@@ -57,7 +57,7 @@ const generate = async () => {
   <div class="flex flex-wrap items-center gap-3">
     <button
       type="button"
-      class="text-xs text-teal-700 hover:underline disabled:opacity-50 dark:text-teal-300"
+      class="text-xs text-brand-700 hover:underline disabled:opacity-50 dark:text-brand-300"
       :disabled="loading || !description.trim()"
       @click="generate"
     >

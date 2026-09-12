@@ -269,6 +269,57 @@ afterAll(() => {
 });
 
 describe('App Manager session boundary', () => {
+  it('separates a current catalog from the last failed verification without exposing its technical error', async () => {
+    mocks.getWebRebuildStatus.mockResolvedValue({
+      current_revision: 4,
+      current_revision_updated_at: '2026-09-12T08:00:00Z',
+      published_revision: 4,
+      needs_rebuild: false,
+      state: 'idle',
+      last_error: 'Standalone SSR catalog sync verification failed',
+    });
+
+    await mountApp();
+
+    expect(wrapper!.text()).toContain('Каталог актуален');
+    expect(wrapper!.text()).toContain('Каталог сайта соответствует текущей ревизии.');
+    expect(wrapper!.text()).toContain('Последняя проверка завершилась ошибкой.');
+    expect(wrapper!.text()).not.toContain('Standalone SSR catalog sync verification failed');
+    expect(wrapper!.get('button[aria-label="Проверить сайт"]').exists()).toBe(true);
+  });
+
+  it('explains stale and queued catalog synchronization states in business terms', async () => {
+    mocks.getWebRebuildStatus.mockResolvedValue({
+      current_revision: 5,
+      current_revision_updated_at: '2026-09-12T08:00:00Z',
+      published_revision: 4,
+      needs_rebuild: true,
+      state: 'idle',
+    });
+
+    await mountApp();
+
+    expect(wrapper!.text()).toContain('Каталог требует синхронизации');
+    expect(wrapper!.text()).toContain('Каталог сайта не соответствует текущей ревизии. Нужна синхронизация.');
+    expect(wrapper!.get('button[aria-label="Обновить сайт"]').exists()).toBe(true);
+
+    wrapper!.unmount();
+    wrapper = null;
+    clearManagerSession();
+    mocks.getWebRebuildStatus.mockResolvedValue({
+      current_revision: 5,
+      current_revision_updated_at: '2026-09-12T08:00:00Z',
+      published_revision: 4,
+      needs_rebuild: true,
+      state: 'queued',
+    });
+
+    await mountApp();
+
+    expect(wrapper!.text()).toContain('Проверка каталога запущена');
+    expect(wrapper!.text()).toContain('Проверяем, соответствует ли каталог сайта текущей ревизии.');
+  });
+
   it('keeps an initial /me 401 in the ordinary login flow', async () => {
     networkFetch.mockImplementation(async () => unauthorizedResponse());
     mocks.readMe.mockImplementationOnce(async () => {

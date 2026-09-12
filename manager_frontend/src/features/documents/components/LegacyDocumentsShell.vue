@@ -43,8 +43,8 @@ const forwardAttach = (document: ManagerOrderDocumentItem, event: Event) => emit
         <p v-if="access.mode === 'history'" class="mt-1 text-xs text-slate-500 dark:text-slate-400">{{ access.summary }}</p>
       </div>
       <div class="flex flex-wrap items-center gap-2 sm:justify-end">
-        <button class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-teal-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-teal-700 disabled:opacity-50" :disabled="uploading || !!processingId || generating || !canSend" @click="sendOpen = true"><span class="material-icons-round text-[18px]">send</span>Письмо</button>
-        <button v-if="documents.length && access.canCreate" class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#007f80] px-3 text-sm font-semibold text-white shadow-sm hover:bg-teal-600 disabled:opacity-50" :disabled="generating || !!processingId || uploading" @click="emit('create')"><span class="material-icons-round text-[18px]">add_circle</span>Создать</button>
+        <button class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 disabled:opacity-50" :disabled="uploading || !!processingId || generating || !canSend" @click="sendOpen = true"><span class="material-icons-round text-[18px]">send</span>Письмо</button>
+        <button v-if="documents.length && access.canCreate" class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-brand-600 disabled:opacity-50" :disabled="generating || !!processingId || uploading" @click="emit('create')"><span class="material-icons-round text-[18px]">add_circle</span>Создать</button>
         <button v-if="access.canUpload" class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-slate-700 px-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-600 disabled:opacity-50" :disabled="uploading || !!processingId || generating" @click="emit('upload')"><span class="material-icons-round text-[18px]" :class="uploading ? 'animate-spin' : ''">{{ uploading ? 'loop' : 'upload_file' }}</span>Загрузить</button>
       </div>
     </div>

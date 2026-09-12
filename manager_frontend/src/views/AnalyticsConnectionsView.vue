@@ -151,7 +151,7 @@ onMounted(() => {
     <div class="mx-auto max-w-7xl">
       <div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
-          <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-teal-600">
+          <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-brand-600">
             <Link2 class="h-4 w-4" /> Аккаунт
           </div>
           <h1 class="mt-2 text-3xl font-bold tracking-tight text-slate-950 dark:text-white">Интеграции</h1>

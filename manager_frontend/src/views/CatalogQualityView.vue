@@ -224,12 +224,12 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopState));
     <div class="mx-auto max-w-[1600px] overflow-hidden border-y border-gray-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900 md:rounded-xl md:border">
       <header class="flex flex-col gap-2 border-b border-gray-200 px-4 py-3 dark:border-slate-700 sm:flex-row sm:items-center sm:justify-between sm:px-5">
         <div class="min-w-0">
-          <div class="flex items-center gap-2"><ShieldCheck class="h-6 w-6 text-teal-700" /><h1 class="text-xl font-bold text-gray-950 dark:text-slate-100">Качество каталога</h1></div>
+          <div class="flex items-center gap-2"><ShieldCheck class="h-6 w-6 text-brand-700" /><h1 class="text-xl font-bold text-gray-950 dark:text-slate-100">Качество каталога</h1></div>
           <p class="mt-1 hidden text-sm text-gray-500 dark:text-slate-400 sm:block">Рабочая очередь карточек: контент, нормализация и готовность предложений.</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <span v-if="generatedAt" class="text-xs text-gray-400">Проверено {{ generatedAt }}</span>
-          <button class="grid h-9 w-9 place-items-center rounded-lg border border-gray-200 text-gray-600 hover:border-teal-300 hover:text-teal-700 disabled:opacity-50" :disabled="loading" title="Обновить отчет" @click="loadReport"><RefreshCw class="h-4 w-4" :class="loading ? 'animate-spin' : ''" /></button>
+          <button class="grid h-9 w-9 place-items-center rounded-lg border border-gray-200 text-gray-600 hover:border-brand-300 hover:text-brand-700 disabled:opacity-50" :disabled="loading" title="Обновить отчет" @click="loadReport"><RefreshCw class="h-4 w-4" :class="loading ? 'animate-spin' : ''" /></button>
           <button class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50" title="Сбросить фильтры" @click="resetFilters"><RotateCcw class="h-4 w-4" />Сбросить</button>
         </div>
       </header>
@@ -256,7 +256,7 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopState));
 
       <section class="sticky top-0 z-20 flex flex-col gap-2 border-b border-gray-200 bg-gray-50/95 px-4 py-2 shadow-sm backdrop-blur dark:border-slate-700 dark:bg-slate-950/95 lg:flex-row lg:items-center lg:justify-between sm:px-5">
         <div class="flex min-w-0 flex-wrap items-center gap-2 text-sm">
-          <strong v-if="selectedBrandTitle" class="text-teal-800">{{ selectedBrandTitle }}</strong>
+          <strong v-if="selectedBrandTitle" class="text-brand-800">{{ selectedBrandTitle }}</strong>
           <span v-if="selectedBrandTitle" class="text-gray-400">·</span>
           <strong class="text-gray-950 dark:text-slate-100">
             <template v-if="selectedBrandTitle && selectedBrandCatalogCount > Number(meta?.total || 0)">{{ formatNumber(meta?.total) }} в очереди из {{ productCountLabel(selectedBrandCatalogCount) }}</template>
@@ -266,11 +266,11 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopState));
           <span class="text-gray-500 dark:text-slate-400">score {{ report?.average_score ?? '—' }}</span>
           <span class="hidden text-gray-400 sm:inline">·</span>
           <span class="hidden text-gray-500 dark:text-slate-400 sm:inline">страница {{ meta?.page || 1 }} из {{ totalPages }}</span>
-          <span v-if="loading" class="font-semibold text-teal-700">обновляем...</span>
-          <span v-if="shouldSuggestSeriesGrouping" class="inline-flex items-center gap-1.5 rounded-lg bg-teal-50 px-2 py-1 text-xs text-teal-900 dark:bg-teal-950 dark:text-teal-100">У бренда несколько серий. <button class="font-bold underline decoration-teal-400 underline-offset-2" @click="state.groupBy = 'series'">Применить группировку</button></span>
+          <span v-if="loading" class="font-semibold text-brand-700">обновляем...</span>
+          <span v-if="shouldSuggestSeriesGrouping" class="inline-flex items-center gap-1.5 rounded-lg bg-brand-50 px-2 py-1 text-xs text-brand-900 dark:bg-brand-950 dark:text-brand-100">У бренда несколько серий. <button class="font-bold underline decoration-brand-400 underline-offset-2" @click="state.groupBy = 'series'">Применить группировку</button></span>
         </div>
         <div class="flex items-center gap-2 overflow-x-auto pb-0.5">
-          <button class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 text-xs font-semibold text-gray-600 hover:border-teal-300 hover:text-teal-800 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" @click="scrollToFilters"><SlidersHorizontal class="h-4 w-4" />Фильтры</button>
+          <button class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 text-xs font-semibold text-gray-600 hover:border-brand-300 hover:text-brand-800 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" @click="scrollToFilters"><SlidersHorizontal class="h-4 w-4" />Фильтры</button>
           <label class="flex items-center gap-2 text-xs font-semibold text-gray-500 dark:text-slate-300">Сортировка
             <select v-model="state.sortBy" class="h-9 rounded-lg border border-gray-200 bg-white px-2 text-sm text-gray-800 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100">
               <option value="priority">По рабочему приоритету</option><option value="score_asc">Худший score</option><option value="critical">Критичные сначала</option><option value="stock">С наличием сначала</option><option value="newest">Новые сначала</option><option value="brand">По бренду</option><option value="series">По серии</option><option value="title">По названию</option>
@@ -282,8 +282,8 @@ onBeforeUnmount(() => window.removeEventListener('popstate', handlePopState));
             </select>
           </label>
           <div class="inline-flex h-9 overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-slate-600 dark:bg-slate-900">
-            <button class="grid w-9 place-items-center" :class="state.view === 'cards' ? 'bg-teal-600 text-white' : 'text-gray-500'" title="Карточки" @click="state.view = 'cards'"><Grid2X2 class="h-4 w-4" /></button>
-            <button class="grid w-9 place-items-center" :class="state.view === 'table' ? 'bg-teal-600 text-white' : 'text-gray-500'" title="Таблица" @click="state.view = 'table'"><List class="h-4 w-4" /></button>
+            <button class="grid w-9 place-items-center" :class="state.view === 'cards' ? 'bg-brand-600 text-white' : 'text-gray-500'" title="Карточки" @click="state.view = 'cards'"><Grid2X2 class="h-4 w-4" /></button>
+            <button class="grid w-9 place-items-center" :class="state.view === 'table' ? 'bg-brand-600 text-white' : 'text-gray-500'" title="Таблица" @click="state.view = 'table'"><List class="h-4 w-4" /></button>
           </div>
         </div>
       </section>

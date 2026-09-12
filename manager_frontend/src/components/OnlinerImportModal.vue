@@ -250,7 +250,7 @@ onBeforeUnmount(stopPolling);
           <!-- Header -->
           <div class="flex items-center justify-between px-6 py-4 border-b border-slate-700/50">
             <div class="flex items-center gap-3">
-              <span class="material-icons-round text-teal-400 text-2xl">cloud_download</span>
+              <span class="material-icons-round text-brand-400 text-2xl">cloud_download</span>
               <h2 class="text-lg font-bold text-white">Импорт товаров</h2>
             </div>
             <button
@@ -272,33 +272,33 @@ onBeforeUnmount(stopPolling);
                   type="button"
                   :disabled="loading"
                   @click="applyImportPreset(preset)"
-                  class="flex items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-3 text-left transition-colors hover:border-teal-500/60 hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="flex items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-3 text-left transition-colors hover:border-brand-500/60 hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <span>
                     <span class="block text-sm font-semibold text-slate-100">{{ preset.label }}</span>
                     <span class="block text-xs text-slate-500 mt-0.5">{{ preset.source }}</span>
                   </span>
-                  <span class="material-icons-round text-teal-400 text-xl">sync</span>
+                  <span class="material-icons-round text-brand-400 text-xl">sync</span>
                 </button>
               </div>
             </div>
 
-            <section class="rounded-xl border border-teal-500/30 bg-teal-950/20 p-4 space-y-4">
+            <section class="rounded-xl border border-brand-500/30 bg-brand-950/20 p-4 space-y-4">
               <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                 <div>
-                  <p class="text-sm font-semibold text-teal-100">MDV официальный каталог</p>
-                  <p class="text-xs text-teal-200/70 mt-0.5">JSON, галерея, инструкции, нормализация характеристик</p>
+                  <p class="text-sm font-semibold text-brand-100">MDV официальный каталог</p>
+                  <p class="text-xs text-brand-200/70 mt-0.5">JSON, галерея, инструкции, нормализация характеристик</p>
                 </div>
                 <div class="flex items-center gap-2">
                   <button
                     type="button"
                     :disabled="loading || mdvLoading || selectedMdvCatalogs.length === 0"
                     @click="handleMdvPreview"
-                    class="inline-flex items-center gap-1.5 rounded-lg border border-teal-400/50 px-3 py-2 text-xs font-semibold text-teal-100 hover:bg-teal-500/15 disabled:opacity-50 disabled:cursor-not-allowed"
+                    class="inline-flex items-center gap-1.5 rounded-lg border border-brand-400/50 px-3 py-2 text-xs font-semibold text-brand-100 hover:bg-brand-500/15 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <span
                       v-if="mdvLoading"
-                      class="h-3.5 w-3.5 rounded-full border-2 border-teal-100/30 border-t-teal-100 animate-spin"
+                      class="h-3.5 w-3.5 rounded-full border-2 border-brand-100/30 border-t-brand-100 animate-spin"
                     />
                     <span v-else class="material-icons-round text-base">fact_check</span>
                     Проверить
@@ -307,7 +307,7 @@ onBeforeUnmount(stopPolling);
                     type="button"
                     :disabled="loading || mdvLoading || selectedMdvCatalogs.length === 0"
                     @click="handleMdvImport"
-                    class="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-3 py-2 text-xs font-semibold text-white hover:bg-teal-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    class="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-500 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <span class="material-icons-round text-base">sync</span>
                     Импорт
@@ -324,7 +324,7 @@ onBeforeUnmount(stopPolling);
                   @click="mdvCatalogSelection[item.key] = !mdvCatalogSelection[item.key]"
                   class="rounded-lg border px-3 py-2 text-left transition-colors disabled:opacity-50"
                   :class="mdvCatalogSelection[item.key]
-                    ? 'border-teal-400/70 bg-teal-500/20 text-teal-50'
+                    ? 'border-brand-400/70 bg-brand-500/20 text-brand-50'
                     : 'border-slate-700 bg-slate-900/60 text-slate-400'"
                 >
                   <span class="block text-xs font-semibold">{{ item.short }}</span>
@@ -345,7 +345,7 @@ onBeforeUnmount(stopPolling);
                       v-model="mdvReplaceLegacySelection[key]"
                       :disabled="loading || mdvLoading || !mdvCatalogSelection[key]"
                       type="checkbox"
-                      class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-teal-500 focus:ring-teal-500"
+                      class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-brand-500 focus:ring-brand-500"
                     />
                     <span>{{ mdvCatalogLabel(key) }}</span>
                   </label>
@@ -417,10 +417,10 @@ onBeforeUnmount(stopPolling);
                 :disabled="loading"
                 rows="7"
                 placeholder="https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php&#10;https://catalog.onliner.by/split_systems/midea/msmb-09hrn8-wifib&#10;https://aircond.by/split-sistemy/mdv-integra-pro-inverter-..."
-                class="w-full rounded-xl border border-slate-600 bg-slate-900 text-slate-100 placeholder-slate-600 text-sm px-4 py-3 resize-none outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all disabled:opacity-50"
+                class="w-full rounded-xl border border-slate-600 bg-slate-900 text-slate-100 placeholder-slate-600 text-sm px-4 py-3 resize-none outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all disabled:opacity-50"
               />
               <p class="text-xs text-slate-500 mt-1.5">
-                Найдено ссылок: <span class="text-teal-400 font-medium">{{ parsedUrls().length }}</span>
+                Найдено ссылок: <span class="text-brand-400 font-medium">{{ parsedUrls().length }}</span>
               </p>
             </div>
 
@@ -438,7 +438,7 @@ onBeforeUnmount(stopPolling);
               <!-- Toggle switch -->
               <div
                 class="relative flex-shrink-0 w-11 h-6 rounded-full transition-colors duration-200"
-                :class="withRelated ? 'bg-teal-500' : 'bg-slate-600'"
+                :class="withRelated ? 'bg-brand-500' : 'bg-slate-600'"
                 @click="withRelated = !withRelated"
               >
                 <div
@@ -461,7 +461,7 @@ onBeforeUnmount(stopPolling);
               </div>
               <div
                 class="relative flex-shrink-0 w-11 h-6 rounded-full transition-colors duration-200"
-                :class="updateExisting ? 'bg-teal-500' : 'bg-slate-600'"
+                :class="updateExisting ? 'bg-brand-500' : 'bg-slate-600'"
                 @click="updateExisting = !updateExisting"
               >
                 <div
@@ -479,7 +479,7 @@ onBeforeUnmount(stopPolling);
               <div class="flex items-center justify-between gap-3">
                 <div>
                   <p class="font-semibold text-slate-100">{{ stageLabel }}</p>
-                  <p v-if="loading" class="text-xs text-teal-300 mt-0.5">
+                  <p v-if="loading" class="text-xs text-brand-300 mt-0.5">
                     Идёт в фоне, окно можно закрыть и открыть позже
                   </p>
                   <p v-if="importProgress?.current_title" class="text-xs text-slate-400 mt-0.5">
@@ -489,12 +489,12 @@ onBeforeUnmount(stopPolling);
                     {{ importProgress.current_url }}
                   </p>
                 </div>
-                <span class="tabular-nums text-lg font-bold text-teal-300">{{ progressPercent }}%</span>
+                <span class="tabular-nums text-lg font-bold text-brand-300">{{ progressPercent }}%</span>
               </div>
 
               <div class="h-2 overflow-hidden rounded-full bg-slate-800">
                 <div
-                  class="h-full rounded-full bg-teal-500 transition-all duration-500"
+                  class="h-full rounded-full bg-brand-500 transition-all duration-500"
                   :style="{ width: `${progressPercent}%` }"
                 />
               </div>
@@ -557,7 +557,7 @@ onBeforeUnmount(stopPolling);
             <button
               @click="handleImport"
               :disabled="loading || parsedUrls().length === 0"
-              class="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold bg-teal-600 hover:bg-teal-500 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-teal-900/30"
+              class="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold bg-brand-600 hover:bg-brand-500 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-brand-900/30"
             >
               <span
                 v-if="loading"

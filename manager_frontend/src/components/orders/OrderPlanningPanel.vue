@@ -94,7 +94,7 @@ const detailsSummary = computed(() => {
         {{ isRepairWorkflow ? 'Назначить диагностику' : 'Назначить замер' }}
       </button>
       <label v-else class="inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-medium text-blue-900 ring-1 ring-blue-100 dark:bg-slate-900 dark:text-blue-100 dark:ring-blue-500/30">
-        <input v-model="measurementRequired" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
+        <input v-model="measurementRequired" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-600" />
         {{ isRepairWorkflow ? 'Диагностика нужна' : 'Замер нужен' }}
       </label>
     </div>
@@ -107,7 +107,7 @@ const detailsSummary = computed(() => {
         </select>
       </label>
       <label class="mt-3 flex items-start gap-2 rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2 text-xs text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100">
-        <input v-model="autoExecutionOnPayment" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
+        <input v-model="autoExecutionOnPayment" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-600" />
         <span>
           <span class="block font-semibold">После полной оплаты автоматически перевести заказ в этап «Работы»</span>
           <span class="mt-0.5 block text-emerald-700/80 dark:text-emerald-200/70">Сработает автоматически, когда долг по заказу станет нулевым.</span>

@@ -184,7 +184,7 @@ onMounted(load);
           Добавьте фичу или скройте унаследованную только для этой модели.
         </p>
       </div>
-      <span v-if="saving" class="text-xs font-semibold text-teal-700"
+      <span v-if="saving" class="text-xs font-semibold text-brand-700"
         >Сохранение…</span
       >
     </div>
@@ -278,7 +278,7 @@ onMounted(load);
                 class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border"
                 :class="
                   effectiveMap.has(feature.id)
-                    ? 'border-teal-600 bg-teal-600 text-white'
+                    ? 'border-brand-600 bg-brand-600 text-white'
                     : 'border-gray-300 text-transparent dark:border-slate-600'
                 "
                 :title="effectiveMap.has(feature.id) ? 'Убрать' : 'Добавить'"

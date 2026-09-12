@@ -83,14 +83,14 @@ const finishObjectEdit = () => {
         <div class="min-w-0 flex-1">
           <p class="break-words text-sm font-semibold leading-5 text-slate-900 dark:text-white">{{ displayName }}</p>
           <div class="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-            <a v-if="validPhone" :href="'tel:' + phoneDigits" class="inline-flex items-center gap-1 hover:text-teal-700 dark:hover:text-teal-300">
+            <a v-if="validPhone" :href="'tel:' + phoneDigits" class="inline-flex items-center gap-1 hover:text-brand-700 dark:hover:text-brand-300">
               <Phone :size="13" /> {{ phone }}
             </a>
             <button v-else type="button" class="font-medium text-amber-700 dark:text-amber-300" @click="startCustomerEdit">Телефон не указан · добавить</button>
-            <a v-if="validEmail" :href="'mailto:' + email" class="inline-flex min-w-0 items-center gap-1 hover:text-teal-700 dark:hover:text-teal-300">
+            <a v-if="validEmail" :href="'mailto:' + email" class="inline-flex min-w-0 items-center gap-1 hover:text-brand-700 dark:hover:text-brand-300">
               <Mail :size="13" /> <span class="truncate">{{ email }}</span>
             </a>
-            <button v-else type="button" class="font-medium text-slate-500 hover:text-teal-700 dark:hover:text-teal-300" @click="startCustomerEdit">Email не указан · добавить</button>
+            <button v-else type="button" class="font-medium text-slate-500 hover:text-brand-700 dark:hover:text-brand-300" @click="startCustomerEdit">Email не указан · добавить</button>
           </div>
         </div>
         <div class="col-start-2 row-start-2 mt-1 flex shrink-0 gap-1 sm:col-start-3 sm:row-start-1 sm:mt-0">
@@ -101,7 +101,7 @@ const finishObjectEdit = () => {
       </div>
 
       <div class="flex min-w-0 items-center gap-3 px-3 py-2.5">
-        <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-700 dark:bg-teal-500/15 dark:text-teal-200"><MapPin :size="17" /></span>
+        <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-200"><MapPin :size="17" /></span>
         <div class="min-w-0 flex-1">
           <p class="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">{{ branch?.name || 'Объект' }}</p>
           <p v-if="address" class="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{{ address }}</p>

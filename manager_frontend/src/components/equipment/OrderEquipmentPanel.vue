@@ -342,7 +342,7 @@ defineExpose({ expand, collapse, ensureLoaded: loadLinks });
   <section class="rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900/70">
     <div class="flex items-center gap-1 pr-2">
       <button type="button" data-order-usage="equipment_open" class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-3 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/60 sm:px-4" :aria-expanded="expanded" @click="toggle">
-        <Boxes class="h-5 w-5 shrink-0 text-teal-700 dark:text-teal-300" />
+        <Boxes class="h-5 w-5 shrink-0 text-brand-700 dark:text-brand-300" />
         <span class="min-w-0 flex-1">
           <span class="block text-sm font-semibold text-slate-900 dark:text-slate-100">Оборудование на объекте</span>
           <span class="block truncate text-xs text-slate-500 dark:text-slate-400">
@@ -370,7 +370,7 @@ defineExpose({ expand, collapse, ensureLoaded: loadLinks });
           <Plus class="h-4 w-4" />
           Создать вручную
         </button>
-        <button v-if="loaded" type="button" class="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:text-teal-700 dark:border-slate-700 dark:hover:text-teal-300" :disabled="loading" title="Обновить" aria-label="Обновить" @click="loadLinks(true)">
+        <button v-if="loaded" type="button" class="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:text-brand-700 dark:border-slate-700 dark:hover:text-brand-300" :disabled="loading" title="Обновить" aria-label="Обновить" @click="loadLinks(true)">
           <RefreshCw class="h-4 w-4" :class="loading ? 'animate-spin' : ''" />
         </button>
       </div>
@@ -395,7 +395,7 @@ defineExpose({ expand, collapse, ensureLoaded: loadLinks });
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-2">
                 <h3 class="break-words text-sm font-semibold text-slate-900 dark:text-slate-100">{{ equipmentTitle(link.equipment) }}</h3>
-                <span class="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-semibold text-teal-700 dark:bg-teal-950/40 dark:text-teal-200">{{ roleLabel(link.role) }}</span>
+                <span class="rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-semibold text-brand-700 dark:bg-brand-950/40 dark:text-brand-200">{{ roleLabel(link.role) }}</span>
               </div>
               <p v-if="link.equipment.serial" class="mt-1 text-xs text-slate-500 dark:text-slate-400">Серийный: {{ link.equipment.serial }}</p>
               <p v-if="link.equipment.branch_address || link.equipment.location_hint" class="mt-1 text-xs text-slate-500 dark:text-slate-400">{{ link.equipment.branch_address || link.equipment.location_hint }}</p>

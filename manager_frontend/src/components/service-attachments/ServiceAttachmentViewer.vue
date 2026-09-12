@@ -274,7 +274,7 @@ onBeforeUnmount(() => {
 
         <div v-else-if="accessUrl && isAudio" class="flex h-full items-center justify-center p-5">
           <div class="w-full max-w-2xl text-center">
-            <span class="material-icons-round text-[64px] text-teal-300" aria-hidden="true">graphic_eq</span>
+            <span class="material-icons-round text-[64px] text-brand-300" aria-hidden="true">graphic_eq</span>
             <audio :src="accessUrl" controls preload="metadata" class="mt-5 w-full" />
             <div v-if="activeItem.transcript" class="mt-5 max-h-52 overflow-y-auto rounded-lg bg-white/10 p-4 text-left text-sm leading-6 text-slate-100">
               <p class="mb-1 text-xs font-semibold uppercase text-slate-300">Расшифровка</p>

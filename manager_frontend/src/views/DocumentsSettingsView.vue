@@ -128,7 +128,7 @@ const savePolicy = async (documentType: string, payload: DocumentNumberPolicyPay
     <div class="mx-auto max-w-7xl space-y-6">
       <header class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p class="text-xs font-bold uppercase tracking-[0.18em] text-teal-600">Документный контур</p>
+          <p class="text-xs font-bold uppercase tracking-[0.18em] text-brand-600">Документный контур</p>
           <h1 class="mt-1 font-['Space_Grotesk'] text-3xl font-bold text-slate-950 dark:text-white">Документы внутри CRM</h1>
           <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-500">Нативная генерация DOCX/PDF и история версий. Google Диск можно подключить как онлайн-редактор шаблонов и черновиков.</p>
         </div>
@@ -138,7 +138,7 @@ const savePolicy = async (documentType: string, payload: DocumentNumberPolicyPay
         </div>
       </header>
 
-      <div v-if="selectedEntity" class="rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-900 dark:border-teal-900 dark:bg-teal-950/30 dark:text-teal-200">
+      <div v-if="selectedEntity" class="rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-900 dark:border-brand-900 dark:bg-brand-950/30 dark:text-brand-200">
         Сейчас настраиваем: <strong>{{ selectedEntity.display_name }}</strong>
       </div>
 
@@ -162,7 +162,7 @@ const savePolicy = async (documentType: string, payload: DocumentNumberPolicyPay
     </div>
 
     <Transition name="fade">
-      <div v-if="toast" class="fixed bottom-6 right-6 z-[100] max-w-md rounded-xl px-5 py-3 text-sm font-semibold text-white shadow-2xl" :class="toastType === 'success' ? 'bg-teal-600' : 'bg-red-600'">{{ toast }}</div>
+      <div v-if="toast" class="fixed bottom-6 right-6 z-[100] max-w-md rounded-xl px-5 py-3 text-sm font-semibold text-white shadow-2xl" :class="toastType === 'success' ? 'bg-emerald-600' : 'bg-red-600'">{{ toast }}</div>
     </Transition>
   </main>
 </template>

@@ -25,10 +25,10 @@ const options: Array<{ value: LeadCustomerType; label: string; hint: string; ico
       type="button"
       class="flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all"
       :class="modelValue === option.value
-        ? 'border-teal-500 bg-teal-50 text-teal-800 shadow-sm dark:border-teal-400 dark:bg-teal-500/10 dark:text-teal-200'
+        ? 'border-brand-500 bg-brand-50 text-brand-800 shadow-sm dark:border-brand-400 dark:bg-brand-500/10 dark:text-brand-200'
         : showError
           ? 'border-red-300 bg-red-50 text-slate-700 dark:border-red-500/50 dark:bg-red-500/10 dark:text-slate-200'
-          : 'border-slate-200 bg-white text-slate-700 hover:border-teal-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'"
+          : 'border-slate-200 bg-white text-slate-700 hover:border-brand-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'"
       @click="emit('update:modelValue', option.value)"
     >
       <span class="material-icons-round text-[20px]">{{ option.icon }}</span>

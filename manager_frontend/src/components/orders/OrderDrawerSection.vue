@@ -30,7 +30,7 @@ const toneClasses = {
     >
       <div class="min-w-0">
         <h3 class="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-          <span v-if="icon" class="material-icons-round text-[18px] text-teal-600 dark:text-teal-300" aria-hidden="true">{{ icon }}</span>
+          <span v-if="icon" class="material-icons-round text-[18px] text-brand-600 dark:text-brand-300" aria-hidden="true">{{ icon }}</span>
           {{ title }}
         </h3>
         <p v-if="summary" class="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">{{ summary }}</p>

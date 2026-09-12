@@ -77,7 +77,7 @@ const clearSeriesDropTarget = (seriesId: number) => {
     <Transition name="fade">
       <div
         v-if="toast"
-        class="fixed right-6 top-6 z-[100] rounded-xl bg-teal-600 px-6 py-3 font-medium text-white shadow-2xl"
+        class="fixed right-6 top-6 z-[100] rounded-xl bg-brand-600 px-6 py-3 font-medium text-white shadow-2xl"
       >
         {{ toast }}
       </div>
@@ -91,7 +91,7 @@ const clearSeriesDropTarget = (seriesId: number) => {
       </h1>
       <button
         type="button"
-        class="inline-flex items-center justify-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-teal-500"
+        class="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-brand-500"
         @click="openCreate"
       >
         <span class="material-icons-round text-[18px]">add</span>

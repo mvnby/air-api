@@ -380,7 +380,7 @@ onMounted(async () => {
         <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Товарные подборки</h1>
         <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">Состав и порядок витрин без изменений frontend-кода.</p>
       </div>
-      <button class="inline-flex h-9 items-center gap-2 rounded-md bg-teal-600 px-3 text-sm font-semibold text-white hover:bg-teal-700" type="button" @click="applyCollection(null)">
+      <button class="inline-flex h-9 items-center gap-2 rounded-md bg-brand-600 px-3 text-sm font-semibold text-white hover:bg-brand-700" type="button" @click="applyCollection(null)">
         <Plus class="h-4 w-4" /> Новая подборка
       </button>
     </header>
@@ -402,7 +402,7 @@ onMounted(async () => {
             :key="collection.id"
             type="button"
             class="block w-full px-2 py-3 text-left hover:bg-gray-50 dark:hover:bg-slate-900"
-            :class="active?.id === collection.id ? 'bg-teal-50 dark:bg-teal-950/20' : ''"
+            :class="active?.id === collection.id ? 'bg-brand-50 dark:bg-brand-950/20' : ''"
             @click="applyCollection(collection)"
           >
             <span class="flex items-start justify-between gap-3">
@@ -426,7 +426,7 @@ onMounted(async () => {
           <div class="flex items-center gap-2">
             <button v-if="active" class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 dark:border-slate-700" type="button" title="Дублировать" @click="duplicateCollection"><Copy class="h-4 w-4" /></button>
             <button v-if="active && active.status !== 'archived'" class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 text-gray-600 dark:border-slate-700" type="button" title="Архивировать" @click="archiveCollection"><Archive class="h-4 w-4" /></button>
-            <button class="inline-flex h-9 items-center gap-2 rounded-md bg-teal-600 px-3 text-sm font-semibold text-white disabled:opacity-50" type="button" :disabled="saving" @click="save"><Save class="h-4 w-4" /> {{ saving ? 'Сохранение...' : 'Сохранить' }}</button>
+            <button class="inline-flex h-9 items-center gap-2 rounded-md bg-brand-600 px-3 text-sm font-semibold text-white disabled:opacity-50" type="button" :disabled="saving" @click="save"><Save class="h-4 w-4" /> {{ saving ? 'Сохранение...' : 'Сохранить' }}</button>
           </div>
         </div>
 

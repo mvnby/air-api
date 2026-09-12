@@ -204,35 +204,34 @@ const webRebuildNeedsAttention = computed(() => Boolean(webRebuildStatus.value?.
 const webRebuildQueued = computed(() => webRebuildStatus.value?.state === 'queued');
 const webRebuildNoticeVisible = computed(() => webRebuildNeedsAttention.value || Boolean(webRebuildStatus.value?.last_error));
 const webRebuildNoticeClass = computed(() => {
-  if (webRebuildQueued.value) return 'border-blue-200 bg-blue-50 text-blue-900';
+  if (webRebuildQueued.value) return 'border-brand-200 bg-brand-50 text-brand-900 dark:border-brand-500/40 dark:bg-brand-950/50 dark:text-brand-200';
   if (webRebuildNeedsAttention.value || webRebuildStatus.value?.last_error) {
-    return 'border-amber-200 bg-amber-50 text-amber-900';
+    return 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/50 dark:text-amber-200';
   }
-  return 'border-gray-200 bg-gray-50 text-gray-700';
+  return 'border-gray-200 bg-gray-50 text-gray-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200';
 });
 const webRebuildNoticeTitle = computed(() => {
-  if (webRebuildQueued.value) return 'Сборка запущена';
-  if (webRebuildNeedsAttention.value) return 'Сайт устарел';
-  return 'Статика актуальна';
+  if (webRebuildQueued.value) return 'Проверка каталога запущена';
+  if (webRebuildNeedsAttention.value) return 'Каталог требует синхронизации';
+  return 'Каталог актуален';
 });
 const webRebuildNoticeText = computed(() => {
   if (webRebuildQueued.value) {
-    return 'GitHub Actions собирает Astro. После deploy предупреждение снимется.';
+    return 'Проверяем, соответствует ли каталог сайта текущей ревизии.';
   }
   if (webRebuildNeedsAttention.value) {
-    return 'Каталог изменился после последней публикации. Нужна пересборка сайта.';
+    return 'Каталог сайта не соответствует текущей ревизии. Нужна синхронизация.';
   }
-  return 'Опубликована текущая ревизия каталога.';
+  return 'Каталог сайта соответствует текущей ревизии.';
 });
 const rebuildButtonLabel = computed(() => {
-  if (rebuildLoading.value) return 'Сборка...';
-  if (webRebuildNeedsAttention.value) return 'Пересобрать сайт';
-  return 'Обновить сайт';
+  if (rebuildLoading.value) return 'Проверка...';
+  if (webRebuildNeedsAttention.value) return 'Обновить сайт';
+  return 'Проверить сайт';
 });
 const rebuildButtonTitle = computed(() => {
   if (!isDesktopNavCollapsed.value) return '';
-  if (webRebuildNeedsAttention.value) return 'Статика устарела - пересобрать сайт';
-  return 'Обновить сайт';
+  return rebuildButtonLabel.value;
 });
 const onPopState = () => {
   currentLocation.value = `${window.location.pathname}${window.location.search}`;
@@ -345,9 +344,9 @@ const renderTelegramLogin = async () => {
 const handleRebuild = async () => {
   if (!canManagePlatform.value) return;
   const confirmed = await confirmDialog({
-    title: 'Пересобрать сайт?',
-    description: 'GitHub Actions запустит новую сборку Astro. Обычно это занимает около двух минут.',
-    confirmText: 'Запустить сборку',
+    title: 'Проверить сайт?',
+    description: 'Проверим, соответствует ли каталог сайта текущей ревизии.',
+    confirmText: 'Проверить сайт',
     variant: 'warning',
   });
   if (!confirmed) return;
@@ -355,10 +354,10 @@ const handleRebuild = async () => {
   try {
     const result = await api.rebuildWeb();
     webRebuildStatus.value = result as WebRebuildStatus;
-    setToast(String(result.message || 'Сборка запущена. Сайт обновится через пару минут.'));
+    setToast('Проверка запущена. Результат появится через пару минут.');
     void fetchWebRebuildStatus();
   } catch (err) {
-    setToast(`Ошибка при запуске сборки: ${getApiErrorMessage(err)}`, 'error');
+    setToast(`Ошибка при запуске проверки: ${getApiErrorMessage(err)}`, 'error');
   } finally {
     rebuildLoading.value = false;
   }
@@ -477,8 +476,8 @@ watch(currentPath, () => {
             <span>{{ webRebuildNoticeTitle }}</span>
           </div>
           <p class="mt-1">{{ webRebuildNoticeText }}</p>
-          <p v-if="webRebuildStatus?.last_error" class="mt-1 break-words text-red-700">
-            {{ webRebuildStatus.last_error }}
+          <p v-if="webRebuildStatus?.last_error" class="mt-1 text-red-700 dark:text-red-300">
+            Последняя проверка завершилась ошибкой.
           </p>
         </div>
         <button
@@ -554,7 +553,7 @@ watch(currentPath, () => {
       <div
         v-if="toast"
         class="fixed top-6 right-6 z-[100] rounded-xl px-6 py-3 font-medium text-white shadow-2xl"
-        :class="toastType === 'success' ? 'bg-teal-600' : 'bg-red-600'"
+        :class="toastType === 'success' ? 'bg-emerald-600' : 'bg-red-600'"
       >
         {{ toast }}
       </div>

@@ -314,7 +314,7 @@ const googleBusy = (version: NativeTemplateVersionItem) => {
           Google подключён<span v-if="googleEditor.accountLabel.value">: {{ googleEditor.accountLabel.value }}</span>. После возвращения изменения сохраняются в CRM новой версией шаблона.
         </p>
         <p v-else-if="googleEditor.connectionState.value === 'disconnected'" class="mt-1 text-xs text-slate-500" data-testid="template-google-disconnected">
-          <template v-if="googleEditor.canConnect.value">Для онлайн-редактирования <button class="font-semibold text-teal-700 underline underline-offset-2" type="button" @click="googleEditor.connect">подключите Google</button>.</template>
+          <template v-if="googleEditor.canConnect.value">Для онлайн-редактирования <button class="font-semibold text-brand-700 underline underline-offset-2" type="button" @click="googleEditor.connect">подключите Google</button>.</template>
           <template v-else>Для онлайн-редактирования обратитесь к владельцу аккаунта.</template>
           Загрузка DOCX вручную останется доступна.
         </p>
@@ -340,7 +340,7 @@ const googleBusy = (version: NativeTemplateVersionItem) => {
             :key="template.id"
             type="button"
             class="rounded-xl border px-3 py-2 text-sm font-semibold"
-            :class="template.id === selectedTemplateId ? 'border-teal-500 bg-teal-50 text-teal-900 dark:bg-teal-950/40 dark:text-teal-200' : 'border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300'"
+            :class="template.id === selectedTemplateId ? 'border-brand-500 bg-brand-50 text-brand-900 dark:bg-brand-950/40 dark:text-brand-200' : 'border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300'"
             @click="selectedTemplateId = template.id"
           >
             {{ template.name }}
@@ -407,7 +407,7 @@ const googleBusy = (version: NativeTemplateVersionItem) => {
             <h4 class="text-xs font-bold uppercase tracking-wide text-slate-400">{{ group }}</h4>
             <div class="mt-2 space-y-1.5">
               <div v-for="field in fields" :key="field.name" class="rounded-lg bg-slate-50 p-2 dark:bg-slate-800">
-                <code class="text-xs font-semibold text-teal-700 dark:text-teal-300">{{ field.syntax }}</code>
+                <code class="text-xs font-semibold text-brand-700 dark:text-brand-300">{{ field.syntax }}</code>
                 <p class="mt-0.5 text-xs text-slate-500">{{ field.label }}</p>
               </div>
             </div>

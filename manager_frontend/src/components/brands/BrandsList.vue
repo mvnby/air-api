@@ -70,7 +70,7 @@ const forwardSeriesDragOver = (event: DragEvent, series: ManagerBrandSeries) =>
       <div class="text-xs text-gray-500 dark:text-slate-400">
         <span
           v-if="reordering"
-          class="font-semibold text-teal-600 dark:text-teal-300"
+          class="font-semibold text-brand-600 dark:text-brand-300"
           >Сохраняем порядок...</span
         ><span v-else-if="query.trim()"
           >Перетаскивание доступно после очистки поиска.</span
@@ -113,7 +113,7 @@ const forwardSeriesDragOver = (event: DragEvent, series: ManagerBrandSeries) =>
             ><tr v-if="dropTargetId === brand.id" aria-hidden="true">
               <td colspan="6" class="p-0">
                 <div
-                  class="mx-3 h-1 rounded-full bg-teal-400 shadow-[0_0_18px_rgba(20,184,166,0.75)] dark:bg-teal-300"
+                  class="mx-3 h-1 rounded-full bg-brand-400 shadow-[0_0_18px] shadow-brand-500/75 dark:bg-brand-300"
                 />
               </td>
             </tr>
@@ -121,7 +121,7 @@ const forwardSeriesDragOver = (event: DragEvent, series: ManagerBrandSeries) =>
               class="cursor-pointer border-b border-gray-100 transition-colors dark:border-slate-800/80"
               :class="[
                 selectedBrandId === brand.id
-                  ? 'bg-teal-50/80 dark:bg-teal-900/20'
+                  ? 'bg-brand-50/80 dark:bg-brand-900/20'
                   : 'hover:bg-gray-50 dark:hover:bg-slate-800',
                 draggedBrandId === brand.id ? 'opacity-50' : '',
               ]"
@@ -140,7 +140,7 @@ const forwardSeriesDragOver = (event: DragEvent, series: ManagerBrandSeries) =>
                   :class="
                     reorderDisabled
                       ? 'cursor-not-allowed opacity-40'
-                      : 'cursor-grab hover:bg-gray-50 hover:text-teal-600 dark:hover:bg-slate-700 dark:hover:text-teal-300 active:cursor-grabbing'
+                      : 'cursor-grab hover:bg-gray-50 hover:text-brand-600 dark:hover:bg-slate-700 dark:hover:text-brand-300 active:cursor-grabbing'
                   "
                   :disabled="reorderDisabled"
                   title="Перетащите бренд выше или ниже"
@@ -195,7 +195,7 @@ const forwardSeriesDragOver = (event: DragEvent, series: ManagerBrandSeries) =>
                 <div class="inline-flex items-center justify-end gap-1">
                   <button
                     type="button"
-                    class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 transition-colors hover:bg-gray-50 hover:text-teal-700 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-teal-200"
+                    class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 transition-colors hover:bg-gray-50 hover:text-brand-700 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-brand-200"
                     title="Изменить бренд"
                     aria-label="Изменить бренд"
                     @click.stop="emit('edit', brand)"
@@ -222,7 +222,7 @@ const forwardSeriesDragOver = (event: DragEvent, series: ManagerBrandSeries) =>
             </tr>
             <tr
               v-if="selectedBrandId === brand.id"
-              class="border-b border-teal-100 bg-teal-50/50 dark:border-teal-900/40 dark:bg-teal-950/10"
+              class="border-b border-brand-100 bg-brand-50/50 dark:border-brand-900/40 dark:bg-brand-950/10"
             >
               <td colspan="6" class="p-0">
                 <SeriesList

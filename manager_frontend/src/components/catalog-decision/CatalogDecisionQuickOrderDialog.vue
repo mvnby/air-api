@@ -51,12 +51,12 @@ const submit = async () => {
         </div>
         <p class="mt-5 text-sm font-medium text-gray-800">Кому готовим предложение?</p>
         <div class="mt-2 grid grid-cols-2 gap-2">
-          <button type="button" class="rounded-xl border px-3 py-2.5 text-sm font-semibold" :class="prospectType === 'individual' ? 'border-teal-600 bg-teal-50 text-teal-800' : 'border-gray-200 text-gray-700'" @click="prospectType = 'individual'">Физлицу</button>
-          <button type="button" class="rounded-xl border px-3 py-2.5 text-sm font-semibold" :class="prospectType === 'company' ? 'border-teal-600 bg-teal-50 text-teal-800' : 'border-gray-200 text-gray-700'" @click="prospectType = 'company'">Юрлицу</button>
+          <button type="button" class="rounded-xl border px-3 py-2.5 text-sm font-semibold" :class="prospectType === 'individual' ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-gray-200 text-gray-700'" @click="prospectType = 'individual'">Физлицу</button>
+          <button type="button" class="rounded-xl border px-3 py-2.5 text-sm font-semibold" :class="prospectType === 'company' ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-gray-200 text-gray-700'" @click="prospectType = 'company'">Юрлицу</button>
         </div>
         <p class="mt-4 rounded-xl bg-gray-50 p-3 text-sm text-gray-600">Все {{ items.length }} выбранных моделей попадут в одно основное предложение — по 1 шт. Заказ сразу откроется в статусе «Переговоры».</p>
         <p v-if="error" class="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{{ error }}</p>
-        <div class="mt-5 flex justify-end gap-2"><button type="button" class="rounded-xl px-4 py-2.5 text-sm font-semibold text-gray-600" @click="emit('close')">Отмена</button><button type="button" class="rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50" :disabled="saving || !items.length" @click="submit">{{ saving ? 'Создаём…' : 'Создать заказ' }}</button></div>
+        <div class="mt-5 flex justify-end gap-2"><button type="button" class="rounded-xl px-4 py-2.5 text-sm font-semibold text-gray-600" @click="emit('close')">Отмена</button><button type="button" class="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50" :disabled="saving || !items.length" @click="submit">{{ saving ? 'Создаём…' : 'Создать заказ' }}</button></div>
       </section>
     </div>
   </Teleport>

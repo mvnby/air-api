@@ -341,7 +341,7 @@ const scopeOptions: { value: Scope; label: string }[] = [
     <!-- Header -->
     <div class="flex items-center justify-between mb-6 gap-4 flex-wrap">
       <h1 class="text-2xl font-bold flex items-center gap-3">
-        <span class="material-icons-round text-teal-600 dark:text-teal-400">move_to_inbox</span>
+        <span class="material-icons-round text-brand-600 dark:text-brand-400">move_to_inbox</span>
         Входящие
         <span
           v-if="total > 0 && scope === 'active'"
@@ -352,7 +352,7 @@ const scopeOptions: { value: Scope; label: string }[] = [
       <div class="flex items-center gap-2">
         <!-- Create Lead button -->
         <button
-          class="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold bg-teal-600 text-white hover:bg-teal-700 active:scale-95 transition-all shadow-sm"
+          class="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700 active:scale-95 transition-all shadow-sm"
           @click="openCreateModal"
         >
           <span class="material-icons-round text-[18px]">add</span>
@@ -366,7 +366,7 @@ const scopeOptions: { value: Scope; label: string }[] = [
             :key="opt.value"
             class="px-4 py-2 transition-colors"
             :class="scope === opt.value
-              ? 'bg-teal-600 text-white'
+              ? 'bg-brand-600 text-white'
               : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'"
             @click="scope = opt.value"
           >
@@ -376,17 +376,17 @@ const scopeOptions: { value: Scope; label: string }[] = [
       </div>
     </div>
 
-    <section class="mb-6 rounded-2xl border border-teal-200 bg-white p-4 shadow-sm dark:border-teal-500/20 dark:bg-slate-800">
+    <section class="mb-6 rounded-2xl border border-brand-200 bg-white p-4 shadow-sm dark:border-brand-500/20 dark:bg-slate-800">
       <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p class="text-sm font-bold uppercase tracking-wide text-teal-700 dark:text-teal-300">Email-лиды</p>
+          <p class="text-sm font-bold uppercase tracking-wide text-brand-700 dark:text-brand-300">Email-лиды</p>
           <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">
             Ручная проверка берёт последние 14 дней; автоимпорт идёт с последнего прохода.
           </p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <button
-            class="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-teal-700 disabled:opacity-60"
+            class="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
             :disabled="emailLeadImporting"
             @click="importEmailLeads"
           >
@@ -443,7 +443,7 @@ const scopeOptions: { value: Scope; label: string }[] = [
 
     <!-- Loading -->
     <div v-if="loading" class="flex items-center gap-3 text-slate-500 dark:text-slate-400 py-12 justify-center">
-      <span class="material-icons-round animate-spin text-teal-500">refresh</span>
+      <span class="material-icons-round animate-spin text-brand-500">refresh</span>
       Загрузка...
     </div>
 
@@ -535,18 +535,18 @@ const scopeOptions: { value: Scope; label: string }[] = [
     >
       <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
         <h2 class="text-lg font-bold flex items-center gap-2">
-          <span class="material-icons-round text-teal-500">person_add</span>
+          <span class="material-icons-round text-brand-500">person_add</span>
           Новый лид
         </h2>
 
         <div class="space-y-3 relative">
           <!-- Selected Customer Banner -->
-          <div v-if="existingCustomerId" class="bg-teal-50 dark:bg-teal-900/30 border border-teal-200 dark:border-teal-800 text-teal-800 dark:text-teal-300 px-3 py-2 rounded-xl flex items-center justify-between text-sm col-span-full">
+          <div v-if="existingCustomerId" class="bg-brand-50 dark:bg-brand-900/30 border border-brand-200 dark:border-brand-800 text-brand-800 dark:text-brand-300 px-3 py-2 rounded-xl flex items-center justify-between text-sm col-span-full">
             <div class="flex items-center gap-2">
-              <span class="material-icons-round text-teal-500 text-lg">check_circle</span>
+              <span class="material-icons-round text-brand-500 text-lg">check_circle</span>
               <span>Привязан клиент: <strong>{{ createForm.name || phoneModelRef || 'Без имени' }}</strong></span>
             </div>
-            <button @click="clearSelectedCustomer" class="text-teal-600 hover:text-teal-800 dark:text-teal-400 dark:hover:text-teal-200 p-1 rounded-md hover:bg-teal-100 dark:hover:bg-teal-800 transition-colors" title="Отвязать клиента">
+            <button @click="clearSelectedCustomer" class="text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-200 p-1 rounded-md hover:bg-brand-100 dark:hover:bg-brand-800 transition-colors" title="Отвязать клиента">
               <span class="material-icons-round text-[16px]">close</span>
             </button>
           </div>
@@ -555,14 +555,14 @@ const scopeOptions: { value: Scope; label: string }[] = [
           <div class="flex gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl w-fit mx-auto col-span-full">
             <button 
               class="px-5 py-1.5 rounded-lg text-xs font-semibold transition-all"
-              :class="!createForm.isCompany ? 'bg-white dark:bg-slate-700 shadow-sm text-teal-700 dark:text-teal-400' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'"
+              :class="!createForm.isCompany ? 'bg-white dark:bg-slate-700 shadow-sm text-brand-700 dark:text-brand-400' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'"
               @click="createForm.isCompany = false"
             >
               👤 Физ. лицо
             </button>
             <button 
               class="px-5 py-1.5 rounded-lg text-xs font-semibold transition-all"
-              :class="createForm.isCompany ? 'bg-white dark:bg-slate-700 shadow-sm text-teal-700 dark:text-teal-400' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'"
+              :class="createForm.isCompany ? 'bg-white dark:bg-slate-700 shadow-sm text-brand-700 dark:text-brand-400' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'"
               @click="createForm.isCompany = true"
             >
               🏢 Юр. лицо
@@ -577,10 +577,10 @@ const scopeOptions: { value: Scope; label: string }[] = [
                 @blur="onCreateInnBlur"
                 type="text"
                 placeholder="9 цифр"
-                class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
               <div v-if="isEgrLoading" class="absolute right-3 top-7">
-                <span class="material-icons-round animate-spin text-teal-500 text-sm">refresh</span>
+                <span class="material-icons-round animate-spin text-brand-500 text-sm">refresh</span>
               </div>
             </div>
             <div>
@@ -589,7 +589,7 @@ const scopeOptions: { value: Scope; label: string }[] = [
                 v-model="createForm.fullLegalName"
                 type="text"
                 placeholder="Полное название"
-                class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
             </div>
           </div>
@@ -601,7 +601,7 @@ const scopeOptions: { value: Scope; label: string }[] = [
               @input="onSearchInput"
               type="text"
               placeholder="Иванов Иван / МастерВоздуха"
-              class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
+              class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
           </div>
           <div class="relative">
@@ -612,7 +612,7 @@ const scopeOptions: { value: Scope; label: string }[] = [
               @input="onSearchInput"
               type="text"
               placeholder="+375 (29) 000-00-00 или +7 916 000-00-00"
-              class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
+              class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
 
             <!-- Autocomplete Dropdown -->
@@ -632,7 +632,7 @@ const scopeOptions: { value: Scope; label: string }[] = [
             <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">Источник</label>
             <select
               v-model="createForm.source"
-              class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+              class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
             >
               <option value="manager">Менеджер (звонок/офис)</option>
               <option value="phone">Входящий звонок</option>
@@ -644,7 +644,7 @@ const scopeOptions: { value: Scope; label: string }[] = [
             <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">Суть задачи</label>
             <select
               v-model="createForm.service_type"
-              class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+              class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
             >
               <option value="">— Не указано —</option>
               <option value="turnkey">📦 Покупка + Монтаж</option>
@@ -662,7 +662,7 @@ const scopeOptions: { value: Scope; label: string }[] = [
                 <input
                   v-model="createForm.target_date"
                   type="datetime-local"
-                  class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
               </div>
               <AddressSuggestInput
@@ -679,7 +679,7 @@ const scopeOptions: { value: Scope; label: string }[] = [
               v-model="createForm.request_text"
               rows="3"
               placeholder="Нужен монтаж кондиционера в квартиру, Минск..."
-              class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none"
+              class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
             />
           </div>
         </div>
@@ -687,7 +687,7 @@ const scopeOptions: { value: Scope; label: string }[] = [
         <div class="flex gap-3 pt-1">
           <button
             class="flex-1 py-2.5 rounded-xl font-semibold text-sm transition-all"
-            :class="createSaving ? 'bg-teal-400 text-white cursor-not-allowed' : 'bg-teal-600 text-white hover:bg-teal-700'"
+            :class="createSaving ? 'bg-brand-400 text-white cursor-not-allowed' : 'bg-brand-600 text-white hover:bg-brand-700'"
             :disabled="createSaving"
             @click="submitCreateLead"
           >

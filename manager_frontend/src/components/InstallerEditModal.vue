@@ -212,7 +212,7 @@ const submit = async () => {
                             </div>
 
                             <label class="flex items-start gap-3 cursor-pointer pt-1 group" :class="{ 'opacity-50': loading }">
-                                <input type="checkbox" v-model="formData.is_assignable_installer" class="mt-1 h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500" :disabled="loading" />
+                                <input type="checkbox" v-model="formData.is_assignable_installer" class="mt-1 h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500" :disabled="loading" />
                                 <span>
                                     <span class="block text-sm font-medium text-gray-700 dark:text-slate-300">Можно назначать на работы</span>
                                     <span class="block text-xs text-gray-500 dark:text-slate-500">Для такого сотрудника сохраняется совместимость с монтажниками в заказах и календаре.</span>
@@ -231,7 +231,7 @@ const submit = async () => {
                         </button>
                         <button
                             @click="submit"
-                            class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-teal-600 hover:bg-teal-500 active:bg-teal-700 transition-colors rounded-lg disabled:opacity-50 shadow-lg shadow-teal-900/30"
+                            class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-brand-600 hover:bg-brand-500 active:bg-brand-700 transition-colors rounded-lg disabled:opacity-50 shadow-lg shadow-brand-900/30"
                             :disabled="loading || !formData.display_name.trim()"
                         >
                             <span v-if="loading" class="material-icons-round text-sm animate-spin">refresh</span>

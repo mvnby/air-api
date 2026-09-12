@@ -29,7 +29,7 @@ const items = [
       :key="item.id"
       type="button"
       class="inline-flex min-h-9 min-w-0 flex-1 items-center justify-center gap-1 rounded-lg px-1 text-xs font-semibold transition sm:flex-none sm:px-3 sm:text-sm"
-      :class="active === item.id ? 'bg-white text-teal-700 shadow-sm dark:bg-slate-800 dark:text-teal-200' : 'text-slate-600 hover:bg-white/80 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white'"
+      :class="active === item.id ? 'bg-white text-brand-700 shadow-sm dark:bg-slate-800 dark:text-brand-200' : 'text-slate-600 hover:bg-white/80 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white'"
       :aria-current="active === item.id ? 'page' : undefined"
       :data-order-usage="`workspace-${item.id}`"
       @click="emit('select', item.id)"
@@ -39,7 +39,7 @@ const items = [
     </button>
     <button
       type="button"
-      class="ml-auto hidden min-h-9 shrink-0 items-center gap-1 rounded-lg px-2.5 text-xs font-semibold text-teal-700 hover:bg-teal-50 dark:text-teal-200 dark:hover:bg-teal-500/10 lg:inline-flex"
+      class="ml-auto hidden min-h-9 shrink-0 items-center gap-1 rounded-lg px-2.5 text-xs font-semibold text-brand-700 hover:bg-brand-50 dark:text-brand-200 dark:hover:bg-brand-500/10 lg:inline-flex"
       data-order-usage="workspace-add-product"
       @click="emit('add-product')"
     >

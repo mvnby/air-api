@@ -110,7 +110,7 @@ const save = async () => {
         <div v-if="loading" role="status" class="flex items-center justify-center gap-2 p-12 text-sm text-gray-500"><LoaderCircle class="h-5 w-5 animate-spin" />Загружаем карточку…</div>
         <div v-else-if="!form || !equipment" class="space-y-3 p-5">
           <p role="alert" class="text-sm text-red-700 dark:text-red-300">{{ error }}</p>
-          <button type="button" class="text-sm font-semibold text-teal-700 dark:text-teal-300" @click="load">Повторить загрузку</button>
+          <button type="button" class="text-sm font-semibold text-brand-700 dark:text-brand-300" @click="load">Повторить загрузку</button>
         </div>
 
         <form v-else class="flex min-h-0 flex-1 flex-col" novalidate @submit.prevent="save">
@@ -119,7 +119,7 @@ const save = async () => {
             <div class="text-sm">
               <p class="font-semibold text-gray-900 dark:text-white">{{ equipment.customer_name || `Клиент #${equipment.customer_id}` }}</p>
               <p v-if="equipmentLocation(equipment)" class="mt-1 text-gray-500 dark:text-slate-400">{{ equipmentLocation(equipment) }}</p>
-              <a v-if="serviceContactPhone(equipment)" :href="phoneHref(serviceContactPhone(equipment))" class="mt-1 inline-block font-medium text-teal-700 hover:underline dark:text-teal-300">{{ equipment.service_contact_name ? `${equipment.service_contact_name} · ` : '' }}{{ serviceContactPhone(equipment) }}</a>
+              <a v-if="serviceContactPhone(equipment)" :href="phoneHref(serviceContactPhone(equipment))" class="mt-1 inline-block font-medium text-brand-700 hover:underline dark:text-brand-300">{{ equipment.service_contact_name ? `${equipment.service_contact_name} · ` : '' }}{{ serviceContactPhone(equipment) }}</a>
             </div>
 
             <div class="grid gap-3 sm:grid-cols-2">
@@ -134,7 +134,7 @@ const save = async () => {
               <div class="flex flex-wrap gap-2" role="group" aria-label="Условия гарантии оборудования">
                 <button v-for="mode in modes" :key="mode.value" type="button" :aria-pressed="form.warrantyMode === mode.value"
                   class="min-h-9 rounded-md border px-3 py-2 text-xs font-semibold transition"
-                  :class="form.warrantyMode === mode.value ? 'border-teal-600 bg-teal-50 text-teal-800 dark:bg-teal-500/15 dark:text-teal-200' : 'border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700'"
+                  :class="form.warrantyMode === mode.value ? 'border-brand-600 bg-brand-50 text-brand-800 dark:bg-brand-500/15 dark:text-brand-200' : 'border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700'"
                   @click="chooseWarrantyMode(mode.value)">{{ mode.label }}</button>
               </div>
               <template v-if="form.warrantyMode === 'manual'">
@@ -155,7 +155,7 @@ const save = async () => {
             </section>
 
             <div class="space-y-3 border-t border-gray-200 pt-4 dark:border-slate-700">
-              <label class="flex cursor-pointer items-center gap-2.5 text-sm font-semibold text-gray-950 dark:text-white"><input v-model="form.maintenanceEnabled" type="checkbox" class="h-4 w-4 rounded border-gray-300 accent-teal-600" />Напоминать о ТО</label>
+              <label class="flex cursor-pointer items-center gap-2.5 text-sm font-semibold text-gray-950 dark:text-white"><input v-model="form.maintenanceEnabled" type="checkbox" class="h-4 w-4 rounded border-gray-300 accent-brand-600" />Напоминать о ТО</label>
               <template v-if="form.maintenanceEnabled">
                 <div class="grid gap-3 sm:grid-cols-2">
                   <label class="edit-label">Интервал ТО, месяцев<input v-model="form.maintenanceMonths" type="number" min="1" max="120" step="1" required class="edit-input" /></label>
@@ -183,7 +183,7 @@ const save = async () => {
             <p v-else-if="changed && validation" role="status" class="text-xs text-amber-800 dark:text-amber-300">{{ validation }}</p>
             <div class="flex justify-end gap-2">
               <button type="button" class="rounded-md border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200" :disabled="saving" @click="close">Отмена</button>
-              <button type="submit" class="inline-flex items-center gap-2 rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50" :disabled="saving || !changed || Boolean(validation)"><LoaderCircle v-if="saving" class="h-4 w-4 animate-spin" />{{ saving ? 'Сохраняем…' : 'Сохранить' }}</button>
+              <button type="submit" class="inline-flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50" :disabled="saving || !changed || Boolean(validation)"><LoaderCircle v-if="saving" class="h-4 w-4 animate-spin" />{{ saving ? 'Сохраняем…' : 'Сохранить' }}</button>
             </div>
           </footer>
         </form>
@@ -194,5 +194,5 @@ const save = async () => {
 
 <style scoped>
 .edit-label { @apply flex min-w-0 flex-col gap-1.5 text-xs font-medium text-gray-600 dark:text-slate-300; }
-.edit-input { @apply min-h-10 w-full min-w-0 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 dark:border-slate-600 dark:bg-slate-900 dark:text-white; }
+.edit-input { @apply min-h-10 w-full min-w-0 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-900 dark:text-white; }
 </style>

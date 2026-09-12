@@ -89,7 +89,7 @@ const saveDecision = async () => {
   <div class="mt-4 grid gap-3 xl:grid-cols-2">
     <section class="rounded-xl border border-[var(--mv-border)] bg-[var(--mv-panel)] p-3">
       <div class="flex items-center gap-2">
-        <ShieldCheck class="h-4 w-4 text-teal-500" />
+        <ShieldCheck class="h-4 w-4 text-brand-500" />
         <h3 class="text-sm font-semibold text-[var(--mv-text)]">Гарантийные покрытия</h3>
       </div>
 
@@ -140,7 +140,7 @@ const saveDecision = async () => {
         v-for="order in linkedOrders"
         :key="`${order.order_id}-${order.role}`"
         :href="`/manager/orders/kanban?orderId=${order.order_id}`"
-        class="mt-2 flex items-center gap-2 rounded-lg border border-[var(--mv-border)] bg-[var(--mv-surface)] px-3 py-2 text-sm hover:border-teal-500"
+        class="mt-2 flex items-center gap-2 rounded-lg border border-[var(--mv-border)] bg-[var(--mv-surface)] px-3 py-2 text-sm hover:border-brand-500"
       >
         <span class="min-w-0 flex-1">
           <span class="block truncate font-semibold text-[var(--mv-text)]">#{{ order.order_id }} · {{ order.title }}</span>

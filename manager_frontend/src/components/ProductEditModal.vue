@@ -1341,7 +1341,7 @@ defineExpose({ save, isDirty, loading });
             <!-- Header -->
             <header v-if="!isWorkspace" class="p-5 border-b dark:border-slate-800 flex justify-between items-center bg-slate-100/50 dark:bg-slate-800/50">
                 <div class="flex items-center gap-3">
-                    <div class="p-2 bg-teal-100 rounded-lg text-teal-700">
+                    <div class="p-2 bg-brand-100 rounded-lg text-brand-700">
                         <Edit3 class="w-5 h-5" />
                     </div>
                     <div>
@@ -1393,14 +1393,14 @@ defineExpose({ save, isDirty, loading });
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 <button
                                     type="button"
-                                    class="px-3 py-2 rounded-lg border border-teal-200 text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-900/20 text-xs font-semibold text-left"
+                                    class="px-3 py-2 rounded-lg border border-brand-200 text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-900/20 text-xs font-semibold text-left"
                                     @click="applyPreset('multi_outdoor')"
                                 >
                                     Мульти: наружный блок
                                 </button>
                                 <button
                                     type="button"
-                                    class="px-3 py-2 rounded-lg border border-teal-200 text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-900/20 text-xs font-semibold text-left"
+                                    class="px-3 py-2 rounded-lg border border-brand-200 text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-900/20 text-xs font-semibold text-left"
                                     @click="applyPreset('multi_indoor')"
                                 >
                                     Мульти: внутренний блок
@@ -1500,7 +1500,7 @@ defineExpose({ save, isDirty, loading });
                                 />
                                 <button
                                     type="button"
-                                    class="px-3 py-2 rounded-lg border border-teal-200 dark:border-teal-800 text-sm font-semibold text-teal-700 dark:text-teal-300 disabled:opacity-50"
+                                    class="px-3 py-2 rounded-lg border border-brand-200 dark:border-brand-800 text-sm font-semibold text-brand-700 dark:text-brand-300 disabled:opacity-50"
                                     :disabled="creatingBrand"
                                     @click="createAndSelectBrand"
                                 >
@@ -1550,7 +1550,7 @@ defineExpose({ save, isDirty, loading });
                                 </button>
                                 <button
                                     type="button"
-                                    class="px-3 py-2 rounded-lg border border-teal-200 dark:border-teal-800 text-sm font-semibold text-teal-700 dark:text-teal-300 disabled:opacity-50"
+                                    class="px-3 py-2 rounded-lg border border-brand-200 dark:border-brand-800 text-sm font-semibold text-brand-700 dark:text-brand-300 disabled:opacity-50"
                                     :disabled="compatibilityLoading || !hasBrandContext"
                                     @click="autoFillCompatibilityByBrand"
                                 >
@@ -1580,7 +1580,7 @@ defineExpose({ save, isDirty, loading });
                                         </button>
                                         <button
                                             type="button"
-                                            class="px-2 py-1 rounded border border-teal-300 text-teal-700 text-[11px] font-semibold"
+                                            class="px-2 py-1 rounded border border-brand-300 text-brand-700 text-[11px] font-semibold"
                                             :disabled="!candidate.slug"
                                             @click="addCompatibilitySlug('outdoor', candidate.slug || '')"
                                         >
@@ -1611,10 +1611,10 @@ defineExpose({ save, isDirty, loading });
                                         <span
                                             v-for="slug in compatibilityOutdoorSlugs"
                                             :key="`outdoor-${slug}`"
-                                            class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-teal-100 text-teal-800 text-[11px] font-semibold"
+                                            class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-brand-100 text-brand-800 text-[11px] font-semibold"
                                         >
                                             {{ slug }}
-                                            <button type="button" class="text-teal-700" @click="removeCompatibilitySlug('outdoor', slug)">×</button>
+                                            <button type="button" class="text-brand-700" @click="removeCompatibilitySlug('outdoor', slug)">×</button>
                                         </span>
                                         <span v-if="compatibilityOutdoorSlugs.length === 0" class="text-[11px] text-gray-400">Не задано</span>
                                     </div>
@@ -1634,7 +1634,7 @@ defineExpose({ save, isDirty, loading });
                                             v-model="multiCompatMode"
                                             type="radio"
                                             value="free_match"
-                                            class="accent-teal-600"
+                                            class="accent-brand-600"
                                         />
                                         <span>
                                             <strong>Free Match (по умолчанию)</strong><br />
@@ -1655,7 +1655,7 @@ defineExpose({ save, isDirty, loading });
                                     </label>
                                 </div>
 
-                                <div v-if="multiCompatMode === 'free_match'" class="rounded-lg border border-teal-200 dark:border-teal-800/50 bg-white dark:bg-slate-900 p-2.5 space-y-2">
+                                <div v-if="multiCompatMode === 'free_match'" class="rounded-lg border border-brand-200 dark:border-brand-800/50 bg-white dark:bg-slate-900 p-2.5 space-y-2">
                                     <p class="text-[11px] text-gray-500 dark:text-slate-400">
                                         Введите допустимые комбинации через запятую или с новой строки. Пример: <code>09+09, 09+12, 12+12</code>
                                     </p>
@@ -1669,7 +1669,7 @@ defineExpose({ save, isDirty, loading });
                                         <span
                                             v-for="combo in normalizedCapacityCombos"
                                             :key="combo"
-                                            class="inline-flex items-center px-2 py-1 rounded-full bg-teal-100 text-teal-800 text-[11px] font-semibold"
+                                            class="inline-flex items-center px-2 py-1 rounded-full bg-brand-100 text-brand-800 text-[11px] font-semibold"
                                         >
                                             {{ combo }}
                                         </span>
@@ -1686,7 +1686,7 @@ defineExpose({ save, isDirty, loading });
                                         </p>
                                         <button
                                             type="button"
-                                            class="px-2.5 py-1 rounded border border-teal-300 dark:border-teal-800 text-teal-700 dark:text-teal-300 text-[11px] font-semibold"
+                                            class="px-2.5 py-1 rounded border border-brand-300 dark:border-brand-800 text-brand-700 dark:text-brand-300 text-[11px] font-semibold"
                                             @click="addMultiComboRule"
                                         >
                                             + Конфигурация
@@ -1780,7 +1780,7 @@ defineExpose({ save, isDirty, loading });
                                 <h3 class="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-widest">
                                     Инструкции и файлы
                                 </h3>
-                                <button @click="addManualRow" class="text-xs bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 px-2.5 py-1 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 text-teal-600 dark:text-teal-400 font-bold flex items-center gap-1 transition-colors shadow-sm">
+                                <button @click="addManualRow" class="text-xs bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 px-2.5 py-1 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 text-brand-600 dark:text-brand-400 font-bold flex items-center gap-1 transition-colors shadow-sm">
                                     <Plus class="w-3 h-3" /> Добавить
                                 </button>
                             </div>
@@ -1808,10 +1808,10 @@ defineExpose({ save, isDirty, loading });
                             </div>
                         </div>
 
-                        <div v-if="showPublicationSection" class="rounded-2xl border border-teal-100 dark:border-teal-900 bg-teal-50/40 dark:bg-teal-950/20 p-3 space-y-3">
+                        <div v-if="showPublicationSection" class="rounded-2xl border border-brand-100 dark:border-brand-900 bg-brand-50/40 dark:bg-brand-950/20 p-3 space-y-3">
                             <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                 <div>
-                                    <h3 class="text-xs font-bold text-teal-700 dark:text-teal-300 uppercase tracking-widest">
+                                    <h3 class="text-xs font-bold text-brand-700 dark:text-brand-300 uppercase tracking-widest">
                                         Состав для накладной
                                     </h3>
                                     <p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
@@ -1821,14 +1821,14 @@ defineExpose({ save, isDirty, loading });
                                 <div class="flex flex-wrap gap-2">
                                     <button
                                         type="button"
-                                        class="text-xs bg-white dark:bg-slate-800 border border-teal-200 dark:border-teal-800 px-2.5 py-1 rounded-lg hover:bg-teal-50 dark:hover:bg-teal-900/30 text-teal-700 dark:text-teal-300 font-bold flex items-center gap-1 transition-colors shadow-sm"
+                                        class="text-xs bg-white dark:bg-slate-800 border border-brand-200 dark:border-brand-800 px-2.5 py-1 rounded-lg hover:bg-brand-50 dark:hover:bg-brand-900/30 text-brand-700 dark:text-brand-300 font-bold flex items-center gap-1 transition-colors shadow-sm"
                                         @click="applyTwoBlockLogisticsTemplate"
                                     >
                                         Внутренний + наружный
                                     </button>
                                     <button
                                         type="button"
-                                        class="text-xs bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 px-2.5 py-1 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 text-teal-600 dark:text-teal-400 font-bold flex items-center gap-1 transition-colors shadow-sm"
+                                        class="text-xs bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 px-2.5 py-1 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 text-brand-600 dark:text-brand-400 font-bold flex items-center gap-1 transition-colors shadow-sm"
                                         @click="addLogisticsComponent"
                                     >
                                         <Plus class="w-3 h-3" /> Добавить
@@ -1892,7 +1892,7 @@ defineExpose({ save, isDirty, loading });
                                     </label>
                                 </div>
                             </div>
-                            <div v-else class="rounded-xl border border-dashed border-teal-200 bg-white/70 px-3 py-4 text-center text-xs text-slate-500 dark:border-teal-900 dark:bg-slate-900/40">
+                            <div v-else class="rounded-xl border border-dashed border-brand-200 bg-white/70 px-3 py-4 text-center text-xs text-slate-500 dark:border-brand-900 dark:bg-slate-900/40">
                                 Состав не задан, накладная будет использовать товар одной строкой.
                             </div>
                         </div>
@@ -1914,7 +1914,7 @@ defineExpose({ save, isDirty, loading });
                             v-model="tagSearchQuery"
                             type="text"
                             placeholder="Поиск тега..."
-                            class="w-full mb-4 px-3 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all text-sm dark:text-slate-200 dark:placeholder-slate-500"
+                            class="w-full mb-4 px-3 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl focus:bg-white focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all text-sm dark:text-slate-200 dark:placeholder-slate-500"
                         />
 
                         <div class="bg-gray-50/50 dark:bg-slate-800/50 rounded-xl border border-gray-100 dark:border-slate-800 max-h-[300px] overflow-y-auto">
@@ -1949,7 +1949,7 @@ defineExpose({ save, isDirty, loading });
                 <button 
                     @click="save" 
                     :disabled="loading"
-                    class="px-8 py-2 bg-teal-600 text-white rounded-xl shadow-lg shadow-teal-700/20 hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2 text-sm font-bold transition-all transform hover:-translate-y-0.5 active:translate-y-0"
+                    class="px-8 py-2 bg-brand-600 text-white rounded-xl shadow-lg shadow-brand-700/20 hover:bg-brand-700 disabled:opacity-50 flex items-center gap-2 text-sm font-bold transition-all transform hover:-translate-y-0.5 active:translate-y-0"
                 >
                     <div v-if="loading" class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                     <Save v-else class="w-4 h-4" />

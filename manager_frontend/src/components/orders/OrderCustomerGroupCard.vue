@@ -85,14 +85,14 @@ const cardComponentForOrder = (order: ManagerOrderListItemResponse) => {
             <div v-if="editing" class="flex min-w-0 items-center gap-1">
               <input
                 v-model="aliasDraft"
-                class="min-w-0 flex-1 rounded-lg border border-teal-200 bg-white px-2 py-1 text-sm font-semibold text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+                class="min-w-0 flex-1 rounded-lg border border-brand-200 bg-white px-2 py-1 text-sm font-semibold text-slate-900 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
                 :placeholder="group.originalCustomerName"
                 autofocus
                 @blur="saveAlias"
                 @keydown.enter.prevent="saveAlias"
                 @keydown.esc.prevent="cancelEditing"
               />
-              <button type="button" class="rounded-full p-1 text-teal-700 hover:bg-teal-50" @mousedown.prevent @click.stop="saveAlias">
+              <button type="button" class="rounded-full p-1 text-brand-700 hover:bg-brand-50" @mousedown.prevent @click.stop="saveAlias">
                 <Check class="h-3.5 w-3.5" />
               </button>
               <button type="button" class="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" @mousedown.prevent @click.stop="cancelEditing">
@@ -114,7 +114,7 @@ const cardComponentForOrder = (order: ManagerOrderListItemResponse) => {
             {{ formatOrderCount(group.orders.length) }}
           </span>
           <span>Сумма: <strong class="text-slate-800 dark:text-slate-200">{{ formatMoney(group.totalAmount) }}</strong></span>
-          <span>Маржа: <strong class="text-teal-700 dark:text-teal-300">{{ formatMoney(group.margin) }}</strong></span>
+          <span>Маржа: <strong class="text-brand-700 dark:text-brand-300">{{ formatMoney(group.margin) }}</strong></span>
           <span>
             Долг:
             <strong :class="group.balanceDue > 0 ? 'text-red-600 dark:text-red-300' : 'text-emerald-700 dark:text-emerald-300'">

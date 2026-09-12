@@ -106,7 +106,7 @@ defineExpose({ openSend, openCreate });
       <button
         type="button"
         class="rounded-lg px-3 py-1.5 text-sm font-semibold transition"
-        :class="activeProvider === 'native' ? 'bg-teal-600 text-white shadow-sm' : 'text-slate-600 hover:text-teal-700 dark:text-slate-300'"
+        :class="activeProvider === 'native' ? 'bg-brand-600 text-white shadow-sm' : 'text-slate-600 hover:text-brand-700 dark:text-slate-300'"
         @click="selectProvider('native')"
       >
         DOCX · В CRM
@@ -114,7 +114,7 @@ defineExpose({ openSend, openCreate });
       <button
         type="button"
         class="rounded-lg px-2.5 py-1.5 text-xs font-semibold transition"
-        :class="activeProvider === 'google' ? 'bg-teal-600 text-white shadow-sm' : 'text-slate-500 hover:text-teal-700 dark:text-slate-400'"
+        :class="activeProvider === 'google' ? 'bg-brand-600 text-white shadow-sm' : 'text-slate-500 hover:text-brand-700 dark:text-slate-400'"
         @click="selectProvider('google')"
       >
         Google Docs

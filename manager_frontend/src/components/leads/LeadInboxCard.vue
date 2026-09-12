@@ -112,8 +112,8 @@ const isBusinessCustomer = computed(() => (
   <div
     class="group relative bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700/60 shadow-sm hover:shadow-md transition-all duration-200"
     :class="{
-      'border-l-4 border-l-teal-500': item.is_new,
-      'bg-teal-50/40 dark:bg-teal-900/10': item.is_new,
+      'border-l-4 border-l-brand-500': item.is_new,
+      'bg-brand-50/40 dark:bg-brand-900/10': item.is_new,
     }"
   >
     <!-- Header row -->
@@ -122,7 +122,7 @@ const isBusinessCustomer = computed(() => (
         <!-- Source icon -->
         <span
           class="material-icons-round text-[18px] shrink-0"
-          :class="item.is_new ? 'text-teal-500' : 'text-slate-400 dark:text-slate-500'"
+          :class="item.is_new ? 'text-brand-500' : 'text-slate-400 dark:text-slate-500'"
         >{{ getSourceIcon(item.source) }}</span>
 
         <!-- Name -->
@@ -148,7 +148,7 @@ const isBusinessCustomer = computed(() => (
         >💼 ИП</span>
         <span
           v-if="item.is_new"
-          class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold bg-teal-500 text-white"
+          class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold bg-brand-500 text-white"
         >🔥 НОВЫЙ</span>
         <span
           v-else
@@ -162,7 +162,7 @@ const isBusinessCustomer = computed(() => (
       <a
         v-if="item.phone"
         :href="`tel:${item.phone}`"
-        class="flex items-center gap-1 text-sm text-teal-600 dark:text-teal-400 hover:underline font-medium"
+        class="flex items-center gap-1 text-sm text-brand-600 dark:text-brand-400 hover:underline font-medium"
       >
         <span class="material-icons-round text-[15px]">call</span>
         {{ formatPhone(item.phone) }}
@@ -170,7 +170,7 @@ const isBusinessCustomer = computed(() => (
       <a
         v-if="formatEmail(item.email)"
         :href="`mailto:${formatEmail(item.email)}`"
-        class="flex min-w-0 items-center gap-1 text-sm text-teal-600 dark:text-teal-400 hover:underline font-medium"
+        class="flex min-w-0 items-center gap-1 text-sm text-brand-600 dark:text-brand-400 hover:underline font-medium"
         :title="formatEmail(item.email)"
       >
         <span class="material-icons-round text-[15px]">email</span>
@@ -232,7 +232,7 @@ const isBusinessCustomer = computed(() => (
       <button
         v-if="hasLongComment"
         type="button"
-        class="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-800 dark:text-teal-300 dark:hover:text-teal-200"
+        class="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand-700 hover:text-brand-800 dark:text-brand-300 dark:hover:text-brand-200"
         @click="isCommentExpanded = !isCommentExpanded"
       >
         <span class="material-icons-round text-[15px]">{{ isCommentExpanded ? 'expand_less' : 'expand_more' }}</span>
@@ -255,7 +255,7 @@ const isBusinessCustomer = computed(() => (
     <!-- Actions footer -->
     <div v-if="!isArchive" class="flex flex-wrap gap-2 px-4 pb-4">
       <button
-        class="flex-1 min-w-[120px] inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs md:text-sm font-semibold bg-teal-600 text-white hover:bg-teal-700 active:scale-95 transition-all"
+        class="flex-1 min-w-[120px] inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs md:text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700 active:scale-95 transition-all"
         title="Квалифицировать (в сделку)"
         @click="emit('qualify', item)"
       >

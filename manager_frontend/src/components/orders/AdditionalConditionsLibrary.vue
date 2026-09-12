@@ -238,7 +238,7 @@ watch(() => props.defaultMode, (mode) => {
       <button
         v-if="showSave"
         type="button"
-        class="rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-teal-700 disabled:opacity-50"
+        class="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-brand-700 disabled:opacity-50"
         :disabled="saveDisabled || saving"
         @click="emit('save')"
       >
@@ -277,7 +277,7 @@ watch(() => props.defaultMode, (mode) => {
             <span class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{{ group.title }}</span>
             <span
               v-if="selectedCountForGroup(group)"
-              class="rounded-full bg-teal-100 px-2 py-0.5 text-[11px] font-semibold text-teal-700 dark:bg-teal-500/15 dark:text-teal-200"
+              class="rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-semibold text-brand-700 dark:bg-brand-500/15 dark:text-brand-200"
             >
               {{ selectedCountForGroup(group) }}
             </span>
@@ -296,14 +296,14 @@ watch(() => props.defaultMode, (mode) => {
             type="button"
             class="min-h-[86px] rounded-lg border px-3 py-2 text-left transition"
             :class="isSelected(preset)
-              ? 'border-teal-400 bg-teal-50 text-teal-950 dark:border-teal-500/60 dark:bg-teal-500/10 dark:text-teal-100'
-              : 'border-slate-200 bg-white text-slate-700 hover:border-teal-200 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-teal-500/50'"
+              ? 'border-brand-400 bg-brand-50 text-brand-950 dark:border-brand-500/60 dark:bg-brand-500/10 dark:text-brand-100'
+              : 'border-slate-200 bg-white text-slate-700 hover:border-brand-200 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-brand-500/50'"
             @click="togglePreset(preset)"
           >
             <span class="flex items-start gap-2">
               <span
                 class="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[12px]"
-                :class="isSelected(preset) ? 'border-teal-500 bg-teal-500 text-white' : 'border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-900'"
+                :class="isSelected(preset) ? 'border-brand-500 bg-brand-500 text-white' : 'border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-900'"
               >
                 <span v-if="isSelected(preset)" class="material-icons-round text-[12px]">check</span>
               </span>
@@ -332,7 +332,7 @@ watch(() => props.defaultMode, (mode) => {
       <textarea
         :value="modelValue"
         rows="5"
-        class="w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+        class="w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
         placeholder="Редкое условие можно вписать вручную"
         @input="emit('update:modelValue', ($event.target as HTMLTextAreaElement).value)"
       />

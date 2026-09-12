@@ -357,7 +357,7 @@ const submitQualify = async () => {
       <div class="flex shrink-0 items-center justify-between border-b border-slate-100 bg-slate-50/70 px-6 py-4 dark:border-slate-800 dark:bg-slate-900/60">
         <div class="min-w-0">
           <h2 class="flex items-center gap-2 text-lg font-bold">
-            <span class="material-icons-round text-teal-600 dark:text-teal-500">bolt</span>
+            <span class="material-icons-round text-brand-600 dark:text-brand-500">bolt</span>
             Быстрая квалификация #{{ lead.id }}
           </h2>
           <p class="mt-1 text-xs text-slate-500">Минимум для сделки: тип клиента и суть задачи.</p>
@@ -395,7 +395,7 @@ const submitQualify = async () => {
             </div>
             <span
               v-if="searchStatus === 'found'"
-              class="inline-flex items-center gap-1 rounded-full bg-teal-100 px-3 py-1 text-xs font-bold text-teal-700 dark:bg-teal-500/10 dark:text-teal-300"
+              class="inline-flex items-center gap-1 rounded-full bg-brand-100 px-3 py-1 text-xs font-bold text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
             >
               <span class="material-icons-round text-[15px]">person_search</span>
               Клиент найден
@@ -420,7 +420,7 @@ const submitQualify = async () => {
           <div>
             <div class="mb-2 flex items-center justify-between gap-3">
               <h3 class="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
-                <span class="material-icons-round text-[18px] text-teal-600 dark:text-teal-400">person</span>
+                <span class="material-icons-round text-[18px] text-brand-600 dark:text-brand-400">person</span>
                 Клиент
               </h3>
               <span v-if="attemptedSubmit && missingCustomerType" class="text-xs font-semibold text-red-500">Выберите тип клиента</span>
@@ -435,7 +435,7 @@ const submitQualify = async () => {
           <div>
             <div class="mb-2 flex items-center justify-between gap-3">
               <h3 class="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
-                <span class="material-icons-round text-[18px] text-teal-600 dark:text-teal-400">build</span>
+                <span class="material-icons-round text-[18px] text-brand-600 dark:text-brand-400">build</span>
                 Суть задачи
               </h3>
               <span v-if="attemptedSubmit && missingServiceType" class="text-xs font-semibold text-red-500">Выберите задачу</span>
@@ -447,10 +447,10 @@ const submitQualify = async () => {
                 type="button"
                 class="flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all"
                 :class="serviceType === option.value
-                  ? 'border-teal-500 bg-teal-50 text-teal-800 shadow-sm dark:border-teal-400 dark:bg-teal-500/10 dark:text-teal-200'
+                  ? 'border-brand-500 bg-brand-50 text-brand-800 shadow-sm dark:border-brand-400 dark:bg-brand-500/10 dark:text-brand-200'
                   : attemptedSubmit && missingServiceType
                     ? 'border-red-300 bg-red-50 text-slate-700 dark:border-red-500/50 dark:bg-red-500/10 dark:text-slate-200'
-                    : 'border-slate-200 bg-white text-slate-700 hover:border-teal-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'"
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-brand-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'"
                 @click="serviceType = option.value"
               >
                 <span class="material-icons-round text-[20px]">{{ option.icon }}</span>
@@ -463,15 +463,15 @@ const submitQualify = async () => {
           </div>
         </section>
 
-        <div v-if="searchStatus === 'found'" class="flex items-start gap-3 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-800 dark:border-teal-800 dark:bg-teal-900/30 dark:text-teal-300">
-          <span class="material-icons-round mt-0.5 text-teal-500">info</span>
+        <div v-if="searchStatus === 'found'" class="flex items-start gap-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-800 dark:border-brand-800 dark:bg-brand-900/30 dark:text-brand-300">
+          <span class="material-icons-round mt-0.5 text-brand-500">info</span>
           <div>
             <strong>Найдена карточка клиента: {{ foundCustomerName }}</strong><br>
             Сделка будет привязана к этому профилю.
             <a
               :href="'/manager/customers/profile?customerId=' + existingCustomerId"
               target="_blank"
-              class="ml-2 font-semibold underline hover:text-teal-600 dark:hover:text-teal-200"
+              class="ml-2 font-semibold underline hover:text-brand-600 dark:hover:text-brand-200"
               title="Открыть в новой вкладке"
             >
               Профиль
@@ -494,15 +494,15 @@ const submitQualify = async () => {
           <div v-if="optionalSections.contacts" class="grid grid-cols-1 gap-4 rounded-xl bg-slate-50 p-4 dark:bg-slate-800/60 md:grid-cols-2">
             <label class="block text-xs font-semibold text-slate-500">
               Имя / контакт
-              <input v-model="customerName" type="text" class="mt-1 w-full rounded-xl border-0 bg-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-slate-900">
+              <input v-model="customerName" type="text" class="mt-1 w-full rounded-xl border-0 bg-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-500 dark:bg-slate-900">
             </label>
             <label class="block text-xs font-semibold text-slate-500">
               Телефон
-              <input ref="phoneInputRef" v-model="customerPhone" type="text" class="mt-1 w-full rounded-xl border-0 bg-white px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-teal-500 dark:bg-slate-900" @input="onSearchInput">
+              <input ref="phoneInputRef" v-model="customerPhone" type="text" class="mt-1 w-full rounded-xl border-0 bg-white px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-brand-500 dark:bg-slate-900" @input="onSearchInput">
             </label>
             <label class="block text-xs font-semibold text-slate-500 md:col-span-2">
               Email
-              <input v-model="customerEmail" type="email" class="mt-1 w-full rounded-xl border-0 bg-white px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-teal-500 dark:bg-slate-900">
+              <input v-model="customerEmail" type="email" class="mt-1 w-full rounded-xl border-0 bg-white px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-brand-500 dark:bg-slate-900">
             </label>
             <AddressSuggestInput
               v-model="customerDeliveryAddress"
@@ -564,7 +564,7 @@ const submitQualify = async () => {
               Филиал клиента
               <select
                 v-model="selectedBranchId"
-                class="mt-1 w-full rounded-xl border-0 bg-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-slate-900"
+                class="mt-1 w-full rounded-xl border-0 bg-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-500 dark:bg-slate-900"
                 :disabled="branchesLoading"
                 @change="onSelectedBranchChange"
               >
@@ -579,7 +579,7 @@ const submitQualify = async () => {
             <template v-if="existingCustomerId">
               <label class="block text-xs font-semibold text-slate-500">
                 Новый филиал
-                <input v-model="newBranchName" type="text" class="mt-1 w-full rounded-xl border-0 bg-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-slate-900" placeholder="Склад / Объект">
+                <input v-model="newBranchName" type="text" class="mt-1 w-full rounded-xl border-0 bg-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-500 dark:bg-slate-900" placeholder="Склад / Объект">
               </label>
               <AddressSuggestInput
                 v-model="newBranchAddress"
@@ -600,7 +600,7 @@ const submitQualify = async () => {
             </template>
             <label class="block text-xs font-semibold text-slate-500 md:col-span-2">
               Тип объекта
-              <select v-model="objectType" class="mt-1 w-full rounded-xl border-0 bg-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-slate-900">
+              <select v-model="objectType" class="mt-1 w-full rounded-xl border-0 bg-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-500 dark:bg-slate-900">
                 <option value="">Не указано</option>
                 <option value="apartment">Квартира</option>
                 <option value="house">Частный дом</option>
@@ -624,7 +624,7 @@ const submitQualify = async () => {
           <div v-if="optionalSections.extra" class="grid grid-cols-1 gap-4 rounded-xl bg-slate-50 p-4 dark:bg-slate-800/60 md:grid-cols-2">
             <label class="block text-xs font-semibold text-slate-500">
               Источник
-              <select v-model="marketingSource" class="mt-1 w-full rounded-xl border-0 bg-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-slate-900">
+              <select v-model="marketingSource" class="mt-1 w-full rounded-xl border-0 bg-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-500 dark:bg-slate-900">
                 <option value="">Не указано</option>
                 <option value="site">Сайт</option>
                 <option value="instagram">Instagram / TikTok</option>
@@ -638,7 +638,7 @@ const submitQualify = async () => {
             </label>
             <label class="block text-xs font-semibold text-slate-500">
               Предпочтения по классу
-              <select v-model="equipmentClass" class="mt-1 w-full rounded-xl border-0 bg-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-slate-900">
+              <select v-model="equipmentClass" class="mt-1 w-full rounded-xl border-0 bg-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-500 dark:bg-slate-900">
                 <option value="">Не определился</option>
                 <option value="economy">Эконом</option>
                 <option value="standard">Цена / качество</option>
@@ -650,7 +650,7 @@ const submitQualify = async () => {
               <textarea
                 v-model="managerComment"
                 rows="3"
-                class="mt-1 w-full resize-y rounded-xl border-0 bg-white px-4 py-3 text-sm focus:ring-2 focus:ring-teal-500 dark:bg-slate-900"
+                class="mt-1 w-full resize-y rounded-xl border-0 bg-white px-4 py-3 text-sm focus:ring-2 focus:ring-brand-500 dark:bg-slate-900"
                 placeholder="Контекст для сделки, КП или выезда"
               ></textarea>
             </label>
@@ -660,7 +660,7 @@ const submitQualify = async () => {
 
       <div class="flex shrink-0 gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4 dark:border-slate-800 dark:bg-slate-900">
         <button
-          class="flex flex-1 items-center justify-center gap-2 rounded-xl bg-teal-600 py-3 font-bold text-white transition-colors hover:bg-teal-700 disabled:opacity-50"
+          class="flex flex-1 items-center justify-center gap-2 rounded-xl bg-brand-600 py-3 font-bold text-white transition-colors hover:bg-brand-700 disabled:opacity-50"
           :disabled="isLoading"
           @click="submitQualify"
         >

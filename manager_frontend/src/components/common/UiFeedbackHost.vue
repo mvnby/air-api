@@ -20,8 +20,8 @@ const initialFocusRef = computed<HTMLElement | null>(() => inputRef.value || con
 const tone = computed(() => ({
   default: {
     icon: Info,
-    iconClass: 'bg-teal-50 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300',
-    buttonClass: 'bg-teal-600 text-white hover:bg-teal-700 focus-visible:ring-teal-500',
+    iconClass: 'bg-brand-50 text-brand-700 dark:bg-brand-950/60 dark:text-brand-300',
+    buttonClass: 'bg-brand-600 text-white hover:bg-brand-700 focus-visible:ring-brand-500',
   },
   warning: {
     icon: AlertTriangle,

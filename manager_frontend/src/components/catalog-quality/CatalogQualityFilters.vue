@@ -131,8 +131,8 @@ const saveChangedAsNew = () => {
           :class="[
             view.builtin ? 'rounded-r-lg' : '',
             isViewActive(view)
-              ? 'border-teal-600 bg-teal-600 text-white'
-              : 'border-gray-200 bg-gray-50 text-gray-700 hover:border-teal-300 hover:bg-teal-50 hover:text-teal-800',
+              ? 'border-brand-600 bg-brand-600 text-white'
+              : 'border-gray-200 bg-gray-50 text-gray-700 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-800',
           ]"
           @click="emit('apply-view', view)"
         >
@@ -149,15 +149,15 @@ const saveChangedAsNew = () => {
       </div>
       <button
         v-if="!showSaveInput"
-        class="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-dashed border-gray-300 px-2.5 text-xs font-semibold text-gray-500 hover:border-teal-300 hover:text-teal-700"
+        class="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-dashed border-gray-300 px-2.5 text-xs font-semibold text-gray-500 hover:border-brand-300 hover:text-brand-700"
         @click="showSaveInput = true"
       >
         <BookmarkPlus class="h-3.5 w-3.5" />
         Сохранить текущие фильтры
       </button>
       <form v-else class="flex shrink-0 items-center gap-1" @submit.prevent="submitView">
-        <input v-model="viewName" class="h-8 w-44 rounded-lg border border-gray-300 px-2 text-xs outline-none focus:border-teal-500" placeholder="Название вида" autofocus>
-        <button class="h-8 rounded-lg bg-teal-600 px-2.5 text-xs font-semibold text-white">Сохранить</button>
+        <input v-model="viewName" class="h-8 w-44 rounded-lg border border-gray-300 px-2 text-xs outline-none focus:border-brand-500" placeholder="Название вида" autofocus>
+        <button class="h-8 rounded-lg bg-brand-600 px-2.5 text-xs font-semibold text-white">Сохранить</button>
         <button class="grid h-8 w-8 place-items-center rounded-lg text-gray-500 hover:bg-gray-100" type="button" @click="showSaveInput = false"><X class="h-4 w-4" /></button>
       </form>
     </div>
@@ -174,7 +174,7 @@ const saveChangedAsNew = () => {
         <Search class="pointer-events-none absolute bottom-3 left-3 h-4 w-4 text-gray-400" />
         <input
           :value="modelValue.q"
-          class="h-10 w-full rounded-lg border border-gray-200 bg-gray-50 pl-9 pr-9 text-sm outline-none focus:border-teal-400 focus:bg-white"
+          class="h-10 w-full rounded-lg border border-gray-200 bg-gray-50 pl-9 pr-9 text-sm outline-none focus:border-brand-400 focus:bg-white"
           placeholder="Модель, артикул или название"
           @input="patchState({ q: ($event.target as HTMLInputElement).value })"
         >
@@ -228,7 +228,7 @@ const saveChangedAsNew = () => {
     </div>
 
     <button
-      class="mt-3 inline-flex h-9 items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm font-semibold text-gray-700 hover:border-teal-300 hover:text-teal-800"
+      class="mt-3 inline-flex h-9 items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm font-semibold text-gray-700 hover:border-brand-300 hover:text-brand-800"
       :aria-expanded="showAdvanced"
       @click="showAdvanced = !showAdvanced"
     >
@@ -255,7 +255,7 @@ const saveChangedAsNew = () => {
 
     <div v-if="activeChips.length" class="mt-3 flex flex-wrap items-center gap-1.5">
       <span class="text-xs font-semibold text-gray-400">Активно:</span>
-      <button v-for="chip in activeChips" :key="chip.key" class="inline-flex min-h-7 items-center gap-1 rounded-full bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-800 hover:bg-teal-100" @click="clearChip(chip.key)">{{ chip.label }} <X class="h-3 w-3" /></button>
+      <button v-for="chip in activeChips" :key="chip.key" class="inline-flex min-h-7 items-center gap-1 rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-800 hover:bg-brand-100" @click="clearChip(chip.key)">{{ chip.label }} <X class="h-3 w-3" /></button>
     </div>
   </section>
 </template>

@@ -206,7 +206,7 @@ watch(() => props.order.id, () => {
 <template>
 <div class="space-y-6">
   <Transition name="fade">
-    <div v-if="toast" class="fixed top-6 right-6 z-[100] text-white px-6 py-3 rounded-xl shadow-2xl font-medium" :class="toastType === 'success' ? 'bg-teal-600' : 'bg-red-500'">
+    <div v-if="toast" class="fixed top-6 right-6 z-[100] text-white px-6 py-3 rounded-xl shadow-2xl font-medium" :class="toastType === 'success' ? 'bg-emerald-600' : 'bg-red-500'">
       {{ toast }}
     </div>
   </Transition>
@@ -228,7 +228,7 @@ watch(() => props.order.id, () => {
     <!-- Timeline List -->
     <div class="space-y-4 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-300 before:to-transparent">
         <div v-for="stage in order.work_stages" :key="stage.id" class="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
-            <div class="flex items-center justify-center w-10 h-10 rounded-full border border-white shrink-0 shadow z-10" :class="stage.status === 'canceled' ? 'bg-slate-400' : 'bg-teal-500'" >
+            <div class="flex items-center justify-center w-10 h-10 rounded-full border border-white shrink-0 shadow z-10" :class="stage.status === 'canceled' ? 'bg-slate-400' : 'bg-brand-500'" >
                 <span class="material-icons-round text-[20px] text-white">{{ stage.status === 'completed' ? 'check' : (stage.status === 'canceled' ? 'close' : (stage.status === 'in_progress' ? 'build' : 'schedule')) }}</span>
             </div>
             
@@ -259,8 +259,8 @@ watch(() => props.order.id, () => {
     </div>
 
     <!-- Add Form -->
-    <div v-if="showAddStage" class="mt-4 p-4 border border-teal-200 bg-teal-50/30 rounded-xl">
-        <h4 class="font-bold text-teal-800 mb-3 text-sm">Новый выезд</h4>
+    <div v-if="showAddStage" class="mt-4 p-4 border border-brand-200 bg-brand-50/30 rounded-xl">
+        <h4 class="font-bold text-brand-800 mb-3 text-sm">Новый выезд</h4>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
             <label class="field-label !mb-0 text-xs">Название (Этап)
                 <select v-model="newStageName" class="field-input mt-1">
@@ -285,7 +285,7 @@ watch(() => props.order.id, () => {
           <h3 class="text-lg font-bold text-slate-800 font-['Space_Grotesk'] mb-4">Финансы</h3>
           <div class="mb-4 text-center border border-slate-200 rounded-xl py-6 bg-white shadow-inner">
               <p class="text-sm font-medium text-slate-500 uppercase tracking-wide">Остаток к оплате</p>
-              <p class="text-4xl font-black mt-2 tracking-tight" :class="(order.balance_due || 0) > 0 ? 'text-red-500' : 'text-teal-600'">
+              <p class="text-4xl font-black mt-2 tracking-tight" :class="(order.balance_due || 0) > 0 ? 'text-red-500' : 'text-brand-600'">
                   {{ formatMoney(order.balance_due || 0) }}
               </p>
           </div>
@@ -368,7 +368,7 @@ watch(() => props.order.id, () => {
   <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
     <button
       class="flex w-full items-center justify-center gap-2 rounded-xl py-4 text-lg font-bold shadow-lg transition-transform active:scale-95"
-      :class="(order.balance_due || 0) > 0 ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-teal-500 text-white hover:bg-teal-600'"
+      :class="(order.balance_due || 0) > 0 ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-brand-500 text-white hover:bg-brand-600'"
       :disabled="(order.balance_due || 0) > 0"
       :title="(order.balance_due || 0) > 0 ? 'Нельзя закрыть при наличии долга' : 'Завершить сделку'"
       @click="closeDeal"

@@ -32,7 +32,7 @@ const value = computed({
 const controlTextClass = computed(() => props.compact ? 'text-xs' : 'text-sm');
 const inputBaseClass = computed(() => [
     'block w-full border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-200',
-    'focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all',
+    'focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all',
     'disabled:bg-gray-100 dark:disabled:bg-slate-800 disabled:text-gray-400 dark:disabled:text-slate-500',
     props.compact ? 'h-[38px] px-2.5 py-1.5 text-xs' : 'h-[38px] px-3 py-1.5 text-sm',
 ].join(' '));
@@ -111,8 +111,8 @@ const updateDimension = (index: number, nextValue: string) => {
             <button
                 type="button"
                 :disabled="disabled"
-                class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                :class="value === 'true' ? 'bg-teal-600' : 'bg-gray-200 dark:bg-slate-700'"
+                class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                :class="value === 'true' ? 'bg-brand-600' : 'bg-gray-200 dark:bg-slate-700'"
                 role="switch"
                 :aria-checked="value === 'true'"
                 @click="value = value === 'true' ? 'false' : 'true'"

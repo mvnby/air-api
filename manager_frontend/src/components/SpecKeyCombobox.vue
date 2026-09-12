@@ -92,7 +92,7 @@ const openDropdown = () => {
         @input="onInput"
         @focus="openDropdown"
         placeholder="Ключ (например: Цвет или color)"
-        class="w-full border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-slate-200 rounded px-9 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+        class="w-full border dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-slate-200 rounded px-9 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
       />
       <button 
         type="button" 
@@ -116,7 +116,7 @@ const openDropdown = () => {
           v-for="opt in filteredOptions" 
           :key="opt.raw"
           @click="selectOption(opt.raw, opt.translation)"
-          class="px-3 py-2 text-sm text-gray-700 dark:text-slate-300 hover:bg-teal-50 dark:hover:bg-teal-900/40 cursor-pointer flex flex-col"
+          class="px-3 py-2 text-sm text-gray-700 dark:text-slate-300 hover:bg-brand-50 dark:hover:bg-brand-900/40 cursor-pointer flex flex-col"
         >
           <span class="font-medium">{{ opt.translation || opt.raw }}</span>
           <span v-if="opt.translation" class="text-xs text-gray-400">{{ opt.raw }}</span>

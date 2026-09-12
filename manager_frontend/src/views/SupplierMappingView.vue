@@ -280,7 +280,7 @@ onMounted(async () => {
 <template>
   <div class="max-w-7xl mx-auto p-6 space-y-4">
     <Transition name="fade">
-      <div v-if="toast" class="fixed top-6 right-6 z-[100] rounded-xl bg-teal-600 px-6 py-3 font-medium text-white shadow-2xl">
+      <div v-if="toast" class="fixed top-6 right-6 z-[100] rounded-xl bg-brand-600 px-6 py-3 font-medium text-white shadow-2xl">
         {{ toast }}
       </div>
     </Transition>
@@ -316,7 +316,7 @@ onMounted(async () => {
           {{ readyToApplyCount }}
         </span>
         <button
-          class="px-3 py-2 rounded bg-teal-600 text-white disabled:opacity-50"
+          class="px-3 py-2 rounded bg-brand-600 text-white disabled:opacity-50"
           :disabled="applyLoading"
           @click="applyBulk"
         >
@@ -346,7 +346,7 @@ onMounted(async () => {
             {{ sourceUrlLoading ? 'Проверка...' : 'Показать кандидатов' }}
           </button>
           <button
-            class="px-3 py-2 rounded bg-teal-600 text-white disabled:opacity-50"
+            class="px-3 py-2 rounded bg-brand-600 text-white disabled:opacity-50"
             :disabled="sourceUrlImportLoading || !selectedSourceUrlCount"
             @click="startSourceUrlImport"
           >
@@ -449,7 +449,7 @@ onMounted(async () => {
                 </span>
               </td>
               <td class="p-3 text-right">
-                <button class="px-2 py-1 rounded bg-teal-600 text-white" @click="toggleMap(offer)">Привязать</button>
+                <button class="px-2 py-1 rounded bg-brand-600 text-white" @click="toggleMap(offer)">Привязать</button>
               </td>
             </tr>
 
@@ -491,7 +491,7 @@ onMounted(async () => {
                   <div class="flex justify-end gap-2">
                     <button class="px-3 py-2 rounded border" @click="expandedKey = null">Отмена</button>
                     <button
-                      class="px-3 py-2 rounded bg-teal-600 text-white disabled:opacity-50"
+                      class="px-3 py-2 rounded bg-brand-600 text-white disabled:opacity-50"
                       :disabled="!selectedProductMap[keyOf(offer)]"
                       @click="saveInline(offer)"
                     >

@@ -127,7 +127,7 @@ const updatePreferredMode = (mode: ServiceDescriptionMode) => {
 
     <div class="mt-3 grid grid-cols-2 gap-2">
       <button type="button" data-testid="add-service-line" data-order-usage="order_service_add" class="btn-mini justify-center" @click="emit('add')">+ услуга</button>
-      <button type="button" class="btn-mini-outline justify-center" :class="showEstimateImport ? 'border-teal-200 bg-teal-50 text-teal-700' : ''" @click="emit('toggleEstimate')">Из сметы</button>
+      <button type="button" class="btn-mini-outline justify-center" :class="showEstimateImport ? 'border-brand-200 bg-brand-50 text-brand-700' : ''" @click="emit('toggleEstimate')">Из сметы</button>
     </div>
     <div v-if="showEstimateImport" class="mt-3 grid gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3">
       <div class="grid gap-2 md:grid-cols-3">

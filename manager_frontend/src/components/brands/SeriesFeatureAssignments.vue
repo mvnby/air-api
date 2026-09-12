@@ -98,7 +98,7 @@ const toggleFeatured = (featureId: number) => {
           class="flex h-7 w-7 shrink-0 items-center justify-center rounded border"
           :class="
             selected.has(feature.id)
-              ? 'border-teal-600 bg-teal-600 text-white'
+              ? 'border-brand-600 bg-brand-600 text-white'
               : 'border-gray-300 text-transparent dark:border-slate-600'
           "
           :aria-pressed="selected.has(feature.id)"

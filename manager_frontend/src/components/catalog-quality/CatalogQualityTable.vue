@@ -49,13 +49,13 @@ const supplierLabel = (product: QualityProduct) => {
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-100">
-        <tr v-for="product in items" :key="product.product_id" class="group hover:bg-teal-50/40">
+        <tr v-for="product in items" :key="product.product_id" class="group hover:bg-brand-50/40">
           <td class="px-3 py-3 align-top">
             <span class="inline-flex min-w-11 justify-center rounded-lg px-2 py-1 font-bold" :class="scoreTone(product.score)">{{ product.score }}</span>
             <span class="mt-1 block text-xs font-semibold" :class="priorityTone(product.work_priority)">{{ priorityLabel(product.work_priority) }}</span>
           </td>
           <td class="px-3 py-3 align-top">
-            <button class="font-semibold leading-5 text-gray-950 hover:text-teal-700" @click="emit('open', product)">{{ product.title }}</button>
+            <button class="font-semibold leading-5 text-gray-950 hover:text-brand-700" @click="emit('open', product)">{{ product.title }}</button>
             <p class="mt-1 text-xs text-gray-500">#{{ product.product_id }} · {{ product.is_published ? 'на сайте' : 'скрыт' }}</p>
           </td>
           <td class="px-3 py-3 align-top text-gray-700">
@@ -77,12 +77,12 @@ const supplierLabel = (product: QualityProduct) => {
           </td>
           <td class="px-3 py-3 align-top">
             <div class="flex flex-wrap gap-1">
-              <button v-for="issue in (product.issues ?? []).slice(0, 3)" :key="issue.code" class="rounded-md bg-gray-100 px-1.5 py-1 text-xs font-semibold text-gray-700 hover:bg-teal-100 hover:text-teal-800" :title="issue.detail || issue.message" @click="emit('selectIssue', issue.code)">{{ issue.label }}</button>
+              <button v-for="issue in (product.issues ?? []).slice(0, 3)" :key="issue.code" class="rounded-md bg-gray-100 px-1.5 py-1 text-xs font-semibold text-gray-700 hover:bg-brand-100 hover:text-brand-800" :title="issue.detail || issue.message" @click="emit('selectIssue', issue.code)">{{ issue.label }}</button>
               <span v-if="product.issue_count > 3" class="rounded-md bg-gray-50 px-1.5 py-1 text-xs font-semibold text-gray-500">+{{ product.issue_count - 3 }}</span>
             </div>
           </td>
           <td class="px-3 py-3 align-top">
-            <button class="grid h-9 w-9 place-items-center rounded-lg border border-gray-200 text-gray-500 opacity-70 transition hover:border-teal-300 hover:text-teal-700 group-hover:opacity-100" title="Открыть товар" @click="emit('open', product)"><ExternalLink class="h-4 w-4" /></button>
+            <button class="grid h-9 w-9 place-items-center rounded-lg border border-gray-200 text-gray-500 opacity-70 transition hover:border-brand-300 hover:text-brand-700 group-hover:opacity-100" title="Открыть товар" @click="emit('open', product)"><ExternalLink class="h-4 w-4" /></button>
           </td>
         </tr>
       </tbody>

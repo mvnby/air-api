@@ -96,7 +96,7 @@ const save = async () => {
           <input 
             v-model="form.title" 
             type="text" 
-            class="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all placeholder-slate-400"
+            class="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none transition-all placeholder-slate-400"
             placeholder="Например: Цвет"
           />
         </div>
@@ -106,7 +106,7 @@ const save = async () => {
            <input 
              v-model="form.slug" 
              type="text" 
-             class="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all placeholder-slate-400"
+             class="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none transition-all placeholder-slate-400"
              placeholder="Оставьте пустым для автогенерации"
            />
         </div>
@@ -116,18 +116,18 @@ const save = async () => {
           <input 
              v-model="form.color" 
              type="text" 
-             class="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all placeholder-slate-400"
+             class="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none transition-all placeholder-slate-400"
              placeholder="secondary"
            />
         </div>
 
         <div class="flex items-center gap-2">
-            <input type="checkbox" id="tg_public" v-model="form.is_public" class="w-4 h-4 text-teal-600" />
+            <input type="checkbox" id="tg_public" v-model="form.is_public" class="w-4 h-4 text-brand-600" />
             <label for="tg_public" class="text-sm font-medium text-slate-700 dark:text-slate-300">Публичная группа</label>
         </div>
 
         <div class="flex items-center gap-2">
-            <input type="checkbox" id="tg_allow_multiple" v-model="form.allow_multiple" class="w-4 h-4 text-teal-600" />
+            <input type="checkbox" id="tg_allow_multiple" v-model="form.allow_multiple" class="w-4 h-4 text-brand-600" />
             <label for="tg_allow_multiple" class="text-sm font-medium text-slate-700 dark:text-slate-300">Множественный выбор (В фильтрах)</label>
         </div>
 
@@ -143,7 +143,7 @@ const save = async () => {
         <button 
           @click="save"
           :disabled="loading || !form.title"
-          class="px-5 py-2.5 bg-teal-600 text-white font-medium rounded-lg hover:bg-teal-500 active:bg-teal-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+          class="px-5 py-2.5 bg-brand-600 text-white font-medium rounded-lg hover:bg-brand-500 active:bg-brand-700 transition-colors disabled:opacity-50 flex items-center gap-2"
         >
           <span v-if="loading" class="material-icons-round animate-spin text-sm">refresh</span>
           Сохранить

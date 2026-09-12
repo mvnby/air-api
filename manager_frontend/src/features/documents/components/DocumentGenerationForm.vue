@@ -45,10 +45,10 @@ const openCustomerProfile = () => {
 </script>
 
 <template>
-      <div v-if="isCreatePanelOpen && documentAccess.canCreate" class="order-first rounded-xl border border-teal-200 bg-teal-50/30 p-3 dark:border-teal-800/70 dark:bg-teal-950/20">
+      <div v-if="isCreatePanelOpen && documentAccess.canCreate" class="order-first rounded-xl border border-brand-200 bg-brand-50/30 p-3 dark:border-brand-800/70 dark:bg-brand-950/20">
         <div class="mb-3 flex items-center justify-between gap-3">
           <div>
-            <p class="text-[11px] font-bold uppercase tracking-wide text-teal-700 dark:text-teal-300">Создание документа</p>
+            <p class="text-[11px] font-bold uppercase tracking-wide text-brand-700 dark:text-brand-300">Создание документа</p>
             <p class="text-xs text-slate-500 dark:text-slate-400">Проверьте обязательные поля и создайте документ.</p>
           </div>
           <button
@@ -69,7 +69,7 @@ const openCustomerProfile = () => {
                 :key="dtype.type"
                 type="button"
                 class="flex min-h-10 items-center justify-between rounded-lg border px-3 py-2 text-left text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-                :class="selectedDocumentType === dtype.type ? 'border-teal-500 bg-white text-teal-700 shadow-sm dark:bg-slate-900 dark:text-teal-300' : 'border-slate-200 bg-white/80 text-slate-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300'"
+                :class="selectedDocumentType === dtype.type ? 'border-brand-500 bg-white text-brand-700 shadow-sm dark:bg-slate-900 dark:text-brand-300' : 'border-slate-200 bg-white/80 text-slate-600 hover:border-brand-300 hover:text-brand-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300'"
                 :disabled="isDocumentTypeLocked(dtype.type)"
                 :title="isDocumentTypeLocked(dtype.type) ? lockedDocumentTitle(dtype.type) : ''"
                 @click="selectDocumentType(dtype.type)"
@@ -103,13 +103,13 @@ const openCustomerProfile = () => {
               <input
                 v-model="documentDate"
                 type="date"
-                class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
               />
             </label>
             <label v-if="selectedDocumentType === 'contract'" class="text-xs font-medium text-slate-600 dark:text-slate-300">Шаг 2: шаблон
               <select
                 v-model="selectedContractTemplateId"
-                class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
               >
                 <option v-for="template in contractTemplates" :key="template.id" :value="template.id">{{ template.name }}</option>
               </select>
@@ -120,7 +120,7 @@ const openCustomerProfile = () => {
             <label class="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">Шаг 2: роли сторон</label>
             <select
               v-model="selectedDocumentRoleBinding"
-              class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+              class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
             >
               <option value="">Оставить по шаблону · {{ getRoleLabel(inheritedDocumentRoleType) }}</option>
               <option v-for="option in DOCUMENT_ROLE_OPTIONS" :key="option.value" :value="option.value">
@@ -144,7 +144,7 @@ const openCustomerProfile = () => {
 
         <select
           v-model="selectedBaseDocumentBinding"
-          class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+          class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
         >
           <option value="">Выберите основание</option>
           <option v-for="option in baseDocumentOptions" :key="option.value" :value="option.value">
@@ -158,7 +158,7 @@ const openCustomerProfile = () => {
 
         <form
           v-if="externalContractOpen"
-          class="mt-3 space-y-3 rounded-lg border border-dashed border-teal-300 bg-teal-50/40 p-3 dark:border-teal-700/70 dark:bg-teal-950/20"
+          class="mt-3 space-y-3 rounded-lg border border-dashed border-brand-300 bg-brand-50/40 p-3 dark:border-brand-700/70 dark:bg-brand-950/20"
           @submit.prevent="registerExternalContract"
         >
           <div class="grid gap-3 sm:grid-cols-2">
@@ -166,7 +166,7 @@ const openCustomerProfile = () => {
               <input
                 v-model="externalContractNumber"
                 type="text"
-                class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                 placeholder="Например, 44-ЭА/2026"
               />
             </label>
@@ -174,7 +174,7 @@ const openCustomerProfile = () => {
               <input
                 v-model="externalContractDate"
                 type="date"
-                class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
               />
             </label>
           </div>
@@ -182,13 +182,13 @@ const openCustomerProfile = () => {
             <input
               v-model="externalContractUrl"
               type="url"
-              class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
               placeholder="https://..."
             />
           </label>
           <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <label class="inline-flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
-              <span class="material-icons-round text-[18px] text-teal-600 dark:text-teal-400">upload_file</span>
+              <span class="material-icons-round text-[18px] text-brand-600 dark:text-brand-400">upload_file</span>
               <span>{{ externalContractFile?.name || 'Прикрепить файл вместо ссылки' }}</span>
               <input type="file" class="hidden" :accept="DOCUMENT_FILE_ACCEPT" @change="handleExternalContractFile" />
             </label>
@@ -202,7 +202,7 @@ const openCustomerProfile = () => {
               </button>
               <button
                 type="submit"
-                class="inline-flex items-center gap-1 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-teal-700 disabled:opacity-60"
+                class="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-brand-700 disabled:opacity-60"
                 :disabled="isRegisteringExternalContract"
               >
                 <span v-if="isRegisteringExternalContract" class="material-icons-round animate-spin text-[16px]">loop</span>
@@ -220,7 +220,7 @@ const openCustomerProfile = () => {
           <span>У клиента нет открытых договоров.</span>
           <button
             type="button"
-            class="rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500/50"
+            class="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
             @click="openCustomerProfileForContract"
           >
             Создать открытый договор
@@ -233,7 +233,7 @@ const openCustomerProfile = () => {
 
           <div
             v-if="selectedDocumentType === 'act'"
-            class="rounded-xl border border-teal-200 bg-white p-3 dark:border-teal-800/70 dark:bg-slate-900/70"
+            class="rounded-xl border border-brand-200 bg-white p-3 dark:border-brand-800/70 dark:bg-slate-900/70"
           >
             <div class="mb-3">
               <p class="text-xs font-semibold text-slate-700 dark:text-slate-200">Шаг 3: объект и строки акта</p>
@@ -246,7 +246,7 @@ const openCustomerProfile = () => {
               <label class="text-xs font-medium text-slate-600 dark:text-slate-300 md:col-span-2">Объект клиента
                 <select
                   v-model.number="selectedActBranchId"
-                  class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                  class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
                   @change="onActBranchChange"
                 >
                   <option :value="null">Адрес из заказа / вручную</option>
@@ -281,7 +281,7 @@ const openCustomerProfile = () => {
               />
               <button
                 type="button"
-                class="inline-flex items-center justify-center gap-1 rounded-lg border border-teal-300 bg-white px-3 py-2 text-xs font-semibold text-teal-700 hover:bg-teal-50 disabled:opacity-60 dark:border-teal-700 dark:bg-slate-900 dark:text-teal-300 dark:hover:bg-teal-950/30"
+                class="inline-flex items-center justify-center gap-1 rounded-lg border border-brand-300 bg-white px-3 py-2 text-xs font-semibold text-brand-700 hover:bg-brand-50 disabled:opacity-60 dark:border-brand-700 dark:bg-slate-900 dark:text-brand-300 dark:hover:bg-brand-950/30"
                 :disabled="creatingActBranch"
                 @click="createActBranch"
               >
@@ -296,7 +296,7 @@ const openCustomerProfile = () => {
                 <p class="text-xs font-semibold text-slate-700 dark:text-slate-200">Услуги в акте</p>
                 <button
                   type="button"
-                  class="text-xs font-semibold text-teal-700 hover:text-teal-800 dark:text-teal-300"
+                  class="text-xs font-semibold text-brand-700 hover:text-brand-800 dark:text-brand-300"
                   @click="syncActServiceSelection"
                 >
                   Выбрать все
@@ -310,7 +310,7 @@ const openCustomerProfile = () => {
                 >
                   <input
                     type="checkbox"
-                    class="mt-1 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                    class="mt-1 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
                     :checked="actServiceQuantity(line.id) > 0"
                     @change="onActServiceCheckboxChange(line.id, $event)"
                   />
@@ -326,7 +326,7 @@ const openCustomerProfile = () => {
                           :max="maxActServiceQuantity(line)"
                           step="1"
                           inputmode="numeric"
-                          class="h-7 w-14 rounded border border-slate-200 bg-white px-2 text-center text-sm font-semibold text-slate-800 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:ring-teal-900/40"
+                          class="h-7 w-14 rounded border border-slate-200 bg-white px-2 text-center text-sm font-semibold text-slate-800 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:ring-brand-900/40"
                           :value="actServiceQuantity(line.id)"
                           @input="setActServiceLineQuantity(line, ($event.target as HTMLInputElement).value)"
                         />
@@ -383,7 +383,7 @@ const openCustomerProfile = () => {
               <button
                 type="button"
                 data-order-usage="document_create"
-                class="inline-flex items-center gap-1 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-teal-700 disabled:opacity-60"
+                class="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 disabled:opacity-60"
                 :disabled="isGeneratingDoc || isDocumentTypeLocked(selectedDocumentType)"
                 @click="generateDocument(selectedDocumentType)"
               >

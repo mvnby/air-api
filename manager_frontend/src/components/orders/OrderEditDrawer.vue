@@ -465,7 +465,7 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
 <template>
   <div v-if="modelValue" class="fixed inset-0 z-50 flex">
     <Transition name="fade">
-      <div v-if="toast" class="fixed top-6 right-6 z-[100] bg-teal-600 text-white px-6 py-3 rounded-xl shadow-2xl font-medium">
+      <div v-if="toast" class="fixed top-6 right-6 z-[100] bg-brand-600 text-white px-6 py-3 rounded-xl shadow-2xl font-medium">
         {{ toast }}
       </div>
     </Transition>

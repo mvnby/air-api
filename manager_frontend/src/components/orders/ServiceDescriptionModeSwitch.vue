@@ -28,7 +28,7 @@ const options: Array<{ value: ServiceDescriptionMode; label: string }> = [
       type="button"
       class="h-7 rounded-md px-2.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
       :class="modelValue === option.value
-        ? 'bg-white text-teal-700 shadow-sm'
+        ? 'bg-white text-brand-700 shadow-sm'
         : 'text-gray-500 hover:text-gray-800'"
       :disabled="disabled"
       :aria-pressed="modelValue === option.value"

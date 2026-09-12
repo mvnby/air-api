@@ -273,7 +273,7 @@ watch(
         :key="candidate.value"
         type="button"
         :data-testid="`company-address-candidate-${candidate.value}`"
-        class="block w-full rounded-md border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900 px-2 py-1.5 text-left text-sm hover:border-teal-500"
+        class="block w-full rounded-md border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900 px-2 py-1.5 text-left text-sm hover:border-brand-500"
         @click="chooseCompanyAddress(candidate.value)"
       >
         <span class="font-medium">{{ candidate.value }}</span>
@@ -330,14 +330,14 @@ watch(
         <div class="overflow-y-auto p-6">
           <div class="relative mb-4">
             <span class="material-icons-round absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">search</span>
-            <input v-model="customerSearchQuery" data-testid="customer-search" type="text" class="w-full rounded-xl border-none bg-slate-50 py-3 pl-11 pr-4 text-sm transition-shadow focus:ring-2 focus:ring-teal-500" placeholder="Поиск по телефону, УНП, имени..." autofocus @input="debouncedSearchCustomer(customerSearchQuery)" />
-            <span v-if="customerSearchLoading" class="material-icons-round absolute right-4 top-1/2 -translate-y-1/2 animate-spin text-teal-500">refresh</span>
+            <input v-model="customerSearchQuery" data-testid="customer-search" type="text" class="w-full rounded-xl border-none bg-slate-50 py-3 pl-11 pr-4 text-sm transition-shadow focus:ring-2 focus:ring-brand-500" placeholder="Поиск по телефону, УНП, имени..." autofocus @input="debouncedSearchCustomer(customerSearchQuery)" />
+            <span v-if="customerSearchLoading" class="material-icons-round absolute right-4 top-1/2 -translate-y-1/2 animate-spin text-brand-500">refresh</span>
           </div>
           <div v-if="customerSearchQuery.length >= 3 && !customerSearchResults.length && !customerSearchLoading" class="rounded-xl border border-dashed border-slate-100 bg-slate-50 py-6 text-center text-sm text-slate-500">Клиенты не найдены</div>
           <div v-if="customerSearchQuery.length < 3" class="py-6 text-center text-xs font-semibold uppercase tracking-wider text-slate-400">Введите минимум 3 символа</div>
           <div class="mt-2 space-y-2">
-            <button v-for="result in customerSearchResults" :key="result.id" type="button" :data-testid="`assign-customer-${result.id}`" class="group flex w-full flex-col gap-1 rounded-xl border border-slate-100 bg-white p-4 text-left outline-none transition-all hover:-translate-y-0.5 hover:border-teal-200 hover:shadow-md focus:ring-2 focus:ring-teal-500" @click="assignCustomer(result)">
-              <span class="text-sm font-bold text-slate-800 transition-colors group-hover:text-teal-700">{{ result.full_legal_name || result.name || `Клиент #${result.id}` }}</span>
+            <button v-for="result in customerSearchResults" :key="result.id" type="button" :data-testid="`assign-customer-${result.id}`" class="group flex w-full flex-col gap-1 rounded-xl border border-slate-100 bg-white p-4 text-left outline-none transition-all hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-md focus:ring-2 focus:ring-brand-500" @click="assignCustomer(result)">
+              <span class="text-sm font-bold text-slate-800 transition-colors group-hover:text-brand-700">{{ result.full_legal_name || result.name || `Клиент #${result.id}` }}</span>
               <span class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500"><span v-if="result.phone">{{ result.phone }}</span><span v-if="result.inn">УНП: {{ result.inn }}</span></span>
             </button>
           </div>

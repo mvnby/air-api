@@ -205,11 +205,11 @@ watch(
     tone="default"
   >
     <div class="grid gap-3 md:grid-cols-2">
-      <div class="md:col-span-2 rounded-xl border border-teal-100 bg-teal-50/50 p-3">
+      <div class="md:col-span-2 rounded-xl border border-brand-100 bg-brand-50/50 p-3">
         <div class="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p class="text-sm font-semibold text-teal-900">Библиотека жалоб</p>
-            <p class="text-xs text-teal-700/80">Выберите типовую жалобу, чтобы заполнить формулировку и вероятный диагноз.</p>
+            <p class="text-sm font-semibold text-brand-900">Библиотека жалоб</p>
+            <p class="text-xs text-brand-700/80">Выберите типовую жалобу, чтобы заполнить формулировку и вероятный диагноз.</p>
           </div>
           <button type="button" data-testid="reload-repair-presets" class="btn-mini-outline justify-center whitespace-nowrap text-xs" :disabled="complaintsLoading" @click="loadComplaintPresets">
             <span class="material-icons-round text-[15px]" :class="{ 'animate-spin': complaintsLoading }">refresh</span>
@@ -223,8 +223,8 @@ watch(
             :key="preset.id"
             type="button"
             :data-testid="`repair-preset-${preset.id}`"
-            class="rounded-lg border bg-white px-3 py-2 text-left text-xs shadow-sm transition hover:border-teal-300 hover:text-teal-800"
-            :class="preset.is_favorite ? 'border-teal-200 text-teal-900' : 'border-slate-200 text-slate-700'"
+            class="rounded-lg border bg-white px-3 py-2 text-left text-xs shadow-sm transition hover:border-brand-300 hover:text-brand-800"
+            :class="preset.is_favorite ? 'border-brand-200 text-brand-900' : 'border-slate-200 text-slate-700'"
             @click="applyComplaintPreset(preset)"
           >
             <span class="flex items-center gap-1 font-semibold">
@@ -234,7 +234,7 @@ watch(
             <span v-if="preset.document_wording" class="mt-1 line-clamp-2 block max-w-[260px] opacity-75">{{ preset.document_wording }}</span>
           </button>
         </div>
-        <p v-else class="rounded-lg border border-dashed border-teal-200 bg-white/70 px-3 py-3 text-xs text-teal-700">
+        <p v-else class="rounded-lg border border-dashed border-brand-200 bg-white/70 px-3 py-3 text-xs text-brand-700">
           {{ complaintsLoading ? 'Загружаем пресеты...' : 'Подходящих пресетов пока нет.' }}
         </p>
       </div>

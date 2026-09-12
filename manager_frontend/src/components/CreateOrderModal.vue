@@ -57,7 +57,7 @@ const handleClose = () => {
           <!-- Header -->
           <div class="flex items-center justify-between px-6 py-4 border-b border-slate-700/50">
             <div class="flex items-center gap-3">
-              <span class="material-icons-round text-teal-400 text-2xl">add_shopping_cart</span>
+              <span class="material-icons-round text-brand-400 text-2xl">add_shopping_cart</span>
               <div>
                 <h2 class="text-lg font-bold text-white">Новый заказ</h2>
                 <p class="text-xs text-slate-400 mt-0.5">{{ customerName }}</p>
@@ -84,14 +84,14 @@ const handleClose = () => {
                 :disabled="loading"
                 rows="4"
                 placeholder="Кондиционер в комнату 25 м², монтаж с закладкой трассы..."
-                class="w-full rounded-xl border border-slate-600 bg-slate-900 text-slate-100 placeholder-slate-600 text-sm px-4 py-3 resize-none outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all disabled:opacity-50"
+                class="w-full rounded-xl border border-slate-600 bg-slate-900 text-slate-100 placeholder-slate-600 text-sm px-4 py-3 resize-none outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all disabled:opacity-50"
                 @keydown.meta.enter="handleCreate"
                 @keydown.ctrl.enter="handleCreate"
               />
             </div>
 
             <p class="text-xs text-slate-500">
-              Заказ будет создан в статусе <span class="text-teal-400 font-medium">Переговоры</span>
+              Заказ будет создан в статусе <span class="text-brand-400 font-medium">Переговоры</span>
             </p>
 
             <!-- Error -->
@@ -112,7 +112,7 @@ const handleClose = () => {
             <button
               @click="handleCreate"
               :disabled="loading || !requestText.trim()"
-              class="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold bg-teal-600 hover:bg-teal-500 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-teal-900/30"
+              class="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold bg-brand-600 hover:bg-brand-500 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-brand-900/30"
             >
               <span
                 v-if="loading"

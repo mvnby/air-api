@@ -189,7 +189,7 @@ const save = () => {
         <h2 class="settings-title">Организации и ИП</h2>
         <p class="settings-help">Реквизиты продавца фиксируются в снимке при создании черновика.</p>
       </div>
-      <span v-if="loading" class="material-icons-round animate-spin text-teal-600">progress_activity</span>
+      <span v-if="loading" class="material-icons-round animate-spin text-brand-600">progress_activity</span>
     </div>
 
     <div class="mt-5 grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
@@ -199,12 +199,12 @@ const save = () => {
           :key="entity.id"
           type="button"
           class="w-full rounded-xl border p-3 text-left transition"
-          :class="entity.id === selectedId ? 'border-teal-500 bg-teal-50 dark:bg-teal-950/30' : 'border-slate-200 hover:border-slate-300 dark:border-slate-700'"
+          :class="entity.id === selectedId ? 'border-brand-500 bg-brand-50 dark:bg-brand-950/30' : 'border-slate-200 hover:border-slate-300 dark:border-slate-700'"
           @click="emit('select', entity.id)"
         >
           <span class="flex items-center justify-between gap-3">
             <span class="font-semibold text-slate-900 dark:text-white">{{ entity.display_name }}</span>
-            <span v-if="entity.is_default" class="rounded-full bg-teal-100 px-2 py-0.5 text-[11px] font-bold text-teal-800">По умолчанию</span>
+            <span v-if="entity.is_default" class="rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-bold text-brand-800">По умолчанию</span>
           </span>
           <span class="mt-1 block text-xs text-slate-500">{{ entity.unp ? `УНП ${entity.unp}` : 'УНП не указан' }}</span>
         </button>
@@ -227,7 +227,7 @@ const save = () => {
               :key="option.value"
               type="button"
               class="h-9 rounded-lg px-3 text-sm font-semibold transition"
-              :class="entityType === option.value ? 'bg-white text-teal-700 shadow-sm dark:bg-slate-800 dark:text-teal-300' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'"
+              :class="entityType === option.value ? 'bg-white text-brand-700 shadow-sm dark:bg-slate-800 dark:text-brand-300' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'"
               :aria-pressed="entityType === option.value"
               @click="selectEntityType(option.value)"
             >{{ option.label }}</button>
@@ -241,7 +241,7 @@ const save = () => {
           <span>УНП</span>
           <span class="relative">
             <input v-model="unp" data-testid="seller-unp" class="settings-input pr-10" inputmode="numeric" maxlength="9" @input="onUnpInput" @blur="onUnpBlur" />
-            <span v-if="isEgrLoading" class="material-icons-round absolute right-3 top-2.5 animate-spin text-[18px] text-teal-600">progress_activity</span>
+            <span v-if="isEgrLoading" class="material-icons-round absolute right-3 top-2.5 animate-spin text-[18px] text-brand-600">progress_activity</span>
           </span>
           <span v-if="egrError" class="font-normal text-red-600">{{ egrError }}</span>
           <span v-else-if="egrLookupSucceeded" class="font-normal text-emerald-700">Наименование и адрес найдены в ЕГР</span>
@@ -249,14 +249,14 @@ const save = () => {
         <button
           type="button"
           class="mt-6 flex h-10 items-center justify-between rounded-xl border px-3 text-sm font-semibold"
-          :class="isVatPayer ? 'border-teal-500 bg-teal-50 text-teal-800' : 'border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300'"
+          :class="isVatPayer ? 'border-brand-500 bg-brand-50 text-brand-800' : 'border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300'"
           @click="isVatPayer = !isVatPayer"
         >
           <span>Плательщик НДС</span>
           <span class="material-icons-round text-[20px]">{{ isVatPayer ? 'toggle_on' : 'toggle_off' }}</span>
         </button>
-        <div class="settings-field rounded-xl border border-teal-100 bg-teal-50/60 p-4 sm:col-span-2 dark:border-teal-900/60 dark:bg-teal-950/20">
-          <span class="text-sm font-bold text-teal-950 dark:text-teal-100">Документы для физлиц</span>
+        <div class="settings-field rounded-xl border border-brand-100 bg-brand-50/60 p-4 sm:col-span-2 dark:border-brand-900/60 dark:bg-brand-950/20">
+          <span class="text-sm font-bold text-brand-950 dark:text-brand-100">Документы для физлиц</span>
           <span class="font-normal text-slate-500">Оферта и гарантия подставляются в заказ-акты. В документе всегда сохраняется значение на дату создания черновика.</span>
           <div class="mt-3 grid gap-3 sm:grid-cols-2">
             <label class="settings-field sm:col-span-2"><span>Ссылка на публичную оферту</span><input v-model="offerUrl" data-testid="consumer-offer-url" class="settings-input" type="url" placeholder="https://example.by/offer" /></label>
@@ -273,7 +273,7 @@ const save = () => {
           <span>IBAN</span>
           <span class="relative">
             <input v-model="iban" data-testid="seller-iban" class="settings-input pr-10" autocomplete="off" @input="onIbanInput" @blur="onIbanBlur" />
-            <span v-if="isBankLoading" class="material-icons-round absolute right-3 top-2.5 animate-spin text-[18px] text-teal-600">progress_activity</span>
+            <span v-if="isBankLoading" class="material-icons-round absolute right-3 top-2.5 animate-spin text-[18px] text-brand-600">progress_activity</span>
           </span>
           <span v-if="bankError" class="font-normal text-red-600">{{ bankError }}</span>
           <span v-else-if="bankLookupSucceeded" class="font-normal text-emerald-700">Банк и BIC определены по IBAN</span>
@@ -285,14 +285,14 @@ const save = () => {
             <button
               type="button"
               class="h-9 rounded-lg px-3 text-sm font-semibold transition"
-              :class="!isPowerOfAttorney ? 'bg-white text-teal-700 shadow-sm dark:bg-slate-800 dark:text-teal-300' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'"
+              :class="!isPowerOfAttorney ? 'bg-white text-brand-700 shadow-sm dark:bg-slate-800 dark:text-brand-300' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'"
               :aria-pressed="!isPowerOfAttorney"
               @click="selectSigningMode(isIndividualEntrepreneur ? 'self' : 'statutory_body')"
             >{{ isIndividualEntrepreneur ? 'Лично' : 'Руководитель' }}</button>
             <button
               type="button"
               class="h-9 rounded-lg px-3 text-sm font-semibold transition"
-              :class="isPowerOfAttorney ? 'bg-white text-teal-700 shadow-sm dark:bg-slate-800 dark:text-teal-300' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'"
+              :class="isPowerOfAttorney ? 'bg-white text-brand-700 shadow-sm dark:bg-slate-800 dark:text-brand-300' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'"
               :aria-pressed="isPowerOfAttorney"
               @click="selectSigningMode('power_of_attorney')"
             >Представитель</button>

@@ -37,7 +37,7 @@ const documentProposalName = (doc: ManagerOrderDocumentItem) => {
         class="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3 text-slate-700 shadow-sm dark:border-slate-700/50 dark:bg-[#1e293b] dark:text-slate-300 dark:shadow-none"
       >
         <div class="flex min-w-0 items-center gap-3">
-          <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-teal-600 dark:bg-slate-800 dark:text-teal-400">
+          <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-brand-600 dark:bg-slate-800 dark:text-brand-400">
             <span class="material-icons-round text-[19px]">description</span>
           </div>
           <div class="min-w-0">
@@ -49,7 +49,7 @@ const documentProposalName = (doc: ManagerOrderDocumentItem) => {
             <p v-if="doc.base_document_number" class="truncate text-[11px] text-slate-400 dark:text-slate-500">
               Основание: {{ doc.base_document_type_label || documentTypeLabel(doc.base_document_type) }} · {{ doc.base_document_number }}
             </p>
-            <p v-if="documentScopeLabel(doc)" class="truncate text-[11px] text-teal-600 dark:text-teal-300">
+            <p v-if="documentScopeLabel(doc)" class="truncate text-[11px] text-brand-600 dark:text-brand-300">
               Объект: {{ documentScopeLabel(doc) }}
             </p>
           </div>
@@ -75,7 +75,7 @@ const documentProposalName = (doc: ManagerOrderDocumentItem) => {
           </button>
           <label
             v-else-if="canReplace"
-            class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-teal-600 hover:bg-teal-50 hover:text-teal-700 dark:text-teal-400 dark:hover:bg-teal-900/30 dark:hover:text-teal-300"
+            class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-brand-600 hover:bg-brand-50 hover:text-brand-700 dark:text-brand-400 dark:hover:bg-brand-900/30 dark:hover:text-brand-300"
             title="Добавить файл"
           >
             <span class="material-icons-round text-[18px]">attach_file</span>

@@ -78,7 +78,7 @@ onMounted(load);
         <div>
           <a
             href="/manager/features"
-            class="inline-flex items-center gap-1 text-sm font-semibold text-teal-700"
+            class="inline-flex items-center gap-1 text-sm font-semibold text-brand-700"
             ><ArrowLeft class="h-4 w-4" />К библиотеке фич</a
           >
           <h1 class="mt-2 text-2xl font-bold text-gray-950 dark:text-white">
@@ -114,7 +114,7 @@ onMounted(load);
             {{ candidates.length }}</span
           ><button
             type="button"
-            class="h-9 rounded-md bg-teal-600 px-4 text-sm font-semibold text-white disabled:opacity-50"
+            class="h-9 rounded-md bg-brand-600 px-4 text-sm font-semibold text-white disabled:opacity-50"
             :disabled="!selectedCandidates.length || applying"
             @click="apply"
           >

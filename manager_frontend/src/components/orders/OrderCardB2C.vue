@@ -100,7 +100,7 @@ const paymentSummary = computed(() => {
     return { label: `Долг: ${formatMoney(balance)}`, className: 'text-red-600 dark:text-red-300' };
   }
   if (props.order.total_amount > 0) {
-    return { label: 'Долг: нет', className: 'text-teal-700 dark:text-teal-300' };
+    return { label: 'Долг: нет', className: 'text-emerald-700 dark:text-emerald-300' };
   }
   return { label: 'Без суммы', className: 'text-gray-500 dark:text-slate-400' };
 });
@@ -110,7 +110,7 @@ const paymentSummary = computed(() => {
   <article
     class="group cursor-pointer rounded-2xl border p-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
     :class="[
-      expanded ? 'border-teal-300 bg-white ring-2 ring-teal-500/20 dark:border-teal-500 dark:bg-slate-800' : cardAccentClass,
+      expanded ? 'border-brand-300 bg-white ring-2 ring-brand-500/20 dark:border-brand-500 dark:bg-slate-800' : cardAccentClass,
       isOverdue(order) ? 'ring-2 ring-red-500/60' : '',
     ]"
     :draggable="!draggableDisabled"
@@ -161,7 +161,7 @@ const paymentSummary = computed(() => {
       <span
         v-for="label in compactLabels"
         :key="label"
-        class="rounded-full border border-teal-200 bg-teal-50 px-2 py-0.5 text-[10px] font-semibold text-teal-800 dark:border-teal-500/30 dark:bg-teal-500/10 dark:text-teal-200"
+        class="rounded-full border border-brand-200 bg-brand-50 px-2 py-0.5 text-[10px] font-semibold text-brand-800 dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-brand-200"
       >
         {{ label }}
       </span>
@@ -202,7 +202,7 @@ const paymentSummary = computed(() => {
           <span
             v-for="label in order.manager_labels"
             :key="label"
-            class="rounded-full border border-teal-200 bg-teal-50 px-2 py-0.5 text-[10px] font-semibold text-teal-800 dark:border-teal-500/30 dark:bg-teal-500/10 dark:text-teal-200"
+            class="rounded-full border border-brand-200 bg-brand-50 px-2 py-0.5 text-[10px] font-semibold text-brand-800 dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-brand-200"
           >
             {{ label }}
           </span>

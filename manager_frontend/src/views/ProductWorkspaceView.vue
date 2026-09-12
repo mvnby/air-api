@@ -302,7 +302,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload));
           <button type="button" class="hidden h-9 items-center gap-2 rounded-lg border border-gray-200 px-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 sm:inline-flex" :disabled="!publicProductUrl" @click="openPublicProduct">
             <ExternalLink class="h-4 w-4" /> На сайте
           </button>
-          <button v-if="activeSection !== 'features'" type="button" class="inline-flex h-9 items-center gap-2 rounded-lg bg-teal-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-teal-700 disabled:opacity-50" :disabled="saving || loading || activeSection === 'media'" @click="saveCurrent">
+          <button v-if="activeSection !== 'features'" type="button" class="inline-flex h-9 items-center gap-2 rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 disabled:opacity-50" :disabled="saving || loading || activeSection === 'media'" @click="saveCurrent">
             <Save class="h-4 w-4" /> <span class="hidden sm:inline">{{ saving ? 'Сохранение…' : 'Сохранить' }}</span>
           </button>
           <div class="relative">
@@ -324,13 +324,13 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload));
             <button type="button" class="flex h-8 items-center gap-1 rounded-md px-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 disabled:opacity-35 dark:text-slate-300 dark:hover:bg-slate-800" :disabled="!neighbors.previousId" @click="navigateProduct(neighbors.previousId)"><ChevronLeft class="h-4 w-4" />Предыдущий</button>
             <button type="button" class="flex h-8 items-center gap-1 rounded-md px-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 disabled:opacity-35 dark:text-slate-300 dark:hover:bg-slate-800" :disabled="!neighbors.nextId" @click="navigateProduct(neighbors.nextId)">Следующий<ArrowRight class="h-4 w-4" /></button>
           </div>
-          <button v-if="neighbors.nextId && !['media', 'features'].includes(activeSection)" type="button" class="hidden h-8 items-center gap-1 rounded-md px-2 text-xs font-semibold text-teal-700 hover:bg-teal-50 sm:flex" :disabled="saving" @click="saveAndNext">Сохранить и дальше<ArrowRight class="h-4 w-4" /></button>
+          <button v-if="neighbors.nextId && !['media', 'features'].includes(activeSection)" type="button" class="hidden h-8 items-center gap-1 rounded-md px-2 text-xs font-semibold text-brand-700 hover:bg-brand-50 sm:flex" :disabled="saving" @click="saveAndNext">Сохранить и дальше<ArrowRight class="h-4 w-4" /></button>
         </div>
       </div>
     </header>
 
     <div v-if="loading" class="flex min-h-[520px] items-center justify-center gap-3 text-gray-500">
-      <span class="h-6 w-6 animate-spin rounded-full border-2 border-teal-600 border-t-transparent" /> Загрузка товара…
+      <span class="h-6 w-6 animate-spin rounded-full border-2 border-brand-600 border-t-transparent" /> Загрузка товара…
     </div>
     <div v-else-if="errorMessage" class="mx-auto max-w-2xl px-4 py-20 text-center">
       <CircleAlert class="mx-auto h-10 w-10 text-red-500" />
@@ -339,7 +339,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload));
     </div>
     <div v-else-if="product" class="mx-auto grid max-w-[1680px] gap-5 px-4 py-5 xl:grid-cols-[190px_minmax(0,1fr)_270px] xl:px-6">
       <nav class="sticky top-[132px] z-20 -mx-4 flex gap-1 overflow-x-auto border-y border-gray-200 bg-white px-4 py-2 dark:border-slate-800 dark:bg-slate-950 xl:mx-0 xl:block xl:self-start xl:border-0 xl:bg-transparent xl:px-0 xl:py-0">
-        <button v-for="section in sections" :key="section.id" type="button" class="flex h-10 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-semibold transition xl:mb-1 xl:w-full" :class="activeSection === section.id ? 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-200' : 'text-gray-600 hover:bg-white dark:text-slate-300 dark:hover:bg-slate-900'" @click="scrollToSection(section.id)">
+        <button v-for="section in sections" :key="section.id" type="button" class="flex h-10 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-semibold transition xl:mb-1 xl:w-full" :class="activeSection === section.id ? 'bg-brand-100 text-brand-800 dark:bg-brand-950 dark:text-brand-200' : 'text-gray-600 hover:bg-white dark:text-slate-300 dark:hover:bg-slate-900'" @click="scrollToSection(section.id)">
           <component :is="section.icon" class="h-4 w-4" />{{ section.label }}
           <span v-if="section.id === 'media'" class="ml-auto rounded-full bg-white px-1.5 text-[10px] text-gray-500 dark:bg-slate-800">{{ mediaCount }}</span>
           <span v-if="section.id === 'suppliers'" class="ml-auto rounded-full bg-white px-1.5 text-[10px] text-gray-500 dark:bg-slate-800" :title="supplierOfferCount == null ? 'Счётчик будет доступен после загрузки предложений' : undefined">{{ supplierOfferCount == null ? '—' : supplierOfferCount }}</span>

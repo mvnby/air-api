@@ -343,7 +343,7 @@ const generateContentDraft = async (mode: DraftMode) => {
               class="rounded px-3 py-1.5 text-sm font-semibold"
               :class="
                 draft.scope_type === 'universal'
-                  ? 'bg-teal-600 text-white'
+                  ? 'bg-brand-600 text-white'
                   : 'text-gray-600 dark:text-slate-300'
               "
               @click="selectScope('universal')"
@@ -355,7 +355,7 @@ const generateContentDraft = async (mode: DraftMode) => {
               class="rounded px-3 py-1.5 text-sm font-semibold"
               :class="
                 draft.scope_type === 'brand'
-                  ? 'bg-teal-600 text-white'
+                  ? 'bg-brand-600 text-white'
                   : 'text-gray-600 dark:text-slate-300'
               "
               @click="selectScope('brand')"
@@ -399,7 +399,7 @@ const generateContentDraft = async (mode: DraftMode) => {
             ><span>Полное описание</span
             ><button
               type="button"
-              class="text-teal-700 hover:underline disabled:opacity-50 dark:text-teal-300"
+              class="text-brand-700 hover:underline disabled:opacity-50 dark:text-brand-300"
               :disabled="contentAiLoading"
               @click="generateContentDraft('polish_text')"
             >
@@ -430,7 +430,7 @@ const generateContentDraft = async (mode: DraftMode) => {
             ><span>Источник</span
             ><button
               type="button"
-              class="text-teal-700 hover:underline disabled:opacity-50 dark:text-teal-300"
+              class="text-brand-700 hover:underline disabled:opacity-50 dark:text-brand-300"
               :disabled="contentAiLoading"
               @click="generateContentDraft('from_source')"
             >
@@ -537,7 +537,7 @@ const generateContentDraft = async (mode: DraftMode) => {
           Отмена</button
         ><button
           type="submit"
-          class="h-10 rounded-md bg-teal-600 px-5 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50"
+          class="h-10 rounded-md bg-brand-600 px-5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
           :disabled="saving"
         >
           {{ saving ? "Сохранение…" : "Сохранить" }}

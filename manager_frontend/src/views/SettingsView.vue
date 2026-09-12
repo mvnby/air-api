@@ -866,7 +866,7 @@ onMounted(() => {
         <!-- Toast Notification -->
         <Transition name="toast">
             <div v-if="toast" class="fixed top-20 right-8 z-50 px-4 py-3 rounded-lg shadow-xl flex items-center gap-3"
-                 :class="toastType === 'success' ? 'bg-teal-600 border border-teal-500 text-white shadow-teal-900/30' : 'bg-red-600 border border-red-500 text-white shadow-red-900/30'">
+                 :class="toastType === 'success' ? 'bg-emerald-600 border border-emerald-500 text-white shadow-emerald-900/30' : 'bg-red-600 border border-red-500 text-white shadow-red-900/30'">
                 <span class="material-icons-round text-xl">{{ toastType === 'success' ? 'check_circle' : 'error' }}</span>
                 <span class="text-sm font-medium">{{ toast }}</span>
             </div>
@@ -875,7 +875,7 @@ onMounted(() => {
         <div class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div class="pl-16 sm:pl-0">
                 <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-3">
-                    <span class="material-icons-round text-teal-600 dark:text-teal-400">settings</span>
+                    <span class="material-icons-round text-brand-600 dark:text-brand-400">settings</span>
                     Настройки
                 </h1>
                 <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">
@@ -893,7 +893,7 @@ onMounted(() => {
                 </button>
                 <button 
                     @click="showCreateForm = !showCreateForm"
-                    class="flex min-w-0 items-center justify-center gap-2 bg-teal-600 hover:bg-teal-500 active:bg-teal-700 text-white font-medium py-2.5 px-3 sm:px-4 rounded-lg shadow-sm transition-all text-sm"
+                    class="flex min-w-0 items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 active:bg-brand-700 text-white font-medium py-2.5 px-3 sm:px-4 rounded-lg shadow-sm transition-all text-sm"
                 >
                     <span class="material-icons-round text-[18px]">{{ showCreateForm ? 'close' : 'add_circle' }}</span>
                     <span class="min-w-0 leading-tight">{{ showCreateForm ? 'Отмена' : 'Добавить' }}</span>
@@ -913,7 +913,7 @@ onMounted(() => {
             <button
                 type="button"
                 class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
-                :class="activeSettingsTab === 'general' ? 'bg-teal-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800'"
+                :class="activeSettingsTab === 'general' ? 'bg-brand-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800'"
                 @click="activeSettingsTab = 'general'"
             >
                 <span class="material-icons-round text-[18px]">tune</span>
@@ -922,7 +922,7 @@ onMounted(() => {
             <button
                 type="button"
                 class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
-                :class="activeSettingsTab === 'documentTemplates' ? 'bg-teal-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800'"
+                :class="activeSettingsTab === 'documentTemplates' ? 'bg-brand-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800'"
                 @click="activeSettingsTab = 'documentTemplates'"
             >
                 <span class="material-icons-round text-[18px]">description</span>
@@ -931,7 +931,7 @@ onMounted(() => {
             <button
                 type="button"
                 class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
-                :class="activeSettingsTab === 'repairComplaints' ? 'bg-teal-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800'"
+                :class="activeSettingsTab === 'repairComplaints' ? 'bg-brand-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800'"
                 @click="activeSettingsTab = 'repairComplaints'"
             >
                 <span class="material-icons-round text-[18px]">build_circle</span>
@@ -940,7 +940,7 @@ onMounted(() => {
             <button
                 type="button"
                 class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
-                :class="activeSettingsTab === 'emailLeads' ? 'bg-teal-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800'"
+                :class="activeSettingsTab === 'emailLeads' ? 'bg-brand-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800'"
                 @click="activeSettingsTab = 'emailLeads'"
             >
                 <span class="material-icons-round text-[18px]">mark_email_read</span>
@@ -949,7 +949,7 @@ onMounted(() => {
             <button
                 type="button"
                 class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
-                :class="activeSettingsTab === 'botSelection' ? 'bg-teal-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800'"
+                :class="activeSettingsTab === 'botSelection' ? 'bg-brand-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800'"
                 @click="activeSettingsTab = 'botSelection'"
             >
                 <span class="material-icons-round text-[18px]">smart_toy</span>
@@ -961,7 +961,7 @@ onMounted(() => {
             <div class="flex items-start justify-between gap-4 flex-wrap">
                 <div>
                     <h3 class="text-base font-semibold text-gray-900 dark:text-slate-200 mb-1 flex items-center gap-2">
-                        <span class="material-icons-round text-teal-500 text-[20px]">account_tree</span>
+                        <span class="material-icons-round text-brand-500 text-[20px]">account_tree</span>
                         Google Integration
                     </h3>
                     <p class="text-xs text-gray-500 dark:text-slate-400">
@@ -999,7 +999,7 @@ onMounted(() => {
             <div class="mt-4 flex flex-wrap items-center gap-2">
                 <button
                     @click="openGoogleAuth"
-                    class="flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-500 active:bg-teal-700 text-white font-medium py-2 px-4 rounded-lg shadow-sm transition-all text-sm disabled:opacity-60"
+                    class="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 active:bg-brand-700 text-white font-medium py-2 px-4 rounded-lg shadow-sm transition-all text-sm disabled:opacity-60"
                     :disabled="googleAuthBusy"
                 >
                     <span class="material-icons-round text-[18px]">open_in_new</span>
@@ -1012,7 +1012,7 @@ onMounted(() => {
             <div class="flex flex-wrap items-start justify-between gap-4">
                 <div>
                     <h3 class="text-base font-semibold text-gray-900 dark:text-slate-200 mb-1 flex items-center gap-2">
-                        <span class="material-icons-round text-teal-500 text-[20px]">mark_email_read</span>
+                        <span class="material-icons-round text-brand-500 text-[20px]">mark_email_read</span>
                         Email-лиды
                     </h3>
                     <p class="text-xs text-gray-500 dark:text-slate-400">
@@ -1021,7 +1021,7 @@ onMounted(() => {
                 </div>
                 <button
                     type="button"
-                    class="flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-500 active:bg-teal-700 text-white font-medium py-2 px-4 rounded-lg shadow-sm transition-all text-sm disabled:opacity-60"
+                    class="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 active:bg-brand-700 text-white font-medium py-2 px-4 rounded-lg shadow-sm transition-all text-sm disabled:opacity-60"
                     :disabled="emailLeadSettingsSaving"
                     @click="saveEmailLeadSettings"
                 >
@@ -1036,7 +1036,7 @@ onMounted(() => {
                     <input
                         v-model="emailLeadSettings.autoImport"
                         type="checkbox"
-                        class="h-5 w-5 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                        class="h-5 w-5 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                         :disabled="emailLeadSettingsSaving"
                     />
                     <span>
@@ -1052,7 +1052,7 @@ onMounted(() => {
                         type="number"
                         min="1"
                         max="1440"
-                        class="w-full bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-200 focus:outline-none focus:border-teal-500 transition-colors shadow-sm text-sm"
+                        class="w-full bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-200 focus:outline-none focus:border-brand-500 transition-colors shadow-sm text-sm"
                         :disabled="emailLeadSettingsSaving"
                     />
                 </div>
@@ -1073,7 +1073,7 @@ onMounted(() => {
             <div class="flex flex-wrap items-start justify-between gap-4">
                 <div>
                     <h3 class="text-base font-semibold text-gray-900 dark:text-slate-200 mb-1 flex items-center gap-2">
-                        <span class="material-icons-round text-teal-500 text-[20px]">smart_toy</span>
+                        <span class="material-icons-round text-brand-500 text-[20px]">smart_toy</span>
                         Подбор в Telegram-боте
                     </h3>
                     <p class="text-xs text-gray-500 dark:text-slate-400">
@@ -1092,7 +1092,7 @@ onMounted(() => {
                     </button>
                     <button
                         type="button"
-                        class="flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-500 active:bg-teal-700 text-white font-medium py-2 px-4 rounded-lg shadow-sm transition-all text-sm disabled:opacity-60"
+                        class="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 active:bg-brand-700 text-white font-medium py-2 px-4 rounded-lg shadow-sm transition-all text-sm disabled:opacity-60"
                         :disabled="botSelectionRulesSaving || !!botSelectionRulesError"
                         @click="saveBotSelectionRules"
                     >
@@ -1116,7 +1116,7 @@ onMounted(() => {
                     </div>
                     <textarea
                         v-model="botSelectionRulesText"
-                        class="min-h-[520px] w-full resize-y rounded-lg border border-gray-300 bg-gray-50 px-3 py-3 font-mono text-sm leading-5 text-gray-900 shadow-sm transition-colors focus:border-teal-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                        class="min-h-[520px] w-full resize-y rounded-lg border border-gray-300 bg-gray-50 px-3 py-3 font-mono text-sm leading-5 text-gray-900 shadow-sm transition-colors focus:border-brand-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
                         spellcheck="false"
                         :disabled="botSelectionRulesSaving"
                     ></textarea>
@@ -1128,7 +1128,7 @@ onMounted(() => {
                 <div class="space-y-4">
                     <div class="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-slate-700 dark:bg-slate-900">
                         <div class="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-slate-100">
-                            <span class="material-icons-round text-[18px] text-teal-500">speed</span>
+                            <span class="material-icons-round text-[18px] text-brand-500">speed</span>
                             Мощности
                         </div>
                         <div class="space-y-2">
@@ -1146,7 +1146,7 @@ onMounted(() => {
 
                     <div class="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-slate-700 dark:bg-slate-900">
                         <div class="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-slate-100">
-                            <span class="material-icons-round text-[18px] text-teal-500">tune</span>
+                            <span class="material-icons-round text-[18px] text-brand-500">tune</span>
                             Режимы
                         </div>
                         <div class="space-y-2">
@@ -1161,7 +1161,7 @@ onMounted(() => {
                         </div>
                     </div>
 
-                    <div class="rounded-xl border border-teal-200 bg-teal-50 p-4 text-sm text-teal-900 dark:border-teal-500/30 dark:bg-teal-500/10 dark:text-teal-200">
+                    <div class="rounded-xl border border-brand-200 bg-brand-50 p-4 text-sm text-brand-900 dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-brand-200">
                         <div class="font-semibold">Активно после сохранения</div>
                         <div class="mt-1 text-xs opacity-80">
                             Бот перечитает правила при следующем запросе подбора.
@@ -1175,7 +1175,7 @@ onMounted(() => {
             <div class="flex flex-wrap items-start justify-between gap-4">
                 <div>
                     <h3 class="text-base font-semibold text-gray-900 dark:text-slate-200 mb-1 flex items-center gap-2">
-                        <span class="material-icons-round text-teal-500 text-[20px]">description</span>
+                        <span class="material-icons-round text-brand-500 text-[20px]">description</span>
                         Шаблоны документов
                     </h3>
                     <p class="text-xs text-gray-500 dark:text-slate-400">
@@ -1188,7 +1188,7 @@ onMounted(() => {
                         :key="option.value"
                         type="button"
                         class="flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-medium text-white shadow-sm"
-                        :class="option.value === 'act' ? 'bg-slate-700 hover:bg-slate-600' : 'bg-teal-600 hover:bg-teal-500'"
+                        :class="option.value === 'act' ? 'bg-slate-700 hover:bg-slate-600' : 'bg-brand-600 hover:bg-brand-500'"
                         @click="addDocumentTemplate(option.value)"
                     >
                         <span class="material-icons-round text-[16px]">add</span>
@@ -1197,18 +1197,18 @@ onMounted(() => {
                 </div>
             </div>
 
-            <div class="mt-5 rounded-xl border border-teal-100 bg-teal-50/60 p-4 dark:border-teal-500/30 dark:bg-teal-500/10">
-                <label class="mb-2 block text-xs font-medium text-teal-800 dark:text-teal-200">Папка Google Drive с шаблонами</label>
+            <div class="mt-5 rounded-xl border border-brand-100 bg-brand-50/60 p-4 dark:border-brand-500/30 dark:bg-brand-500/10">
+                <label class="mb-2 block text-xs font-medium text-brand-800 dark:text-brand-200">Папка Google Drive с шаблонами</label>
                 <div class="flex flex-col gap-2 sm:flex-row">
                     <input
                         v-model="templateFolderId"
                         type="text"
-                        class="min-w-0 flex-1 rounded-lg border border-teal-200 bg-white px-3 py-2 font-mono text-sm text-gray-900 shadow-sm dark:border-teal-500/40 dark:bg-slate-900 dark:text-slate-200"
+                        class="min-w-0 flex-1 rounded-lg border border-brand-200 bg-white px-3 py-2 font-mono text-sm text-gray-900 shadow-sm dark:border-brand-500/40 dark:bg-slate-900 dark:text-slate-200"
                         placeholder="Google Drive folder ID"
                     />
                     <button
                         type="button"
-                        class="flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-medium text-teal-700 shadow-sm ring-1 ring-teal-200 hover:bg-teal-50 disabled:opacity-60 dark:bg-slate-900 dark:text-teal-200 dark:ring-teal-500/40 dark:hover:bg-slate-800"
+                        class="flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-medium text-brand-700 shadow-sm ring-1 ring-brand-200 hover:bg-brand-50 disabled:opacity-60 dark:bg-slate-900 dark:text-brand-200 dark:ring-brand-500/40 dark:hover:bg-slate-800"
                         :disabled="loadingTemplateFiles"
                         @click="loadTemplateFiles"
                     >
@@ -1308,7 +1308,7 @@ onMounted(() => {
                                 <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-300">
                                     <input
                                         type="checkbox"
-                                        class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                                        class="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                                         :checked="!template.client_restricted"
                                         @change="template.client_restricted = !($event.target as HTMLInputElement).checked; if (!template.client_restricted) template.customer_ids = []"
                                     />
@@ -1351,7 +1351,7 @@ onMounted(() => {
                                             v-for="customer in selectedCustomersForTemplate(template)"
                                             :key="customer.id"
                                             type="button"
-                                            class="inline-flex items-center gap-1 rounded-full bg-teal-50 px-3 py-1 text-xs font-medium text-teal-800 ring-1 ring-teal-200 dark:bg-teal-500/10 dark:text-teal-200 dark:ring-teal-500/30"
+                                            class="inline-flex items-center gap-1 rounded-full bg-brand-50 px-3 py-1 text-xs font-medium text-brand-800 ring-1 ring-brand-200 dark:bg-brand-500/10 dark:text-brand-200 dark:ring-brand-500/30"
                                             @click="removeCustomerFromTemplate(template, customer.id)"
                                         >
                                             {{ customerLabel(customer) }}
@@ -1398,15 +1398,15 @@ onMounted(() => {
                     <div class="mt-3 flex flex-wrap items-center justify-between gap-3">
                         <div class="flex flex-wrap gap-3 text-sm text-gray-700 dark:text-slate-300">
                             <label class="flex items-center gap-2">
-                                <input v-model="template.is_active" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
+                                <input v-model="template.is_active" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500" />
                                 Активен
                             </label>
                             <label class="flex items-center gap-2">
-                                <input v-model="template.is_default" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
+                                <input v-model="template.is_default" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500" />
                                 По умолчанию
                             </label>
                             <label v-if="template.doc_type === 'contract'" class="flex items-center gap-2">
-                                <input v-model="template.is_open_contract" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
+                                <input v-model="template.is_open_contract" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500" />
                                 Открытый договор
                             </label>
                         </div>
@@ -1421,7 +1421,7 @@ onMounted(() => {
                             </button>
                             <button
                                 type="button"
-                                class="rounded-lg bg-teal-600 px-4 py-2 text-xs font-medium text-white shadow-sm hover:bg-teal-500 disabled:opacity-60"
+                                class="rounded-lg bg-brand-600 px-4 py-2 text-xs font-medium text-white shadow-sm hover:bg-brand-500 disabled:opacity-60"
                                 :disabled="savingTemplateKeys.has(String(template.document_template_id || `new:${template.doc_type}:${template.sort_order}`))"
                                 @click="saveDocumentTemplate(template)"
                             >
@@ -1440,7 +1440,7 @@ onMounted(() => {
             <div class="flex flex-wrap items-start justify-between gap-4">
                 <div>
                     <h3 class="text-base font-semibold text-gray-900 dark:text-slate-200 mb-1 flex items-center gap-2">
-                        <span class="material-icons-round text-teal-500 text-[20px]">build_circle</span>
+                        <span class="material-icons-round text-brand-500 text-[20px]">build_circle</span>
                         Жалобы и диагнозы для ремонта
                     </h3>
                     <p class="text-xs text-gray-500 dark:text-slate-400">
@@ -1449,7 +1449,7 @@ onMounted(() => {
                 </div>
                 <button
                     type="button"
-                    class="flex items-center gap-1 rounded-lg bg-teal-600 px-3 py-2 text-xs font-medium text-white shadow-sm hover:bg-teal-500"
+                    class="flex items-center gap-1 rounded-lg bg-brand-600 px-3 py-2 text-xs font-medium text-white shadow-sm hover:bg-brand-500"
                     @click="addRepairComplaintPreset"
                 >
                     <span class="material-icons-round text-[16px]">add</span>
@@ -1547,11 +1547,11 @@ onMounted(() => {
                     <div class="mt-3 flex flex-wrap items-center justify-between gap-3">
                         <div class="flex flex-wrap gap-3 text-sm text-gray-700 dark:text-slate-300">
                             <label class="flex items-center gap-2">
-                                <input v-model="preset.is_active" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
+                                <input v-model="preset.is_active" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500" />
                                 Активна
                             </label>
                             <label class="flex items-center gap-2">
-                                <input v-model="preset.is_favorite" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
+                                <input v-model="preset.is_favorite" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500" />
                                 Избранная
                             </label>
                         </div>
@@ -1566,7 +1566,7 @@ onMounted(() => {
                             </button>
                             <button
                                 type="button"
-                                class="rounded-lg bg-teal-600 px-4 py-2 text-xs font-medium text-white shadow-sm hover:bg-teal-500 disabled:opacity-60"
+                                class="rounded-lg bg-brand-600 px-4 py-2 text-xs font-medium text-white shadow-sm hover:bg-brand-500 disabled:opacity-60"
                                 :disabled="savingRepairComplaintKeys.has(String(preset.id || `new:${preset.complaint_group}:${preset.sort_order}`))"
                                 @click="saveRepairComplaintPreset(preset)"
                             >
@@ -1583,9 +1583,9 @@ onMounted(() => {
 
         <!-- Create Setting Form -->
         <Transition name="toast">
-            <div v-if="activeSettingsTab === 'general' && showCreateForm" class="mb-6 bg-white dark:bg-[#1e293b] rounded-xl shadow-sm border-2 border-teal-500/50 p-6">
+            <div v-if="activeSettingsTab === 'general' && showCreateForm" class="mb-6 bg-white dark:bg-[#1e293b] rounded-xl shadow-sm border-2 border-brand-500/50 p-6">
                 <h3 class="text-base font-semibold text-gray-900 dark:text-slate-200 mb-4 flex items-center gap-2">
-                    <span class="material-icons-round text-teal-500 text-[20px]">add_circle</span>
+                    <span class="material-icons-round text-brand-500 text-[20px]">add_circle</span>
                     Новый параметр
                 </h3>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1594,7 +1594,7 @@ onMounted(() => {
                         <input
                             v-model="newKey"
                             type="text"
-                            class="w-full bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-200 focus:outline-none focus:border-teal-500 transition-colors shadow-sm font-mono text-sm"
+                            class="w-full bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-200 focus:outline-none focus:border-brand-500 transition-colors shadow-sm font-mono text-sm"
                             placeholder="contract_templates"
                             :disabled="creating"
                         />
@@ -1604,7 +1604,7 @@ onMounted(() => {
                         <input
                             v-model="newValue"
                             type="text"
-                            class="w-full bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-200 focus:outline-none focus:border-teal-500 transition-colors shadow-sm text-sm"
+                            class="w-full bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-200 focus:outline-none focus:border-brand-500 transition-colors shadow-sm text-sm"
                             placeholder='[{"id": "...", "name": "..."}]'
                             :disabled="creating"
                         />
@@ -1615,13 +1615,13 @@ onMounted(() => {
                             <input
                                 v-model="newDescription"
                                 type="text"
-                                class="flex-1 bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-200 focus:outline-none focus:border-teal-500 transition-colors shadow-sm text-sm"
+                                class="flex-1 bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-200 focus:outline-none focus:border-brand-500 transition-colors shadow-sm text-sm"
                                 placeholder="Описание параметра"
                                 :disabled="creating"
                             />
                             <button
                                 @click="createSetting"
-                                class="flex items-center gap-1 px-4 py-2 text-sm font-medium text-white bg-teal-600 hover:bg-teal-500 active:bg-teal-700 transition-colors rounded-lg disabled:opacity-50 shadow-sm whitespace-nowrap"
+                                class="flex items-center gap-1 px-4 py-2 text-sm font-medium text-white bg-brand-600 hover:bg-brand-500 active:bg-brand-700 transition-colors rounded-lg disabled:opacity-50 shadow-sm whitespace-nowrap"
                                 :disabled="creating || !newKey.trim() || !newValue.trim()"
                             >
                                 <span v-if="creating" class="material-icons-round text-sm animate-spin">refresh</span>
@@ -1639,7 +1639,7 @@ onMounted(() => {
         </div>
 
         <div v-if="activeSettingsTab === 'general' && loading && !settings.length" class="flex justify-center py-20">
-            <div class="w-8 h-8 rounded-full border-4 border-gray-200 dark:border-slate-700 border-t-teal-500 animate-spin"></div>
+            <div class="w-8 h-8 rounded-full border-4 border-gray-200 dark:border-slate-700 border-t-brand-500 animate-spin"></div>
         </div>
 
         <div v-else-if="activeSettingsTab === 'general'" class="space-y-4">
@@ -1653,7 +1653,7 @@ onMounted(() => {
                     </div>
                     <button
                         type="button"
-                        class="flex items-center justify-center gap-2 rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-teal-500 active:bg-teal-700 disabled:opacity-50"
+                        class="flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-brand-500 active:bg-brand-700 disabled:opacity-50"
                         :disabled="companyRequisitesSaving"
                         @click="saveCompanyRequisites"
                     >
@@ -1665,15 +1665,15 @@ onMounted(() => {
                 <div class="mt-5 grid gap-4 md:grid-cols-2">
                     <label class="block text-sm">
                         <span class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">Краткое название</span>
-                        <input v-model="companyRequisites.company_name" class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 shadow-sm transition-colors focus:border-teal-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" />
+                        <input v-model="companyRequisites.company_name" class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 shadow-sm transition-colors focus:border-brand-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" />
                     </label>
                     <label class="block text-sm">
                         <span class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">Полное наименование</span>
-                        <input v-model="companyRequisites.company_full_legal_name" class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 shadow-sm transition-colors focus:border-teal-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" />
+                        <input v-model="companyRequisites.company_full_legal_name" class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 shadow-sm transition-colors focus:border-brand-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" />
                     </label>
                     <label class="block text-sm">
                         <span class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">УНП</span>
-                        <input v-model="companyRequisites.company_unp" class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 shadow-sm transition-colors focus:border-teal-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" />
+                        <input v-model="companyRequisites.company_unp" class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 shadow-sm transition-colors focus:border-brand-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" />
                     </label>
                     <label class="block text-sm">
                         <span class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">Юридический адрес</span>
@@ -1681,27 +1681,27 @@ onMounted(() => {
                     </label>
                     <label class="block text-sm">
                         <span class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">IBAN</span>
-                        <input v-model="companyRequisites.company_iban" class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 shadow-sm transition-colors focus:border-teal-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" />
+                        <input v-model="companyRequisites.company_iban" class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 shadow-sm transition-colors focus:border-brand-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" />
                     </label>
                     <label class="block text-sm">
                         <span class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">Банк</span>
-                        <input v-model="companyRequisites.company_bank_name" class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 shadow-sm transition-colors focus:border-teal-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" />
+                        <input v-model="companyRequisites.company_bank_name" class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 shadow-sm transition-colors focus:border-brand-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" />
                     </label>
                     <label class="block text-sm">
                         <span class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">BIC</span>
-                        <input v-model="companyRequisites.company_bic" class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 shadow-sm transition-colors focus:border-teal-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" />
+                        <input v-model="companyRequisites.company_bic" class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 shadow-sm transition-colors focus:border-brand-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" />
                     </label>
                     <label class="block text-sm">
                         <span class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">Должность подписанта</span>
-                        <input v-model="companyRequisites.company_signer_position" class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 shadow-sm transition-colors focus:border-teal-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" />
+                        <input v-model="companyRequisites.company_signer_position" class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 shadow-sm transition-colors focus:border-brand-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" />
                     </label>
                     <label class="block text-sm">
                         <span class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">ФИО подписанта</span>
-                        <input v-model="companyRequisites.company_signer_name" class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 shadow-sm transition-colors focus:border-teal-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" />
+                        <input v-model="companyRequisites.company_signer_name" class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 shadow-sm transition-colors focus:border-brand-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" />
                     </label>
                     <label class="block text-sm">
                         <span class="mb-1 block text-xs font-medium text-gray-500 dark:text-slate-400">Основание полномочий</span>
-                        <input v-model="companyRequisites.company_acting_basis" class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 shadow-sm transition-colors focus:border-teal-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" />
+                        <input v-model="companyRequisites.company_acting_basis" class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 shadow-sm transition-colors focus:border-brand-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" />
                     </label>
                 </div>
             </section>
@@ -1723,7 +1723,7 @@ onMounted(() => {
                         <label class="block text-xs font-medium text-gray-500 dark:text-slate-400">Шаблоны договоров</label>
                         <button
                             type="button"
-                            class="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 dark:bg-teal-500/10 dark:text-teal-300 dark:hover:bg-teal-500/20 rounded-lg"
+                            class="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-brand-700 bg-brand-50 hover:bg-brand-100 dark:bg-brand-500/10 dark:text-brand-300 dark:hover:bg-brand-500/20 rounded-lg"
                             @click="addContractTemplateRow(setting)"
                         >
                             <span class="material-icons-round text-[16px]">add</span>
@@ -1739,20 +1739,20 @@ onMounted(() => {
                             <input
                                 v-model="template.name"
                                 type="text"
-                                class="w-full bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-200 focus:outline-none focus:border-teal-500 transition-colors shadow-sm text-sm"
+                                class="w-full bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-200 focus:outline-none focus:border-brand-500 transition-colors shadow-sm text-sm"
                                 placeholder="Название для менеджера"
                                 :disabled="savingKeys.has(setting.key)"
                             />
                             <input
                                 v-model="template.id"
                                 type="text"
-                                class="w-full bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-200 focus:outline-none focus:border-teal-500 transition-colors shadow-sm text-sm font-mono"
+                                class="w-full bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-200 focus:outline-none focus:border-brand-500 transition-colors shadow-sm text-sm font-mono"
                                 placeholder="Google Template ID"
                                 :disabled="savingKeys.has(setting.key)"
                             />
                             <select
                                 v-model="template.document_role_type"
-                                class="w-full bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-200 focus:outline-none focus:border-teal-500 transition-colors shadow-sm text-sm"
+                                class="w-full bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-200 focus:outline-none focus:border-brand-500 transition-colors shadow-sm text-sm"
                                 :disabled="savingKeys.has(setting.key)"
                             >
                                 <option v-for="option in DOCUMENT_ROLE_OPTIONS" :key="option.value" :value="option.value">
@@ -1763,7 +1763,7 @@ onMounted(() => {
                                 <input
                                     v-model="template.is_open_contract"
                                     type="checkbox"
-                                    class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                                    class="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                                     :disabled="savingKeys.has(setting.key)"
                                 />
                                 <span>Открытый</span>
@@ -1789,7 +1789,7 @@ onMounted(() => {
                         <input
                             v-model="setting.value"
                             type="text"
-                            class="w-full bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-200 focus:outline-none focus:border-teal-500 transition-colors shadow-sm"
+                            class="w-full bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-200 focus:outline-none focus:border-brand-500 transition-colors shadow-sm"
                             :disabled="savingKeys.has(setting.key)"
                         />
                     </div>
@@ -1798,7 +1798,7 @@ onMounted(() => {
                         <input
                             v-model="setting.description"
                             type="text"
-                            class="w-full bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-200 focus:outline-none focus:border-teal-500 transition-colors shadow-sm text-sm"
+                            class="w-full bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-200 focus:outline-none focus:border-brand-500 transition-colors shadow-sm text-sm"
                             :disabled="savingKeys.has(setting.key)"
                             placeholder="Добавьте описание..."
                         />
@@ -1808,7 +1808,7 @@ onMounted(() => {
                 <div class="md:w-32 flex-shrink-0 flex justify-end w-full md:block">
                     <button
                         @click="setting.key === 'contract_templates' ? saveContractTemplates(setting) : saveSetting(setting)"
-                        class="w-full flex justify-center items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-teal-600 hover:bg-teal-500 active:bg-teal-700 transition-colors rounded-lg disabled:opacity-50 shadow-sm"
+                        class="w-full flex justify-center items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-brand-600 hover:bg-brand-500 active:bg-brand-700 transition-colors rounded-lg disabled:opacity-50 shadow-sm"
                         :disabled="savingKeys.has(setting.key)"
                     >
                         <span v-if="savingKeys.has(setting.key)" class="material-icons-round text-sm animate-spin">refresh</span>

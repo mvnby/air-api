@@ -41,8 +41,8 @@ const summary = computed(() => (
         :data-testid="`execution-status-${option.value}`"
         class="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-xs font-semibold transition"
         :class="executionStatus === option.value
-          ? 'border-teal-500 bg-white text-teal-800 shadow-sm'
-          : 'border-teal-100 bg-white/70 text-slate-600 hover:border-teal-300 hover:text-teal-800'"
+          ? 'border-brand-500 bg-white text-brand-800 shadow-sm'
+          : 'border-brand-100 bg-white/70 text-slate-600 hover:border-brand-300 hover:text-brand-800'"
         @click="executionStatus = option.value"
       >
         <span class="material-icons-round text-[15px]">{{ option.icon }}</span>
@@ -51,11 +51,11 @@ const summary = computed(() => (
     </div>
     <div class="mt-3 grid gap-2 sm:grid-cols-2">
       <label class="flex items-start gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-        <input v-model="executionWithoutPayment" data-testid="execution-without-payment" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
+        <input v-model="executionWithoutPayment" data-testid="execution-without-payment" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-600" />
         <span><strong class="block">Разрешить переходы при наличии долга</strong><span class="mt-0.5 block text-slate-500 dark:text-slate-400">Менеджер сможет продолжать работу без полной оплаты.</span></span>
       </label>
       <label class="flex items-start gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-        <input v-model="autoCloseOnPayment" data-testid="auto-close-on-payment" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
+        <input v-model="autoCloseOnPayment" data-testid="auto-close-on-payment" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-600" />
         <span><strong class="block">Автоматически завершить после полной оплаты</strong><span class="mt-0.5 block text-slate-500 dark:text-slate-400">Сработает, когда долг станет нулевым.</span></span>
       </label>
     </div>

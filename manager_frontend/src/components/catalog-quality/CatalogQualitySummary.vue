@@ -43,12 +43,12 @@ const severityTone = (severity: string) => {
   <section class="border-b border-gray-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900 sm:px-5">
     <div class="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
       <div class="flex items-center gap-2">
-        <ShieldCheck class="h-6 w-6 shrink-0 text-teal-700" />
+        <ShieldCheck class="h-6 w-6 shrink-0 text-brand-700" />
         <div><p class="text-[11px] font-semibold uppercase text-gray-500 dark:text-slate-400">Средний score</p><p class="text-lg font-bold text-gray-950 dark:text-slate-100">{{ report.average_score }} / 100</p></div>
       </div>
       <div><p class="text-[11px] font-semibold uppercase text-gray-500 dark:text-slate-400">Товаров</p><p class="text-lg font-bold text-gray-950 dark:text-slate-100">{{ formatNumber(report.total_products) }}</p></div>
       <div><p class="text-[11px] font-semibold uppercase text-red-600">Критичных</p><p class="text-lg font-bold text-red-700">{{ formatNumber(report.critical_products) }}</p></div>
-      <div><p class="text-[11px] font-semibold uppercase text-teal-700">Исправимо здесь</p><p class="text-lg font-bold text-teal-800">{{ formatNumber(report.fixable_products) }}</p></div>
+      <div><p class="text-[11px] font-semibold uppercase text-brand-700">Исправимо здесь</p><p class="text-lg font-bold text-brand-800">{{ formatNumber(report.fixable_products) }}</p></div>
     </div>
 
     <div v-if="report.summary.length" class="mt-3 grid gap-2 border-t border-gray-100 pt-3 dark:border-slate-700 lg:grid-cols-2">
@@ -58,7 +58,7 @@ const severityTone = (severity: string) => {
           v-for="item in group.items.slice(0, 4)"
           :key="item.code"
           class="inline-flex min-h-8 items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-semibold transition hover:brightness-95"
-          :class="[severityTone(item.severity), selectedIssueCode === item.code ? 'ring-2 ring-teal-500 ring-offset-1' : '']"
+          :class="[severityTone(item.severity), selectedIssueCode === item.code ? 'ring-2 ring-brand-500 ring-offset-1' : '']"
           :title="`Показать ${countLabel(item.count, 'карточку', 'карточки', 'карточек')} с этой проблемой`"
           @click="emit('selectIssue', item.code)"
         >

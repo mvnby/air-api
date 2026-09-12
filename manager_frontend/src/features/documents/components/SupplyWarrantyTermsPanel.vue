@@ -43,5 +43,5 @@ const updateText = (field: 'subject' | 'goods_warranty_terms' | 'work_warranty_t
 .business-heading { @apply text-sm font-bold text-slate-900 dark:text-white; }
 .business-help { @apply mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400; }
 .business-field { @apply flex min-w-0 flex-col gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200; }
-.business-input { @apply h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-normal text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/15 dark:border-slate-700 dark:bg-slate-950 dark:text-white; }
+.business-input { @apply h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-normal text-slate-900 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15 dark:border-slate-700 dark:bg-slate-950 dark:text-white; }
 </style>

@@ -26,7 +26,7 @@ const categoryLabel = (category: Category) => categories.find(item => item.value
 
 <template>
 <div class="border-b border-gray-100 pb-4 dark:border-slate-800">
-    <p class="text-xs font-bold uppercase tracking-[0.16em] text-teal-700 dark:text-teal-300">Основное</p>
+    <p class="text-xs font-bold uppercase tracking-[0.16em] text-brand-700 dark:text-brand-300">Основное</p>
     <h2 class="mt-1 text-xl font-bold text-gray-950 dark:text-white">Название, цена и группа каталога</h2>
 </div>
 
@@ -35,7 +35,7 @@ const categoryLabel = (category: Category) => categories.find(item => item.value
     <input
         v-model="form.title"
         type="text"
-        class="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border rounded-xl focus:bg-white dark:focus:bg-slate-700 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all text-gray-900 dark:text-slate-100 font-medium text-sm"
+        class="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border rounded-xl focus:bg-white dark:focus:bg-slate-700 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all text-gray-900 dark:text-slate-100 font-medium text-sm"
         :class="errors.title ? 'border-red-400 dark:border-red-800 focus:border-red-500' : 'border-gray-200 dark:border-slate-700'"
         placeholder="Напр: LG ARTCOOL Gallery"
     />
@@ -50,7 +50,7 @@ const categoryLabel = (category: Category) => categories.find(item => item.value
     <input
         v-model="form.slug"
         type="text"
-        class="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border rounded-xl focus:bg-white dark:focus:bg-slate-700 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all text-sm font-mono text-gray-600 dark:text-slate-300"
+        class="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border rounded-xl focus:bg-white dark:focus:bg-slate-700 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all text-sm font-mono text-gray-600 dark:text-slate-300"
         :class="errors.slug ? 'border-red-400 dark:border-red-800 focus:border-red-500' : 'border-gray-200 dark:border-slate-700'"
         placeholder="lg-artcool-gallery"
     />
@@ -64,7 +64,7 @@ const categoryLabel = (category: Category) => categories.find(item => item.value
             <input
                 v-model.number="form.price"
                 type="number"
-                class="w-full pl-3 pr-10 py-2 bg-slate-100 dark:bg-slate-800 border rounded-xl focus:bg-white dark:focus:bg-slate-700 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all font-bold text-teal-700 dark:text-teal-400 text-sm"
+                class="w-full pl-3 pr-10 py-2 bg-slate-100 dark:bg-slate-800 border rounded-xl focus:bg-white dark:focus:bg-slate-700 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-bold text-brand-700 dark:text-brand-400 text-sm"
                 :class="errors.price ? 'border-red-400 dark:border-red-800 focus:border-red-500' : 'border-gray-200 dark:border-slate-700'"
             />
             <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 text-xs">BYN</span>
@@ -77,7 +77,7 @@ const categoryLabel = (category: Category) => categories.find(item => item.value
             <input
                 v-model.number="form.old_price"
                 type="number"
-                class="w-full pl-3 pr-10 py-2 bg-slate-100 dark:bg-slate-800 border rounded-xl focus:bg-white dark:focus:bg-slate-700 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all text-gray-500 dark:text-slate-400 text-sm"
+                class="w-full pl-3 pr-10 py-2 bg-slate-100 dark:bg-slate-800 border rounded-xl focus:bg-white dark:focus:bg-slate-700 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all text-gray-500 dark:text-slate-400 text-sm"
                 :class="errors.old_price ? 'border-red-400 dark:border-red-800 focus:border-red-500' : 'border-gray-200 dark:border-slate-700'"
             />
             <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 text-xs">BYN</span>
@@ -89,7 +89,7 @@ const categoryLabel = (category: Category) => categories.find(item => item.value
 <div class="flex items-center gap-2 pt-1">
      <label class="relative inline-flex items-center cursor-pointer">
         <input type="checkbox" v-model="form.is_published" class="sr-only peer">
-        <div class="w-11 h-6 bg-gray-200 dark:bg-slate-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-teal-300 dark:peer-focus:ring-teal-900 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 dark:after:border-slate-600 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
+        <div class="w-11 h-6 bg-gray-200 dark:bg-slate-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-brand-300 dark:peer-focus:ring-brand-900 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 dark:after:border-slate-600 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
         <span class="ms-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Опубликовано</span>
     </label>
 </div>
@@ -118,8 +118,8 @@ const categoryLabel = (category: Category) => categories.find(item => item.value
             :aria-pressed="form.catalog_category_override === category.value"
             class="rounded-lg border px-3 py-2 text-sm font-medium transition-colors"
             :class="form.catalog_category_override === category.value
-                ? 'border-teal-600 bg-teal-600 text-white'
-                : 'border-gray-200 bg-white text-gray-700 hover:border-teal-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'"
+                ? 'border-brand-600 bg-brand-600 text-white'
+                : 'border-gray-200 bg-white text-gray-700 hover:border-brand-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'"
             @click="form.catalog_category_override = category.value; emit('category-change')"
         >{{ category.label }}</button>
     </div>

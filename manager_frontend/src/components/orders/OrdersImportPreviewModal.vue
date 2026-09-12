@@ -31,7 +31,7 @@ defineEmits<{
         </div>
         <div class="rounded-xl border border-gray-100 bg-slate-50 p-3">
           <p class="text-xs text-gray-500">Товары найдены</p>
-          <p class="text-xl font-bold text-teal-700">
+          <p class="text-xl font-bold text-brand-700">
             {{ preview.products_matched }} / {{ preview.products_total }}
           </p>
         </div>

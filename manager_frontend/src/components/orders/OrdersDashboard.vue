@@ -495,7 +495,7 @@ watch(drawerOpen, (isOpen) => {
             >
               <Download class="h-4 w-4" />
               <span class="hidden sm:inline">Экспорт</span>
-              <span v-if="selectedOrderIds.length" class="rounded-full bg-teal-100 px-1.5 py-0.5 text-[10px] text-teal-800">{{ selectedOrderIds.length }}</span>
+              <span v-if="selectedOrderIds.length" class="rounded-full bg-brand-100 px-1.5 py-0.5 text-[10px] text-brand-800">{{ selectedOrderIds.length }}</span>
             </button>
             <button
               type="button"
@@ -512,7 +512,7 @@ watch(drawerOpen, (isOpen) => {
             <button
               type="button"
               class="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-700 transition hover:bg-white dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 sm:h-9 sm:w-9"
-              :class="filtersOpen || hasActiveOrderFilters ? 'bg-teal-50 text-teal-700 dark:bg-teal-500/10 dark:text-teal-300' : ''"
+              :class="filtersOpen || hasActiveOrderFilters ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300' : ''"
               :aria-expanded="filtersOpen"
               aria-label="Опции и фильтры"
               :title="hasActiveOrderFilters ? 'Есть активные фильтры' : 'Опции и фильтры'"
@@ -533,15 +533,15 @@ watch(drawerOpen, (isOpen) => {
               </option>
             </select>
             <label class="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-gray-700 transition hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700">
-              <input v-model="overdueOnly" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
+              <input v-model="overdueOnly" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-600" />
               <span class="text-sm font-medium">Только просроченные</span>
             </label>
             <label class="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-gray-700 transition hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700">
-              <input v-model="groupByCustomer" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
+              <input v-model="groupByCustomer" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-600" />
               <span class="text-sm font-medium">Группировать</span>
             </label>
             <label class="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-gray-700 transition hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700">
-              <input v-model="hideOnHold" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600" />
+              <input v-model="hideOnHold" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-600" />
               <span class="text-sm font-medium">Скрывать отложенные</span>
             </label>
             <button
@@ -554,7 +554,7 @@ watch(drawerOpen, (isOpen) => {
               Сбросить фильтры
             </button>
             <div v-if="view === 'list'" class="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
-              <button type="button" class="text-sm font-medium text-teal-700 disabled:text-gray-400" :disabled="!visibleOrderIds.length" @click="selectAllVisible">Выбрать все</button>
+              <button type="button" class="text-sm font-medium text-brand-700 disabled:text-gray-400" :disabled="!visibleOrderIds.length" @click="selectAllVisible">Выбрать все</button>
               <span class="text-xs text-gray-400">/</span>
               <button type="button" class="text-sm font-medium text-gray-600 disabled:text-gray-400" :disabled="!selectedOrderIds.length" @click="clearSelection">Сбросить</button>
             </div>
@@ -564,7 +564,7 @@ watch(drawerOpen, (isOpen) => {
 
       <!-- Toast -->
       <Transition name="fade">
-        <div v-if="toast" class="fixed top-6 right-6 z-[100] bg-teal-600 text-white px-6 py-3 rounded-xl shadow-2xl font-medium animate-in slide-in-from-top-4 duration-300">
+        <div v-if="toast" class="fixed top-6 right-6 z-[100] bg-brand-600 text-white px-6 py-3 rounded-xl shadow-2xl font-medium animate-in slide-in-from-top-4 duration-300">
           {{ toast }}
         </div>
       </Transition>

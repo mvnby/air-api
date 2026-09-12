@@ -48,7 +48,7 @@ useDialogA11y({
       >
         <header class="flex items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-slate-700">
           <div class="flex min-w-0 items-center gap-2.5">
-            <span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-teal-50 text-teal-700 dark:bg-teal-500/10 dark:text-teal-300">
+            <span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
               <Wrench class="h-4 w-4" />
             </span>
             <h2 id="maintenance-order-title" class="truncate text-base font-semibold text-gray-950 dark:text-white">
@@ -110,7 +110,7 @@ useDialogA11y({
             <button
               ref="confirmButton"
               type="submit"
-              class="inline-flex min-h-9 items-center justify-center gap-2 rounded-md bg-teal-600 px-3 text-sm font-semibold text-white transition hover:bg-teal-700 disabled:cursor-wait disabled:opacity-70"
+              class="inline-flex min-h-9 items-center justify-center gap-2 rounded-md bg-brand-600 px-3 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-wait disabled:opacity-70"
               :disabled="loading"
             >
               <LoaderCircle v-if="loading" class="h-4 w-4 animate-spin" />

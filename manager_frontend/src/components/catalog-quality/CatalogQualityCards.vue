@@ -145,8 +145,8 @@ const sharedImageLabel = (key: string) => {
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <span v-if="groupSummary(group.key)?.media_problem_products" class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-200"><Images class="h-3.5 w-3.5" /> Медиа: {{ groupSummary(group.key)?.media_problem_products }}</span>
-          <button v-if="groupSummary(group.key)?.media_problem_products && seriesMediaProduct(group)" class="inline-flex h-8 items-center gap-1.5 rounded-lg bg-teal-600 px-2.5 text-xs font-semibold text-white hover:bg-teal-700" @click="openGroupMedia(group)"><Images class="h-3.5 w-3.5" />Исправить медиа серии</button>
-          <button v-if="isSeriesGroup(group.key)" class="inline-flex h-8 items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 text-xs font-semibold text-gray-700 hover:border-teal-300 hover:text-teal-800 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" :aria-expanded="isGroupExpanded(group.key)" @click="toggleGroup(group.key)">
+          <button v-if="groupSummary(group.key)?.media_problem_products && seriesMediaProduct(group)" class="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand-600 px-2.5 text-xs font-semibold text-white hover:bg-brand-700" @click="openGroupMedia(group)"><Images class="h-3.5 w-3.5" />Исправить медиа серии</button>
+          <button v-if="isSeriesGroup(group.key)" class="inline-flex h-8 items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 text-xs font-semibold text-gray-700 hover:border-brand-300 hover:text-brand-800 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200" :aria-expanded="isGroupExpanded(group.key)" @click="toggleGroup(group.key)">
             {{ isGroupExpanded(group.key) ? 'Скрыть модели' : 'Показать модели' }}
             <ChevronDown class="h-3.5 w-3.5 transition-transform" :class="isGroupExpanded(group.key) ? 'rotate-180' : ''" />
           </button>
@@ -164,7 +164,7 @@ const sharedImageLabel = (key: string) => {
           <div class="min-w-0">
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0">
-                <button class="line-clamp-2 text-left text-sm font-bold leading-5 text-gray-950 hover:text-teal-700 dark:text-slate-100 dark:hover:text-teal-300" @click="emit('open', product)">{{ displayTitle(product) }}</button>
+                <button class="line-clamp-2 text-left text-sm font-bold leading-5 text-gray-950 hover:text-brand-700 dark:text-slate-100 dark:hover:text-brand-300" @click="emit('open', product)">{{ displayTitle(product) }}</button>
                 <p v-if="identityParts(product).length" class="mt-0.5 truncate text-xs font-semibold uppercase text-gray-500 dark:text-slate-400">{{ identityParts(product).join(' / ') }}</p>
               </div>
               <span class="shrink-0 rounded-full px-2 py-1 text-[10px] font-bold uppercase" :class="priorityTone(product.work_priority)">{{ priorityLabel(product.work_priority) }}</span>
@@ -188,9 +188,9 @@ const sharedImageLabel = (key: string) => {
             </div>
 
             <div class="mt-2 flex flex-wrap gap-2 border-t border-gray-100 pt-2 dark:border-slate-700">
-              <button v-if="hasIssueCategory(product, 'media')" class="inline-flex h-8 items-center gap-1.5 rounded-lg bg-teal-50 px-2.5 text-xs font-semibold text-teal-800 hover:bg-teal-100 dark:bg-teal-950 dark:text-teal-200 dark:hover:bg-teal-900" @click="emit('openMedia', product)"><Images class="h-3.5 w-3.5" />Исправить медиа</button>
-              <button class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 text-xs font-semibold text-gray-700 hover:border-teal-300 hover:text-teal-800 dark:border-slate-600 dark:text-slate-200 dark:hover:border-teal-600 dark:hover:text-teal-200" @click="emit('open', product)"><Wrench class="h-3.5 w-3.5" />Открыть карточку</button>
-              <a v-if="product.slug" class="grid h-8 w-8 place-items-center rounded-lg border border-gray-200 text-gray-500 hover:border-teal-300 hover:text-teal-700 dark:border-slate-600 dark:text-slate-300 dark:hover:border-teal-600 dark:hover:text-teal-200" :href="publicProductUrl(product.slug)" target="_blank" rel="noopener noreferrer" title="Открыть товар на сайте" aria-label="Открыть товар на сайте"><ExternalLink class="h-3.5 w-3.5" /></a>
+              <button v-if="hasIssueCategory(product, 'media')" class="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand-50 px-2.5 text-xs font-semibold text-brand-800 hover:bg-brand-100 dark:bg-brand-950 dark:text-brand-200 dark:hover:bg-brand-900" @click="emit('openMedia', product)"><Images class="h-3.5 w-3.5" />Исправить медиа</button>
+              <button class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 text-xs font-semibold text-gray-700 hover:border-brand-300 hover:text-brand-800 dark:border-slate-600 dark:text-slate-200 dark:hover:border-brand-600 dark:hover:text-brand-200" @click="emit('open', product)"><Wrench class="h-3.5 w-3.5" />Открыть карточку</button>
+              <a v-if="product.slug" class="grid h-8 w-8 place-items-center rounded-lg border border-gray-200 text-gray-500 hover:border-brand-300 hover:text-brand-700 dark:border-slate-600 dark:text-slate-300 dark:hover:border-brand-600 dark:hover:text-brand-200" :href="publicProductUrl(product.slug)" target="_blank" rel="noopener noreferrer" title="Открыть товар на сайте" aria-label="Открыть товар на сайте"><ExternalLink class="h-3.5 w-3.5" /></a>
             </div>
           </div>
         </article>
