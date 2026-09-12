@@ -109,35 +109,35 @@ const shortText = (value?: string | null, limit = 120) => {
 </script>
 
 <template>
-  <div class="min-h-full bg-slate-50 p-4 text-slate-900 dark:bg-[#0f172a] dark:text-white sm:p-6">
+  <div class="kitlane-home-page">
     <header class="mb-5">
-      <h1 class="text-2xl font-semibold tracking-tight text-slate-950 dark:text-white">Эффективность работы</h1>
-      <p v-if="overview" class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ formatDashboardComparisonPeriod(overview.period) }}</p>
+      <h1 class="kitlane-page-title">Эффективность работы</h1>
+      <p v-if="overview" class="mt-1 text-sm text-[var(--kitlane-muted)] dark:text-slate-400">{{ formatDashboardComparisonPeriod(overview.period) }}</p>
     </header>
     <nav class="mb-6 grid grid-cols-3 gap-1 border-b border-slate-200 dark:border-slate-700 sm:gap-2" role="tablist" aria-label="Разделы эффективности">
-      <button v-for="tab in tabs" :id="`dashboard-tab-${tab.id}`" :key="tab.id" type="button" role="tab" :aria-selected="activeTab === tab.id" :aria-controls="`dashboard-panel-${tab.id}`" class="inline-flex min-w-0 items-center justify-center gap-1 border-b-2 px-2 py-3 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 sm:gap-2 sm:px-3 sm:text-sm" :class="activeTab === tab.id ? 'border-teal-600 bg-teal-50 text-teal-800 dark:border-teal-400 dark:bg-teal-950/30 dark:text-teal-200' : 'border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'" @click="selectTab(tab.id)" @keydown="selectTabFromKey"><component :is="tab.icon" class="hidden h-4 w-4 shrink-0 min-[360px]:block" aria-hidden="true" /><span class="truncate">{{ tab.label }}</span></button>
+      <button v-for="tab in tabs" :id="`dashboard-tab-${tab.id}`" :key="tab.id" type="button" role="tab" :aria-selected="activeTab === tab.id" :aria-controls="`dashboard-panel-${tab.id}`" class="kitlane-dashboard-tab" :class="{ 'is-active': activeTab === tab.id }" :tabindex="activeTab === tab.id ? 0 : -1" @click="selectTab(tab.id)" @keydown="selectTabFromKey"><component :is="tab.icon" class="hidden h-4 w-4 shrink-0 min-[360px]:block" aria-hidden="true" /><span class="truncate">{{ tab.label }}</span></button>
     </nav>
 
     <section v-if="activeTab === 'sales'" id="dashboard-panel-sales" role="tabpanel" aria-labelledby="dashboard-tab-sales" class="space-y-5">
       <section class="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
-        <div class="flex items-center justify-between gap-3"><h2 class="text-lg font-semibold text-slate-900 dark:text-white">Требует внимания</h2><span class="text-xs text-slate-500 dark:text-slate-400">На сейчас</span></div>
-        <div v-if="operationalLoading || leadsLoading" class="mt-3 text-sm text-slate-500 dark:text-slate-400">Проверяем срочные действия...</div>
+        <div class="flex items-center justify-between gap-3"><h2 class="text-lg font-semibold text-slate-900 dark:text-white">Требует внимания</h2><span class="text-xs text-[var(--kitlane-muted)] dark:text-slate-400">На сейчас</span></div>
+        <div v-if="operationalLoading || leadsLoading" class="mt-3 text-sm text-[var(--kitlane-muted)] dark:text-slate-400">Проверяем срочные действия...</div>
         <template v-else>
-        <p v-if="leadsError || operationalError" class="mt-3 text-sm text-slate-500 dark:text-slate-400">Часть проверок недоступна. Доступные действия показаны ниже.</p>
-        <div v-if="leadsCount || stats?.bank_receipts_review_count || firstOverdueTouchpoint" class="mt-4 grid gap-3 md:grid-cols-3">
-          <button v-if="leadsCount" type="button" class="flex items-center gap-3 rounded-lg bg-slate-50 p-3 text-left hover:bg-teal-50 dark:bg-slate-900/40 dark:hover:bg-teal-950/30" @click="navigate('/manager/leads')"><Inbox class="h-5 w-5 shrink-0 text-teal-600" aria-hidden="true" /><span><strong class="block text-sm">{{ leadsCount }} входящих</strong><span class="text-xs text-slate-500">Разобрать заявки</span></span></button>
-          <button v-if="stats?.bank_receipts_review_count" type="button" class="flex items-center gap-3 rounded-lg bg-slate-50 p-3 text-left hover:bg-teal-50 dark:bg-slate-900/40 dark:hover:bg-teal-950/30" @click="navigate('/manager/payments')"><WalletCards class="h-5 w-5 shrink-0 text-teal-600" aria-hidden="true" /><span><strong class="block text-sm">{{ stats.bank_receipts_review_count }} поступлений</strong><span class="text-xs text-slate-500">Связать с заказами</span></span></button>
-          <button v-if="firstOverdueTouchpoint" type="button" class="flex items-center gap-3 rounded-lg bg-slate-50 p-3 text-left hover:bg-teal-50 dark:bg-slate-900/40 dark:hover:bg-teal-950/30" @click="openOrder(firstOverdueTouchpoint.order_id)"><CalendarClock class="h-5 w-5 shrink-0 text-rose-600" aria-hidden="true" /><span><strong class="block text-sm">Просроченные касания</strong><span class="text-xs text-slate-500">Вернуться к клиентам</span></span></button>
+        <p v-if="leadsError || operationalError" class="mt-3 text-sm text-[var(--kitlane-muted)] dark:text-slate-400">Часть проверок недоступна. Доступные действия показаны ниже.</p>
+        <div v-if="leadsCount || stats?.bank_receipts_review_count || firstOverdueTouchpoint" class="kitlane-attention-grid mt-4 grid gap-3">
+          <button v-if="leadsCount" type="button" class="flex items-center gap-3 rounded-lg bg-slate-50 p-3 text-left hover:bg-[var(--kitlane-accent-soft)] dark:bg-slate-900/40" @click="navigate('/manager/leads')"><Inbox class="h-5 w-5 shrink-0 text-[var(--kitlane-accent-text)]" aria-hidden="true" /><span><strong class="block text-sm">{{ leadsCount }} входящих</strong><span class="text-xs text-[var(--kitlane-muted)] dark:text-slate-400">Разобрать заявки</span></span></button>
+          <button v-if="stats?.bank_receipts_review_count" type="button" class="flex items-center gap-3 rounded-lg bg-slate-50 p-3 text-left hover:bg-[var(--kitlane-accent-soft)] dark:bg-slate-900/40" @click="navigate('/manager/payments')"><WalletCards class="h-5 w-5 shrink-0 text-[var(--kitlane-accent-text)]" aria-hidden="true" /><span><strong class="block text-sm">{{ stats.bank_receipts_review_count }} поступлений</strong><span class="text-xs text-[var(--kitlane-muted)] dark:text-slate-400">Связать с заказами</span></span></button>
+          <button v-if="firstOverdueTouchpoint" type="button" class="flex items-center gap-3 rounded-lg bg-slate-50 p-3 text-left hover:bg-[var(--kitlane-accent-soft)] dark:bg-slate-900/40" @click="openOrder(firstOverdueTouchpoint.order_id)"><CalendarClock class="h-5 w-5 shrink-0 text-rose-600" aria-hidden="true" /><span><strong class="block text-sm">Просроченные касания</strong><span class="text-xs text-[var(--kitlane-muted)] dark:text-slate-400">Вернуться к клиентам</span></span></button>
         </div>
-        <p v-else-if="!leadsError && !operationalError" class="mt-3 text-sm text-slate-500 dark:text-slate-400">Срочных действий нет.</p>
+        <p v-else-if="!leadsError && !operationalError" class="mt-3 text-sm text-[var(--kitlane-muted)] dark:text-slate-400">Срочных действий нет.</p>
         </template>
       </section>
       <DashboardLoadingState v-if="overviewLoading" />
       <section v-else-if="overviewError" class="rounded-xl border border-rose-200 bg-white p-6 text-center dark:border-rose-900/60 dark:bg-slate-800">
         <CircleAlert class="mx-auto h-8 w-8 text-rose-500" aria-hidden="true" />
         <h2 class="mt-2 font-semibold text-slate-900 dark:text-white">Не удалось загрузить сводку</h2>
-        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Операционные списки ниже остаются доступны.</p>
-        <button type="button" class="mt-4 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700" @click="fetchOverview">Повторить</button>
+        <p class="mt-1 text-sm text-[var(--kitlane-muted)] dark:text-slate-400">Операционные списки ниже остаются доступны.</p>
+        <button type="button" class="mt-4 rounded-lg bg-[var(--kitlane-accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--kitlane-accent-hover)]" @click="fetchOverview">Повторить</button>
       </section>
       <template v-else-if="overview">
       <DashboardKpiGrid :kpis="overview.kpis" />
@@ -146,24 +146,38 @@ const shortText = (value?: string | null, limit = 120) => {
       <section v-if="stats && (stats.bank_receipts_review_count || 0) > 0" class="pt-2">
         <h2 class="mb-3 text-lg font-semibold text-slate-800 dark:text-gray-300">Поступления требуют проверки</h2>
         <article v-for="receipt in stats.bank_receipts_review" :key="receipt.id" class="mb-3 rounded-xl border border-amber-200 bg-white p-4 dark:border-amber-500/30 dark:bg-[#1e293b]">
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p class="font-semibold text-slate-900 dark:text-white">{{ formatDashboardCurrency(receipt.amount) }} <span class="ml-2 text-sm font-normal text-slate-500">{{ receipt.payer_name || 'Плательщик не указан' }}</span></p><p class="mt-1 text-xs text-slate-500">УНП {{ receipt.payer_unp || 'не указан' }} · документ {{ receipt.payment_document_number || 'не указан' }}</p><p class="mt-2 text-sm text-slate-600 dark:text-slate-300">{{ shortText(receipt.payment_purpose) }}</p></div><button v-if="receipt.candidate_order_ids?.length" type="button" class="inline-flex items-center gap-1 self-start rounded-lg bg-teal-600 px-3 py-2 text-sm font-semibold text-white" @click="openOrder(receipt.candidate_order_ids[0]!)">Заказ #{{ receipt.candidate_order_ids[0] }}<ExternalLink class="h-4 w-4" /></button><button v-else type="button" class="inline-flex items-center gap-1 self-start rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold" @click="navigate('/manager/orders/kanban')"><Search class="h-4 w-4" />Найти заказ</button></div>
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p class="font-semibold text-slate-900 dark:text-white">{{ formatDashboardCurrency(receipt.amount) }} <span class="ml-2 text-sm font-normal text-[var(--kitlane-muted)]">{{ receipt.payer_name || 'Плательщик не указан' }}</span></p><p class="mt-1 text-xs text-[var(--kitlane-muted)] dark:text-slate-400">УНП {{ receipt.payer_unp || 'не указан' }} · документ {{ receipt.payment_document_number || 'не указан' }}</p><p class="mt-2 text-sm text-slate-600 dark:text-slate-300">{{ shortText(receipt.payment_purpose) }}</p></div><button v-if="receipt.candidate_order_ids?.length" type="button" class="inline-flex items-center gap-1 self-start rounded-lg bg-[var(--kitlane-accent)] px-3 py-2 text-sm font-semibold text-white" @click="openOrder(receipt.candidate_order_ids[0]!)">Заказ #{{ receipt.candidate_order_ids[0] }}<ExternalLink class="h-4 w-4" /></button><button v-else type="button" class="inline-flex items-center gap-1 self-start rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold" @click="navigate('/manager/orders/kanban')"><Search class="h-4 w-4" />Найти заказ</button></div>
         </article>
       </section>
       <section v-if="stats && stats.expiring_contracts?.length" class="pt-2">
         <h2 class="mb-3 text-lg font-semibold text-slate-800 dark:text-gray-300">{{ hasOverdueContracts ? 'Договоры требуют внимания' : 'Договоры к продлению' }}</h2>
-        <article v-for="contract in stats.expiring_contracts" :key="contract.contract_id" class="mb-3 flex items-center justify-between rounded-xl border border-amber-200 bg-white p-4 dark:border-amber-500/30 dark:bg-[#1e293b]"><button class="text-left" type="button" @click="openCustomer(contract.customer_id)"><strong>{{ contract.customer_name }} · {{ contract.number }}</strong><span class="mt-1 flex items-center gap-1 text-sm" :class="isOverdue(contract.valid_until) ? 'font-semibold text-rose-600' : 'text-amber-600'"><FileWarning class="h-4 w-4" />{{ deadlineLabel(contract.valid_until) }}</span></button><a v-if="contract.edit_url" :href="contract.edit_url" target="_blank" class="text-slate-400 hover:text-teal-500" title="Открыть договор"><ExternalLink class="h-5 w-5" /></a></article>
+        <article v-for="contract in stats.expiring_contracts" :key="contract.contract_id" class="mb-3 flex items-center justify-between rounded-xl border border-amber-200 bg-white p-4 dark:border-amber-500/30 dark:bg-[#1e293b]"><button class="text-left" type="button" @click="openCustomer(contract.customer_id)"><strong>{{ contract.customer_name }} · {{ contract.number }}</strong><span class="mt-1 flex items-center gap-1 text-sm" :class="isOverdue(contract.valid_until) ? 'font-semibold text-rose-600' : 'text-amber-600'"><FileWarning class="h-4 w-4" />{{ deadlineLabel(contract.valid_until) }}</span></button><a v-if="contract.edit_url" :href="contract.edit_url" target="_blank" class="text-slate-400 hover:text-[var(--kitlane-accent-text)]" title="Открыть договор"><ExternalLink class="h-5 w-5" /></a></article>
       </section>
       <section class="pt-2">
         <h2 class="mb-3 text-lg font-semibold text-slate-800 dark:text-gray-300">{{ overdueTouchpoints.length ? 'Касания требуют внимания' : 'Ближайшие касания' }}</h2>
-        <div v-if="operationalLoading" class="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-500">Загрузка задач...</div>
-        <div v-else-if="operationalError" class="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-500">Операционные данные временно недоступны.</div>
-        <div v-else-if="stats && stats.upcoming_touchpoints.length" class="space-y-3"><button v-for="touch in stats.upcoming_touchpoints" :key="touch.order_id" type="button" class="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white p-4 text-left hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800" @click="openOrder(touch.order_id)"><span><strong>Заказ #{{ touch.order_id }} — {{ touch.customer_name }}</strong><span v-if="touch.title" class="ml-2 text-sm text-slate-500">({{ touch.title }})</span><span class="mt-1 block text-sm" :class="isOverdue(touch.next_followup_date) ? 'font-semibold text-rose-600' : 'text-slate-500'">{{ touch.phone ? `${touch.phone} · ` : '' }}{{ deadlineLabel(touch.next_followup_date) }}</span></span><ChevronRight class="h-5 w-5 text-slate-400" /></button></div>
-        <div v-else class="rounded-xl border border-dashed border-slate-200 bg-slate-100 p-6 text-center text-sm text-slate-500">Нет срочных касаний.</div>
+        <div v-if="operationalLoading" class="rounded-xl border border-slate-200 bg-white p-5 text-sm text-[var(--kitlane-muted)]">Загрузка задач...</div>
+        <div v-else-if="operationalError" class="rounded-xl border border-slate-200 bg-white p-5 text-sm text-[var(--kitlane-muted)]">Операционные данные временно недоступны.</div>
+        <div v-else-if="stats && stats.upcoming_touchpoints.length" class="space-y-3"><button v-for="touch in stats.upcoming_touchpoints" :key="touch.order_id" type="button" class="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white p-4 text-left hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800" @click="openOrder(touch.order_id)"><span><strong>Заказ #{{ touch.order_id }} — {{ touch.customer_name }}</strong><span v-if="touch.title" class="ml-2 text-sm text-[var(--kitlane-muted)]">({{ touch.title }})</span><span class="mt-1 block text-sm" :class="isOverdue(touch.next_followup_date) ? 'font-semibold text-rose-600' : 'text-[var(--kitlane-muted)]'">{{ touch.phone ? `${touch.phone} · ` : '' }}{{ deadlineLabel(touch.next_followup_date) }}</span></span><ChevronRight class="h-5 w-5 text-slate-400" /></button></div>
+        <div v-else class="rounded-xl border border-dashed border-slate-200 bg-slate-100 p-6 text-center text-sm text-[var(--kitlane-muted)]">Нет срочных касаний.</div>
       </section>
     </section>
     <DashboardLoadingState v-else-if="overviewLoading" />
-    <section v-else-if="overviewError" class="rounded-xl border border-rose-200 bg-white p-6 text-center dark:border-rose-900/60 dark:bg-slate-800"><CircleAlert class="mx-auto h-8 w-8 text-rose-500" aria-hidden="true" /><h2 class="mt-2 font-semibold text-slate-900 dark:text-white">Не удалось загрузить сводку</h2><button type="button" class="mt-4 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700" @click="fetchOverview">Повторить</button></section>
+    <section v-else-if="overviewError" class="rounded-xl border border-rose-200 bg-white p-6 text-center dark:border-rose-900/60 dark:bg-slate-800"><CircleAlert class="mx-auto h-8 w-8 text-rose-500" aria-hidden="true" /><h2 class="mt-2 font-semibold text-slate-900 dark:text-white">Не удалось загрузить сводку</h2><button type="button" class="mt-4 rounded-lg bg-[var(--kitlane-accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--kitlane-accent-hover)]" @click="fetchOverview">Повторить</button></section>
     <section v-else-if="overview && activeTab === 'site-seo'" id="dashboard-panel-site-seo" role="tabpanel" aria-labelledby="dashboard-tab-site-seo"><DashboardSiteSeo :marketing="overview.marketing" :search-demand="overview.search_demand" :can-manage-integrations="canManageIntegrations" /></section>
     <section v-else-if="overview" id="dashboard-panel-advertising" role="tabpanel" aria-labelledby="dashboard-tab-advertising"><DashboardAdvertising :marketing="overview.marketing" :can-manage-integrations="canManageIntegrations" /></section>
   </div>
 </template>
+
+<style scoped>
+.kitlane-home-page { min-height: 100%; padding: 28px; color: var(--kitlane-text); }
+.kitlane-attention-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
+.kitlane-page-title { font-size: 30px; font-weight: 650; letter-spacing: -.8px; line-height: 1.2; }
+.kitlane-dashboard-tab { display: inline-flex; min-width: 0; align-items: center; justify-content: center; gap: 8px; padding: 12px; border-bottom: 2px solid transparent; border-radius: 8px 8px 0 0; color: var(--kitlane-muted); font-size: 14px; font-weight: 600; }
+.kitlane-dashboard-tab:hover { color: var(--kitlane-accent-text); }
+.kitlane-dashboard-tab.is-active { background: var(--kitlane-accent-soft); color: var(--kitlane-accent-text); border-bottom-color: var(--kitlane-accent-text); }
+@media (max-width: 767px) {
+  .kitlane-home-page { padding: 20px 16px; }
+  .kitlane-page-title { font-size: 28px; }
+  .kitlane-dashboard-tab { font-size: 12px; padding: 12px 4px; gap: 4px; }
+}
+</style>

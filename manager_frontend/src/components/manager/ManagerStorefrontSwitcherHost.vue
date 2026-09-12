@@ -20,9 +20,9 @@ const {
       :selected-slug="selectedSlug"
       :disabled="loading || switching"
       :collapsed="collapsed"
-      @select="managerStorefrontSelection.switchTo"
+      @select="managerStorefrontSelection.switchTo($event)"
     />
-    <p v-if="error" class="mt-1 px-1 text-[11px] leading-snug text-amber-700" role="status">
+    <p v-if="error" class="mt-1 px-1 text-[11px] leading-snug text-amber-300" role="status">
       {{ error }}
     </p>
   </div>

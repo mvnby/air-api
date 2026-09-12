@@ -1,0 +1,163 @@
+{
+  "auth": {
+    "username": "demo-manager",
+    "display_name": "Демо менеджер",
+    "status": "authenticated",
+    "staff_user_id": 999,
+    "role": "owner",
+    "tenant_id": 999,
+    "storefront_id": 999,
+    "is_system_tenant": true,
+    "capabilities": [
+      "crm.manage",
+      "catalog.master.read",
+      "storefront.offers.read",
+      "storefront.collections.manage",
+      "platform.manage",
+      "staff.manage",
+      "infrastructure.manage",
+      "documents.manage",
+      "analytics.manage"
+    ]
+  },
+  "stores": [
+    {
+      "slug": "minsk",
+      "display_name": "Демо компания",
+      "city": "Минск",
+      "currency": "BYN",
+      "default_locale": "ru-BY",
+      "is_default": true,
+      "is_current": true
+    },
+    {
+      "slug": "brest",
+      "display_name": "Демо филиал",
+      "city": "Брест",
+      "currency": "BYN",
+      "default_locale": "ru-BY",
+      "is_default": false,
+      "is_current": false
+    }
+  ],
+  "overview": {
+    "period": {
+      "current": {
+        "start": "2026-09-01T00:00:00+03:00",
+        "end": "2026-09-13T00:00:00+03:00"
+      },
+      "previous": {
+        "start": "2026-08-01T00:00:00+03:00",
+        "end": "2026-08-13T00:00:00+03:00"
+      }
+    },
+    "kpis": {
+      "revenue": {
+        "label": "revenue",
+        "unit": "byn",
+        "current": 12500,
+        "previous": 10000,
+        "delta_pct": 20,
+        "trend": "up"
+      },
+      "sales": {
+        "label": "sales",
+        "unit": "count",
+        "current": 18,
+        "previous": 15,
+        "delta_pct": 20,
+        "trend": "up"
+      },
+      "receivables": {
+        "label": "receivables",
+        "unit": "byn",
+        "current": 2400,
+        "previous": 3000,
+        "delta_pct": 20,
+        "trend": "down"
+      },
+      "new_leads": {
+        "label": "new_leads",
+        "unit": "count",
+        "current": 32,
+        "previous": 28,
+        "delta_pct": 20,
+        "trend": "up"
+      },
+      "installations": {
+        "label": "installations",
+        "unit": "count",
+        "current": 14,
+        "previous": 12,
+        "delta_pct": 20,
+        "trend": "up"
+      },
+      "active_tasks": {
+        "label": "active_tasks",
+        "unit": "count",
+        "current": 7,
+        "previous": null,
+        "delta_pct": null,
+        "trend": "unavailable"
+      }
+    },
+    "sales_series": [
+      {
+        "date": "2026-09-01",
+        "revenue": 600,
+        "sales": 1
+      },
+      {
+        "date": "2026-09-02",
+        "revenue": 1200,
+        "sales": 2
+      },
+      {
+        "date": "2026-09-03",
+        "revenue": 900,
+        "sales": 3
+      },
+      {
+        "date": "2026-09-04",
+        "revenue": 1800,
+        "sales": 4
+      },
+      {
+        "date": "2026-09-05",
+        "revenue": 600,
+        "sales": 5
+      },
+      {
+        "date": "2026-09-06",
+        "revenue": 1100,
+        "sales": 6
+      }
+    ],
+    "funnel": [
+      {
+        "stage": "leads",
+        "label": "Заявки",
+        "current": 32
+      },
+      {
+        "stage": "proposals",
+        "label": "Предложения",
+        "current": 24
+      },
+      {
+        "stage": "sales",
+        "label": "Продажи",
+        "current": 18
+      }
+    ],
+    "marketing": {
+      "status": "unconfigured",
+      "providers": []
+    },
+    "search_demand": {
+      "status": "unconfigured",
+      "providers": [],
+      "queries": []
+    }
+  }
+}

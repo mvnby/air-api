@@ -42,7 +42,7 @@ const compactLabel = computed(() => {
     <div
       v-if="collapsed"
       data-testid="collapsed-storefront-badge"
-      class="hidden h-9 min-w-9 items-center justify-center rounded-lg border border-teal-200 bg-teal-50 px-1 text-[11px] font-bold text-teal-700 md:flex"
+      class="hidden h-9 min-w-9 items-center justify-center rounded-lg kitlane-storefront-badge border px-1 text-[11px] font-bold md:flex"
       :title="`Витрина: ${storefrontLabel(currentStorefront)}`"
       :aria-label="`Текущая витрина: ${storefrontLabel(currentStorefront)}`"
     >
@@ -50,22 +50,22 @@ const compactLabel = computed(() => {
     </div>
 
     <div
-      class="rounded-xl border border-gray-200 bg-gray-50 p-2.5"
+      class="kitlane-storefront-panel rounded-lg p-2.5"
       :class="collapsed ? 'md:hidden' : ''"
     >
       <div class="min-w-0 px-1">
-        <div class="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400">Витрина</div>
-        <div class="truncate text-xs font-semibold text-gray-800">
+        <div class="text-[10px] font-bold uppercase tracking-[0.16em] kitlane-storefront-muted">Витрина</div>
+        <div class="truncate text-xs font-semibold kitlane-storefront-text" :title="currentStorefront.display_name">
           {{ currentStorefront.display_name }}
         </div>
-        <div v-if="currentStorefront.city" class="truncate text-[11px] text-gray-500">
+        <div v-if="currentStorefront.city" class="truncate text-[11px] kitlane-storefront-muted">
           {{ currentStorefront.city }}
         </div>
       </div>
 
       <div
         v-if="storefronts.length > 1"
-        class="mt-2 grid gap-1 rounded-lg bg-gray-100 p-1"
+        class="mt-2 grid gap-1 rounded-lg p-1"
         :class="storefronts.length === 2 ? 'grid-cols-2' : 'grid-cols-1'"
         role="group"
         aria-label="Выбор витрины"
@@ -74,17 +74,17 @@ const compactLabel = computed(() => {
           v-for="storefront in storefronts"
           :key="storefront.slug"
           type="button"
-          class="min-h-9 min-w-0 rounded-md px-2 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-1"
+          class="min-h-9 min-w-0 rounded-md px-2 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-1"
           :class="storefront.slug === selectedSlug
-            ? 'bg-white text-teal-700 shadow-sm'
-            : 'text-gray-600 hover:bg-white hover:text-gray-900'"
+            ? 'kitlane-storefront-selected'
+            : 'kitlane-storefront-option'"
           :aria-pressed="storefront.slug === selectedSlug"
           :aria-label="`Переключиться: ${storefrontLabel(storefront)}`"
           :disabled="disabled || storefront.slug === selectedSlug"
           @click="emit('select', storefront.slug)"
         >
           <span class="block truncate">{{ storefront.display_name }}</span>
-          <span v-if="storefront.city" class="block truncate text-[10px] font-normal opacity-70">
+          <span v-if="storefront.city" class="block truncate text-[10px] font-normal">
             {{ storefront.city }}
           </span>
         </button>
@@ -92,3 +92,13 @@ const compactLabel = computed(() => {
     </div>
   </section>
 </template>
+
+<style scoped>
+.kitlane-storefront-panel { background: var(--kitlane-sidebar-hover); color: var(--kitlane-sidebar-text); }
+.kitlane-storefront-text { color: var(--kitlane-sidebar-text); }
+.kitlane-storefront-muted { color: var(--kitlane-sidebar-muted); }
+.kitlane-storefront-badge { background: var(--kitlane-sidebar-hover); border-color: var(--kitlane-sidebar-border); color: var(--kitlane-sidebar-text); }
+.kitlane-storefront-selected { background: var(--kitlane-sidebar-selected); color: #fff; box-shadow: inset 0 -2px #80b1ff; }
+.kitlane-storefront-option { color: var(--kitlane-sidebar-muted); }
+.kitlane-storefront-option:hover { background: var(--kitlane-sidebar-selected); color: #fff; }
+</style>

@@ -105,3 +105,18 @@ describe('manager account menu', () => {
     expect(wrapper.emitted('navigate')).toEqual([['/manager/settings/documents']]);
   });
 });
+
+it('supports arrow keys and restores the account trigger after Escape', async () => {
+  const wrapper = mount(ManagerAccountMenu, {
+    attachTo: document.body,
+    props: { auth: { username: 'demo', status: 'active', tenant_id: 999, storefront_id: 999, capabilities: [] } },
+  });
+  const trigger = wrapper.get('[aria-haspopup="menu"]');
+  await trigger.trigger('keydown', { key: 'ArrowDown' });
+  expect(document.activeElement?.textContent).toContain('Профиль и пароль');
+  await wrapper.get('[role="menuitem"]').trigger('keydown', { key: 'End' });
+  expect(document.activeElement?.textContent).toContain('Выйти');
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  expect(document.activeElement).toBe(trigger.element);
+  wrapper.unmount();
+});

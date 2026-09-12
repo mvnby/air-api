@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Package } from 'lucide-vue-next';
+import KitlanePlatformBrand from '../kitlane/KitlanePlatformBrand.vue';
 
 defineProps<{
   username: string;
@@ -19,23 +19,21 @@ const emit = defineEmits<{
 
 <template>
   <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+    class="kitlane-login fixed inset-0 z-50 flex items-center justify-center"
     role="dialog"
     aria-modal="true"
     aria-labelledby="manager-login-title"
   >
-    <div class="mx-4 w-full max-w-md rounded-xl bg-white p-8 shadow-2xl">
+    <div class="kitlane-login-card mx-4 w-full max-w-md rounded-xl p-6 sm:p-8">
       <div class="mb-6 flex justify-center">
-        <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-teal-600">
-          <Package class="h-6 w-6 text-white" />
-        </div>
+        <KitlanePlatformBrand :attribution="false" />
       </div>
-      <h2 id="manager-login-title" class="mb-6 text-center text-2xl font-bold text-gray-900">
+      <h2 id="manager-login-title" class="mb-6 text-center text-2xl font-bold text-[var(--kitlane-text)]">
         Вход в менеджер
       </h2>
       <form class="space-y-4" @submit.prevent="emit('submit')">
         <div>
-          <label class="mb-1 block text-sm font-medium text-gray-700" for="manager-login-username">
+          <label class="mb-1 block text-sm font-medium text-[var(--kitlane-text)]" for="manager-login-username">
             Логин
           </label>
           <input
@@ -44,13 +42,13 @@ const emit = defineEmits<{
             type="text"
             required
             autocomplete="username"
-            class="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-teal-500"
+            class="field-input"
             placeholder="Введите логин"
             @input="emit('update:username', ($event.target as HTMLInputElement).value)"
           />
         </div>
         <div>
-          <label class="mb-1 block text-sm font-medium text-gray-700" for="manager-login-password">
+          <label class="mb-1 block text-sm font-medium text-[var(--kitlane-text)]" for="manager-login-password">
             Пароль
           </label>
           <input
@@ -59,7 +57,7 @@ const emit = defineEmits<{
             type="password"
             required
             autocomplete="current-password"
-            class="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-teal-500"
+            class="field-input"
             placeholder="Введите пароль"
             @input="emit('update:password', ($event.target as HTMLInputElement).value)"
           />
@@ -68,12 +66,12 @@ const emit = defineEmits<{
         <button
           type="submit"
           :disabled="loading"
-          class="w-full rounded-lg bg-teal-600 py-2.5 font-medium text-white transition-colors hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"
+          class="btn-mini w-full justify-center py-2.5"
         >
           {{ loading ? 'Входим...' : 'Войти' }}
         </button>
         <div v-if="telegramEnabled" class="pt-2">
-          <div class="mb-3 flex items-center gap-3 text-xs uppercase tracking-[0.18em] text-gray-400">
+          <div class="mb-3 flex items-center gap-3 text-xs uppercase tracking-[0.18em] text-[var(--kitlane-muted)]">
             <span class="h-px flex-1 bg-gray-200" />
             <span>или</span>
             <span class="h-px flex-1 bg-gray-200" />
@@ -89,3 +87,8 @@ const emit = defineEmits<{
     </div>
   </div>
 </template>
+
+<style scoped>
+.kitlane-login { background: var(--kitlane-bg); overflow-y: auto; padding-block: 24px; }
+.kitlane-login-card { background: var(--kitlane-surface); color: var(--kitlane-text); border: 1px solid var(--kitlane-border); }
+</style>
