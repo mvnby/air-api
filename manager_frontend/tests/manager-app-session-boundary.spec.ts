@@ -94,6 +94,15 @@ vi.mock('../src/components/orders/OrdersImportPreviewModal.vue', () => ({
   default: { name: 'OrdersImportPreviewModal', template: '<div />' },
 }));
 
+vi.mock('../src/views/SupplierFeedsView.vue', () => ({
+  __esModule: true,
+  default: {
+    name: 'SupplierFeedsView',
+    props: ['initialTab'],
+    template: '<div data-testid="supplier-entry">{{ initialTab }}</div>',
+  },
+}));
+
 import App from '../src/App.vue';
 import { useOrderDrawerSaving } from '../src/composables/useOrderDrawerSaving';
 import { clearManagerSession, managerSession, recoverManagerSessionFromUnauthorized } from '../src/services/manager-session';
@@ -511,5 +520,23 @@ describe('App Manager session boundary', () => {
     expect(managerSession.auth.value?.username).toBe('old-owner');
     expect(wrapper!.find('[data-testid="manager-root"]').exists()).toBe(true);
     expect(wrapper!.find('[role="dialog"]').exists()).toBe(false);
+  });
+});
+
+describe('supplier navigation entry points', () => {
+  it('opens prices separately from the supplier profile and highlights only that entry', async () => {
+    await mountApp('/manager/suppliers');
+    expect(wrapper!.get('[data-testid="supplier-entry"]').text()).toBe('profile');
+    const prices = wrapper!.findAll('button').find(button => button.attributes('aria-label') === 'Прайсы поставщиков');
+    expect(prices).toBeDefined();
+    await prices!.trigger('click');
+    await flushPromises();
+    expect(window.location.pathname).toBe('/manager/suppliers/prices');
+    expect(wrapper!.get('[data-testid="supplier-entry"]').text()).toBe('prices');
+    expect(wrapper!.findAll('[aria-current="page"]').map(button => button.attributes('aria-label'))).toEqual(['Прайсы поставщиков']);
+    const suppliers = wrapper!.findAll('button').find(button => button.attributes('aria-label') === 'Поставщики');
+    await suppliers!.trigger('click');
+    await flushPromises();
+    expect(wrapper!.get('[data-testid="supplier-entry"]').text()).toBe('profile');
   });
 });

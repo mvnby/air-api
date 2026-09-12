@@ -3,6 +3,7 @@ import { MANAGER_CAPABILITY, type ManagerCapability } from './manager-capabiliti
 import {
   Award,
   Boxes,
+  Building2,
   Calendar,
   Calculator,
   Database,
@@ -33,7 +34,7 @@ export type NavItem = {
   requiredCapability?: ManagerCapability;
 };
 
-export type NavSectionId = 'catalog' | 'services' | 'team' | 'finance' | 'mail' | 'system';
+export type NavSectionId = 'catalog' | 'sales' | 'services' | 'team' | 'finance' | 'mail' | 'system';
 
 export type NavSection = {
   id: NavSectionId;
@@ -54,18 +55,25 @@ export const navSections: NavSection[] = [
     id: 'catalog',
     label: 'Каталог',
     items: [
-      { path: '/manager/catalog-decision', label: 'Подбор оборудования', icon: Calculator, match: 'exact', requiredCapability: MANAGER_CAPABILITY.platformManage },
       { path: '/manager/products', label: 'Кондиционеры', icon: Package, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.catalogMasterRead },
-      { path: '/manager/installation-discounts', label: 'Скидки на монтаж', icon: Wallet, match: 'exact', requiredCapability: MANAGER_CAPABILITY.platformManage },
-      { path: '/manager/product-collections', label: 'Подборки', icon: GalleryVerticalEnd, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.storefrontCollectionsManage },
       { path: '/manager/brands', label: 'Бренды', icon: Award, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.platformManage },
       { path: '/manager/features', label: 'Фичи', icon: Sparkles, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.platformManage },
-      { path: '/manager/suppliers', label: 'Прайсы поставщиков', icon: FileSpreadsheet, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.platformManage },
+      { path: '/manager/suppliers', label: 'Поставщики', icon: Building2, match: 'exact', requiredCapability: MANAGER_CAPABILITY.platformManage },
+      { path: '/manager/suppliers/prices', label: 'Прайсы поставщиков', icon: FileSpreadsheet, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.platformManage },
       { path: '/manager/supplier-mapping', label: 'Маппинг прайсов', icon: Link2, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.platformManage },
-      { path: '/manager/supply', label: 'Поставки', icon: Truck, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.platformManage },
       { path: '/manager/catalog-quality', label: 'Качество каталога', icon: ShieldCheck, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.platformManage },
       { path: '/manager/media', label: 'Медиатека', icon: ImageIcon, match: 'exact', requiredCapability: MANAGER_CAPABILITY.platformManage },
       { path: '/manager/tags', label: 'Теги', icon: Tags, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.platformManage },
+    ],
+  },
+  {
+    id: 'sales',
+    label: 'Продажи и витрина',
+    items: [
+      { path: '/manager/catalog-decision', label: 'Подбор оборудования', icon: Calculator, match: 'exact', requiredCapability: MANAGER_CAPABILITY.platformManage },
+      { path: '/manager/installation-discounts', label: 'Скидки на монтаж', icon: Wallet, match: 'exact', requiredCapability: MANAGER_CAPABILITY.platformManage },
+      { path: '/manager/product-collections', label: 'Подборки', icon: GalleryVerticalEnd, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.storefrontCollectionsManage },
+      { path: '/manager/supply', label: 'Поставки', icon: Truck, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.platformManage },
     ],
   },
   {
@@ -112,6 +120,7 @@ export const navSections: NavSection[] = [
 
 export const defaultExpandedNavSections: Record<NavSectionId, boolean> = {
   catalog: true,
+  sales: true,
   services: true,
   team: true,
   finance: true,

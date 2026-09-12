@@ -255,8 +255,13 @@ assert(
 
 assert(
   navSections.find((section) => section.id === 'catalog')?.items.map((item) => item.label).join('|')
-    === 'Подбор оборудования|Кондиционеры|Скидки на монтаж|Подборки|Бренды|Фичи|Прайсы поставщиков|Маппинг прайсов|Поставки|Качество каталога|Медиатека|Теги',
+    === 'Кондиционеры|Бренды|Фичи|Поставщики|Прайсы поставщиков|Маппинг прайсов|Качество каталога|Медиатека|Теги',
   'catalog navigation must follow the product data workflow',
+);
+assert(
+  navSections.find((section) => section.id === 'sales')?.items.map((item) => item.label).join('|')
+    === 'Подбор оборудования|Скидки на монтаж|Подборки|Поставки',
+  'sales navigation must group equipment selection and storefront workflows',
 );
 
 assert(ADDRESS_SUGGEST_DEBOUNCE_MS === 800, 'address debounce must remain 800 ms');
