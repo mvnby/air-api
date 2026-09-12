@@ -161,14 +161,14 @@ onMounted(load);
 <template>
   <div class="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
     <Transition name="toast">
-      <div v-if="toast" class="fixed right-8 top-20 z-50 rounded-lg bg-teal-600 px-4 py-3 text-sm font-medium text-white shadow-xl">
+      <div v-if="toast" class="fixed right-8 top-20 z-50 rounded-lg bg-brand-600 px-4 py-3 text-sm font-medium text-white shadow-xl">
         {{ toast }}
       </div>
     </Transition>
 
     <header class="mb-6">
       <h1 class="flex items-center gap-3 text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
-        <span class="material-icons-round text-teal-600 dark:text-teal-400">sell</span>
+        <span class="material-icons-round text-brand-600 dark:text-brand-400">sell</span>
         Скидки на монтаж
       </h1>
       <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">
@@ -194,10 +194,10 @@ onMounted(load);
           :aria-checked="policy.is_enabled"
           :disabled="savingPolicy"
           class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-          :class="policy.is_enabled ? 'bg-teal-600 text-white' : 'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-200'"
+          :class="policy.is_enabled ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-200'"
           @click="toggleEnabled"
         >
-          <span class="relative h-5 w-9 rounded-full" :class="policy.is_enabled ? 'bg-teal-400' : 'bg-gray-300 dark:bg-slate-500'">
+          <span class="relative h-5 w-9 rounded-full" :class="policy.is_enabled ? 'bg-brand-400' : 'bg-gray-300 dark:bg-slate-500'">
             <span class="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform" :class="policy.is_enabled ? 'translate-x-4' : 'translate-x-0.5'" />
           </span>
           {{ policy.is_enabled ? 'Защита маржи включена' : 'Защита маржи выключена' }}
@@ -216,7 +216,7 @@ onMounted(load);
           <span class="mt-1 block text-xs text-gray-500">Ниже этого уровня скидка не применяется.</span>
         </label>
         <div class="flex items-end">
-          <button type="button" class="h-10 rounded-lg bg-teal-600 px-4 text-sm font-semibold text-white hover:bg-teal-500 disabled:opacity-60" :disabled="savingPolicy" @click="savePolicy()">
+          <button type="button" class="h-10 rounded-lg bg-brand-600 px-4 text-sm font-semibold text-white hover:bg-brand-500 disabled:opacity-60" :disabled="savingPolicy" @click="savePolicy()">
             {{ savingPolicy ? 'Сохраняем…' : 'Сохранить правило' }}
           </button>
         </div>
@@ -231,7 +231,7 @@ onMounted(load);
         </div>
         <form class="flex w-full max-w-xl gap-2" @submit.prevent="searchProducts">
           <input v-model="search" type="search" placeholder="Название или slug товара" class="h-10 min-w-0 flex-1 rounded-lg border border-gray-300 bg-white px-3 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white" />
-          <button type="submit" class="h-10 rounded-lg border border-teal-300 px-3 text-sm font-semibold text-teal-700 hover:bg-teal-50 dark:border-teal-500/50 dark:text-teal-300" :disabled="searching">
+          <button type="submit" class="h-10 rounded-lg border border-brand-300 px-3 text-sm font-semibold text-brand-700 hover:bg-brand-50 dark:border-brand-500/50 dark:text-brand-300" :disabled="searching">
             {{ searching ? 'Ищем…' : 'Найти' }}
           </button>
         </form>
@@ -245,7 +245,7 @@ onMounted(load);
             <div class="text-xs text-gray-500 dark:text-slate-400">{{ product.slug }} · {{ formatAmount(product.retail_price) }}</div>
           </div>
           <input v-model.number="draftDiscounts[product.product_id]" type="number" min="0" step="1" class="h-9 w-28 rounded-lg border border-gray-300 bg-white px-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white" :aria-label="`Скидка для ${product.title}`" />
-          <button type="button" class="h-9 rounded-lg bg-teal-600 px-3 text-sm font-semibold text-white hover:bg-teal-500 disabled:opacity-60" :disabled="savingProductId === product.product_id" @click="saveOverride(product)">
+          <button type="button" class="h-9 rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white hover:bg-brand-500 disabled:opacity-60" :disabled="savingProductId === product.product_id" @click="saveOverride(product)">
             {{ product.has_override ? 'Сохранить' : 'Добавить' }}
           </button>
           <button
@@ -269,7 +269,7 @@ onMounted(load);
         </div>
       </div>
 
-      <div v-if="loading" class="flex justify-center py-16"><div class="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-teal-500" /></div>
+      <div v-if="loading" class="flex justify-center py-16"><div class="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-brand-500" /></div>
       <div v-else-if="!overrides.length" class="p-10 text-center text-sm text-gray-500 dark:text-slate-400">Пока все товары наследуют общую скидку.</div>
       <div v-else class="divide-y divide-gray-100 dark:divide-slate-700">
         <article v-for="product in overrides" :key="product.product_id" class="p-5">
@@ -287,13 +287,13 @@ onMounted(load);
             <div><div class="text-xs text-gray-500">Себестоимость</div><div class="font-medium text-gray-900 dark:text-white">{{ formatAmount(product.purchase_cost) }}</div></div>
             <div><div class="text-xs text-gray-500">Маржа товара</div><div class="font-medium text-gray-900 dark:text-white">{{ formatAmount(product.margin) }}</div></div>
             <div><div class="text-xs text-gray-500">Задано</div><div class="font-medium text-gray-900 dark:text-white">{{ configuredDiscountLabel(product.configured_discount) }}</div></div>
-            <div><div class="text-xs text-gray-500">Применится</div><div class="font-medium text-teal-700 dark:text-teal-300">{{ configuredDiscountLabel(product.applied_discount) }}</div></div>
+            <div><div class="text-xs text-gray-500">Применится</div><div class="font-medium text-brand-700 dark:text-brand-300">{{ configuredDiscountLabel(product.applied_discount) }}</div></div>
           </div>
 
           <p class="mt-3 text-xs text-gray-500 dark:text-slate-400">{{ product.status_note }}</p>
           <div class="mt-4 flex flex-wrap items-center gap-2">
             <input v-model.number="draftDiscounts[product.product_id]" type="number" min="0" step="1" class="h-9 w-28 rounded-lg border border-gray-300 bg-white px-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white" :aria-label="`Скидка для ${product.title}`" />
-            <button type="button" class="h-9 rounded-lg bg-teal-600 px-3 text-sm font-semibold text-white hover:bg-teal-500 disabled:opacity-60" :disabled="savingProductId === product.product_id" @click="saveOverride(product)">Сохранить</button>
+            <button type="button" class="h-9 rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white hover:bg-brand-500 disabled:opacity-60" :disabled="savingProductId === product.product_id" @click="saveOverride(product)">Сохранить</button>
             <button type="button" class="h-9 rounded-lg border border-gray-300 px-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700" :disabled="savingProductId === product.product_id" @click="inheritDefault(product)">Наследовать общую</button>
           </div>
         </article>

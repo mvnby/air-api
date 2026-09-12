@@ -85,7 +85,7 @@ onMounted(() => {
 <template>
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
         <Transition name="toast">
-            <div v-if="toast" class="fixed top-20 right-8 z-50 bg-teal-600 border border-teal-500 text-white px-4 py-3 rounded-lg shadow-xl shadow-teal-900/30 flex items-center gap-3">
+            <div v-if="toast" class="fixed top-20 right-8 z-50 bg-brand-600 border border-brand-500 text-white px-4 py-3 rounded-lg shadow-xl shadow-brand-900/30 flex items-center gap-3">
                 <span class="material-icons-round text-xl">check_circle</span>
                 <span class="text-sm font-medium">{{ toast }}</span>
             </div>
@@ -94,7 +94,7 @@ onMounted(() => {
         <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-8">
             <div>
                 <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-3">
-                    <span class="material-icons-round text-teal-600 dark:text-teal-400">badge</span>
+                    <span class="material-icons-round text-brand-600 dark:text-brand-400">badge</span>
                     Сотрудники
                 </h1>
                 <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">
@@ -104,7 +104,7 @@ onMounted(() => {
 
             <button
                 @click="openAddModal"
-                class="inline-flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-500 active:bg-teal-700 text-white font-medium py-2.5 px-4 rounded-lg shadow-lg shadow-teal-900/30 transition-all text-sm"
+                class="inline-flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 active:bg-brand-700 text-white font-medium py-2.5 px-4 rounded-lg shadow-lg shadow-brand-900/30 transition-all text-sm"
             >
                 <span class="material-icons-round text-[18px]">add</span>
                 Добавить
@@ -116,7 +116,7 @@ onMounted(() => {
         </div>
 
         <div v-if="loading && !staff.length" class="flex justify-center py-20">
-            <div class="w-8 h-8 rounded-full border-4 border-slate-200 dark:border-slate-700 border-t-teal-500 animate-spin"></div>
+            <div class="w-8 h-8 rounded-full border-4 border-slate-200 dark:border-slate-700 border-t-brand-500 animate-spin"></div>
         </div>
 
         <div v-else class="bg-white dark:bg-[#1e293b] rounded-xl shadow-sm border border-gray-200 dark:border-slate-700/60 overflow-hidden">
@@ -184,7 +184,7 @@ onMounted(() => {
                                     </span>
                                     <label class="relative inline-flex items-center cursor-pointer" @click.prevent="toggleActive(item)" :title="item.status === 'active' ? 'Перевести в архив' : 'Вернуть в активные'">
                                         <input type="checkbox" :checked="item.status === 'active'" class="sr-only peer" />
-                                        <div class="w-9 h-5 bg-gray-200 dark:bg-slate-600 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-teal-500 transition-colors"></div>
+                                        <div class="w-9 h-5 bg-gray-200 dark:bg-slate-600 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand-500 transition-colors"></div>
                                     </label>
                                 </div>
                             </td>

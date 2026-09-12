@@ -83,7 +83,7 @@ const removeItem = (index: number) => update(
         <button class="payment-remove" type="button" :aria-label="`Удалить платёж ${index + 1}`" :disabled="terms.payment_schedule.length === 1" @click="removeItem(index)"><span class="material-icons-round text-[18px]">delete</span></button>
       </div>
     </div>
-    <button class="mt-3 inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700 hover:border-teal-400 hover:text-teal-700 dark:border-slate-700 dark:text-slate-200" type="button" @click="addItem"><span class="material-icons-round text-[17px]">add</span>Добавить этап</button>
+    <button class="mt-3 inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700 hover:border-brand-400 hover:text-brand-700 dark:border-slate-700 dark:text-slate-200" type="button" @click="addItem"><span class="material-icons-round text-[17px]">add</span>Добавить этап</button>
   </section>
 </template>
 
@@ -92,9 +92,9 @@ const removeItem = (index: number) => update(
 .business-heading { @apply text-sm font-bold text-slate-900 dark:text-white; }
 .business-help { @apply mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400; }
 .business-field { @apply flex min-w-0 flex-col gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200; }
-.business-input { @apply h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-normal text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/15 dark:border-slate-700 dark:bg-slate-950 dark:text-white; }
+.business-input { @apply h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-normal text-slate-900 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15 dark:border-slate-700 dark:bg-slate-950 dark:text-white; }
 .payment-mode { @apply min-h-20 rounded-xl border p-3 text-left transition; }
-.payment-mode-active { @apply border-teal-600 bg-teal-600 text-white shadow-sm; }
-.payment-mode-idle { @apply border-slate-200 bg-slate-50 text-slate-800 hover:border-teal-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100; }
+.payment-mode-active { @apply border-brand-600 bg-brand-600 text-white shadow-sm; }
+.payment-mode-idle { @apply border-slate-200 bg-slate-50 text-slate-800 hover:border-brand-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100; }
 .payment-remove { @apply mt-5 inline-flex h-10 w-10 items-center justify-center rounded-xl text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-30 dark:hover:bg-rose-950/30; }
 </style>

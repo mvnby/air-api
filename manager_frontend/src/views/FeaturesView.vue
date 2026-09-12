@@ -154,7 +154,7 @@ onMounted(load);
           </a>
           <button
             type="button"
-            class="inline-flex h-10 items-center gap-2 rounded-md bg-teal-600 px-4 text-sm font-semibold text-white hover:bg-teal-700"
+            class="inline-flex h-10 items-center gap-2 rounded-md bg-brand-600 px-4 text-sm font-semibold text-white hover:bg-brand-700"
             @click="openCreate"
           >
             <Plus class="h-4 w-4" />
@@ -246,7 +246,7 @@ onMounted(load);
           :key="feature.id"
           role="button"
           tabindex="0"
-          class="grid w-full cursor-pointer gap-2 border-b border-gray-100 px-4 py-3 text-left last:border-0 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600 dark:border-slate-800 dark:hover:bg-slate-900 md:grid-cols-[minmax(240px,1fr)_180px_150px_150px_auto] md:items-center"
+          class="grid w-full cursor-pointer gap-2 border-b border-gray-100 px-4 py-3 text-left last:border-0 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600 dark:border-slate-800 dark:hover:bg-slate-900 md:grid-cols-[minmax(240px,1fr)_180px_150px_150px_auto] md:items-center"
           @click="openEdit(feature)"
           @keydown.enter="openEdit(feature)"
           @keydown.space.prevent="openEdit(feature)"

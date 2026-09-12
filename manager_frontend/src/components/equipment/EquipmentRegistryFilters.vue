@@ -29,7 +29,7 @@ const updateSearch = (event: Event) => {
         <input
           :value="modelValue"
           type="search"
-          class="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-9 text-sm text-gray-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+          class="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-9 text-sm text-gray-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
           placeholder="Оборудование, клиент, адрес, серийный номер"
           @input="updateSearch"
         >
@@ -47,7 +47,7 @@ const updateSearch = (event: Event) => {
 
       <button
         type="button"
-        class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 transition hover:border-teal-300 hover:text-teal-700 disabled:cursor-wait disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-teal-600 dark:hover:text-teal-300"
+        class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 transition hover:border-brand-300 hover:text-brand-700 disabled:cursor-wait disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-brand-600 dark:hover:text-brand-300"
         :disabled="loading"
         title="Обновить список"
         aria-label="Обновить список"
@@ -66,7 +66,7 @@ const updateSearch = (event: Event) => {
           role="tab"
           class="h-8 rounded-md px-3 text-xs font-semibold transition sm:text-sm"
           :class="attention === option.value
-            ? 'bg-white text-teal-700 shadow-sm dark:bg-slate-700 dark:text-teal-300'
+            ? 'bg-white text-brand-700 shadow-sm dark:bg-slate-700 dark:text-brand-300'
             : 'text-gray-600 hover:bg-white/70 hover:text-gray-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white'"
           :aria-selected="attention === option.value"
           @click="emit('update:attention', option.value)"

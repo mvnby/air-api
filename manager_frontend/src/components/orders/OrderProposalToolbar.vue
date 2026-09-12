@@ -93,14 +93,14 @@ defineExpose({
         type="button"
         class="min-w-[9.5rem] shrink-0 rounded-xl border px-3 py-2 text-left text-xs transition disabled:cursor-not-allowed disabled:opacity-60"
         :class="proposal.id === activeProposal?.id
-          ? 'border-teal-500 bg-teal-50 text-teal-950 shadow-sm dark:border-teal-400 dark:bg-teal-500/10 dark:text-teal-100'
-          : 'border-slate-200 bg-white text-slate-600 hover:border-teal-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'"
+          ? 'border-brand-500 bg-brand-50 text-brand-950 shadow-sm dark:border-brand-400 dark:bg-brand-500/10 dark:text-brand-100'
+          : 'border-slate-200 bg-white text-slate-600 hover:border-brand-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'"
         :disabled="loading"
         @click="emit('open', proposal)"
       >
         <span class="flex min-w-0 items-center gap-1 font-semibold">
           <span class="truncate">{{ proposal.name }}</span>
-          <Check v-if="proposal.is_selected" :size="13" class="shrink-0 text-teal-600" aria-label="Активное предложение" />
+          <Check v-if="proposal.is_selected" :size="13" class="shrink-0 text-brand-600" aria-label="Активное предложение" />
         </span>
         <span class="mt-1 flex items-center gap-1.5">
           <span class="rounded-full px-1.5 py-0.5 text-[10px] font-semibold" :class="toneClass(proposal)">{{ statusMeta(proposal).label }}</span>
@@ -113,7 +113,7 @@ defineExpose({
       <div class="min-w-0 flex-1">
         <div class="flex min-w-0 flex-wrap items-center gap-1.5 text-xs">
           <span class="truncate font-semibold text-slate-900 dark:text-white">{{ activeProposal.name }}</span>
-          <span v-if="activeProposal.is_selected" class="rounded-full bg-teal-50 px-2 py-0.5 font-semibold text-teal-700 dark:bg-teal-500/15 dark:text-teal-200">Активное</span>
+          <span v-if="activeProposal.is_selected" class="rounded-full bg-brand-50 px-2 py-0.5 font-semibold text-brand-700 dark:bg-brand-500/15 dark:text-brand-200">Активное</span>
           <span class="rounded-full px-2 py-0.5 font-semibold" :class="toneClass(activeProposal)">{{ statusMeta(activeProposal).label }}</span>
         </div>
         <p class="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">{{ lineLabel(activeProposal) }} · {{ formatMoney(activeProposal.total_amount || 0) }}</p>

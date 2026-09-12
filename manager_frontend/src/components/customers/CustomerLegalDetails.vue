@@ -82,7 +82,7 @@ const entrepreneurSigningPersonally = () => (
           <div class="relative">
             <input :value="customer.iban" type="text" placeholder="IBAN" :class="fieldClass('iban')" @input="update('iban', eventValue($event))" @blur="emit('ibanBlur')" />
             <div v-if="isBankLoading" class="absolute right-3 top-2">
-              <span class="material-icons-round animate-spin text-teal-500 text-sm">refresh</span>
+              <span class="material-icons-round animate-spin text-brand-500 text-sm">refresh</span>
             </div>
           </div>
           <span v-if="ibanError" class="field-error">{{ ibanError }}</span>
@@ -93,19 +93,19 @@ const entrepreneurSigningPersonally = () => (
               <button
                 type="button"
                 class="flex-1 rounded-md px-3 py-2 text-sm transition-all"
-                :class="customer.signing_mode !== 'power_of_attorney' ? 'bg-white font-medium text-teal-700 shadow-sm dark:bg-slate-600 dark:text-teal-300' : 'text-[var(--mv-text-muted)]'"
+                :class="customer.signing_mode !== 'power_of_attorney' ? 'bg-white font-medium text-brand-700 shadow-sm dark:bg-slate-600 dark:text-brand-300' : 'text-[var(--mv-text-muted)]'"
                 @click="update('signing_mode', customer.type === 'company' ? 'statutory_body' : 'self')"
               >{{ customer.type === 'company' ? 'Руководитель' : 'Лично' }}</button>
               <button
                 type="button"
                 class="flex-1 rounded-md px-3 py-2 text-sm transition-all"
-                :class="customer.signing_mode === 'power_of_attorney' ? 'bg-white font-medium text-teal-700 shadow-sm dark:bg-slate-600 dark:text-teal-300' : 'text-[var(--mv-text-muted)]'"
+                :class="customer.signing_mode === 'power_of_attorney' ? 'bg-white font-medium text-brand-700 shadow-sm dark:bg-slate-600 dark:text-brand-300' : 'text-[var(--mv-text-muted)]'"
                 @click="update('signing_mode', 'power_of_attorney')"
               >Представитель</button>
             </div>
           </div>
           <input :value="customer.signer_name" type="text" placeholder="Подписант" :class="fieldClass('signer_name')" @input="update('signer_name', eventValue($event))" />
-          <p v-if="entrepreneurSigningPersonally()" class="rounded-lg bg-teal-500/10 px-3 py-2 text-xs text-[var(--mv-text-muted)]">
+          <p v-if="entrepreneurSigningPersonally()" class="rounded-lg bg-brand-500/10 px-3 py-2 text-xs text-[var(--mv-text-muted)]">
             ИП подписывает договор лично; должность и основание действий не требуются.
           </p>
           <template v-else>

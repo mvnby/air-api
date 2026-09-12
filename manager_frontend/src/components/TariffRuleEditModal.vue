@@ -382,7 +382,7 @@ const insertPlaceholder = async (token: string) => {
                 <div class="text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase">Избранные правила</div>
                 <button
                   type="button"
-                  class="text-xs font-medium text-teal-700 hover:text-teal-600 dark:text-teal-300 dark:hover:text-teal-200"
+                  class="text-xs font-medium text-brand-700 hover:text-brand-600 dark:text-brand-300 dark:hover:text-brand-200"
                   :disabled="favoriteRulesLoading || loading"
                   @click="loadFavoriteRules"
                 >
@@ -531,7 +531,7 @@ const insertPlaceholder = async (token: string) => {
             </button>
             <button
               @click="submit"
-              class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-teal-600 hover:bg-teal-500 active:bg-teal-700 transition-colors rounded-lg disabled:opacity-50 shadow-lg shadow-teal-900/30"
+              class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-brand-600 hover:bg-brand-500 active:bg-brand-700 transition-colors rounded-lg disabled:opacity-50 shadow-lg shadow-brand-900/30"
               :disabled="loading || !String(formData.name || '').trim()"
             >
               <span v-if="loading" class="material-icons-round text-sm animate-spin">refresh</span>

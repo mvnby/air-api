@@ -123,15 +123,15 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(searchTimer); loadGenerati
         <div><h1 class="text-2xl font-bold text-gray-900">Подбор оборудования</h1><p class="mt-1 text-sm text-gray-500">Мощность, форма блока и обогрев — под задачу клиента.</p></div>
         <p class="text-sm text-gray-500" aria-live="polite">Найдено: {{ total }}</p>
       </header>
-      <div v-if="target.requested" class="rounded-xl border border-teal-200 bg-teal-50 p-3">
+      <div v-if="target.requested" class="rounded-xl border border-brand-200 bg-brand-50 p-3">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <p class="font-semibold text-teal-950">{{ target.context.value ? `Подбор для заказа #${target.context.value.orderId}` : 'Подбор для заказа' }}</p>
-            <p v-if="target.loading.value" class="mt-1 text-sm text-teal-800">Загружаем заказ…</p>
-            <p v-else-if="target.order.value && target.proposal.value" class="mt-1 text-sm text-teal-800">{{ target.order.value.title || target.order.value.customer?.name || 'Без названия' }} · {{ target.proposal.value.name }}</p>
-            <p v-if="target.canAttach.value" class="mt-1 text-xs text-teal-800">Выбранные модели дополнят этот вариант предложения.</p>
+            <p class="font-semibold text-brand-950">{{ target.context.value ? `Подбор для заказа #${target.context.value.orderId}` : 'Подбор для заказа' }}</p>
+            <p v-if="target.loading.value" class="mt-1 text-sm text-brand-800">Загружаем заказ…</p>
+            <p v-else-if="target.order.value && target.proposal.value" class="mt-1 text-sm text-brand-800">{{ target.order.value.title || target.order.value.customer?.name || 'Без названия' }} · {{ target.proposal.value.name }}</p>
+            <p v-if="target.canAttach.value" class="mt-1 text-xs text-brand-800">Выбранные модели дополнят этот вариант предложения.</p>
           </div>
-          <a v-if="target.context.value" :href="target.context.value.returnTo" class="text-sm font-semibold text-teal-800 underline underline-offset-2" @click.prevent="!target.saving.value && navigateManager(target.context.value!.returnTo)">Вернуться в заказ</a>
+          <a v-if="target.context.value" :href="target.context.value.returnTo" class="text-sm font-semibold text-brand-800 underline underline-offset-2" @click.prevent="!target.saving.value && navigateManager(target.context.value!.returnTo)">Вернуться в заказ</a>
         </div>
         <p v-if="target.error.value" role="alert" class="mt-2 text-sm text-red-700">{{ target.error.value }}</p>
       </div>

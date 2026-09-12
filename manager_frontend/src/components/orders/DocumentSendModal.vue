@@ -275,7 +275,7 @@ const sendEmail = async () => {
             <input
               v-model="toEmail"
               type="email"
-              class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
               placeholder="client@example.com"
             />
           </div>
@@ -286,7 +286,7 @@ const sendEmail = async () => {
               <button
                 v-if="subjectTouched || bodyTouched"
                 type="button"
-                class="text-xs font-semibold text-teal-700 hover:text-teal-800 dark:text-teal-300"
+                class="text-xs font-semibold text-brand-700 hover:text-brand-800 dark:text-brand-300"
                 :disabled="composing"
                 @click="applyTemplate(true)"
               >
@@ -295,7 +295,7 @@ const sendEmail = async () => {
             </div>
             <select
               v-model="templateKey"
-              class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
               :disabled="composing"
               @change="changeTemplate"
             >
@@ -316,13 +316,13 @@ const sendEmail = async () => {
               <label
                 v-for="doc in documents"
                 :key="doc.id"
-                class="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm hover:border-teal-300 dark:border-slate-700 dark:bg-slate-800/70 dark:hover:border-teal-500/70"
+                class="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm hover:border-brand-300 dark:border-slate-700 dark:bg-slate-800/70 dark:hover:border-brand-500/70"
               >
                 <input
                   v-model="selectedDocumentIds"
                   type="checkbox"
                   :value="doc.id"
-                  class="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                  class="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
                 />
                 <span class="min-w-0 flex-1">
                   <span class="block font-medium text-slate-900 dark:text-white">{{ documentLabel(doc) }}</span>
@@ -351,7 +351,7 @@ const sendEmail = async () => {
             <input
               v-model="subject"
               type="text"
-              class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
               @input="subjectTouched = true"
             />
           </div>
@@ -361,7 +361,7 @@ const sendEmail = async () => {
             <textarea
               v-model="bodyText"
               rows="8"
-              class="w-full resize-y rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              class="w-full resize-y rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
               @input="bodyTouched = true"
             />
           </div>
@@ -382,7 +382,7 @@ const sendEmail = async () => {
           </button>
           <button
             type="button"
-            class="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-teal-700 disabled:opacity-50"
+            class="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-brand-700 disabled:opacity-50"
             :disabled="sending || composing || (documentsRequired && !selectedDocumentIds.length)"
             @click="sendEmail"
           >

@@ -415,7 +415,7 @@ onBeforeUnmount(() => {
             <div
                 v-if="toast"
                 class="fixed top-20 right-8 z-50 px-4 py-3 rounded-lg shadow-xl flex items-center gap-3"
-                :class="toastType === 'success' ? 'bg-teal-600 border border-teal-500 text-white shadow-teal-900/30' : 'bg-red-600 border border-red-500 text-white shadow-red-900/30'"
+                :class="toastType === 'success' ? 'bg-emerald-600 border border-emerald-500 text-white shadow-emerald-900/30' : 'bg-red-600 border border-red-500 text-white shadow-red-900/30'"
             >
                 <span class="material-icons-round text-xl">{{ toastType === 'success' ? 'check_circle' : 'error' }}</span>
                 <span class="text-sm font-medium">{{ toast }}</span>
@@ -453,7 +453,7 @@ onBeforeUnmount(() => {
                 <span
                     class="px-2.5 py-1 rounded-full text-xs font-semibold"
                     :class="backupRunJob.status === 'success'
-                        ? 'bg-teal-100 text-teal-700 dark:bg-teal-500/20 dark:text-teal-300'
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300'
                         : backupRunJob.status === 'failed'
                             ? 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300'
                             : 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'"
@@ -489,7 +489,7 @@ onBeforeUnmount(() => {
                 <span
                     class="px-2.5 py-1 rounded-full text-xs font-semibold"
                     :class="restoreJob.status === 'success'
-                        ? 'bg-teal-100 text-teal-700 dark:bg-teal-500/20 dark:text-teal-300'
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300'
                         : restoreJob.status === 'failed'
                             ? 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300'
                             : 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'"
@@ -520,7 +520,7 @@ onBeforeUnmount(() => {
             <button
                 class="px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors"
                 :class="kindFilter === 'all'
-                    ? 'bg-teal-600 text-white border-teal-600'
+                    ? 'bg-brand-600 text-white border-brand-600'
                     : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-300 border-gray-200 dark:border-slate-700'"
                 @click="kindFilter = 'all'"
             >
@@ -529,7 +529,7 @@ onBeforeUnmount(() => {
             <button
                 class="px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors"
                 :class="kindFilter === 'db'
-                    ? 'bg-teal-600 text-white border-teal-600'
+                    ? 'bg-brand-600 text-white border-brand-600'
                     : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-300 border-gray-200 dark:border-slate-700'"
                 @click="kindFilter = 'db'"
             >
@@ -538,14 +538,14 @@ onBeforeUnmount(() => {
             <button
                 class="px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors"
                 :class="kindFilter === 'media'
-                    ? 'bg-teal-600 text-white border-teal-600'
+                    ? 'bg-brand-600 text-white border-brand-600'
                     : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-300 border-gray-200 dark:border-slate-700'"
                 @click="kindFilter = 'media'"
             >
                 Media
             </button>
             <button
-                class="ml-auto px-3 py-1.5 rounded-lg text-sm font-medium border bg-teal-600 text-white border-teal-600 hover:bg-teal-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                class="ml-auto px-3 py-1.5 rounded-lg text-sm font-medium border bg-brand-600 text-white border-brand-600 hover:bg-brand-500 disabled:opacity-60 disabled:cursor-not-allowed"
                 @click="startManualBackup"
                 :disabled="backupRunLaunching || backupRunning || restoring || pairRestoreLaunching"
             >
@@ -604,7 +604,7 @@ onBeforeUnmount(() => {
                             <span
                                 class="px-2 py-0.5 rounded text-xs font-medium"
                                 :class="item.kind === 'db'
-                                    ? 'bg-teal-100 text-teal-700 dark:bg-teal-500/20 dark:text-teal-300'
+                                    ? 'bg-brand-100 text-brand-700 dark:bg-brand-500/20 dark:text-brand-300'
                                     : 'bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300'"
                             >
                                 {{ item.kind }}

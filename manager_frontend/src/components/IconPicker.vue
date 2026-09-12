@@ -33,11 +33,11 @@ const selectedOption = computed(() => (
 const accentClasses = computed(() => {
     if (props.tone === 'teal') {
         return {
-            trigger: 'border-teal-100 bg-teal-50/60 text-teal-800 hover:border-teal-300 dark:border-teal-900/50 dark:bg-teal-950/20 dark:text-teal-100',
-            selected: 'border-teal-500 bg-teal-600 text-white shadow-sm',
-            idle: 'border-gray-200 bg-white text-gray-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:border-teal-700 dark:hover:text-teal-200',
-            icon: 'bg-teal-50 text-teal-700 group-hover:bg-teal-100 dark:bg-slate-800 dark:text-teal-200',
-            chip: 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-100',
+            trigger: 'border-brand-100 bg-brand-50/60 text-brand-800 hover:border-brand-300 dark:border-brand-900/50 dark:bg-brand-950/20 dark:text-brand-100',
+            selected: 'border-brand-500 bg-brand-600 text-white shadow-sm',
+            idle: 'border-gray-200 bg-white text-gray-600 hover:border-brand-300 hover:text-brand-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:border-brand-700 dark:hover:text-brand-200',
+            icon: 'bg-brand-50 text-brand-700 group-hover:bg-brand-100 dark:bg-slate-800 dark:text-brand-200',
+            chip: 'bg-brand-100 text-brand-800 dark:bg-brand-950 dark:text-brand-100',
         };
     }
     return {

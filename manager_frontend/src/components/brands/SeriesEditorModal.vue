@@ -168,7 +168,7 @@ const addGallery = (url = pendingGalleryImage.value) => {
               <button
                 v-if="editing"
                 type="button"
-                class="inline-flex items-center gap-1 rounded-lg border border-teal-200 px-3 py-1.5 text-xs font-semibold text-teal-700 hover:bg-teal-50 disabled:cursor-wait disabled:opacity-50 dark:border-teal-900/60 dark:text-teal-200 dark:hover:bg-teal-950/30"
+                class="inline-flex items-center gap-1 rounded-lg border border-brand-200 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-50 disabled:cursor-wait disabled:opacity-50 dark:border-brand-900/60 dark:text-brand-200 dark:hover:bg-brand-950/30"
                 :disabled="galleryApplying || !form.galleryImages.length"
                 @click="emit('applyGallery')"
               >
@@ -218,7 +218,7 @@ const addGallery = (url = pendingGalleryImage.value) => {
               Галерея пока пустая.
             </p>
             <div
-              class="rounded-xl border border-teal-100 bg-teal-50/40 p-3 dark:border-teal-900/60 dark:bg-teal-950/20"
+              class="rounded-xl border border-brand-100 bg-brand-50/40 p-3 dark:border-brand-900/60 dark:bg-brand-950/20"
             >
               <MediaField
                 v-model="pendingGalleryImage"
@@ -232,7 +232,7 @@ const addGallery = (url = pendingGalleryImage.value) => {
               /><button
                 v-if="pendingGalleryImage"
                 type="button"
-                class="mt-3 inline-flex items-center gap-1 rounded-lg bg-teal-600 px-3 py-2 text-xs font-semibold text-white hover:bg-teal-700"
+                class="mt-3 inline-flex items-center gap-1 rounded-lg bg-brand-600 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-700"
                 @click="addGallery()"
               >
                 <span class="material-icons-round text-[16px]">add</span
@@ -262,7 +262,7 @@ const addGallery = (url = pendingGalleryImage.value) => {
             </div>
             <button
               type="button"
-              class="inline-flex items-center gap-1 rounded-lg border border-teal-200 px-3 py-1.5 text-xs font-semibold text-teal-700 hover:bg-teal-50 dark:border-teal-900/60 dark:text-teal-200 dark:hover:bg-teal-950/30"
+              class="inline-flex items-center gap-1 rounded-lg border border-brand-200 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-50 dark:border-brand-900/60 dark:text-brand-200 dark:hover:bg-brand-950/30"
               @click="emit('addContentBlock')"
             >
               <span class="material-icons-round text-[16px]">add</span>Секция
@@ -419,7 +419,7 @@ const addGallery = (url = pendingGalleryImage.value) => {
             Отмена</button
           ><button
             type="button"
-            class="rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50"
+            class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
             :disabled="saving"
             @click="emit('save')"
           >

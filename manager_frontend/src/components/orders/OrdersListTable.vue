@@ -57,7 +57,7 @@ const isGroupSelected = (item: OrderRenderItem) => {
           <th class="w-10 px-3 py-2"></th>
           <th class="px-3 py-2 cursor-pointer hover:bg-slate-100 rounded select-none group" @click="toggleSort('created_at')">
             Сделка
-            <span class="inline-block ml-1 opacity-50 group-hover:opacity-100" :class="sort?.startsWith('created_at') ? 'text-teal-600 opacity-100' : ''">
+            <span class="inline-block ml-1 opacity-50 group-hover:opacity-100" :class="sort?.startsWith('created_at') ? 'text-brand-600 opacity-100' : ''">
               {{ sort === 'created_at_desc' ? '↓' : '↑' }}
             </span>
           </th>
@@ -65,12 +65,12 @@ const isGroupSelected = (item: OrderRenderItem) => {
           <th class="px-3 py-2">Статус</th>
           <th class="px-3 py-2 cursor-pointer hover:bg-slate-100 rounded select-none group" @click="emit('update:sort', sort === 'followup_asc' ? 'created_at_desc' : 'followup_asc')">
             След. касание
-            <span class="inline-block ml-1 opacity-50 text-teal-600 transition-opacity" :class="sort === 'followup_asc' ? 'opacity-100 font-bold' : 'opacity-0 group-hover:opacity-50'">↑</span>
+            <span class="inline-block ml-1 opacity-50 text-brand-600 transition-opacity" :class="sort === 'followup_asc' ? 'opacity-100 font-bold' : 'opacity-0 group-hover:opacity-50'">↑</span>
           </th>
           <th class="px-3 py-2">Сумма</th>
           <th class="px-3 py-2 cursor-pointer hover:bg-slate-100 rounded select-none group" @click="emit('update:sort', sort === 'margin_desc' ? 'created_at_desc' : 'margin_desc')">
             Маржа
-            <span class="inline-block ml-1 opacity-50 text-teal-600 transition-opacity" :class="sort === 'margin_desc' ? 'opacity-100 font-bold' : 'opacity-0 group-hover:opacity-50'">↓</span>
+            <span class="inline-block ml-1 opacity-50 text-brand-600 transition-opacity" :class="sort === 'margin_desc' ? 'opacity-100 font-bold' : 'opacity-0 group-hover:opacity-50'">↓</span>
           </th>
           <th class="px-3 py-2">Долг</th>
           <th class="px-3 py-2">Действия</th>
@@ -83,7 +83,7 @@ const isGroupSelected = (item: OrderRenderItem) => {
               <td class="w-10 px-3 py-3 align-top">
                 <input
                   type="checkbox"
-                  class="mt-1 h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600"
+                  class="mt-1 h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-600"
                   :checked="isGroupSelected(item)"
                   :aria-label="`Выбрать группу ${item.group.customerName}`"
                   @change="emit('toggleSelectMany', { orderIds: groupOrderIds(item), selected: ($event.target as HTMLInputElement).checked })"
@@ -109,7 +109,7 @@ const isGroupSelected = (item: OrderRenderItem) => {
               </td>
               <td class="px-3 py-3 text-xs text-gray-500">Группа клиента</td>
               <td class="px-3 py-3">{{ formatMoney(item.group.totalAmount) }}</td>
-              <td class="px-3 py-3 font-semibold text-teal-700">{{ formatMoney(item.group.margin) }}</td>
+              <td class="px-3 py-3 font-semibold text-brand-700">{{ formatMoney(item.group.margin) }}</td>
               <td
                 class="px-3 py-3 font-semibold"
                 :class="item.group.balanceDue > 0 ? 'text-red-600' : 'text-emerald-700'"

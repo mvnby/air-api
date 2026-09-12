@@ -95,7 +95,7 @@ const showHelp = async (key: string) => {
   <section class="space-y-4">
     <header class="flex flex-col gap-3 border-b border-gray-100 pb-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <p class="text-xs font-bold uppercase tracking-[0.16em] text-teal-700 dark:text-teal-300">Характеристики</p>
+        <p class="text-xs font-bold uppercase tracking-[0.16em] text-brand-700 dark:text-brand-300">Характеристики</p>
         <h2 class="mt-1 text-xl font-bold text-gray-950 dark:text-white">Технические данные товара</h2>
         <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">
           {{ expertMode ? 'Экспертный режим: доступны ключи схемы и удаление полей.' : 'Безопасный режим: редактируются только значения.' }}
@@ -107,7 +107,7 @@ const showHelp = async (key: string) => {
     </header>
 
     <div class="flex flex-wrap items-center gap-2">
-      <button v-for="option in ([['filled', 'Заполненные'], ['problems', `Проблемные${problemCount ? ` · ${problemCount}` : ''}`], ['all', 'Все поля']] as const)" :key="option[0]" type="button" class="h-9 rounded-lg border px-3 text-sm font-semibold transition" :class="filterMode === option[0] ? 'border-teal-300 bg-teal-50 text-teal-800 dark:border-teal-800 dark:bg-teal-950 dark:text-teal-200' : 'border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-slate-700 dark:text-slate-300'" @click="filterMode = option[0]">
+      <button v-for="option in ([['filled', 'Заполненные'], ['problems', `Проблемные${problemCount ? ` · ${problemCount}` : ''}`], ['all', 'Все поля']] as const)" :key="option[0]" type="button" class="h-9 rounded-lg border px-3 text-sm font-semibold transition" :class="filterMode === option[0] ? 'border-brand-300 bg-brand-50 text-brand-800 dark:border-brand-800 dark:bg-brand-950 dark:text-brand-200' : 'border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-slate-700 dark:text-slate-300'" @click="filterMode = option[0]">
         {{ option[1] }}
       </button>
     </div>
@@ -130,7 +130,7 @@ const showHelp = async (key: string) => {
               </div>
               <SpecValueInput :model-value="row.value" :spec-key="row.key" compact @update:model-value="replaceRow(index, { value: $event })" />
               <div class="flex items-start justify-end gap-1">
-                <button v-if="getSpecHelpText(row.key)" type="button" class="rounded-full p-2 text-slate-400 hover:bg-teal-50 hover:text-teal-700 dark:hover:bg-slate-800" title="Пояснение" @click="showHelp(row.key)"><CircleHelp class="h-4 w-4" /></button>
+                <button v-if="getSpecHelpText(row.key)" type="button" class="rounded-full p-2 text-slate-400 hover:bg-brand-50 hover:text-brand-700 dark:hover:bg-slate-800" title="Пояснение" @click="showHelp(row.key)"><CircleHelp class="h-4 w-4" /></button>
                 <button v-if="expertMode" type="button" class="rounded-lg p-2 text-gray-300 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30" title="Удалить поле" @click="removeRow(index)"><Trash2 class="h-4 w-4" /></button>
               </div>
             </div>

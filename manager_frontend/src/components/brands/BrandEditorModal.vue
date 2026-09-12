@@ -111,7 +111,7 @@ const emit = defineEmits<{
           Отмена</button
         ><button
           type="button"
-          class="rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50"
+          class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
           :disabled="saving"
           @click="emit('save')"
         >

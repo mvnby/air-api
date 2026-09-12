@@ -35,7 +35,7 @@ const statusClass = computed(() => {
 });
 
 const iconClass = computed(() => {
-  if (isAutomatic.value) return 'bg-teal-50 text-teal-600 dark:bg-teal-500/10 dark:text-teal-300';
+  if (isAutomatic.value) return 'bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-300';
   if (isUnsupported.value) return 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-300';
   return 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-200';
 });
@@ -81,7 +81,7 @@ const mappingTarget = computed(() => (
     <div class="mt-4 rounded-lg border border-gray-100 bg-gray-50 p-3 dark:border-slate-700 dark:bg-slate-800/70">
       <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-slate-400">
         <span>{{ rate.equipment_label }}</span>
-        <span class="material-icons-round text-sm text-teal-500">arrow_forward</span>
+        <span class="material-icons-round text-sm text-brand-500">arrow_forward</span>
         <span class="font-medium text-gray-800 dark:text-slate-200">{{ mappingTarget }}</span>
       </div>
       <p v-if="!isAutomatic" class="mt-2 text-xs text-gray-500 dark:text-slate-400">{{ rate.selection_note }}</p>

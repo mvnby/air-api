@@ -1,8 +1,21 @@
 :root {
-  --kitlane-accent: #1763e8;
-  --kitlane-accent-hover: #1454c7;
-  --kitlane-accent-soft: #eff6ff;
-  --kitlane-accent-text: #1454c7;
+  --kitlane-font-sans: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* RGB channels support Tailwind opacity modifiers without duplicating colors. */
+  --kitlane-brand-50: 239 246 255;
+  --kitlane-brand-100: 219 234 254;
+  --kitlane-brand-200: 191 219 254;
+  --kitlane-brand-300: 147 197 253;
+  --kitlane-brand-400: 96 165 250;
+  --kitlane-brand-500: 37 99 235;
+  --kitlane-brand-600: 23 99 232;
+  --kitlane-brand-700: 20 84 199;
+  --kitlane-brand-800: 30 64 175;
+  --kitlane-brand-900: 30 58 138;
+  --kitlane-brand-950: 23 37 84;
+  --kitlane-accent: rgb(var(--kitlane-brand-600));
+  --kitlane-accent-hover: rgb(var(--kitlane-brand-700));
+  --kitlane-accent-soft: rgb(var(--kitlane-brand-50));
+  --kitlane-accent-text: rgb(var(--kitlane-brand-700));
   --kitlane-bg: #f5f7fb;
   --kitlane-surface: #fff;
   --kitlane-text: #142033;
@@ -22,8 +35,8 @@
   --kitlane-sidebar-compact: 76px;
 }
 .dark {
-  --kitlane-accent: #1763e8;
-  --kitlane-accent-hover: #1454c7;
+  --kitlane-accent: rgb(var(--kitlane-brand-600));
+  --kitlane-accent-hover: rgb(var(--kitlane-brand-700));
   --kitlane-accent-soft: #172f50;
   --kitlane-accent-text: #93bdff;
   --kitlane-bg: #0f172a;

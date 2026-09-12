@@ -148,7 +148,7 @@ const save = () => {
         <header class="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-700">
           <div class="min-w-0">
             <div class="flex items-center gap-2">
-              <Scale class="h-5 w-5 shrink-0 text-teal-700 dark:text-teal-300" />
+              <Scale class="h-5 w-5 shrink-0 text-brand-700 dark:text-brand-300" />
               <h2 id="bank-receipt-allocation-title" class="text-base font-semibold text-slate-950 dark:text-white">
                 {{ detail?.allocated_amount ? 'Переразнести поступление' : 'Распределить поступление' }}
               </h2>
@@ -181,9 +181,9 @@ const save = () => {
                 <div class="text-xs text-slate-500 dark:text-slate-400">Поступило</div>
                 <div class="mt-0.5 font-semibold text-slate-950 dark:text-white">{{ money(detail.receipt_amount) }}</div>
               </div>
-              <div class="rounded-md bg-teal-50 px-2 py-2 dark:bg-teal-950/40">
-                <div class="text-xs text-teal-700 dark:text-teal-300">Распределено</div>
-                <div class="mt-0.5 font-semibold text-teal-900 dark:text-teal-100">{{ money(allocated) }}</div>
+              <div class="rounded-md bg-brand-50 px-2 py-2 dark:bg-brand-950/40">
+                <div class="text-xs text-brand-700 dark:text-brand-300">Распределено</div>
+                <div class="mt-0.5 font-semibold text-brand-900 dark:text-brand-100">{{ money(allocated) }}</div>
               </div>
               <div class="rounded-md bg-amber-50 px-2 py-2 dark:bg-amber-950/40">
                 <div class="text-xs text-amber-700 dark:text-amber-300">Остаток</div>
@@ -215,7 +215,7 @@ const save = () => {
                 <div class="flex min-w-0 items-start gap-3">
                   <input
                     :checked="row.selected"
-                    class="mt-1 h-4 w-4 shrink-0 accent-teal-600"
+                    class="mt-1 h-4 w-4 shrink-0 accent-brand-600"
                     type="checkbox"
                     :aria-label="`Выбрать заказ ${row.order_id}`"
                     @change="toggleRow(row)"
@@ -230,7 +230,7 @@ const save = () => {
                         · сейчас отнесено {{ money(row.current_allocation) }}
                       </span>
                     </div>
-                    <div v-if="row.selected" class="mt-1 text-xs font-medium text-teal-700 dark:text-teal-300">
+                    <div v-if="row.selected" class="mt-1 text-xs font-medium text-brand-700 dark:text-brand-300">
                       После распределения останется {{ money(Math.max(0, row.balance_due_before_receipt - Number(row.amount || 0))) }} {{ currency }}
                     </div>
                   </div>

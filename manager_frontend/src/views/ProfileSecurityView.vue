@@ -132,7 +132,7 @@ const submit = async () => {
   <section class="mx-auto max-w-xl px-4 py-8 sm:px-6">
     <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
       <div class="flex items-start gap-3">
-        <div class="rounded-lg bg-teal-50 p-2 text-teal-700"><KeyRound class="h-5 w-5" /></div>
+        <div class="rounded-lg bg-brand-50 p-2 text-brand-700"><KeyRound class="h-5 w-5" /></div>
         <div>
           <h1 class="text-xl font-semibold text-gray-900">Профиль / Безопасность</h1>
           <p class="mt-1 text-sm text-gray-600">После смены пароля потребуется войти заново.</p>
@@ -141,7 +141,7 @@ const submit = async () => {
 
       <div class="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-4">
         <div class="flex items-center gap-3">
-          <div class="flex h-10 w-10 items-center justify-center rounded-full bg-teal-100 text-teal-700">
+          <div class="flex h-10 w-10 items-center justify-center rounded-full bg-brand-100 text-brand-700">
             <UserRound class="h-5 w-5" />
           </div>
           <div class="min-w-0">
@@ -173,7 +173,7 @@ const submit = async () => {
           <input id="password-confirmation" v-model="confirmation" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2" :type="showNewPassword ? 'text' : 'password'" autocomplete="new-password" required />
         </label>
         <div class="flex flex-wrap gap-3">
-          <button type="button" class="inline-flex items-center gap-2 text-sm font-medium text-teal-700 hover:text-teal-800" @click="generatePassword">
+          <button type="button" class="inline-flex items-center gap-2 text-sm font-medium text-brand-700 hover:text-brand-800" @click="generatePassword">
             <RefreshCw class="h-4 w-4" /> Сгенерировать надёжный пароль
           </button>
           <button type="button" class="inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900" @click="showNewPassword = !showNewPassword">
@@ -195,7 +195,7 @@ const submit = async () => {
           </label>
         </div>
         <p v-if="error" role="alert" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
-        <button class="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 font-medium text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-60" type="submit" :disabled="submitting">
+        <button class="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60" type="submit" :disabled="submitting">
           <Loader2 v-if="submitting" class="h-4 w-4 animate-spin" />
           {{ submitting ? 'Сохраняем...' : 'Сменить пароль' }}
         </button>

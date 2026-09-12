@@ -96,7 +96,7 @@ watch(() => props.equipmentId, () => {
 <template>
   <section class="mt-4 rounded-xl border border-[var(--mv-border)] bg-[var(--mv-panel)]">
     <button type="button" class="flex w-full items-center gap-3 px-3 py-3 text-left" :aria-expanded="expanded" @click="toggle">
-      <Images class="h-4 w-4 shrink-0 text-teal-500" />
+      <Images class="h-4 w-4 shrink-0 text-brand-500" />
       <span class="min-w-0 flex-1">
         <span class="block text-sm font-semibold text-[var(--mv-text)]">Фото и файлы оборудования</span>
         <span class="block text-xs text-[var(--mv-text-muted)]">{{ loaded ? `${items.length} файлов` : 'Загрузятся при открытии' }}</span>
@@ -128,7 +128,7 @@ watch(() => props.equipmentId, () => {
 
       <div v-if="fileItems.length" class="mt-2 divide-y divide-[var(--mv-border)] border-y border-[var(--mv-border)]">
         <button v-for="item in fileItems" :key="item.id || item.legacy_key || `${item.filename}-${item.created_at}`" type="button" class="flex w-full items-center gap-3 py-2 text-left" @click="open(item)">
-          <FileText class="h-4 w-4 shrink-0 text-teal-500" />
+          <FileText class="h-4 w-4 shrink-0 text-brand-500" />
           <span class="min-w-0 flex-1">
             <span class="block truncate text-sm font-semibold text-[var(--mv-text)]">{{ item.filename }}</span>
             <span class="block text-xs text-[var(--mv-text-muted)]">{{ getAttachmentCategoryLabel(item.category) }} · {{ formatAttachmentDate(item.created_at) }}</span>

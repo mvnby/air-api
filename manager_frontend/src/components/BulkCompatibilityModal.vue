@@ -376,7 +376,7 @@ watch(() => props.modelValue, async (opened) => {
                     </button>
                     <button
                         type="button"
-                        class="px-3 py-2 rounded-lg border border-teal-300 dark:border-teal-800 text-sm font-semibold text-teal-700 dark:text-teal-300 disabled:opacity-50"
+                        class="px-3 py-2 rounded-lg border border-brand-300 dark:border-brand-800 text-sm font-semibold text-brand-700 dark:text-brand-300 disabled:opacity-50"
                         :disabled="loadingCandidates || !canUseModal"
                         @click="searchByBrand"
                     >
@@ -387,7 +387,7 @@ watch(() => props.modelValue, async (opened) => {
                 <div v-if="error" class="rounded-lg border border-red-200 dark:border-red-900/40 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-sm text-red-700 dark:text-red-300">
                     {{ error }}
                 </div>
-                <div v-if="info" class="rounded-lg border border-teal-200 dark:border-teal-900/40 bg-teal-50 dark:bg-teal-900/20 px-3 py-2 text-sm text-teal-700 dark:text-teal-300">
+                <div v-if="info" class="rounded-lg border border-brand-200 dark:border-brand-900/40 bg-brand-50 dark:bg-brand-900/20 px-3 py-2 text-sm text-brand-700 dark:text-brand-300">
                     {{ info }}
                 </div>
 
@@ -427,10 +427,10 @@ watch(() => props.modelValue, async (opened) => {
                         >
                             <button
                                 type="button"
-                                class="mt-0.5 text-gray-400 hover:text-teal-600"
+                                class="mt-0.5 text-gray-400 hover:text-brand-600"
                                 @click.prevent="toggleCandidate(String(candidate.slug || ''))"
                             >
-                                <CheckSquare v-if="selectedCandidateSlugs.has(String(candidate.slug || '').trim())" class="w-5 h-5 text-teal-600" />
+                                <CheckSquare v-if="selectedCandidateSlugs.has(String(candidate.slug || '').trim())" class="w-5 h-5 text-brand-600" />
                                 <Square v-else class="w-5 h-5" />
                             </button>
                             <div class="min-w-0">
@@ -444,7 +444,7 @@ watch(() => props.modelValue, async (opened) => {
                 </div>
 
                 <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-300">
-                    <input v-model="applyReverse" type="checkbox" class="rounded border-gray-300 dark:border-slate-700 text-teal-600 focus:ring-teal-500" />
+                    <input v-model="applyReverse" type="checkbox" class="rounded border-gray-300 dark:border-slate-700 text-brand-600 focus:ring-brand-500" />
                     <span>
                         Записать обратные связи тоже
                         <span class="text-xs text-gray-500 dark:text-slate-400">
@@ -469,7 +469,7 @@ watch(() => props.modelValue, async (opened) => {
                     </button>
                     <button
                         type="button"
-                        class="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-teal-600 hover:bg-teal-700 disabled:opacity-50"
+                        class="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 disabled:opacity-50"
                         :disabled="applying || !canUseModal || selectedCandidateSlugs.size === 0 || selectedIds.length === 0"
                         @click="applyCompatibility"
                     >

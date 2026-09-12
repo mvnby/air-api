@@ -28,7 +28,7 @@
 
 body {
   margin: 0;
-  font-family: Inter, system-ui, -apple-system, Segoe UI, sans-serif;
+  font-family: var(--kitlane-font-sans);
   background: var(--mv-bg);
   color: var(--mv-text);
 }

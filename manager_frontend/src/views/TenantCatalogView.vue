@@ -76,7 +76,7 @@ onMounted(() => {
           <Search class="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
           <input
             v-model="search"
-            class="w-full rounded-lg border border-gray-200 py-2 pl-10 pr-3 text-sm outline-none focus:border-teal-500"
+            class="w-full rounded-lg border border-gray-200 py-2 pl-10 pr-3 text-sm outline-none focus:border-brand-500"
             placeholder="Модель или бренд"
             aria-label="Поиск по каталогу"
           />
@@ -91,7 +91,7 @@ onMounted(() => {
           <option value="allowed">Разрешены для витрины</option>
           <option value="not_allowed">Не разрешены</option>
         </select>
-        <button class="rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700" type="submit">
+        <button class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700" type="submit">
           Найти
         </button>
       </form>

@@ -497,17 +497,17 @@ onMounted(loadData);
 <template>
   <div class="mx-auto max-w-7xl space-y-5 p-4 sm:p-6">
     <Transition name="fade">
-      <div v-if="toast" class="fixed right-6 top-6 z-[100] rounded-xl bg-teal-600 px-5 py-3 font-medium text-white shadow-2xl">
+      <div v-if="toast" class="fixed right-6 top-6 z-[100] rounded-xl bg-brand-600 px-5 py-3 font-medium text-white shadow-2xl">
         {{ toast }}
       </div>
     </Transition>
 
     <header class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        <p class="text-xs font-bold uppercase tracking-[0.22em] text-teal-700">CRM поставщики</p>
+        <p class="text-xs font-bold uppercase tracking-[0.22em] text-brand-700">CRM поставщики</p>
         <h1 class="text-2xl font-bold text-slate-900">Поставщики и прайсы</h1>
       </div>
-      <button class="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-teal-700" @click="selectSupplier(null)">
+      <button class="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700" @click="selectSupplier(null)">
         <Plus class="h-4 w-4" />
         Новый поставщик
       </button>
@@ -527,7 +527,7 @@ onMounted(loadData);
             v-for="supplier in suppliers"
             :key="supplier.id"
             class="w-full rounded-xl border px-3 py-2 text-left transition"
-            :class="selectedSupplierId === supplier.id ? 'border-teal-300 bg-teal-50 text-teal-950' : 'border-slate-200 bg-white hover:border-teal-200 hover:bg-slate-50'"
+            :class="selectedSupplierId === supplier.id ? 'border-brand-300 bg-brand-50 text-brand-950' : 'border-slate-200 bg-white hover:border-brand-200 hover:bg-slate-50'"
             @click="selectSupplier(supplier)"
           >
             <span class="flex items-start justify-between gap-2">
@@ -575,7 +575,7 @@ onMounted(loadData);
               ]"
               :key="tab.id"
               class="inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition"
-              :class="activeTab === tab.id ? 'bg-teal-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+              :class="activeTab === tab.id ? 'bg-brand-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
               @click="activeTab = tab.id as SupplierTab"
             >
               <component :is="tab.icon" class="h-4 w-4" />
@@ -604,12 +604,12 @@ onMounted(loadData);
                 </select>
               </label>
               <label class="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700">
-                <input v-model="supplierForm.is_active" type="checkbox" class="rounded text-teal-600" />
+                <input v-model="supplierForm.is_active" type="checkbox" class="rounded text-brand-600" />
                 Активный поставщик
               </label>
               <label class="space-y-1 text-sm font-medium text-slate-600 md:col-span-2">Комментарий по оплате<textarea v-model="supplierForm.payment_comment" class="field-input min-h-[72px]" placeholder="Например: SaveIN и Iera по безналу, остальное наличными" /></label>
             </div>
-            <button class="inline-flex items-center justify-center rounded-xl bg-teal-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50" :disabled="savingSupplier" @click="saveSupplier">
+            <button class="inline-flex items-center justify-center rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50" :disabled="savingSupplier" @click="saveSupplier">
               {{ savingSupplier ? 'Сохранение...' : 'Сохранить профиль' }}
             </button>
           </div>
@@ -623,7 +623,7 @@ onMounted(loadData);
                     <p class="text-sm text-slate-500">{{ contact.role || 'Контакт' }}</p>
                     <p class="mt-2 text-sm text-slate-700">{{ [contact.phone, contact.viber && `Viber ${contact.viber}`, contact.telegram_username && `TG ${contact.telegram_username}`, contact.email].filter(Boolean).join(' · ') || 'каналы не заполнены' }}</p>
                     <div class="mt-2 flex flex-wrap gap-1 text-[11px] font-semibold">
-                      <span v-if="contact.default_for_orders" class="rounded-full bg-teal-50 px-2 py-0.5 text-teal-700">заказы</span>
+                      <span v-if="contact.default_for_orders" class="rounded-full bg-brand-50 px-2 py-0.5 text-brand-700">заказы</span>
                       <span v-if="contact.default_for_logistics" class="rounded-full bg-cyan-50 px-2 py-0.5 text-cyan-700">логистика</span>
                     </div>
                   </div>
@@ -656,7 +656,7 @@ onMounted(loadData);
                 <textarea v-model="contactForm.comment" class="field-input bg-white" placeholder="Комментарий" />
               </div>
               <div class="mt-3 flex gap-2">
-                <button class="flex-1 rounded-xl bg-teal-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" :disabled="savingContact">{{ savingContact ? '...' : 'Сохранить' }}</button>
+                <button class="flex-1 rounded-xl bg-brand-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" :disabled="savingContact">{{ savingContact ? '...' : 'Сохранить' }}</button>
                 <button v-if="editingContactId" type="button" class="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold" @click="resetContactForm">Отмена</button>
               </div>
             </form>
@@ -668,9 +668,9 @@ onMounted(loadData);
                 <div class="flex items-start justify-between gap-3">
                   <div class="min-w-0">
                     <p class="flex flex-wrap items-center gap-2 font-semibold text-slate-900">
-                      <MapPin class="h-4 w-4 text-teal-600" />
+                      <MapPin class="h-4 w-4 text-brand-600" />
                       {{ warehouseItem.name }}
-                      <span v-if="warehouseItem.is_default" class="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] text-teal-700">по умолчанию</span>
+                      <span v-if="warehouseItem.is_default" class="rounded-full bg-brand-50 px-2 py-0.5 text-[11px] text-brand-700">по умолчанию</span>
                     </p>
                     <p class="mt-1 text-sm text-slate-700">{{ warehouseItem.address }}</p>
                     <p class="mt-2 text-sm text-slate-500">{{ [warehouseItem.contact_name, warehouseItem.contact_phone, warehouseItem.work_hours].filter(Boolean).join(' · ') || 'контакт и режим не заполнены' }}</p>
@@ -700,7 +700,7 @@ onMounted(loadData);
                 <label class="flex items-center gap-2 text-sm text-slate-700"><input v-model="warehouseForm.is_default" type="checkbox" /> Склад по умолчанию</label>
               </div>
               <div class="mt-3 flex gap-2">
-                <button class="flex-1 rounded-xl bg-teal-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" :disabled="savingWarehouse">{{ savingWarehouse ? '...' : 'Сохранить' }}</button>
+                <button class="flex-1 rounded-xl bg-brand-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" :disabled="savingWarehouse">{{ savingWarehouse ? '...' : 'Сохранить' }}</button>
                 <button v-if="editingWarehouseId" type="button" class="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold" @click="resetWarehouseForm">Отмена</button>
               </div>
             </form>
@@ -736,7 +736,7 @@ onMounted(loadData);
                 <input v-model="sourceForm.col_source_url" class="field-input bg-white" placeholder="URL/Onliner" />
               </div>
               <div class="mt-3 flex flex-wrap gap-2">
-                <button class="rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" :disabled="savingSource" @click="saveSource">{{ savingSource ? '...' : 'Сохранить источник' }}</button>
+                <button class="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" :disabled="savingSource" @click="saveSource">{{ savingSource ? '...' : 'Сохранить источник' }}</button>
                 <button v-if="editingSourceId" class="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold" @click="resetSourceForm">Отмена</button>
                 <button class="ml-auto rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" :disabled="syncingAll" @click="syncAll">{{ syncingAll ? 'Sync...' : 'Sync all' }}</button>
               </div>

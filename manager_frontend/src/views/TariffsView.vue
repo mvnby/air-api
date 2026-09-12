@@ -135,7 +135,7 @@ onMounted(loadTariffs);
     <Transition name="toast">
       <div
         v-if="toast"
-        class="fixed top-20 right-8 z-50 bg-teal-600 border border-teal-500 text-white px-4 py-3 rounded-lg shadow-xl shadow-teal-900/30 flex items-center gap-3"
+        class="fixed top-20 right-8 z-50 bg-brand-600 border border-brand-500 text-white px-4 py-3 rounded-lg shadow-xl shadow-brand-900/30 flex items-center gap-3"
       >
         <span class="material-icons-round text-xl">check_circle</span>
         <span class="text-sm font-medium">{{ toast }}</span>
@@ -145,7 +145,7 @@ onMounted(loadTariffs);
     <div class="flex flex-wrap gap-3 items-end justify-between mb-6">
       <div>
         <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-3">
-          <span class="material-icons-round text-teal-600 dark:text-teal-400">payments</span>
+          <span class="material-icons-round text-brand-600 dark:text-brand-400">payments</span>
           Тарифы смет
         </h1>
         <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">
@@ -170,7 +170,7 @@ onMounted(loadTariffs);
         </label>
         <button
           @click="openAddTariff"
-          class="flex items-center gap-2 bg-teal-600 hover:bg-teal-500 text-white font-medium py-2.5 px-4 rounded-lg shadow-lg shadow-teal-900/40 transition-all text-sm"
+          class="flex items-center gap-2 bg-brand-600 hover:bg-brand-500 text-white font-medium py-2.5 px-4 rounded-lg shadow-lg shadow-brand-900/40 transition-all text-sm"
         >
           <span class="material-icons-round text-[18px]">add</span>
           Добавить тариф
@@ -207,7 +207,7 @@ onMounted(loadTariffs);
     <div class="grid grid-cols-1 xl:grid-cols-5 gap-6">
       <section class="xl:col-span-3 bg-white dark:bg-[#1e293b] rounded-xl shadow-sm border border-gray-200 dark:border-slate-700/60 overflow-hidden">
         <div v-if="loading" class="flex justify-center py-20">
-          <div class="w-8 h-8 rounded-full border-4 border-gray-200 dark:border-slate-700 border-t-teal-500 animate-spin"></div>
+          <div class="w-8 h-8 rounded-full border-4 border-gray-200 dark:border-slate-700 border-t-brand-500 animate-spin"></div>
         </div>
 
         <table v-else class="min-w-full divide-y divide-gray-200 dark:divide-slate-700/50">
@@ -225,7 +225,7 @@ onMounted(loadTariffs);
               v-for="tariff in tariffs"
               :key="tariff.id"
               class="hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors"
-              :class="{ 'bg-teal-50/50 dark:bg-teal-900/10': selectedTariffId === tariff.id }"
+              :class="{ 'bg-brand-50/50 dark:bg-brand-900/10': selectedTariffId === tariff.id }"
             >
               <td class="px-4 py-3">
                 <button class="text-left" @click="selectedTariffId = tariff.id">
@@ -248,7 +248,7 @@ onMounted(loadTariffs);
                 <div class="flex justify-end gap-2">
                   <button
                     @click="openAddRule(tariff.id)"
-                    class="p-2 text-teal-600 hover:text-teal-700 border border-teal-200 hover:bg-teal-50 rounded-lg transition-colors inline-flex items-center"
+                    class="p-2 text-brand-600 hover:text-brand-700 border border-brand-200 hover:bg-brand-50 rounded-lg transition-colors inline-flex items-center"
                     title="Добавить правило"
                   >
                     <span class="material-icons-round text-sm">library_add</span>
@@ -291,7 +291,7 @@ onMounted(loadTariffs);
             </div>
             <button
               @click="openAddRule(selectedTariff.id)"
-              class="inline-flex items-center gap-1 rounded-lg border border-teal-300 text-teal-700 px-2 py-1 text-xs font-medium hover:bg-teal-50"
+              class="inline-flex items-center gap-1 rounded-lg border border-brand-300 text-brand-700 px-2 py-1 text-xs font-medium hover:bg-brand-50"
             >
               <span class="material-icons-round text-[15px]">add</span>
               Правило

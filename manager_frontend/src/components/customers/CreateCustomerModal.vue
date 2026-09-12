@@ -58,7 +58,7 @@ const { lookupCompany, isEgrLoading, egrError } = useB2BLookup();
 const business = computed(() => isBusinessCustomer(form.value.type));
 
 const inputClass = (field: keyof CustomerForm) => [
-  'w-full rounded-xl border bg-slate-900 px-4 py-3 text-sm text-slate-100 outline-none transition-all placeholder:text-slate-600 focus:ring-2 focus:ring-teal-500 disabled:opacity-50',
+  'w-full rounded-xl border bg-slate-900 px-4 py-3 text-sm text-slate-100 outline-none transition-all placeholder:text-slate-600 focus:ring-2 focus:ring-brand-500 disabled:opacity-50',
   serverErrors.value[field] ? 'border-red-500/70' : 'border-slate-600 focus:border-transparent',
 ];
 
@@ -203,7 +203,7 @@ watch(
               <div class="relative">
                 <label class="mb-2 block text-sm font-medium text-slate-300">УНП <span class="font-normal text-slate-500">— подставим реквизиты автоматически</span></label>
                 <input v-model="form.inn" type="text" inputmode="numeric" maxlength="9" :disabled="saving" :class="inputClass('inn')" placeholder="123456789" @blur="handleInnBlur" />
-                <span v-if="isEgrLoading" class="material-icons-round absolute bottom-3 right-3 animate-spin text-sm text-teal-400">refresh</span>
+                <span v-if="isEgrLoading" class="material-icons-round absolute bottom-3 right-3 animate-spin text-sm text-brand-400">refresh</span>
                 <span v-if="serverErrors.inn" class="mt-1 block text-xs text-red-300">{{ serverErrors.inn }}</span>
                 <span v-else-if="egrError" class="mt-1 block text-xs text-amber-300">{{ egrError }}</span>
               </div>
@@ -239,7 +239,7 @@ watch(
             <button
               type="button"
               data-testid="submit-customer"
-              class="flex items-center gap-2 rounded-lg bg-teal-600 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-teal-900/30 transition-colors hover:bg-teal-500 disabled:cursor-not-allowed disabled:opacity-50"
+              class="flex items-center gap-2 rounded-lg bg-brand-600 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-brand-900/30 transition-colors hover:bg-brand-500 disabled:cursor-not-allowed disabled:opacity-50"
               :disabled="saving || !form.name.trim()"
               @click="handleCreate"
             >

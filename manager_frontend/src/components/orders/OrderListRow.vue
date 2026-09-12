@@ -29,7 +29,7 @@ const customerName = (order: ManagerOrderListItemResponse) => getOrderCustomerNa
     <td v-if="selectable" class="w-10 px-3 py-3 align-top">
       <input
         type="checkbox"
-        class="mt-1 h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-600"
+        class="mt-1 h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-600"
         :checked="selected"
         :aria-label="`Выбрать заказ #${order.id}`"
         @click.stop
@@ -53,7 +53,7 @@ const customerName = (order: ManagerOrderListItemResponse) => getOrderCustomerNa
             <span
               v-for="label in order.manager_labels"
               :key="label"
-              class="rounded-full border border-teal-200 bg-teal-50 px-2 py-0.5 text-[10px] font-semibold text-teal-800"
+              class="rounded-full border border-brand-200 bg-brand-50 px-2 py-0.5 text-[10px] font-semibold text-brand-800"
             >
               {{ label }}
             </span>
@@ -82,7 +82,7 @@ const customerName = (order: ManagerOrderListItemResponse) => getOrderCustomerNa
     </td>
     <td class="px-3 py-3">{{ formatDate(order.next_followup_date) }}</td>
     <td class="px-3 py-3">{{ formatMoney(order.total_amount) }}</td>
-    <td class="px-3 py-3 font-semibold text-teal-700">{{ formatMoney(order.margin) }}</td>
+    <td class="px-3 py-3 font-semibold text-brand-700">{{ formatMoney(order.margin) }}</td>
     <td
       class="px-3 py-3 font-semibold"
       :class="(order.balance_due || 0) > 0 ? 'text-red-600' : 'text-emerald-700'"

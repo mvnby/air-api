@@ -415,7 +415,7 @@ defineExpose({ refresh, expand });
       :aria-expanded="expanded"
       @click="toggleExpanded"
     >
-      <span class="material-icons-round text-[21px] text-teal-700 dark:text-teal-300" aria-hidden="true">perm_media</span>
+      <span class="material-icons-round text-[21px] text-brand-700 dark:text-brand-300" aria-hidden="true">perm_media</span>
       <span class="min-w-0 flex-1">
         <span class="block text-sm font-semibold text-slate-900 dark:text-slate-100">Фото и файлы</span>
         <span class="block truncate text-xs text-slate-500 dark:text-slate-400">
@@ -490,7 +490,7 @@ defineExpose({ refresh, expand });
       <div v-if="readonly && loaded" class="flex justify-end">
         <button
           type="button"
-          class="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-teal-700 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-teal-300"
+          class="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-brand-700 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-brand-300"
           :disabled="loading"
           title="Обновить защищённые ссылки на файлы"
           aria-label="Обновить фото и файлы"
@@ -547,7 +547,7 @@ defineExpose({ refresh, expand });
               </span>
             </button>
             <span class="absolute left-1.5 top-1.5 rounded-md px-1.5 py-0.5 text-[10px] font-semibold shadow-sm" :class="statusClass(item.processing_status)">{{ statusLabel(item.processing_status) }}</span>
-            <button v-if="!readonly && !item.legacy && item.id !== null" type="button" class="absolute right-1.5 top-1.5 inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white/95 text-slate-600 shadow-sm hover:text-teal-700 dark:bg-slate-900/95 dark:text-slate-300" title="Изменить файл" aria-label="Изменить файл" @click.stop="beginEdit(item)">
+            <button v-if="!readonly && !item.legacy && item.id !== null" type="button" class="absolute right-1.5 top-1.5 inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white/95 text-slate-600 shadow-sm hover:text-brand-700 dark:bg-slate-900/95 dark:text-slate-300" title="Изменить файл" aria-label="Изменить файл" @click.stop="beginEdit(item)">
               <span class="material-icons-round text-[18px]" aria-hidden="true">edit</span>
             </button>
             <p v-if="item.processing_error" class="border-t border-red-100 px-2 py-1.5 text-[11px] text-red-600 dark:border-red-900/40 dark:text-red-300">{{ item.processing_error }}</p>
@@ -560,7 +560,7 @@ defineExpose({ refresh, expand });
         <div class="divide-y divide-slate-200 border-y border-slate-200 dark:divide-slate-700 dark:border-slate-700">
           <article v-for="item in fileItems" :key="attachmentKey(item)" class="py-3">
             <div class="flex min-w-0 items-start gap-3">
-              <button type="button" class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600 hover:text-teal-700 dark:bg-slate-800 dark:text-slate-300" :title="`Открыть ${item.filename}`" :aria-label="`Открыть ${item.filename}`" @click="openViewer(item)">
+              <button type="button" class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600 hover:text-brand-700 dark:bg-slate-800 dark:text-slate-300" :title="`Открыть ${item.filename}`" :aria-label="`Открыть ${item.filename}`" @click="openViewer(item)">
                 <span class="material-icons-round text-[22px]" aria-hidden="true">{{ iconForItem(item) }}</span>
               </button>
               <button type="button" class="min-w-0 flex-1 text-left" @click="openViewer(item)">
@@ -570,7 +570,7 @@ defineExpose({ refresh, expand });
                 </span>
               </button>
               <span class="hidden shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold sm:inline" :class="statusClass(item.processing_status)">{{ statusLabel(item.processing_status) }}</span>
-              <button v-if="!readonly && !item.legacy && item.id !== null" type="button" class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-teal-700 dark:text-slate-400 dark:hover:bg-slate-800" title="Изменить файл" aria-label="Изменить файл" @click="beginEdit(item)">
+              <button v-if="!readonly && !item.legacy && item.id !== null" type="button" class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-brand-700 dark:text-slate-400 dark:hover:bg-slate-800" title="Изменить файл" aria-label="Изменить файл" @click="beginEdit(item)">
                 <span class="material-icons-round text-[19px]" aria-hidden="true">edit</span>
               </button>
             </div>

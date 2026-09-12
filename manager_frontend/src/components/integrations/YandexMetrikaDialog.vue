@@ -52,7 +52,7 @@ const submit = () => {
       >
         <header class="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5 dark:border-slate-800">
           <div>
-            <p class="text-xs font-bold uppercase tracking-[0.16em] text-teal-600">Яндекс Метрика</p>
+            <p class="text-xs font-bold uppercase tracking-[0.16em] text-brand-600">Яндекс Метрика</p>
             <h2 id="metrika-dialog-title" class="mt-1 text-xl font-bold text-slate-950 dark:text-white">
               {{ mode === 'help' ? 'Где взять данные для подключения' : 'Подключение счётчика' }}
             </h2>
@@ -68,7 +68,7 @@ const submit = () => {
             <li class="flex gap-3"><span class="step">2</span><span>Создайте приложение в Яндекс OAuth и разрешите чтение статистики Метрики: <strong class="text-slate-900 dark:text-white">metrika:read</strong>.</span></li>
             <li class="flex gap-3"><span class="step">3</span><span>Получите OAuth-токен под аккаунтом, у которого есть доступ к этому счётчику.</span></li>
           </ol>
-          <div class="rounded-2xl border border-teal-100 bg-teal-50 p-4 text-sm text-teal-900 dark:border-teal-900 dark:bg-teal-950/40 dark:text-teal-100">
+          <div class="rounded-2xl border border-brand-100 bg-brand-50 p-4 text-sm text-brand-900 dark:border-brand-900 dark:bg-brand-950/40 dark:text-brand-100">
             <div class="flex gap-3">
               <ShieldCheck class="mt-0.5 h-5 w-5 shrink-0" />
               <p>Токен хранится в зашифрованном виде и никогда не показывается обратно в интерфейсе.</p>
@@ -83,7 +83,7 @@ const submit = () => {
             >
               Инструкция Яндекса <ExternalLink class="h-4 w-4" />
             </a>
-            <button type="button" class="rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700" @click="$emit('changeMode', 'configure')">
+            <button type="button" class="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700" @click="$emit('changeMode', 'configure')">
               Перейти к подключению
             </button>
           </div>
@@ -98,14 +98,14 @@ const submit = () => {
               inputmode="numeric"
               pattern="[0-9]+"
               required
-              class="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:ring-teal-950"
+              class="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:ring-brand-950"
               placeholder="Например, 12345678"
             >
           </label>
           <label class="block">
             <span class="flex items-center justify-between gap-3 text-sm font-semibold text-slate-800 dark:text-slate-200">
               OAuth-токен
-              <button type="button" class="inline-flex items-center gap-1 text-xs text-teal-700 hover:text-teal-800" @click="$emit('changeMode', 'help')">
+              <button type="button" class="inline-flex items-center gap-1 text-xs text-brand-700 hover:text-brand-800" @click="$emit('changeMode', 'help')">
                 <HelpCircle class="h-4 w-4" /> Где взять?
               </button>
             </span>
@@ -115,7 +115,7 @@ const submit = () => {
               type="password"
               :required="!connected"
               autocomplete="new-password"
-              class="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:ring-teal-950"
+              class="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:ring-brand-950"
               :placeholder="connected ? 'Оставьте пустым, чтобы сохранить текущий токен' : 'Вставьте OAuth-токен'"
             >
           </label>
@@ -125,7 +125,7 @@ const submit = () => {
             <button
               data-testid="metrika-save"
               type="submit"
-              class="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-60"
+              class="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
               :disabled="saving"
             >
               <Loader2 v-if="saving" class="h-4 w-4 animate-spin" />

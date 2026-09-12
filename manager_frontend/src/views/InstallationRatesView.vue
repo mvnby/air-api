@@ -58,7 +58,7 @@ onMounted(loadRates);
     <Transition name="toast">
       <div
         v-if="toast"
-        class="fixed right-8 top-20 z-50 flex items-center gap-3 rounded-lg border border-teal-500 bg-teal-600 px-4 py-3 text-white shadow-xl shadow-teal-900/30"
+        class="fixed right-8 top-20 z-50 flex items-center gap-3 rounded-lg border border-brand-500 bg-brand-600 px-4 py-3 text-white shadow-xl shadow-brand-900/30"
       >
         <span class="material-icons-round text-xl">check_circle</span>
         <span class="text-sm font-medium">{{ toast }}</span>
@@ -68,7 +68,7 @@ onMounted(loadRates);
     <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
         <h1 class="flex items-center gap-3 text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
-          <span class="material-icons-round text-teal-600 dark:text-teal-400">handyman</span>
+          <span class="material-icons-round text-brand-600 dark:text-brand-400">handyman</span>
           Публичный монтаж
         </h1>
         <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">
@@ -84,19 +84,19 @@ onMounted(loadRates);
       </a>
     </div>
 
-    <div class="mb-6 rounded-xl border border-teal-200 bg-teal-50 p-4 dark:border-teal-500/30 dark:bg-teal-500/10">
-      <div class="mb-3 text-sm font-semibold text-teal-950 dark:text-teal-100">Как выбирается монтаж</div>
+    <div class="mb-6 rounded-xl border border-brand-200 bg-brand-50 p-4 dark:border-brand-500/30 dark:bg-brand-500/10">
+      <div class="mb-3 text-sm font-semibold text-brand-950 dark:text-brand-100">Как выбирается монтаж</div>
       <div class="grid gap-2 text-sm sm:grid-cols-[1fr_auto_1fr_auto_1fr] sm:items-center">
         <div class="rounded-lg bg-white px-3 py-2 text-gray-800 shadow-sm dark:bg-slate-800 dark:text-slate-100">
           <span class="font-medium">Карточка товара</span>
           <span class="mt-0.5 block text-xs text-gray-500 dark:text-slate-400">Комплектная система и её форм-фактор</span>
         </div>
-        <span class="material-icons-round hidden text-teal-500 sm:block">arrow_forward</span>
+        <span class="material-icons-round hidden text-brand-500 sm:block">arrow_forward</span>
         <div class="rounded-lg bg-white px-3 py-2 text-gray-800 shadow-sm dark:bg-slate-800 dark:text-slate-100">
           <span class="font-medium">Точное совпадение</span>
           <span class="mt-0.5 block text-xs text-gray-500 dark:text-slate-400">Канальный → канальный, кассетный → кассетный</span>
         </div>
-        <span class="material-icons-round hidden text-teal-500 sm:block">arrow_forward</span>
+        <span class="material-icons-round hidden text-brand-500 sm:block">arrow_forward</span>
         <div class="rounded-lg bg-white px-3 py-2 text-gray-800 shadow-sm dark:bg-slate-800 dark:text-slate-100">
           <span class="font-medium">Цена или ручной расчёт</span>
           <span class="mt-0.5 block text-xs text-gray-500 dark:text-slate-400">Неизвестные товары не считаются как настенные</span>
@@ -112,7 +112,7 @@ onMounted(loadRates);
     </div>
 
     <div v-if="loading" class="flex justify-center py-24">
-      <div class="h-9 w-9 animate-spin rounded-full border-4 border-gray-200 border-t-teal-500 dark:border-slate-700"></div>
+      <div class="h-9 w-9 animate-spin rounded-full border-4 border-gray-200 border-t-brand-500 dark:border-slate-700"></div>
     </div>
 
     <template v-else>

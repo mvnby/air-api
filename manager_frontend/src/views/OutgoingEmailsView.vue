@@ -209,9 +209,9 @@ onMounted(() => {
       <header class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <p class="text-xs font-bold uppercase tracking-[0.22em] text-teal-700 dark:text-teal-300">Почта</p>
+            <p class="text-xs font-bold uppercase tracking-[0.22em] text-brand-700 dark:text-brand-300">Почта</p>
             <h1 class="mt-1 flex items-center gap-2 text-2xl font-bold">
-              <Mail class="h-6 w-6 text-teal-600" />
+              <Mail class="h-6 w-6 text-brand-600" />
               Исходящие
             </h1>
             <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">CRM-история отправок. Яндекс “Отправленные” не считается источником истины.</p>
@@ -262,7 +262,7 @@ onMounted(() => {
           </label>
         </div>
         <div class="mt-4 flex flex-wrap gap-2">
-          <button type="button" class="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-teal-700" @click="applyFilters">
+          <button type="button" class="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-brand-700" @click="applyFilters">
             <Search class="h-4 w-4" />
             Найти
           </button>
@@ -322,14 +322,14 @@ onMounted(() => {
                   <span class="line-clamp-2">{{ email.customer_name || (email.customer_id ? `#${email.customer_id}` : '—') }}</span>
                 </td>
                 <td class="px-4 py-3">
-                  <button v-if="email.order_id" type="button" class="inline-flex items-center gap-1 font-bold text-teal-700 hover:text-teal-900 dark:text-teal-300" @click="openOrder(email.order_id)">
+                  <button v-if="email.order_id" type="button" class="inline-flex items-center gap-1 font-bold text-brand-700 hover:text-brand-900 dark:text-brand-300" @click="openOrder(email.order_id)">
                     #{{ email.order_id }}
                     <ExternalLink class="h-3.5 w-3.5" />
                   </button>
                   <span v-else>—</span>
                 </td>
                 <td class="max-w-[260px] px-4 py-3">
-                  <button type="button" class="line-clamp-2 text-left font-semibold hover:text-teal-700 dark:hover:text-teal-300" @click="openEmail(email)">
+                  <button type="button" class="line-clamp-2 text-left font-semibold hover:text-brand-700 dark:hover:text-brand-300" @click="openEmail(email)">
                     {{ email.subject }}
                   </button>
                 </td>
@@ -350,7 +350,7 @@ onMounted(() => {
                     <button
                       v-if="email.status === 'failed'"
                       type="button"
-                      class="inline-flex items-center gap-1 rounded-lg border border-teal-200 px-2.5 py-1.5 text-xs font-semibold text-teal-700 hover:bg-teal-50 disabled:opacity-60 dark:border-teal-500/30 dark:text-teal-300 dark:hover:bg-teal-500/10"
+                      class="inline-flex items-center gap-1 rounded-lg border border-brand-200 px-2.5 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-50 disabled:opacity-60 dark:border-brand-500/30 dark:text-brand-300 dark:hover:bg-brand-500/10"
                       :disabled="actionId === email.id"
                       @click="retryEmail(email)"
                     >
@@ -370,7 +370,7 @@ onMounted(() => {
       <div
         v-if="toast"
         class="fixed right-6 top-6 z-[120] rounded-xl px-5 py-3 text-sm font-semibold text-white shadow-2xl"
-        :class="toastType === 'success' ? 'bg-teal-600' : 'bg-red-600'"
+        :class="toastType === 'success' ? 'bg-emerald-600' : 'bg-red-600'"
       >
         {{ toast }}
       </div>

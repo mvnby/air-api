@@ -694,7 +694,7 @@ const reconciliationBalanceClass = computed(() => {
   const value = reconciliation.value?.closing_balance || 0;
   if (value > 0) return 'text-red-600 dark:text-red-300';
   if (value < 0) return 'text-sky-600 dark:text-sky-300';
-  return 'text-teal-700 dark:text-teal-300';
+  return 'text-brand-700 dark:text-brand-300';
 });
 
 const paymentDocLabel = (payment: ManagerCustomerReconciliationPaymentItem) => {
@@ -1387,7 +1387,7 @@ onMounted(() => {
           <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 class="flex items-center gap-2 text-lg font-bold">
-                <span class="material-icons-round text-teal-500">fact_check</span>
+                <span class="material-icons-round text-brand-500">fact_check</span>
                 Акт сверки
               </h2>
               <p class="mt-1 text-sm text-[var(--mv-text-muted)]">
@@ -1424,7 +1424,7 @@ onMounted(() => {
             </div>
             <div class="rounded-xl border border-[var(--mv-border)] bg-[var(--mv-panel)] p-3">
               <p class="text-xs uppercase tracking-[0.14em] text-[var(--mv-text-muted)]">Оплачено</p>
-              <p class="mt-1 text-lg font-bold text-teal-700 dark:text-teal-300">{{ formatMoney(reconciliation?.payments_total) }}</p>
+              <p class="mt-1 text-lg font-bold text-brand-700 dark:text-brand-300">{{ formatMoney(reconciliation?.payments_total) }}</p>
             </div>
             <div class="rounded-xl border border-[var(--mv-border)] bg-[var(--mv-panel)] p-3">
               <p class="text-xs uppercase tracking-[0.14em] text-[var(--mv-text-muted)]">Остаток</p>
@@ -1449,7 +1449,7 @@ onMounted(() => {
                         <a
                           v-for="doc in reconciliationDocLinks(item)"
                           :key="doc.id"
-                          class="rounded-lg border border-[var(--mv-border)] px-2 py-1 text-xs font-semibold text-teal-700 hover:border-teal-400 dark:text-teal-300"
+                          class="rounded-lg border border-[var(--mv-border)] px-2 py-1 text-xs font-semibold text-brand-700 hover:border-brand-400 dark:text-brand-300"
                           :href="doc.edit_url || '#'"
                           target="_blank"
                         >
@@ -1487,7 +1487,7 @@ onMounted(() => {
                         {{ payment.payment_purpose || payment.comment }}
                       </p>
                     </div>
-                    <p class="shrink-0 whitespace-nowrap font-bold text-teal-700 dark:text-teal-300">{{ formatMoney(payment.amount) }}</p>
+                    <p class="shrink-0 whitespace-nowrap font-bold text-brand-700 dark:text-brand-300">{{ formatMoney(payment.amount) }}</p>
                   </div>
                 </div>
               </div>
@@ -1518,9 +1518,9 @@ onMounted(() => {
             <template v-else>
               <div class="space-y-3 text-sm">
                 <div class="flex rounded-lg bg-[var(--mv-panel)] p-1">
-                  <button type="button" class="flex-1 rounded-md px-2 py-2 text-sm transition-all" :class="form.type === 'individual' ? 'bg-white font-medium text-teal-700 shadow-sm dark:bg-slate-600 dark:text-teal-300' : 'text-[var(--mv-text-muted)]'" @click="setCustomerType('individual')">Физлицо</button>
-                  <button type="button" class="flex-1 rounded-md px-2 py-2 text-sm transition-all" :class="form.type === 'individual_entrepreneur' ? 'bg-white font-medium text-teal-700 shadow-sm dark:bg-slate-600 dark:text-teal-300' : 'text-[var(--mv-text-muted)]'" @click="setCustomerType('individual_entrepreneur')">ИП</button>
-                  <button type="button" class="flex-1 rounded-md px-2 py-2 text-sm transition-all" :class="form.type === 'company' ? 'bg-white font-medium text-teal-700 shadow-sm dark:bg-slate-600 dark:text-teal-300' : 'text-[var(--mv-text-muted)]'" @click="setCustomerType('company')">Юрлицо</button>
+                  <button type="button" class="flex-1 rounded-md px-2 py-2 text-sm transition-all" :class="form.type === 'individual' ? 'bg-white font-medium text-brand-700 shadow-sm dark:bg-slate-600 dark:text-brand-300' : 'text-[var(--mv-text-muted)]'" @click="setCustomerType('individual')">Физлицо</button>
+                  <button type="button" class="flex-1 rounded-md px-2 py-2 text-sm transition-all" :class="form.type === 'individual_entrepreneur' ? 'bg-white font-medium text-brand-700 shadow-sm dark:bg-slate-600 dark:text-brand-300' : 'text-[var(--mv-text-muted)]'" @click="setCustomerType('individual_entrepreneur')">ИП</button>
+                  <button type="button" class="flex-1 rounded-md px-2 py-2 text-sm transition-all" :class="form.type === 'company' ? 'bg-white font-medium text-brand-700 shadow-sm dark:bg-slate-600 dark:text-brand-300' : 'text-[var(--mv-text-muted)]'" @click="setCustomerType('company')">Юрлицо</button>
                 </div>
                 <input v-model="form.name" type="text" :placeholder="isCompany ? 'Компания' : 'Имя клиента'" :class="fieldClass('name')" />
                 <AddressSuggestInput
@@ -1537,7 +1537,7 @@ onMounted(() => {
                 <div v-if="isBusiness" class="relative">
                     <input v-model="form.inn" type="text" placeholder="УНП" :class="fieldClass('inn')" @blur="onInnBlur" />
                     <div v-if="isEgrLoading" class="absolute right-3 top-2">
-                        <span class="material-icons-round animate-spin text-teal-500 text-sm">refresh</span>
+                        <span class="material-icons-round animate-spin text-brand-500 text-sm">refresh</span>
                     </div>
                 </div>
                 <span v-if="isBusiness && innError" class="field-error">{{ innError }}</span>
@@ -1562,9 +1562,9 @@ onMounted(() => {
         <section v-if="!editMode && isBusiness" class="mt-8 mb-6">
           <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h2 class="flex items-center gap-2 text-lg font-bold">
-              <span class="material-icons-round text-teal-500">contract</span>
+              <span class="material-icons-round text-brand-500">contract</span>
               Открытые договоры
-              <span v-if="contracts.length" class="flex h-6 min-w-6 items-center justify-center rounded-full bg-teal-500/20 px-2 text-xs text-teal-400">{{ contracts.length }}</span>
+              <span v-if="contracts.length" class="flex h-6 min-w-6 items-center justify-center rounded-full bg-brand-500/20 px-2 text-xs text-brand-400">{{ contracts.length }}</span>
             </h2>
             <div class="flex flex-wrap gap-2">
               <button class="btn-mini-outline" type="button" @click="openContractUploadForm">
@@ -1627,13 +1627,13 @@ onMounted(() => {
           <div v-else-if="contracts.length" class="space-y-3">
             <div v-for="contract in contracts" :key="contract.id" class="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4 text-slate-700 shadow-sm dark:border-slate-700/50 dark:bg-[#1e293b] dark:text-slate-300">
               <div class="flex items-center gap-4">
-                <div class="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-teal-600 dark:bg-slate-800 dark:text-teal-400">
+                <div class="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-brand-600 dark:bg-slate-800 dark:text-brand-400">
                   <span class="material-icons-round text-2xl">article</span>
                 </div>
                 <div>
                   <div class="flex flex-wrap items-center gap-2">
                     <p class="text-[15px] font-semibold leading-none text-slate-900 dark:text-white">{{ contract.number }}</p>
-                    <span class="rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider" :class="contract.status === 'active' ? 'bg-teal-500/10 text-teal-700 dark:text-teal-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'">
+                    <span class="rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider" :class="contract.status === 'active' ? 'bg-brand-500/10 text-brand-700 dark:text-brand-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'">
                       {{ contract.status === 'active' ? 'активен' : 'архив' }}
                     </span>
                   </div>
@@ -1666,13 +1666,13 @@ onMounted(() => {
         <section v-if="!editMode" class="mt-8 mb-6">
           <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h2 class="flex items-center gap-2 text-lg font-bold">
-              <span class="material-icons-round text-teal-500">precision_manufacturing</span>
+              <span class="material-icons-round text-brand-500">precision_manufacturing</span>
               Оборудование клиента
-              <span v-if="equipment.length" class="flex h-6 min-w-6 items-center justify-center rounded-full bg-teal-500/20 px-2 text-xs text-teal-400">{{ equipment.length }}</span>
+              <span v-if="equipment.length" class="flex h-6 min-w-6 items-center justify-center rounded-full bg-brand-500/20 px-2 text-xs text-brand-400">{{ equipment.length }}</span>
             </h2>
             <div class="flex flex-wrap items-center gap-2">
               <label class="inline-flex items-center gap-2 rounded-xl border border-[var(--mv-border)] px-3 py-2 text-xs text-[var(--mv-text-muted)]">
-                <input v-model="includeArchivedEquipment" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" />
+                <input v-model="includeArchivedEquipment" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
                 Архив
               </label>
               <button class="btn-mini-outline" type="button" :disabled="equipmentLoading" @click="loadCustomerEquipment">
@@ -1790,12 +1790,12 @@ onMounted(() => {
                 v-for="item in equipment"
                 :key="item.id"
                 class="rounded-xl border p-4 shadow-sm transition"
-                :class="selectedEquipmentId === item.id ? 'border-teal-400 bg-teal-500/10' : 'border-[var(--mv-border)] bg-[var(--mv-surface)] hover:border-teal-400/60'"
+                :class="selectedEquipmentId === item.id ? 'border-brand-400 bg-brand-500/10' : 'border-[var(--mv-border)] bg-[var(--mv-surface)] hover:border-brand-400/60'"
               >
                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <button
                     type="button"
-                    class="min-w-0 flex-1 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
+                    class="min-w-0 flex-1 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
                     :aria-pressed="selectedEquipmentId === item.id"
                     @click="selectEquipment(item.id)"
                   >
@@ -1939,7 +1939,7 @@ onMounted(() => {
                       <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                         <div class="min-w-0">
                           <div class="flex flex-wrap items-center gap-2">
-                            <span class="rounded-full bg-teal-500/10 px-2 py-0.5 text-xs font-semibold text-teal-400">{{ componentTypeLabel(component.component_type) }}</span>
+                            <span class="rounded-full bg-brand-500/10 px-2 py-0.5 text-xs font-semibold text-brand-400">{{ componentTypeLabel(component.component_type) }}</span>
                             <span v-if="component.is_archived" class="rounded-full bg-slate-500/20 px-2 py-0.5 text-xs font-semibold text-slate-400">Архив</span>
                           </div>
                           <p class="mt-2 break-words font-semibold text-[var(--mv-text)]">{{ componentTitle(component) }}</p>
@@ -2001,7 +2001,7 @@ onMounted(() => {
                       <input v-model="historyForm.refrigerant_amount" class="field-input" />
                     </label>
                     <label class="inline-flex items-center gap-2 text-xs text-[var(--mv-text-muted)] md:col-span-2">
-                      <input v-model="historyForm.not_repairable" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" />
+                      <input v-model="historyForm.not_repairable" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
                       Оборудование не ремонтируется
                     </label>
                     <label class="field-label md:col-span-2">
@@ -2028,7 +2028,7 @@ onMounted(() => {
                     class="rounded-xl border border-[var(--mv-border)] bg-[var(--mv-panel)] p-3 text-sm"
                   >
                     <div class="flex flex-wrap items-center gap-2">
-                      <span class="rounded-full bg-teal-500/10 px-2 py-0.5 text-xs font-semibold text-teal-400">{{ equipmentEventLabel(entry.event_type) }}</span>
+                      <span class="rounded-full bg-brand-500/10 px-2 py-0.5 text-xs font-semibold text-brand-400">{{ equipmentEventLabel(entry.event_type) }}</span>
                       <span class="text-xs text-[var(--mv-text-muted)]">{{ formatDate(entry.event_date) }}</span>
                       <span v-if="entry.order_id" class="text-xs text-[var(--mv-text-muted)]">Заказ #{{ entry.order_id }}</span>
                     </div>
@@ -2049,9 +2049,9 @@ onMounted(() => {
 
         <section v-if="!editMode" class="mt-8 mb-6">
           <h2 class="mb-4 flex items-center gap-2 text-lg font-bold">
-            <span class="material-icons-round text-teal-500">folder</span>
+            <span class="material-icons-round text-brand-500">folder</span>
             Связанные документы 
-            <span v-if="documents.length" class="flex h-6 w-6 items-center justify-center rounded-full bg-teal-500/20 text-xs text-teal-400">{{ documents.length }}</span>
+            <span v-if="documents.length" class="flex h-6 w-6 items-center justify-center rounded-full bg-brand-500/20 text-xs text-brand-400">{{ documents.length }}</span>
           </h2>
 
           <div v-if="docsLoading" class="text-sm text-[var(--mv-text-muted)] p-5 border border-dashed border-[var(--mv-border)] rounded-2xl">
@@ -2060,13 +2060,13 @@ onMounted(() => {
           <div v-else-if="documents.length" class="space-y-3">
              <div v-for="doc in documents" :key="doc.id" class="flex items-center justify-between rounded-xl border border-slate-700/50 bg-[#1e293b] p-4 text-slate-300 shadow-sm">
                 <div class="flex items-center gap-4">
-                    <div class="flex h-12 w-12 items-center justify-center rounded-full bg-slate-800 text-teal-400">
+                    <div class="flex h-12 w-12 items-center justify-center rounded-full bg-slate-800 text-brand-400">
                       <span class="material-icons-round text-2xl">description</span>
                     </div>
                     <div>
                         <div class="flex items-center gap-2 mb-1">
                           <p class="text-[15px] font-semibold text-white leading-none">{{ doc.number || doc.doc_type }}</p>
-                          <a :href="`/manager/orders/kanban?orderId=${doc.order_id}`" target="_blank" class="rounded bg-teal-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-teal-400 border border-teal-500/20 hover:bg-teal-500/20 hover:text-white transition-colors">Заказ #{{ doc.order_id }}</a>
+                          <a :href="`/manager/orders/kanban?orderId=${doc.order_id}`" target="_blank" class="rounded bg-brand-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-brand-400 border border-brand-500/20 hover:bg-brand-500/20 hover:text-white transition-colors">Заказ #{{ doc.order_id }}</a>
                         </div>
                         <p class="text-[13px] text-slate-400 leading-none mt-1">{{ new Date(doc.date).toLocaleDateString('ru-RU', { year: 'numeric', month: 'long', day: 'numeric' }) }} · <span class="uppercase font-medium text-slate-300">{{ doc.doc_type }}</span></p>
                     </div>

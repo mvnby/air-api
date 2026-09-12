@@ -142,7 +142,7 @@ const save = async () => {
                     <label class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Операция</label>
                     <div class="flex flex-wrap gap-4">
                         <label class="flex items-center gap-2 cursor-pointer">
-                            <input v-model="operation" type="radio" value="merge" class="text-teal-600 focus:ring-teal-500" />
+                            <input v-model="operation" type="radio" value="merge" class="text-brand-600 focus:ring-brand-500" />
                             <span class="text-sm text-gray-800 dark:text-slate-200">Слияние (Добавить/Обновить)</span>
                         </label>
                         <label class="flex items-center gap-2 cursor-pointer">
@@ -175,7 +175,7 @@ const save = async () => {
                         <button
                             v-if="getSpecHelpText(row.key)"
                             type="button"
-                            class="mt-2 shrink-0 rounded-full p-1 text-slate-400 transition hover:bg-teal-50 hover:text-teal-700 dark:hover:bg-slate-700 dark:hover:text-teal-300"
+                            class="mt-2 shrink-0 rounded-full p-1 text-slate-400 transition hover:bg-brand-50 hover:text-brand-700 dark:hover:bg-slate-700 dark:hover:text-brand-300"
                             :title="getSpecHelpText(row.key)"
                             @click="showSpecHelp(row.key)"
                         >
@@ -208,7 +208,7 @@ const save = async () => {
                 <button 
                     @click="save" 
                     :disabled="loading"
-                    class="px-6 py-2 bg-[#007f80] text-white rounded shadow hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2 text-sm font-medium"
+                    class="px-6 py-2 bg-brand-600 text-white rounded shadow hover:bg-brand-700 disabled:opacity-50 flex items-center gap-2 text-sm font-medium"
                 >
                     <div v-if="loading" class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                     <Save v-else class="w-4 h-4" />

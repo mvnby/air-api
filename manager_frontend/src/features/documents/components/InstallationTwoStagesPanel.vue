@@ -51,10 +51,10 @@ const secondStageDescription = computed(() => (
 </script>
 
 <template>
-  <section class="mt-5 border-t border-teal-200 pt-4 dark:border-teal-900/70" data-testid="installation-two-stages">
+  <section class="mt-5 border-t border-brand-200 pt-4 dark:border-brand-900/70" data-testid="installation-two-stages">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h5 class="text-sm font-bold text-teal-950 dark:text-teal-100">Монтаж</h5>
+        <h5 class="text-sm font-bold text-brand-950 dark:text-brand-100">Монтаж</h5>
       </div>
       <button
         type="button"
@@ -69,12 +69,12 @@ const secondStageDescription = computed(() => (
     </div>
 
     <div v-if="terms.installation_two_stages" class="mt-4 grid gap-3 sm:grid-cols-2">
-      <p class="sm:col-span-2 text-xs leading-5 text-teal-900/75 dark:text-teal-200/75" data-testid="installation-two-stages-description">
+      <p class="sm:col-span-2 text-xs leading-5 text-brand-900/75 dark:text-brand-200/75" data-testid="installation-two-stages-description">
         Сумма выбранного предложения: {{ formatByn(proposalTotalCents) }}. Первый этап: {{ firstStageDescription }}. Второй: {{ secondStageDescription }} после ремонта по договорённости.
       </p>
       <div class="sm:col-span-2">
-        <span class="text-xs font-semibold text-teal-950/80 dark:text-teal-100/80">Первый этап</span>
-        <div class="mt-1.5 inline-flex rounded-xl border border-teal-200 bg-white p-1 dark:border-teal-900 dark:bg-slate-900" aria-label="Состав первого этапа">
+        <span class="text-xs font-semibold text-brand-950/80 dark:text-brand-100/80">Первый этап</span>
+        <div class="mt-1.5 inline-flex rounded-xl border border-brand-200 bg-white p-1 dark:border-brand-900 dark:bg-slate-900" aria-label="Состав первого этапа">
           <button
             type="button"
             class="installation-stage-choice"
@@ -125,12 +125,12 @@ const secondStageDescription = computed(() => (
 </template>
 
 <style scoped>
-.consumer-field { @apply flex min-w-0 flex-col gap-1.5 text-xs font-semibold text-teal-950/80 dark:text-teal-100/80; }
-.consumer-input { @apply h-10 w-full rounded-xl border border-teal-200 bg-white px-3 text-sm font-normal text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/15 dark:border-teal-900 dark:bg-slate-900 dark:text-white; }
+.consumer-field { @apply flex min-w-0 flex-col gap-1.5 text-xs font-semibold text-brand-950/80 dark:text-brand-100/80; }
+.consumer-input { @apply h-10 w-full rounded-xl border border-brand-200 bg-white px-3 text-sm font-normal text-slate-900 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15 dark:border-brand-900 dark:bg-slate-900 dark:text-white; }
 .consumer-toggle { @apply h-9 rounded-lg border px-3 text-sm font-semibold transition; }
-.consumer-toggle-active { @apply border-teal-600 bg-teal-600 text-white; }
-.consumer-toggle-idle { @apply border-teal-200 bg-white text-teal-900 hover:border-teal-400 dark:border-teal-900 dark:bg-slate-900 dark:text-teal-100; }
+.consumer-toggle-active { @apply border-brand-600 bg-brand-600 text-white; }
+.consumer-toggle-idle { @apply border-brand-200 bg-white text-brand-900 hover:border-brand-400 dark:border-brand-900 dark:bg-slate-900 dark:text-brand-100; }
 .installation-stage-choice { @apply rounded-lg px-3 py-1.5 text-sm font-semibold transition; }
-.installation-stage-choice-active { @apply bg-teal-600 text-white; }
-.installation-stage-choice-idle { @apply text-teal-900 hover:bg-teal-50 dark:text-teal-100 dark:hover:bg-teal-900/30; }
+.installation-stage-choice-active { @apply bg-brand-600 text-white; }
+.installation-stage-choice-idle { @apply text-brand-900 hover:bg-brand-50 dark:text-brand-100 dark:hover:bg-brand-900/30; }
 </style>

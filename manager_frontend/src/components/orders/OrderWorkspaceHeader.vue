@@ -271,7 +271,7 @@ const onWorkflowChange = async (event: Event) => {
         class="inline-flex min-h-8 items-center gap-2 font-medium text-slate-700 dark:text-slate-200"
         @click="emit('toggle-autosave')"
       >
-        <span class="relative h-4 w-7 rounded-full" :class="autosaveEnabled ? 'bg-teal-600' : 'bg-slate-400'" aria-hidden="true">
+        <span class="relative h-4 w-7 rounded-full" :class="autosaveEnabled ? 'bg-brand-600' : 'bg-slate-400'" aria-hidden="true">
           <span class="absolute top-0.5 h-3 w-3 rounded-full bg-white transition-transform" :class="autosaveEnabled ? 'left-0.5 translate-x-3' : 'left-0.5'" />
         </span>
         Автосохранение {{ autosaveEnabled ? 'вкл.' : 'выкл.' }}

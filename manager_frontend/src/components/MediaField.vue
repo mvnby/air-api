@@ -248,7 +248,7 @@ const pasteFromClipboard = async () => {
             <div class="inline-flex items-center gap-1">
                 <button
                     type="button"
-                    class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 transition-colors hover:bg-gray-50 hover:text-teal-700 disabled:cursor-wait disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-teal-200"
+                    class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 transition-colors hover:bg-gray-50 hover:text-brand-700 disabled:cursor-wait disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-brand-200"
                     :disabled="uploading"
                     title="Выбрать из медиатеки"
                     aria-label="Выбрать из медиатеки"
@@ -258,7 +258,7 @@ const pasteFromClipboard = async () => {
                 </button>
                 <button
                     type="button"
-                    class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 transition-colors hover:bg-gray-50 hover:text-teal-700 disabled:cursor-wait disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-teal-200"
+                    class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 transition-colors hover:bg-gray-50 hover:text-brand-700 disabled:cursor-wait disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-brand-200"
                     :disabled="uploading"
                     title="Загрузить файл"
                     aria-label="Загрузить файл"
@@ -268,7 +268,7 @@ const pasteFromClipboard = async () => {
                 </button>
                 <button
                     type="button"
-                    class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 transition-colors hover:bg-gray-50 hover:text-teal-700 disabled:cursor-wait disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-teal-200"
+                    class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 transition-colors hover:bg-gray-50 hover:text-brand-700 disabled:cursor-wait disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-brand-200"
                     :disabled="uploading"
                     title="Вставить из буфера"
                     aria-label="Вставить из буфера"
@@ -320,7 +320,7 @@ const pasteFromClipboard = async () => {
                     <button
                         v-if="canImportCurrentUrl"
                         type="button"
-                        class="absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-teal-700 transition hover:bg-teal-50 disabled:cursor-wait disabled:opacity-50 dark:text-teal-200 dark:hover:bg-teal-950/40"
+                        class="absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-brand-700 transition hover:bg-brand-50 disabled:cursor-wait disabled:opacity-50 dark:text-brand-200 dark:hover:bg-brand-950/40"
                         :disabled="uploading"
                         title="Скачать URL в медиатеку"
                         aria-label="Скачать URL в медиатеку"
@@ -329,7 +329,7 @@ const pasteFromClipboard = async () => {
                         <Download class="h-4 w-4" />
                     </button>
                 </span>
-                <span v-if="uploading" class="mt-1 block text-xs font-medium text-teal-700 dark:text-teal-300">
+                <span v-if="uploading" class="mt-1 block text-xs font-medium text-brand-700 dark:text-brand-300">
                     {{ uploadTotal > 1 ? `Подготовка и загрузка: ${uploadCompleted}/${uploadTotal}` : 'Подготовка и загрузка...' }}
                 </span>
                 <span v-if="error" class="mt-1 block text-xs font-medium text-red-600 dark:text-red-300">
@@ -382,7 +382,7 @@ const pasteFromClipboard = async () => {
                         </button>
                         <button
                             type="button"
-                            class="inline-flex items-center justify-center gap-2 rounded-lg bg-teal-600 px-3 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:cursor-wait disabled:opacity-60"
+                            class="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:cursor-wait disabled:opacity-60"
                             :disabled="uploading"
                             @click="chooseFile"
                         >
@@ -401,7 +401,7 @@ const pasteFromClipboard = async () => {
                         />
                         <button
                             type="button"
-                            class="inline-flex items-center justify-center gap-2 rounded-lg border border-teal-200 px-3 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-50 disabled:cursor-wait disabled:opacity-60 dark:border-teal-900/70 dark:text-teal-200 dark:hover:bg-teal-950/30"
+                            class="inline-flex items-center justify-center gap-2 rounded-lg border border-brand-200 px-3 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50 disabled:cursor-wait disabled:opacity-60 dark:border-brand-900/70 dark:text-brand-200 dark:hover:bg-brand-950/30"
                             :disabled="uploading"
                             @click="uploadFromUrl(remoteUrl)"
                         >
@@ -436,8 +436,8 @@ const pasteFromClipboard = async () => {
                             v-for="asset in assets"
                             :key="asset.id"
                             type="button"
-                            class="group overflow-hidden rounded-xl border bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:border-teal-400 hover:shadow-md dark:bg-slate-950"
-                            :class="asset.url === normalizedUrl ? 'border-teal-500 ring-2 ring-teal-500/20' : 'border-gray-200 dark:border-slate-700'"
+                            class="group overflow-hidden rounded-xl border bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:border-brand-400 hover:shadow-md dark:bg-slate-950"
+                            :class="asset.url === normalizedUrl ? 'border-brand-500 ring-2 ring-brand-500/20' : 'border-gray-200 dark:border-slate-700'"
                             @click="selectAsset(asset)"
                         >
                             <span class="flex aspect-[4/3] items-center justify-center bg-gray-100 dark:bg-slate-900">

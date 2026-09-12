@@ -56,9 +56,9 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
     <div class="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div class="flex flex-wrap items-center gap-3">
         <h4 class="text-md font-semibold text-gray-800">Товары</h4>
-        <button v-if="catalogAvailable" type="button" class="rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-800 disabled:opacity-50" :disabled="catalogOpening" @click="emit('catalog')">{{ catalogOpening ? 'Открываем подбор…' : catalogNeedsSave ? 'Сохранить и подобрать' : 'Подобрать по параметрам' }}</button>
+        <button v-if="catalogAvailable" type="button" class="rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-xs font-semibold text-brand-800 disabled:opacity-50" :disabled="catalogOpening" @click="emit('catalog')">{{ catalogOpening ? 'Открываем подбор…' : catalogNeedsSave ? 'Сохранить и подобрать' : 'Подобрать по параметрам' }}</button>
         <label v-if="canManagePlatform" class="flex cursor-pointer items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-600 shadow-sm transition-colors hover:bg-gray-50">
-          <input v-model="searchInStock" type="checkbox" class="h-3 w-3 rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
+          <input v-model="searchInStock" type="checkbox" class="h-3 w-3 rounded border-gray-300 text-brand-600 focus:ring-brand-500" />
           В наличии
         </label>
       </div>
@@ -73,7 +73,7 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
           <label class="relative col-span-6 space-y-1 md:col-span-5">
             <span class="flex items-center justify-between gap-2 px-1 text-xs font-medium text-gray-500 md:h-6">
               <span>Название</span>
-              <button v-if="line.product_id && canManagePlatform" type="button" data-order-usage="order_product_open_catalog" class="text-xs font-semibold text-teal-700 hover:text-teal-900" @click="emit('open', index)">
+              <button v-if="line.product_id && canManagePlatform" type="button" data-order-usage="order_product_open_catalog" class="text-xs font-semibold text-brand-700 hover:text-brand-900" @click="emit('open', index)">
                 Открыть ↗
               </button>
             </span>
@@ -136,7 +136,7 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
                 v-if="line.product_id"
                 type="button"
                 data-order-usage="order_product_fill_description"
-                class="text-xs font-semibold text-teal-700 hover:text-teal-900"
+                class="text-xs font-semibold text-brand-700 hover:text-brand-900"
                 @click="emit('fillDescription', index)"
               >
                 Заполнить из каталога
@@ -155,11 +155,11 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
             Цена строки отличается от каталожной ({{ formatMoney(catalogPrice(line.product_id) || 0) }}).
           </p>
           <div v-if="canManagePlatform" class="col-span-6 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-2 md:col-span-12">
-            <span v-if="supplyBadgeForLine(line)" class="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2 py-1 text-xs font-semibold text-teal-700">
+            <span v-if="supplyBadgeForLine(line)" class="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-1 text-xs font-semibold text-brand-700">
               Поставка: {{ supplyBadgeForLine(line)?.label }}
             </span>
             <span v-else-if="line.link_id" class="text-xs text-gray-500">Поставка не создана</span>
-            <button type="button" data-order-usage="order_product_supply" class="rounded-lg border border-teal-200 px-3 py-1.5 text-xs font-semibold text-teal-700 hover:bg-teal-50 disabled:opacity-50" :disabled="!line.product_id || supplyActionLoadingLineId === line.link_id" @click="emit('supply', { line, intent: 'order' })">В поставку</button>
+            <button type="button" data-order-usage="order_product_supply" class="rounded-lg border border-brand-200 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-50 disabled:opacity-50" :disabled="!line.product_id || supplyActionLoadingLineId === line.link_id" @click="emit('supply', { line, intent: 'order' })">В поставку</button>
             <button type="button" data-order-usage="order_product_reserve" class="rounded-lg border border-indigo-200 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50" :disabled="!line.product_id || supplyActionLoadingLineId === line.link_id" @click="emit('supply', { line, intent: 'reserve' })">Забронировать</button>
           </div>
         </div>

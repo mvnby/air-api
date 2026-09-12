@@ -152,7 +152,7 @@ const cardComponentForOrder = (order: ManagerOrderListItemResponse) => (
           </span>
           <span class="inline-flex items-center gap-2 text-xs text-slate-500">
             {{ allOrderCount }}
-            <Check v-if="!activeFilter" class="h-4 w-4 text-teal-600" />
+            <Check v-if="!activeFilter" class="h-4 w-4 text-brand-600" />
           </span>
         </button>
         <button
@@ -168,7 +168,7 @@ const cardComponentForOrder = (order: ManagerOrderListItemResponse) => (
           </span>
           <span class="inline-flex items-center gap-2 text-xs text-slate-500">
             {{ filterCounts[option.value] || 0 }}
-            <Check v-if="activeFilter === option.value" class="h-4 w-4 text-teal-600" />
+            <Check v-if="activeFilter === option.value" class="h-4 w-4 text-brand-600" />
           </span>
         </button>
       </div>

@@ -261,7 +261,7 @@ const onImageLoad = (event: Event) => {
       />
       <div class="pointer-events-none absolute inset-0">
         <div
-          class="absolute pointer-events-auto cursor-move border-2 border-teal-500 bg-teal-500/10 shadow-[0_0_0_9999px_rgba(15,23,42,0.30)]"
+          class="absolute pointer-events-auto cursor-move border-2 border-brand-500 bg-brand-500/10 shadow-[0_0_0_9999px_rgba(15,23,42,0.30)]"
           :style="selectionStyle"
           data-crop-selection="true"
         >
@@ -269,13 +269,13 @@ const onImageLoad = (event: Event) => {
             v-for="handle in handleControls"
             :key="handle.key"
             type="button"
-            class="absolute z-10 flex h-8 w-8 items-center justify-center rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2"
+            class="absolute z-10 flex h-8 w-8 items-center justify-center rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
             :class="handle.className"
             :data-crop-handle="handle.key"
             :aria-label="handle.label"
             :title="handle.label"
           >
-            <span class="block h-3.5 w-3.5 rounded-full border-2 border-white bg-teal-500 shadow-md"></span>
+            <span class="block h-3.5 w-3.5 rounded-full border-2 border-white bg-brand-500 shadow-md"></span>
           </button>
         </div>
       </div>

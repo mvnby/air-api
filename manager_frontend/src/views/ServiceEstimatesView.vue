@@ -289,7 +289,7 @@ onMounted(async () => {
     <Transition name="toast">
       <div
         v-if="toast"
-        class="fixed top-20 right-8 z-50 bg-teal-600 border border-teal-500 text-white px-4 py-3 rounded-lg shadow-xl shadow-teal-900/30 flex items-center gap-3"
+        class="fixed top-20 right-8 z-50 bg-brand-600 border border-brand-500 text-white px-4 py-3 rounded-lg shadow-xl shadow-brand-900/30 flex items-center gap-3"
       >
         <span class="material-icons-round text-xl">check_circle</span>
         <span class="text-sm font-medium">{{ toast }}</span>
@@ -298,7 +298,7 @@ onMounted(async () => {
 
     <div class="flex flex-col gap-2 mb-8">
       <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-3">
-        <span class="material-icons-round text-teal-600 dark:text-teal-400">request_quote</span>
+        <span class="material-icons-round text-brand-600 dark:text-brand-400">request_quote</span>
         Сметы услуг
       </h1>
       <p class="text-sm text-gray-500 dark:text-slate-400">
@@ -432,7 +432,7 @@ onMounted(async () => {
           </div>
 
           <button
-            class="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-teal-600 hover:bg-teal-500 text-white py-2.5 font-medium"
+            class="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white py-2.5 font-medium"
             :disabled="calculating || !estimateForm.tariff_id"
             @click="calculateEstimate"
           >
@@ -544,7 +544,7 @@ onMounted(async () => {
             </label>
 
             <button
-              class="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+              class="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white py-2.5 font-medium disabled:opacity-60 disabled:cursor-not-allowed"
               :disabled="saving"
               @click="saveEstimate"
             >

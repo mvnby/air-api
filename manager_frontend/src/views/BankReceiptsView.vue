@@ -369,7 +369,7 @@ onMounted(loadReceipts);
     <div class="mx-auto max-w-7xl space-y-5">
       <header class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <p class="text-sm font-medium text-teal-700 dark:text-teal-300">CRM платежи</p>
+          <p class="text-sm font-medium text-brand-700 dark:text-brand-300">CRM платежи</p>
           <h1 class="text-2xl font-semibold text-gray-900 dark:text-slate-100">Банковские поступления</h1>
         </div>
         <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -378,7 +378,7 @@ onMounted(loadReceipts);
             {{ statementFile ? statementFile.name : 'Выбрать CSV' }}
           </label>
           <button
-            class="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-teal-200 px-4 text-sm font-semibold text-teal-700 shadow-sm transition hover:bg-teal-50 disabled:opacity-60 dark:border-teal-500/30 dark:text-teal-200 dark:hover:bg-teal-500/10"
+            class="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-brand-200 px-4 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 disabled:opacity-60 dark:border-brand-500/30 dark:text-brand-200 dark:hover:bg-brand-500/10"
             :disabled="importingStatement"
             @click="importStatement"
           >
@@ -386,7 +386,7 @@ onMounted(loadReceipts);
             Сверить выписку
           </button>
           <button
-            class="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-teal-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700 disabled:opacity-60"
+            class="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 disabled:opacity-60"
             :disabled="importing"
             @click="importNow"
           >
@@ -466,7 +466,7 @@ onMounted(loadReceipts);
                   </td>
                   <td class="whitespace-nowrap px-4 py-3 text-gray-900 dark:text-slate-100">
                     <div class="font-semibold">{{ formatAmount(receipt) }}</div>
-                    <div v-if="receipt.allocation_count" class="mt-1 text-xs font-medium text-teal-700 dark:text-teal-300">
+                    <div v-if="receipt.allocation_count" class="mt-1 text-xs font-medium text-brand-700 dark:text-brand-300">
                       Распределено {{ formatMoneyValue(receipt.allocated_amount, receipt.currency) }}
                     </div>
                     <div v-if="Number(receipt.unallocated_amount || 0) > 0" class="text-xs font-medium text-amber-700 dark:text-amber-300">
@@ -486,7 +486,7 @@ onMounted(loadReceipts);
                   <td class="px-4 py-3">
                     <button
                       v-if="receipt.matched_order_id"
-                      class="inline-flex items-center gap-1 text-sm font-semibold text-teal-700 hover:text-teal-900 dark:text-teal-300"
+                      class="inline-flex items-center gap-1 text-sm font-semibold text-brand-700 hover:text-brand-900 dark:text-brand-300"
                       @click="goToOrder(receipt.matched_order_id)"
                     >
                       #{{ receipt.matched_order_id }}
@@ -572,7 +572,7 @@ onMounted(loadReceipts);
                     <div class="flex justify-end gap-2">
                       <button
                         v-if="canManageAllocations(receipt)"
-                        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-teal-200 text-teal-700 hover:bg-teal-50 disabled:opacity-40 dark:border-teal-500/30 dark:text-teal-300 dark:hover:bg-teal-500/10"
+                        class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-brand-200 text-brand-700 hover:bg-brand-50 disabled:opacity-40 dark:border-brand-500/30 dark:text-brand-300 dark:hover:bg-brand-500/10"
                         :title="receipt.allocation_count ? 'Переразнести поступление' : 'Распределить поступление'"
                         :disabled="actionId === receipt.id"
                         @click="openAllocation(receipt)"

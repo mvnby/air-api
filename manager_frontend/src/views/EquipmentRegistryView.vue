@@ -193,7 +193,7 @@ onBeforeUnmount(() => {
     <div class="mx-auto max-w-[1500px]">
       <header class="flex items-center justify-between gap-4 pb-4">
         <div class="flex min-w-0 items-center gap-3">
-          <span class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-700 dark:bg-teal-500/10 dark:text-teal-300">
+          <span class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
             <Boxes class="h-5 w-5" />
           </span>
           <div class="min-w-0">
@@ -245,7 +245,7 @@ onBeforeUnmount(() => {
         v-if="loading && !hasLoaded"
         class="flex min-h-56 items-center justify-center gap-2 border-y border-gray-200 text-sm font-medium text-gray-500 dark:border-slate-700 dark:text-slate-400"
       >
-        <LoaderCircle class="h-5 w-5 animate-spin text-teal-600 dark:text-teal-300" />
+        <LoaderCircle class="h-5 w-5 animate-spin text-brand-600 dark:text-brand-300" />
         Загрузка оборудования
       </div>
 
@@ -259,7 +259,7 @@ onBeforeUnmount(() => {
         <button
           v-if="hasActiveFilters"
           type="button"
-          class="mt-4 inline-flex min-h-9 items-center justify-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-700 transition hover:border-teal-300 hover:text-teal-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-teal-600 dark:hover:text-teal-300"
+          class="mt-4 inline-flex min-h-9 items-center justify-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-700 transition hover:border-brand-300 hover:text-brand-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-brand-600 dark:hover:text-brand-300"
           @click="resetFilters"
         >
           <RotateCcw class="h-4 w-4" />
@@ -279,7 +279,7 @@ onBeforeUnmount(() => {
       >
         <button
           type="button"
-          class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 transition hover:border-teal-300 hover:text-teal-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-teal-600 dark:hover:text-teal-300"
+          class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 transition hover:border-brand-300 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-brand-600 dark:hover:text-brand-300"
           :disabled="page <= 1 || loading"
           title="Предыдущая страница"
           aria-label="Предыдущая страница"
@@ -292,7 +292,7 @@ onBeforeUnmount(() => {
         </span>
         <button
           type="button"
-          class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 transition hover:border-teal-300 hover:text-teal-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-teal-600 dark:hover:text-teal-300"
+          class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 transition hover:border-brand-300 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-brand-600 dark:hover:text-brand-300"
           :disabled="page >= totalPages || loading"
           title="Следующая страница"
           aria-label="Следующая страница"

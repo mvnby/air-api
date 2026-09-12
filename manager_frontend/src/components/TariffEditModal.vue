@@ -307,7 +307,7 @@ const submit = async () => {
             </button>
             <button
               @click="submit"
-              class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-teal-600 hover:bg-teal-500 active:bg-teal-700 transition-colors rounded-lg disabled:opacity-50 shadow-lg shadow-teal-900/30"
+              class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-brand-600 hover:bg-brand-500 active:bg-brand-700 transition-colors rounded-lg disabled:opacity-50 shadow-lg shadow-brand-900/30"
               :disabled="loading || !String(formData.short_name || '').trim()"
             >
               <span v-if="loading" class="material-icons-round text-sm animate-spin">refresh</span>

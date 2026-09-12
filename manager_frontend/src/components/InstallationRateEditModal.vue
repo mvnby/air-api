@@ -108,14 +108,14 @@ const submit = async () => {
               {{ error }}
             </div>
 
-            <div class="rounded-xl border border-teal-200 bg-teal-50 p-4 dark:border-teal-500/30 dark:bg-teal-500/10">
-              <div class="text-xs font-medium uppercase tracking-wide text-teal-700 dark:text-teal-300">Связка с товаром</div>
+            <div class="rounded-xl border border-brand-200 bg-brand-50 p-4 dark:border-brand-500/30 dark:bg-brand-500/10">
+              <div class="text-xs font-medium uppercase tracking-wide text-brand-700 dark:text-brand-300">Связка с товаром</div>
               <div class="mt-2 flex items-center gap-2 text-sm text-gray-900 dark:text-slate-100">
                 <span class="font-medium">{{ rate.equipment_label }}</span>
-                <span class="material-icons-round text-base text-teal-500">arrow_forward</span>
+                <span class="material-icons-round text-base text-brand-500">arrow_forward</span>
                 <span>{{ rate.title }}</span>
               </div>
-              <div class="mt-2 text-xs text-teal-800/80 dark:text-teal-200/80">{{ rate.power_label }}</div>
+              <div class="mt-2 text-xs text-brand-800/80 dark:text-brand-200/80">{{ rate.power_label }}</div>
             </div>
 
             <div
@@ -189,7 +189,7 @@ const submit = async () => {
               Отмена
             </button>
             <button
-              class="flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-teal-900/30 transition-colors hover:bg-teal-500 disabled:opacity-50"
+              class="flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-brand-900/30 transition-colors hover:bg-brand-500 disabled:opacity-50"
               :disabled="loading"
               @click="submit"
             >

@@ -65,14 +65,14 @@ const productLabel = (count: number | undefined) => {
 
 <template>
   <div
-    class="mx-3 my-3 rounded-2xl border border-teal-100 bg-white p-4 shadow-sm dark:border-teal-900/60 dark:bg-slate-900"
+    class="mx-3 my-3 rounded-2xl border border-brand-100 bg-white p-4 shadow-sm dark:border-brand-900/60 dark:bg-slate-900"
   >
     <div
       class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
     >
       <div class="min-w-0">
         <p
-          class="text-xs font-bold uppercase tracking-[0.18em] text-teal-600 dark:text-teal-300"
+          class="text-xs font-bold uppercase tracking-[0.18em] text-brand-600 dark:text-brand-300"
         >
           Серии бренда
         </p>
@@ -93,13 +93,13 @@ const productLabel = (count: number | undefined) => {
       <div class="flex shrink-0 flex-wrap items-center gap-2">
         <div
           v-if="reordering"
-          class="text-xs font-semibold text-teal-600 dark:text-teal-300"
+          class="text-xs font-semibold text-brand-600 dark:text-brand-300"
         >
           Сохраняем порядок...
         </div>
         <button
           type="button"
-          class="inline-flex items-center justify-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-teal-500"
+          class="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-brand-500"
           @click.stop="emit('create')"
         >
           <span class="material-icons-round text-[18px]">add</span>Новая серия
@@ -141,7 +141,7 @@ const productLabel = (count: number | undefined) => {
         <span
           v-if="dropTargetId === series.id"
           aria-hidden="true"
-          class="pointer-events-none absolute -top-2 left-3 right-3 h-1 rounded-full bg-teal-400 shadow-[0_0_18px_rgba(20,184,166,0.75)] dark:bg-teal-300"
+          class="pointer-events-none absolute -top-2 left-3 right-3 h-1 rounded-full bg-brand-400 shadow-[0_0_18px] shadow-brand-500/75 dark:bg-brand-300"
         />
         <div
           class="absolute right-2 top-2 z-10 inline-flex items-center gap-1 lg:hidden"
@@ -149,7 +149,7 @@ const productLabel = (count: number | undefined) => {
         >
           <button
             type="button"
-            class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white/85 text-gray-600 shadow-sm backdrop-blur hover:text-teal-700 dark:border-slate-700 dark:bg-slate-900/85 dark:text-slate-300 dark:hover:text-teal-200"
+            class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white/85 text-gray-600 shadow-sm backdrop-blur hover:text-brand-700 dark:border-slate-700 dark:bg-slate-900/85 dark:text-slate-300 dark:hover:text-brand-200"
             title="Изменить серию"
             aria-label="Изменить серию"
             @click.stop="emit('edit', series)"
@@ -174,7 +174,7 @@ const productLabel = (count: number | undefined) => {
               :class="
                 reorderDisabled
                   ? 'cursor-not-allowed opacity-40'
-                  : 'cursor-grab hover:bg-white hover:text-teal-600 active:cursor-grabbing dark:hover:bg-slate-800 dark:hover:text-teal-300'
+                  : 'cursor-grab hover:bg-white hover:text-brand-600 active:cursor-grabbing dark:hover:bg-slate-800 dark:hover:text-brand-300'
               "
               :disabled="reorderDisabled"
               title="Перетащите серию выше или ниже"
@@ -206,10 +206,10 @@ const productLabel = (count: number | undefined) => {
                   >{{ series.is_published ? "Публичная" : "Скрыта" }}</span
                 ><button
                   type="button"
-                  class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-40"
+                  class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
                   :class="
                     series.is_featured
-                      ? 'bg-teal-100 text-teal-800 hover:bg-teal-200 dark:bg-teal-900/40 dark:text-teal-100 dark:hover:bg-teal-900/60'
+                      ? 'bg-brand-100 text-brand-800 hover:bg-brand-200 dark:bg-brand-900/40 dark:text-brand-100 dark:hover:bg-brand-900/60'
                       : 'text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800'
                   "
                   :disabled="
@@ -234,7 +234,7 @@ const productLabel = (count: number | undefined) => {
                 </button
                 ><button
                   type="button"
-                  class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-semibold text-teal-700 transition-colors hover:bg-teal-50 hover:text-teal-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:text-teal-300 dark:hover:bg-teal-950/40 dark:hover:text-teal-100"
+                  class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-semibold text-brand-700 transition-colors hover:bg-brand-50 hover:text-brand-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:text-brand-300 dark:hover:bg-brand-950/40 dark:hover:text-brand-100"
                   :title="`Показать товары серии ${series.title}`"
                   @click.stop="emit('openProducts', series)"
                 >

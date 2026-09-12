@@ -37,10 +37,10 @@ const updateMonths = (field: 'goods_warranty_months' | 'work_warranty_months', e
 </script>
 
 <template>
-  <section class="mt-4 rounded-xl border border-teal-200 bg-teal-50/70 p-4 dark:border-teal-900/70 dark:bg-teal-950/20" data-testid="consumer-document-terms">
+  <section class="mt-4 rounded-xl border border-brand-200 bg-brand-50/70 p-4 dark:border-brand-900/70 dark:bg-brand-950/20" data-testid="consumer-document-terms">
     <div>
-      <h4 class="text-sm font-bold text-teal-950 dark:text-teal-100">Данные для документа физлицу</h4>
-      <p class="mt-1 text-xs leading-5 text-teal-900/75 dark:text-teal-200/75">Эти данные попадут в снимок черновика и не изменятся вслед за карточкой заказа.</p>
+      <h4 class="text-sm font-bold text-brand-950 dark:text-brand-100">Данные для документа физлицу</h4>
+      <p class="mt-1 text-xs leading-5 text-brand-900/75 dark:text-brand-200/75">Эти данные попадут в снимок черновика и не изменятся вслед за карточкой заказа.</p>
     </div>
 
     <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -61,8 +61,8 @@ const updateMonths = (field: 'goods_warranty_months' | 'work_warranty_months', e
     />
 
     <template v-if="isRouteLaying">
-      <div class="mt-5 border-t border-teal-200 pt-4 dark:border-teal-900/70">
-        <h5 class="text-sm font-bold text-teal-950 dark:text-teal-100">Параметры закладки трассы</h5>
+      <div class="mt-5 border-t border-brand-200 pt-4 dark:border-brand-900/70">
+        <h5 class="text-sm font-bold text-brand-950 dark:text-brand-100">Параметры закладки трассы</h5>
         <div class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <label class="consumer-field"><span>Длина, м</span><input :value="terms.route_length_meters || ''" class="consumer-input" inputmode="decimal" @input="updateText('route_length_meters', $event)" /></label>
           <label class="consumer-field"><span>Жидкостная труба, мм</span><input :value="terms.route_liquid_pipe_diameter_mm || ''" class="consumer-input" inputmode="decimal" @input="updateText('route_liquid_pipe_diameter_mm', $event)" /></label>
@@ -83,9 +83,9 @@ const updateMonths = (field: 'goods_warranty_months' | 'work_warranty_months', e
 </template>
 
 <style scoped>
-.consumer-field { @apply flex min-w-0 flex-col gap-1.5 text-xs font-semibold text-teal-950/80 dark:text-teal-100/80; }
-.consumer-input { @apply h-10 w-full rounded-xl border border-teal-200 bg-white px-3 text-sm font-normal text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/15 dark:border-teal-900 dark:bg-slate-900 dark:text-white; }
+.consumer-field { @apply flex min-w-0 flex-col gap-1.5 text-xs font-semibold text-brand-950/80 dark:text-brand-100/80; }
+.consumer-input { @apply h-10 w-full rounded-xl border border-brand-200 bg-white px-3 text-sm font-normal text-slate-900 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15 dark:border-brand-900 dark:bg-slate-900 dark:text-white; }
 .consumer-toggle { @apply h-9 rounded-lg border px-3 text-sm font-semibold transition; }
-.consumer-toggle-active { @apply border-teal-600 bg-teal-600 text-white; }
-.consumer-toggle-idle { @apply border-teal-200 bg-white text-teal-900 hover:border-teal-400 dark:border-teal-900 dark:bg-slate-900 dark:text-teal-100; }
+.consumer-toggle-active { @apply border-brand-600 bg-brand-600 text-white; }
+.consumer-toggle-idle { @apply border-brand-200 bg-white text-brand-900 hover:border-brand-400 dark:border-brand-900 dark:bg-slate-900 dark:text-brand-100; }
 </style>

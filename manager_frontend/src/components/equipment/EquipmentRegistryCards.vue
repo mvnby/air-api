@@ -35,7 +35,7 @@ const emit = defineEmits<{
       class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800"
     >
       <div class="min-w-0">
-        <button type="button" class="break-words text-left text-base font-semibold leading-snug text-gray-950 hover:text-teal-700 hover:underline dark:text-white" @click="emit('edit', item)">{{ equipmentTitle(item) }}</button>
+        <button type="button" class="break-words text-left text-base font-semibold leading-snug text-gray-950 hover:text-brand-700 hover:underline dark:text-white" @click="emit('edit', item)">{{ equipmentTitle(item) }}</button>
         <p v-if="equipmentSubtitle(item)" class="mt-1 break-words text-xs text-gray-500 dark:text-slate-400">
           {{ equipmentSubtitle(item) }}
         </p>
@@ -57,7 +57,7 @@ const emit = defineEmits<{
             </p>
             <a
               v-if="item.customer_phone"
-              class="mt-0.5 block w-fit text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
+              class="mt-0.5 block w-fit text-xs font-medium text-brand-700 hover:underline dark:text-brand-300"
               :href="phoneHref(item.customer_phone)"
             >
               {{ item.customer_phone }}
@@ -76,7 +76,7 @@ const emit = defineEmits<{
             <p class="break-words text-gray-600 dark:text-slate-300">{{ serviceContactName(item) || 'Контакт по сервису' }}</p>
             <a
               v-if="serviceContactPhone(item)"
-              class="mt-0.5 block w-fit text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
+              class="mt-0.5 block w-fit text-xs font-medium text-brand-700 hover:underline dark:text-brand-300"
               :href="phoneHref(serviceContactPhone(item))"
             >
               {{ serviceContactPhone(item) }}
@@ -108,7 +108,7 @@ const emit = defineEmits<{
       <button type="button" class="min-h-10 rounded-md border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700" :aria-label="`Изменить: ${equipmentTitle(item)}`" @click="emit('edit', item)">Изменить</button>
       <button
         type="button"
-        class="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-teal-600 px-3 py-2 text-sm font-semibold leading-tight text-white transition hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 dark:ring-offset-slate-800"
+        class="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-brand-600 px-3 py-2 text-sm font-semibold leading-tight text-white transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 dark:ring-offset-slate-800"
         @click="emit('createMaintenanceOrder', item)"
       >
         <Wrench class="h-4 w-4 shrink-0" />

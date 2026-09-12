@@ -192,7 +192,7 @@ const processingJobStatusLabel = (status?: string | null) => {
 
 const processingJobStatusClass = (status?: string | null) => {
   if (status === 'queued') return 'bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-200';
-  if (status === 'running') return 'bg-teal-50 text-teal-700 dark:bg-teal-950 dark:text-teal-200';
+  if (status === 'running') return 'bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-200';
   if (status === 'success') return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-200';
   if (status === 'failed') return 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-200';
   return 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300';
@@ -638,7 +638,7 @@ onUnmounted(() => {
 
     <div
       class="rounded-xl border border-dashed p-3 transition dark:border-gray-700 lg:p-4"
-      :class="dragActive ? 'border-teal-500 bg-teal-50 dark:bg-teal-950/30' : 'border-gray-300 bg-white dark:bg-gray-900'"
+      :class="dragActive ? 'border-brand-500 bg-brand-50 dark:bg-brand-950/30' : 'border-gray-300 bg-white dark:bg-gray-900'"
       @dragenter.prevent="dragActive = true"
       @dragover.prevent="dragActive = true"
       @dragleave.prevent="dragActive = false"
@@ -651,14 +651,14 @@ onUnmounted(() => {
             v-model="uploadTags"
             type="text"
             placeholder="монтаж, штробы, обслуживание"
-            class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-white"
+            class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-white"
           />
         </label>
         <label class="block">
           <span class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Тип</span>
           <select
             v-model="uploadKind"
-            class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-white"
+            class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-white"
           >
             <option v-for="item in kindOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
           </select>
@@ -668,7 +668,7 @@ onUnmounted(() => {
         </div>
         <button
           type="button"
-          class="inline-flex items-center justify-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-60 lg:min-w-[120px]"
+          class="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60 lg:min-w-[120px]"
           :disabled="uploading"
           @click="uploadInput?.click()"
         >
@@ -683,13 +683,13 @@ onUnmounted(() => {
             v-model="uploadUrl"
             type="url"
             placeholder="https://site.by/image.jpg"
-            class="w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-24 text-sm text-gray-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-white"
+            class="w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-24 text-sm text-gray-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-white"
             @keydown.enter.prevent="uploadFromUrl"
           />
           <div class="absolute right-1 top-1/2 flex -translate-y-1/2 gap-1">
             <button
               type="button"
-              class="inline-flex h-8 w-8 items-center justify-center rounded-md text-teal-700 transition hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-teal-200 dark:hover:bg-teal-950/40"
+              class="inline-flex h-8 w-8 items-center justify-center rounded-md text-brand-700 transition hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-brand-200 dark:hover:bg-brand-950/40"
               :disabled="uploading"
               title="Скачать по URL"
               aria-label="Скачать по URL"
@@ -730,7 +730,7 @@ onUnmounted(() => {
             type="number"
             min="1"
             max="5000"
-            class="h-9 w-24 rounded-lg border border-gray-300 bg-white px-2 text-sm text-gray-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-white"
+            class="h-9 w-24 rounded-lg border border-gray-300 bg-white px-2 text-sm text-gray-900 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-white"
           />
         </label>
         <button
@@ -744,7 +744,7 @@ onUnmounted(() => {
         </button>
         <button
           type="button"
-          class="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-teal-600 px-3 text-sm font-semibold text-white transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-60"
+          class="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
           :disabled="backfillLoading || !backfillResult?.planned"
           @click="backfillReferencedAssets(true)"
         >
@@ -761,19 +761,19 @@ onUnmounted(() => {
           v-model="query"
           type="search"
           placeholder="Поиск по названию, alt, файлу"
-          class="w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-white"
+          class="w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-white"
           @keydown.enter="applyFilters"
         />
       </label>
-      <select v-model="kind" class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-white">
+      <select v-model="kind" class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-white">
         <option value="">Все типы</option>
         <option v-for="item in kindOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
       </select>
-      <select v-model="tag" class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-white">
+      <select v-model="tag" class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-white">
         <option value="">Все теги</option>
         <option v-for="item in tagList" :key="item" :value="item">{{ item }}</option>
       </select>
-      <select v-model="status" class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-white">
+      <select v-model="status" class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-white">
         <option value="">Все статусы</option>
         <option value="ready">Готово</option>
         <option value="processing">В обработке</option>
@@ -809,7 +809,7 @@ onUnmounted(() => {
             role="button"
             tabindex="0"
             class="group relative overflow-hidden rounded-xl border bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:bg-gray-900"
-            :class="selectedAsset?.id === asset.id ? 'border-teal-500 ring-2 ring-teal-500/20' : 'border-gray-200 dark:border-gray-800'"
+            :class="selectedAsset?.id === asset.id ? 'border-brand-500 ring-2 ring-brand-500/20' : 'border-gray-200 dark:border-gray-800'"
             @click="selectAsset(asset)"
             @keydown.enter.prevent="selectAsset(asset)"
             @keydown.space.prevent="selectAsset(asset)"
@@ -818,7 +818,7 @@ onUnmounted(() => {
               type="button"
               title="Копировать URL"
               aria-label="Копировать URL"
-              class="absolute right-2 top-2 z-10 rounded-full bg-white/95 p-1.5 text-gray-700 shadow-sm ring-1 ring-gray-200 transition hover:bg-white hover:text-teal-700 dark:bg-gray-900/95 dark:text-gray-200 dark:ring-gray-700"
+              class="absolute right-2 top-2 z-10 rounded-full bg-white/95 p-1.5 text-gray-700 shadow-sm ring-1 ring-gray-200 transition hover:bg-white hover:text-brand-700 dark:bg-gray-900/95 dark:text-gray-200 dark:ring-gray-700"
               @click.stop="copyUrl(asset)"
             >
               <Copy class="h-4 w-4" />
@@ -832,7 +832,7 @@ onUnmounted(() => {
                 <span class="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-600 dark:bg-gray-800 dark:text-gray-300">{{ variantLabel(asset.variant_type) }}</span>
               </div>
               <div class="flex flex-wrap gap-1">
-                <span class="rounded bg-teal-50 px-1.5 py-0.5 text-[11px] font-medium text-teal-700 dark:bg-teal-950 dark:text-teal-200">{{ kindLabel(asset.kind) }}</span>
+                <span class="rounded bg-brand-50 px-1.5 py-0.5 text-[11px] font-medium text-brand-700 dark:bg-brand-950 dark:text-brand-200">{{ kindLabel(asset.kind) }}</span>
                 <span v-for="item in (asset.tags || []).slice(0, 2)" :key="item" class="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-600 dark:bg-gray-800 dark:text-gray-300">{{ item }}</span>
               </div>
               <p class="text-xs text-gray-500 dark:text-gray-400">{{ asset.width || 0 }}×{{ asset.height || 0 }} · {{ bytesLabel(asset.size_bytes) }}</p>
@@ -907,7 +907,7 @@ onUnmounted(() => {
                 <Wand2 class="h-4 w-4" />
                 {{ processing === 'background' ? 'Фон...' : 'Без фона' }}
               </button>
-              <button class="inline-flex items-center justify-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm font-medium text-teal-800 transition hover:bg-teal-100 disabled:opacity-50 dark:border-teal-900/70 dark:bg-teal-950/30 dark:text-teal-100 dark:hover:bg-teal-950/60" :disabled="queueing || Boolean(activeSelectedProcessingJob)" @click="enqueueBackgroundRemoval">
+              <button class="inline-flex items-center justify-center gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm font-medium text-brand-800 transition hover:bg-brand-100 disabled:opacity-50 dark:border-brand-900/70 dark:bg-brand-950/30 dark:text-brand-100 dark:hover:bg-brand-950/60" :disabled="queueing || Boolean(activeSelectedProcessingJob)" @click="enqueueBackgroundRemoval">
                 <Clock3 class="h-4 w-4" />
                 {{ queueing ? 'Очередь...' : activeSelectedProcessingJob ? 'В очереди' : 'В очередь' }}
               </button>
@@ -921,7 +921,7 @@ onUnmounted(() => {
                 Провайдер
                 <select
                   v-model="backgroundProvider"
-                  class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-teal-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+                  class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
                 >
                   <option
                     v-for="option in backgroundRemovalProviderOptions"
@@ -936,7 +936,7 @@ onUnmounted(() => {
                 Модель
                 <select
                   v-model="backgroundModel"
-                  class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+                  class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
                   :disabled="backgroundModelsLoading"
                 >
                   <option
@@ -970,7 +970,7 @@ onUnmounted(() => {
                   <RefreshCw class="h-4 w-4" :class="processingJobsLoading ? 'animate-spin' : ''" />
                 </button>
               </div>
-              <div v-if="activeSelectedProcessingJob" class="mt-3 rounded-md border border-teal-200 bg-white px-3 py-2 text-sm text-teal-900 dark:border-teal-900/70 dark:bg-gray-900 dark:text-teal-100">
+              <div v-if="activeSelectedProcessingJob" class="mt-3 rounded-md border border-brand-200 bg-white px-3 py-2 text-sm text-brand-900 dark:border-brand-900/70 dark:bg-gray-900 dark:text-brand-100">
                 Текущий файл: {{ processingJobStatusLabel(activeSelectedProcessingJob.status) }}
               </div>
               <div v-if="visibleProcessingJobs.length" class="mt-3 space-y-2">
@@ -991,10 +991,10 @@ onUnmounted(() => {
               <p v-else class="mt-3 text-xs text-gray-500 dark:text-gray-400">Очередь пуста.</p>
             </div>
 
-            <div v-if="cropMode" class="rounded-lg border border-teal-200 bg-teal-50 p-3 dark:border-teal-900 dark:bg-teal-950/30">
+            <div v-if="cropMode" class="rounded-lg border border-brand-200 bg-brand-50 p-3 dark:border-brand-900 dark:bg-brand-950/30">
               <div class="flex items-center justify-between gap-3">
-                <p class="text-sm text-teal-900 dark:text-teal-100">Потяните рамку или углы, чтобы выбрать область.</p>
-                <button class="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-teal-700 disabled:opacity-50" :disabled="!cropBox.width || !cropBox.height || processing === 'crop'" @click="applyCrop">
+                <p class="text-sm text-brand-900 dark:text-brand-100">Потяните рамку или углы, чтобы выбрать область.</p>
+                <button class="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-brand-700 disabled:opacity-50" :disabled="!cropBox.width || !cropBox.height || processing === 'crop'" @click="applyCrop">
                   <Scissors class="h-4 w-4" />
                   {{ processing === 'crop' ? 'Сохраняю...' : 'Сохранить crop' }}
                 </button>
@@ -1004,27 +1004,27 @@ onUnmounted(() => {
             <div class="space-y-3">
               <label class="block">
                 <span class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Название</span>
-                <input v-model="editForm.title" class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-white" />
+                <input v-model="editForm.title" class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-white" />
               </label>
               <label class="block">
                 <span class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Alt text</span>
-                <input v-model="editForm.alt_text" class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-white" />
+                <input v-model="editForm.alt_text" class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-white" />
               </label>
               <div class="grid grid-cols-2 gap-3">
                 <label class="block">
                   <span class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Тип</span>
-                  <select v-model="editForm.kind" class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-white">
+                  <select v-model="editForm.kind" class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-white">
                     <option v-for="item in kindOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
                   </select>
                 </label>
                 <label class="block">
                   <span class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Теги</span>
-                  <input v-model="editForm.tagsText" class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-white" />
+                  <input v-model="editForm.tagsText" class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-white" />
                 </label>
               </div>
               <label class="block">
                 <span class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Описание</span>
-                <textarea v-model="editForm.description" rows="3" class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-white" />
+                <textarea v-model="editForm.description" rows="3" class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-white" />
               </label>
               <button class="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950" :disabled="saving" @click="saveSelected">
                 <Save class="h-4 w-4" />

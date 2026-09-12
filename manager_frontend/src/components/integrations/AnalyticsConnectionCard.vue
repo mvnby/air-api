@@ -77,7 +77,7 @@ const configurationEntries = (connection: AnalyticsConnectionItem) => (
       <button
         v-if="connection.available"
         type="button"
-        class="min-w-0 flex-1 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-teal-700 sm:flex-none"
+        class="min-w-0 flex-1 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700 sm:flex-none"
         @click="$emit('configure', connection)"
       >
         {{ connection.state === 'connected' ? 'Изменить' : 'Подключить' }}

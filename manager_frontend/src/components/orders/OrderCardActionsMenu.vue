@@ -140,7 +140,7 @@ onBeforeUnmount(() => {
           <span class="material-icons-round text-[16px]">{{ option.icon }}</span>
           <span class="truncate">{{ option.label }}</span>
         </span>
-        <span v-if="(activeBoardColumn === 'execution' ? activeExecutionStatus : activeNegotiationStatus) === option.value" class="material-icons-round text-[15px] text-teal-600">check</span>
+        <span v-if="(activeBoardColumn === 'execution' ? activeExecutionStatus : activeNegotiationStatus) === option.value" class="material-icons-round text-[15px] text-brand-600">check</span>
       </button>
 
       <template v-if="allowCloseDebt && balanceDue > 0">

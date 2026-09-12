@@ -303,11 +303,11 @@ onBeforeUnmount(() => {
         @keydown="onKeydown"
       />
       <div class="absolute inset-y-0 right-2 flex items-center gap-1">
-        <LoaderCircle v-if="loading" :size="17" class="animate-spin text-teal-600 dark:text-teal-300" aria-label="Проверяем адрес" />
+        <LoaderCircle v-if="loading" :size="17" class="animate-spin text-brand-600 dark:text-brand-300" aria-label="Проверяем адрес" />
         <button
           v-if="inputValue && !disabled && !readonly"
           type="button"
-          class="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+          class="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500 dark:hover:bg-slate-800 dark:hover:text-slate-100"
           aria-label="Очистить адрес"
           @mousedown.prevent
           @click="clear"
@@ -330,7 +330,7 @@ onBeforeUnmount(() => {
         role="option"
         :aria-selected="activeIndex === index"
         class="cursor-pointer rounded-lg px-3 py-2 text-sm transition-colors"
-        :class="activeIndex === index ? 'bg-teal-50 dark:bg-teal-500/15' : 'hover:bg-slate-50 dark:hover:bg-slate-800'"
+        :class="activeIndex === index ? 'bg-brand-50 dark:bg-brand-500/15' : 'hover:bg-slate-50 dark:hover:bg-slate-800'"
         @mousemove="activeIndex = index"
         @mousedown.prevent="chooseSuggestion(item)"
       >

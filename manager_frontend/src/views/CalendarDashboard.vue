@@ -229,17 +229,17 @@ const calendarOptions = ref<CalendarOptions>({
   <div class="p-6 max-w-[1400px] mx-auto relative min-h-screen">
     <!-- Toast -->
     <Transition name="fade">
-      <div v-if="toast" class="fixed top-6 right-6 z-[100] bg-teal-600 text-white px-6 py-3 rounded-xl shadow-2xl font-medium animate-in slide-in-from-top-4 duration-300">
+      <div v-if="toast" class="fixed top-6 right-6 z-[100] bg-brand-600 text-white px-6 py-3 rounded-xl shadow-2xl font-medium animate-in slide-in-from-top-4 duration-300">
         {{ toast }}
       </div>
     </Transition>
 
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-3">
-        <CalendarDays class="h-6 w-6 shrink-0 text-teal-600 dark:text-teal-400" />
+        <CalendarDays class="h-6 w-6 shrink-0 text-brand-600 dark:text-brand-400" />
         Календарь работ и обслуживания
       </h1>
-      <div v-if="isLoading" class="text-teal-600 flex items-center gap-2">
+      <div v-if="isLoading" class="text-brand-600 flex items-center gap-2">
         <Loader2 class="w-5 h-5 animate-spin" />
         Загрузка…
       </div>
@@ -291,7 +291,7 @@ const calendarOptions = ref<CalendarOptions>({
           <tbody>
             <tr v-for="stage in staleStages" :key="stage.id" class="bg-white shadow-sm">
               <td class="rounded-l-lg px-3 py-3 align-top">
-                <button class="font-semibold text-teal-700 hover:text-teal-900" @click="openOrder(stage.order_id)">
+                <button class="font-semibold text-brand-700 hover:text-brand-900" @click="openOrder(stage.order_id)">
                   #{{ stage.order_id }} · {{ stage.name }}
                 </button>
                 <div class="mt-1 text-xs text-slate-500">
@@ -374,12 +374,12 @@ const calendarOptions = ref<CalendarOptions>({
   --fc-button-hover-border-color: #d1d5db;
   --fc-button-active-bg-color: #f3f4f6;
   --fc-button-active-border-color: #d1d5db;
-  --fc-today-bg-color: #f0fdfa;
+  --fc-today-bg-color: var(--kitlane-accent-soft);
   --fc-event-border-color: transparent;
 }
 
 .fc-button-primary {
-  @apply !bg-white !border-gray-300 !text-gray-700 !shadow-sm hover:!bg-gray-50 focus:!ring-2 focus:!ring-teal-500 focus:!ring-offset-1 !transition-colors;
+  @apply !bg-white !border-gray-300 !text-gray-700 !shadow-sm hover:!bg-gray-50 focus:!ring-2 focus:!ring-brand-500 focus:!ring-offset-1 !transition-colors;
 }
 
 .fc-button-primary:not(:disabled).fc-button-active, 

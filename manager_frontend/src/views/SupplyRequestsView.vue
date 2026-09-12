@@ -355,7 +355,7 @@ onMounted(async () => {
   <div class="min-h-screen bg-slate-50 p-4 md:p-6">
     <header class="mb-4 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:flex-row md:items-center md:justify-between">
       <div>
-        <p class="text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">CRM поставки</p>
+        <p class="text-xs font-semibold uppercase tracking-[0.18em] text-brand-700">CRM поставки</p>
         <h1 class="text-2xl font-bold text-slate-900">Поставки и брони</h1>
         <p class="mt-1 text-sm text-slate-500">Заявки поставщикам, складовые закупки и тексты для логиста.</p>
       </div>
@@ -397,16 +397,16 @@ onMounted(async () => {
             <option value="stock">Только склад</option>
           </select>
         </label>
-        <button class="mt-6 inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" :disabled="!activeRequestIds.length" @click="copyLogisticsMessage(activeRequestIds, false)">
+        <button class="mt-6 inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" :disabled="!activeRequestIds.length" @click="copyLogisticsMessage(activeRequestIds, false)">
           <Truck class="h-4 w-4" /> Логисту
         </button>
       </div>
     </section>
 
     <div class="grid gap-4 xl:grid-cols-[360px_1fr]">
-      <aside class="rounded-2xl border border-teal-100 bg-white p-4 shadow-sm">
+      <aside class="rounded-2xl border border-brand-100 bg-white p-4 shadow-sm">
         <div class="mb-3 flex items-center gap-2">
-          <PackagePlus class="h-5 w-5 text-teal-700" />
+          <PackagePlus class="h-5 w-5 text-brand-700" />
           <h2 class="font-semibold text-slate-900">Добавить на склад</h2>
         </div>
         <div class="space-y-3">
@@ -461,7 +461,7 @@ onMounted(async () => {
             </label>
           </div>
           <textarea v-model="stockForm.comment" class="field-input min-h-[84px]" placeholder="Комментарий для поставщика или логиста" />
-          <button class="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50" :disabled="savingStock" @click="createStockRequest">
+          <button class="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50" :disabled="savingStock" @click="createStockRequest">
             <PackagePlus class="h-4 w-4" /> {{ savingStock ? 'Создаю...' : 'Добавить в поставки' }}
           </button>
         </div>
@@ -473,7 +473,7 @@ onMounted(async () => {
         <section v-for="group in groupedRequests" :key="group.key" class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <header class="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div class="flex items-center gap-2">
-              <Warehouse class="h-5 w-5 text-teal-700" />
+              <Warehouse class="h-5 w-5 text-brand-700" />
               <h2 class="font-semibold text-slate-900">{{ group.title }}</h2>
               <span class="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{{ group.requests.length }}</span>
             </div>
@@ -487,7 +487,7 @@ onMounted(async () => {
               <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div class="min-w-0">
                   <div class="mb-2 flex flex-wrap items-center gap-2">
-                    <span class="rounded-full bg-teal-50 px-2 py-1 text-xs font-semibold text-teal-700">#{{ request.id }}</span>
+                    <span class="rounded-full bg-brand-50 px-2 py-1 text-xs font-semibold text-brand-700">#{{ request.id }}</span>
                     <span class="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">{{ statusLabels[request.status] || request.status }}</span>
                     <span class="rounded-full bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700">{{ intentLabels[request.intent] || request.intent }}</span>
                     <span class="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">{{ paymentLabels[request.payment_method] || request.payment_method }}</span>
@@ -501,7 +501,7 @@ onMounted(async () => {
                   <button class="rounded-lg border border-slate-200 p-2 text-slate-700 hover:bg-slate-50" title="Скопировать поставщику" @click="copySupplierMessage(request.id, false)">
                     <Copy class="h-4 w-4" />
                   </button>
-                  <button class="rounded-lg border border-teal-200 p-2 text-teal-700 hover:bg-teal-50" title="Скопировать и отметить отправленным" @click="copySupplierMessage(request.id, true)">
+                  <button class="rounded-lg border border-brand-200 p-2 text-brand-700 hover:bg-brand-50" title="Скопировать и отметить отправленным" @click="copySupplierMessage(request.id, true)">
                     <CheckCircle2 class="h-4 w-4" />
                   </button>
                   <button class="rounded-lg border border-emerald-200 p-2 text-emerald-700 hover:bg-emerald-50" title="Отметить полученным" @click="markRequestReceived(request)">

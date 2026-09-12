@@ -413,7 +413,7 @@ const setHeatingFilter = (value: number) => {
 
 const filterChipClass = (active: boolean) => (
     active
-        ? 'bg-teal-600 text-white border-teal-600 shadow-sm'
+        ? 'bg-brand-600 text-white border-brand-600 shadow-sm'
         : 'bg-white dark:bg-slate-900 text-gray-700 dark:text-slate-200 border-gray-300 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700'
 );
 
@@ -1603,7 +1603,7 @@ watchDebounced(
             Назад
           </button>
           <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-3 sm:pl-0" :class="pendingReturnTo ? 'pl-0' : 'pl-20'">
-            <span class="material-icons-round text-teal-600 dark:text-teal-400">inventory_2</span>
+            <span class="material-icons-round text-brand-600 dark:text-brand-400">inventory_2</span>
             Товары
           </h1>
 
@@ -1625,7 +1625,7 @@ watchDebounced(
             <button 
                 @click="viewType = 'grid'"
                 class="p-1.5 rounded-md transition-all"
-                :class="viewType === 'grid' ? 'bg-white dark:bg-slate-700 text-teal-700 dark:text-teal-400 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-slate-300'"
+                :class="viewType === 'grid' ? 'bg-white dark:bg-slate-700 text-brand-700 dark:text-brand-400 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-slate-300'"
                 title="Сетка"
             >
               <LayoutGrid class="w-4 h-4" />
@@ -1633,7 +1633,7 @@ watchDebounced(
             <button 
                 @click="viewType = 'table'"
                 class="p-1.5 rounded-md transition-all"
-                :class="viewType === 'table' ? 'bg-white dark:bg-slate-700 text-teal-700 dark:text-teal-400 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-slate-300'"
+                :class="viewType === 'table' ? 'bg-white dark:bg-slate-700 text-brand-700 dark:text-brand-400 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-slate-300'"
                 title="Таблица"
             >
               <List class="w-4 h-4" />
@@ -1646,7 +1646,7 @@ watchDebounced(
           <div v-if="selectedProductIds.size > 0" class="relative sm:hidden">
               <button
                 type="button"
-                class="flex items-center gap-2 rounded-lg border border-teal-100 bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-800 dark:border-teal-900/30 dark:bg-teal-900/20 dark:text-teal-300"
+                class="flex items-center gap-2 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-sm font-semibold text-brand-800 dark:border-brand-900/30 dark:bg-brand-900/20 dark:text-brand-300"
                 @click="showBulkActionsMenu = !showBulkActionsMenu"
               >
                   {{ selectedProductIds.size }} выбрано
@@ -1677,12 +1677,12 @@ watchDebounced(
               </div>
           </div>
 
-          <div v-if="selectedProductIds.size > 0" class="hidden items-center gap-2 bg-teal-50 dark:bg-teal-900/20 px-4 py-2 rounded-lg border border-teal-100 dark:border-teal-900/30 sm:flex">
-              <span class="text-sm font-medium text-teal-800 dark:text-teal-300">{{ selectedProductIds.size }} выбрано</span>
+          <div v-if="selectedProductIds.size > 0" class="hidden items-center gap-2 bg-brand-50 dark:bg-brand-900/20 px-4 py-2 rounded-lg border border-brand-100 dark:border-brand-900/30 sm:flex">
+              <span class="text-sm font-medium text-brand-800 dark:text-brand-300">{{ selectedProductIds.size }} выбрано</span>
               <button @click="openBulkImageModal" class="flex items-center gap-1 bg-gray-700 text-white px-3 py-1.5 rounded-md text-sm hover:bg-gray-800 transition-colors">
                   <Images class="w-3.5 h-3.5" /> Изображения
               </button>
-              <button @click="openBulkUpdate" class="flex items-center gap-1 bg-teal-600 text-white px-3 py-1.5 rounded-md text-sm hover:bg-teal-700 transition-colors">
+              <button @click="openBulkUpdate" class="flex items-center gap-1 bg-brand-600 text-white px-3 py-1.5 rounded-md text-sm hover:bg-brand-700 transition-colors">
                   <Edit3 class="w-3.5 h-3.5" /> Характеристики
               </button>
               <button @click="openBulkCompatibility" class="flex items-center gap-1 bg-indigo-600 text-white px-3 py-1.5 rounded-md text-sm hover:bg-indigo-700 transition-colors">
@@ -1704,18 +1704,18 @@ watchDebounced(
                   <Trash2 class="w-3.5 h-3.5" />
                   Удалить
               </button>
-              <button @click="selectedProductIds.clear()" class="text-xs text-teal-600 hover:text-teal-800 underline ml-1">Сбросить</button>
+              <button @click="selectedProductIds.clear()" class="text-xs text-brand-600 hover:text-brand-800 underline ml-1">Сбросить</button>
           </div>
       </div>
       <div class="flex flex-wrap gap-2">
           <button @click="toggleSelectAll" class="px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 flex items-center gap-2 text-gray-700 dark:text-slate-200 text-sm transition-colors">
-              <CheckSquare v-if="allSelected" class="w-4 h-4 text-teal-600" />
+              <CheckSquare v-if="allSelected" class="w-4 h-4 text-brand-600" />
               <Square v-else class="w-4 h-4 text-gray-400" />
               Выбрать все
           </button>
           <button
             @click="openCreateProductModal"
-            class="flex items-center gap-1.5 px-3 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
+            class="flex items-center gap-1.5 px-3 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
             title="Создать товар вручную"
           >
             <Plus class="w-4 h-4" />
@@ -1750,7 +1750,7 @@ watchDebounced(
     </header>
       <!-- Toast -->
       <Transition name="fade">
-        <div v-if="toast" class="fixed top-6 right-6 z-[100] bg-teal-600 text-white px-6 py-3 rounded-xl shadow-2xl font-medium animate-in slide-in-from-top-4 duration-300">
+        <div v-if="toast" class="fixed top-6 right-6 z-[100] bg-brand-600 text-white px-6 py-3 rounded-xl shadow-2xl font-medium animate-in slide-in-from-top-4 duration-300">
           {{ toast }}
         </div>
       </Transition>
@@ -1766,7 +1766,7 @@ watchDebounced(
                         v-model="searchQuery"
                         @keyup.enter="applyFilters"
                         placeholder="Например: lg 12"
-                        class="w-full pl-9 pr-4 py-2.5 border border-gray-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-gray-900 dark:text-slate-100 dark:placeholder-slate-500 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none shadow-inner"
+                        class="w-full pl-9 pr-4 py-2.5 border border-gray-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-gray-900 dark:text-slate-100 dark:placeholder-slate-500 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none shadow-inner"
                     />
                 </div>
             </div>
@@ -1776,7 +1776,7 @@ watchDebounced(
                     type="button"
                     class="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-semibold transition-colors"
                     :class="filtersOpen
-                        ? 'bg-teal-600 text-white border-teal-600'
+                        ? 'bg-brand-600 text-white border-brand-600'
                         : 'bg-white dark:bg-slate-900 text-gray-700 dark:text-slate-200 border-gray-300 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700'"
                     @click="filtersOpen = !filtersOpen"
                 >
@@ -1785,7 +1785,7 @@ watchDebounced(
                     <span
                         v-if="hasAdvancedFilters"
                         class="inline-flex h-2 w-2 rounded-full"
-                        :class="filtersOpen ? 'bg-white' : 'bg-teal-500'"
+                        :class="filtersOpen ? 'bg-white' : 'bg-brand-500'"
                     ></span>
                 </button>
                 <button
@@ -1799,11 +1799,11 @@ watchDebounced(
             </div>
         </div>
 
-        <div v-if="selectedSeriesId" class="flex flex-wrap items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm dark:border-teal-900/60 dark:bg-teal-950/30">
-            <span class="font-medium text-teal-900 dark:text-teal-100">Серия: {{ selectedSeriesTitle }}</span>
+        <div v-if="selectedSeriesId" class="flex flex-wrap items-center gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm dark:border-brand-900/60 dark:bg-brand-950/30">
+            <span class="font-medium text-brand-900 dark:text-brand-100">Серия: {{ selectedSeriesTitle }}</span>
             <button
                 type="button"
-                class="inline-flex h-7 w-7 items-center justify-center rounded-md text-teal-700 transition-colors hover:bg-teal-100 dark:text-teal-300 dark:hover:bg-teal-900/50"
+                class="inline-flex h-7 w-7 items-center justify-center rounded-md text-brand-700 transition-colors hover:bg-brand-100 dark:text-brand-300 dark:hover:bg-brand-900/50"
                 title="Показать товары всех серий"
                 aria-label="Сбросить фильтр серии"
                 @click="clearSeriesFilter"
@@ -1849,7 +1849,7 @@ watchDebounced(
                         <select
                             id="manager-products-sort"
                             v-model="sortMode"
-                            class="w-full px-3 py-2.5 border border-gray-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-gray-900 dark:text-slate-100 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 outline-none shadow-inner"
+                            class="w-full px-3 py-2.5 border border-gray-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-gray-900 dark:text-slate-100 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 outline-none shadow-inner"
                             @change="applyFilters"
                         >
                             <option value="recommended">Рекомендуемые</option>
@@ -1869,19 +1869,19 @@ watchDebounced(
                                 v-model.number="areaMin"
                                 type="number"
                                 placeholder="От"
-                                class="w-full px-3 py-2.5 border border-gray-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-gray-900 dark:text-slate-100 dark:placeholder-slate-500 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 outline-none shadow-inner"
+                                class="w-full px-3 py-2.5 border border-gray-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-gray-900 dark:text-slate-100 dark:placeholder-slate-500 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 outline-none shadow-inner"
                             />
                             <span class="text-gray-400">-</span>
                             <input
                                 v-model.number="areaMax"
                                 type="number"
                                 placeholder="До"
-                                class="w-full px-3 py-2.5 border border-gray-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-gray-900 dark:text-slate-100 dark:placeholder-slate-500 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 outline-none shadow-inner"
+                                class="w-full px-3 py-2.5 border border-gray-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-gray-900 dark:text-slate-100 dark:placeholder-slate-500 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 outline-none shadow-inner"
                             />
                             <button
                                 type="button"
                                 @click="applyFilters"
-                                class="px-4 py-2.5 bg-teal-600 dark:bg-teal-600 text-white rounded-lg hover:bg-teal-700 dark:hover:bg-teal-700 font-medium text-sm transition-colors shadow-sm"
+                                class="px-4 py-2.5 bg-brand-600 dark:bg-brand-600 text-white rounded-lg hover:bg-brand-700 dark:hover:bg-brand-700 font-medium text-sm transition-colors shadow-sm"
                             >
                                 OK
                             </button>
@@ -1957,7 +1957,7 @@ watchDebounced(
     <!-- Product Grid -->
     <div v-if="loading" class="py-20">
       <div class="flex items-center justify-center gap-3 text-gray-500">
-        <div class="h-6 w-6 rounded-full border-2 border-[#007f80] border-t-transparent animate-spin"></div>
+        <div class="h-6 w-6 rounded-full border-2 border-brand-600 border-t-transparent animate-spin"></div>
         <span>Загрузка товаров...</span>
       </div>
     </div>
@@ -1967,13 +1967,13 @@ watchDebounced(
       <div v-if="viewType === 'grid'" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
         <div v-for="product in products" :key="product.id" 
              class="relative cursor-pointer overflow-hidden rounded-lg border-2 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:bg-slate-800"
-             :class="selectedProductIds.has(product.id) ? 'border-teal-500 ring-2 ring-teal-100 dark:ring-teal-900/50' : 'border-transparent'"
+             :class="selectedProductIds.has(product.id) ? 'border-brand-500 ring-2 ring-brand-100 dark:ring-brand-900/50' : 'border-transparent'"
              @click="openProductWorkspace(product)"
         >
              <!-- Selection Checkbox Overlay -->
              <div class="absolute top-2.5 left-2.5 z-10">
                  <button @click.stop="toggleSelection(product.id)" class="bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-md shadow-sm hover:bg-white dark:hover:bg-slate-700 p-1 transition-colors">
-                     <CheckSquare v-if="selectedProductIds.has(product.id)" class="w-5 h-5 text-teal-600" />
+                     <CheckSquare v-if="selectedProductIds.has(product.id)" class="w-5 h-5 text-brand-600" />
                      <Square v-else class="w-5 h-5 text-gray-400" />
                  </button>
              </div>
@@ -2009,22 +2009,22 @@ watchDebounced(
                             @blur="savePrice(product)"
                             @keyup.enter="savePrice(product)"
                             @keyup.esc="cancelEditingPrice"
-                            class="w-24 px-1 py-0.5 border border-teal-500 dark:border-teal-400 rounded text-sm outline-none bg-teal-50 dark:bg-teal-900/30 text-gray-900 dark:text-slate-200"
+                            class="w-24 px-1 py-0.5 border border-brand-500 dark:border-brand-400 rounded text-sm outline-none bg-brand-50 dark:bg-brand-900/30 text-gray-900 dark:text-slate-200"
                             auto-focus
                         />
-                        <span class="text-xs text-teal-600 dark:text-teal-400 ml-1">BYN</span>
+                        <span class="text-xs text-brand-600 dark:text-brand-400 ml-1">BYN</span>
                     </template>
                     <p 
                         v-else 
                         @click.stop="startEditingPrice(product)"
-                        class="text-teal-700 dark:text-teal-400 font-semibold text-sm cursor-pointer hover:bg-teal-50 dark:hover:bg-teal-900/40 rounded px-1 -ml-1 transition-colors"
+                        class="text-brand-700 dark:text-brand-400 font-semibold text-sm cursor-pointer hover:bg-brand-50 dark:hover:bg-brand-900/40 rounded px-1 -ml-1 transition-colors"
                         title="Нажмите, чтобы изменить цену"
                     >
                         {{ product.price }} BYN
                     </p>
                     <button
                         @click.stop="openPublicProductPage(product)"
-                        class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-900/30 hover:bg-teal-100 dark:hover:bg-teal-900/40 transition-colors disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:bg-teal-50 dark:disabled:hover:bg-teal-900/30"
+                        class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-900/30 hover:bg-brand-100 dark:hover:bg-brand-900/40 transition-colors disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:bg-brand-50 dark:disabled:hover:bg-brand-900/30"
                         :disabled="!product.slug"
                         :title="product.slug ? 'Открыть карточку товара на сайте' : 'У товара нет публичного slug'"
                     >
@@ -2064,10 +2064,10 @@ watchDebounced(
                 </div>
             </div>
             <div class="grid grid-cols-[1fr_1fr_auto] border-t border-gray-100 dark:border-slate-700">
-                <button type="button" class="inline-flex h-10 items-center justify-center gap-1.5 text-xs font-semibold text-gray-600 transition hover:bg-gray-50 hover:text-teal-700 dark:text-slate-300 dark:hover:bg-slate-700" @click.stop="openSearchModal(product)">
+                <button type="button" class="inline-flex h-10 items-center justify-center gap-1.5 text-xs font-semibold text-gray-600 transition hover:bg-gray-50 hover:text-brand-700 dark:text-slate-300 dark:hover:bg-slate-700" @click.stop="openSearchModal(product)">
                     <Images class="h-4 w-4" /> Фото
                 </button>
-                <button type="button" class="inline-flex h-10 items-center justify-center gap-1.5 border-l border-gray-100 text-xs font-semibold text-teal-700 transition hover:bg-teal-50 dark:border-slate-700 dark:text-teal-300 dark:hover:bg-slate-700" @click.stop="openProductWorkspace(product)">
+                <button type="button" class="inline-flex h-10 items-center justify-center gap-1.5 border-l border-gray-100 text-xs font-semibold text-brand-700 transition hover:bg-brand-50 dark:border-slate-700 dark:text-brand-300 dark:hover:bg-slate-700" @click.stop="openProductWorkspace(product)">
                     <ExternalLink class="h-4 w-4" /> Открыть
                 </button>
                 <details class="relative border-l border-gray-100 dark:border-slate-700" @click.stop>
@@ -2093,7 +2093,7 @@ watchDebounced(
             <tr>
               <th class="p-4 w-12">
                 <button @click="toggleSelectAll" class="text-gray-400 hover:text-gray-600 dark:hover:text-slate-300">
-                  <CheckSquare v-if="allSelected" class="w-5 h-5 text-teal-600" />
+                  <CheckSquare v-if="allSelected" class="w-5 h-5 text-brand-600" />
                   <Square v-else class="w-5 h-5" />
                 </button>
               </th>
@@ -2107,12 +2107,12 @@ watchDebounced(
           <tbody class="divide-y divide-gray-100 dark:divide-slate-700">
             <tr v-for="product in products" :key="product.id" 
                 class="cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
-                :class="{ 'bg-teal-50/50 dark:bg-teal-900/20': selectedProductIds.has(product.id) }"
+                :class="{ 'bg-brand-50/50 dark:bg-brand-900/20': selectedProductIds.has(product.id) }"
                 @click="openProductWorkspace(product)"
             >
               <td class="p-4">
                 <button @click.stop="toggleSelection(product.id)" class="text-gray-400 hover:text-gray-600 dark:hover:text-slate-300">
-                  <CheckSquare v-if="selectedProductIds.has(product.id)" class="w-5 h-5 text-teal-600" />
+                  <CheckSquare v-if="selectedProductIds.has(product.id)" class="w-5 h-5 text-brand-600" />
                   <Square v-else class="w-5 h-5" />
                 </button>
               </td>
@@ -2130,7 +2130,7 @@ watchDebounced(
                 </div>
               </td>
               <td class="p-4">
-                <div class="text-sm font-semibold text-teal-700 dark:text-teal-400">
+                <div class="text-sm font-semibold text-brand-700 dark:text-brand-400">
                    {{ product.price }} BYN
                 </div>
               </td>
@@ -2150,10 +2150,10 @@ watchDebounced(
                   >
                     <Star class="w-4 h-4" :class="{ 'fill-amber-400': isFavoriteProduct(product) }" />
                   </button>
-                  <button @click.stop="openSearchModal(product)" class="p-2 hover:text-teal-600 dark:hover:text-teal-400 transition-colors" title="Фото">
+                  <button @click.stop="openSearchModal(product)" class="p-2 hover:text-brand-600 dark:hover:text-brand-400 transition-colors" title="Фото">
                     <Images class="w-4 h-4" />
                   </button>
-                  <button @click.stop="openProductWorkspace(product)" class="p-2 hover:text-teal-600 dark:hover:text-teal-400 transition-colors" title="Открыть товар">
+                  <button @click.stop="openProductWorkspace(product)" class="p-2 hover:text-brand-600 dark:hover:text-brand-400 transition-colors" title="Открыть товар">
                     <ExternalLink class="w-4 h-4" />
                   </button>
                   <details class="relative" @click.stop>
@@ -2176,7 +2176,7 @@ watchDebounced(
       <!-- Lazy Load Sentinel -->
       <div ref="sentinel" class="py-8 text-center">
         <div v-if="loadingMore" class="flex items-center justify-center gap-2 text-gray-500">
-          <div class="w-5 h-5 border-2 border-teal-600 border-t-transparent rounded-full animate-spin"></div>
+          <div class="w-5 h-5 border-2 border-brand-600 border-t-transparent rounded-full animate-spin"></div>
           Загрузка...
         </div>
         <p v-else-if="!hasMore && products.length > 0" class="text-gray-400 text-sm">Все товары загружены ({{ products.length }})</p>
@@ -2200,7 +2200,7 @@ watchDebounced(
           
           <div class="flex justify-end gap-2">
               <button @click="showCleanupModal = false" class="px-4 py-2 text-gray-500 hover:text-gray-700">Закрыть</button>
-              <button @click="triggerCleanup" :disabled="cleanupLoading" class="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 transition-colors">
+              <button @click="triggerCleanup" :disabled="cleanupLoading" class="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50 transition-colors">
                   {{ cleanupLoading ? 'Проверка...' : 'Проверить' }}
               </button>
           </div>
@@ -2216,19 +2216,19 @@ watchDebounced(
                <button 
                   @click="activeTab = 'upload'" 
                   class="shrink-0 px-4 py-3 font-medium border-b-2 text-sm transition-colors sm:px-6"
-                  :class="activeTab === 'upload' ? 'border-teal-600 text-teal-700' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                  :class="activeTab === 'upload' ? 'border-brand-600 text-brand-700' : 'border-transparent text-gray-500 hover:text-gray-700'"
                >Загрузить</button>
                <button 
                   @click="activeTab = 'search'" 
                   class="shrink-0 px-4 py-3 font-medium border-b-2 text-sm transition-colors sm:px-6"
-                  :class="activeTab === 'search' ? 'border-teal-600 text-teal-700' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                  :class="activeTab === 'search' ? 'border-brand-600 text-brand-700' : 'border-transparent text-gray-500 hover:text-gray-700'"
                >Поиск изображений</button>
                <button 
                   @click="activeTab = 'reuse'" 
                   class="shrink-0 px-4 py-3 font-medium border-b-2 text-sm transition-colors sm:px-6"
-                  :class="activeTab === 'reuse' ? 'border-teal-600 text-teal-700' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                  :class="activeTab === 'reuse' ? 'border-brand-600 text-brand-700' : 'border-transparent text-gray-500 hover:text-gray-700'"
                >Из каталога</button>
-               <div v-if="isBulkMode" class="flex shrink-0 items-center text-sm text-teal-700 font-medium px-3">
+               <div v-if="isBulkMode" class="flex shrink-0 items-center text-sm text-brand-700 font-medium px-3">
                   {{ selectedIdsArray.length }} товаров
                </div>
             </div>
@@ -2247,8 +2247,8 @@ watchDebounced(
               <!-- SEARCH TAB -->
               <div v-if="activeTab === 'search'" class="flex flex-col flex-1 min-h-0">
                    <div class="p-4 border-b flex gap-4 bg-white">
-                      <input v-model="imageQuery" @keyup.enter="handleImageSearch" class="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent" placeholder="Поисковый запрос..." />
-                      <button @click="handleImageSearch" class="bg-teal-600 text-white px-6 rounded-lg hover:bg-teal-700 transition-colors font-medium">Поиск</button>
+                      <input v-model="imageQuery" @keyup.enter="handleImageSearch" class="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent" placeholder="Поисковый запрос..." />
+                      <button @click="handleImageSearch" class="bg-brand-600 text-white px-6 rounded-lg hover:bg-brand-700 transition-colors font-medium">Поиск</button>
                   </div>
                   
                   <div class="flex-1 overflow-y-auto p-4 bg-gray-50">
@@ -2258,7 +2258,7 @@ watchDebounced(
                               <div class="aspect-square bg-gray-100 relative overflow-hidden rounded-t-lg">
                                    <img :src="r.thumbnail || r.image" class="w-full h-full object-contain p-2" loading="lazy" />
                                    <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-2">
-                                       <button @click="selectImage(r.image)" class="w-full bg-teal-600 text-white text-xs py-1.5 rounded-md hover:bg-teal-700 transition-colors">
+                                       <button @click="selectImage(r.image)" class="w-full bg-brand-600 text-white text-xs py-1.5 rounded-md hover:bg-brand-700 transition-colors">
                                            {{ isBulkMode ? 'Главное для всех' : 'Сделать главным' }}
                                        </button>
                                        <button @click="addToGallery(r.image)" class="w-full bg-gray-600 text-white text-xs py-1.5 rounded-md hover:bg-gray-700 transition-colors">
@@ -2278,8 +2278,8 @@ watchDebounced(
               <!-- REUSE TAB -->
               <div v-if="activeTab === 'reuse'" class="flex flex-col flex-1 min-h-0">
                    <div class="p-4 border-b flex gap-4 bg-white">
-                      <input v-model="reuseQuery" @keyup.enter="handleReuseSearch" class="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent" placeholder="Найти модель (напр. Forest 09)..." />
-                      <button @click="handleReuseSearch" class="bg-teal-600 text-white px-6 rounded-lg hover:bg-teal-700 transition-colors font-medium">Найти</button>
+                      <input v-model="reuseQuery" @keyup.enter="handleReuseSearch" class="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent" placeholder="Найти модель (напр. Forest 09)..." />
+                      <button @click="handleReuseSearch" class="bg-brand-600 text-white px-6 rounded-lg hover:bg-brand-700 transition-colors font-medium">Найти</button>
                   </div>
                   <div class="flex-1 overflow-y-auto p-4 bg-gray-50">
                       <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -2289,7 +2289,7 @@ watchDebounced(
                                   <div v-else class="w-full h-full flex items-center justify-center text-gray-300 text-xs">Нет фото</div>
                                   
                                    <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                       <button @click="reuseImage(p.main_image)" class="text-white text-sm bg-teal-600 px-3 py-2 rounded-lg hover:bg-teal-700 transition-colors">
+                                       <button @click="reuseImage(p.main_image)" class="text-white text-sm bg-brand-600 px-3 py-2 rounded-lg hover:bg-brand-700 transition-colors">
                                           {{ isBulkMode ? 'Копировать всем' : 'Копировать' }}
                                        </button>
                                   </div>
@@ -2304,7 +2304,7 @@ watchDebounced(
               <div v-if="activeTab === 'upload'" class="flex flex-col flex-1 min-h-0 items-center justify-center gap-4 bg-gray-50 p-4 sm:p-8">
                   <div 
                       class="w-full max-w-2xl border-4 border-dashed rounded-xl p-8 sm:p-12 flex flex-col items-center justify-center transition-colors cursor-pointer"
-                      :class="uploadDragActive ? 'border-teal-500 bg-teal-50' : 'border-gray-300 hover:border-gray-400 bg-white'"
+                      :class="uploadDragActive ? 'border-brand-500 bg-brand-50' : 'border-gray-300 hover:border-gray-400 bg-white'"
                       @dragenter.prevent="uploadDragActive = true"
                       @dragleave.prevent="uploadDragActive = false"
                       @dragover.prevent
@@ -2312,14 +2312,14 @@ watchDebounced(
                       @click="fileInput?.click()"
                   >
                       <input type="file" ref="fileInput" multiple accept="image/*" class="hidden" @change="handleFileSelect" />
-                      <UploadCloud class="w-16 h-16 text-gray-400 mb-4" :class="{ 'text-teal-500': uploadDragActive }" />
+                      <UploadCloud class="w-16 h-16 text-gray-400 mb-4" :class="{ 'text-brand-500': uploadDragActive }" />
                       <h3 class="text-xl font-medium text-gray-700 mb-2">
                           {{ uploadDragActive ? 'Отпустите файлы' : 'Перетащите изображения сюда' }}
                       </h3>
                       <p class="text-gray-500 mb-6">или нажмите для выбора файлов</p>
                       
-                      <div v-if="searchLoading" class="flex items-center gap-2 text-teal-600 font-medium">
-                          <div class="w-4 h-4 border-2 border-teal-600 border-t-transparent rounded-full animate-spin"></div>
+                      <div v-if="searchLoading" class="flex items-center gap-2 text-brand-600 font-medium">
+                          <div class="w-4 h-4 border-2 border-brand-600 border-t-transparent rounded-full animate-spin"></div>
                           {{ uploadTotal > 1 ? `Подготовка и загрузка: ${uploadCompleted}/${uploadTotal}` : 'Подготовка и загрузка...' }}
                       </div>
                   </div>
@@ -2330,13 +2330,13 @@ watchDebounced(
                               v-model="uploadUrl"
                               type="url"
                               placeholder="https://site.by/image.jpg"
-                              class="w-full rounded-lg border border-gray-300 bg-white py-2.5 pl-9 pr-24 text-sm text-gray-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
+                              class="w-full rounded-lg border border-gray-300 bg-white py-2.5 pl-9 pr-24 text-sm text-gray-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
                               @keydown.enter.prevent="uploadFromUrl"
                           />
                           <div class="absolute right-1 top-1/2 flex -translate-y-1/2 gap-1">
                               <button
                                   type="button"
-                                  class="inline-flex h-8 w-8 items-center justify-center rounded-md text-teal-700 transition hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                  class="inline-flex h-8 w-8 items-center justify-center rounded-md text-brand-700 transition hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-50"
                                   :disabled="searchLoading"
                                   title="Скачать по URL"
                                   aria-label="Скачать по URL"
@@ -2377,12 +2377,12 @@ watchDebounced(
                               type="number"
                               min="1"
                               max="100"
-                              class="h-8 w-16 rounded-md border border-gray-300 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500"
+                              class="h-8 w-16 rounded-md border border-gray-300 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500"
                           />
                       </label>
                       <select
                           v-model="variantProvider"
-                          class="h-8 rounded-md border border-gray-300 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500"
+                          class="h-8 rounded-md border border-gray-300 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500"
                           title="Провайдер обработки variant card"
                       >
                           <option
@@ -2394,7 +2394,7 @@ watchDebounced(
                           </option>
                       </select>
                       <label class="flex items-center gap-1 text-xs text-gray-600">
-                          <input v-model="includeInstallationVariants" type="checkbox" class="rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
+                          <input v-model="includeInstallationVariants" type="checkbox" class="rounded border-gray-300 text-brand-600 focus:ring-brand-500" />
                           монтажные
                       </label>
                   </div>
@@ -2409,7 +2409,7 @@ watchDebounced(
                       <button
                           @click="processMissingCardVariants"
                           :disabled="variantProcessingLoading || variantCandidatesLoading"
-                          class="rounded-md bg-teal-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-teal-700 disabled:opacity-50"
+                          class="rounded-md bg-brand-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
                       >
                           {{ variantProcessingLoading ? 'Обработка...' : 'Создать card batch' }}
                       </button>
@@ -2451,7 +2451,7 @@ watchDebounced(
                   <div class="absolute right-3 top-3 z-30" @click.stop>
                       <button
                           type="button"
-                          class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white/95 text-gray-600 shadow-sm transition hover:border-teal-300 hover:text-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                          class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white/95 text-gray-600 shadow-sm transition hover:border-brand-300 hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500"
                           title="Настройки обработки галереи"
                           @click="productGallerySettingsOpen = !productGallerySettingsOpen"
                       >
@@ -2465,7 +2465,7 @@ watchDebounced(
                               <span class="font-semibold uppercase tracking-wide text-gray-500">Без фона</span>
                               <select
                                   v-model="productBackgroundProvider"
-                                  class="mt-2 h-9 w-full rounded-md border border-gray-300 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                  class="mt-2 h-9 w-full rounded-md border border-gray-300 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                                   title="Провайдер удаления фона для текущего фото"
                               >
                                   <option
@@ -2479,7 +2479,7 @@ watchDebounced(
                           </label>
                           <button
                               type="button"
-                              class="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-teal-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"
+                              class="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
                               :disabled="!canApplyGalleryToSeries || applyingSeriesGallery"
                               title="Заменить галерею остальных товаров этой серии текущей галереей"
                               @click="applyGalleryToSeries"
@@ -2493,9 +2493,9 @@ watchDebounced(
                       </div>
                   </div>
                   <!-- Main Image -->
-                  <div v-if="selectedProduct?.main_image" class="relative group w-36 shrink-0 border-2 border-teal-500 rounded-lg overflow-hidden">
+                  <div v-if="selectedProduct?.main_image" class="relative group w-36 shrink-0 border-2 border-brand-500 rounded-lg overflow-hidden">
                       <img :src="getImageUrl(selectedProduct.main_image)" class="w-full h-full object-cover" />
-                      <span class="absolute top-0 left-0 bg-teal-500 text-white text-[10px] px-1.5 py-0.5 rounded-br-md">Главное</span>
+                      <span class="absolute top-0 left-0 bg-brand-500 text-white text-[10px] px-1.5 py-0.5 rounded-br-md">Главное</span>
                       <span class="absolute bottom-0 left-0 right-0 bg-black/60 px-1.5 py-1 text-[10px] font-medium text-white">Оригинал URL</span>
                       <div
                           v-if="selectedMainGalleryImage"
@@ -2511,7 +2511,7 @@ watchDebounced(
                           <button
                               @click="removeGalleryImageBackground(selectedMainGalleryImage)"
                               :disabled="backgroundRemovingImageId === selectedMainGalleryImage.id"
-                              class="inline-flex w-full items-center justify-center gap-1 rounded bg-teal-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-teal-700 disabled:opacity-60"
+                              class="inline-flex w-full items-center justify-center gap-1 rounded bg-brand-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-brand-700 disabled:opacity-60"
                               title="Удалить фон и заменить главное фото"
                           >
                               <Wand2 class="h-3 w-3" />
@@ -2520,7 +2520,7 @@ watchDebounced(
                           <button
                               @click="reprocessCardVariant(selectedMainGalleryImage.id)"
                               :disabled="variantReprocessingImageId === selectedMainGalleryImage.id || variantProcessingLoading"
-                              class="w-full rounded bg-teal-600 px-2 py-1 text-[10px] text-white hover:bg-teal-700 disabled:opacity-60"
+                              class="w-full rounded bg-brand-600 px-2 py-1 text-[10px] text-white hover:bg-brand-700 disabled:opacity-60"
                               title="Обновить card variant только для главной картинки"
                           >
                               {{ variantReprocessingImageId === selectedMainGalleryImage.id ? 'variant...' : 'Обновить card' }}
@@ -2574,7 +2574,7 @@ watchDebounced(
                            <button
                               @click="removeGalleryImageBackground(img)"
                               :disabled="backgroundRemovingImageId === img.id"
-                              class="inline-flex w-full items-center justify-center gap-1 rounded bg-teal-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-teal-700 disabled:opacity-60"
+                              class="inline-flex w-full items-center justify-center gap-1 rounded bg-brand-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-brand-700 disabled:opacity-60"
                               title="Удалить фон и заменить это фото"
                            >
                               <Wand2 class="h-3 w-3" />
@@ -2583,7 +2583,7 @@ watchDebounced(
                            <button
                               @click="reprocessCardVariant(img.id)"
                               :disabled="variantReprocessingImageId === img.id || variantProcessingLoading"
-                              class="text-[10px] bg-teal-600 text-white px-2 py-1 rounded hover:bg-teal-700 disabled:opacity-60 w-full"
+                              class="text-[10px] bg-brand-600 text-white px-2 py-1 rounded hover:bg-brand-700 disabled:opacity-60 w-full"
                               title="Обновить card variant только для этой картинки"
                            >
                               {{ variantReprocessingImageId === img.id ? 'variant...' : 'Обновить card этой картинки' }}
@@ -2637,19 +2637,19 @@ watchDebounced(
                           <div class="grid grid-cols-2 gap-3">
                               <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500">
                                   X
-                                  <input id="product-crop-x" v-model.number="cropForm.x" name="product-crop-x" type="number" min="0" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" @change="clampCropForm" />
+                                  <input id="product-crop-x" v-model.number="cropForm.x" name="product-crop-x" type="number" min="0" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" @change="clampCropForm" />
                               </label>
                               <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500">
                                   Y
-                                  <input id="product-crop-y" v-model.number="cropForm.y" name="product-crop-y" type="number" min="0" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" @change="clampCropForm" />
+                                  <input id="product-crop-y" v-model.number="cropForm.y" name="product-crop-y" type="number" min="0" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" @change="clampCropForm" />
                               </label>
                               <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500">
                                   Ширина
-                                  <input id="product-crop-width" v-model.number="cropForm.width" name="product-crop-width" type="number" min="1" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" @change="clampCropForm" />
+                                  <input id="product-crop-width" v-model.number="cropForm.width" name="product-crop-width" type="number" min="1" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" @change="clampCropForm" />
                               </label>
                               <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500">
                                   Высота
-                                  <input id="product-crop-height" v-model.number="cropForm.height" name="product-crop-height" type="number" min="1" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" @change="clampCropForm" />
+                                  <input id="product-crop-height" v-model.number="cropForm.height" name="product-crop-height" type="number" min="1" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" @change="clampCropForm" />
                               </label>
                           </div>
 
@@ -2664,17 +2664,17 @@ watchDebounced(
 
                           <div class="rounded-lg border border-gray-200 p-2">
                               <label class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                                  <input v-model="cropMode" name="product-crop-mode" type="radio" value="replace" class="text-teal-600 focus:ring-teal-500" />
+                                  <input v-model="cropMode" name="product-crop-mode" type="radio" value="replace" class="text-brand-600 focus:ring-brand-500" />
                                   Заменить это фото
                               </label>
                               <label class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                                  <input v-model="cropMode" name="product-crop-mode" type="radio" value="append" class="text-teal-600 focus:ring-teal-500" />
+                                  <input v-model="cropMode" name="product-crop-mode" type="radio" value="append" class="text-brand-600 focus:ring-brand-500" />
                                   Добавить как новое фото
                               </label>
                           </div>
 
                           <label class="flex items-center gap-2 text-sm text-gray-700" :class="{ 'opacity-50': !cropCanSetMain }">
-                              <input id="product-crop-set-main" v-model="cropSetMain" name="product-crop-set-main" type="checkbox" class="rounded border-gray-300 text-teal-600 focus:ring-teal-500" :disabled="!cropCanSetMain" />
+                              <input id="product-crop-set-main" v-model="cropSetMain" name="product-crop-set-main" type="checkbox" class="rounded border-gray-300 text-brand-600 focus:ring-brand-500" :disabled="!cropCanSetMain" />
                               Сделать главным
                           </label>
                       </div>
@@ -2691,7 +2691,7 @@ watchDebounced(
                       </button>
                       <button
                           type="button"
-                          class="inline-flex items-center justify-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50"
+                          class="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
                           :disabled="cropSaving || !cropSourceSize.width"
                           @click="saveCrop"
                       >

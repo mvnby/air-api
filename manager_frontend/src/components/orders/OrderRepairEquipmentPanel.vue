@@ -311,8 +311,8 @@ watch(
               :data-testid="`repair-equipment-${item.id}`"
               class="w-full rounded-lg border px-3 py-2 text-left text-xs transition"
               :class="selectedId === item.id
-                ? 'border-teal-400 bg-white text-teal-900 shadow-sm'
-                : 'border-slate-200 bg-white text-slate-700 hover:border-teal-200'"
+                ? 'border-brand-400 bg-white text-brand-900 shadow-sm'
+                : 'border-slate-200 bg-white text-slate-700 hover:border-brand-200'"
               @click="selectEquipment(item.id)"
             >
               <span class="block break-words font-semibold">{{ equipmentTitle(item) }}</span>
@@ -353,7 +353,7 @@ watch(
               <div class="mt-3 max-h-56 space-y-2 overflow-y-auto pr-1">
                 <div v-for="entry in selectedDetail?.recent_history || []" :key="entry.id" class="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs">
                   <div class="flex flex-wrap items-center gap-2">
-                    <span class="rounded-full bg-teal-50 px-2 py-0.5 font-semibold text-teal-700">{{ eventLabel(entry.event_type) }}</span>
+                    <span class="rounded-full bg-brand-50 px-2 py-0.5 font-semibold text-brand-700">{{ eventLabel(entry.event_type) }}</span>
                     <span class="text-slate-500">{{ formatDateTime(entry.event_date) || 'Без даты' }}</span>
                     <span v-if="entry.order_id" class="text-slate-500">Заказ #{{ entry.order_id }}</span>
                   </div>

@@ -164,7 +164,7 @@ onBeforeUnmount(() => pendingRequest?.cancel());
           <h3 class="text-sm font-semibold text-slate-900 dark:text-white">По действиям</h3>
           <div class="mt-2 space-y-2">
             <div v-for="item in metricTotals" :key="item.metric" class="grid grid-cols-[minmax(0,1fr)_3rem] items-center gap-3 text-xs">
-              <div class="min-w-0"><div class="mb-1 flex justify-between gap-2"><span class="truncate text-slate-700 dark:text-slate-200">{{ metricLabels[item.metric] }}</span><span class="text-slate-500">{{ item.count }}</span></div><div class="h-1.5 overflow-hidden rounded bg-slate-100 dark:bg-slate-800"><div class="h-full rounded bg-teal-600" :style="{ width: `${Math.max(4, item.count / maxMetric * 100)}%` }" /></div></div>
+              <div class="min-w-0"><div class="mb-1 flex justify-between gap-2"><span class="truncate text-slate-700 dark:text-slate-200">{{ metricLabels[item.metric] }}</span><span class="text-slate-500">{{ item.count }}</span></div><div class="h-1.5 overflow-hidden rounded bg-slate-100 dark:bg-slate-800"><div class="h-full rounded bg-brand-600" :style="{ width: `${Math.max(4, item.count / maxMetric * 100)}%` }" /></div></div>
               <span class="text-right text-slate-500">{{ componentMetrics.has(item.metric) ? 'раздел' : 'действие' }}</span>
             </div>
           </div>

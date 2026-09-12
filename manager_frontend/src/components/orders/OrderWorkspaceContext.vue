@@ -32,7 +32,7 @@ const emit = defineEmits<{
         <span class="block truncate font-medium text-slate-800 dark:text-slate-100">{{ address || 'Указать адрес' }}</span>
       </span>
     </button>
-    <button type="button" class="mt-3 hidden w-full items-start gap-2 rounded-lg border-t border-slate-200 pt-3 text-left hover:text-teal-700 dark:border-slate-700 dark:hover:text-teal-200 lg:flex" data-order-usage="context-payments" @click="emit('payments')">
+    <button type="button" class="mt-3 hidden w-full items-start gap-2 rounded-lg border-t border-slate-200 pt-3 text-left hover:text-brand-700 dark:border-slate-700 dark:hover:text-brand-200 lg:flex" data-order-usage="context-payments" @click="emit('payments')">
       <WalletCards :size="17" class="mt-0.5 shrink-0 text-slate-400" aria-hidden="true" />
       <span class="min-w-0">
         <span class="block text-xs font-medium text-slate-500 dark:text-slate-400">Расчёты</span>

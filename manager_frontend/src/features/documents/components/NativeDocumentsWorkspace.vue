@@ -264,7 +264,7 @@ const createDraft = async () => {
 </script>
 
 <template>
-  <section class="rounded-2xl border border-teal-200 bg-white p-4 shadow-sm dark:border-teal-900/70 dark:bg-slate-900/60 sm:p-5" data-testid="native-documents-workspace">
+  <section class="rounded-2xl border border-brand-200 bg-white p-4 shadow-sm dark:border-brand-900/70 dark:bg-slate-900/60 sm:p-5" data-testid="native-documents-workspace">
     <DocumentSendModal
       v-model="sendOpen"
       transport="native"
@@ -276,22 +276,22 @@ const createDraft = async () => {
       <div>
         <div class="flex flex-wrap items-center gap-2">
           <h3 class="font-['Space_Grotesk'] text-lg font-bold text-slate-900 dark:text-white">Документы CRM</h3>
-          <span class="rounded-full bg-teal-100 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-teal-800 dark:bg-teal-950/60 dark:text-teal-300">DOCX + PDF</span>
+          <span class="rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-brand-800 dark:bg-brand-950/60 dark:text-brand-300">DOCX + PDF</span>
         </div>
         <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Черновик фиксирует данные. Официальный номер выдаётся только при явном выпуске.</p>
         <p v-if="googleEditor.connectionState.value === 'connected'" class="mt-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300" data-testid="document-google-connected">
           Google подключён<span v-if="googleEditor.accountLabel.value">: {{ googleEditor.accountLabel.value }}</span>. Черновики можно править онлайн; изменения сохраняются в CRM после возвращения во вкладку.
         </p>
         <p v-else-if="googleEditor.connectionState.value === 'disconnected'" class="mt-1 text-xs text-slate-500" data-testid="document-google-disconnected">
-          <template v-if="googleEditor.canConnect.value">Для онлайн-редактирования <button class="font-semibold text-teal-700 underline underline-offset-2" type="button" @click="googleEditor.connect">подключите Google</button>.</template>
+          <template v-if="googleEditor.canConnect.value">Для онлайн-редактирования <button class="font-semibold text-brand-700 underline underline-offset-2" type="button" @click="googleEditor.connect">подключите Google</button>.</template>
           <template v-else>Для онлайн-редактирования обратитесь к владельцу аккаунта.</template>
         </p>
       </div>
       <div class="flex flex-wrap items-center gap-2 sm:justify-end">
-        <button v-if="access.canSend && sendableDocuments.length && canSendNativeEmail" class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-teal-600 px-3 text-xs font-semibold text-white shadow-sm hover:bg-teal-700" type="button" data-testid="native-document-email" @click="sendOpen = true">
+        <button v-if="access.canSend && sendableDocuments.length && canSendNativeEmail" class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand-600 px-3 text-xs font-semibold text-white shadow-sm hover:bg-brand-700" type="button" data-testid="native-document-email" @click="sendOpen = true">
           <span class="material-icons-round text-[17px]">send</span>Письмо
         </button>
-        <button v-if="canManageDocumentSettings" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:border-teal-400 hover:text-teal-700 dark:border-slate-700 dark:text-slate-300" type="button" @click="openSettings">
+        <button v-if="canManageDocumentSettings" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:border-brand-400 hover:text-brand-700 dark:border-slate-700 dark:text-slate-300" type="button" @click="openSettings">
           <span class="material-icons-round text-[17px]">settings</span>Юрлица и шаблоны
         </button>
       </div>
@@ -316,8 +316,8 @@ const createDraft = async () => {
 
         <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div class="inline-flex w-fit rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-900" data-testid="native-document-audience-toggle">
-            <button type="button" class="rounded-lg px-3 py-1.5 text-sm font-semibold transition" :class="documentAudience === 'business' ? 'bg-teal-600 text-white' : 'text-slate-600 dark:text-slate-300'" data-testid="native-audience-business" @click="setAudience('business')">Для организаций и ИП</button>
-            <button type="button" class="rounded-lg px-3 py-1.5 text-sm font-semibold transition" :class="documentAudience === 'consumer' ? 'bg-teal-600 text-white' : 'text-slate-600 dark:text-slate-300'" data-testid="native-audience-consumer" @click="setAudience('consumer')">Для физлиц</button>
+            <button type="button" class="rounded-lg px-3 py-1.5 text-sm font-semibold transition" :class="documentAudience === 'business' ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-300'" data-testid="native-audience-business" @click="setAudience('business')">Для организаций и ИП</button>
+            <button type="button" class="rounded-lg px-3 py-1.5 text-sm font-semibold transition" :class="documentAudience === 'consumer' ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-300'" data-testid="native-audience-consumer" @click="setAudience('consumer')">Для физлиц</button>
           </div>
           <span class="text-xs font-semibold text-slate-500">В карточке клиента: {{ customerTypeLabel }}</span>
         </div>
@@ -349,7 +349,7 @@ const createDraft = async () => {
             <span>Город документа</span>
             <input v-model="workspace.issueCity.value" class="native-input" data-testid="native-document-issue-city" placeholder="Витебск" />
           </label>
-          <button class="inline-flex h-10 items-center justify-center rounded-xl bg-teal-600 px-4 text-sm font-bold text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50" type="button" data-testid="create-native-draft" data-order-usage="document_create" :disabled="preparingDraft || workspace.busy.value || Boolean(workspace.draftBlockedReason.value)" :title="workspace.draftBlockedReason.value" @click="createDraft">
+          <button class="inline-flex h-10 items-center justify-center rounded-xl bg-brand-600 px-4 text-sm font-bold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50" type="button" data-testid="create-native-draft" data-order-usage="document_create" :disabled="preparingDraft || workspace.busy.value || Boolean(workspace.draftBlockedReason.value)" :title="workspace.draftBlockedReason.value" @click="createDraft">
             Создать черновик
           </button>
         </div>
@@ -372,8 +372,8 @@ const createDraft = async () => {
         <div v-if="workspace.documentType.value === 'invoice'" class="mt-4">
           <span class="text-xs font-bold text-slate-500">Роль счёта</span>
           <div class="mt-1.5 inline-flex rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-900" data-testid="invoice-role-toggle">
-            <button type="button" class="rounded-lg px-3 py-1.5 text-sm font-semibold transition" :class="workspace.businessRole.value === 'payment_request' ? 'bg-teal-600 text-white' : 'text-slate-600 dark:text-slate-300'" @click="workspace.businessRole.value = 'payment_request'">Документ для оплаты</button>
-            <button type="button" class="rounded-lg px-3 py-1.5 text-sm font-semibold transition" :class="workspace.businessRole.value === 'offer' ? 'bg-teal-600 text-white' : 'text-slate-600 dark:text-slate-300'" @click="workspace.businessRole.value = 'offer'">Счёт-оферта</button>
+            <button type="button" class="rounded-lg px-3 py-1.5 text-sm font-semibold transition" :class="workspace.businessRole.value === 'payment_request' ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-300'" @click="workspace.businessRole.value = 'payment_request'">Документ для оплаты</button>
+            <button type="button" class="rounded-lg px-3 py-1.5 text-sm font-semibold transition" :class="workspace.businessRole.value === 'offer' ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-300'" @click="workspace.businessRole.value = 'offer'">Счёт-оферта</button>
           </div>
           <p class="mt-1.5 text-xs text-slate-500">{{ workspace.businessRole.value === 'payment_request' ? 'После появления договора закрывающие документы будут ссылаться на договор.' : 'Оферта может сама стать основанием сделки.' }}</p>
         </div>
@@ -471,8 +471,8 @@ const createDraft = async () => {
 
 <style scoped>
 .native-field { @apply flex min-w-0 flex-col gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300; }
-.native-input { @apply h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-normal text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-white; }
-.native-action { @apply inline-flex h-9 items-center justify-center gap-1 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:border-teal-400 hover:text-teal-700 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300; }
-.native-action-primary { @apply inline-flex h-9 items-center justify-center rounded-lg bg-teal-600 px-3 text-xs font-bold text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50; }
+.native-input { @apply h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-normal text-slate-900 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-white; }
+.native-action { @apply inline-flex h-9 items-center justify-center gap-1 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:border-brand-400 hover:text-brand-700 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300; }
+.native-action-primary { @apply inline-flex h-9 items-center justify-center rounded-lg bg-brand-600 px-3 text-xs font-bold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50; }
 .native-action-danger { @apply inline-flex h-9 items-center justify-center rounded-lg border border-rose-200 px-3 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50; }
 </style>
