@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import type { ManagerOrderListItemResponse } from '../../client';
 import type { Segment } from '../../api';
-import { STATUS_LABELS, formatDate, formatMoney, formatPhone, getOrderCustomerName, getOrderSegment, isOverdue } from './order-utils';
+import { formatDate, formatMoney, formatPhone, getOrderBoardLabel, getOrderCustomerName, getOrderExecutionLabel, getOrderNegotiationLabel, getOrderSegment, isOverdue } from './order-utils';
 import OrderTitleEditor from './OrderTitleEditor.vue';
 
 const props = defineProps<{
@@ -21,11 +21,18 @@ const emit = defineEmits<{
 }>();
 
 const rowSegment = computed(() => (props.segment === 'all' ? getOrderSegment(props.order) : props.segment));
-const customerName = (order: ManagerOrderListItemResponse) => getOrderCustomerName(order, rowSegment.value);
+const customerName = computed(() => getOrderCustomerName(props.order, rowSegment.value));
+const hasTitle = computed(() => Boolean(props.order.title?.trim()));
+const stage = computed(() => {
+  if (props.order.status === 'negotiation') return { label: 'Переговоры', detail: getOrderNegotiationLabel(props.order) };
+  if (props.order.status === 'execution') return { label: 'Работы', detail: getOrderExecutionLabel(props.order) };
+  return { label: getOrderBoardLabel(props.order), detail: null };
+});
+const balanceDue = computed(() => Number(props.order.balance_due || 0));
 </script>
 
 <template>
-  <tr class="border-t border-gray-100" :class="[isOverdue(order) ? 'bg-red-50' : '', nested ? 'bg-slate-50/60' : '']">
+  <tr class="border-t border-gray-100 dark:border-slate-700" :class="[isOverdue(order) ? 'bg-red-50 dark:bg-red-500/10' : '', nested ? 'bg-slate-50/60 dark:bg-slate-800/50' : '']">
     <td v-if="selectable" class="w-10 px-3 py-3 align-top">
       <input
         type="checkbox"
@@ -36,20 +43,24 @@ const customerName = (order: ManagerOrderListItemResponse) => getOrderCustomerNa
         @change="emit('toggleSelect', { orderId: order.id, selected: ($event.target as HTMLInputElement).checked })"
       />
     </td>
-    <td class="px-3 py-3">
+    <td class="px-3 py-2.5 align-top">
       <div class="flex min-w-0 items-start gap-2">
         <span v-if="nested" class="mt-1 h-2 w-2 shrink-0 rounded-full bg-slate-300" />
         <div class="min-w-0">
+          <p class="text-xs font-semibold text-slate-500 dark:text-slate-400">#{{ order.id }}</p>
           <OrderTitleEditor
-            class="max-w-[260px]"
+            class="max-w-full"
             :order-id="order.id"
             :title="order.title"
-            :fallback-title="customerName(order)"
-            text-class="text-sm"
+            :fallback-title="customerName"
+            text-class="text-sm leading-5"
+            multiline
             @rename="(payload) => emit('renameOrder', payload)"
           />
-          <p v-if="order.title?.trim()" class="max-w-[260px] truncate text-xs text-gray-500">#{{ order.id }} · {{ customerName(order) }}</p>
-          <div v-if="order.manager_labels?.length" class="mt-1 flex max-w-[260px] flex-wrap gap-1">
+          <p v-if="hasTitle" class="mt-0.5 line-clamp-2 text-xs leading-4 text-gray-600 dark:text-slate-300" :title="customerName">{{ customerName }}</p>
+          <p v-if="rowSegment === 'b2b' && order.customer?.inn" class="text-xs text-gray-500 dark:text-slate-400">УНП: {{ order.customer.inn }}</p>
+          <p v-else-if="rowSegment === 'b2c' && order.customer?.phone" class="text-xs text-gray-500 dark:text-slate-400">{{ formatPhone(order.customer.phone) }}</p>
+          <div v-if="order.manager_labels?.length" class="mt-1 flex flex-wrap gap-1">
             <span
               v-for="label in order.manager_labels"
               :key="label"
@@ -61,18 +72,9 @@ const customerName = (order: ManagerOrderListItemResponse) => getOrderCustomerNa
         </div>
       </div>
     </td>
-    <td class="px-3 py-3">
-      <template v-if="rowSegment === 'b2b'">
-        <p>{{ customerName(order) }}</p>
-        <p class="text-xs text-gray-500">УНП: {{ order.customer?.inn || '—' }}</p>
-      </template>
-      <template v-else>
-        <p>{{ customerName(order) }}</p>
-        <p class="text-xs text-gray-500">{{ formatPhone(order.customer?.phone) }}</p>
-      </template>
-    </td>
-    <td class="px-3 py-3">
-      <div class="mb-1">{{ STATUS_LABELS[order.status] || order.status }}</div>
+    <td class="px-3 py-2.5 align-top">
+      <div class="font-medium text-gray-900 dark:text-white">{{ stage.label }}</div>
+      <div v-if="stage.detail" class="mt-0.5 text-xs text-gray-600 dark:text-slate-300">{{ stage.detail }}</div>
       <div class="flex flex-col items-start gap-1">
         <span v-if="order.needs_attention" class="rounded-full bg-red-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-red-700">Внимание</span>
         <span v-if="order.awaiting_measurement" class="rounded-full bg-blue-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-blue-700">Замер</span>
@@ -80,46 +82,33 @@ const customerName = (order: ManagerOrderListItemResponse) => getOrderCustomerNa
         <span v-if="order.ready_for_execution" class="rounded-full bg-green-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-green-700">Согласовано</span>
       </div>
     </td>
-    <td class="px-3 py-3">{{ formatDate(order.next_followup_date) }}</td>
-    <td class="px-3 py-3">{{ formatMoney(order.total_amount) }}</td>
-    <td class="px-3 py-3 font-semibold text-brand-700">{{ formatMoney(order.margin) }}</td>
-    <td
-      class="px-3 py-3 font-semibold"
-      :class="(order.balance_due || 0) > 0 ? 'text-red-600' : 'text-emerald-700'"
-    >
-      {{ formatMoney(order.balance_due || 0) }}
+    <td class="px-3 py-2.5 align-top text-xs">
+      <p><span class="text-gray-500 dark:text-slate-400">Касание:</span> {{ formatDate(order.next_followup_date) }}</p>
+      <p><span class="text-gray-500 dark:text-slate-400">Работы:</span> {{ formatDate(order.installation_date) }}</p>
     </td>
-    <td class="px-3 py-3">
-      <div class="flex flex-wrap gap-2">
-        <button
-          v-if="rowSegment === 'b2b'"
-          class="btn-mini"
-          @click="emit('generate', { orderId: order.id, docType: 'invoice' })"
-        >
-          Счет
-        </button>
-        <button
-          v-if="rowSegment === 'b2b'"
-          class="btn-mini"
-          @click="emit('generate', { orderId: order.id, docType: 'contract' })"
-        >
-          Договор
-        </button>
-        <button
-          v-if="rowSegment === 'b2c'"
-          class="btn-mini"
-          @click="emit('generate', { orderId: order.id, docType: 'work_order' })"
-        >
-          Наряд
-        </button>
-        <button
-          v-if="rowSegment === 'b2c'"
-          class="btn-mini"
-          @click="emit('generate', { orderId: order.id, docType: 'act' })"
-        >
-          Акт
-        </button>
-        <button class="btn-mini-outline" @click="emit('open', order.id)">Открыть</button>
+    <td class="px-3 py-2.5 align-top text-xs">
+      <p class="font-semibold text-gray-900 dark:text-white">{{ formatMoney(order.total_amount) }}</p>
+      <p class="mt-0.5 text-brand-700 dark:text-brand-300">Маржа: {{ formatMoney(order.margin) }}</p>
+    </td>
+    <td class="px-3 py-2.5 align-top text-xs">
+      <p class="font-semibold" :class="balanceDue > 0 ? 'text-amber-800 dark:text-amber-300' : 'text-gray-900 dark:text-white'">{{ formatMoney(balanceDue) }}</p>
+    </td>
+    <td class="px-3 py-2.5 align-top">
+      <div class="flex flex-col items-start gap-1.5">
+        <button class="btn-mini-outline whitespace-nowrap" @click="emit('open', order.id)">Открыть</button>
+        <details class="relative text-xs">
+          <summary class="cursor-pointer text-brand-700 hover:text-brand-800 dark:text-brand-300 dark:hover:text-brand-200">Документы</summary>
+          <div class="mt-1 flex w-full flex-col gap-1">
+            <template v-if="rowSegment === 'b2b'">
+              <button class="btn-mini whitespace-nowrap" @click="emit('generate', { orderId: order.id, docType: 'invoice' })">Счет</button>
+              <button class="btn-mini whitespace-nowrap" @click="emit('generate', { orderId: order.id, docType: 'contract' })">Договор</button>
+            </template>
+            <template v-else>
+              <button class="btn-mini whitespace-nowrap" @click="emit('generate', { orderId: order.id, docType: 'work_order' })">Наряд</button>
+              <button class="btn-mini whitespace-nowrap" @click="emit('generate', { orderId: order.id, docType: 'act' })">Акт</button>
+            </template>
+          </div>
+        </details>
       </div>
     </td>
   </tr>

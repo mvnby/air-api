@@ -116,8 +116,8 @@ const cardComponentForOrder = (order: ManagerOrderListItemResponse) => {
           <span>Сумма: <strong class="text-slate-800 dark:text-slate-200">{{ formatMoney(group.totalAmount) }}</strong></span>
           <span>Маржа: <strong class="text-brand-700 dark:text-brand-300">{{ formatMoney(group.margin) }}</strong></span>
           <span>
-            Долг:
-            <strong :class="group.balanceDue > 0 ? 'text-red-600 dark:text-red-300' : 'text-emerald-700 dark:text-emerald-300'">
+            Остаток:
+            <strong :class="group.balanceDue > 0 ? 'text-amber-800 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'">
               {{ formatMoney(group.balanceDue) }}
             </strong>
           </span>

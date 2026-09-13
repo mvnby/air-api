@@ -146,7 +146,7 @@ describe('LeadInboxCard read-only attachments', () => {
 
     await disclosure.trigger('click');
     expect(wrapper.find('[data-testid="lead-readonly-attachments"]').exists()).toBe(false);
-    await wrapper.get('button[title="Квалифицировать (в сделку)"]').trigger('click');
+    await wrapper.get('button[title="Перевести в переговоры"]').trigger('click');
     await wrapper.get('button[title="Отмена / В архив"]').trigger('click');
     expect(wrapper.emitted('qualify')).toEqual([[lead]]);
     expect(wrapper.emitted('reject')).toEqual([[lead]]);

@@ -97,10 +97,10 @@ const hasComment = computed(() => Boolean(props.order.comment?.trim()));
 const paymentSummary = computed(() => {
   const balance = Number(props.order.balance_due || 0);
   if (balance > 0) {
-    return { label: `Долг: ${formatMoney(balance)}`, className: 'text-red-600 dark:text-red-300' };
+    return { label: `Остаток: ${formatMoney(balance)}`, className: 'text-amber-800 dark:text-amber-300' };
   }
   if (props.order.total_amount > 0) {
-    return { label: 'Долг: нет', className: 'text-emerald-700 dark:text-emerald-300' };
+    return { label: 'Оплачено', className: 'text-emerald-700 dark:text-emerald-300' };
   }
   return { label: 'Без суммы', className: 'text-gray-500 dark:text-slate-400' };
 });

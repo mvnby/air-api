@@ -44,7 +44,7 @@ export type NavSection = {
 
 export const coreNavItems: NavItem[] = [
   { path: '/manager', label: 'Главная', icon: Home, match: 'exact' },
-  { path: '/manager/leads', label: 'Лиды', icon: UserPlus, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.crmManage },
+  { path: '/manager/leads', label: 'Входящие', icon: UserPlus, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.crmManage },
   { path: '/manager/orders/kanban', label: 'Заказы', icon: ShoppingCart, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.crmManage },
   { path: '/manager/calendar', label: 'Календарь', icon: Calendar, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.crmManage },
   { path: '/manager/customers', label: 'Клиенты', icon: Users, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.crmManage },

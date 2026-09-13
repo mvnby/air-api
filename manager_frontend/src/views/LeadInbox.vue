@@ -1,25 +1,37 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { api, type LeadsInboxItemResponse } from '../api';
-import { ManagerMailService, type EmailLeadImportJobResponse, type EmailLeadImportResponse } from '../client';
 import LeadInboxCard from '../components/leads/LeadInboxCard.vue';
 import LeadQualifyModal from '../components/leads/LeadQualifyModal.vue';
+import EmailLeadImportPanel from '../components/leads/EmailLeadImportPanel.vue';
 import AddressSuggestInput from '../components/ui/AddressSuggestInput.vue';
 import { useBelarusPhoneMask } from '../composables/useBelarusPhoneMask';
 import { useB2BLookup } from '../composables/useB2BLookup';
 
 type Scope = 'active' | 'archive';
-const EMAIL_LEAD_MANUAL_LOOKBACK_DAYS = 14;
 
 const scope = ref<Scope>('active');
 const items = ref<LeadsInboxItemResponse[]>([]);
 const total = ref(0);
 const loading = ref(false);
+const loadError = ref('');
 const toast = ref('');
-const emailLeadImporting = ref(false);
-const emailLeadImportJob = ref<EmailLeadImportJobResponse | null>(null);
-const emailLeadImportResult = ref<EmailLeadImportResponse | null>(null);
+const search = ref('');
 let loadRequestId = 0;
+let disposed = false;
+
+const matchingItems = computed(() => {
+  const query = search.value.trim().toLocaleLowerCase('ru-RU');
+  if (!query) return items.value;
+  return items.value.filter((item) => [
+    item.customer_name || item.customer_full_legal_name || 'Имя не указано',
+    item.customer_full_legal_name,
+    item.phone,
+    item.email,
+    item.customer_inn,
+    item.comment,
+  ].some((value) => String(value || '').toLocaleLowerCase('ru-RU').includes(query)));
+});
 
 // Qualify / Reject modals
 const qualifyTarget = ref<LeadsInboxItemResponse | null>(null);
@@ -115,77 +127,15 @@ const setToast = (msg: string) => {
   setTimeout(() => { if (toast.value === msg) toast.value = ''; }, 3000);
 };
 
-const getApiErrorMessage = (error: unknown) => {
-  if (error instanceof Error && error.message) return error.message;
-  return 'неизвестная ошибка';
-};
-
-const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
-
-const handleEmailLeadImportJob = async (job: EmailLeadImportJobResponse) => {
-  emailLeadImportJob.value = job;
-  if (job.result) {
-    emailLeadImportResult.value = job.result;
-  }
-  if (job.status === 'failed') {
-    setToast(`Почта: ошибка импорта${job.error ? `: ${job.error}` : ''}`);
-    return;
-  }
-  if (job.status === 'running' || job.already_running) {
-    setToast(job.already_running ? 'Почта уже проверяется, жду результат.' : 'Проверка почты запущена в фоне.');
-    await pollEmailLeadImportStatus();
-    return;
-  }
-  const result = job.result;
-  if (!result) {
-    setToast(job.message || 'Почта: задача завершена.');
-    return;
-  }
-  setToast(`Почта: обработано ${result.processed || 0}, кандидатов ${result.candidates || 0}, создано ${result.created || 0}.`);
-  if ((result.created || 0) > 0) {
-    scope.value = 'active';
-    await load();
-  }
-};
-
-const pollEmailLeadImportStatus = async () => {
-  for (let attempt = 0; attempt < 60; attempt += 1) {
-    await sleep(3000);
-    const job = await ManagerMailService.getManagerEmailLeadImportStatus();
-    emailLeadImportJob.value = job;
-    if (job.result) {
-      emailLeadImportResult.value = job.result;
-    }
-    if (job.status !== 'running') {
-      await handleEmailLeadImportJob(job);
-      return;
-    }
-  }
-  setToast('Проверка почты ещё выполняется в фоне.');
-};
-
-const importEmailLeads = async () => {
-  emailLeadImporting.value = true;
-  emailLeadImportJob.value = null;
-  emailLeadImportResult.value = null;
-  try {
-    const job = await ManagerMailService.importManagerEmailLeads(false, EMAIL_LEAD_MANUAL_LOOKBACK_DAYS);
-    await handleEmailLeadImportJob(job);
-  } catch (error) {
-    setToast(`Не удалось проверить почту: ${getApiErrorMessage(error)}`);
-  } finally {
-    emailLeadImporting.value = false;
-  }
-};
-
 const load = async () => {
   const requestId = ++loadRequestId;
   const currentScope = scope.value;
   loading.value = true;
+  loadError.value = '';
   try {
     const pageLimit = 100;
     const firstPage = await api.getLeadsInbox(currentScope, 1, pageLimit);
-    if (requestId !== loadRequestId) return;
+    if (disposed || requestId !== loadRequestId) return;
     const loadedItems = [...firstPage.items];
     const totalPages = Math.max(1, firstPage.meta?.pages || 1);
     const pageBatchSize = 4;
@@ -195,15 +145,15 @@ const load = async () => {
       const nextPages = await Promise.all(
         pageBatch.map((page) => api.getLeadsInbox(currentScope, page, pageLimit)),
       );
-      if (requestId !== loadRequestId) return;
+      if (disposed || requestId !== loadRequestId) return;
       nextPages.forEach((page) => loadedItems.push(...page.items));
     }
     items.value = loadedItems;
     total.value = firstPage.meta?.total ?? firstPage.total;
   } catch (e) {
-    if (requestId !== loadRequestId) return;
+    if (disposed || requestId !== loadRequestId) return;
     console.error(e);
-    setToast('Не удалось загрузить входящие');
+    loadError.value = 'Не удалось загрузить входящие. Проверьте соединение и повторите попытку.';
   } finally {
     if (requestId === loadRequestId) loading.value = false;
   }
@@ -213,6 +163,12 @@ onMounted(async () => {
   await load();
 });
 watch(scope, load);
+onBeforeUnmount(() => {
+  disposed = true;
+  loadRequestId += 1;
+  customerSearchRequestId += 1;
+  if (searchTimeout.value) clearTimeout(searchTimeout.value);
+});
 
 // ── Create Lead ───────────────────────────────────────────────────────────────
 const openCreateModal = () => {
@@ -241,7 +197,7 @@ const submitCreateLead = async () => {
     }
     createSaving.value = true;
     try {
-        await api.createManagerOrder({
+        const created = await api.createManagerOrder({
             customer_id: existingCustomerId.value || undefined,
             source: createForm.value.source,
             request_text: createForm.value.request_text,
@@ -255,11 +211,17 @@ const submitCreateLead = async () => {
             target_date: createForm.value.service_type === 'maintenance' && createForm.value.target_date ? new Date(createForm.value.target_date).toISOString() : undefined,
         });
         showCreateModal.value = false;
-        setToast('Лид создан');
-        await load();
+        if (created.status === 'new_lead') {
+          setToast(`Обращение #${created.id} создано`);
+          await load();
+        } else {
+          setToast(`Обращение #${created.id} уже в переговорах, открываем карточку`);
+          window.history.pushState({}, '', `/manager/orders/kanban?orderId=${created.id}`);
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        }
     } catch (e: any) {
         console.error(e);
-        setToast(`Ошибка: ${e?.message ?? 'Не удалось создать лид'}`);
+        setToast(`Ошибка: ${e?.message ?? 'Не удалось создать обращение'}`);
     } finally {
         createSaving.value = false;
     }
@@ -282,7 +244,7 @@ const handleQualifySuccess = async (orderId: number) => {
   window.dispatchEvent(new PopStateEvent('popstate'));
 };
 
-// ── No Answer (Недозвон) ──────────────────────────────────────────────────────
+// ── No Answer ────────────────────────────────────────────────────────────────
 const markNoAnswer = async (item: LeadsInboxItemResponse) => {
   try {
     const noAnswerPayload = { 
@@ -290,7 +252,7 @@ const markNoAnswer = async (item: LeadsInboxItemResponse) => {
       no_answer_at: new Date().toISOString() 
     };
     await api.patchManagerOrder(item.id, noAnswerPayload);
-    setToast(`Заявка #${item.id} переведена в работу (Недозвон)`);
+    setToast(`Обращение #${item.id}: нет ответа, остаётся в работе`);
     await load();
   } catch (e) {
     console.error(e);
@@ -314,7 +276,7 @@ const confirmReject = async () => {
       reject_reason: rejectReason.value || undefined,
       comment: newComment || undefined,
     });
-    setToast(`Заявка #${rejectTarget.value.id} перемещена в архив`);
+    setToast(`Обращение #${rejectTarget.value.id} перемещено в архив`);
     rejectTarget.value = null;
     rejectReason.value = '';
     await load();
@@ -333,6 +295,11 @@ const scopeOptions: { value: Scope; label: string }[] = [
   { value: 'active', label: 'Активные' },
   { value: 'archive', label: 'Архив' },
 ];
+
+const onEmailImported = async () => {
+  if (scope.value !== 'active') scope.value = 'active';
+  else await load();
+};
 </script>
 
 <template>
@@ -349,18 +316,18 @@ const scopeOptions: { value: Scope; label: string }[] = [
         >{{ total }}</span>
       </h1>
 
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2">
         <!-- Create Lead button -->
         <button
-          class="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700 active:scale-95 transition-all shadow-sm"
+          class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700 active:scale-95 transition-all shadow-sm"
           @click="openCreateModal"
         >
           <span class="material-icons-round text-[18px]">add</span>
-          Создать лид
+          Создать обращение
         </button>
 
         <!-- Scope filter -->
-        <div class="flex rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium shadow-sm">
+        <div class="flex shrink-0 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium shadow-sm">
           <button
             v-for="opt in scopeOptions"
             :key="opt.value"
@@ -368,6 +335,7 @@ const scopeOptions: { value: Scope; label: string }[] = [
             :class="scope === opt.value
               ? 'bg-brand-600 text-white'
               : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'"
+            :aria-pressed="scope === opt.value"
             @click="scope = opt.value"
           >
             {{ opt.label }}
@@ -376,70 +344,32 @@ const scopeOptions: { value: Scope; label: string }[] = [
       </div>
     </div>
 
-    <section class="mb-6 rounded-2xl border border-brand-200 bg-white p-4 shadow-sm dark:border-brand-500/20 dark:bg-slate-800">
-      <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p class="text-sm font-bold uppercase tracking-wide text-brand-700 dark:text-brand-300">Email-лиды</p>
-          <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">
-            Ручная проверка берёт последние 14 дней; автоимпорт идёт с последнего прохода.
-          </p>
-        </div>
-        <div class="flex flex-wrap items-center gap-2">
-          <button
-            class="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
-            :disabled="emailLeadImporting"
-            @click="importEmailLeads"
-          >
-            <span class="material-icons-round text-[18px]" :class="{ 'animate-spin': emailLeadImporting }">
-              {{ emailLeadImporting ? 'refresh' : 'mark_email_read' }}
-            </span>
-            {{ emailLeadImporting ? 'Проверяем...' : 'Проверить почту' }}
-          </button>
-        </div>
-      </div>
-      <div
-        v-if="emailLeadImportJob && !emailLeadImportResult"
-        class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600 dark:text-slate-300"
-      >
-        <span>{{ emailLeadImportJob.message || 'Проверка почты выполняется.' }}</span>
-        <span v-if="emailLeadImportJob.started_at">Старт: {{ new Date(emailLeadImportJob.started_at).toLocaleString('ru-RU') }}</span>
-      </div>
-      <div
-        v-if="emailLeadImportResult"
-        class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600 dark:text-slate-300"
-      >
-        <span v-if="emailLeadImportJob?.status">Статус: {{ emailLeadImportJob.status }}</span>
-        <span>Обработано: {{ emailLeadImportResult.processed || 0 }}</span>
-        <span v-if="emailLeadImportResult.scanned_since">С: {{ new Date(emailLeadImportResult.scanned_since).toLocaleString('ru-RU') }}</span>
-        <span>Кандидатов: {{ emailLeadImportResult.candidates || 0 }}</span>
-        <span>AI: {{ emailLeadImportResult.ai_checked || 0 }}</span>
-        <span>Создано: {{ emailLeadImportResult.created || 0 }}</span>
-        <span>Дубли: {{ emailLeadImportResult.duplicates || 0 }}</span>
-        <span>Отклонено: {{ emailLeadImportResult.rejected || 0 }}</span>
-        <span>Ошибки: {{ emailLeadImportResult.failed || 0 }}</span>
-      </div>
-      <div
-        v-if="emailLeadImportResult?.decisions?.length"
-        class="mt-3 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700"
-      >
-        <div
-          v-for="(decision, index) in emailLeadImportResult.decisions"
-          :key="`${decision.sender_email}-${decision.subject}-${decision.status}-${index}`"
-          class="grid gap-2 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0 dark:border-slate-700 md:grid-cols-[120px_minmax(0,1fr)_minmax(0,2fr)]"
+    <EmailLeadImportPanel @notice="setToast" @imported="onEmailImported" />
+
+    <div class="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <label class="relative block max-w-xl flex-1">
+        <span class="sr-only">Поиск по входящим обращениям</span>
+        <span class="material-icons-round pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-slate-400">search</span>
+        <input
+          v-model="search"
+          type="search"
+          class="w-full rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-10 text-sm text-slate-800 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+          placeholder="Имя, телефон, email, УНП или текст обращения"
         >
-          <span class="font-semibold text-slate-700 dark:text-slate-200">
-            {{ decision.status === 'rejected' ? 'Отклонено' : decision.status === 'would_create' ? 'Кандидат' : decision.status === 'created' ? 'Создан' : decision.status === 'duplicate' ? 'Дубль' : decision.status === 'filtered' ? 'Не кандидат' : 'Ошибка' }}
-            <span v-if="decision.order_id" class="text-slate-400">#{{ decision.order_id }}</span>
-          </span>
-          <span class="min-w-0 truncate text-slate-600 dark:text-slate-300">
-            {{ decision.subject || 'Без темы' }}
-          </span>
-          <span class="min-w-0 text-slate-500 dark:text-slate-400">
-            {{ decision.reason === 'keyword_filter' ? 'Не прошло быстрый фильтр' : decision.reason || decision.sender_email }}
-          </span>
-        </div>
-      </div>
-    </section>
+        <button
+          v-if="search"
+          type="button"
+          class="absolute right-2 top-1/2 inline-flex -translate-y-1/2 rounded p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700"
+          aria-label="Очистить поиск"
+          @click="search = ''"
+        ><span class="material-icons-round text-[18px]">close</span></button>
+      </label>
+      <p v-if="loading" class="text-sm text-slate-500 dark:text-slate-400" aria-live="polite">Обновляем список…</p>
+      <p v-else-if="loadError" class="text-sm text-red-600 dark:text-red-300" aria-live="polite">Список не загружен</p>
+      <p v-else class="text-sm text-slate-500 dark:text-slate-400" aria-live="polite">
+        Найдено: {{ matchingItems.length }} из {{ items.length }}
+      </p>
+    </div>
 
     <!-- Loading -->
     <div v-if="loading" class="flex items-center gap-3 text-slate-500 dark:text-slate-400 py-12 justify-center">
@@ -447,21 +377,26 @@ const scopeOptions: { value: Scope; label: string }[] = [
       Загрузка...
     </div>
 
+    <div v-else-if="loadError" class="rounded-xl border border-red-200 bg-red-50 p-6 text-center text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200" role="alert">
+      <p>{{ loadError }}</p>
+      <button type="button" class="mt-3 rounded-lg bg-white px-3 py-2 text-sm font-semibold shadow-sm hover:bg-red-100 dark:bg-slate-800 dark:hover:bg-slate-700" @click="load">Повторить</button>
+    </div>
+
     <!-- Empty state -->
     <div
-      v-else-if="items.length === 0"
+      v-else-if="items.length === 0 || matchingItems.length === 0"
       class="text-center py-16 text-slate-400 dark:text-slate-500"
     >
       <span class="material-icons-round text-5xl mb-3 block opacity-30">inbox</span>
       <p class="text-lg font-medium">
-        {{ scope === 'active' ? 'Входящих нет — всё обработано!' : 'Архив пуст' }}
+        {{ items.length === 0 ? (scope === 'active' ? 'Входящих нет — всё обработано!' : 'Архив пуст') : 'По этому запросу обращений нет' }}
       </p>
     </div>
 
     <!-- Feed -->
-    <div v-else class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+    <div v-else class="grid grid-cols-1 xl:grid-cols-2 gap-4">
       <LeadInboxCard
-        v-for="item in items"
+        v-for="item in matchingItems"
         :key="item.id"
         :item="item"
         :is-archive="scope === 'archive'"
@@ -498,10 +433,10 @@ const scopeOptions: { value: Scope; label: string }[] = [
       <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-sm w-full p-6 space-y-4">
         <h2 class="text-lg font-bold flex items-center gap-2">
           <span class="material-icons-round text-red-500">cancel</span>
-          Отказать по заявке #{{ rejectTarget.id }}
+          Отказать по обращению #{{ rejectTarget.id }}
         </h2>
         <p class="text-sm text-slate-600 dark:text-slate-300">
-          Заявка будет перемещена в архив со статусом <strong>«Отменена»</strong>.
+          Обращение будет перемещено в архив со статусом <strong>«Отменена»</strong>.
         </p>
 
         <div>
@@ -536,7 +471,7 @@ const scopeOptions: { value: Scope; label: string }[] = [
       <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
         <h2 class="text-lg font-bold flex items-center gap-2">
           <span class="material-icons-round text-brand-500">person_add</span>
-          Новый лид
+          Новое обращение
         </h2>
 
         <div class="space-y-3 relative">
@@ -691,7 +626,7 @@ const scopeOptions: { value: Scope; label: string }[] = [
             :disabled="createSaving"
             @click="submitCreateLead"
           >
-            {{ createSaving ? 'Сохранение...' : '✅ Создать лид' }}
+            {{ createSaving ? 'Сохранение...' : '✅ Создать обращение' }}
           </button>
           <button
             class="flex-1 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-sm hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"

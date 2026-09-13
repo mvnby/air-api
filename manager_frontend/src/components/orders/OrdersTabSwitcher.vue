@@ -13,13 +13,14 @@ const tabs: Array<{ value: Segment; label: string; title: string; icon: typeof L
 </script>
 
 <template>
-  <div class="inline-flex shrink-0 rounded-xl border border-gray-200 bg-gray-100 p-0.5">
+  <div class="inline-flex shrink-0 rounded-xl border border-gray-200 bg-gray-100 p-0.5 dark:border-slate-600 dark:bg-slate-700">
     <button
       v-for="tab in tabs"
       :key="tab.value"
       class="inline-flex items-center gap-1 rounded-[10px] px-1.5 py-1.5 text-xs font-semibold transition sm:gap-1.5 sm:px-3 sm:text-sm"
-      :class="modelValue === tab.value ? 'bg-brand-600 text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'"
+      :class="modelValue === tab.value ? 'bg-brand-600 text-white shadow-sm' : 'text-gray-600 hover:text-gray-900 dark:text-slate-200 dark:hover:text-white'"
       :title="tab.title"
+      :aria-pressed="modelValue === tab.value"
       @click="emit('update:modelValue', tab.value)"
     >
       <component :is="tab.icon" class="h-3.5 w-3.5" />

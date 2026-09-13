@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue';
-import { Download, SlidersHorizontal, Upload, X } from 'lucide-vue-next';
+import { onMounted, onUnmounted, ref, watch } from 'vue';
 import { api } from '../../api';
 import {
   ManagerOrdersService,
@@ -9,14 +8,11 @@ import {
   type ManagerOrderTransferPackage_Input,
   type ManagerOrderUpdatePayload,
 } from '../../client';
-import OrdersTabSwitcher from './OrdersTabSwitcher.vue';
-import OrdersViewToggle from './OrdersViewToggle.vue';
+import OrdersToolbar from './OrdersToolbar.vue';
 import OrderKanbanBoard from './OrderKanbanBoard.vue';
 import OrdersListTable from './OrdersListTable.vue';
 import OrderEditDrawer from './OrderEditDrawer.vue';
 import {
-  STATUS_LABELS,
-  STATUS_ORDER,
   formatMoney,
 } from './order-utils';
 import { getApiErrorMessage } from '../../utils/api-errors';
@@ -33,6 +29,7 @@ import {
 const { recoveryRequired } = managerSession;
 
 const toast = ref('');
+const loadError = ref('');
 const setToast = (message: string) => {
   toast.value = message;
   window.setTimeout(() => {
@@ -40,7 +37,7 @@ const setToast = (message: string) => {
   }, 2500);
 };
 const {
-  segment, view, statusFilter, overdueOnly, sort, search, loading, orders,
+  segment, view, statusFilter, workFilter, workFilterCounts, hiddenOnHoldCount, sort, search, loading, orders,
   movingOrderIds, isHydrated, drawerOpen, selectedOrder, pendingOpenOrderId,
   openedByUrlOrderId, orderServerErrors, orderFormError, hideOnHold,
   groupByCustomer, filtersOpen, selectedOrderIds, transferLoading, importFileInput,
@@ -167,12 +164,12 @@ const loadOrders = async () => {
   if (recoveryRequired.value) return;
   const requestId = ++loadRequestId;
   loading.value = true;
+  loadError.value = '';
   try {
     const params = {
       segment: segment.value,
       status: statusFilter.value || undefined,
-      search: search.value || undefined,
-      overdueOnly: overdueOnly.value,
+      search: normalizedSearch.value || undefined,
       sort: sort.value,
     };
     const pageLimit = 100;
@@ -208,7 +205,7 @@ const loadOrders = async () => {
       setToast('Требуется повторный вход');
       return;
     }
-    setToast(`Не удалось загрузить сделки: ${getApiErrorMessage(error)}`);
+    loadError.value = `Не удалось загрузить заказы: ${getApiErrorMessage(error)}`;
   } finally {
     if (requestId !== loadRequestId) return;
     loading.value = false;
@@ -216,37 +213,44 @@ const loadOrders = async () => {
 };
 
 let searchTimer: number | undefined;
+const refreshOrders = () => {
+  if (searchTimer) window.clearTimeout(searchTimer);
+  searchTimer = undefined;
+  return loadOrders();
+};
 watch(
-  () => [segment.value, statusFilter.value, overdueOnly.value, sort.value],
-  async () => {
+  () => [segment.value, statusFilter.value, sort.value, search.value],
+  (next, previous) => {
     if (!isHydrated.value) return;
+    // Invalidate the old response as soon as the inputs change, including the debounce window.
+    loadRequestId += 1;
     persistSegmentAndView();
-    await loadOrders();
+    setQueryParam('search', normalizedSearch.value);
+    if (searchTimer) window.clearTimeout(searchTimer);
+    if (next.slice(0, 3).some((value, index) => value !== previous[index])) {
+      void refreshOrders();
+    } else {
+      searchTimer = window.setTimeout(refreshOrders, 250);
+    }
   },
 );
-watch(view, () => {
-  persistSegmentAndView();
-});
+watch(view, persistSegmentAndView);
 watch(groupByCustomer, () => {
-  if (!isHydrated.value) return;
-  persistGrouping();
+  if (isHydrated.value) persistGrouping();
 });
-watch(search, () => {
-  if (!isHydrated.value) return;
-  setQueryParam('search', normalizedSearch.value);
-  if (searchTimer) window.clearTimeout(searchTimer);
-  searchTimer = window.setTimeout(async () => {
-    await loadOrders();
-  }, 250);
-});
-
-const clearOrderFilters = async () => {
+const boardFilterReset = ref(0);
+const clearOrderFilters = () => {
   search.value = '';
   statusFilter.value = '';
-  overdueOnly.value = false;
+  workFilter.value = 'all';
+  hideOnHold.value = false;
+  boardFilterReset.value += 1;
   setQueryParam('search', '');
-  await loadOrders();
 };
+onUnmounted(() => {
+  loadRequestId += 1;
+  if (searchTimer) window.clearTimeout(searchTimer);
+});
 
 const applyStatusLocally = (orderId: number, payload: ManagerOrderUpdatePayload) => {
   const item = orders.value.find((order) => order.id === orderId);
@@ -477,90 +481,21 @@ watch(drawerOpen, (isOpen) => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 text-slate-900">
+  <div class="min-h-screen bg-gray-50 text-slate-900 dark:bg-slate-900 dark:text-slate-100">
     <div class="mx-auto max-w-[1400px] px-4 py-6 md:px-8">
-      <header class="mb-4 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-        <div class="flex items-center gap-1 pl-9 sm:gap-2 md:pl-0">
-          <div class="flex min-w-0 flex-1 items-center gap-1 sm:gap-2">
-            <h1 class="hidden shrink-0 text-lg font-bold dark:text-white sm:block md:text-xl">Заказы</h1>
-            <OrdersTabSwitcher v-model="segment" />
-          </div>
-          <div class="ml-auto flex shrink-0 items-center justify-end gap-1 sm:gap-2">
-            <button
-              type="button"
-              class="hidden h-8 items-center justify-center gap-1 rounded-xl border border-gray-200 bg-gray-50 px-2 text-xs font-semibold text-gray-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 sm:inline-flex sm:h-9 sm:px-3"
-              :disabled="transferLoading || !selectedOrderIds.length"
-              title="Экспорт выбранных заказов"
-              @click="exportSelectedOrders"
-            >
-              <Download class="h-4 w-4" />
-              <span class="hidden sm:inline">Экспорт</span>
-              <span v-if="selectedOrderIds.length" class="rounded-full bg-brand-100 px-1.5 py-0.5 text-[10px] text-brand-800">{{ selectedOrderIds.length }}</span>
-            </button>
-            <button
-              type="button"
-              class="hidden h-8 items-center justify-center gap-1 rounded-xl border border-gray-200 bg-gray-50 px-2 text-xs font-semibold text-gray-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 sm:inline-flex sm:h-9 sm:px-3"
-              :disabled="transferLoading"
-              title="Импорт заказов из JSON"
-              @click="openImportPicker"
-            >
-              <Upload class="h-4 w-4" />
-              <span class="hidden sm:inline">Импорт</span>
-            </button>
-            <input ref="importFileInput" class="hidden" type="file" accept="application/json,.json" @change="handleImportFile" />
-            <OrdersViewToggle v-model="view" />
-            <button
-              type="button"
-              class="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-700 transition hover:bg-white dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 sm:h-9 sm:w-9"
-              :class="filtersOpen || hasActiveOrderFilters ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300' : ''"
-              :aria-expanded="filtersOpen"
-              aria-label="Опции и фильтры"
-              :title="hasActiveOrderFilters ? 'Есть активные фильтры' : 'Опции и фильтры'"
-              @click="filtersOpen = !filtersOpen"
-            >
-              <SlidersHorizontal class="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-        
-        <Transition name="fade">
-          <div v-if="filtersOpen" class="mt-3 grid gap-3 rounded-2xl border border-gray-100 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50 md:grid-cols-3 lg:grid-cols-4">
-            <input v-model="search" class="field-input" placeholder="Поиск (клиент, УНП, ID)..." />
-            <select v-model="statusFilter" class="field-input">
-              <option value="">Все статусы</option>
-              <option v-for="statusKey in STATUS_ORDER" :key="statusKey" :value="statusKey">
-                {{ STATUS_LABELS[statusKey] || statusKey }}
-              </option>
-            </select>
-            <label class="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-gray-700 transition hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700">
-              <input v-model="overdueOnly" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-600" />
-              <span class="text-sm font-medium">Только просроченные</span>
-            </label>
-            <label class="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-gray-700 transition hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700">
-              <input v-model="groupByCustomer" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-600" />
-              <span class="text-sm font-medium">Группировать</span>
-            </label>
-            <label class="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-gray-700 transition hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700">
-              <input v-model="hideOnHold" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-600" />
-              <span class="text-sm font-medium">Скрывать отложенные</span>
-            </label>
-            <button
-              type="button"
-              class="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-              :disabled="!hasActiveOrderFilters"
-              @click="clearOrderFilters"
-            >
-              <X class="h-4 w-4" />
-              Сбросить фильтры
-            </button>
-            <div v-if="view === 'list'" class="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
-              <button type="button" class="text-sm font-medium text-brand-700 disabled:text-gray-400" :disabled="!visibleOrderIds.length" @click="selectAllVisible">Выбрать все</button>
-              <span class="text-xs text-gray-400">/</span>
-              <button type="button" class="text-sm font-medium text-gray-600 disabled:text-gray-400" :disabled="!selectedOrderIds.length" @click="clearSelection">Сбросить</button>
-            </div>
-          </div>
-        </Transition>
-      </header>
+      <OrdersToolbar
+        v-model:segment="segment" v-model:view="view" v-model:search="search"
+        v-model:status-filter="statusFilter" v-model:work-filter="workFilter"
+        v-model:group-by-customer="groupByCustomer" v-model:hide-on-hold="hideOnHold"
+        v-model:filters-open="filtersOpen" :counts="workFilterCounts"
+        :hidden-on-hold-count="hiddenOnHoldCount" :visible-count="visibleOrderIds.length"
+        :selected-count="selectedOrderIds.length" :has-active-filters="hasActiveOrderFilters"
+        :loading="loading" :load-failed="Boolean(loadError)" :transfer-loading="transferLoading"
+        @reset="clearOrderFilters" @search-now="refreshOrders"
+        @import="openImportPicker" @export="exportSelectedOrders"
+        @select-all="selectAllVisible" @clear-selection="clearSelection"
+      />
+      <input ref="importFileInput" class="hidden" type="file" accept="application/json,.json" @change="handleImportFile" />
 
       <!-- Toast -->
       <Transition name="fade">
@@ -568,11 +503,15 @@ watch(drawerOpen, (isOpen) => {
           {{ toast }}
         </div>
       </Transition>
-      <p v-if="loading" class="mb-4 text-sm text-gray-500">Загрузка сделок...</p>
 
+      <div v-if="loadError" role="alert" class="rounded-xl border border-red-200 bg-red-50 p-5 text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">
+        <p>{{ loadError }}</p>
+        <button type="button" class="mt-3 rounded-lg bg-white px-3 py-2 text-sm font-semibold dark:bg-slate-800" @click="refreshOrders">Повторить</button>
+      </div>
       <OrderKanbanBoard
-        v-if="view === 'kanban'"
+        v-else-if="view === 'kanban'"
         :grouped-items="groupedOrderItems"
+        :filter-reset="boardFilterReset"
         :segment="segment"
         :moving-order-ids="movingOrderIds"
         @open="openOrder"
