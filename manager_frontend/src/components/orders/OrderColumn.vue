@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Check, ChevronDown } from 'lucide-vue-next';
 import type { Segment } from '../../api';
 import type { ManagerOrderListItemResponse } from '../../client';
@@ -20,6 +20,7 @@ const props = defineProps<{
   movingOrderIds: number[];
   expandedOrderId: number | null;
   expandedGroupIds: string[];
+  filterReset?: number;
 }>();
 
 const emit = defineEmits<{
@@ -38,6 +39,10 @@ const emit = defineEmits<{
 
 const activeFilter = ref('');
 const filterOpen = ref(false);
+watch(() => props.filterReset, () => {
+  activeFilter.value = '';
+  filterOpen.value = false;
+});
 
 const getFilterValue = (order: ManagerOrderListItemResponse) => {
   if (props.filterKind === 'negotiation') return getOrderNegotiationStatus(order);
@@ -108,7 +113,7 @@ const cardComponentForOrder = (order: ManagerOrderListItemResponse) => (
 
 <template>
   <section
-    class="min-h-[220px] w-[calc(100vw-2rem)] max-w-[320px] shrink-0 rounded-2xl border border-gray-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800 sm:w-[340px] sm:max-w-[340px] md:w-[420px] md:max-w-[420px] xl:w-[460px] xl:max-w-[460px]"
+    class="min-h-[220px] w-[calc(100vw-2rem)] max-w-[320px] shrink-0 rounded-xl border border-gray-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800 sm:w-[340px] sm:max-w-[340px]"
     :class="BOARD_COLUMN_TONE_CLASSES[status]?.column"
     @dragover.prevent
     @drop="(event) => onDrop(event, status)"

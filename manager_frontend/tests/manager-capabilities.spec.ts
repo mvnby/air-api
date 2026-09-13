@@ -107,7 +107,7 @@ describe('tenant manager capabilities', () => {
       .map(item => item.label);
     expect(visibleLabels).toEqual([
       'Главная',
-      'Лиды',
+      'Входящие',
       'Заказы',
       'Календарь',
       'Клиенты',

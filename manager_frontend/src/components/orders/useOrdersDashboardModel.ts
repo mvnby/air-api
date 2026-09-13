@@ -9,6 +9,7 @@ import type {
 } from '../../client';
 import { managerSession } from '../../services/manager-session';
 import { managerStorefrontSelection } from '../../services/manager-storefront-selection';
+import { matchesOrderWorkFilter, ORDER_WORK_FILTERS, type OrderWorkFilter } from './order-work-filters';
 import {
   BOARD_COLUMNS,
   buildCustomerOrderRenderItems,
@@ -31,7 +32,7 @@ export const useOrdersDashboardModel = (notify: (message: string) => void) => {
   const segment = ref<Segment>('b2c');
   const view = ref<DashboardView>('kanban');
   const statusFilter = ref('');
-  const overdueOnly = ref(false);
+  const workFilter = ref<OrderWorkFilter>('all');
   const sort = ref('created_at_desc');
   const search = ref('');
   const loading = ref(false);
@@ -59,12 +60,17 @@ export const useOrdersDashboardModel = (notify: (message: string) => void) => {
   const importFileName = ref('');
   const importModalOpen = ref(false);
 
-  const visibleOrders = computed(() => orders.value.filter((order) => (
+  const availableOrders = computed(() => orders.value.filter((order) => (
     !hideOnHold.value || !order.is_on_hold
   )));
+  const hiddenOnHoldCount = computed(() => hideOnHold.value ? orders.value.filter((order) => order.is_on_hold).length : 0);
+  const workFilterCounts = computed(() => Object.fromEntries(ORDER_WORK_FILTERS.map(({ value }) => [
+    value, availableOrders.value.filter((order) => matchesOrderWorkFilter(order, value)).length,
+  ])) as Record<OrderWorkFilter, number>);
+  const visibleOrders = computed(() => availableOrders.value.filter((order) => matchesOrderWorkFilter(order, workFilter.value)));
   const normalizedSearch = computed(() => search.value.trim());
   const hasActiveOrderFilters = computed(() => Boolean(
-    normalizedSearch.value || statusFilter.value || overdueOnly.value,
+    normalizedSearch.value || statusFilter.value || workFilter.value !== 'all' || hideOnHold.value,
   ));
   const groupedOrders = computed(() => {
     const groups: Record<string, ManagerOrderListItemResponse[]> = {};
@@ -204,6 +210,7 @@ export const useOrdersDashboardModel = (notify: (message: string) => void) => {
     orderFormError.value = '';
     customerAliases.value = {};
     search.value = '';
+    workFilter.value = 'all';
     loading.value = false;
     saving.value = false;
     transferLoading.value = false;
@@ -216,7 +223,7 @@ export const useOrdersDashboardModel = (notify: (message: string) => void) => {
   };
 
   return {
-    segment, view, statusFilter, overdueOnly, sort, search, loading, saving, orders,
+    segment, view, statusFilter, workFilter, workFilterCounts, hiddenOnHoldCount, sort, search, loading, saving, orders,
     movingOrderIds, isHydrated, drawerOpen, selectedOrder, pendingOpenOrderId,
     openedByUrlOrderId, orderServerErrors, orderFormError, hideOnHold,
     groupByCustomer, filtersOpen, customerAliases, selectedOrderIds, transferLoading,

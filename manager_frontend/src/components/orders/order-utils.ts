@@ -232,6 +232,7 @@ export function formatPhone(phone?: string | null): string {
 }
 
 export function isOverdue(order: ManagerOrderListItemResponse): boolean {
+    if (order.status === 'closed') return false;
     if (!order.next_followup_date) return false;
     const date = new Date(order.next_followup_date);
     if (Number.isNaN(date.getTime())) return false;

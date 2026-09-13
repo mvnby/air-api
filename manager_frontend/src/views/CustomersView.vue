@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue';
-import { Search, Users, ChevronLeft, ChevronRight, Phone, Mail, Building, Plus, Star, UserPlus } from 'lucide-vue-next';
+import { Search, Users, ChevronLeft, ChevronRight, Phone, Mail, Plus, Star, UserPlus, X } from 'lucide-vue-next';
 import { api } from '../api';
 import type { ManagerCatalogCustomerItemResponse } from '../client';
 import { CUSTOMER_UPDATED_EVENT, type CustomerUpdatedEventPayload } from '../utils/customer-events';
@@ -15,6 +15,8 @@ const typeFilter = ref('');
 const onlyWithOrders = ref(false);
 const page = ref(1);
 const meta = ref({ total: 0, pages: 1, limit: 20 });
+const loadError = ref('');
+const hasLoaded = ref(false);
 const recentlyUpdated = ref<Record<number, number>>({});
 const favoriteSaving = ref<Record<number, boolean>>({});
 const cleanupTimers = new Map<number, number>();
@@ -22,6 +24,9 @@ const toast = ref('');
 const showCreateOrder = ref(false);
 const showCreateCustomer = ref(false);
 const createOrderCustomer = ref<{ id: number; name: string } | null>(null);
+let loadRequestId = 0;
+let isUnmounted = false;
+let searchTimer: number | undefined;
 
 function sortCustomerItems(items: ManagerCatalogCustomerItemResponse[]) {
   return [...items].sort((a, b) => {
@@ -84,7 +89,9 @@ const TYPE_MAP: Record<string, { label: string; icon: string }> = {
 
 // --- Fetch ---
 async function loadCustomers() {
+  const requestId = ++loadRequestId;
   loading.value = true;
+  loadError.value = '';
   try {
     const data = await api.getManagerCustomers(
       page.value,
@@ -93,36 +100,56 @@ async function loadCustomers() {
       typeFilter.value || undefined,
       onlyWithOrders.value,
     );
+    if (isUnmounted || requestId !== loadRequestId) return;
     customers.value = sortCustomerItems(data.items);
     meta.value = data.meta;
+    hasLoaded.value = true;
   } catch (e) {
+    if (isUnmounted || requestId !== loadRequestId) return;
     console.error('Failed to load customers', e);
-    setToast('Не удалось загрузить список клиентов');
+    loadError.value = 'Не удалось загрузить список клиентов. Проверьте соединение и повторите попытку.';
   } finally {
-    loading.value = false;
+    if (!isUnmounted && requestId === loadRequestId) loading.value = false;
   }
 }
 
 function onSearch() {
+  cancelScheduledSearch();
   page.value = 1;
-  loadCustomers();
+  void loadCustomers();
+}
+
+function scheduleSearch() {
+  cancelScheduledSearch();
+  loadRequestId += 1;
+  searchTimer = window.setTimeout(onSearch, 300);
+}
+
+function cancelScheduledSearch() {
+  if (!searchTimer) return;
+  window.clearTimeout(searchTimer);
+  searchTimer = undefined;
+}
+
+function clearSearch() {
+  if (!searchQuery.value) return;
+  searchQuery.value = '';
+  onSearch();
 }
 
 function onTypeChange() {
+  cancelScheduledSearch();
+  loadRequestId += 1;
   page.value = 1;
-  loadCustomers();
+  void loadCustomers();
 }
 
 function goToPage(p: number) {
   if (p < 1 || p > meta.value.pages) return;
+  cancelScheduledSearch();
+  loadRequestId += 1;
   page.value = p;
-  loadCustomers();
-}
-
-function formatDate(iso: string | null) {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  void loadCustomers();
 }
 
 function openCustomerProfile(customerId: number) {
@@ -189,6 +216,9 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  isUnmounted = true;
+  loadRequestId += 1;
+  cancelScheduledSearch();
   window.removeEventListener(CUSTOMER_UPDATED_EVENT, handleCustomerUpdated);
   cleanupTimers.forEach((timer) => window.clearTimeout(timer));
   cleanupTimers.clear();
@@ -213,14 +243,25 @@ onUnmounted(() => {
           <UserPlus :size="17" />
           Новый клиент
         </button>
-        <div class="search-box">
+        <label class="search-box">
           <Search :size="16" />
           <input
             v-model="searchQuery"
-            placeholder="Поиск клиентов..."
+            aria-label="Поиск клиентов по имени, телефону, email или УНП"
+            placeholder="Имя, телефон, email или УНП"
+            @input="scheduleSearch"
             @keyup.enter="onSearch"
           />
-        </div>
+          <button
+            v-if="searchQuery"
+            type="button"
+            class="search-clear"
+            aria-label="Очистить поиск"
+            @click="clearSearch"
+          >
+            <X :size="15" />
+          </button>
+        </label>
         <div class="flex bg-gray-100 dark:bg-slate-700 p-1 rounded-lg">
           <button
               @click="typeFilter = ''; onTypeChange()"
@@ -263,12 +304,21 @@ onUnmounted(() => {
       <p>Загрузка...</p>
     </div>
 
+    <div v-else-if="loadError" class="empty-state border border-dashed border-red-200 bg-white dark:border-red-900/50 dark:bg-slate-800">
+      <h2 class="text-xl font-bold mb-2 text-gray-900 dark:text-white">Список не загрузился</h2>
+      <p>{{ loadError }}</p>
+      <button type="button" class="mt-4 inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-500" @click="loadCustomers">
+        Повторить
+      </button>
+    </div>
+
     <!-- Empty -->
-    <div v-else-if="customers.length === 0" class="empty-state border border-dashed border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800">
+    <div v-else-if="hasLoaded && customers.length === 0" class="empty-state border border-dashed border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800">
       <div class="flex justify-center mb-4">
         <Users :size="64" class="text-gray-300 dark:text-slate-600" />
       </div>
       <h2 class="text-xl font-bold mb-2 text-gray-900 dark:text-white">Клиенты не найдены</h2>
+      <p class="customers-found" aria-live="polite">Найдено: {{ meta.total }}</p>
       <p v-if="searchQuery || typeFilter" class="text-gray-500 dark:text-slate-400">Попробуйте изменить поисковый запрос "{{ searchQuery }}" или фильтры</p>
       <p v-else-if="onlyWithOrders" class="text-gray-500 dark:text-slate-400">Нет клиентов с заказами по текущим фильтрам.</p>
       <div v-else class="text-gray-500 dark:text-slate-400">
@@ -280,73 +330,82 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Cards Grid -->
-    <div v-else class="customers-grid">
-      <div v-for="customer in customers" :key="customer.id" class="customer-card">
-        <div class="card-header">
-          <div class="avatar" :class="customer.type">
-            {{ (customer.name || 'К').charAt(0).toUpperCase() }}
-          </div>
-          <div class="card-info">
-            <div class="customer-name">{{ customer.name }}</div>
-            <span class="type-badge" :class="customer.type">
-              {{ TYPE_MAP[customer.type]?.icon }} {{ TYPE_MAP[customer.type]?.label || customer.type }}
-            </span>
-            <span v-if="recentlyUpdated[customer.id]" class="updated-badge">обновлено</span>
-          </div>
-        </div>
-
-        <div class="card-details">
-          <div class="detail-row" v-if="customer.phone">
-            <Phone :size="14" />
-            <span>{{ customer.phone }}</span>
-          </div>
-          <div class="detail-row" v-if="customer.email">
-            <Mail :size="14" />
-            <span>{{ customer.email }}</span>
-          </div>
-          <div class="detail-row" v-if="customer.inn">
-            <Building :size="14" />
-            <span>ИНН: {{ customer.inn }}</span>
-          </div>
-          <div class="detail-row" v-if="customer.full_legal_name">
-            <Building :size="14" />
-            <span class="legal-name">{{ customer.full_legal_name }}</span>
-          </div>
-        </div>
-
-        <div class="card-footer">
-          <div class="order-count">
-            <span class="count-number">{{ customer.order_count }}</span>
-            <span class="count-label">{{ customer.order_count === 1 ? 'заказ' : (customer.order_count >= 2 && customer.order_count <= 4 ? 'заказа' : 'заказов') }}</span>
-          </div>
-          <div class="footer-actions">
-            <div class="date-added">{{ formatDate(customer.created_at) }}</div>
-            <button
-              class="favorite-btn"
-              :class="{ active: customer.is_favorite }"
-              :disabled="favoriteSaving[customer.id]"
-              :title="customer.is_favorite ? 'Убрать из избранного' : 'Добавить в избранное'"
-              @click="toggleFavorite(customer)"
-            >
-              <Star :size="15" :fill="customer.is_favorite ? 'currentColor' : 'none'" />
-            </button>
-            <button class="open-btn" @click="openCreateOrder(customer)" title="Создать заказ">
-              <Plus :size="14" />
-            </button>
-            <button class="open-btn" @click="openCustomerProfile(customer.id)">Карточка</button>
-          </div>
-        </div>
-      </div>
+    <div v-else class="customers-list-wrap">
+      <p class="customers-found" aria-live="polite">Найдено: {{ meta.total }}</p>
+      <table class="customers-list">
+        <thead>
+          <tr>
+            <th scope="col">Клиент</th>
+            <th scope="col">Контакты</th>
+            <th scope="col">УНП</th>
+            <th scope="col">Заказы</th>
+            <th scope="col" class="customers-actions-heading">Действия</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="customer in customers" :key="customer.id">
+            <td data-label="Клиент" class="customer-primary-cell">
+              <a
+                class="customer-name-link"
+                :href="`/manager/customers/profile?customerId=${customer.id}`"
+                :title="customer.full_legal_name || customer.name || `Клиент #${customer.id}`"
+              >
+                {{ customer.name || customer.full_legal_name || `Клиент #${customer.id}` }}
+              </a>
+              <div class="customer-meta">
+                <span class="type-badge" :class="customer.type">
+                  {{ TYPE_MAP[customer.type]?.icon }} {{ TYPE_MAP[customer.type]?.label || customer.type }}
+                </span>
+                <span v-if="recentlyUpdated[customer.id]" class="updated-badge">обновлено</span>
+              </div>
+            </td>
+            <td data-label="Контакты" class="customer-contacts-cell">
+              <div class="customer-contacts">
+                <a v-if="customer.phone" :href="`tel:${customer.phone}`" class="customer-contact-link">
+                  <Phone :size="14" aria-hidden="true" />{{ customer.phone }}
+                </a>
+                <a v-if="customer.email" :href="`mailto:${customer.email}`" class="customer-contact-link customer-email-link">
+                  <Mail :size="14" aria-hidden="true" />{{ customer.email }}
+                </a>
+                <span v-if="!customer.phone && !customer.email" class="customer-empty">—</span>
+              </div>
+            </td>
+            <td data-label="УНП">
+              <span v-if="customer.inn" class="customer-inn">{{ customer.inn }}</span>
+              <span v-else class="customer-empty">—</span>
+            </td>
+            <td data-label="Заказы"><strong>{{ customer.order_count }}</strong></td>
+            <td data-label="Действия" class="customer-actions-cell">
+              <div class="customer-actions">
+                <button
+                  type="button"
+                  class="favorite-btn"
+                  :class="{ active: customer.is_favorite }"
+                  :disabled="favoriteSaving[customer.id]"
+                  :aria-pressed="Boolean(customer.is_favorite)"
+                  :aria-label="customer.is_favorite ? `Убрать ${customer.name} из избранного` : `Добавить ${customer.name} в избранное`"
+                  @click="toggleFavorite(customer)"
+                >
+                  <Star :size="16" :fill="customer.is_favorite ? 'currentColor' : 'none'" />
+                </button>
+                <button type="button" class="open-btn" title="Создать заказ" aria-label="Создать заказ" @click="openCreateOrder(customer)">
+                  <Plus :size="15" aria-hidden="true" />
+                  Заказ
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
     <!-- Pagination -->
-    <div v-if="meta.pages > 1" class="pagination">
-      <button @click="goToPage(page - 1)" :disabled="page <= 1" class="page-btn">
+    <div v-if="!loadError && meta.pages > 1" class="pagination">
+      <button aria-label="Предыдущая страница" @click="goToPage(page - 1)" :disabled="loading || page <= 1" class="page-btn">
         <ChevronLeft :size="16" />
       </button>
       <span class="page-info">{{ page }} / {{ meta.pages }} ({{ meta.total }} записей)</span>
-      <button @click="goToPage(page + 1)" :disabled="page >= meta.pages" class="page-btn">
+      <button aria-label="Следующая страница" @click="goToPage(page + 1)" :disabled="loading || page >= meta.pages" class="page-btn">
         <ChevronRight :size="16" />
       </button>
     </div>

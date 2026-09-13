@@ -358,7 +358,7 @@ const submitQualify = async () => {
         <div class="min-w-0">
           <h2 class="flex items-center gap-2 text-lg font-bold">
             <span class="material-icons-round text-brand-600 dark:text-brand-500">bolt</span>
-            Быстрая квалификация #{{ lead.id }}
+            Перевести в переговоры #{{ lead.id }}
           </h2>
           <p class="mt-1 text-xs text-slate-500">Минимум для сделки: тип клиента и суть задачи.</p>
         </div>
@@ -666,7 +666,7 @@ const submitQualify = async () => {
         >
           <span v-if="isLoading" class="material-icons-round animate-spin">refresh</span>
           <span v-else class="material-icons-round">arrow_forward</span>
-          Создать сделку
+          В переговоры
         </button>
       </div>
     </div>

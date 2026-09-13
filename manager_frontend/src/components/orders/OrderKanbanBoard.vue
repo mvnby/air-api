@@ -9,6 +9,7 @@ defineProps<{
   groupedItems: Record<string, OrderRenderItem[]>;
   segment: Segment;
   movingOrderIds: number[];
+  filterReset?: number;
 }>();
 
 const emit = defineEmits<{
@@ -65,6 +66,7 @@ const onToggleGroup = (groupId: string) => {
       :filter-kind="column.value === 'negotiation' ? 'negotiation' : column.value === 'execution' ? 'execution' : undefined"
       :filter-options="column.value === 'negotiation' ? NEGOTIATION_STATUS_OPTIONS : column.value === 'execution' ? EXECUTION_STATUS_OPTIONS : undefined"
       :items="groupedItems[column.value] || []"
+      :filter-reset="filterReset"
       :segment="segment"
       :moving-order-ids="movingOrderIds"
       :expanded-order-id="expandedOrderId"

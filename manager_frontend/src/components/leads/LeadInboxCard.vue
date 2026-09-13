@@ -37,7 +37,7 @@ const sourceIcon: Record<string, string> = {
 };
 
 const ORDER_STATUS_MAP: Record<string, string> = {
-  new_lead: 'Лид',
+  new_lead: 'Обращение',
   negotiation: 'Переговоры',
   execution: 'Монтаж',
   closed: 'Закрыт',
@@ -54,6 +54,7 @@ const getStatusLabel = (status: string) =>
 
 const formatDate = (dt: string) => {
   const d = new Date(dt);
+  if (Number.isNaN(d.getTime())) return 'Дата не указана';
   return d.toLocaleString('ru-RU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 };
 
@@ -82,6 +83,7 @@ const displayDate = computed(() => props.item.source_created_at || props.item.cr
 const getRelativeTime = (dt: string | null | undefined) => {
   if (!dt) return '';
   const date = new Date(dt);
+  if (Number.isNaN(date.getTime())) return 'дата не указана';
   const now = new Date();
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
   
@@ -117,7 +119,7 @@ const isBusinessCustomer = computed(() => (
     }"
   >
     <!-- Header row -->
-    <div class="flex items-start justify-between gap-3 p-4 pb-2">
+    <div class="flex flex-col items-start gap-2 p-4 pb-2">
       <div class="flex items-center gap-2 min-w-0">
         <!-- Source icon -->
         <span
@@ -127,7 +129,7 @@ const isBusinessCustomer = computed(() => (
 
         <!-- Name -->
         <div class="flex flex-col min-w-0">
-          <span class="font-semibold text-slate-800 dark:text-white truncate text-sm">
+          <span class="font-semibold text-slate-800 dark:text-white line-clamp-2 text-sm" :title="item.customer_name || item.customer_full_legal_name || 'Имя не указано'">
             {{ item.customer_name || item.customer_full_legal_name || '(Имя не указано)' }}
           </span>
           <span v-if="isBusinessCustomer && item.customer_inn" class="text-[10px] text-slate-400 dark:text-slate-500 uppercase font-bold tracking-tighter">
@@ -176,15 +178,12 @@ const isBusinessCustomer = computed(() => (
         <span class="material-icons-round text-[15px]">email</span>
         <span class="min-w-0 break-all">{{ formatEmail(item.email) }}</span>
       </a>
-      <span
-        v-if="!(item.source === 'email' && formatEmail(item.email))"
-        class="text-xs text-slate-400 dark:text-slate-500 flex items-center gap-1"
-      >
+      <span class="text-xs text-slate-400 dark:text-slate-500 flex items-center gap-1">
         <span class="material-icons-round text-[13px]">{{ getSourceIcon(item.source) }}</span>
         {{ getSourceLabel(item.source) }}
       </span>
-      <span class="text-xs text-slate-400 dark:text-slate-500 ml-auto">
-        {{ formatDate(displayDate) }}
+      <span class="text-xs text-slate-400 dark:text-slate-500 ml-auto" :title="formatDate(displayDate)">
+        {{ getRelativeTime(displayDate) }}
       </span>
       <button
         v-if="item.attachment_count"
@@ -192,7 +191,7 @@ const isBusinessCustomer = computed(() => (
         class="inline-flex min-h-9 items-center gap-1 rounded-full bg-cyan-50 px-2.5 py-1.5 text-xs font-semibold text-cyan-700 transition hover:bg-cyan-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2 dark:bg-cyan-500/10 dark:text-cyan-300 dark:hover:bg-cyan-500/20 dark:focus-visible:ring-offset-slate-800"
         :aria-expanded="attachmentsOpen"
         :aria-controls="attachmentsRegionId"
-        :aria-label="`${attachmentsOpen ? 'Скрыть' : 'Показать'} фото заявки: ${item.attachment_count}`"
+        :aria-label="`${attachmentsOpen ? 'Скрыть' : 'Показать'} фото обращения: ${item.attachment_count}`"
         @click="attachmentsOpen = !attachmentsOpen"
       >
         <span class="material-icons-round text-[15px]" aria-hidden="true">photo_library</span>
@@ -206,7 +205,7 @@ const isBusinessCustomer = computed(() => (
       :id="attachmentsRegionId"
       class="mx-4 mb-3 rounded-lg bg-slate-50/80 px-3 dark:bg-slate-900/40"
       role="region"
-      :aria-label="`Фото заявки #${item.id}`"
+      :aria-label="`Фото обращения #${item.id}`"
       data-testid="lead-readonly-attachments"
     >
       <OrderAttachmentsPanel
@@ -249,27 +248,27 @@ const isBusinessCustomer = computed(() => (
     <!-- No Answer Badge -->
     <div v-if="item.no_answer_at" class="mx-4 mb-4 flex items-center gap-1.5 w-fit rounded-full px-3 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 text-[11px] font-bold tracking-wide">
       <span class="material-icons-round text-[14px]">phone_missed</span>
-      Недозвон: {{ getRelativeTime(item.no_answer_at) }}
+      Нет ответа: {{ getRelativeTime(item.no_answer_at) }}
     </div>
 
     <!-- Actions footer -->
     <div v-if="!isArchive" class="flex flex-wrap gap-2 px-4 pb-4">
       <button
-        class="flex-1 min-w-[120px] inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs md:text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700 active:scale-95 transition-all"
-        title="Квалифицировать (в сделку)"
+        class="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs md:text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700 active:scale-95 transition-all"
+        title="Перевести в переговоры"
         @click="emit('qualify', item)"
       >
         <span class="material-icons-round text-[16px]">check_circle</span>
-        Квалифицировать
+        В переговоры
       </button>
 
       <button
         class="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs md:text-sm font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-900/50 active:scale-95 transition-all"
-        title="Недозвон (оставить в работе)"
+        title="Нет ответа (оставить в работе)"
         @click="emit('no-answer', item)"
       >
         <span class="material-icons-round text-[16px]">timer</span>
-        Недозвон
+        Нет ответа
       </button>
 
       <button
