@@ -4,6 +4,7 @@ import ast
 from pathlib import Path
 
 from services.catalog_mutation_contracts import (
+    BRAND_LOGO_GLOBAL_MUTATION_PRODUCERS,
     FEATURE_DELETE_GLOBAL_MUTATION_PRODUCERS,
     FEATURE_MIGRATION_GLOBAL_MUTATION_PRODUCERS,
     GLOBAL_CATALOG_MUTATION_CONTRACTS,
@@ -28,9 +29,7 @@ SCOPED_MUTATION_ROUTER_PATHS = (
     ROOT / "routers/manager_media_ingest_write.py",
     ROOT / "routers/manager_brands.py",
 )
-SCOPED_COMMAND_CALLER_PATHS = (
-    ROOT / "scripts/backfill_yandex_feed_images.py",
-)
+SCOPED_COMMAND_CALLER_PATHS = (ROOT / "scripts/backfill_yandex_feed_images.py",)
 NESTED_CATALOG_MUTATION_METHODS = {
     "bulk_add_gallery_images",
     "reprocess_variant",
@@ -130,6 +129,7 @@ def test_public_catalog_mutation_inventory_covers_reviewed_entrypoints():
         | FEATURE_MIGRATION_GLOBAL_MUTATION_PRODUCERS
         | PRODUCT_IMAGE_VARIANT_GLOBAL_MUTATION_PRODUCERS
         | MANAGER_BRAND_GLOBAL_MUTATION_PRODUCERS
+        | BRAND_LOGO_GLOBAL_MUTATION_PRODUCERS
     )
 
 
@@ -189,17 +189,22 @@ def test_scoped_routes_and_command_callers_are_registered_automatically():
 
 
 def test_registered_entrypoints_resolve_to_real_service_methods():
-    assert unresolved_service_entrypoints(
-        ROOT / "services",
-        PUBLIC_CATALOG_MUTATION_ENTRYPOINTS,
-    ) == set()
+    assert (
+        unresolved_service_entrypoints(
+            ROOT / "services",
+            PUBLIC_CATALOG_MUTATION_ENTRYPOINTS,
+        )
+        == set()
+    )
 
 
 def test_nested_catalog_mutations_require_a_caller_owned_batch():
     offenders: list[str] = []
     for path in (ROOT / "services").glob("*.py"):
         for node in ast.walk(ast.parse(path.read_text())):
-            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            if not isinstance(node, ast.Call) or not isinstance(
+                node.func, ast.Attribute
+            ):
                 continue
             if node.func.attr not in NESTED_CATALOG_MUTATION_METHODS:
                 continue
@@ -220,14 +225,19 @@ def test_manager_media_request_paths_never_unlink_physical_objects():
     offenders: list[str] = []
     for path in paths:
         for node in ast.walk(ast.parse(path.read_text())):
-            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            if not isinstance(node, ast.Call) or not isinstance(
+                node.func, ast.Attribute
+            ):
                 continue
             is_os_remove = (
                 node.func.attr == "remove"
                 and isinstance(node.func.value, ast.Name)
                 and node.func.value.id == "os"
             )
-            if node.func.attr in {"unlink", "remove_file_if_unreferenced"} or is_os_remove:
+            if (
+                node.func.attr in {"unlink", "remove_file_if_unreferenced"}
+                or is_os_remove
+            ):
                 offenders.append(f"{path.name}:{node.lineno}")
 
     assert offenders == []
