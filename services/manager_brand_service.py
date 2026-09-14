@@ -94,9 +94,8 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
             session.add(category)
             await session.flush()
             category_id = int(category.id)
-        image_url = ManagerBrandService._require_catalog_media(
+        image_url = ManagerBrandService._require_content_media(
             payload.get("image_url"),
-            kind=CatalogMediaKind.CONTENT,
             field="feature.image_url",
         )
         icon = ManagerBrandService._require_feature_icon(payload.get("icon"))
@@ -157,9 +156,8 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
         if "text" in payload:
             feature.full_description = ManagerBrandService._clean_optional_text(payload["text"])
         if "image_url" in payload:
-            feature.image_url = ManagerBrandService._require_catalog_media(
+            feature.image_url = ManagerBrandService._require_content_media(
                 payload["image_url"],
-                kind=CatalogMediaKind.CONTENT,
                 field="feature.image_url",
             )
         if "icon" in payload:
@@ -240,9 +238,8 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
         if existing_brand is not None:
             raise HTTPException(status_code=400, detail=f"Бренд со slug '{slug}' уже существует.")
 
-        logo_url = ManagerBrandService._require_catalog_media(
+        logo_url = ManagerBrandService._require_content_media(
             payload.get("logo_url"),
-            kind=CatalogMediaKind.CONTENT,
             field="brand.logo_url",
         )
         brand = Brand(
@@ -309,9 +306,8 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
                 brand.slug = new_slug
 
         if "logo_url" in payload:
-            brand.logo_url = ManagerBrandService._require_catalog_media(
+            brand.logo_url = ManagerBrandService._require_content_media(
                 payload["logo_url"],
-                kind=CatalogMediaKind.CONTENT,
                 field="brand.logo_url",
             )
         if "short_description" in payload:
@@ -515,16 +511,11 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
         return feature_slug
 
     @staticmethod
-    def _require_catalog_media(
-        value: Any,
-        *,
-        kind: CatalogMediaKind,
-        field: str,
-    ) -> Optional[str]:
+    def _require_content_media(value: Any, *, field: str) -> Optional[str]:
         try:
             return CatalogMediaPolicy.require_allowed(
                 ManagerBrandService._clean_optional_text(value),
-                kind=kind,
+                kind=CatalogMediaKind.CONTENT,
                 field=field,
             )
         except ValueError as exc:
