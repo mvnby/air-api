@@ -16,5 +16,6 @@ export type ManagerAuthStatusResponse = {
     capabilities?: Array<string>;
     can_change_password?: boolean;
     must_change_password?: boolean;
+    demo_read_only?: boolean;
 };
 

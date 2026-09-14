@@ -4,6 +4,7 @@ import type { Segment } from '../../api';
 import type { OrderRenderItem } from './order-utils';
 import { STATUS_LABELS, formatMoney, formatOrderCount } from './order-utils';
 import OrderListRow from './OrderListRow.vue';
+import { useDemoReadOnly } from '../../services/manager-demo';
 
 const props = defineProps<{
   items: OrderRenderItem[];
@@ -27,6 +28,7 @@ const toggleSort = (key: string) => {
 };
 
 const expandedGroupIds = ref<string[]>([]);
+const demoReadOnly = useDemoReadOnly();
 
 const toggleGroup = (groupId: string) => {
   expandedGroupIds.value = expandedGroupIds.value.includes(groupId)
@@ -77,7 +79,7 @@ const isGroupSelected = (item: OrderRenderItem) => {
           </th>
           <th class="px-3 py-2" :aria-sort="sort === 'margin_desc' ? 'descending' : 'none'">
             Сумма
-            <button type="button" class="block rounded px-1 py-0.5 text-left text-[10px] normal-case text-brand-700 hover:bg-slate-100 dark:text-brand-300 dark:hover:bg-slate-800" @click="emit('update:sort', sort === 'margin_desc' ? 'created_at_desc' : 'margin_desc')">
+            <button v-if="!demoReadOnly" type="button" class="block rounded px-1 py-0.5 text-left text-[10px] normal-case text-brand-700 hover:bg-slate-100 dark:text-brand-300 dark:hover:bg-slate-800" @click="emit('update:sort', sort === 'margin_desc' ? 'created_at_desc' : 'margin_desc')">
               Маржа {{ sort === 'margin_desc' ? '↓' : '↕' }}
             </button>
           </th>
@@ -113,7 +115,7 @@ const isGroupSelected = (item: OrderRenderItem) => {
                 <span v-else class="text-xs text-gray-500 dark:text-slate-400">Без срочных флагов</span>
               </td>
               <td class="px-3 py-3 text-xs text-gray-500 dark:text-slate-400">Сводка по клиенту</td>
-              <td class="px-3 py-3 text-xs"><p class="font-semibold text-gray-900 dark:text-white">{{ formatMoney(item.group.totalAmount) }}</p><p class="mt-0.5 text-brand-700 dark:text-brand-300">Маржа: {{ formatMoney(item.group.margin) }}</p></td>
+              <td class="px-3 py-3 text-xs"><p class="font-semibold text-gray-900 dark:text-white">{{ formatMoney(item.group.totalAmount) }}</p><p v-if="!demoReadOnly" class="mt-0.5 text-brand-700 dark:text-brand-300">Маржа: {{ formatMoney(item.group.margin) }}</p></td>
               <td
                 class="px-3 py-3 text-xs"
               >

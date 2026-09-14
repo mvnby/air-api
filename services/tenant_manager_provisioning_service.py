@@ -1,4 +1,4 @@
-"""Reviewed, fail-closed provisioning for one tenant-scoped manager identity."""
+"""Reviewed, fail-closed provisioning for one tenant-scoped staff identity."""
 
 from __future__ import annotations
 
@@ -34,7 +34,9 @@ class TenantManagerProvisioningRequest:
     storefront_slug: str
     display_name: str
     username: str
-    phone: str
+    phone: str | None
+    role: str = StaffUserService.ROLE_MANAGER
+    reset_password: bool = False
 
     @classmethod
     def normalize(
@@ -44,41 +46,55 @@ class TenantManagerProvisioningRequest:
         storefront_slug: str,
         display_name: str,
         username: str,
-        phone: str,
+        phone: str | None = None,
+        role: str = StaffUserService.ROLE_MANAGER,
+        reset_password: bool = False,
     ) -> "TenantManagerProvisioningRequest":
         normalized_tenant = str(tenant_slug or "").strip().lower()
         normalized_storefront = str(storefront_slug or "").strip().lower()
         normalized_name = str(display_name or "").strip()
         normalized_username = StaffUserService.normalize_username(username)
-        normalized_phone = str(phone or "").strip()
+        normalized_phone = str(phone or "").strip() or None
+        normalized_role = StaffUserService.normalize_role(role)
         if not normalized_tenant or not normalized_storefront:
             raise ValueError("Tenant and storefront slugs are required")
         if not normalized_name:
             raise ValueError("Display name is required")
         if not normalized_username:
             raise ValueError("Username is required")
-        if not _PHONE_PATTERN.fullmatch(normalized_phone):
+        if normalized_phone is not None and not _PHONE_PATTERN.fullmatch(normalized_phone):
             raise ValueError("Phone must be a complete E.164 number")
+        if normalized_role not in {
+            StaffUserService.ROLE_MANAGER,
+            StaffUserService.ROLE_OWNER,
+        }:
+            raise ValueError("Role must be manager or owner")
+        if type(reset_password) is not bool:
+            raise ValueError("Reset password must be an explicit boolean")
         return cls(
             tenant_slug=normalized_tenant,
             storefront_slug=normalized_storefront,
             display_name=normalized_name,
             username=normalized_username,
             phone=normalized_phone,
+            role=normalized_role,
+            reset_password=reset_password,
         )
 
-    def public_dict(self) -> dict[str, str]:
+    def public_dict(self) -> dict[str, Any]:
         return {
             "tenant_slug": self.tenant_slug,
             "storefront_slug": self.storefront_slug,
             "display_name": self.display_name,
             "username": self.username,
             "phone": self.phone,
+            "role": self.role,
+            "reset_password": self.reset_password,
         }
 
     @property
     def phone_digits(self) -> str:
-        return normalize_phone_digits(self.phone)
+        return normalize_phone_digits(self.phone or "")
 
 
 @dataclass
@@ -90,7 +106,7 @@ class _State:
 
 
 class TenantManagerProvisioningService:
-    """Plan and atomically apply a least-privilege manager identity.
+    """Plan and atomically apply a least-privilege tenant staff identity.
 
     The service deliberately does not commit.  The caller owns the enclosing
     transaction, so a failed post-check cannot leave a partial StaffUser or
@@ -143,20 +159,25 @@ class TenantManagerProvisioningService:
                 "Manager provisioning preflight is blocked: "
                 + "; ".join(reviewed["blockers"])
             )
-        if reviewed["changes"] and password is None:
+        password_changes = {
+            "create_staff_user",
+            "reset_staff_password",
+        }.intersection(reviewed["changes"])
+        if password_changes and password is None:
             raise TenantManagerProvisioningBlockedError(
-                "A password source is required to create this manager"
+                "A password source is required for the reviewed credential change"
             )
-        if password is not None:
+        if password_changes:
+            assert password is not None
             cls._validate_password(password)
 
-        created = False
+        changed = False
         if not state.candidates:
             staff_user = StaffUser(
                 display_name=request.display_name,
                 status=StaffUserService.STATUS_ACTIVE,
-                primary_role=StaffUserService.ROLE_MANAGER,
-                roles=[StaffUserService.ROLE_MANAGER],
+                primary_role=request.role,
+                roles=[request.role],
                 username=request.username,
                 password_hash=CredentialService.hash_password(str(password)),
                 password_changed_at=datetime.now(timezone.utc),
@@ -167,7 +188,7 @@ class TenantManagerProvisioningService:
             membership = TenantMembership(
                 tenant_id=int(state.tenant.id),
                 staff_user_id=int(staff_user.id),
-                role=StaffUserService.ROLE_MANAGER,
+                role=request.role,
                 status="active",
             )
             session.add(membership)
@@ -180,12 +201,58 @@ class TenantManagerProvisioningService:
                 staff_user=staff_user,
                 membership=membership,
                 plan_token=plan_token,
+                before_role=None,
+                before_auth_version=None,
             )
-            created = True
+            changed = True
+        else:
+            staff_user = state.candidates[0]
+            membership = state.memberships[0]
+            before_role = StaffUserService.primary_role(staff_user)
+            before_auth_version = int(staff_user.auth_version)
+            changed_at = datetime.now(timezone.utc)
+            if "promote_staff_user_to_owner" in reviewed["changes"]:
+                staff_user.primary_role = StaffUserService.ROLE_OWNER
+                staff_user.roles = [StaffUserService.ROLE_OWNER]
+                membership.role = StaffUserService.ROLE_OWNER
+                membership.updated_at = changed_at
+                session.add(staff_user)
+                session.add(membership)
+                changed = True
+            if "reset_staff_password" in reviewed["changes"]:
+                assert password is not None
+                staff_user.password_hash = CredentialService.hash_password(password)
+                staff_user.password_changed_at = changed_at
+                staff_user.auth_version = before_auth_version + 1
+                staff_user.must_change_password = False
+                session.add(staff_user)
+                changed = True
+            if changed:
+                await session.flush()
+                cls._add_audit_event(
+                    session,
+                    request=request,
+                    tenant=state.tenant,
+                    storefront=state.storefront,
+                    staff_user=staff_user,
+                    membership=membership,
+                    plan_token=plan_token,
+                    before_role=before_role,
+                    before_auth_version=before_auth_version,
+                )
         await session.flush()
 
         after = await cls._load(session, request=request, for_update=False)
-        after_plan = cls._build_plan(request=request, state=after)
+        postcheck_request = TenantManagerProvisioningRequest(
+            tenant_slug=request.tenant_slug,
+            storefront_slug=request.storefront_slug,
+            display_name=request.display_name,
+            username=request.username,
+            phone=request.phone,
+            role=request.role,
+            reset_password=False,
+        )
+        after_plan = cls._build_plan(request=postcheck_request, state=after)
         if after_plan["blockers"] or after_plan["changes"]:
             raise TenantManagerProvisioningBlockedError(
                 "Manager provisioning post-check did not reach the reviewed target state"
@@ -193,7 +260,7 @@ class TenantManagerProvisioningService:
         return {
             "mode": "execute",
             "ready": True,
-            "changed": created,
+            "changed": changed,
             "target": request.public_dict(),
             "staff_user_id": int(after.candidates[0].id),
             "membership_id": int(after.memberships[0].id),
@@ -208,14 +275,13 @@ class TenantManagerProvisioningService:
     ) -> bool:
         if session.get_bind().dialect.name != "postgresql":
             return True
-        lock_keys = sorted(
-            {
-                f"{cls.LOCK_NAMESPACE}:tenant:{request.tenant_slug}",
-                f"{cls.LOCK_NAMESPACE}:username:{request.username}",
-                f"{cls.LOCK_NAMESPACE}:phone:{request.phone_digits}",
-            }
-        )
-        for lock_key in lock_keys:
+        lock_keys = {
+            f"{cls.LOCK_NAMESPACE}:tenant:{request.tenant_slug}",
+            f"{cls.LOCK_NAMESPACE}:username:{request.username}",
+        }
+        if request.phone_digits:
+            lock_keys.add(f"{cls.LOCK_NAMESPACE}:phone:{request.phone_digits}")
+        for lock_key in sorted(lock_keys):
             acquired = await session.scalar(
                 text("SELECT pg_try_advisory_xact_lock(hashtextextended(:key, 0))"),
                 {"key": lock_key},
@@ -256,15 +322,17 @@ class TenantManagerProvisioningService:
                 )
             ).scalars().all()
         )
-        phone_matches = list(
-            (
-                await session.execute(
-                    select(StaffUser.id, StaffUser.phone).where(
-                        StaffUser.phone.is_not(None)
+        phone_matches: list[tuple[int, str | None]] = []
+        if request.phone_digits:
+            phone_matches = list(
+                (
+                    await session.execute(
+                        select(StaffUser.id, StaffUser.phone).where(
+                            StaffUser.phone.is_not(None)
+                        )
                     )
-                )
-            ).all()
-        )
+                ).all()
+            )
         candidate_ids = {
             int(staff_user_id)
             for staff_user_id in username_matches
@@ -274,6 +342,7 @@ class TenantManagerProvisioningService:
             int(staff_user_id)
             for staff_user_id, phone in phone_matches
             if staff_user_id is not None
+            and request.phone_digits
             and normalize_phone_digits(str(phone or "")) == request.phone_digits
         )
         candidate_statement = (
@@ -316,10 +385,21 @@ class TenantManagerProvisioningService:
         blockers = cls._blockers(request=request, state=state)
         changes: list[str] = []
         if not blockers and not state.candidates:
-            changes.extend(["create_staff_user", "create_active_manager_membership"])
+            changes.extend(
+                ["create_staff_user", f"create_active_{request.role}_membership"]
+            )
+        elif not blockers and state.candidates:
+            if (
+                request.role == StaffUserService.ROLE_OWNER
+                and StaffUserService.primary_role(state.candidates[0])
+                == StaffUserService.ROLE_MANAGER
+            ):
+                changes.append("promote_staff_user_to_owner")
+            if request.reset_password:
+                changes.append("reset_staff_password")
         current = cls._public_state(state)
         digest_payload = {
-            "version": 1,
+            "version": 2,
             "request": request.public_dict(),
             "current": current,
             "blockers": blockers,
@@ -363,20 +443,24 @@ class TenantManagerProvisioningService:
             blockers.append("Username and phone resolve to different staff users")
         if len(state.candidates) == 1:
             user = state.candidates[0]
-            if (
-                user.username != request.username
-                or normalize_phone_digits(str(user.phone or ""))
-                != request.phone_digits
+            if user.username != request.username:
+                blockers.append("Existing staff user does not match the username")
+            if request.phone_digits and (
+                normalize_phone_digits(str(user.phone or "")) != request.phone_digits
             ):
-                blockers.append("Existing staff user does not match both username and phone")
+                blockers.append("Existing staff user does not match the requested phone")
             if user.display_name != request.display_name:
                 blockers.append("Existing staff user has a different display name")
             if user.status != StaffUserService.STATUS_ACTIVE:
                 blockers.append("Existing staff user is not active")
-            if StaffUserService.primary_role(user) != StaffUserService.ROLE_MANAGER:
-                blockers.append("Existing staff user does not have manager primary role")
-            if StaffUserService.normalize_roles(user.roles) != [StaffUserService.ROLE_MANAGER]:
-                blockers.append("Existing staff user has non-manager global roles")
+            current_role = StaffUserService.primary_role(user)
+            allowed_current_roles = {request.role}
+            if request.role == StaffUserService.ROLE_OWNER:
+                allowed_current_roles.add(StaffUserService.ROLE_MANAGER)
+            if current_role not in allowed_current_roles:
+                blockers.append("Existing staff user cannot be converted to the requested role")
+            if StaffUserService.normalize_roles(user.roles) != [current_role]:
+                blockers.append("Existing staff user has extraneous global roles")
             if user.legacy_installer_id is not None:
                 blockers.append("Existing staff user is linked to legacy installer privileges")
             if not user.password_hash:
@@ -390,10 +474,10 @@ class TenantManagerProvisioningService:
             elif (
                 tenant is None
                 or state.memberships[0].tenant_id != tenant.id
-                or state.memberships[0].role != StaffUserService.ROLE_MANAGER
+                or state.memberships[0].role != current_role
                 or state.memberships[0].status != "active"
             ):
-                blockers.append("Existing staff user lacks the exact active manager membership")
+                blockers.append("Existing staff user lacks the exact active tenant membership")
         return blockers
 
     @staticmethod
@@ -426,6 +510,13 @@ class TenantManagerProvisioningService:
                     "legacy_installer_id": user.legacy_installer_id,
                     "telegram_id": user.telegram_id,
                     "telegram_username": user.telegram_username,
+                    "auth_version": int(user.auth_version),
+                    "credential_changed_at": (
+                        user.password_changed_at.isoformat()
+                        if user.password_changed_at is not None
+                        else None
+                    ),
+                    "must_change_password": bool(user.must_change_password),
                 }
                 for user in state.candidates
             ],
@@ -454,6 +545,8 @@ class TenantManagerProvisioningService:
         staff_user: StaffUser,
         membership: TenantMembership,
         plan_token: str,
+        before_role: str | None,
+        before_auth_version: int | None,
     ) -> None:
         if (
             tenant is None
@@ -469,6 +562,52 @@ class TenantManagerProvisioningService:
         request_id = "tenant-manager-" + hashlib.sha256(
             plan_token.encode("utf-8")
         ).hexdigest()[:32]
+        created = before_role is None
+        role_changed = before_role != request.role
+        auth_version_changed = (
+            before_auth_version is None
+            or int(staff_user.auth_version) != before_auth_version
+        )
+        change_set: dict[str, Any] = {}
+        if created:
+            change_set.update(
+                {
+                    "display_name": {"before": None, "after": request.display_name},
+                    "username": {"before": None, "after": request.username},
+                    "phone": {"before": None, "after": request.phone},
+                }
+            )
+        if created or role_changed:
+            change_set.update(
+                {
+                    "primary_role": {"before": before_role, "after": request.role},
+                    "membership": {
+                        "before": (
+                            None
+                            if created
+                            else {
+                                "id": int(membership.id),
+                                "tenant_id": int(tenant.id),
+                                "role": before_role,
+                                "status": "active",
+                            }
+                        ),
+                        "after": {
+                            "id": int(membership.id),
+                            "tenant_id": int(tenant.id),
+                            "role": request.role,
+                            "status": "active",
+                        },
+                    },
+                }
+            )
+        if auth_version_changed:
+            change_set["auth_version"] = {
+                "before": before_auth_version,
+                "after": int(staff_user.auth_version),
+            }
+        if before_auth_version is not None and auth_version_changed:
+            change_set["sessions_revoked"] = True
         session.add(
             TenantAuditEvent(
                 tenant_id=int(tenant.id),
@@ -479,21 +618,7 @@ class TenantManagerProvisioningService:
                 entity_type="staff_user",
                 entity_id=int(staff_user.id),
                 request_id=request_id,
-                change_set={
-                    "display_name": {"before": None, "after": request.display_name},
-                    "username": {"before": None, "after": request.username},
-                    "phone": {"before": None, "after": request.phone},
-                    "primary_role": {"before": None, "after": "manager"},
-                    "membership": {
-                        "before": None,
-                        "after": {
-                            "id": int(membership.id),
-                            "tenant_id": int(tenant.id),
-                            "role": "manager",
-                            "status": "active",
-                        },
-                    },
-                },
+                change_set=change_set,
             )
         )
 

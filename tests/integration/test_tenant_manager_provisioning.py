@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import func
 from sqlmodel import select
 
 from models import StaffUser, Storefront, Tenant, TenantAuditEvent, TenantMembership
+from models.tenancy import TenantScope
+from services.credential_service import CredentialService
+from services.manager_account_credential_service import ManagerAccountCredentialService
 from services.staff_user_service import StaffUserService
 from services.tenant_manager_provisioning_service import (
     TenantManagerProvisioningBlockedError,
@@ -56,7 +60,8 @@ async def test_provisions_one_least_privilege_manager_atomically_and_idempotentl
 
     assert plan["ready"] is True
     assert plan["changes"] == ["create_staff_user", "create_active_manager_membership"]
-    assert "password" not in json.dumps(plan).casefold()
+    assert "manager-password-2026" not in json.dumps(plan)
+    assert "password_hash" not in json.dumps(plan).casefold()
 
     result = await TenantManagerProvisioningService.execute(
         db,
@@ -67,7 +72,8 @@ async def test_provisions_one_least_privilege_manager_atomically_and_idempotentl
     await db.commit()
 
     assert result["changed"] is True
-    assert "password" not in json.dumps(result).casefold()
+    assert "manager-password-2026" not in json.dumps(result)
+    assert "password_hash" not in json.dumps(result).casefold()
     staff = await db.scalar(select(StaffUser).where(StaffUser.username == request.username))
     memberships = list(
         (
@@ -171,7 +177,7 @@ async def test_rejects_identity_with_another_membership_or_elevated_role(db) -> 
     plan = await TenantManagerProvisioningService.plan(db, request=request)
 
     assert plan["ready"] is False
-    assert any("non-manager global roles" in value for value in plan["blockers"])
+    assert any("extraneous global roles" in value for value in plan["blockers"])
     assert any("exactly one tenant membership" in value for value in plan["blockers"])
     with pytest.raises(TenantManagerProvisioningBlockedError, match="preflight"):
         await TenantManagerProvisioningService.execute(
@@ -180,6 +186,66 @@ async def test_rejects_identity_with_another_membership_or_elevated_role(db) -> 
             password=None,
             plan_token=plan["plan_token"],
         )
+
+
+@pytest.mark.asyncio
+async def test_never_converts_global_admin_to_tenant_owner(db) -> None:
+    tenant, _ = await _seed_polotsk(db)
+    staff = StaffUser(
+        display_name="Global Admin",
+        username="global.admin",
+        phone=None,
+        status="active",
+        primary_role="admin",
+        roles=["admin"],
+        password_hash=CredentialService.hash_password("admin-password-2026"),
+    )
+    db.add(staff)
+    await db.flush()
+    db.add(
+        TenantMembership(
+            tenant_id=int(tenant.id),
+            staff_user_id=int(staff.id),
+            role="owner",
+            status="active",
+        )
+    )
+    await db.flush()
+    request = TenantManagerProvisioningRequest.normalize(
+        tenant_slug="polotsk",
+        storefront_slug="main",
+        display_name="Global Admin",
+        username="global.admin",
+        role="owner",
+        reset_password=True,
+    )
+
+    plan = await TenantManagerProvisioningService.plan(db, request=request)
+
+    assert plan["ready"] is False
+    assert "extraneous global roles" in " ".join(plan["blockers"])
+    assert plan["changes"] == []
+
+
+@pytest.mark.asyncio
+async def test_owner_provisioning_is_blocked_for_system_tenant(db) -> None:
+    tenant, _ = await _seed_polotsk(db)
+    tenant.is_system = True
+    db.add(tenant)
+    await db.flush()
+    request = TenantManagerProvisioningRequest.normalize(
+        tenant_slug="polotsk",
+        storefront_slug="main",
+        display_name="System Owner",
+        username="system.owner",
+        role="owner",
+    )
+
+    plan = await TenantManagerProvisioningService.plan(db, request=request)
+
+    assert plan["ready"] is False
+    assert "active and non-system" in " ".join(plan["blockers"])
+    assert plan["changes"] == []
 
 
 @pytest.mark.asyncio
@@ -244,9 +310,12 @@ async def test_blocks_formatted_legacy_phone_collision_without_creating_duplicat
             "legacy_installer_id": None,
             "telegram_id": None,
             "telegram_username": None,
+            "auth_version": 1,
+            "credential_changed_at": None,
+            "must_change_password": False,
         }
     ]
-    assert "match both username and phone" in " ".join(plan["blockers"])
+    assert "does not match the username" in " ".join(plan["blockers"])
     with pytest.raises(TenantManagerProvisioningBlockedError, match="preflight"):
         await TenantManagerProvisioningService.execute(
             db,
@@ -329,3 +398,200 @@ async def test_rolls_back_audit_and_identity_together_when_command_transaction_r
 
     assert int((await db.scalar(select(func.count(StaffUser.id)))) or 0) == 0
     assert int((await db.scalar(select(func.count(TenantAuditEvent.id)))) or 0) == 0
+
+
+@pytest.mark.asyncio
+async def test_creates_owner_without_fabricating_phone_and_supports_self_service(db) -> None:
+    tenant, storefront = await _seed_polotsk(db)
+    request = TenantManagerProvisioningRequest.normalize(
+        tenant_slug="polotsk",
+        storefront_slug="main",
+        display_name="Test1 Demo",
+        username="demo.test1",
+        phone=None,
+        role="owner",
+    )
+    plan = await TenantManagerProvisioningService.plan(db, request=request)
+
+    assert plan["ready"] is True
+    assert plan["target"]["phone"] is None
+    assert plan["changes"] == ["create_staff_user", "create_active_owner_membership"]
+    result = await TenantManagerProvisioningService.execute(
+        db,
+        request=request,
+        password="simple-demo-12",
+        plan_token=plan["plan_token"],
+    )
+    await db.commit()
+
+    owner = await db.get(StaffUser, result["staff_user_id"])
+    membership = await db.get(TenantMembership, result["membership_id"])
+    assert owner is not None
+    assert owner.phone is None
+    assert owner.primary_role == "owner"
+    assert owner.roles == ["owner"]
+    assert owner.must_change_password is False
+    assert membership is not None
+    assert (membership.tenant_id, membership.role, membership.status) == (
+        tenant.id,
+        "owner",
+        "active",
+    )
+
+    await ManagerAccountCredentialService.change_password(
+        db,
+        staff_user_id=int(owner.id),
+        actor_username=str(owner.username),
+        tenant_scope=TenantScope(
+            tenant_id=int(tenant.id),
+            storefront_id=int(storefront.id),
+            is_system=False,
+        ),
+        current_password="simple-demo-12",
+        new_password="self-service-2026",
+    )
+    await db.refresh(owner)
+    assert CredentialService.verify_password("self-service-2026", owner.password_hash)
+
+
+@pytest.mark.asyncio
+async def test_promotes_exact_manager_resets_password_and_revokes_sessions(db) -> None:
+    tenant, _ = await _seed_polotsk(db)
+    changed_at = datetime.now(timezone.utc) - timedelta(days=1)
+    staff = StaffUser(
+        display_name="Андрей",
+        username="andrey.polotsk",
+        phone="+375297146293",
+        status="active",
+        primary_role="manager",
+        roles=["manager"],
+        password_hash=CredentialService.hash_password("old-password-2026"),
+        password_changed_at=changed_at,
+        auth_version=4,
+        must_change_password=True,
+    )
+    db.add(staff)
+    await db.flush()
+    membership = TenantMembership(
+        tenant_id=int(tenant.id),
+        staff_user_id=int(staff.id),
+        role="manager",
+        status="active",
+    )
+    db.add(membership)
+    await db.flush()
+    request = TenantManagerProvisioningRequest.normalize(
+        tenant_slug="polotsk",
+        storefront_slug="main",
+        display_name="Андрей",
+        username="andrey.polotsk",
+        phone="+375297146293",
+        role="owner",
+        reset_password=True,
+    )
+
+    plan = await TenantManagerProvisioningService.plan(db, request=request)
+    assert plan["changes"] == [
+        "promote_staff_user_to_owner",
+        "reset_staff_password",
+    ]
+    assert plan["current"]["staff_users"][0]["auth_version"] == 4
+    assert (
+        plan["current"]["staff_users"][0]["credential_changed_at"]
+        == changed_at.isoformat()
+    )
+    result = await TenantManagerProvisioningService.execute(
+        db,
+        request=request,
+        password="new-password-2026",
+        plan_token=plan["plan_token"],
+    )
+    await db.commit()
+
+    await db.refresh(staff)
+    await db.refresh(membership)
+    assert result["changed"] is True
+    assert staff.primary_role == "owner"
+    assert staff.roles == ["owner"]
+    assert membership.role == "owner"
+    assert staff.auth_version == 5
+    assert staff.password_changed_at is not None
+    assert staff.password_changed_at > changed_at
+    assert staff.must_change_password is False
+    assert CredentialService.verify_password("new-password-2026", staff.password_hash)
+    assert not CredentialService.verify_password("old-password-2026", staff.password_hash)
+
+    audit = (
+        await db.execute(
+            select(TenantAuditEvent).order_by(TenantAuditEvent.id.desc()).limit(1)
+        )
+    ).scalar_one()
+    assert audit.change_set["auth_version"] == {"before": 4, "after": 5}
+    assert audit.change_set["sessions_revoked"] is True
+    assert "password" not in json.dumps(audit.change_set).casefold()
+    assert "hash" not in json.dumps(audit.change_set).casefold()
+
+    no_reset = TenantManagerProvisioningRequest.normalize(
+        tenant_slug="polotsk",
+        storefront_slug="main",
+        display_name="Андрей",
+        username="andrey.polotsk",
+        phone="+375297146293",
+        role="owner",
+        reset_password=False,
+    )
+    no_op_plan = await TenantManagerProvisioningService.plan(db, request=no_reset)
+    assert no_op_plan["changes"] == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("changed_field", ["auth_version", "password_changed_at"])
+async def test_reset_plan_stales_on_credential_state_change(db, changed_field: str) -> None:
+    tenant, _ = await _seed_polotsk(db)
+    staff = StaffUser(
+        display_name="Андрей",
+        username="andrey.polotsk",
+        phone="+375297146293",
+        status="active",
+        primary_role="owner",
+        roles=["owner"],
+        password_hash=CredentialService.hash_password("old-password-2026"),
+        password_changed_at=datetime.now(timezone.utc) - timedelta(days=1),
+        auth_version=2,
+    )
+    db.add(staff)
+    await db.flush()
+    db.add(
+        TenantMembership(
+            tenant_id=int(tenant.id),
+            staff_user_id=int(staff.id),
+            role="owner",
+            status="active",
+        )
+    )
+    await db.flush()
+    request = TenantManagerProvisioningRequest.normalize(
+        tenant_slug="polotsk",
+        storefront_slug="main",
+        display_name="Андрей",
+        username="andrey.polotsk",
+        phone="+375297146293",
+        role="owner",
+        reset_password=True,
+    )
+    plan = await TenantManagerProvisioningService.plan(db, request=request)
+
+    if changed_field == "auth_version":
+        staff.auth_version += 1
+    else:
+        staff.password_changed_at = datetime.now(timezone.utc)
+    db.add(staff)
+    await db.flush()
+
+    with pytest.raises(TenantManagerProvisioningBlockedError, match="stale"):
+        await TenantManagerProvisioningService.execute(
+            db,
+            request=request,
+            password="new-password-2026",
+            plan_token=plan["plan_token"],
+        )

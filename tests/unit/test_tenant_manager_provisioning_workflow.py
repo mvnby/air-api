@@ -4,6 +4,7 @@ import argparse
 import io
 import json
 import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -12,6 +13,18 @@ import pytest
 from scripts.ha.pitr_pinned_ssh import PATRONI_NODES
 from scripts.ha.pitr_cluster_topology import ClusterTopology
 from scripts.ops import tenant_manager_provisioning_workflow as workflow
+
+
+def test_controller_runs_without_api_or_site_package_dependencies():
+    result = subprocess.run(
+        [sys.executable, "-I", "-S", str(Path(workflow.__file__).resolve()), "--help"],
+        cwd=Path(workflow.__file__).resolve().parents[2],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "--reset-password" in result.stdout
 
 
 def _arguments(tmp_path: Path, *, operation: str = "plan") -> argparse.Namespace:
@@ -25,6 +38,8 @@ def _arguments(tmp_path: Path, *, operation: str = "plan") -> argparse.Namespace
         display_name="Андрей",
         username="andrey.polotsk",
         phone="+375297146293",
+        role="manager",
+        reset_password=False,
         reviewed_plan_digest=("a" * 64 if operation == "execute" else None),
         identity_file=identity,
         result_file=tmp_path / "result.json",
@@ -56,6 +71,8 @@ def _plan_payload(
                 "display_name": "Андрей",
                 "username": "andrey.polotsk",
                 "phone": "+375297146293",
+                "role": "manager",
+                "reset_password": False,
             },
             "current": {
                 "tenant": {"id": 2, "status": "active", "is_system": False},
@@ -112,6 +129,11 @@ def test_workflow_inputs_are_exact_and_execute_requires_reviewed_digest(tmp_path
     with pytest.raises(workflow.WorkflowError, match="username"):
         workflow.validate_arguments(invalid)
 
+    invalid = _arguments(tmp_path)
+    invalid.role = "admin"
+    with pytest.raises(workflow.WorkflowError, match="role"):
+        workflow.validate_arguments(invalid)
+
 
 def test_remote_command_is_fixed_to_active_immutable_app_and_reviewed_cli():
     node = PATRONI_NODES[0]
@@ -149,7 +171,74 @@ def test_remote_command_is_fixed_to_active_immutable_app_and_reviewed_cli():
     assert "{{.Config.Image}}" in image_command
     capability_command = workflow._runtime_capability_command(node, runtime=runtime)
     assert "--execution-json-stdin" in capability_command
+    assert "--reset-password" in capability_command
     assert "docker exec -i " + "c" * 64 in capability_command
+
+
+def test_remote_command_supports_owner_reset_without_fabricated_phone():
+    node = PATRONI_NODES[0]
+    runtime = workflow.RuntimeTarget(
+        service="app-green",
+        container_id="c" * 64,
+        image="ghcr.io/mvnby/air-api/backend@sha256:" + "d" * 64,
+    )
+    command = workflow._provisioning_command(
+        node,
+        runtime=runtime,
+        operation="plan",
+        tenant_slug="test1",
+        storefront_slug="main",
+        display_name="Test1 Demo",
+        username="demo.test1",
+        phone=None,
+        role="owner",
+        reset_password=True,
+    )
+
+    assert "--role owner" in command
+    assert "--reset-password" in command
+    assert "--phone" not in command
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        ["create_staff_user", "create_active_owner_membership"],
+        ["promote_staff_user_to_owner"],
+        ["reset_staff_password"],
+        ["promote_staff_user_to_owner", "reset_staff_password"],
+    ],
+)
+def test_result_contract_accepts_reviewed_owner_changes(changes: list[str]):
+    payload = json.loads(_plan_payload(changes=changes))
+    payload["target"]["role"] = "owner"
+    if "reset_staff_password" in changes:
+        payload["target"]["reset_password"] = True
+        payload["current"]["staff_users"] = [
+            {
+                "id": 36,
+                "username": "andrey.polotsk",
+                "display_name": "Андрей",
+                "phone": "+375297146293",
+                "status": "active",
+                "primary_role": "manager",
+                "roles": ["manager"],
+                "legacy_installer_id": None,
+                "telegram_id": None,
+                "telegram_username": None,
+                "auth_version": 1,
+                "credential_changed_at": "2026-09-14T10:00:00+00:00",
+                "must_change_password": False,
+            }
+        ]
+        payload["current"]["memberships"] = [
+            {"id": 37, "tenant_id": 34, "role": "manager", "status": "active"}
+        ]
+    workflow._validate_result_semantics(
+        payload,
+        expected_mode="plan",
+        remote_status=0,
+    )
 
 
 def test_runtime_target_requires_exact_container_and_immutable_image():
@@ -377,6 +466,9 @@ def test_existing_compliant_manager_plan_is_noop_and_never_executes(
                 "legacy_installer_id": None,
                 "telegram_id": None,
                 "telegram_username": None,
+                "auth_version": 1,
+                "credential_changed_at": "2026-09-14T10:00:00+00:00",
+                "must_change_password": False,
             }
         ],
         "memberships": [

@@ -1,10 +1,11 @@
 import { mount } from '@vue/test-utils';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import type { ManagerOrderListItemResponse } from '../src/client';
 import type { OrderRenderItem } from '../src/components/orders/order-utils';
 import OrderListRow from '../src/components/orders/OrderListRow.vue';
 import OrdersListTable from '../src/components/orders/OrdersListTable.vue';
 import OrdersViewToggle from '../src/components/orders/OrdersViewToggle.vue';
+import { managerSession } from '../src/services/manager-session';
 
 const order = (overrides: Partial<ManagerOrderListItemResponse> = {}): ManagerOrderListItemResponse => ({
   id: 501,
@@ -34,6 +35,7 @@ const order = (overrides: Partial<ManagerOrderListItemResponse> = {}): ManagerOr
 });
 
 describe('orders list table', () => {
+  afterEach(() => { managerSession.auth.value = null; });
   it('keeps the order ID, one client line, and the exact negotiation substatus visible', () => {
     const wrapper = mount(OrderListRow, { props: { order: order(), segment: 'b2b', selectable: true } });
 
@@ -109,5 +111,13 @@ describe('orders list table', () => {
     await wrapper.get('th:nth-child(5) button').trigger('click');
 
     expect(wrapper.emitted('update:sort')).toEqual([['followup_asc'], ['margin_desc']]);
+  });
+
+  it('does not render or sort margin in the read-only demo', () => {
+    managerSession.auth.value = { demo_read_only: true } as any;
+    const wrapper = mount(OrdersListTable, { props: { items: [{ type: 'order', order: order() }], segment: 'b2b' } });
+
+    expect(wrapper.text()).not.toContain('Маржа');
+    expect(wrapper.text()).toContain('12 500 BYN');
   });
 });

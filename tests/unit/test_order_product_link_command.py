@@ -144,6 +144,26 @@ def test_manager_product_line_dto_prefers_immutable_title_snapshot():
     assert response.currency_snapshot == "BYN"
 
 
+def test_demo_projection_redacts_line_cost_without_changing_normal_projection():
+    link = OrderProductLink(
+        id=31,
+        order_id=10,
+        proposal_id=20,
+        product_id=17,
+        quantity=2,
+        price=3200,
+        cost=1000,
+    )
+
+    normal = OrderProjectionService._map_product_line(link)
+    demo = OrderProjectionService._map_product_line(link, demo_read_only=True)
+
+    assert normal["cost"] == 1000
+    assert demo["cost"] is None
+    assert demo["price"] == 3200
+    assert OrderProductLineResponse.model_validate(demo).cost is None
+
+
 def test_snapshot_preserves_unbounded_valid_product_title_exactly():
     long_title = "  " + ("Товар " * 110) + "\n"
     assert len(long_title) > 500

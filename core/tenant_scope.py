@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
 from core.database import get_session
+from core.demo_access import enforce_demo_read_only
 from core.storefront_request_auth import (
     STOREFRONT_VERIFIED_ENVELOPE_SCOPE_KEY,
     VerifiedStorefrontEnvelope,
@@ -98,6 +99,7 @@ async def verify_public_storefront_request(
 
 
 async def get_public_tenant_scope(
+    request: Request,
     verified: VerifiedPublicStorefrontRequest = Depends(
         verify_public_storefront_request
     ),
@@ -108,9 +110,11 @@ async def get_public_tenant_scope(
     if verified.context is None:
         return await SystemTenantScopeResolver.resolve(session)
     context = verified.context
+    enforce_demo_read_only(request, demo_read_only=context.demo_read_only)
     return TenantScope(
         tenant_id=context.tenant_id,
         storefront_id=context.storefront_id,
+        demo_read_only=context.demo_read_only,
         is_system=context.tenant_is_system,
         is_canonical_storefront=(
             context.tenant_is_system

@@ -5,6 +5,7 @@ import type { Segment } from '../../api';
 import type { ManagerOrderListItemResponse } from '../../client';
 import type { CustomerOrderGroup } from './order-utils';
 import { formatMoney, formatOrderCount, getOrderSegment } from './order-utils';
+import { useDemoReadOnly } from '../../services/manager-demo';
 import OrderCardB2B from './OrderCardB2B.vue';
 import OrderCardB2C from './OrderCardB2C.vue';
 
@@ -30,6 +31,7 @@ const emit = defineEmits<{
 }>();
 
 const editing = ref(false);
+const demoReadOnly = useDemoReadOnly();
 const aliasDraft = ref(props.group.customerName);
 
 watch(
@@ -114,7 +116,7 @@ const cardComponentForOrder = (order: ManagerOrderListItemResponse) => {
             {{ formatOrderCount(group.orders.length) }}
           </span>
           <span>Сумма: <strong class="text-slate-800 dark:text-slate-200">{{ formatMoney(group.totalAmount) }}</strong></span>
-          <span>Маржа: <strong class="text-brand-700 dark:text-brand-300">{{ formatMoney(group.margin) }}</strong></span>
+          <span v-if="!demoReadOnly">Маржа: <strong class="text-brand-700 dark:text-brand-300">{{ formatMoney(group.margin) }}</strong></span>
           <span>
             Остаток:
             <strong :class="group.balanceDue > 0 ? 'text-amber-800 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'">

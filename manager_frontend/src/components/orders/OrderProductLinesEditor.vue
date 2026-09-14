@@ -4,6 +4,7 @@ import type { ProductLine, ProductOption } from './order-editor-types';
 import { formatMoney } from './order-utils';
 import { MANAGER_CAPABILITY, hasManagerCapability } from '../../manager-capabilities';
 import { managerSession } from '../../services/manager-session';
+import { useDemoReadOnly } from '../../services/manager-demo';
 
 type SupplyBadge = { label: string; requestId: number; status: string } | null;
 
@@ -39,6 +40,7 @@ const canManagePlatform = computed(() => hasManagerCapability(
   managerSession.auth.value,
   MANAGER_CAPABILITY.platformManage,
 ));
+const demoReadOnly = useDemoReadOnly();
 
 const suggestionsFor = (index: number) => (
   props.activeSuggestionIndex === index ? props.productOptions.slice(0, 10) : []
@@ -121,7 +123,7 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
             <span class="flex h-auto items-center whitespace-nowrap px-1 text-xs font-medium text-gray-500 md:h-6 md:text-[11px]">Кол-во</span>
             <input v-model.number="line.quantity" type="number" min="1" class="field-input" placeholder="1" />
           </label>
-          <label class="col-span-3 space-y-1 md:col-span-2">
+          <label v-if="!demoReadOnly" class="col-span-3 space-y-1 md:col-span-2">
             <span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Себест.</span>
             <input v-model.number="line.cost" type="number" min="0" class="field-input" placeholder="0" />
           </label>

@@ -69,7 +69,11 @@ class OrderProjectionService:
         }
 
     @staticmethod
-    def _map_order_list_item(order: Order) -> Dict[str, Any]:
+    def _map_order_list_item(
+        order: Order,
+        *,
+        demo_read_only: bool = False,
+    ) -> Dict[str, Any]:
         if (
             "proposals" in getattr(order, "__dict__", {})
             and "product_links" in getattr(order, "__dict__", {})
@@ -95,8 +99,8 @@ class OrderProjectionService:
             "measurement_date": order.measurement_date,
             "installation_date": order.installation_date,
             "total_amount": float(order.total_amount or 0),
-            "total_cost": float(order.total_cost or 0),
-            "margin": float(order.margin or 0),
+            "total_cost": None if demo_read_only else float(order.total_cost or 0),
+            "margin": None if demo_read_only else float(order.margin or 0),
             "total_payments": float(order.total_payments or 0),
             "balance_due": float(order.balance_due or 0),
             "is_paid": bool(order.is_paid),
@@ -144,7 +148,11 @@ class OrderProjectionService:
         }
 
     @staticmethod
-    def _map_product_line(link: OrderProductLink) -> Dict[str, Any]:
+    def _map_product_line(
+        link: OrderProductLink,
+        *,
+        demo_read_only: bool = False,
+    ) -> Dict[str, Any]:
         product_title = (
             getattr(link, "title_snapshot", None)
             or (link.product.title if link.product else f"Товар #{link.product_id}")
@@ -160,7 +168,7 @@ class OrderProjectionService:
             "currency_snapshot": getattr(link, "currency_snapshot", None),
             "quantity": link.quantity,
             "price": link.price,
-            "cost": link.cost,
+            "cost": None if demo_read_only else link.cost,
             "is_installation_included": bool(link.is_installation_included),
             "installation_price": int(link.installation_price or 0),
             "line_total": line_total,
@@ -170,7 +178,11 @@ class OrderProjectionService:
         }
 
     @staticmethod
-    def _map_service_line(link: OrderServiceLink) -> Dict[str, Any]:
+    def _map_service_line(
+        link: OrderServiceLink,
+        *,
+        demo_read_only: bool = False,
+    ) -> Dict[str, Any]:
         service_title = link.title or (link.service.title if link.service else f"Услуга #{link.service_id}")
         line_total = link.price * link.quantity
         return {
@@ -181,12 +193,17 @@ class OrderProjectionService:
             "service_category": link.service.category if link.service else None,
             "quantity": link.quantity,
             "price": link.price,
-            "cost": link.cost,
+            "cost": None if demo_read_only else link.cost,
             "line_total": line_total,
         }
 
     @staticmethod
-    def _map_order_proposal(order: Order, proposal: OrderProposal) -> Dict[str, Any]:
+    def _map_order_proposal(
+        order: Order,
+        proposal: OrderProposal,
+        *,
+        demo_read_only: bool = False,
+    ) -> Dict[str, Any]:
         product_links = [link for link in order.product_links if link.proposal_id == proposal.id]
         service_links = [link for link in order.service_links if link.proposal_id == proposal.id]
         total_amount, total_cost, margin = OrderService._proposal_line_totals(product_links, service_links)
@@ -199,10 +216,16 @@ class OrderProjectionService:
             "is_archived": bool(proposal.is_archived),
             "sort_order": int(proposal.sort_order or 0),
             "total_amount": total_amount,
-            "total_cost": total_cost,
-            "margin": margin,
-            "product_lines": [OrderProjectionService._map_product_line(link) for link in product_links],
-            "service_lines": [OrderProjectionService._map_service_line(link) for link in service_links],
+            "total_cost": None if demo_read_only else total_cost,
+            "margin": None if demo_read_only else margin,
+            "product_lines": [
+                OrderProjectionService._map_product_line(link, demo_read_only=demo_read_only)
+                for link in product_links
+            ],
+            "service_lines": [
+                OrderProjectionService._map_service_line(link, demo_read_only=demo_read_only)
+                for link in service_links
+            ],
         }
 
     @staticmethod
@@ -328,7 +351,13 @@ class OrderProjectionService:
 
         result = await session.execute(base_stmt)
         orders = list(result.scalars().all())
-        items = [OrderProjectionService._map_order_list_item(order) for order in orders]
+        items = [
+            OrderProjectionService._map_order_list_item(
+                order,
+                demo_read_only=tenant_scope.demo_read_only,
+            )
+            for order in orders
+        ]
 
         pages = (total + limit - 1) // limit if limit > 0 else 0
         return {
@@ -378,11 +407,15 @@ class OrderProjectionService:
             if owned_customer_id is None:
                 return None
         # Transitional compatibility: a legacy detail read may still repair a
-        # missing default proposal.  The command-handler slice will move this
-        # mutation out of the projection transaction without changing output.
-        await OrderService.ensure_default_proposal(session, order)
+        # missing default proposal. Demo reads must remain read-only even while
+        # this compatibility path exists.
+        if not tenant_scope.demo_read_only:
+            await OrderService.ensure_default_proposal(session, order)
 
-        data = OrderProjectionService._map_order_list_item(order)
+        data = OrderProjectionService._map_order_list_item(
+            order,
+            demo_read_only=tenant_scope.demo_read_only,
+        )
         from models import CustomerEquipment, EquipmentOrderLink
         from services.service_attachment_service import ServiceAttachmentService
 
@@ -418,17 +451,27 @@ class OrderProjectionService:
         selected_proposal = OrderService._selected_proposal(order)
         selected_proposal_id = selected_proposal.id if selected_proposal else None
         data["product_lines"] = [
-            OrderProjectionService._map_product_line(link)
+            OrderProjectionService._map_product_line(
+                link,
+                demo_read_only=tenant_scope.demo_read_only,
+            )
             for link in order.product_links
             if selected_proposal_id is None or link.proposal_id == selected_proposal_id
         ]
         data["service_lines"] = [
-            OrderProjectionService._map_service_line(link)
+            OrderProjectionService._map_service_line(
+                link,
+                demo_read_only=tenant_scope.demo_read_only,
+            )
             for link in order.service_links
             if selected_proposal_id is None or link.proposal_id == selected_proposal_id
         ]
         data["proposals"] = [
-            OrderProjectionService._map_order_proposal(order, proposal)
+            OrderProjectionService._map_order_proposal(
+                order,
+                proposal,
+                demo_read_only=tenant_scope.demo_read_only,
+            )
             for proposal in sorted(order.proposals, key=lambda proposal: (proposal.is_archived, proposal.sort_order, proposal.id or 0))
         ]
         from services.document_service import DocumentService

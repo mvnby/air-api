@@ -21,6 +21,7 @@ class StorefrontContextRow:
     default_locale: str
     currency: str
     tenant_is_system: bool = False
+    demo_read_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,7 @@ class ManagerTenantAccessRow:
     storefront_id: int
     role: str
     is_system: bool
+    demo_read_only: bool = False
 
 
 class TenancyDAO:
@@ -145,6 +147,7 @@ class TenancyDAO:
                 storefront_id=int(storefront.id or 0),
                 role=str(membership.role or "").strip().lower(),
                 is_system=bool(tenant.is_system),
+                demo_read_only=bool(tenant.demo_read_only),
             )
             for membership, tenant, storefront in rows
         ]
@@ -182,6 +185,7 @@ class TenancyDAO:
             default_locale=storefront.default_locale,
             currency=storefront.currency,
             tenant_is_system=bool(tenant.is_system),
+            demo_read_only=bool(tenant.demo_read_only),
         )
 
     @staticmethod
@@ -221,4 +225,5 @@ class TenancyDAO:
             default_locale=storefront.default_locale,
             currency=storefront.currency,
             tenant_is_system=bool(tenant.is_system),
+            demo_read_only=bool(tenant.demo_read_only),
         )

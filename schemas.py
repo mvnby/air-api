@@ -788,6 +788,7 @@ class ManagerAuthStatusResponse(BaseModel):
     capabilities: List[str] = Field(default_factory=list)
     can_change_password: bool = False
     must_change_password: bool = False
+    demo_read_only: bool = False
 
 
 class ManagerPasswordChangePayload(BaseModel):

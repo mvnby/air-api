@@ -141,6 +141,30 @@ describe('OrderProductLinesEditor', () => {
     expect(wrapper.text()).not.toContain('В поставку');
     expect(wrapper.text()).not.toContain('Забронировать');
   });
+
+  it('hides cost inputs for a read-only demo session', () => {
+    managerSession.auth.value = { demo_read_only: true } as any;
+    const productWrapper = mount(OrderProductLinesEditor, {
+      props: {
+        lines: [{ ...productLine }], searchInStock: false, productOptions: [],
+        productLookupById: {}, productLookupLoading: false, activeSuggestionIndex: null,
+        supplyActionLoadingLineId: null, supplyBadgeForLine: () => null,
+      },
+    });
+    const serviceWrapper = mount(OrderServiceLinesEditor, {
+      props: {
+        lines: [{ ...serviceLine }], editingIndex: null, showEstimateImport: false,
+        selectedEstimateId: null, estimateSearchQuery: '', estimateImportMode: 'detailed',
+        descriptionMode: 'short', serviceOptions: [], serviceLookupLoading: false,
+        activeSuggestionIndex: null, estimateOptions: [], estimateOptionsLoading: false,
+        importingEstimate: false, formatServiceKind: () => 'монтаж',
+      },
+    });
+    mountedWrappers.push(productWrapper, serviceWrapper);
+
+    expect(productWrapper.text()).not.toContain('Себест.');
+    expect(serviceWrapper.text()).not.toContain('Себест.');
+  });
 });
 
 describe('OrderServiceLinesEditor', () => {

@@ -47,6 +47,8 @@ def test_workflow_has_validated_operation_and_apply_inputs():
         "display_name",
         "username",
         "phone",
+        "role",
+        "reset_password",
         "reviewed_plan_digest",
     }
     assert inputs["operation"]["type"] == "choice"
@@ -58,9 +60,13 @@ def test_workflow_has_validated_operation_and_apply_inputs():
         "storefront_slug",
         "display_name",
         "username",
-        "phone",
     ):
         assert inputs[name]["required"] == "true"
+    assert inputs["phone"]["required"] == "false"
+    assert inputs["role"]["options"] == ["manager", "owner"]
+    assert inputs["role"]["default"] == "manager"
+    assert inputs["reset_password"]["type"] == "boolean"
+    assert inputs["reset_password"]["default"] == "false"
 
 
 def test_workflow_uses_pinned_controller_and_static_one_time_secret():
@@ -84,6 +90,8 @@ def test_workflow_uses_pinned_controller_and_static_one_time_secret():
     assert "%0A" in execute["run"]
     assert "--password-env" not in source
     assert "--plan-token" not in source
+    assert "--reset-password" in source
+    assert "--role" in source
     assert "ssh-keyscan" not in source
     assert "secrets[" not in source
 

@@ -22,8 +22,8 @@ export type ManagerOrderListItemResponse = {
     measurement_date?: (string | null);
     installation_date?: (string | null);
     total_amount: number;
-    total_cost: number;
-    margin: number;
+    total_cost?: (number | null);
+    margin?: (number | null);
     is_paid: boolean;
     comment?: (string | null);
     delivery_address?: (string | null);

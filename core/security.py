@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
 from core.database import get_session
+from core.demo_access import enforce_demo_read_only
 from models.tenancy import TenantScope
 from services.manager_tenant_access_service import (
     ManagerTenantAccessResolutionError,
@@ -49,6 +50,7 @@ class AuthenticatedUser:
     auth_version: int | None = None
     must_change_password: bool = False
     can_change_password: bool = False
+    demo_read_only: bool = False
 
     def tenant_scope(self) -> TenantScope:
         if not self.tenant_id or not self.storefront_id:
@@ -59,6 +61,7 @@ class AuthenticatedUser:
             tenant_id=self.tenant_id,
             storefront_id=self.storefront_id,
             is_system=self.is_system_tenant,
+            demo_read_only=self.demo_read_only,
         )
 
 
@@ -167,6 +170,7 @@ async def get_current_auth_context(
                 request,
                 access.tenant_scope,
             )
+            enforce_demo_read_only(request, demo_read_only=tenant_scope.demo_read_only)
             return AuthenticatedUser(
                 username=username,
                 staff_user_id=int(staff_user.id or 0),
@@ -179,7 +183,8 @@ async def get_current_auth_context(
                 is_system_tenant=tenant_scope.is_system,
                 auth_version=token_auth_version,
                 must_change_password=bool(staff_user.must_change_password),
-                can_change_password=bool(staff_user.password_hash),
+                can_change_password=bool(staff_user.password_hash) and not tenant_scope.demo_read_only,
+                demo_read_only=tenant_scope.demo_read_only,
             )
 
         if not LegacyOwnerAuthGuard.configured_username_matches(username):

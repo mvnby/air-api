@@ -86,12 +86,29 @@ def _validate_plan(result: dict[str, Any], *, ready: bool) -> None:
         raise WorkflowError("tenant-manager blocker list is invalid")
     if not _is_string_list(result["changes"]):
         raise WorkflowError("tenant-manager change list is invalid")
-    reviewed_changes = [
-        "create_staff_user",
-        "create_active_manager_membership",
-    ]
-    if result["changes"] not in ([], reviewed_changes):
+    reviewed_changes = (
+        [],
+        ["create_staff_user", "create_active_manager_membership"],
+        ["create_staff_user", "create_active_owner_membership"],
+        ["promote_staff_user_to_owner"],
+        ["reset_staff_password"],
+        ["promote_staff_user_to_owner", "reset_staff_password"],
+    )
+    if result["changes"] not in reviewed_changes:
         raise WorkflowError("tenant-manager change list is not reviewed")
+    target = result["target"]
+    expected_creation = [
+        "create_staff_user",
+        f"create_active_{target['role']}_membership",
+    ]
+    if result["changes"] and result["changes"][0] == "create_staff_user":
+        if result["changes"] != expected_creation:
+            raise WorkflowError("tenant-manager creation changes disagree with target role")
+    if "promote_staff_user_to_owner" in result["changes"] and target["role"] != "owner":
+        raise WorkflowError("tenant-manager promotion disagrees with target role")
+    has_reset = "reset_staff_password" in result["changes"]
+    if has_reset != bool(target["reset_password"] and result["current"]["staff_users"]):
+        raise WorkflowError("tenant-manager reset changes disagree with target")
     if not isinstance(result["plan_token"], str) or not result["plan_token"]:
         raise WorkflowError("tenant-manager plan token is invalid")
     if not isinstance(result["plan_digest"], str) or not DIGEST_RE.fullmatch(
@@ -119,10 +136,21 @@ def _validate_target_shape(value: Any) -> None:
         "display_name",
         "username",
         "phone",
+        "role",
+        "reset_password",
     }:
         raise WorkflowError("tenant-manager target shape is invalid")
-    if any(not isinstance(item, str) or not item for item in value.values()):
+    for key in ("tenant_slug", "storefront_slug", "display_name", "username", "role"):
+        if not isinstance(value[key], str) or not value[key]:
+            raise WorkflowError("tenant-manager target value is invalid")
+    if value["phone"] is not None and (
+        not isinstance(value["phone"], str) or not value["phone"]
+    ):
         raise WorkflowError("tenant-manager target value is invalid")
+    if type(value["reset_password"]) is not bool:
+        raise WorkflowError("tenant-manager target value is invalid")
+    if value["role"] not in {"manager", "owner"}:
+        raise WorkflowError("tenant-manager target role is invalid")
 
 
 def _is_string_list(value: Any) -> bool:
@@ -197,6 +225,9 @@ def _validate_staff_user_state(user: Any) -> None:
         "legacy_installer_id",
         "telegram_id",
         "telegram_username",
+        "auth_version",
+        "credential_changed_at",
+        "must_change_password",
     }
     if not isinstance(user, dict) or set(user) != expected:
         raise WorkflowError("tenant-manager staff-user state is invalid")
@@ -216,6 +247,15 @@ def _validate_staff_user_state(user: Any) -> None:
         user["telegram_username"], str
     ):
         raise WorkflowError("tenant-manager Telegram username is invalid")
+    if type(user["auth_version"]) is not int or user["auth_version"] < 1:
+        raise WorkflowError("tenant-manager auth version is invalid")
+    if user["credential_changed_at"] is not None and (
+        not isinstance(user["credential_changed_at"], str)
+        or not user["credential_changed_at"]
+    ):
+        raise WorkflowError("tenant-manager credential timestamp is invalid")
+    if type(user["must_change_password"]) is not bool:
+        raise WorkflowError("tenant-manager forced-change state is invalid")
 
 
 def _validate_membership_state(membership: Any) -> None:

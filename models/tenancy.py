@@ -4,7 +4,19 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, Index, String, UniqueConstraint, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Column,
+    DateTime,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    JSON,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlmodel import Field, SQLModel
 
 
@@ -24,6 +36,9 @@ class TenantScope:
     # Public resolvers set this explicitly. ``None`` keeps compatibility for
     # internal callers that only know the persisted IDs.
     is_canonical_storefront: bool | None = None
+    # Demo tenants are read-only for Manager mutations while retaining normal
+    # scoped catalog visibility.
+    demo_read_only: bool = False
 
 
 class Tenant(SQLModel, table=True):
@@ -42,6 +57,10 @@ class Tenant(SQLModel, table=True):
     kind: str = Field(default="independent_seller", sa_column=Column(String(40), nullable=False, index=True))
     status: str = Field(default="active", sa_column=Column(String(24), nullable=False, index=True))
     is_system: bool = Field(default=False, sa_column=Column(Boolean, nullable=False))
+    demo_read_only: bool = Field(
+        default=False,
+        sa_column=Column(Boolean, nullable=False, server_default=text("false")),
+    )
     created_at: datetime = Field(
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False),
@@ -108,6 +127,60 @@ class Storefront(SQLModel, table=True):
     default_locale: str = Field(default="ru-BY", sa_column=Column(String(16), nullable=False))
     currency: str = Field(default="BYN", sa_column=Column(String(3), nullable=False))
     is_default: bool = Field(default=False, sa_column=Column(Boolean, nullable=False))
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
+class TenantDemoFixtureState(SQLModel, table=True):
+    """Identity record for the one supported synthetic demo fixture."""
+
+    __tablename__ = "tenant_demo_fixture_state"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["storefront_id", "tenant_id"],
+            ["storefront.id", "storefront.tenant_id"],
+            name="fk_tenant_demo_fixture_storefront_tenant",
+        ),
+        CheckConstraint(
+            "fixture_version = 'v1'",
+            name="ck_tenant_demo_fixture_version",
+        ),
+    )
+
+    tenant_id: int = Field(foreign_key="tenant.id", primary_key=True)
+    storefront_id: int = Field(
+        sa_column=Column(Integer, nullable=False, unique=True),
+    )
+    fixture_version: str = Field(
+        default="v1",
+        sa_column=Column(String(24), nullable=False),
+    )
+    customer_ids: list[int] = Field(
+        default_factory=list,
+        sa_column=Column(JSON, nullable=False),
+    )
+    order_ids: list[int] = Field(
+        default_factory=list,
+        sa_column=Column(JSON, nullable=False),
+    )
+    proposal_ids: list[int] = Field(
+        default_factory=list,
+        sa_column=Column(JSON, nullable=False),
+    )
+    product_line_ids: list[int] = Field(
+        default_factory=list,
+        sa_column=Column(JSON, nullable=False),
+    )
+    offer_ids: list[int] = Field(
+        default_factory=list,
+        sa_column=Column(JSON, nullable=False),
+    )
     created_at: datetime = Field(
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False),

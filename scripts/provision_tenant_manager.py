@@ -1,4 +1,4 @@
-"""Plan and execute a least-privilege tenant manager provisioning request."""
+"""Plan and execute a least-privilege tenant staff provisioning request."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ _MAX_EXECUTION_INPUT_BYTES = 16_384
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Provision one tenant-scoped manager. Plan is read-only; execute "
+            "Provision one tenant-scoped manager or owner. Plan is read-only; execute "
             "requires a fresh plan token and one secret input source."
         )
     )
@@ -43,7 +43,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--storefront-slug", required=True)
     parser.add_argument("--display-name", required=True)
     parser.add_argument("--username", required=True)
-    parser.add_argument("--phone", required=True)
+    parser.add_argument("--phone")
+    parser.add_argument(
+        "--role",
+        choices=("manager", "owner"),
+        default="manager",
+    )
+    parser.add_argument(
+        "--reset-password",
+        action="store_true",
+        help="Explicitly rotate an existing compliant identity's password.",
+    )
     parser.add_argument("--plan-token")
     parser.add_argument(
         "--execution-json-stdin",
@@ -91,6 +101,8 @@ def request_from_args(args: argparse.Namespace) -> TenantManagerProvisioningRequ
         display_name=args.display_name,
         username=args.username,
         phone=args.phone,
+        role=args.role,
+        reset_password=args.reset_password,
     )
 
 
@@ -194,12 +206,16 @@ def reviewed_command(args: argparse.Namespace, result: dict[str, Any]) -> str | 
         target["display_name"],
         "--username",
         target["username"],
-        "--phone",
-        target["phone"],
+        "--role",
+        target["role"],
         "--plan-token",
         result["plan_token"],
     ]
-    if result["changes"]:
+    if target["phone"] is not None:
+        command.extend(["--phone", target["phone"]])
+    if target["reset_password"]:
+        command.append("--reset-password")
+    if {"create_staff_user", "reset_staff_password"}.intersection(result["changes"]):
         command.append("--password-stdin")
     return shlex.join(command)
 

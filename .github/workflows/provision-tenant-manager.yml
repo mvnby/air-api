@@ -30,17 +30,30 @@ on:
         required: true
         default: main
       display_name:
-        description: "Manager display name"
+        description: "Tenant staff display name"
         type: string
         required: true
       username:
-        description: "Unique manager login"
+        description: "Unique tenant staff login"
         type: string
         required: true
       phone:
-        description: "Unique complete E.164 phone number"
+        description: "Optional unique complete E.164 phone number"
         type: string
+        required: false
+      role:
+        description: "Tenant-scoped access role"
+        type: choice
         required: true
+        default: manager
+        options:
+          - manager
+          - owner
+      reset_password:
+        description: "Explicitly rotate an existing compliant identity password"
+        type: boolean
+        required: true
+        default: false
       reviewed_plan_digest:
         description: "64-character plan_digest from the reviewed plan artifact; execute only"
         type: string
@@ -123,18 +136,23 @@ jobs:
         env:
           DISPLAY_NAME: ${{ inputs.display_name }}
           PHONE: ${{ inputs.phone }}
+          RESET_PASSWORD: ${{ inputs.reset_password }}
+          ROLE: ${{ inputs.role }}
           STOREFRONT_SLUG: ${{ inputs.storefront_slug }}
           TENANT_SLUG: ${{ inputs.tenant_slug }}
           USERNAME: ${{ inputs.username }}
         run: |
           set -euo pipefail
           umask 077
+          extra_args=(--role "${ROLE}")
+          if [ -n "${PHONE}" ]; then extra_args+=(--phone "${PHONE}"); fi
+          if [ "${RESET_PASSWORD}" = "true" ]; then extra_args+=(--reset-password); fi
           python3 -I scripts/ops/tenant_manager_provisioning_workflow.py plan \
             --tenant-slug "${TENANT_SLUG}" \
             --storefront-slug "${STOREFRONT_SLUG}" \
             --display-name "${DISPLAY_NAME}" \
             --username "${USERNAME}" \
-            --phone "${PHONE}" \
+            "${extra_args[@]}" \
             --identity-file "${RUNNER_TEMP}/tenant-manager-ops-key" \
             --result-file "${GITHUB_WORKSPACE}/tenant-manager-operation-result.json"
 
@@ -143,7 +161,9 @@ jobs:
         env:
           DISPLAY_NAME: ${{ inputs.display_name }}
           PHONE: ${{ inputs.phone }}
+          RESET_PASSWORD: ${{ inputs.reset_password }}
           REVIEWED_PLAN_DIGEST: ${{ inputs.reviewed_plan_digest }}
+          ROLE: ${{ inputs.role }}
           STOREFRONT_SLUG: ${{ inputs.storefront_slug }}
           TENANT_MANAGER_ONE_TIME_PASSWORD: ${{ secrets.TENANT_MANAGER_ONE_TIME_PASSWORD }}
           TENANT_SLUG: ${{ inputs.tenant_slug }}
@@ -152,6 +172,9 @@ jobs:
           set -euo pipefail
           set +x
           umask 077
+          extra_args=(--role "${ROLE}")
+          if [ -n "${PHONE}" ]; then extra_args+=(--phone "${PHONE}"); fi
+          if [ "${RESET_PASSWORD}" = "true" ]; then extra_args+=(--reset-password); fi
           if [ -z "${TENANT_MANAGER_ONE_TIME_PASSWORD}" ]; then
             echo "::error::Missing temporary TENANT_MANAGER_ONE_TIME_PASSWORD production secret"
             exit 1
@@ -167,7 +190,7 @@ jobs:
               --storefront-slug "${STOREFRONT_SLUG}" \
               --display-name "${DISPLAY_NAME}" \
               --username "${USERNAME}" \
-              --phone "${PHONE}" \
+              "${extra_args[@]}" \
               --reviewed-plan-digest "${REVIEWED_PLAN_DIGEST}" \
               --identity-file "${RUNNER_TEMP}/tenant-manager-ops-key" \
               --result-file "${GITHUB_WORKSPACE}/tenant-manager-operation-result.json"

@@ -43,6 +43,7 @@ class ManagerStorefrontSelector:
             tenant_id=base_scope.tenant_id,
             storefront_id=int(storefront.id),
             is_system=base_scope.is_system,
+            demo_read_only=base_scope.demo_read_only,
         )
 
     @staticmethod

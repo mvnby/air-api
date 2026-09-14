@@ -119,6 +119,8 @@ def test_reviewed_command_uses_stdin_only_when_plan_creates_a_user() -> None:
         "display_name": "Андрей",
         "username": "andrey-polotsk",
         "phone": "+375297146293",
+        "role": "manager",
+        "reset_password": False,
     }
 
     creation = reviewed_command(
@@ -132,6 +134,52 @@ def test_reviewed_command_uses_stdin_only_when_plan_creates_a_user() -> None:
 
     assert "--password-stdin" in creation
     assert "--password-stdin" not in no_op
+
+
+def test_owner_reset_and_phone_optional_are_explicit() -> None:
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "plan",
+            "--tenant-slug",
+            "test1",
+            "--storefront-slug",
+            "main",
+            "--display-name",
+            "Test1 Demo",
+            "--username",
+            "demo.test1",
+            "--role",
+            "owner",
+            "--reset-password",
+        ]
+    )
+
+    validate_args(args, parser)
+    assert args.phone is None
+    assert args.role == "owner"
+    assert args.reset_password is True
+
+    result = {
+        "ready": True,
+        "target": {
+            "tenant_slug": "test1",
+            "storefront_slug": "main",
+            "display_name": "Test1 Demo",
+            "username": "demo.test1",
+            "phone": None,
+            "role": "owner",
+            "reset_password": True,
+        },
+        "plan_token": "fresh-token",
+        "changes": ["reset_staff_password"],
+    }
+    command = reviewed_command(args, result)
+    assert command is not None
+    assert "--role owner" in command
+    assert "--reset-password" in command
+    assert "--phone" not in command
+    assert "--password-stdin" in command
 
 
 def test_execute_accepts_exact_execution_json_from_stdin_without_cli_secrets() -> None:

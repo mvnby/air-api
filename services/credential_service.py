@@ -4,41 +4,13 @@ import asyncio
 
 import bcrypt
 
-
-class CredentialPolicyError(ValueError):
-    def __init__(self, code: str, message: str) -> None:
-        super().__init__(message)
-        self.code = code
+from services.credential_policy import CredentialPolicy, CredentialPolicyError
 
 
-class CredentialService:
-    MIN_PASSWORD_CHARACTERS = 9
-    MAX_PASSWORD_UTF8_BYTES = 72
+class CredentialService(CredentialPolicy):
     # Cost-matched non-credential hash used to avoid revealing whether a staff
     # username has a usable password through response timing.
     DUMMY_PASSWORD_HASH = "$2b$12$vUbirU34FCJ9Ki/.2IXnLOKGyNOPfEcwT6hk9crUkMMZ2r.1Oat5a"
-
-    @classmethod
-    def validate_password(cls, password: str) -> str:
-        value = str(password or "")
-        if len(value) < cls.MIN_PASSWORD_CHARACTERS:
-            raise CredentialPolicyError(
-                "password_too_short",
-                f"Пароль должен содержать не менее {cls.MIN_PASSWORD_CHARACTERS} символов",
-            )
-        try:
-            encoded = value.encode("utf-8")
-        except UnicodeEncodeError as exc:
-            raise CredentialPolicyError(
-                "password_invalid_encoding",
-                "Пароль содержит недопустимую Unicode-последовательность",
-            ) from exc
-        if len(encoded) > cls.MAX_PASSWORD_UTF8_BYTES:
-            raise CredentialPolicyError(
-                "password_too_long",
-                f"Пароль должен занимать не более {cls.MAX_PASSWORD_UTF8_BYTES} UTF-8 байт",
-            )
-        return value
 
     @classmethod
     def hash_password(cls, password: str) -> str:
