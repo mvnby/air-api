@@ -37,8 +37,20 @@ or `https://cdn.mvn.by/products/variants/original/` are accepted.
 
 Manifest `polotsk-presentation-v1.json` ожидает 1 235 товаров, не содержит URL
 новых TCL и больше не совпадает с публичным snapshot. Он непригоден для execute.
-Для исправления нужен новый manifest и свежий database-aware plan на primary;
-старый токен или вручную изменённую команду использовать нельзя.
+Текущий `polotsk-presentation-v2.json` фиксирует новый публичный snapshot и
+ограничивает исполняемую часть тремя TCL. Перед исправлением обязателен свежий
+database-aware plan на primary; старый токен или вручную изменённую команду
+использовать нельзя.
+
+Текущая read-only команда:
+
+```bash
+python3 scripts/manage_product_media_url_backfill.py plan \
+  --manifest config/product_media_url_backfills/polotsk-presentation-v2.json
+```
+
+Готовый план должен показывать ровно три исполняемых TCL и три отложенных LG,
+без неизвестных URL и без drift публичного или DB snapshot.
 
 ## Polotsk presentation v1 snapshot (история)
 
