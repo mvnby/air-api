@@ -206,8 +206,8 @@ async def test_series_gallery_can_be_added_to_all_series_products(async_client: 
     await db.commit()
 
     urls = [
-        "/media/library/original/series-gallery-1.webp",
-        "/media/library/original/series-gallery-2.webp",
+        "/media/products/shared/series-gallery-1.webp",
+        "/media/products/shared/series-gallery-2.webp",
     ]
     headers = await _auth_headers(async_client)
     endpoint = f"/api/manager/brands/{brand.id}/series/{series.id}/gallery/apply-to-products"

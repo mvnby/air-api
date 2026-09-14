@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import Brand, FeatureSeriesLink, Product, ProductSeries
 from services.catalog_invalidation_commit_service import CatalogInvalidationCommitService
+from services.catalog_media_policy import CatalogMediaKind, CatalogMediaPolicy
 from services.catalog_mutation_contracts import CatalogMutationBatch
 from services.manager_brand_mutation_state import snapshot_brand_series
 from services.manager_brand_series_feature_service import (
@@ -69,6 +70,18 @@ class ManagerBrandSeriesOperations(ManagerBrandSeriesFeatureOperations):
             slug=series_slug,
         )
 
+        hero_image = cls._require_series_media(
+            cls._clean_optional_text(payload.get("hero_image")),
+            field="series.hero_image",
+        )
+        gallery_images = cls._normalize_string_list(payload.get("gallery_images"))
+        feature_blocks = cls._normalize_feature_blocks(payload.get("feature_blocks"))
+        content_blocks = cls._normalize_content_blocks(payload.get("content_blocks"))
+        cls._require_series_media_collection(
+            gallery_images=gallery_images,
+            feature_blocks=feature_blocks,
+            content_blocks=content_blocks,
+        )
         series = ProductSeries(
             brand_id=brand_id,
             title=title,
@@ -76,11 +89,11 @@ class ManagerBrandSeriesOperations(ManagerBrandSeriesFeatureOperations):
             tagline=cls._clean_optional_text(payload.get("tagline")),
             short_description=cls._clean_optional_text(payload.get("short_description")),
             description=cls._clean_optional_text(payload.get("description")),
-            hero_image=cls._clean_optional_text(payload.get("hero_image")),
-            gallery_images=cls._normalize_string_list(payload.get("gallery_images")),
+            hero_image=hero_image,
+            gallery_images=gallery_images,
             features=cls._normalize_features(payload.get("features")),
-            feature_blocks=cls._normalize_feature_blocks(payload.get("feature_blocks")),
-            content_blocks=cls._normalize_content_blocks(payload.get("content_blocks")),
+            feature_blocks=feature_blocks,
+            content_blocks=content_blocks,
             footnotes=cls._normalize_string_list(payload.get("footnotes")),
             seo_title=cls._clean_optional_text(payload.get("seo_title")),
             seo_description=cls._clean_optional_text(payload.get("seo_description")),
@@ -158,15 +171,24 @@ class ManagerBrandSeriesOperations(ManagerBrandSeriesFeatureOperations):
         if "description" in payload:
             series.description = cls._clean_optional_text(payload["description"])
         if "hero_image" in payload:
-            series.hero_image = cls._clean_optional_text(payload["hero_image"])
+            series.hero_image = cls._require_series_media(
+                cls._clean_optional_text(payload["hero_image"]),
+                field="series.hero_image",
+            )
         if "gallery_images" in payload and payload["gallery_images"] is not None:
-            series.gallery_images = cls._normalize_string_list(payload["gallery_images"])
+            gallery_images = cls._normalize_string_list(payload["gallery_images"])
+            cls._require_series_media_collection(gallery_images=gallery_images)
+            series.gallery_images = gallery_images
         if "features" in payload and payload["features"] is not None:
             series.features = cls._normalize_features(payload["features"])
         if "feature_blocks" in payload and payload["feature_blocks"] is not None:
-            series.feature_blocks = cls._normalize_feature_blocks(payload["feature_blocks"])
+            feature_blocks = cls._normalize_feature_blocks(payload["feature_blocks"])
+            cls._require_series_media_collection(feature_blocks=feature_blocks)
+            series.feature_blocks = feature_blocks
         if "content_blocks" in payload and payload["content_blocks"] is not None:
-            series.content_blocks = cls._normalize_content_blocks(payload["content_blocks"])
+            content_blocks = cls._normalize_content_blocks(payload["content_blocks"])
+            cls._require_series_media_collection(content_blocks=content_blocks)
+            series.content_blocks = content_blocks
         if "footnotes" in payload and payload["footnotes"] is not None:
             series.footnotes = cls._normalize_string_list(payload["footnotes"])
         if "seo_title" in payload:
@@ -249,6 +271,7 @@ class ManagerBrandSeriesOperations(ManagerBrandSeriesFeatureOperations):
         gallery_urls = cls._normalize_string_list(source_urls)
         if not gallery_urls:
             raise HTTPException(status_code=400, detail="Галерея серии пуста.")
+        cls._require_series_media_collection(gallery_images=gallery_urls)
 
         product_ids = list(
             (
@@ -427,3 +450,39 @@ class ManagerBrandSeriesOperations(ManagerBrandSeriesFeatureOperations):
         if not series_slug:
             raise HTTPException(status_code=400, detail="Не удалось сформировать slug серии.")
         return series_slug
+
+    @staticmethod
+    def _require_series_media(value: str | None, *, field: str) -> str | None:
+        try:
+            return CatalogMediaPolicy.require_allowed(
+                value,
+                kind=CatalogMediaKind.SERIES,
+                field=field,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @classmethod
+    def _require_series_media_collection(
+        cls,
+        *,
+        gallery_images: List[str] | None = None,
+        feature_blocks: List[Dict[str, Any]] | None = None,
+        content_blocks: List[Dict[str, Any]] | None = None,
+    ) -> None:
+        try:
+            CatalogMediaPolicy.require_many(
+                gallery_images or [],
+                kind=CatalogMediaKind.SERIES,
+                field="series.gallery_images",
+            )
+            CatalogMediaPolicy.require_series_blocks(
+                feature_blocks or [],
+                field="series.feature_blocks",
+            )
+            CatalogMediaPolicy.require_series_blocks(
+                content_blocks or [],
+                field="series.content_blocks",
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc

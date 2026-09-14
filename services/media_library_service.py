@@ -36,6 +36,7 @@ from models import (
 )
 from services.service_catalog_scope import canonical_service_catalog_clause
 from services.general_media_storage_service import get_general_media_storage
+from services.catalog_media_policy import CatalogMediaKind, CatalogMediaPolicy
 from services.media_library_read_service import MediaLibraryReadService
 from services.product_image_processing_contract import ProductImageVariantType
 from services.product_image_processing_provider import (
@@ -59,6 +60,7 @@ ALLOWED_KINDS = {
     "installation",
     "strobe",
     "brand",
+    "feature",
     "misc",
 }
 
@@ -122,6 +124,11 @@ class MediaLibraryService:
             stored = await MediaLibraryService._store_image(
                 content,
                 variant_type="original",
+            )
+            CatalogMediaPolicy.require_allowed(
+                stored.url,
+                kind=CatalogMediaKind.CONTENT,
+                field="media_asset.url",
             )
             asset = MediaAsset(
                 title=MediaLibraryService._title_from_filename(filename) or "Без названия",

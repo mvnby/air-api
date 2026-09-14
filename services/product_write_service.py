@@ -12,8 +12,10 @@ from crud.product import ProductDAO
 from models import Product, ProductImage, Tag
 from services.brand_series_service import sync_product_brand_series
 from services.catalog_revision_service import CatalogRevisionService
+from services.catalog_media_policy import CatalogMediaKind, CatalogMediaPolicy
 from services.product_attachment_service import replace_manuals
 from services.product_kind_service import ProductKindService
+from services.product_original_media_service import ProductOriginalMediaService
 from services.product_series_assignment_service import ProductSeriesAssignmentService
 from services.spec_normalizer import normalize_specs
 from services.product_supply_metrics_service import ProductSupplyMetricsService
@@ -25,6 +27,14 @@ from services.tag_logic import category_detection_inputs
 
 
 class ProductWriteService:
+    @staticmethod
+    def _validated_main_image(value: str | None) -> str | None:
+        return CatalogMediaPolicy.require_allowed(
+            value,
+            kind=CatalogMediaKind.PRODUCT,
+            field="product.main_image",
+        )
+
     @staticmethod
     async def _unique_slug(
         session: AsyncSession,
@@ -104,7 +114,9 @@ class ProductWriteService:
             catalog_category_override=payload.get("catalog_category_override"),
             is_inverter=bool(payload.get("is_inverter", False)),
             power_cooling=payload.get("power_cooling"),
-            main_image=payload.get("main_image"),
+            main_image=ProductWriteService._validated_main_image(
+                payload.get("main_image")
+            ),
             images=[],
             tags=selected_tags,
             specs=specs,
@@ -189,6 +201,26 @@ class ProductWriteService:
         if make_unpublished:
             is_published = False
 
+        selected_main_image = ProductWriteService._validated_main_image(
+            payload.get("main_image", source.main_image)
+        )
+        selected_legacy_images = (
+            CatalogMediaPolicy.require_many(
+                source.images or [],
+                kind=CatalogMediaKind.PRODUCT,
+                field="product.images",
+            )
+            if copy_gallery
+            else []
+        )
+        if copy_gallery:
+            for index, image in enumerate(source.gallery_images or [], start=1):
+                CatalogMediaPolicy.require_allowed(
+                    image.url,
+                    kind=CatalogMediaKind.PRODUCT,
+                    field=f"product.gallery[{index}]",
+                )
+
         product = Product(
             title=title,
             slug=slug,
@@ -205,8 +237,8 @@ class ProductWriteService:
             ),
             is_inverter=bool(payload.get("is_inverter", source.is_inverter)),
             power_cooling=payload.get("power_cooling", source.power_cooling),
-            main_image=payload.get("main_image", source.main_image),
-            images=list(source.images or []),
+            main_image=selected_main_image,
+            images=selected_legacy_images,
             tags=selected_tags,
             specs=specs,
             is_published=is_published,
@@ -282,20 +314,14 @@ class ProductWriteService:
         file_bytes: bytes,
         filename: str,
     ) -> Optional[dict]:
-        from services.image_service import ImageService
-
         stmt = select(Product).where(Product.id == product_id)
         product = (await session.execute(stmt)).scalar_one_or_none()
         if not product:
             return None
 
-        db_path = await ImageService.save_image(
-            file_bytes=file_bytes,
-            entity_type="products",
-            slug=product.slug,
-            filename=filename,
-        )
-        product.main_image = ImageService.get_web_path(db_path)
+        del filename  # Content-addressed storage determines the public name.
+        original = await ProductOriginalMediaService.save_shared_original(file_bytes)
+        product.main_image = original.url
         session.add(product)
         await CatalogRevisionService.stage_invalidation(
             session,
@@ -320,6 +346,10 @@ class ProductWriteService:
         existing_product = await ProductDAO.get_by_id(session, product_id)
         if not existing_product:
             return None
+        if "main_image" in payload:
+            payload["main_image"] = ProductWriteService._validated_main_image(
+                payload.get("main_image")
+            )
         original_brand_id = existing_product.brand_id
         original_category_inputs = (
             category_detection_inputs(existing_product.specs, existing_product.title),

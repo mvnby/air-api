@@ -9,13 +9,10 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit
 
+from services.catalog_media_policy import CatalogMediaKind, CatalogMediaPolicy
+
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
-_CANONICAL_URL_RE = re.compile(
-    r"^https://cdn\.mvn\.by/products/(?:shared|variants/original)/"
-    r"[A-Za-z0-9][A-Za-z0-9._-]{0,199}\.(?:avif|gif|jpe?g|png|webp)$",
-    re.IGNORECASE,
-)
 
 
 class ProductMediaUrlBackfillManifestError(ValueError):
@@ -23,22 +20,9 @@ class ProductMediaUrlBackfillManifestError(ValueError):
 
 
 def is_canonical_product_media_url(value: str) -> bool:
-    candidate = str(value or "").strip()
-    if (
-        not candidate.startswith("https://cdn.mvn.by/")
-        or not _CANONICAL_URL_RE.fullmatch(candidate)
-        or ".." in candidate
-    ):
-        return False
-    parsed = urlsplit(candidate)
-    return (
-        parsed.scheme == "https"
-        and parsed.hostname == "cdn.mvn.by"
-        and not parsed.username
-        and not parsed.password
-        and parsed.port is None
-        and not parsed.query
-        and not parsed.fragment
+    return CatalogMediaPolicy.is_allowed_cdn(
+        value,
+        kind=CatalogMediaKind.PRODUCT,
     )
 
 

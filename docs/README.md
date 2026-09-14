@@ -22,6 +22,7 @@
 | Генерация документов и шаблоны | [Архитектура](document-module-architecture.md), [DOCX-шаблоны](native-document-template-bundles.md), [плейсхолдеры](document-placeholders.md) |
 | Ремонт и акты дефекта | [Сценарии ремонта](repair-workflow-v1.md), [акт дефекта V3](bot-defect-act-v3.md) |
 | Медиа и приватные вложения | [R2/S3](media-storage-r2.md), [вложения сервиса](service-attachments.md) |
+| Владение каталогом, CDN-пути и SVG | [Публикация медиа каталога](catalog-media-publication.md) |
 | Telegram и граница API | [Граница бота](bot-service-boundary.md), [выделение сервиса](bot-service-extraction.md) |
 | Публичная витрина | [Граница отдельного репозитория](web-service-extraction.md); UI, сборка и деплой — в `mvnby/mvn-web` |
 | Контекст витрины, tenant и цены | [Подписанный контекст](storefront-context-contract.md), [tenant scope](tenant-scope-rollout.md), [предложения](tenant-offer-contract.md), [селектор Manager](manager-storefront-selector-contract.md) |

@@ -9,6 +9,7 @@ from sqlmodel import select, update
 
 from models import Product, ProductImage, ProductImageVariant, ProductSeries
 from services.catalog_invalidation_commit_service import CatalogInvalidationCommitService
+from services.catalog_media_policy import CatalogMediaKind, CatalogMediaPolicy
 from services.catalog_mutation_contracts import CatalogMutationBatch
 from services.manager_media_storage_service import ManagerMediaStorageOperations
 from services.product_image_processing_contract import ProductImageVariantType
@@ -30,6 +31,12 @@ class ManagerMediaService(ManagerMediaStorageOperations):
         product = await session.get(Product, image.product_id)
         if not product:
             raise ValueError("Product not found")
+
+        CatalogMediaPolicy.require_allowed(
+            image.url,
+            kind=CatalogMediaKind.PRODUCT,
+            field="product.main_image",
+        )
 
         changed = product.main_image != image.url
         if changed:
@@ -295,6 +302,12 @@ class ManagerMediaService(ManagerMediaStorageOperations):
         if not unique_urls:
             raise ValueError("No valid source_urls provided")
 
+        unique_urls = [
+            await ManagerMediaService.canonicalize_product_source_url(url)
+            for url in unique_urls
+        ]
+        unique_urls = list(dict.fromkeys(unique_urls))
+
         products_stmt = select(Product.id).where(Product.id.in_(unique_product_ids))
         existing_product_ids = set((await session.execute(products_stmt)).scalars().all())
         missing = sorted(set(unique_product_ids) - existing_product_ids)
@@ -477,6 +490,12 @@ class ManagerMediaService(ManagerMediaStorageOperations):
         source_urls = [url for url in dict.fromkeys(source_urls) if url]
         if not source_urls:
             raise ValueError("Source product has no non-installation gallery images")
+        for index, url in enumerate(source_urls, start=1):
+            CatalogMediaPolicy.require_allowed(
+                url,
+                kind=CatalogMediaKind.PRODUCT,
+                field=f"product.gallery[{index}]",
+            )
 
         target_products = (
             await session.execute(

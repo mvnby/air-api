@@ -68,11 +68,12 @@ class FakeGeneralMediaStorage:
 
     async def save_media(self, **kwargs):
         self.calls.append(kwargs)
+        extension = kwargs["extension"]
         return StoredGeneralMediaObject(
-            url="https://cdn.mvn.by/media/library/original/hash.webp",
+            url=f"https://cdn.mvn.by/library/original/{'c' * 64}.{extension}",
             content_hash="c" * 64,
             storage_provider="r2",
-            path="library/original/hash.webp",
+            path=f"library/original/{'c' * 64}.{extension}",
             size_bytes=len(kwargs["content"]),
         )
 
@@ -134,7 +135,7 @@ async def test_upload_media_asset_uses_general_storage_when_r2_enabled(sqlite_se
     )
 
     item = response["items"][0]
-    assert item["url"] == "https://cdn.mvn.by/media/library/original/hash.webp"
+    assert item["url"] == f"https://cdn.mvn.by/library/original/{'c' * 64}.webp"
     assert item["storage_provider"] == "r2"
     assert fake_storage.calls[0]["namespace"] == "library"
     assert fake_storage.calls[0]["variant_type"] == "original"
@@ -172,6 +173,28 @@ async def test_upload_svg_media_asset_keeps_vector_source(sqlite_session):
             title="logo crop",
             created_by="admin",
         )
+
+
+@pytest.mark.asyncio
+async def test_upload_svg_media_asset_keeps_partner_safe_r2_url(sqlite_session, monkeypatch):
+    fake_storage = FakeGeneralMediaStorage()
+    monkeypatch.setenv("MEDIA_STORAGE_PROVIDER", "r2")
+    monkeypatch.setattr(media_library_service, "get_general_media_storage", lambda: fake_storage)
+
+    response = await MediaLibraryService.upload_assets(
+        session=sqlite_session,
+        files=[("brand-logo.svg", svg_bytes())],
+        kind="brand",
+        tags=["logo"],
+        created_by="admin",
+    )
+
+    item = response["items"][0]
+    assert item["url"] == f"https://cdn.mvn.by/library/original/{'c' * 64}.svg"
+    assert item["mime_type"] == "image/svg+xml"
+    assert fake_storage.calls[0]["content_type"] == "image/svg+xml"
+    assert fake_storage.calls[0]["namespace"] == "library"
+    assert fake_storage.calls[0]["variant_type"] == "original"
 
 
 @pytest.mark.asyncio

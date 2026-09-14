@@ -8,6 +8,8 @@ from io import BytesIO
 
 from PIL import Image
 
+from services.catalog_media_policy import CatalogMediaKind, CatalogMediaPolicy
+
 from services.media_storage_service import (
     ProductOriginalSourceStorage,
     StoredMediaObject,
@@ -40,6 +42,11 @@ class ProductOriginalMediaService:
         stored = await storage.save_product_original(
             content=webp_content,
             extension="webp",
+        )
+        CatalogMediaPolicy.require_allowed(
+            stored.url,
+            kind=CatalogMediaKind.PRODUCT,
+            field="product_original.url",
         )
         return ProductOriginalMediaService._serialize_ingested(
             stored=stored,

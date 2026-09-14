@@ -29,6 +29,7 @@ from schemas_features import (
     ManagerFeatureResponse,
 )
 from services.catalog_revision_service import CatalogRevisionService
+from services.catalog_media_policy import CatalogMediaKind, CatalogMediaPolicy
 from services.feature_scope_policy import FeatureScopePolicy
 
 
@@ -198,6 +199,9 @@ class FeatureLibraryService:
             prelocked_feature_ids=prelocked_feature_ids,
             lock_replacement=False,
         )
+        for media_field in ("image_url", "icon"):
+            if media_field in data:
+                data[media_field] = merged.get(media_field)
         for key, value in data.items():
             setattr(feature, key, value)
         feature.updated_at = datetime.now()
@@ -332,10 +336,39 @@ class FeatureLibraryService:
                 status_code=400,
                 detail="Автоматические правила допустимы только для общих фич",
             )
+        try:
+            data["image_url"] = CatalogMediaPolicy.require_allowed(
+                data.get("image_url"),
+                kind=CatalogMediaKind.CONTENT,
+                field="feature.image_url",
+            )
+            data["icon"] = CatalogMediaPolicy.require_optional_content_reference(
+                data.get("icon"),
+                field="feature.icon",
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
         for key in ("icon_media_id", "image_media_id"):
             media_id = data.get(key)
-            if media_id is not None and await session.get(MediaAsset, media_id) is None:
+            if media_id is None:
+                continue
+            asset = await session.get(MediaAsset, media_id)
+            if asset is None:
                 raise HTTPException(status_code=400, detail=f"Media asset #{media_id} не найден")
+            if asset.processing_status != "ready":
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Media asset #{media_id} ещё не готов к публикации",
+                )
+            try:
+                CatalogMediaPolicy.require_allowed(
+                    asset.url,
+                    kind=CatalogMediaKind.CONTENT,
+                    field=f"feature.{key}",
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @staticmethod
     async def _unique_slug(

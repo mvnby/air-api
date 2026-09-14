@@ -24,6 +24,7 @@ from schemas_features import (
 from services.catalog_invalidation_commit_service import (
     CatalogInvalidationCommitService,
 )
+from services.catalog_media_policy import CatalogMediaKind, CatalogMediaPolicy
 from services.catalog_revision_service import CatalogRevisionService
 from services.feature_resolver_service import FeatureResolverService
 from services.feature_scope_policy import FeatureScopePolicy
@@ -57,7 +58,9 @@ class FeatureAssignmentService:
             raise HTTPException(status_code=400, detail="Фича не может быть назначена товару дважды")
         features = await FeatureAssignmentService._get_active_features(session, feature_ids)
         await FeatureAssignmentService._validate_override_media(
-            session, [item.override_media_id for item in assignments]
+            session,
+            [item.override_media_id for item in assignments],
+            [item.override_image_url for item in assignments],
         )
         if any(item.source != "manual" for item in assignments):
             raise HTTPException(
@@ -252,7 +255,11 @@ class FeatureAssignmentService:
         feature = (await FeatureAssignmentService._get_active_features(session, [feature_id]))[
             feature_id
         ]
-        await FeatureAssignmentService._validate_override_media(session, [payload.override_media_id])
+        await FeatureAssignmentService._validate_override_media(
+            session,
+            [payload.override_media_id],
+            [payload.override_image_url],
+        )
         target_brand_id = int(target.id) if target_type == "brand" else target.brand_id
         if not FeatureScopePolicy.allows_target(
             feature,
@@ -370,13 +377,39 @@ class FeatureAssignmentService:
         return found
 
     @staticmethod
-    async def _validate_override_media(session: AsyncSession, media_ids) -> None:
+    async def _validate_override_media(session: AsyncSession, media_ids, image_urls=()) -> None:
+        try:
+            CatalogMediaPolicy.require_many(
+                image_urls,
+                kind=CatalogMediaKind.CONTENT,
+                field="feature.override_image_url",
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
         ids = {int(item) for item in media_ids if item is not None}
         if not ids:
             return
-        found = set(
-            (await session.execute(select(MediaAsset.id).where(MediaAsset.id.in_(ids)))).scalars().all()
+        assets = list(
+            (
+                await session.execute(select(MediaAsset).where(MediaAsset.id.in_(ids)))
+            ).scalars().all()
         )
+        found = {int(asset.id) for asset in assets if asset.id is not None}
         missing = sorted(ids - found)
         if missing:
             raise HTTPException(status_code=400, detail={"message": "Media assets не найдены", "media_ids": missing})
+        for asset in assets:
+            if asset.processing_status != "ready":
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Media asset #{asset.id} ещё не готов к публикации",
+                )
+            try:
+                CatalogMediaPolicy.require_allowed(
+                    asset.url,
+                    kind=CatalogMediaKind.CONTENT,
+                    field=f"feature.override_media_id[{asset.id}]",
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc

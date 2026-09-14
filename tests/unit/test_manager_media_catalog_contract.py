@@ -7,6 +7,7 @@ from services.catalog_invalidation_commit_service import (
     CatalogInvalidationCommitService,
 )
 from services.manager_media_service import ManagerMediaService
+from services.product_original_media_service import ProductOriginalMediaService
 
 
 class _ScalarResult:
@@ -30,7 +31,7 @@ class _ScalarsResult:
 
 @pytest.mark.asyncio
 async def test_set_main_image_full_noop_uses_changed_false(monkeypatch):
-    image = SimpleNamespace(id=5, product_id=9, url="/media/products/same.webp")
+    image = SimpleNamespace(id=5, product_id=9, url="/media/products/shared/same.webp")
     product = SimpleNamespace(id=9, main_image=image.url)
     session = AsyncMock()
     session.get.side_effect = [image, product]
@@ -56,7 +57,7 @@ async def test_set_main_image_full_noop_uses_changed_false(monkeypatch):
 @pytest.mark.asyncio
 async def test_reusing_fully_linked_image_is_a_catalog_noop(monkeypatch):
     product = SimpleNamespace(id=9)
-    image = SimpleNamespace(id=5, product_id=9, url="/media/products/same.webp")
+    image = SimpleNamespace(id=5, product_id=9, url="/media/products/shared/same.webp")
     original_variant = SimpleNamespace(url=image.url, processing_status="ready")
     session = AsyncMock()
     session.get.return_value = product
@@ -84,6 +85,39 @@ async def test_reusing_fully_linked_image_is_a_catalog_noop(monkeypatch):
         changed=False,
         product_ids=[product.id],
     )
+
+
+@pytest.mark.asyncio
+async def test_external_reuse_is_ingested_before_it_can_be_linked(monkeypatch):
+    canonical_url = "https://cdn.mvn.by/products/shared/canonical.webp"
+    load_source = AsyncMock(return_value=b"source-image")
+    save_original = AsyncMock(return_value=SimpleNamespace(url=canonical_url))
+    monkeypatch.setattr(ManagerMediaService, "load_image_source_content", load_source)
+    monkeypatch.setattr(ProductOriginalMediaService, "save_shared_original", save_original)
+
+    result = await ManagerMediaService.canonicalize_product_source_url(
+        "https://vendor.example/model.png"
+    )
+
+    assert result == canonical_url
+    load_source.assert_awaited_once_with("https://vendor.example/model.png")
+    save_original.assert_awaited_once_with(b"source-image")
+
+
+@pytest.mark.asyncio
+async def test_set_main_image_rejects_a_link_hidden_by_partner_storefront():
+    image = SimpleNamespace(
+        id=5,
+        product_id=9,
+        url="https://cdn.mvn.by/library/original/"
+        f"{'a' * 64}.webp",
+    )
+    product = SimpleNamespace(id=9, main_image=None)
+    session = AsyncMock()
+    session.get.side_effect = [image, product]
+
+    with pytest.raises(ValueError, match="загрузить в медиатеку"):
+        await ManagerMediaService.set_main_image(session, image.id)
 
 
 @pytest.mark.asyncio
@@ -129,8 +163,8 @@ async def test_bulk_upload_stages_all_images_before_one_catalog_commit(monkeypat
 async def test_media_mutation_does_not_cross_commit_boundary_when_staging_fails(
     monkeypatch,
 ):
-    image = SimpleNamespace(id=5, product_id=9, url="/media/products/new.webp")
-    product = SimpleNamespace(id=9, main_image="/media/products/old.webp")
+    image = SimpleNamespace(id=5, product_id=9, url="/media/products/shared/new.webp")
+    product = SimpleNamespace(id=9, main_image="/media/products/shared/old.webp")
     session = AsyncMock()
     session.add = Mock()
     session.get.side_effect = [image, product]
