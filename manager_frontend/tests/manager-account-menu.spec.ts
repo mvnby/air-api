@@ -45,6 +45,7 @@ describe('manager account menu', () => {
           capabilities: [
             MANAGER_CAPABILITY.analyticsManage,
             MANAGER_CAPABILITY.infrastructureManage,
+            MANAGER_CAPABILITY.settingsManage,
           ],
         },
       },
