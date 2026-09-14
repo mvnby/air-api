@@ -85,28 +85,15 @@ PLATFORM_MANAGER_OPERATION_IDS = frozenset(
         operation_ids.UPSERT_MANAGER_TENANT_OFFER,
         operation_ids.UPDATE_MANAGER_TENANT_OFFER,
         # Platform-owned service dictionaries.
-        operation_ids.LIST_MANAGER_INSTALLATION_RATES,
-        operation_ids.UPDATE_MANAGER_INSTALLATION_RATE,
         operation_ids.LIST_MANAGER_INSTALLATION_DISCOUNT_RULES,
         operation_ids.SEARCH_MANAGER_INSTALLATION_DISCOUNT_PRODUCTS,
         operation_ids.UPDATE_MANAGER_INSTALLATION_DISCOUNT_POLICY,
         operation_ids.UPSERT_MANAGER_INSTALLATION_DISCOUNT_RULE,
         operation_ids.DELETE_MANAGER_INSTALLATION_DISCOUNT_RULE,
-        operation_ids.CREATE_MANAGER_TARIFF,
-        operation_ids.UPDATE_MANAGER_TARIFF,
-        operation_ids.DELETE_MANAGER_TARIFF,
-        operation_ids.CREATE_MANAGER_TARIFF_RULE,
-        operation_ids.UPDATE_MANAGER_TARIFF_RULE,
-        operation_ids.DELETE_MANAGER_TARIFF_RULE,
         operation_ids.CREATE_MANAGER_REPAIR_COMPLAINT_PRESET,
         operation_ids.UPDATE_MANAGER_REPAIR_COMPLAINT_PRESET,
         operation_ids.DELETE_MANAGER_REPAIR_COMPLAINT_PRESET,
         # Saved shared estimates and platform warranty definitions.
-        operation_ids.CREATE_MANAGER_SERVICE_ESTIMATE,
-        operation_ids.LIST_MANAGER_SERVICE_ESTIMATES,
-        operation_ids.GET_MANAGER_SERVICE_ESTIMATE,
-        operation_ids.GET_MANAGER_SERVICE_ESTIMATE_ORDER_LINES,
-        operation_ids.DELETE_MANAGER_SERVICE_ESTIMATE,
         operation_ids.CREATE_MANAGER_WARRANTY_POLICY,
         operation_ids.PATCH_MANAGER_WARRANTY_POLICY,
         # Supplier data and supply workflows are platform-global today.
@@ -190,6 +177,29 @@ PLATFORM_MANAGER_OPERATION_IDS = frozenset(
 )
 
 
+TENANT_SERVICE_OPERATION_IDS = frozenset(
+    {
+        operation_ids.LIST_MANAGER_TARIFFS,
+        operation_ids.LIST_MANAGER_QUICK_TARIFFS,
+        operation_ids.LIST_MANAGER_INSTALLATION_RATES,
+        operation_ids.LIST_MANAGER_TARIFF_RULES,
+        operation_ids.LIST_MANAGER_FAVORITE_TARIFF_RULES,
+        operation_ids.CALCULATE_MANAGER_INSTALL_ESTIMATE,
+        operation_ids.LIST_MANAGER_SERVICE_ESTIMATES,
+        operation_ids.GET_MANAGER_SERVICE_ESTIMATE,
+        operation_ids.GET_MANAGER_SERVICE_ESTIMATE_ORDER_LINES,
+        operation_ids.UPDATE_MANAGER_INSTALLATION_RATE,
+        operation_ids.CREATE_MANAGER_TARIFF,
+        operation_ids.UPDATE_MANAGER_TARIFF,
+        operation_ids.DELETE_MANAGER_TARIFF,
+        operation_ids.CREATE_MANAGER_TARIFF_RULE,
+        operation_ids.UPDATE_MANAGER_TARIFF_RULE,
+        operation_ids.DELETE_MANAGER_TARIFF_RULE,
+        operation_ids.CREATE_MANAGER_SERVICE_ESTIMATE,
+        operation_ids.DELETE_MANAGER_SERVICE_ESTIMATE,
+    }
+)
+
 STOREFRONT_COLLECTION_OPERATION_IDS = frozenset(
     {
         operation_ids.SEARCH_MANAGER_PRODUCT_COLLECTION_PRODUCTS,
@@ -261,6 +271,8 @@ STOREFRONT_OWNER_OPERATION_IDS = frozenset(
 
 
 def required_permission_dependency(operation_id: str | None):
+    if operation_id in TENANT_SERVICE_OPERATION_IDS:
+        return require_manager_access
     if operation_id in STOREFRONT_OWNER_OPERATION_IDS:
         return require_owner_access
     if operation_id in STOREFRONT_COLLECTION_OPERATION_IDS:

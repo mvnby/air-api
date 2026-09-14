@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
-from core.security import get_current_username
+from core.security import get_current_manager_tenant_scope, get_current_username
+from models.tenancy import TenantScope
 from routers.manager_operation_ids import (
     CREATE_MANAGER_TARIFF,
     CREATE_MANAGER_TARIFF_RULE,
@@ -44,11 +45,13 @@ async def list_manager_tariffs(
     service_kind: ManagerTariffServiceKind | None = Query(None),
     include_inactive: bool = Query(True),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     items = await TariffsService.get_all_tariffs(
         session=session,
         service_kind=service_kind,
         include_inactive=include_inactive,
+        tenant_scope=tenant_scope,
     )
     return ManagerTariffListResponse(items=items)
 
@@ -59,12 +62,14 @@ async def list_manager_quick_tariffs(
     service_kind: ManagerTariffServiceKind | None = Query(None),
     limit: int = Query(10, ge=1, le=50),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     items = await TariffsService.list_quick_add_tariffs(
         session=session,
         service_kind=service_kind,
         q=q,
         limit=limit,
+        tenant_scope=tenant_scope,
     )
     return ManagerQuickTariffListResponse(items=items)
 
@@ -73,8 +78,9 @@ async def list_manager_quick_tariffs(
 async def create_manager_tariff(
     payload: ManagerTariffCreatePayload,
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
-    return await TariffsService.create_tariff(session, payload)
+    return await TariffsService.create_tariff(session, payload, tenant_scope)
 
 
 @router.put("/{tariff_id}", response_model=ManagerTariffResponse, operation_id=UPDATE_MANAGER_TARIFF)
@@ -82,16 +88,20 @@ async def update_manager_tariff(
     tariff_id: int,
     payload: ManagerTariffUpdatePayload,
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
-    return await TariffsService.update_tariff(session, tariff_id, payload)
+    return await TariffsService.update_tariff(
+        session, tariff_id, payload, tenant_scope
+    )
 
 
 @router.delete("/{tariff_id}", response_model=ManagerActionMessageResponse, operation_id=DELETE_MANAGER_TARIFF)
 async def delete_manager_tariff(
     tariff_id: int,
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
-    await TariffsService.delete_tariff(session, tariff_id)
+    await TariffsService.delete_tariff(session, tariff_id, tenant_scope)
     return ManagerActionMessageResponse(message="Tariff deleted successfully")
 
 
@@ -105,12 +115,14 @@ async def list_manager_favorite_tariff_rules(
     include_inactive: bool = Query(False),
     exclude_tariff_id: int | None = Query(None),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     items = await TariffsService.list_favorite_tariff_rules(
         session=session,
         service_kind=service_kind,
         include_inactive=include_inactive,
         exclude_tariff_id=exclude_tariff_id,
+        tenant_scope=tenant_scope,
     )
     return ManagerTariffRuleListResponse(items=items)
 
@@ -124,11 +136,13 @@ async def list_manager_tariff_rules(
     tariff_id: int,
     include_inactive: bool = Query(True),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     items = await TariffsService.list_tariff_rules(
         session=session,
         tariff_id=tariff_id,
         include_inactive=include_inactive,
+        tenant_scope=tenant_scope,
     )
     return ManagerTariffRuleListResponse(items=items)
 
@@ -143,8 +157,14 @@ async def create_manager_tariff_rule(
     tariff_id: int,
     payload: ManagerTariffRuleCreatePayload,
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
-    return await TariffsService.create_tariff_rule(session=session, tariff_id=tariff_id, payload=payload)
+    return await TariffsService.create_tariff_rule(
+        session=session,
+        tariff_id=tariff_id,
+        payload=payload,
+        tenant_scope=tenant_scope,
+    )
 
 
 @router.put(
@@ -157,12 +177,14 @@ async def update_manager_tariff_rule(
     rule_id: int,
     payload: ManagerTariffRuleUpdatePayload,
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     return await TariffsService.update_tariff_rule(
         session=session,
         tariff_id=tariff_id,
         rule_id=rule_id,
         payload=payload,
+        tenant_scope=tenant_scope,
     )
 
 
@@ -175,6 +197,12 @@ async def delete_manager_tariff_rule(
     tariff_id: int,
     rule_id: int,
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
-    await TariffsService.delete_tariff_rule(session=session, tariff_id=tariff_id, rule_id=rule_id)
+    await TariffsService.delete_tariff_rule(
+        session=session,
+        tariff_id=tariff_id,
+        rule_id=rule_id,
+        tenant_scope=tenant_scope,
+    )
     return ManagerActionMessageResponse(message="Tariff rule deleted successfully")

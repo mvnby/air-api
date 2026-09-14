@@ -19,6 +19,7 @@ from models import (
     ProductSeries,
     Service,
 )
+from services.service_catalog_scope import canonical_service_catalog_clause
 
 
 class MediaLibraryReadService:
@@ -180,7 +181,8 @@ class MediaLibraryReadService:
                 ProductAttachment.url.in_(unique_urls)
             ),
             select(Service.image.label("url")).where(
-                Service.image.in_(unique_urls)
+                Service.image.in_(unique_urls),
+                canonical_service_catalog_clause(Service),
             ),
         ).subquery("media_usage_reference")
         grouped_references = await session.execute(

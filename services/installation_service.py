@@ -4,21 +4,40 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from models import InstallationRate
+from models.tenancy import TenantScope
+from services.service_catalog_scope import (
+    canonical_service_catalog_clause,
+    service_catalog_scope_clause,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class InstallationService:
     @staticmethod
-    async def get_all(session: AsyncSession):
-        stmt = select(InstallationRate).order_by(InstallationRate.id)
+    async def get_all(
+        session: AsyncSession,
+        tenant_scope: TenantScope | None = None,
+    ):
+        scope_clause = (
+            canonical_service_catalog_clause(InstallationRate)
+            if tenant_scope is None
+            else service_catalog_scope_clause(InstallationRate, tenant_scope)
+        )
+        stmt = (
+            select(InstallationRate)
+            .where(scope_clause)
+            .order_by(InstallationRate.id)
+        )
         result = await session.execute(stmt)
         return result.scalars().all()
 
     @staticmethod
     async def seed_defaults(session: AsyncSession):
         """Populate initial installation rates if table is empty."""
-        stmt = select(InstallationRate)
+        stmt = select(InstallationRate).where(
+            canonical_service_catalog_clause(InstallationRate)
+        )
         result = await session.execute(stmt)
         existing = result.first()
 

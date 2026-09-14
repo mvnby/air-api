@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import CheckConstraint, Column, Float, Index, String, UniqueConstraint, cast, func
+from sqlalchemy import CheckConstraint, Column, Float, Index, String, UniqueConstraint, cast, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, JSON, Relationship, SQLModel
 
@@ -322,7 +322,33 @@ class Favorite(SQLModel, table=True):
 
 class InstallationRate(SQLModel, table=True):
     __tablename__ = "installation_rates"
+    __table_args__ = (
+        Index(
+            "uq_installation_rate_tenant_source",
+            "tenant_id",
+            "source_installation_rate_id",
+            unique=True,
+            postgresql_where=text(
+                "tenant_id IS NOT NULL AND source_installation_rate_id IS NOT NULL"
+            ),
+            sqlite_where=text(
+                "tenant_id IS NOT NULL AND source_installation_rate_id IS NOT NULL"
+            ),
+        ),
+    )
+
     id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: Optional[int] = Field(
+        default=None,
+        foreign_key="tenant.id",
+        index=True,
+    )
+    source_installation_rate_id: Optional[int] = Field(
+        default=None,
+        foreign_key="installation_rates.id",
+        ondelete="SET NULL",
+        index=True,
+    )
 
     category: str = Field(index=True)
     power_range: str = Field(default="")

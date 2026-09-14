@@ -606,6 +606,7 @@ async def test_tenant_manager_me_exposes_only_minimal_server_capabilities(
         "catalog.master.read",
         "storefront.offers.read",
         "storefront.collections.manage",
+        "services.manage",
     ]
 
     listed = await async_client.get(

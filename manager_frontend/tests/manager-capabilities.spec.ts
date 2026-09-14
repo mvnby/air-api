@@ -124,17 +124,33 @@ describe('tenant manager capabilities', () => {
         MANAGER_CAPABILITY.staffManage,
         MANAGER_CAPABILITY.analyticsManage,
         MANAGER_CAPABILITY.documentsManage,
+        MANAGER_CAPABILITY.settingsManage,
+        MANAGER_CAPABILITY.servicesManage,
       ],
     };
 
     expect(isManagerPathAllowed(partnerOwnerAuth, '/manager/settings/documents')).toBe(true);
-    expect(isManagerPathAllowed(partnerOwnerAuth, '/manager/settings')).toBe(false);
+    expect(isManagerPathAllowed(partnerOwnerAuth, '/manager/settings')).toBe(true);
+    expect(isManagerPathAllowed(partnerOwnerAuth, '/manager/settings/platform')).toBe(false);
+    expect(isManagerPathAllowed(partnerOwnerAuth, '/manager/tariffs')).toBe(true);
+    expect(isManagerPathAllowed(partnerOwnerAuth, '/manager/installation-rates')).toBe(true);
+    expect(isManagerPathAllowed(partnerOwnerAuth, '/manager/service-estimates')).toBe(true);
     expect(isManagerPathAllowed(partnerOwnerAuth, '/manager/settings/backup')).toBe(false);
     expect(
       navSections.flatMap(section => section.items)
         .filter(item => !item.requiredCapability || partnerOwnerAuth.capabilities.includes(item.requiredCapability))
         .map(item => item.label),
     ).toContain('Документы CRM');
+    expect(
+      navSections.flatMap(section => section.items)
+        .filter(item => !item.requiredCapability || partnerOwnerAuth.capabilities.includes(item.requiredCapability))
+        .map(item => item.label),
+    ).toContain('Настройки');
+    expect(
+      navSections.flatMap(section => section.items)
+        .filter(item => !item.requiredCapability || partnerOwnerAuth.capabilities.includes(item.requiredCapability))
+        .map(item => item.label),
+    ).toEqual(expect.arrayContaining(['Тарифы смет', 'Публичный монтаж', 'Сметы услуг']));
   });
 
   it('renders the safe projection without edit, supplier or price controls', async () => {

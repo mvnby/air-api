@@ -20,6 +20,7 @@ from services.order_service import OrderService
 from services.public_catalog_visibility_service import PublicCatalogVisibilityService
 from services.public_write_idempotency_service import PublicWriteIdempotencyService
 from services.website_order_service import WebsiteOrderService
+from services.storefront_settings_service import StorefrontSettingsService
 
 
 async def _execute_once(session, *, operation, **_kwargs):
@@ -56,9 +57,21 @@ async def test_website_checkout_creates_negotiation_order(monkeypatch, tenant_sc
         captured_event["session"] = event_session
         captured_event.update(kwargs)
 
-    async def fake_price_items(_session, items, *, catalog_snapshots):
+    async def fake_price_items(
+        _session,
+        items,
+        *,
+        catalog_snapshots,
+        tenant_scope,
+    ):
         assert catalog_snapshots[7].unit_price == 3000
+        assert tenant_scope is not None
         return [item.model_dump() for item in items]
+
+    async def fake_service_enabled(_session, *, tenant_scope, service_kind):
+        assert tenant_scope is not None
+        assert service_kind == "installation"
+        return True
 
     async def fake_checkout_snapshots(_session, *, tenant_scope, product_ids):
         assert tenant_scope is not None
@@ -83,6 +96,11 @@ async def test_website_checkout_creates_negotiation_order(monkeypatch, tenant_sc
         fake_checkout_snapshots,
     )
     monkeypatch.setattr(TenantWebsiteEventService, "enqueue_checkout", fake_enqueue)
+    monkeypatch.setattr(
+        StorefrontSettingsService,
+        "is_service_enabled",
+        fake_service_enabled,
+    )
     monkeypatch.setattr(PublicWriteIdempotencyService, "execute", _execute_once)
 
     payload = OrderPayload.model_validate(

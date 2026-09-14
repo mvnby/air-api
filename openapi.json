@@ -4203,6 +4203,112 @@
         }
       }
     },
+    "/api/v1/storefront-settings": {
+      "get": {
+        "tags": [
+          "api",
+          "storefront-settings"
+        ],
+        "summary": "Get Public Storefront Settings",
+        "operationId": "get_public_storefront_settings",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorefrontSettingsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/service-pricing/tariffs": {
+      "get": {
+        "tags": [
+          "api",
+          "api/service-pricing"
+        ],
+        "summary": "List Public Service Tariffs",
+        "operationId": "list_public_service_tariffs",
+        "parameters": [
+          {
+            "name": "service_kind",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ManagerTariffServiceKind"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicServiceTariffListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/service-pricing/calculate": {
+      "post": {
+        "tags": [
+          "api",
+          "api/service-pricing"
+        ],
+        "summary": "Calculate Public Service Tariff",
+        "operationId": "calculate_public_service_tariff",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicServiceEstimateCalculatePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerInstallEstimateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/feeds/yandex-business.yml": {
       "get": {
         "tags": [
@@ -20135,6 +20241,148 @@
             }
           }
         }
+      }
+    },
+    "/api/manager/storefront-settings": {
+      "get": {
+        "tags": [
+          "manager-storefront-settings"
+        ],
+        "summary": "Get Storefront Settings",
+        "operationId": "get_manager_storefront_settings",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorefrontSettingsResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "manager-storefront-settings"
+        ],
+        "summary": "Update Storefront Settings",
+        "operationId": "update_manager_storefront_settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StorefrontSettingsPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorefrontSettingsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/service-catalog/template-preview": {
+      "get": {
+        "tags": [
+          "manager/service-catalog"
+        ],
+        "summary": "Preview Manager Service Catalog Template",
+        "operationId": "preview_manager_service_catalog_template",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerServiceCatalogTemplatePreviewResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/service-catalog/clone-template": {
+      "post": {
+        "tags": [
+          "manager/service-catalog"
+        ],
+        "summary": "Clone Manager Service Catalog Template",
+        "operationId": "clone_manager_service_catalog_template",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerServiceCatalogClonePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerServiceCatalogCloneResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
       }
     },
     "/api/manager/installation-rates": {
@@ -52506,6 +52754,73 @@
         "type": "object",
         "title": "ManagerServiceAttachmentUpdatePayload"
       },
+      "ManagerServiceCatalogClonePayload": {
+        "properties": {
+          "expected_fingerprint": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Expected Fingerprint"
+          }
+        },
+        "type": "object",
+        "required": [
+          "expected_fingerprint"
+        ],
+        "title": "ManagerServiceCatalogClonePayload"
+      },
+      "ManagerServiceCatalogCloneResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "cloned",
+              "already_cloned"
+            ],
+            "title": "Status"
+          },
+          "cloned_counts": {
+            "$ref": "#/components/schemas/ServiceCatalogCounts"
+          },
+          "source_fingerprint": {
+            "type": "string",
+            "title": "Source Fingerprint"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "cloned_counts",
+          "source_fingerprint"
+        ],
+        "title": "ManagerServiceCatalogCloneResponse"
+      },
+      "ManagerServiceCatalogTemplatePreviewResponse": {
+        "properties": {
+          "source_counts": {
+            "$ref": "#/components/schemas/ServiceCatalogCounts"
+          },
+          "source_fingerprint": {
+            "type": "string",
+            "title": "Source Fingerprint"
+          },
+          "target_counts": {
+            "$ref": "#/components/schemas/ServiceCatalogCounts"
+          },
+          "can_clone": {
+            "type": "boolean",
+            "title": "Can Clone"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_counts",
+          "source_fingerprint",
+          "target_counts",
+          "can_clone"
+        ],
+        "title": "ManagerServiceCatalogTemplatePreviewResponse"
+      },
       "ManagerServiceDescriptionMode": {
         "type": "string",
         "enum": [
@@ -62556,6 +62871,165 @@
         ],
         "title": "PublicSeriesPageResponse"
       },
+      "PublicServiceEstimateCalculatePayload": {
+        "properties": {
+          "tariff_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Tariff Id"
+          },
+          "route_length_m": {
+            "type": "number",
+            "title": "Route Length M",
+            "default": 3.0
+          },
+          "quantity": {
+            "type": "integer",
+            "title": "Quantity",
+            "default": 1
+          },
+          "extra_holes_count": {
+            "type": "integer",
+            "title": "Extra Holes Count",
+            "default": 0
+          },
+          "rule_inputs": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerEstimateRuleInputPayload"
+            },
+            "type": "array",
+            "title": "Rule Inputs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tariff_id"
+        ],
+        "title": "PublicServiceEstimateCalculatePayload"
+      },
+      "PublicServiceTariffListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PublicServiceTariffResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "PublicServiceTariffListResponse"
+      },
+      "PublicServiceTariffResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "service_kind": {
+            "$ref": "#/components/schemas/ManagerTariffServiceKind"
+          },
+          "short_name": {
+            "type": "string",
+            "title": "Short Name"
+          },
+          "full_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Description"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "power_range": {
+            "type": "string",
+            "title": "Power Range"
+          },
+          "base_price": {
+            "type": "integer",
+            "title": "Base Price"
+          },
+          "included_route_meters": {
+            "type": "number",
+            "title": "Included Route Meters"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/PublicServiceTariffRuleResponse"
+            },
+            "type": "array",
+            "title": "Rules"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "service_kind",
+          "short_name",
+          "category",
+          "power_range",
+          "base_price",
+          "included_route_meters"
+        ],
+        "title": "PublicServiceTariffResponse"
+      },
+      "PublicServiceTariffRuleResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "rule_type": {
+            "$ref": "#/components/schemas/ManagerTariffRuleType"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "line_template": {
+            "type": "string",
+            "title": "Line Template"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "unit_price": {
+            "type": "number",
+            "title": "Unit Price"
+          },
+          "is_optional": {
+            "type": "boolean",
+            "title": "Is Optional"
+          },
+          "sort_order": {
+            "type": "integer",
+            "title": "Sort Order"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "rule_type",
+          "name",
+          "line_template",
+          "unit",
+          "unit_price",
+          "is_optional",
+          "sort_order"
+        ],
+        "title": "PublicServiceTariffRuleResponse"
+      },
       "PublicStorefrontContextResponse": {
         "properties": {
           "tenant_slug": {
@@ -62664,6 +63138,71 @@
           "created_at"
         ],
         "title": "RepairDiagnosticLeadResponse"
+      },
+      "ServiceCatalogCounts": {
+        "properties": {
+          "services": {
+            "type": "integer",
+            "title": "Services",
+            "default": 0
+          },
+          "tariffs": {
+            "type": "integer",
+            "title": "Tariffs",
+            "default": 0
+          },
+          "tariff_rules": {
+            "type": "integer",
+            "title": "Tariff Rules",
+            "default": 0
+          },
+          "installation_rates": {
+            "type": "integer",
+            "title": "Installation Rates",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "ServiceCatalogCounts"
+      },
+      "ServiceDirectionSetting": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "enum": [
+              "installation",
+              "pre_install",
+              "dismantling",
+              "maintenance",
+              "repair"
+            ],
+            "title": "Key"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 5000,
+            "title": "Description",
+            "default": ""
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key",
+          "title"
+        ],
+        "title": "ServiceDirectionSetting"
       },
       "ServiceResponse": {
         "properties": {
@@ -62852,6 +63391,128 @@
           "total_products_using"
         ],
         "title": "SpecsKeysResponse"
+      },
+      "StorefrontSettingsPayload": {
+        "properties": {
+          "site": {
+            "$ref": "#/components/schemas/StorefrontSiteSettings"
+          },
+          "services": {
+            "items": {
+              "$ref": "#/components/schemas/ServiceDirectionSetting"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "minItems": 5,
+            "title": "Services"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "site",
+          "services",
+          "version"
+        ],
+        "title": "StorefrontSettingsPayload"
+      },
+      "StorefrontSettingsResponse": {
+        "properties": {
+          "site": {
+            "$ref": "#/components/schemas/StorefrontSiteSettings"
+          },
+          "services": {
+            "items": {
+              "$ref": "#/components/schemas/ServiceDirectionSetting"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "minItems": 5,
+            "title": "Services"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Version"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "site",
+          "services",
+          "version"
+        ],
+        "title": "StorefrontSettingsResponse"
+      },
+      "StorefrontSiteSettings": {
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Display Name"
+          },
+          "city": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "City",
+            "default": ""
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 80,
+            "title": "Phone",
+            "default": ""
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "title": "Email",
+            "default": ""
+          },
+          "address": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Address",
+            "default": ""
+          },
+          "work_hours": {
+            "type": "string",
+            "maxLength": 300,
+            "title": "Work Hours",
+            "default": ""
+          },
+          "support_telegram_url": {
+            "type": "string",
+            "maxLength": 300,
+            "title": "Support Telegram Url",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "display_name"
+        ],
+        "title": "StorefrontSiteSettings"
       },
       "SupplierContactCreatePayload": {
         "properties": {

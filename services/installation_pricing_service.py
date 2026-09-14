@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from models import InstallationRate, Product, Service
+from models.tenancy import TenantScope
 from services.cooling_capacity import power_range_capacity_bounds
 from services.installation_discount_service import (
     InstallationDiscountDecision,
@@ -22,6 +23,10 @@ from services.installation_product_profile import (
     build_installation_product_profile,
 )
 from services.order_product_link_command import OrderProductCatalogSnapshot
+from services.service_catalog_scope import (
+    canonical_service_catalog_clause,
+    service_catalog_scope_clause,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -238,6 +243,7 @@ class InstallationPricingService:
         session: AsyncSession,
         items: Sequence[Any],
         catalog_snapshots: Mapping[int, OrderProductCatalogSnapshot] | None = None,
+        tenant_scope: TenantScope | None = None,
     ) -> list[dict[str, Any]]:
         has_installation = any(item.with_installation for item in items)
         product_ids = {
@@ -269,8 +275,15 @@ class InstallationPricingService:
 
         rates: list[InstallationRate] = []
         if has_installation:
+            rate_scope_clause = (
+                canonical_service_catalog_clause(InstallationRate)
+                if tenant_scope is None
+                else service_catalog_scope_clause(InstallationRate, tenant_scope)
+            )
             rates_result = await session.execute(
-                select(InstallationRate).order_by(InstallationRate.id)
+                select(InstallationRate)
+                .where(rate_scope_clause)
+                .order_by(InstallationRate.id)
             )
             rates = list(rates_result.scalars().all())
         rates_by_id = {int(rate.id): rate for rate in rates if rate.id is not None}
@@ -289,11 +302,17 @@ class InstallationPricingService:
 
         options_by_slug: dict[str, Service] = {}
         if requested_option_slugs:
+            option_scope_clause = (
+                canonical_service_catalog_clause(Service)
+                if tenant_scope is None
+                else service_catalog_scope_clause(Service, tenant_scope)
+            )
             options_result = await session.execute(
                 select(Service).where(
                     Service.slug.in_(set(requested_option_slugs)),
                     Service.category == "installation_option",
                     Service.is_active.is_(True),
+                    option_scope_clause,
                 )
             )
             options_by_slug = {
@@ -325,7 +344,9 @@ class InstallationPricingService:
             item.with_installation and item.product_id is not None for item in items
         )
         discount_decisions: dict[int, InstallationDiscountDecision] = {}
-        if has_product_installation:
+        if has_product_installation and (
+            tenant_scope is None or tenant_scope.is_system
+        ):
             effective_prices = {
                 product_id: (
                     int(catalog_snapshots[product_id].unit_price)

@@ -8,9 +8,20 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
 from models import ServiceEstimate, ServiceEstimateItem, ServiceTariff
+from models.tenancy import TenantScope
+from services.service_catalog_scope import (
+    canonical_service_catalog_clause,
+    service_catalog_scope_clause,
+)
 
 
 class ServiceEstimateDAO:
+    @staticmethod
+    def _scope_clause(tenant_scope: TenantScope | None):
+        if tenant_scope is None:
+            return canonical_service_catalog_clause(ServiceEstimate)
+        return service_catalog_scope_clause(ServiceEstimate, tenant_scope)
+
     @staticmethod
     async def create(
         session: AsyncSession,
@@ -38,10 +49,15 @@ class ServiceEstimateDAO:
         return result.scalar_one()
 
     @staticmethod
-    async def get_by_id(session: AsyncSession, estimate_id: int) -> Optional[ServiceEstimate]:
+    async def get_by_id(
+        session: AsyncSession,
+        estimate_id: int,
+        tenant_scope: TenantScope | None = None,
+    ) -> Optional[ServiceEstimate]:
         stmt = (
             select(ServiceEstimate)
             .where(ServiceEstimate.id == estimate_id)
+            .where(ServiceEstimateDAO._scope_clause(tenant_scope))
             .options(
                 selectinload(ServiceEstimate.items),
                 selectinload(ServiceEstimate.tariff).selectinload(ServiceTariff.rules),
@@ -56,18 +72,25 @@ class ServiceEstimateDAO:
         page: int = 1,
         limit: int = 20,
         customer_id: Optional[int] = None,
+        tenant_scope: TenantScope | None = None,
     ) -> Tuple[List[ServiceEstimate], int]:
         safe_page = max(1, page)
         safe_limit = max(1, min(limit, 100))
         offset = (safe_page - 1) * safe_limit
 
-        total_stmt = select(func.count()).select_from(ServiceEstimate)
+        total_stmt = (
+            select(func.count())
+            .select_from(ServiceEstimate)
+            .where(ServiceEstimateDAO._scope_clause(tenant_scope))
+        )
         if customer_id is not None:
             total_stmt = total_stmt.where(ServiceEstimate.customer_id == customer_id)
         total_result = await session.execute(total_stmt)
         total = int(total_result.scalar_one() or 0)
 
-        stmt = select(ServiceEstimate)
+        stmt = select(ServiceEstimate).where(
+            ServiceEstimateDAO._scope_clause(tenant_scope)
+        )
         if customer_id is not None:
             stmt = stmt.where(ServiceEstimate.customer_id == customer_id)
         stmt = (
@@ -83,8 +106,19 @@ class ServiceEstimateDAO:
         return list(result.scalars().all()), total
 
     @staticmethod
-    async def delete_by_id(session: AsyncSession, estimate_id: int) -> bool:
-        estimate = await session.get(ServiceEstimate, estimate_id)
+    async def delete_by_id(
+        session: AsyncSession,
+        estimate_id: int,
+        tenant_scope: TenantScope | None = None,
+    ) -> bool:
+        estimate = (
+            await session.execute(
+                select(ServiceEstimate).where(
+                    ServiceEstimate.id == estimate_id,
+                    ServiceEstimateDAO._scope_clause(tenant_scope),
+                )
+            )
+        ).scalars().first()
         if estimate is None:
             return False
         await session.delete(estimate)

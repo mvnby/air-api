@@ -7,10 +7,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from models import InstallationRate
+from models.tenancy import TenantScope
 from schemas_manager_installation_rates import (
     ManagerInstallationRateResponse,
     ManagerInstallationRateSelectionStatus,
     ManagerInstallationRateUpdatePayload,
+)
+from services.service_catalog_scope import (
+    canonical_service_catalog_clause,
+    service_catalog_scope_clause,
 )
 from services.cooling_capacity import power_range_capacity_bounds
 
@@ -138,10 +143,19 @@ class ManagerInstallationRateService:
 
     @classmethod
     async def list_rates(
-        cls, session: AsyncSession
+        cls,
+        session: AsyncSession,
+        tenant_scope: TenantScope | None = None,
     ) -> list[ManagerInstallationRateResponse]:
+        scope_clause = (
+            canonical_service_catalog_clause(InstallationRate)
+            if tenant_scope is None
+            else service_catalog_scope_clause(InstallationRate, tenant_scope)
+        )
         result = await session.execute(
-            select(InstallationRate).order_by(InstallationRate.id)
+            select(InstallationRate)
+            .where(scope_clause)
+            .order_by(InstallationRate.id)
         )
         return [cls._to_response(rate) for rate in result.scalars().all()]
 
@@ -152,8 +166,21 @@ class ManagerInstallationRateService:
         *,
         rate_id: int,
         payload: ManagerInstallationRateUpdatePayload,
+        tenant_scope: TenantScope | None = None,
     ) -> ManagerInstallationRateResponse:
-        rate = await session.get(InstallationRate, rate_id)
+        scope_clause = (
+            canonical_service_catalog_clause(InstallationRate)
+            if tenant_scope is None
+            else service_catalog_scope_clause(InstallationRate, tenant_scope)
+        )
+        rate = (
+            await session.execute(
+                select(InstallationRate).where(
+                    InstallationRate.id == rate_id,
+                    scope_clause,
+                )
+            )
+        ).scalars().first()
         if rate is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

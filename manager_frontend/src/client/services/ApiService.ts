@@ -10,6 +10,8 @@ import type { CatalogResponse } from '../models/CatalogResponse';
 import type { CatalogRevisionResponse } from '../models/CatalogRevisionResponse';
 import type { FiltersConfigResponse } from '../models/FiltersConfigResponse';
 import type { InstallationEstimateLeadResponse } from '../models/InstallationEstimateLeadResponse';
+import type { ManagerInstallEstimateResponse } from '../models/ManagerInstallEstimateResponse';
+import type { ManagerTariffServiceKind } from '../models/ManagerTariffServiceKind';
 import type { OrderPayload } from '../models/OrderPayload';
 import type { OrderResponse } from '../models/OrderResponse';
 import type { ProductAvailabilityLeadPayload } from '../models/ProductAvailabilityLeadPayload';
@@ -23,11 +25,14 @@ import type { PublicContactLeadResponse } from '../models/PublicContactLeadRespo
 import type { PublicProductCollectionPlacementResponse } from '../models/PublicProductCollectionPlacementResponse';
 import type { PublicProductSearchResponse } from '../models/PublicProductSearchResponse';
 import type { PublicSeriesPageResponse } from '../models/PublicSeriesPageResponse';
+import type { PublicServiceEstimateCalculatePayload } from '../models/PublicServiceEstimateCalculatePayload';
+import type { PublicServiceTariffListResponse } from '../models/PublicServiceTariffListResponse';
 import type { PublicStorefrontContextResponse } from '../models/PublicStorefrontContextResponse';
 import type { RepairDiagnosticLeadResponse } from '../models/RepairDiagnosticLeadResponse';
 import type { ServiceResponse } from '../models/ServiceResponse';
 import type { SpecRegistryResponse } from '../models/SpecRegistryResponse';
 import type { SpecsKeysResponse } from '../models/SpecsKeysResponse';
+import type { StorefrontSettingsResponse } from '../models/StorefrontSettingsResponse';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -801,6 +806,56 @@ export class ApiService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/storefront/context',
+        });
+    }
+    /**
+     * Get Public Storefront Settings
+     * @returns StorefrontSettingsResponse Successful Response
+     * @throws ApiError
+     */
+    public static getPublicStorefrontSettings(): CancelablePromise<StorefrontSettingsResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/storefront-settings',
+        });
+    }
+    /**
+     * List Public Service Tariffs
+     * @param serviceKind
+     * @returns PublicServiceTariffListResponse Successful Response
+     * @throws ApiError
+     */
+    public static listPublicServiceTariffs(
+        serviceKind: ManagerTariffServiceKind,
+    ): CancelablePromise<PublicServiceTariffListResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/service-pricing/tariffs',
+            query: {
+                'service_kind': serviceKind,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Calculate Public Service Tariff
+     * @param requestBody
+     * @returns ManagerInstallEstimateResponse Successful Response
+     * @throws ApiError
+     */
+    public static calculatePublicServiceTariff(
+        requestBody: PublicServiceEstimateCalculatePayload,
+    ): CancelablePromise<ManagerInstallEstimateResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/service-pricing/calculate',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
         });
     }
     /**

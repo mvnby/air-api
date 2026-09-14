@@ -26,6 +26,7 @@ from services.product_image_processing_contract import (
     ProductImageVariantType,
 )
 from services.tariffs_service import TariffsService
+from services.service_catalog_scope import canonical_service_catalog_clause
 from services.tenant_scope_service import SystemTenantScopeResolver
 from services.yandex_business_feed_text import sanitize_yandex_description
 
@@ -241,7 +242,11 @@ class YandexBusinessPriceListService:
     async def _load_tariffs(session: AsyncSession) -> list[ServiceTariff]:
         stmt = (
             select(ServiceTariff)
-            .where(ServiceTariff.is_active.is_(True), ServiceTariff.base_price > 0)
+            .where(
+                canonical_service_catalog_clause(ServiceTariff),
+                ServiceTariff.is_active.is_(True),
+                ServiceTariff.base_price > 0,
+            )
             .order_by(
                 ServiceTariff.sort_order.asc(),
                 ServiceTariff.category.asc(),

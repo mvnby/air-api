@@ -10,6 +10,8 @@ export const MANAGER_CAPABILITY = {
   infrastructureManage: 'infrastructure.manage',
   analyticsManage: 'analytics.manage',
   documentsManage: 'documents.manage',
+  settingsManage: 'settings.manage',
+  servicesManage: 'services.manage',
 } as const;
 
 export type ManagerCapability = typeof MANAGER_CAPABILITY[keyof typeof MANAGER_CAPABILITY];
@@ -26,6 +28,9 @@ export const requiredCapabilityForManagerPath = (path: string): ManagerCapabilit
   }
   if (path.startsWith('/manager/settings/documents')) {
     return MANAGER_CAPABILITY.documentsManage;
+  }
+  if (path.startsWith('/manager/settings/platform') || path.startsWith('/manager/settings/backup')) {
+    return MANAGER_CAPABILITY.infrastructureManage;
   }
   if (
     path.startsWith('/manager/leads')
@@ -50,12 +55,17 @@ export const requiredCapabilityForManagerPath = (path: string): ManagerCapabilit
     return MANAGER_CAPABILITY.storefrontCollectionsManage;
   }
   if (
+    path.startsWith('/manager/installation-rates')
+    || path.startsWith('/manager/tariffs')
+    || path.startsWith('/manager/service-estimates')
+  ) return MANAGER_CAPABILITY.servicesManage;
+  if (
     path.startsWith('/manager/staff')
     || path.startsWith('/manager/users')
     || path.startsWith('/manager/installers')
   ) return MANAGER_CAPABILITY.staffManage;
   if (path.startsWith('/manager/settings')) {
-    return MANAGER_CAPABILITY.infrastructureManage;
+    return MANAGER_CAPABILITY.settingsManage;
   }
   return MANAGER_CAPABILITY.platformManage;
 };

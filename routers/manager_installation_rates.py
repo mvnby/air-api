@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
-from core.security import get_current_username
+from core.security import get_current_manager_tenant_scope, get_current_username
+from models.tenancy import TenantScope
 from routers.manager_operation_ids import (
     LIST_MANAGER_INSTALLATION_RATES,
     UPDATE_MANAGER_INSTALLATION_RATE,
@@ -33,9 +34,12 @@ router = APIRouter(
 )
 async def list_manager_installation_rates(
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     return ManagerInstallationRateListResponse(
-        items=await ManagerInstallationRateService.list_rates(session)
+        items=await ManagerInstallationRateService.list_rates(
+            session, tenant_scope
+        )
     )
 
 
@@ -48,9 +52,11 @@ async def update_manager_installation_rate(
     rate_id: int,
     payload: ManagerInstallationRateUpdatePayload,
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     return await ManagerInstallationRateService.update_rate(
         session,
         rate_id=rate_id,
         payload=payload,
+        tenant_scope=tenant_scope,
     )

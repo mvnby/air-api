@@ -18,6 +18,7 @@ from services.article_service import ArticleService
 from services.content_api_service import ContentApiService
 from services.installation_service import InstallationService
 from services.public_series_page_service import PublicSeriesPageService
+from services.storefront_settings_service import StorefrontSettingsService
 
 router = APIRouter(
     tags=["api"],
@@ -41,9 +42,14 @@ async def get_article(slug: str, session: AsyncSession = Depends(get_session)):
 
 
 @router.get("/v1/content/services", response_model=List[ServiceResponse])
-async def get_services(session: AsyncSession = Depends(get_session)):
+async def get_services(
+    session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_public_tenant_scope),
+):
     """Get list of all available services."""
-    return await ContentApiService.get_active_services(session)
+    return await ContentApiService.get_active_services(
+        session, tenant_scope=tenant_scope
+    )
 
 
 @router.get("/v1/content/brands", response_model=List[PublicBrandResponse], operation_id="get_public_brands")
@@ -109,21 +115,41 @@ async def get_public_brand_series(
 async def get_service_options(
     category: str = "installation_option",
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
     """Get rich installation options."""
-    return await ContentApiService.get_service_options(session, category=category)
+    return await ContentApiService.get_service_options(
+        session,
+        category=category,
+        tenant_scope=tenant_scope,
+    )
 
 
 @router.get("/v1/installation-rates")
-async def get_installation_rates(session: AsyncSession = Depends(get_session)):
+async def get_installation_rates(
+    session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_public_tenant_scope),
+):
     """Get all installation rates."""
-    return await InstallationService.get_all(session)
+    if not await StorefrontSettingsService.is_service_enabled(
+        session,
+        tenant_scope=tenant_scope,
+        service_kind="installation",
+    ):
+        return []
+    return await InstallationService.get_all(session, tenant_scope)
 
 
 @router.get("/v1/config", operation_id="get_config")
-async def get_global_config(session: AsyncSession = Depends(get_session)):
+async def get_global_config(
+    session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_public_tenant_scope),
+):
     """
     Get the public storefront configuration as a key-value dictionary.
     Example: {"phone": "+37529...", "email": "..."}
     """
-    return await ContentApiService.get_global_config_map(session)
+    return await ContentApiService.get_global_config_map(
+        session,
+        tenant_scope=tenant_scope,
+    )

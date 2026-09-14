@@ -51,6 +51,7 @@ from services.tenant_scope_service import (
     TenantScope,
     tenant_scope_clause,
 )
+from services.service_catalog_scope import service_catalog_scope_clause
 
 
 class OrderTransferService:
@@ -349,18 +350,37 @@ class OrderTransferService:
         return None, "will_create"
 
     @staticmethod
-    async def _find_service(session: AsyncSession, service_ref: Optional[ManagerOrderTransferServiceRef]) -> Optional[Service]:
+    async def _find_service(
+        session: AsyncSession,
+        service_ref: Optional[ManagerOrderTransferServiceRef],
+        *,
+        tenant_scope: TenantScope,
+    ) -> Optional[Service]:
         if not service_ref:
             return None
         slug = OrderTransferService._optional_clean(service_ref.slug)
         if slug:
-            result = await session.execute(select(Service).where(Service.slug == slug).limit(1))
+            result = await session.execute(
+                select(Service)
+                .where(
+                    Service.slug == slug,
+                    service_catalog_scope_clause(Service, tenant_scope),
+                )
+                .limit(1)
+            )
             service = result.scalars().first()
             if service:
                 return service
         title = OrderTransferService._optional_clean(service_ref.title)
         if title:
-            result = await session.execute(select(Service).where(func.lower(Service.title) == title.lower()).limit(1))
+            result = await session.execute(
+                select(Service)
+                .where(
+                    func.lower(Service.title) == title.lower(),
+                    service_catalog_scope_clause(Service, tenant_scope),
+                )
+                .limit(1)
+            )
             return result.scalars().first()
         return None
 
@@ -633,7 +653,11 @@ class OrderTransferService:
                     )
 
                 for service_line in proposal_data.service_lines:
-                    service = await OrderTransferService._find_service(session, service_line.service)
+                    service = await OrderTransferService._find_service(
+                        session,
+                        service_line.service,
+                        tenant_scope=tenant_scope,
+                    )
                     session.add(
                         OrderServiceLink(
                             order_id=int(order.id),

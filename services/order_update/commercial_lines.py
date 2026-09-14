@@ -11,6 +11,7 @@ from services.order_proposal_lifecycle import (
     normalize_proposal_status,
 )
 from services.order_service import OrderService
+from services.service_catalog_scope import service_catalog_scope_clause
 from services.order_update.context import OrderUpdateContext
 
 
@@ -180,7 +181,10 @@ async def _replace_service_lines(
     }
     if service_ids:
         result = await context.session.execute(
-            select(Service.id).where(Service.id.in_(service_ids))
+            select(Service.id).where(
+                Service.id.in_(service_ids),
+                service_catalog_scope_clause(Service, context.tenant_scope),
+            )
         )
         existing_service_ids = {int(service_id) for service_id in result.scalars()}
         missing_service_ids = sorted(service_ids - existing_service_ids)
@@ -190,6 +194,7 @@ async def _replace_service_lines(
     cost_defaults = await OrderService._build_service_line_cost_defaults(
         context.session,
         service_lines,
+        tenant_scope=context.tenant_scope,
     )
     await context.session.execute(
         delete(OrderServiceLink).where(

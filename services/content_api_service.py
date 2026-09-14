@@ -19,9 +19,22 @@ from services.public_catalog_disclosure import (
     PublicCatalogDisclosurePolicy,
 )
 from services.public_catalog_visibility_service import PublicCatalogVisibilityService
+from services.service_catalog_scope import (
+    canonical_service_catalog_clause,
+    service_catalog_scope_clause,
+)
+from services.storefront_settings_service import StorefrontSettingsService
 
 
 class ContentApiService:
+    _SERVICE_CATEGORY_DIRECTIONS = {
+        "installation_option": "installation",
+        "installation": "installation",
+        "pre_install": "pre_install",
+        "dismantling": "dismantling",
+        "maintenance": "maintenance",
+        "repair": "repair",
+    }
     PUBLIC_CONFIG_KEYS = frozenset(
         {
             "phone",
@@ -209,20 +222,64 @@ class ContentApiService:
         return payload
 
     @staticmethod
-    async def get_active_services(session: AsyncSession) -> List[Dict[str, Any]]:
-        stmt = select(Service).where(Service.is_active == True).order_by(Service.id)
+    async def get_active_services(
+        session: AsyncSession,
+        *,
+        tenant_scope: TenantScope | None = None,
+    ) -> List[Dict[str, Any]]:
+        scope_clause = (
+            canonical_service_catalog_clause(Service)
+            if tenant_scope is None
+            else service_catalog_scope_clause(Service, tenant_scope)
+        )
+        stmt = (
+            select(Service)
+            .where(Service.is_active == True, scope_clause)
+            .order_by(Service.id)
+        )
         result = await session.execute(stmt)
-        return [ContentApiService._serialize_service(service) for service in result.scalars().all()]
+        services = list(result.scalars().all())
+        if tenant_scope is not None and not tenant_scope.is_canonical_storefront:
+            settings = await StorefrontSettingsService.get_settings(
+                session,
+                tenant_scope=tenant_scope,
+            )
+            enabled = {item.key for item in settings.services if item.enabled}
+            services = [
+                service
+                for service in services
+                if ContentApiService._SERVICE_CATEGORY_DIRECTIONS.get(
+                    service.category
+                )
+                in enabled
+            ]
+        return [ContentApiService._serialize_service(service) for service in services]
 
     @staticmethod
     async def get_service_options(
         session: AsyncSession,
         category: str = "installation_option",
+        *,
+        tenant_scope: TenantScope | None = None,
     ) -> List[Dict[str, Any]]:
+        if tenant_scope is not None and not tenant_scope.is_canonical_storefront:
+            service_kind = ContentApiService._SERVICE_CATEGORY_DIRECTIONS.get(category)
+            if service_kind is None or not await StorefrontSettingsService.is_service_enabled(
+                session,
+                tenant_scope=tenant_scope,
+                service_kind=service_kind,
+            ):
+                return []
+        scope_clause = (
+            canonical_service_catalog_clause(Service)
+            if tenant_scope is None
+            else service_catalog_scope_clause(Service, tenant_scope)
+        )
         stmt = (
             select(Service)
             .where(Service.is_active == True)
             .where(Service.category == category)
+            .where(scope_clause)
             .order_by(Service.base_price)
         )
         result = await session.execute(stmt)
@@ -342,7 +399,29 @@ class ContentApiService:
         )
 
     @staticmethod
-    async def get_global_config_map(session: AsyncSession) -> Dict[str, str]:
+    async def get_global_config_map(
+        session: AsyncSession,
+        *,
+        tenant_scope: TenantScope | None = None,
+    ) -> Dict[str, str]:
+        if tenant_scope is not None:
+            settings = await StorefrontSettingsService.get_settings(
+                session,
+                tenant_scope=tenant_scope,
+            )
+            if settings.version > 0 or not tenant_scope.is_canonical_storefront:
+                site = settings.site
+                phone_clean = "".join(char for char in site.phone if char.isdigit())
+                return {
+                    "phone": site.phone,
+                    "phone_clean": phone_clean,
+                    "email": site.email,
+                    "address": site.address,
+                    "work_hours": site.work_hours,
+                    "support_telegram_url": site.support_telegram_url,
+                    "display_name": site.display_name,
+                    "city": site.city,
+                }
         stmt = select(GlobalConfig).where(GlobalConfig.key.in_(ContentApiService.PUBLIC_CONFIG_KEYS))
         result = await session.execute(stmt)
         configs = result.scalars().all()

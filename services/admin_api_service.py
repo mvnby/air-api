@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import func, select
 
 from models import Product, ProductTagLink, Service, Tag, TagGroup
+from services.service_catalog_scope import canonical_service_catalog_clause
 
 
 class AdminApiService:
@@ -60,7 +61,14 @@ class AdminApiService:
 
     @staticmethod
     async def search_services(session: AsyncSession, q: str = "") -> List[Dict[str, Any]]:
-        stmt = select(Service).where(Service.title.ilike(f"%{q}%")).limit(20)
+        stmt = (
+            select(Service)
+            .where(
+                canonical_service_catalog_clause(Service),
+                Service.title.ilike(f"%{q}%"),
+            )
+            .limit(20)
+        )
         result = await session.execute(stmt)
         services = result.scalars().all()
         return [{"id": s.id, "text": s.title, "price": s.base_price} for s in services]

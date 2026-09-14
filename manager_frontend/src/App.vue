@@ -46,6 +46,7 @@ const CalendarDashboard = defineAsyncComponent(() => import('./views/CalendarDas
 const ManagerHomeView = defineAsyncComponent(() => import('./views/ManagerHome.vue'));
 const InstallersView = defineAsyncComponent(() => import('./views/InstallersView.vue'));
 const SettingsView = defineAsyncComponent(() => import('./views/SettingsView.vue'));
+const PlatformSettingsView = defineAsyncComponent(() => import('./views/PlatformSettingsView.vue'));
 const SettingsBackupView = defineAsyncComponent(() => import('./views/SettingsBackupView.vue'));
 const DocumentsSettingsView = defineAsyncComponent(() => import('./views/DocumentsSettingsView.vue'));
 const TariffsView = defineAsyncComponent(() => import('./views/TariffsView.vue'));
@@ -116,6 +117,7 @@ const currentPath = computed(() => normalizePath(currentLocation.value.split('?'
 const canManagePlatform = computed(() => hasManagerCapability(auth.value, MANAGER_CAPABILITY.platformManage));
 const canManageInfrastructure = computed(() => hasManagerCapability(auth.value, MANAGER_CAPABILITY.infrastructureManage));
 const canManageDocuments = computed(() => hasManagerCapability(auth.value, MANAGER_CAPABILITY.documentsManage));
+const canManageSettings = computed(() => hasManagerCapability(auth.value, MANAGER_CAPABILITY.settingsManage));
 const visibleCoreNavItems = computed(() => coreNavItems.filter(
   item => !item.requiredCapability || hasManagerCapability(auth.value, item.requiredCapability),
 ));
@@ -180,6 +182,7 @@ const currentView = computed(() => {
   if (path.startsWith('/manager/staff') || path.startsWith('/manager/users') || path.startsWith('/manager/installers')) return 'installers';
   if (path.startsWith('/manager/settings/backup')) return 'settings-backup';
   if (path.startsWith('/manager/settings/documents')) return 'settings-documents';
+  if (path.startsWith('/manager/settings/platform')) return 'settings-platform';
   if (path.startsWith('/manager/settings')) return 'settings';
   if (path.startsWith('/manager/installation-rates')) return 'installation-rates';
   if (path.startsWith('/manager/installation-discounts')) return 'installation-discounts';
@@ -530,7 +533,8 @@ watch(currentPath, () => {
       <InstallersView v-else-if="authorizedView === 'installers'" :key="currentLocation" />
       <SettingsBackupView v-else-if="authorizedView === 'settings-backup' && canManageInfrastructure" :key="currentLocation" />
       <DocumentsSettingsView v-else-if="authorizedView === 'settings-documents' && canManageDocuments" :key="currentLocation" />
-      <SettingsView v-else-if="authorizedView === 'settings' && canManageInfrastructure" :key="currentLocation" />
+      <PlatformSettingsView v-else-if="authorizedView === 'settings-platform' && canManageInfrastructure" :key="currentLocation" />
+      <SettingsView v-else-if="authorizedView === 'settings' && canManageSettings" :key="currentLocation" />
       <InstallationRatesView v-else-if="authorizedView === 'installation-rates'" :key="currentLocation" />
       <InstallationDiscountsView v-else-if="authorizedView === 'installation-discounts'" :key="currentLocation" />
       <TariffsView v-else-if="authorizedView === 'tariffs'" :key="currentLocation" />

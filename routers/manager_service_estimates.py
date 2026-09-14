@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
-from core.security import get_current_username
+from core.security import get_current_manager_tenant_scope, get_current_username
+from models.tenancy import TenantScope
 from routers.manager_operation_ids import (
     CALCULATE_MANAGER_INSTALL_ESTIMATE,
     CREATE_MANAGER_SERVICE_ESTIMATE,
@@ -38,8 +39,11 @@ router = APIRouter(
 async def calculate_manager_install_estimate(
     payload: ManagerInstallEstimateCalculatePayload,
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
-    return await ServiceEstimateService.calculate_install_estimate(session, payload)
+    return await ServiceEstimateService.calculate_install_estimate(
+        session, payload, tenant_scope
+    )
 
 
 @router.post(
@@ -52,11 +56,13 @@ async def create_manager_service_estimate(
     payload: ManagerInstallEstimateSavePayload,
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     return await ServiceEstimateService.create_install_estimate(
         session=session,
         payload=payload,
         created_by=username,
+        tenant_scope=tenant_scope,
     )
 
 
@@ -66,12 +72,14 @@ async def list_manager_service_estimates(
     limit: int = Query(20, ge=1, le=100),
     customer_id: int | None = Query(None, ge=1),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     return await ServiceEstimateService.list_estimates(
         session=session,
         page=page,
         limit=limit,
         customer_id=customer_id,
+        tenant_scope=tenant_scope,
     )
 
 
@@ -85,12 +93,14 @@ async def get_manager_service_estimate_order_lines(
     mode: ManagerServiceEstimateOrderLinesMode = Query(ManagerServiceEstimateOrderLinesMode.detailed),
     description_mode: ManagerServiceDescriptionMode = Query(ManagerServiceDescriptionMode.short),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     return await ServiceEstimateService.get_estimate_order_lines(
         session=session,
         estimate_id=estimate_id,
         mode=mode,
         description_mode=description_mode,
+        tenant_scope=tenant_scope,
     )
 
 
@@ -98,8 +108,13 @@ async def get_manager_service_estimate_order_lines(
 async def get_manager_service_estimate(
     estimate_id: int,
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
-    return await ServiceEstimateService.get_estimate_by_id(session=session, estimate_id=estimate_id)
+    return await ServiceEstimateService.get_estimate_by_id(
+        session=session,
+        estimate_id=estimate_id,
+        tenant_scope=tenant_scope,
+    )
 
 
 @router.delete(
@@ -110,5 +125,10 @@ async def get_manager_service_estimate(
 async def delete_manager_service_estimate(
     estimate_id: int,
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
-    return await ServiceEstimateService.delete_estimate(session=session, estimate_id=estimate_id)
+    return await ServiceEstimateService.delete_estimate(
+        session=session,
+        estimate_id=estimate_id,
+        tenant_scope=tenant_scope,
+    )
