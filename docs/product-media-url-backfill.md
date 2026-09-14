@@ -36,17 +36,21 @@ or `https://cdn.mvn.by/products/variants/original/` are accepted.
 в `products/shared` или `products/variants/original`.
 
 Manifest `polotsk-presentation-v1.json` ожидает 1 235 товаров, не содержит URL
-новых TCL и больше не совпадает с публичным snapshot. Он непригоден для execute.
-Текущий `polotsk-presentation-v2.json` фиксирует новый публичный snapshot и
-ограничивает исполняемую часть тремя TCL. Перед исправлением обязателен свежий
-database-aware plan на primary; старый токен или вручную изменённую команду
-использовать нельзя.
+новых TCL и больше не совпадает с публичным snapshot. Manifest
+`polotsk-presentation-v2.json` правильно фиксирует публичный snapshot, но его
+DB-хэш был ошибочно выведен из публичного ответа. Первый database-aware plan на
+primary доказал несовпадение и не выдал команду execute; `v2` никогда не
+исполнялся и оставлен как заблокированная история. Текущий
+`polotsk-presentation-v3.json` фиксирует DB-хэш из этого read-only плана и
+ограничивает исполняемую часть тремя TCL. Перед исправлением обязателен новый
+свежий план на primary; старый токен или вручную изменённую команду использовать
+нельзя.
 
 Текущая read-only команда:
 
 ```bash
 python3 scripts/manage_product_media_url_backfill.py plan \
-  --manifest config/product_media_url_backfills/polotsk-presentation-v2.json
+  --manifest config/product_media_url_backfills/polotsk-presentation-v3.json
 ```
 
 Готовый план должен показывать ровно три исполняемых TCL и три отложенных LG,

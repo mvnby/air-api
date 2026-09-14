@@ -53,7 +53,7 @@ Production server intentionally runs from Docker images only (no git checkout in
      plan, and run only its emitted command under the production deploy lock;
      see [tenant demo setup](tenant-demo-setup.md).
    - Product media URL audit/plan (read-only default):
-     `python3 scripts/manage_product_media_url_backfill.py plan --manifest config/product_media_url_backfills/polotsk-presentation-v2.json`
+     `python3 scripts/manage_product_media_url_backfill.py plan --manifest config/product_media_url_backfills/polotsk-presentation-v3.json`
    - Product media URL execution is primary-only and manual-only. Resolve every
      manifest blocker, review the exact source hashes/locations, and run only
      the fresh plan's expiring `reviewed_execute_command`; see

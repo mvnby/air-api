@@ -54,13 +54,16 @@ def _manifest_payload(**overrides):
 def test_current_polotsk_manifest_is_closed_and_scoped_to_known_residuals() -> None:
     path = (
         Path(__file__).parents[2]
-        / "config/product_media_url_backfills/polotsk-presentation-v2.json"
+        / "config/product_media_url_backfills/polotsk-presentation-v3.json"
     )
     manifest = ProductMediaUrlBackfillManifest.normalize(
         json.loads(path.read_text(encoding="utf-8"))
     )
 
     assert manifest.expected_public_product_count == 1239
+    assert manifest.expected_db_snapshot_sha256 == (
+        "e5dfdb39b285d2a3e179600cbb0fb69d3c0b0c29050660d25a9123ff06b3c218"
+    )
     assert [source.action for source in manifest.sources] == ["blocked", "ingest"]
     assert [source.expected_product_ids for source in manifest.sources] == [
         (126, 127, 128),
