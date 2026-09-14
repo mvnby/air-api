@@ -48,9 +48,9 @@ from scripts.ops.tenant_manager_result_contract import (  # noqa: E402
     sanitize_plan,
     validate_result_semantics as _validate_result_semantics,
 )
-from services.credential_service import (  # noqa: E402
+from services.credential_policy import (  # noqa: E402
     CredentialPolicyError,
-    CredentialService,
+    CredentialPolicy,
 )
 
 
@@ -350,7 +350,7 @@ def _read_password(stream: Any | None = None) -> str:
     if not password:
         raise WorkflowError("one-time password is required for execute")
     try:
-        CredentialService.validate_password(password)
+        CredentialPolicy.validate_password(password)
     except CredentialPolicyError as exc:
         raise WorkflowError(f"one-time password violates credential policy: {exc.code}") from exc
     return password

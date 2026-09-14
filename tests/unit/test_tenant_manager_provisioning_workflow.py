@@ -4,6 +4,7 @@ import argparse
 import io
 import json
 import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -12,6 +13,18 @@ import pytest
 from scripts.ha.pitr_pinned_ssh import PATRONI_NODES
 from scripts.ha.pitr_cluster_topology import ClusterTopology
 from scripts.ops import tenant_manager_provisioning_workflow as workflow
+
+
+def test_controller_runs_without_api_or_site_package_dependencies():
+    result = subprocess.run(
+        [sys.executable, "-I", "-S", str(Path(workflow.__file__).resolve()), "--help"],
+        cwd=Path(workflow.__file__).resolve().parents[2],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "--reset-password" in result.stdout
 
 
 def _arguments(tmp_path: Path, *, operation: str = "plan") -> argparse.Namespace:
