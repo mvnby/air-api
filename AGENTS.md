@@ -12,9 +12,9 @@
   this API owns business rules and the internal bot contract.
 - Reuse `services/spec_normalizer.py`; add spec definitions/aliases to
   `services/spec_registry.py`, from which the normalizer derives `KEY_MAP`.
-- Keep changes focused and modules cohesive. If a touched file exceeds about
-  700 lines or mixes responsibilities, propose a bounded split; do not turn a
-  small fix into an unrelated repository-wide refactor.
+- Keep changes focused and modules cohesive. About 700 lines or mixed
+  responsibilities is a signal to assess cohesion, not an automatic refactor.
+  Split when needed for the current task; propose other improvements separately.
 - Manager list endpoints require `limit <= 100`.
 
 ## Read by task
@@ -53,6 +53,9 @@ code and live state before treating them as present-day facts or authorization.
 - Do not remove required tests, release gates or final runtime verification to
   save tokens. A new independent task may start fresh with a short handoff;
   keep related implementation and validation together.
+- Honor authorization already given: a requested fix includes in-scope edits
+  and relevant local checks. Do not ask again for an approved step; clarify
+  ambiguous scope or actions outside it. Analysis-only requests stop at findings.
 
 ## Delegation and effort
 
@@ -60,8 +63,10 @@ code and live state before treating them as present-day facts or authorization.
   a cheaper or stronger setting when the user's choice is materially mismatched.
 - Terra `low`/`medium`: inventory, documentation, focused checks and small fixes;
   Terra `medium`/`high`: routine implementation/tests and bounded refactors;
-  Sol `high`/`xhigh`: architecture, concurrency, migrations, HA and security.
-  Reserve the highest efforts for difficult work that justifies their cost.
+  Astra `high`: a starting point for general development; Sol or Astra
+  `high`/`xhigh`: difficult architecture, concurrency, migrations, HA and security.
+  Honor an explicit model choice; compare completion time, usage and rework
+  before adopting a cheaper setting. Reserve higher effort for demonstrated need.
 - This is standing authorization to delegate safe, independent, in-scope work
   only when it costs less than doing it locally. Keep small or tightly coupled
   tasks with one agent; do not create a reviewer for every trivial edit.
