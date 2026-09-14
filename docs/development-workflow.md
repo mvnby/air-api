@@ -90,7 +90,8 @@ Use this after large catalog imports or when unknown spec keys appear.
    - regenerate OpenAPI (`python3 scripts/legacy/extract_openapi.py`),
    - refresh typed client with `npm run gen:api` in `manager_frontend/`,
    - commit generated artifacts (`openapi.json`, `manager_frontend/src/client/*`) when changed,
-   - verify photo/spec bulk-edit flows end-to-end.
+   - verify the user flows affected by the changed contract; include photo/spec
+     bulk-edit flows when their contracts or shared dependencies are affected.
 5. Legacy admin freeze:
    - SQLAdmin routes/views have been removed,
    - avoid adding user workflows under a legacy `/admin` UI,
