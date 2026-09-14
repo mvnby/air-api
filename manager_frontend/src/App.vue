@@ -19,6 +19,7 @@ import {
   managerSession,
   restoreManagerSession,
 } from './services/manager-session';
+import { useDemoReadOnly } from './services/manager-demo';
 import {
   coreNavItems,
   defaultExpandedNavSections,
@@ -68,6 +69,7 @@ const ProfileSecurityView = defineAsyncComponent(() => import('./views/ProfileSe
 const AnalyticsConnectionsView = defineAsyncComponent(() => import('./views/AnalyticsConnectionsView.vue'));
 const props = defineProps<{ reloadPage?: () => void }>();
 const { isAuthenticated, auth, recoveryRequired } = managerSession;
+const demoReadOnly = useDemoReadOnly();
 const { name: partnerName, contextKey: partnerContextKey } = useKitlaneIdentity();
 const showLoginModal = ref(false);
 const loginUsername = ref('');
@@ -516,6 +518,10 @@ watch(currentPath, () => {
           @error="handleLogoutError"
         />
       </template>
+
+      <div v-if="demoReadOnly" class="mx-4 mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100" role="status">
+        Демонстрационный режим: данные доступны только для просмотра.
+      </div>
 
       <ManagerHomeView v-if="authorizedView === 'home'" :key="currentLocation" />
       <ProfileSecurityView v-else-if="authorizedView === 'profile-security'" :key="currentLocation" @password-changed="handleLogoutSuccess" />

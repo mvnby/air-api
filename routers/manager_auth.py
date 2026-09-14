@@ -42,6 +42,7 @@ async def check_auth_status(auth: AuthenticatedUser = Depends(require_manager_ac
         "capabilities": ManagerCapabilityService.for_auth(auth),
         "can_change_password": auth.can_change_password,
         "must_change_password": auth.must_change_password,
+        "demo_read_only": auth.demo_read_only,
     }
 
 

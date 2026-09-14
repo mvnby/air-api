@@ -11,6 +11,7 @@ import { ManagerMailService, ManagerOrdersService } from '../../client';
 import { getApiErrorMessage } from '../../utils/api-errors';
 import OrderDrawerSection from './OrderDrawerSection.vue';
 import { formatMoney } from './order-utils';
+import { useDemoReadOnly } from '../../services/manager-demo';
 
 const props = defineProps<{
   order: ManagerOrderDetailResponse;
@@ -64,9 +65,10 @@ const newPaymentAmount = ref<number | null>(null);
 const newPaymentType = ref('prepayment');
 const isAddingPayment = ref(false);
 const deletingPaymentId = ref<number | null>(null);
+const demoReadOnly = useDemoReadOnly();
 
 const summary = computed(() => (
-  `оплачено ${formatMoney(props.totalPayments)} · остаток ${formatMoney(props.balanceDue)} · итого ${formatMoney(props.total)} · маржа ${formatMoney(props.margin)}`
+  `оплачено ${formatMoney(props.totalPayments)} · остаток ${formatMoney(props.balanceDue)} · итого ${formatMoney(props.total)}${demoReadOnly.value ? '' : ` · маржа ${formatMoney(props.margin)}`}`
 ));
 const candidateBankReceipts = computed(() => (
   bankReceipts.value.filter((receipt) => receipt.status === 'requires_review')

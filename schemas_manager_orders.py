@@ -145,7 +145,7 @@ class OrderProductLineResponse(BaseModel):
     currency_snapshot: Optional[str] = None
     quantity: int
     price: int
-    cost: int
+    cost: Optional[int] = None
     is_installation_included: bool
     installation_price: int
     line_total: int
@@ -166,7 +166,7 @@ class OrderServiceLineResponse(BaseModel):
     service_category: Optional[str] = None
     quantity: int
     price: int
-    cost: int
+    cost: Optional[int] = None
     line_total: int
 
 
@@ -185,8 +185,8 @@ class ManagerOrderListItemResponse(BaseModel):
     measurement_date: Optional[datetime] = None
     installation_date: Optional[datetime] = None
     total_amount: float
-    total_cost: float
-    margin: float
+    total_cost: Optional[float] = None
+    margin: Optional[float] = None
     is_paid: bool
     comment: Optional[str] = None
     delivery_address: Optional[str] = None
@@ -459,8 +459,8 @@ class OrderProposalResponse(BaseModel):
     is_archived: bool = False
     sort_order: int = 0
     total_amount: float = 0.0
-    total_cost: float = 0.0
-    margin: float = 0.0
+    total_cost: Optional[float] = None
+    margin: Optional[float] = None
     product_lines: List[OrderProductLineResponse] = Field(default_factory=list)
     service_lines: List[OrderServiceLineResponse] = Field(default_factory=list)
 

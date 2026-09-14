@@ -29,6 +29,7 @@ class StorefrontContext:
     default_locale: str
     currency: str
     tenant_is_system: bool = False
+    demo_read_only: bool = False
 
 
 class StorefrontContextService:

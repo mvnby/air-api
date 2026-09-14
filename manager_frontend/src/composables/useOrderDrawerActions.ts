@@ -71,8 +71,8 @@ export const useOrderDrawerActions = ({
       });
       onUpdated(updatedOrder);
       setToast(hold ? 'Сделка поставлена на паузу' : 'Сделка снята с паузы', 'success');
-    } catch {
-      setToast('Ошибка паузы', 'error');
+    } catch (error) {
+      setToast(getApiErrorMessage(error) || 'Ошибка паузы', 'error');
     }
   };
 

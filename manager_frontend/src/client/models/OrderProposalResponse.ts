@@ -13,8 +13,8 @@ export type OrderProposalResponse = {
     is_archived?: boolean;
     sort_order?: number;
     total_amount?: number;
-    total_cost?: number;
-    margin?: number;
+    total_cost?: (number | null);
+    margin?: (number | null);
     product_lines?: Array<OrderProductLineResponse>;
     service_lines?: Array<OrderServiceLineResponse>;
 };

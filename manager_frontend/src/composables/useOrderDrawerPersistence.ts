@@ -7,6 +7,7 @@ import type {
   ProductLogisticsTemplateComponent,
   ServiceLine,
 } from '../components/orders/order-editor-types';
+import { useDemoReadOnly } from '../services/manager-demo';
 
 const createDefaultDrawerSections = () => ({
   website: false,
@@ -42,6 +43,7 @@ export const useOrderDrawerPersistence = ({
   currentLinesSnapshot,
   currentFormSnapshot,
 }: UseOrderDrawerPersistenceOptions) => {
+  const demoReadOnly = useDemoReadOnly();
   const expandedDrawerSections = ref(createDefaultDrawerSections());
   const initializedOrderId = ref<number | null>(null);
   const pendingDraftClearOrderId = ref<number | null>(null);
@@ -62,6 +64,10 @@ export const useOrderDrawerPersistence = ({
   const persistDraft = () => {
     if (!draftKey.value) return;
     try {
+      if (demoReadOnly.value) {
+        window.sessionStorage.removeItem(draftKey.value);
+        return;
+      }
       if (!hasUnsavedChanges.value) {
         window.sessionStorage.removeItem(draftKey.value);
         return;
@@ -79,6 +85,10 @@ export const useOrderDrawerPersistence = ({
   const restoreDraft = () => {
     if (!draftKey.value) return;
     try {
+      if (demoReadOnly.value) {
+        window.sessionStorage.removeItem(draftKey.value);
+        return;
+      }
       const raw = window.sessionStorage.getItem(draftKey.value);
       if (!raw) return;
       const payload = JSON.parse(raw) as Partial<OrderDrawerDraft>;

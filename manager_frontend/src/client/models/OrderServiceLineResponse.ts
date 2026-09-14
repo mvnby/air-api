@@ -10,7 +10,7 @@ export type OrderServiceLineResponse = {
     service_category?: (string | null);
     quantity: number;
     price: number;
-    cost: number;
+    cost?: (number | null);
     line_total: number;
 };
 

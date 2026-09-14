@@ -381,7 +381,7 @@ export function createCustomerOrderGroup(
         originalCustomerName,
         orders,
         totalAmount: orders.reduce((sum, order) => sum + order.total_amount, 0),
-        margin: orders.reduce((sum, order) => sum + order.margin, 0),
+        margin: orders.reduce((sum, order) => sum + Number(order.margin || 0), 0),
         balanceDue: orders.reduce((sum, order) => sum + Number(order.balance_due || 0), 0),
         statusCounts: Array.from(statusCounter.entries()).map(([status, count]) => ({ status, count })),
         addresses: addresses.slice(0, 3),

@@ -37362,6 +37362,11 @@
             "type": "boolean",
             "title": "Must Change Password",
             "default": false
+          },
+          "demo_read_only": {
+            "type": "boolean",
+            "title": "Demo Read Only",
+            "default": false
           }
         },
         "type": "object",
@@ -46925,11 +46930,25 @@
             "title": "Total Amount"
           },
           "total_cost": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Total Cost"
           },
           "margin": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Margin"
           },
           "is_paid": {
@@ -47320,8 +47339,6 @@
           "status",
           "created_at",
           "total_amount",
-          "total_cost",
-          "margin",
           "is_paid",
           "needs_attention",
           "awaiting_measurement",
@@ -48082,11 +48099,25 @@
             "title": "Total Amount"
           },
           "total_cost": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Total Cost"
           },
           "margin": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Margin"
           },
           "is_paid": {
@@ -48425,8 +48456,6 @@
           "status",
           "created_at",
           "total_amount",
-          "total_cost",
-          "margin",
           "is_paid",
           "needs_attention",
           "awaiting_measurement",
@@ -57219,7 +57248,14 @@
             "title": "Price"
           },
           "cost": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Cost"
           },
           "is_installation_included": {
@@ -57266,7 +57302,6 @@
           "product_title",
           "quantity",
           "price",
-          "cost",
           "is_installation_included",
           "installation_price",
           "line_total"
@@ -57391,14 +57426,26 @@
             "default": 0.0
           },
           "total_cost": {
-            "type": "number",
-            "title": "Total Cost",
-            "default": 0.0
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Cost"
           },
           "margin": {
-            "type": "number",
-            "title": "Margin",
-            "default": 0.0
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Margin"
           },
           "product_lines": {
             "items": {
@@ -57554,7 +57601,14 @@
             "title": "Price"
           },
           "cost": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Cost"
           },
           "line_total": {
@@ -57568,7 +57622,6 @@
           "service_title",
           "quantity",
           "price",
-          "cost",
           "line_total"
         ],
         "title": "OrderServiceLineResponse"

@@ -7,6 +7,7 @@ import type {
 } from '../src/client';
 import { ManagerMailService, ManagerOrdersService } from '../src/client';
 import OrderPaymentsPanel from '../src/components/orders/OrderPaymentsPanel.vue';
+import { managerSession } from '../src/services/manager-session';
 
 vi.mock('../src/client', () => ({
   ManagerMailService: {
@@ -106,9 +107,19 @@ beforeEach(() => {
 afterEach(() => {
   for (const wrapper of mountedWrappers.splice(0)) wrapper.unmount();
   document.body.innerHTML = '';
+  managerSession.auth.value = null;
 });
 
 describe('OrderPaymentsPanel', () => {
+  it('omits margin from the payment summary in a read-only demo', async () => {
+    managerSession.auth.value = { demo_read_only: true } as any;
+    const wrapper = mountPanel();
+    await flushPromises();
+
+    expect(wrapper.text()).not.toContain('маржа');
+    expect(wrapper.text()).toContain('итого 2 000 BYN');
+  });
+
   it('waits to load bank receipts until the payment section is expanded', async () => {
     const wrapper = mountPanel([], false);
     await flushPromises();

@@ -120,7 +120,7 @@ const mapProductLineFromResponse = (line: OrderProductLineResponse): ProductLine
   client_description: line.client_description ?? null,
   quantity: line.quantity,
   price: line.price,
-  cost: line.cost,
+  cost: Number(line.cost || 0),
   product_country: (line as any).product_country || null,
   product_logistics_components: Array.isArray((line as any).product_logistics_components)
     ? ((line as any).product_logistics_components as ProductLogisticsTemplateComponent[])

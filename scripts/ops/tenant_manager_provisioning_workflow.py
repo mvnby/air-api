@@ -79,14 +79,16 @@ class RemoteOutput:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Provision one tenant manager on the current Patroni primary"
+        description="Provision one tenant manager or owner on the current Patroni primary"
     )
     parser.add_argument("operation", choices=("plan", "execute"))
     parser.add_argument("--tenant-slug", required=True)
     parser.add_argument("--storefront-slug", required=True)
     parser.add_argument("--display-name", required=True)
     parser.add_argument("--username", required=True)
-    parser.add_argument("--phone", required=True)
+    parser.add_argument("--phone")
+    parser.add_argument("--role", choices=("manager", "owner"), default="manager")
+    parser.add_argument("--reset-password", action="store_true")
     parser.add_argument("--reviewed-plan-digest")
     parser.add_argument("--identity-file", type=Path, required=True)
     parser.add_argument("--result-file", type=Path, required=True)
@@ -94,13 +96,20 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def validate_arguments(args: argparse.Namespace) -> None:
+    args.role = getattr(args, "role", "manager")
+    args.reset_password = getattr(args, "reset_password", False)
     if not SLUG_RE.fullmatch(args.tenant_slug) or len(args.tenant_slug) > 63:
         raise WorkflowError("tenant slug is invalid")
     if not SLUG_RE.fullmatch(args.storefront_slug) or len(args.storefront_slug) > 63:
         raise WorkflowError("storefront slug is invalid")
     if not USERNAME_RE.fullmatch(args.username):
         raise WorkflowError("username is invalid")
-    if not PHONE_RE.fullmatch(args.phone):
+    if args.role not in {"manager", "owner"}:
+        raise WorkflowError("role is invalid")
+    if type(args.reset_password) is not bool:
+        raise WorkflowError("reset-password flag is invalid")
+    args.phone = args.phone or None
+    if args.phone is not None and not PHONE_RE.fullmatch(args.phone):
         raise WorkflowError("phone must be a complete E.164 number")
     if (
         args.display_name != args.display_name.strip()
@@ -217,6 +226,11 @@ def _runtime_capability_command(
         "python3 scripts/provision_tenant_manager.py --help "
         "| grep -F -- '--execution-json-stdin' >/dev/null"
     )
+    lines.append(
+        f"docker exec -i {shlex.quote(runtime.container_id)} "
+        "python3 scripts/provision_tenant_manager.py --help "
+        "| grep -F -- '--reset-password' >/dev/null"
+    )
     return "; ".join(lines)
 
 
@@ -229,7 +243,9 @@ def _provisioning_command(
     storefront_slug: str,
     display_name: str,
     username: str,
-    phone: str,
+    phone: str | None,
+    role: str = "manager",
+    reset_password: bool = False,
 ) -> str:
     command = [
         "python3",
@@ -243,9 +259,13 @@ def _provisioning_command(
         display_name,
         "--username",
         username,
-        "--phone",
-        phone,
+        "--role",
+        role,
     ]
+    if phone is not None:
+        command.extend(["--phone", phone])
+    if reset_password:
+        command.append("--reset-password")
     if operation == "execute":
         command.append("--execution-json-stdin")
     lines = _remote_prelude(node, expected_runtime=runtime)
@@ -307,6 +327,8 @@ def _assert_target(result: dict[str, Any], args: argparse.Namespace) -> None:
         "display_name": args.display_name,
         "username": args.username,
         "phone": args.phone,
+        "role": args.role,
+        "reset_password": args.reset_password,
     }
     if result.get("target") != expected:
         raise WorkflowError("tenant-manager CLI normalized to an unexpected target")
@@ -390,6 +412,8 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
                 display_name=args.display_name,
                 username=args.username,
                 phone=args.phone,
+                role=args.role,
+                reset_password=args.reset_password,
             ),
             accepted_statuses=frozenset({0, 2}),
         )
@@ -435,6 +459,8 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
                     display_name=args.display_name,
                     username=args.username,
                     phone=args.phone,
+                    role=args.role,
+                    reset_password=args.reset_password,
                 ),
                 stdin=execution_payload,
             )

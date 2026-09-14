@@ -4,6 +4,7 @@ import { parseApiFieldErrors } from '../utils/api-errors';
 import type { ProductLine } from '../components/orders/order-editor-types';
 import { useOrderAutosave } from './useOrderAutosave';
 import { useOrderAutosavePreference } from './useOrderAutosavePreference';
+import { DEMO_READ_ONLY_MESSAGE, useDemoReadOnly } from '../services/manager-demo';
 
 type Options = {
   order: Readonly<Ref<ManagerOrderDetailResponse | null>>;
@@ -36,6 +37,8 @@ const formPayload = (payload: ManagerOrderUpdatePayload) => {
 
 export const useOrderDrawerSaving = (options: Options) => {
   const { enabled, toggle, identity } = useOrderAutosavePreference();
+  const demoReadOnly = useDemoReadOnly();
+  const autosaveEnabled = computed(() => enabled.value && !demoReadOnly.value);
   let baseline: ManagerOrderUpdatePayload = {};
   const ownResponses = new WeakSet<object>();
   const scope = computed(() => `${identity.value}:${options.order.value?.id}:${options.activeProposalId.value}`);
@@ -126,7 +129,7 @@ export const useOrderDrawerSaving = (options: Options) => {
   };
 
   const autosave = useOrderAutosave({
-    enabled,
+    enabled: autosaveEnabled,
     ready: options.ready,
     scope,
     snapshot: computed(() => `${options.currentFormSnapshot()}\n${options.currentLinesSnapshot()}`),
@@ -134,6 +137,10 @@ export const useOrderDrawerSaving = (options: Options) => {
     save,
   });
   const beforeDocumentGenerate = async () => {
+    if (demoReadOnly.value) {
+      options.localFormError.value = DEMO_READ_ONLY_MESSAGE;
+      return false;
+    }
     if (!enabled.value && options.hasUnsavedChanges.value) {
       options.localFormError.value = 'Сохраните изменения перед созданием документа или включите автосохранение.';
       return false;
@@ -143,12 +150,22 @@ export const useOrderDrawerSaving = (options: Options) => {
     return { mutated };
   };
   const beforeClose = async () => {
+    if (demoReadOnly.value) return true;
     if (enabled.value) return autosave.flush();
     await autosave.waitForIdle();
     return true;
   };
   return {
-    ...autosave, enabled, toggle, resetBaseline, beforeDocumentGenerate, beforeClose,
+    ...autosave,
+    enabled: autosaveEnabled,
+    toggle: () => {
+      if (demoReadOnly.value) {
+        options.localFormError.value = DEMO_READ_ONLY_MESSAGE;
+        return;
+      }
+      toggle();
+    },
+    resetBaseline, beforeDocumentGenerate, beforeClose,
     isOwnResponse: (order: ManagerOrderDetailResponse) => ownResponses.has(toRaw(order)),
   };
 };

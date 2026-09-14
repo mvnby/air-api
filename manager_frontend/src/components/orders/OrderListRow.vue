@@ -4,6 +4,7 @@ import type { ManagerOrderListItemResponse } from '../../client';
 import type { Segment } from '../../api';
 import { formatDate, formatMoney, formatPhone, getOrderBoardLabel, getOrderCustomerName, getOrderExecutionLabel, getOrderNegotiationLabel, getOrderSegment, isOverdue } from './order-utils';
 import OrderTitleEditor from './OrderTitleEditor.vue';
+import { useDemoReadOnly } from '../../services/manager-demo';
 
 const props = defineProps<{
   order: ManagerOrderListItemResponse;
@@ -29,6 +30,7 @@ const stage = computed(() => {
   return { label: getOrderBoardLabel(props.order), detail: null };
 });
 const balanceDue = computed(() => Number(props.order.balance_due || 0));
+const demoReadOnly = useDemoReadOnly();
 </script>
 
 <template>
@@ -88,7 +90,7 @@ const balanceDue = computed(() => Number(props.order.balance_due || 0));
     </td>
     <td class="px-3 py-2.5 align-top text-xs">
       <p class="font-semibold text-gray-900 dark:text-white">{{ formatMoney(order.total_amount) }}</p>
-      <p class="mt-0.5 text-brand-700 dark:text-brand-300">Маржа: {{ formatMoney(order.margin) }}</p>
+      <p v-if="!demoReadOnly" class="mt-0.5 text-brand-700 dark:text-brand-300">Маржа: {{ formatMoney(Number(order.margin || 0)) }}</p>
     </td>
     <td class="px-3 py-2.5 align-top text-xs">
       <p class="font-semibold" :class="balanceDue > 0 ? 'text-amber-800 dark:text-amber-300' : 'text-gray-900 dark:text-white'">{{ formatMoney(balanceDue) }}</p>

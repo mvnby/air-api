@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ManagerOrderDetailResponse } from '../src/client';
 import type { ProductLine } from '../src/components/orders/order-editor-types';
 import { useOrderDrawerSaving } from '../src/composables/useOrderDrawerSaving';
+import { managerSession } from '../src/services/manager-session';
 
 const ordersMock = vi.hoisted(() => ({ patchManagerOrder: vi.fn() }));
 const preferenceMock = vi.hoisted(() => ({ current: null as any }));
@@ -138,6 +139,7 @@ beforeEach(() => {
 
 afterEach(() => {
   scope?.stop();
+  managerSession.auth.value = null;
   vi.useRealTimers();
   vi.clearAllMocks();
 });
@@ -184,6 +186,22 @@ describe('useOrderDrawerSaving', () => {
     expect(ordersMock.patchManagerOrder).not.toHaveBeenCalled();
     await expect(state.saving.beforeDocumentGenerate()).resolves.toBe(false);
     expect(state.localFormError.value).toContain('Сохраните изменения');
+  });
+
+  it('keeps demo edits local without flushing them on close', async () => {
+    vi.useFakeTimers();
+    managerSession.auth.value = { demo_read_only: true } as any;
+    const state = createSaving();
+    state.form.value = 'правка в демо';
+    await nextTick();
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(state.saving.enabled.value).toBe(false);
+    expect(ordersMock.patchManagerOrder).not.toHaveBeenCalled();
+    await expect(state.saving.beforeClose()).resolves.toBe(true);
+    await expect(state.saving.beforeDocumentGenerate()).resolves.toBe(false);
+    expect(state.localFormError.value).toBe('Демонстрационный режим: изменения не сохраняются');
+    expect(ordersMock.patchManagerOrder).not.toHaveBeenCalled();
   });
 
   it('ignores a late response after the order scope changes', async () => {

@@ -5,6 +5,7 @@ import type { ManagerOrderListItemResponse } from '../../client';
 import { BOARD_CARD_ACCENT_CLASSES, BOARD_COLUMN_TONE_CLASSES, formatDate, formatMoney, formatPhone, formatRelativeAge, getOrderBoardColumn, getOrderBoardLabel, getOrderExecutionLabel, getOrderExecutionStatus, getOrderNegotiationLabel, getOrderNegotiationStatus, isOverdue } from './order-utils';
 import OrderCardActionsMenu from './OrderCardActionsMenu.vue';
 import OrderTitleEditor from './OrderTitleEditor.vue';
+import { useDemoReadOnly } from '../../services/manager-demo';
 
 const props = defineProps<{
   order: ManagerOrderListItemResponse;
@@ -24,6 +25,7 @@ const emit = defineEmits<{
 }>();
 
 const isDragging = ref(false);
+const demoReadOnly = useDemoReadOnly();
 
 const onDragStart = () => {
   isDragging.value = true;
@@ -192,7 +194,7 @@ const paymentSummary = computed(() => {
 
         <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
           <p class="rounded-xl bg-gray-50 px-2 py-1.5 text-gray-700 dark:bg-slate-900/40 dark:text-slate-300">Сумма: <span class="font-semibold">{{ formatMoney(order.total_amount) }}</span></p>
-          <p class="rounded-xl bg-gray-50 px-2 py-1.5 text-gray-700 dark:bg-slate-900/40 dark:text-slate-300">Маржа: <span class="font-semibold">{{ formatMoney(order.margin) }}</span></p>
+          <p v-if="!demoReadOnly" class="rounded-xl bg-gray-50 px-2 py-1.5 text-gray-700 dark:bg-slate-900/40 dark:text-slate-300">Маржа: <span class="font-semibold">{{ formatMoney(Number(order.margin || 0)) }}</span></p>
           <p v-if="order.next_followup_date" class="rounded-xl bg-gray-50 px-2 py-1.5 text-gray-700 dark:bg-slate-900/40 dark:text-slate-300">Касание: <span class="font-semibold">{{ formatDate(order.next_followup_date) }}</span></p>
           <p v-if="order.measurement_date" class="rounded-xl bg-gray-50 px-2 py-1.5 text-gray-700 dark:bg-slate-900/40 dark:text-slate-300">Замер: <span class="font-semibold">{{ formatDate(order.measurement_date) }}</span></p>
           <p v-if="order.installation_date" class="rounded-xl bg-gray-50 px-2 py-1.5 text-gray-700 dark:bg-slate-900/40 dark:text-slate-300">Работы: <span class="font-semibold">{{ formatDate(order.installation_date) }}</span></p>

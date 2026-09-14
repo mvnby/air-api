@@ -52,5 +52,6 @@ class ManagerTenantAccessResolver:
                 tenant_id=candidate.tenant_id,
                 storefront_id=candidate.storefront_id,
                 is_system=candidate.is_system,
+                demo_read_only=candidate.demo_read_only,
             ),
         )

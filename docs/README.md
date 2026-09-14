@@ -40,6 +40,7 @@
 | Релиз API, HA, Patroni, PITR | [Деплой](deployment.md), [HA](api-ha-runbook.md), [quorum](postgres-quorum-runbook.md) |
 | Мониторинг и инфраструктурная безопасность | [VPS monitoring](api-vps-monitoring.md), [security](infrastructure-security-runbook.md) |
 | Выдача доступа tenant-менеджеру | [Provisioning](tenant-manager-provisioning.md) |
+| Read-only демо tenant | [Reviewed fixture и проверка](tenant-demo-setup.md) |
 | Исправление URL медиа | [Аудит и reviewed execute](product-media-url-backfill.md) |
 | OAuth и ключи интеграций | [Google OAuth](google-oauth-token-runbook.md), [ключи интеграций](integration-credential-keyring-runbook.md), [подпись витрины](storefront-signing-keyring-runbook.md) |
 | Communications rollout | [Профили и canary](communications-installation-estimate-rollout.md), [Telegram canary](communications-telegram-canary.md) |
