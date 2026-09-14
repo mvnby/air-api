@@ -85,6 +85,10 @@ PRODUCT_IMAGE_VARIANT_GLOBAL_MUTATION_PRODUCERS = frozenset(
     }
 )
 
+BRAND_LOGO_GLOBAL_MUTATION_PRODUCERS = frozenset(
+    {"brand_logo.cdn_backfill"}
+)
+
 MANAGER_BRAND_GLOBAL_MUTATION_PRODUCERS = frozenset(
     {
         "manager_brand.create_brand",
@@ -107,6 +111,7 @@ PUBLIC_CATALOG_MUTATION_PRODUCERS = frozenset(
         *FEATURE_DELETE_GLOBAL_MUTATION_PRODUCERS,
         *FEATURE_MIGRATION_GLOBAL_MUTATION_PRODUCERS,
         *PRODUCT_IMAGE_VARIANT_GLOBAL_MUTATION_PRODUCERS,
+        *BRAND_LOGO_GLOBAL_MUTATION_PRODUCERS,
         *MANAGER_BRAND_GLOBAL_MUTATION_PRODUCERS,
     }
 )
@@ -189,6 +194,9 @@ PUBLIC_CATALOG_MUTATION_ENTRYPOINTS: Mapping[str, frozenset[str]] = MappingProxy
         ),
         "ProductMediaUrlBackfillService.execute": frozenset(
             {"product_media_url.backfill"}
+        ),
+        "BrandLogoCdnBackfillService.execute": frozenset(
+            {"brand_logo.cdn_backfill"}
         ),
         "ManagerBrandService.list_brands": frozenset(),
         "ManagerBrandService.list_brand_features": frozenset(),
@@ -311,6 +319,10 @@ GLOBAL_CATALOG_MUTATION_CONTRACTS: Mapping[
         "product_media_url.backfill": _contract(
             "product_media_url.backfill",
             "product_media_url_backfill",
+        ),
+        "brand_logo.cdn_backfill": _contract(
+            "brand_logo.cdn_backfill",
+            "brand_logo_cdn_backfill",
         ),
         "manager_brand.create_brand": _contract(
             "manager_brand.create_brand",

@@ -58,6 +58,11 @@ Production server intentionally runs from Docker images only (no git checkout in
      manifest blocker, review the exact source hashes/locations, and run only
      the fresh plan's expiring `reviewed_execute_command`; see
      [product media URL backfill](product-media-url-backfill.md).
+   - Brand logo CDN plan (read-only default):
+     `python3 scripts/manage_brand_logo_cdn_backfill.py plan`
+   - Brand logo execution is primary-only and accepts only the expiring token
+     printed by a fresh ready plan. It is limited to the six exact reviewed
+     legacy logo URLs and records SVG/WEBP files in the media library.
    - Normalize:
      - `docker compose -f /opt/air-api/docker-compose.prod.yml exec -T app python3 scripts/normalize_legacy.py`
    - Backfill brand/series:
