@@ -75,7 +75,10 @@ async def test_create_manager_order_rolls_back_customer_order_and_proposal(
     async def fail_after_create(
         _session: AsyncSession,
         _order: Order,
+        *,
+        tenant_scope: TenantScope,
     ) -> None:
+        assert tenant_scope == TEST_TENANT_SCOPE
         raise RuntimeError("injected final-step failure")
 
     monkeypatch.setattr(

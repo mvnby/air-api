@@ -25,6 +25,7 @@ from services.public_write_idempotency_service import (
     PublicWriteIdempotencyService,
 )
 from services.tenant_scope_service import TenantScope
+from services.storefront_settings_service import StorefrontSettingsService
 
 logger = logging.getLogger(__name__)
 
@@ -105,10 +106,22 @@ class WebsiteOrderService:
                 f"Товар #{missing_product_ids[0]} недоступен для этой витрины",
                 code="product_not_available",
             )
+        if any(item.with_installation for item in payload.items) and not (
+            await StorefrontSettingsService.is_service_enabled(
+                session,
+                tenant_scope=tenant_scope,
+                service_kind="installation",
+            )
+        ):
+            raise InstallationPricingError(
+                "Монтаж недоступен для этой витрины",
+                code="installation_not_available",
+            )
         items = await InstallationPricingService.price_public_items(
             session,
             payload.items,
             catalog_snapshots=storefront_snapshots,
+            tenant_scope=tenant_scope,
         )
         pricing_snapshots = [
             {

@@ -23,6 +23,7 @@ async def finalize_order_update(context: OrderUpdateContext) -> None:
         await OrderService._maybe_add_default_repair_diagnostic(
             context.session,
             order,
+            tenant_scope=context.tenant_scope,
         )
 
     if order.status == OrderStatus.CLOSED and order.closing_result == "won":

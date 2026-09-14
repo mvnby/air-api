@@ -1,0 +1,6 @@
+{
+  "tenant_slug": "test1",
+  "storefront_slug": "main",
+  "site": {"display_name": "Test 1"},
+  "enabled_services": ["installation", "pre_install", "dismantling", "maintenance", "repair"]
+}

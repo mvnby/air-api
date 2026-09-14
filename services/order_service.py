@@ -24,6 +24,10 @@ from services.tenant_scope_service import (
     tenant_scope_clause,
 )
 from services.tenant_entity_access_service import TenantEntityAccessService
+from services.service_catalog_scope import (
+    canonical_service_catalog_clause,
+    service_catalog_scope_clause,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1287,7 +1291,10 @@ class OrderService:
                         #    We need to fetch options to know their prices.
                         
                         from services.image_service import ImageService # Just in case, or use DAO
-                        stmt_opts = select(Service).where(Service.slug.in_(options_slugs))
+                        stmt_opts = select(Service).where(
+                            Service.slug.in_(options_slugs),
+                            service_catalog_scope_clause(Service, tenant_scope),
+                        )
                         res_opts = await session.execute(stmt_opts)
                         db_options = res_opts.scalars().all()
                         
@@ -1391,7 +1398,10 @@ class OrderService:
                 service_links_to_add = []
                 
                 if options_slugs:
-                    stmt_opts = select(Service).where(Service.slug.in_(options_slugs))
+                    stmt_opts = select(Service).where(
+                        Service.slug.in_(options_slugs),
+                        service_catalog_scope_clause(Service, tenant_scope),
+                    )
                     res_opts = await session.execute(stmt_opts)
                     db_options = res_opts.scalars().all()
                     
@@ -2096,12 +2106,22 @@ class OrderService:
         session: AsyncSession,
         product_id: Optional[int] = None,
         service_id: Optional[int] = None,
+        tenant_scope: TenantScope | None = None,
     ) -> Dict[str, int]:
         if product_id is not None:
             product = await session.get(Product, product_id)
             return {"cost": int(getattr(product, "cost", 0) or 0)} if product else {"cost": 0}
         if service_id is not None:
-            service = await session.get(Service, service_id)
+            scope_clause = (
+                canonical_service_catalog_clause(Service)
+                if tenant_scope is None
+                else service_catalog_scope_clause(Service, tenant_scope)
+            )
+            service = (
+                await session.execute(
+                    select(Service).where(Service.id == service_id, scope_clause)
+                )
+            ).scalars().first()
             return {"cost": int(getattr(service, "base_price", 0) or 0)} if service else {"cost": 0}
         return {"cost": 0}
 
@@ -2118,7 +2138,11 @@ class OrderService:
         }
 
     @staticmethod
-    async def _build_service_line_cost_defaults(session: AsyncSession, service_lines: List[Any]) -> Dict[int, int]:
+    async def _build_service_line_cost_defaults(
+        session: AsyncSession,
+        service_lines: List[Any],
+        tenant_scope: TenantScope | None = None,
+    ) -> Dict[int, int]:
         service_ids = {
             int(line.service_id)
             for line in service_lines
@@ -2126,11 +2150,26 @@ class OrderService:
         }
         if not service_ids:
             return {}
-        result = await session.execute(select(Service.id, Service.base_price).where(Service.id.in_(service_ids)))
+        scope_clause = (
+            canonical_service_catalog_clause(Service)
+            if tenant_scope is None
+            else service_catalog_scope_clause(Service, tenant_scope)
+        )
+        result = await session.execute(
+            select(Service.id, Service.base_price).where(
+                Service.id.in_(service_ids),
+                scope_clause,
+            )
+        )
         return {int(service_id): int(base_price or 0) for service_id, base_price in result.all()}
 
     @staticmethod
-    async def _maybe_add_default_repair_diagnostic(session: AsyncSession, order: Order) -> None:
+    async def _maybe_add_default_repair_diagnostic(
+        session: AsyncSession,
+        order: Order,
+        *,
+        tenant_scope: TenantScope,
+    ) -> None:
         await session.refresh(order, attribute_names=["proposals", "service_links", "payments", "product_links", "installers"])
         selected_proposal = await OrderService.ensure_default_proposal(session, order)
         target_proposal_id = int(selected_proposal.id)
@@ -2146,6 +2185,7 @@ class OrderService:
             .where(
                 ServiceTariff.service_kind == "repair",
                 ServiceTariff.is_active == True,  # noqa: E712
+                service_catalog_scope_clause(ServiceTariff, tenant_scope),
                 or_(
                     ServiceTariff.short_name.ilike("%диагност%"),
                     ServiceTariff.selector_label.ilike("%диагност%"),

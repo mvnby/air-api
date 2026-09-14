@@ -10,6 +10,7 @@ from core.database import get_session
 from core.security import (
     AuthenticatedUser,
     get_current_auth_context,
+    require_manager_access,
     require_system_manager_tenant_scope,
     require_system_owner_access,
 )
@@ -55,6 +56,7 @@ from routers.manager_permission_policy import (
     PLATFORM_MANAGER_OPERATION_IDS,
     STOREFRONT_COLLECTION_OPERATION_IDS,
     SYSTEM_OWNER_OPERATION_IDS,
+    TENANT_SERVICE_OPERATION_IDS,
     require_storefront_collections_manage,
 )
 from services.settings_service import SettingsService
@@ -107,7 +109,6 @@ PURE_GLOBAL_MUTATION_ROUTERS = (
     manager_media_library.router,
     manager_media_processing.router,
     manager_media_cleanup.router,
-    manager_installation_rates.router,
     manager_installation_discounts.router,
     manager_tenant_offers.router,
 )
@@ -118,7 +119,14 @@ FULLY_SYSTEM_SCOPED_ROUTERS = (
     manager_media_processing.router,
     manager_media_cleanup.router,
 )
-SERVICE_DICTIONARY_MUTATION_OPERATION_IDS = frozenset(
+SERVICE_DICTIONARY_PLATFORM_MUTATION_OPERATION_IDS = frozenset(
+    {
+        "create_manager_repair_complaint_preset",
+        "update_manager_repair_complaint_preset",
+        "delete_manager_repair_complaint_preset",
+    }
+)
+SERVICE_DICTIONARY_TENANT_MUTATION_OPERATION_IDS = frozenset(
     {
         "create_manager_tariff",
         "update_manager_tariff",
@@ -126,29 +134,30 @@ SERVICE_DICTIONARY_MUTATION_OPERATION_IDS = frozenset(
         "create_manager_tariff_rule",
         "update_manager_tariff_rule",
         "delete_manager_tariff_rule",
-        "create_manager_repair_complaint_preset",
-        "update_manager_repair_complaint_preset",
-        "delete_manager_repair_complaint_preset",
+        "update_manager_installation_rate",
     }
 )
-SERVICE_DICTIONARY_TENANT_READ_OPERATION_IDS = frozenset(
+SERVICE_CATALOG_TENANT_READ_OPERATION_IDS = frozenset(
     {
         "list_manager_tariffs",
         "list_manager_quick_tariffs",
         "list_manager_tariff_rules",
         "list_manager_favorite_tariff_rules",
+        "list_manager_installation_rates",
+    }
+)
+SERVICE_DICTIONARY_TENANT_READ_OPERATION_IDS = (
+    SERVICE_CATALOG_TENANT_READ_OPERATION_IDS
+    | frozenset(
+        {
         "list_manager_repair_complaint_presets",
         "generate_manager_repair_act_ai_draft",
-    }
+        }
+    )
 )
 ADDITIONAL_PLATFORM_OPERATION_IDS = frozenset(
     {
         "get_manager_catalog_quality_report",
-        "create_manager_service_estimate",
-        "list_manager_service_estimates",
-        "get_manager_service_estimate",
-        "get_manager_service_estimate_order_lines",
-        "delete_manager_service_estimate",
         "create_manager_warranty_policy",
         "patch_manager_warranty_policy",
         "get_image_variant_candidates",
@@ -156,9 +165,18 @@ ADDITIONAL_PLATFORM_OPERATION_IDS = frozenset(
         "get_manager_yandex_business_quality_report",
     }
 )
-ADDITIONAL_TENANT_OPERATION_IDS = frozenset(
+SERVICE_ESTIMATE_TENANT_OPERATION_IDS = frozenset(
     {
         "calculate_manager_install_estimate",
+        "create_manager_service_estimate",
+        "list_manager_service_estimates",
+        "get_manager_service_estimate",
+        "get_manager_service_estimate_order_lines",
+        "delete_manager_service_estimate",
+    }
+)
+ADDITIONAL_TENANT_OPERATION_IDS = SERVICE_ESTIMATE_TENANT_OPERATION_IDS | frozenset(
+    {
         "list_manager_warranty_policies",
         "list_manager_equipment_warranty_coverages",
         "decide_manager_warranty_coverage",
@@ -253,17 +271,30 @@ def test_sensitive_supply_and_reusable_media_routers_are_fully_system_scoped():
 def test_service_dictionary_policy_gates_mutations_but_preserves_tenant_reads():
     routes = _api_routes(
         manager_tariffs.router,
+        manager_installation_rates.router,
         manager_repair_complaints.router,
     )
     by_operation_id = {route.operation_id: route for route in routes}
 
-    assert SERVICE_DICTIONARY_MUTATION_OPERATION_IDS <= by_operation_id.keys()
+    assert SERVICE_DICTIONARY_PLATFORM_MUTATION_OPERATION_IDS <= by_operation_id.keys()
+    assert SERVICE_DICTIONARY_TENANT_MUTATION_OPERATION_IDS <= by_operation_id.keys()
     assert SERVICE_DICTIONARY_TENANT_READ_OPERATION_IDS <= by_operation_id.keys()
-    for operation_id in SERVICE_DICTIONARY_MUTATION_OPERATION_IDS:
+    for operation_id in SERVICE_DICTIONARY_PLATFORM_MUTATION_OPERATION_IDS:
         assert operation_id in PLATFORM_MANAGER_OPERATION_IDS
         assert _has_direct_dependency(
             by_operation_id[operation_id],
             require_system_manager_tenant_scope,
+        )
+    tenant_service_operations = (
+        SERVICE_DICTIONARY_TENANT_MUTATION_OPERATION_IDS
+        | SERVICE_CATALOG_TENANT_READ_OPERATION_IDS
+    )
+    for operation_id in tenant_service_operations:
+        assert operation_id in TENANT_SERVICE_OPERATION_IDS
+        assert operation_id not in PLATFORM_MANAGER_OPERATION_IDS
+        assert _has_direct_dependency(
+            by_operation_id[operation_id],
+            require_manager_access,
         )
     for operation_id in SERVICE_DICTIONARY_TENANT_READ_OPERATION_IDS:
         assert operation_id not in PLATFORM_MANAGER_OPERATION_IDS
@@ -294,6 +325,12 @@ def test_additional_global_surfaces_are_gated_without_widening_exceptions():
             require_system_manager_tenant_scope,
         )
     for operation_id in ADDITIONAL_TENANT_OPERATION_IDS:
+        if operation_id in SERVICE_ESTIMATE_TENANT_OPERATION_IDS:
+            assert operation_id in TENANT_SERVICE_OPERATION_IDS
+            assert _has_direct_dependency(
+                by_operation_id[operation_id],
+                require_manager_access,
+            )
         assert operation_id not in PLATFORM_MANAGER_OPERATION_IDS
         assert not _has_direct_dependency(
             by_operation_id[operation_id],

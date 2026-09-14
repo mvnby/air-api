@@ -23,6 +23,7 @@ def test_non_system_manager_gets_only_tenant_work_capabilities():
         "catalog.master.read",
         "storefront.offers.read",
         "storefront.collections.manage",
+        "services.manage",
     ]
 
 
@@ -39,5 +40,7 @@ def test_non_system_owner_does_not_gain_platform_capabilities():
     assert "staff.manage" in capabilities
     assert "analytics.manage" in capabilities
     assert "documents.manage" in capabilities
+    assert "settings.manage" in capabilities
+    assert "services.manage" in capabilities
     assert "platform.manage" not in capabilities
     assert "infrastructure.manage" not in capabilities

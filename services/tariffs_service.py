@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
 from models import ServiceTariff, ServiceTariffRule
+from models.tenancy import TenantScope
 from schemas import (
     ManagerTariffCreatePayload,
     ManagerQuickTariffResponse,
@@ -18,6 +19,11 @@ from schemas import (
     ManagerTariffUpdatePayload,
 )
 from services.cooling_capacity import BTU_TO_KW_MAP
+from services.service_catalog_scope import (
+    canonical_service_catalog_clause,
+    service_catalog_scope_clause,
+    service_catalog_write_tenant_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +33,12 @@ class TariffsService:
         ManagerTariffServiceKind.installation.value,
         ManagerTariffServiceKind.pre_install.value,
     }
+
+    @staticmethod
+    def _scope_clause(tenant_scope: TenantScope | None):
+        if tenant_scope is None:
+            return canonical_service_catalog_clause(ServiceTariff)
+        return service_catalog_scope_clause(ServiceTariff, tenant_scope)
 
     @staticmethod
     def _format_number(value: float) -> str:
@@ -106,8 +118,19 @@ class TariffsService:
         session: AsyncSession,
         service_kind: Optional[ManagerTariffServiceKind] = None,
         include_inactive: bool = True,
+        tenant_scope: TenantScope | None = None,
     ) -> List[ServiceTariff]:
-        stmt = select(ServiceTariff).options(selectinload(ServiceTariff.rules))
+        rules_loader = selectinload(ServiceTariff.rules)
+        if not include_inactive:
+            rules_loader = selectinload(
+                ServiceTariff.rules.and_(ServiceTariffRule.is_active.is_(True))
+            )
+        stmt = (
+            select(ServiceTariff)
+            .where(TariffsService._scope_clause(tenant_scope))
+            .options(rules_loader)
+            .execution_options(populate_existing=True)
+        )
         if service_kind is not None:
             stmt = stmt.where(ServiceTariff.service_kind == service_kind.value)
         if not include_inactive:
@@ -120,13 +143,7 @@ class TariffsService:
             ServiceTariff.id,
         )
         res = await session.execute(stmt)
-        tariffs = list(res.scalars().all())
-        for tariff in tariffs:
-            tariff.rules = sorted(
-                [rule for rule in tariff.rules if include_inactive or rule.is_active],
-                key=lambda item: (item.sort_order, item.id or 0),
-            )
-        return tariffs
+        return list(res.scalars().all())
 
     @staticmethod
     async def list_quick_add_tariffs(
@@ -134,8 +151,12 @@ class TariffsService:
         service_kind: Optional[ManagerTariffServiceKind] = None,
         q: str = "",
         limit: int = 10,
+        tenant_scope: TenantScope | None = None,
     ) -> List[ManagerQuickTariffResponse]:
-        stmt = select(ServiceTariff).where(ServiceTariff.is_active == True)  # noqa: E712
+        stmt = select(ServiceTariff).where(  # noqa: E712
+            TariffsService._scope_clause(tenant_scope),
+            ServiceTariff.is_active == True,
+        )
         if service_kind is not None:
             kind_value = service_kind.value if hasattr(service_kind, "value") else str(service_kind)
             stmt = stmt.where(ServiceTariff.service_kind == kind_value)
@@ -176,28 +197,34 @@ class TariffsService:
         return [TariffsService._map_quick_tariff(tariff) for tariff in result.scalars().all()]
 
     @staticmethod
-    async def get_tariff_by_id(session: AsyncSession, tariff_id: int) -> ServiceTariff:
+    async def get_tariff_by_id(
+        session: AsyncSession,
+        tariff_id: int,
+        tenant_scope: TenantScope | None = None,
+        *,
+        require_active: bool = False,
+    ) -> ServiceTariff:
         stmt = (
             select(ServiceTariff)
             .where(ServiceTariff.id == tariff_id)
+            .where(TariffsService._scope_clause(tenant_scope))
             .options(selectinload(ServiceTariff.rules))
             .execution_options(populate_existing=True)
             .limit(1)
         )
+        if require_active:
+            stmt = stmt.where(ServiceTariff.is_active == True)  # noqa: E712
         tariff = (await session.execute(stmt)).scalars().first()
         if not tariff:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tariff not found")
-        # Keep rules in sync even when the same session already has a cached tariff instance.
-        rules_stmt = (
-            select(ServiceTariffRule)
-            .where(ServiceTariffRule.tariff_id == tariff_id)
-            .order_by(ServiceTariffRule.sort_order, ServiceTariffRule.id)
-        )
-        tariff.rules = list((await session.execute(rules_stmt)).scalars().all())
         return tariff
 
     @staticmethod
-    async def create_tariff(session: AsyncSession, payload: ManagerTariffCreatePayload) -> ServiceTariff:
+    async def create_tariff(
+        session: AsyncSession,
+        payload: ManagerTariffCreatePayload,
+        tenant_scope: TenantScope | None = None,
+    ) -> ServiceTariff:
         included_route_meters = (
             float(payload.included_route_meters or 0)
             if TariffsService.supports_route_meters(payload.service_kind)
@@ -206,6 +233,11 @@ class TariffsService:
         short_name = payload.short_name.strip()
         full_description = (payload.full_description or "").strip() or None
         tariff = ServiceTariff(
+            tenant_id=(
+                None
+                if tenant_scope is None
+                else service_catalog_write_tenant_id(tenant_scope)
+            ),
             service_kind=payload.service_kind.value,
             short_name=short_name,
             full_description=full_description,
@@ -221,15 +253,20 @@ class TariffsService:
         )
         session.add(tariff)
         await session.commit()
-        return await TariffsService.get_tariff_by_id(session, int(tariff.id))
+        return await TariffsService.get_tariff_by_id(
+            session, int(tariff.id), tenant_scope
+        )
 
     @staticmethod
     async def update_tariff(
         session: AsyncSession,
         tariff_id: int,
         payload: ManagerTariffUpdatePayload,
+        tenant_scope: TenantScope | None = None,
     ) -> ServiceTariff:
-        tariff = await TariffsService.get_tariff_by_id(session, tariff_id)
+        tariff = await TariffsService.get_tariff_by_id(
+            session, tariff_id, tenant_scope
+        )
         update_data = payload.model_dump(exclude_unset=True)
         next_service_kind = update_data.get("service_kind", tariff.service_kind)
         next_service_kind_value = (
@@ -261,11 +298,19 @@ class TariffsService:
 
         session.add(tariff)
         await session.commit()
-        return await TariffsService.get_tariff_by_id(session, tariff_id)
+        return await TariffsService.get_tariff_by_id(
+            session, tariff_id, tenant_scope
+        )
 
     @staticmethod
-    async def delete_tariff(session: AsyncSession, tariff_id: int) -> None:
-        tariff = await TariffsService.get_tariff_by_id(session, tariff_id)
+    async def delete_tariff(
+        session: AsyncSession,
+        tariff_id: int,
+        tenant_scope: TenantScope | None = None,
+    ) -> None:
+        tariff = await TariffsService.get_tariff_by_id(
+            session, tariff_id, tenant_scope
+        )
         await session.delete(tariff)
         await session.commit()
 
@@ -274,8 +319,9 @@ class TariffsService:
         session: AsyncSession,
         tariff_id: int,
         include_inactive: bool = True,
+        tenant_scope: TenantScope | None = None,
     ) -> List[ServiceTariffRule]:
-        await TariffsService.get_tariff_by_id(session, tariff_id)
+        await TariffsService.get_tariff_by_id(session, tariff_id, tenant_scope)
         stmt = select(ServiceTariffRule).where(ServiceTariffRule.tariff_id == tariff_id)
         if not include_inactive:
             stmt = stmt.where(ServiceTariffRule.is_active == True)  # noqa: E712
@@ -288,12 +334,14 @@ class TariffsService:
         service_kind: ManagerTariffServiceKind,
         include_inactive: bool = False,
         exclude_tariff_id: Optional[int] = None,
+        tenant_scope: TenantScope | None = None,
     ) -> List[ServiceTariffRule]:
         stmt = (
             select(ServiceTariffRule)
             .join(ServiceTariff)
             .where(ServiceTariffRule.is_favorite == True)  # noqa: E712
             .where(ServiceTariff.service_kind == service_kind.value)
+            .where(TariffsService._scope_clause(tenant_scope))
         )
         if not include_inactive:
             stmt = stmt.where(ServiceTariffRule.is_active == True)  # noqa: E712
@@ -308,7 +356,13 @@ class TariffsService:
         return list((await session.execute(stmt)).scalars().all())
 
     @staticmethod
-    async def get_tariff_rule_by_id(session: AsyncSession, tariff_id: int, rule_id: int) -> ServiceTariffRule:
+    async def get_tariff_rule_by_id(
+        session: AsyncSession,
+        tariff_id: int,
+        rule_id: int,
+        tenant_scope: TenantScope | None = None,
+    ) -> ServiceTariffRule:
+        await TariffsService.get_tariff_by_id(session, tariff_id, tenant_scope)
         stmt = (
             select(ServiceTariffRule)
             .where(ServiceTariffRule.id == rule_id)
@@ -325,8 +379,9 @@ class TariffsService:
         session: AsyncSession,
         tariff_id: int,
         payload: ManagerTariffRuleCreatePayload,
+        tenant_scope: TenantScope | None = None,
     ) -> ServiceTariffRule:
-        await TariffsService.get_tariff_by_id(session, tariff_id)
+        await TariffsService.get_tariff_by_id(session, tariff_id, tenant_scope)
         rule_type = payload.rule_type.value
         name = payload.name.strip()
         line_template = (payload.line_template or "{name}").strip()
@@ -356,7 +411,9 @@ class TariffsService:
                 existing.is_favorite = True
                 session.add(existing)
                 await session.commit()
-                return await TariffsService.get_tariff_rule_by_id(session, tariff_id, int(existing.id))
+                return await TariffsService.get_tariff_rule_by_id(
+                    session, tariff_id, int(existing.id), tenant_scope
+                )
             return existing
 
         rule = ServiceTariffRule(
@@ -374,7 +431,9 @@ class TariffsService:
         )
         session.add(rule)
         await session.commit()
-        return await TariffsService.get_tariff_rule_by_id(session, tariff_id, int(rule.id))
+        return await TariffsService.get_tariff_rule_by_id(
+            session, tariff_id, int(rule.id), tenant_scope
+        )
 
     @staticmethod
     async def update_tariff_rule(
@@ -382,8 +441,11 @@ class TariffsService:
         tariff_id: int,
         rule_id: int,
         payload: ManagerTariffRuleUpdatePayload,
+        tenant_scope: TenantScope | None = None,
     ) -> ServiceTariffRule:
-        rule = await TariffsService.get_tariff_rule_by_id(session, tariff_id, rule_id)
+        rule = await TariffsService.get_tariff_rule_by_id(
+            session, tariff_id, rule_id, tenant_scope
+        )
         update_data = payload.model_dump(exclude_unset=True)
         for key, value in update_data.items():
             if key == "rule_type" and value is not None:
@@ -396,10 +458,19 @@ class TariffsService:
 
         session.add(rule)
         await session.commit()
-        return await TariffsService.get_tariff_rule_by_id(session, tariff_id, rule_id)
+        return await TariffsService.get_tariff_rule_by_id(
+            session, tariff_id, rule_id, tenant_scope
+        )
 
     @staticmethod
-    async def delete_tariff_rule(session: AsyncSession, tariff_id: int, rule_id: int) -> None:
-        rule = await TariffsService.get_tariff_rule_by_id(session, tariff_id, rule_id)
+    async def delete_tariff_rule(
+        session: AsyncSession,
+        tariff_id: int,
+        rule_id: int,
+        tenant_scope: TenantScope | None = None,
+    ) -> None:
+        rule = await TariffsService.get_tariff_rule_by_id(
+            session, tariff_id, rule_id, tenant_scope
+        )
         await session.delete(rule)
         await session.commit()

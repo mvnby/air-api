@@ -1,0 +1,6 @@
+{
+  "tenant_slug": "polotsk",
+  "storefront_slug": "main",
+  "site": {"display_name": "ДВИНА КЛИМАТ", "city": "Полоцк", "phone": "+375 (29) 714-62-93"},
+  "enabled_services": ["installation", "pre_install", "dismantling", "maintenance", "repair"]
+}

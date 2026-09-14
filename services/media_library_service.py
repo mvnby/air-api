@@ -34,6 +34,7 @@ from models import (
     ProductSeries,
     Service,
 )
+from services.service_catalog_scope import canonical_service_catalog_clause
 from services.general_media_storage_service import get_general_media_storage
 from services.media_library_read_service import MediaLibraryReadService
 from services.product_image_processing_contract import ProductImageVariantType
@@ -970,7 +971,14 @@ class MediaLibraryService:
                     )
                 )
 
-        services = (await session.execute(select(Service).where(Service.image.is_not(None)))).scalars().all()
+        services = (
+            await session.execute(
+                select(Service).where(
+                    Service.image.is_not(None),
+                    canonical_service_catalog_clause(Service),
+                )
+            )
+        ).scalars().all()
         for service in services:
             if not service.image:
                 continue

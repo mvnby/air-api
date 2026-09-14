@@ -5,9 +5,11 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
 from crud.service_estimate import ServiceEstimateDAO
 from models import Customer, ServiceEstimate, ServiceEstimateItem, ServiceTariff, ServiceTariffRule
+from models.tenancy import TenantScope
 from schemas import (
     ManagerActionMessageResponse,
     ManagerEstimateLineResponse,
@@ -26,6 +28,7 @@ from schemas import (
 )
 from services.tariffs_service import TariffsService
 from services.cooling_capacity import BTU_TO_KW_MAP
+from services.service_catalog_scope import service_catalog_write_tenant_id
 
 
 class ServiceEstimateService:
@@ -135,9 +138,15 @@ class ServiceEstimateService:
 
     @staticmethod
     async def _resolve_tariff(
-        session: AsyncSession, payload: ManagerInstallEstimateCalculatePayload
+        session: AsyncSession,
+        payload: ManagerInstallEstimateCalculatePayload,
+        tenant_scope: TenantScope | None = None,
     ) -> ServiceTariff:
-        return await TariffsService.get_tariff_by_id(session, payload.tariff_id)
+        return await TariffsService.get_tariff_by_id(
+            session,
+            payload.tariff_id,
+            tenant_scope,
+        )
 
     @staticmethod
     def _rule_inputs_map(payload: ManagerInstallEstimateCalculatePayload) -> Dict[int, float]:
@@ -269,9 +278,13 @@ class ServiceEstimateService:
 
     @staticmethod
     async def calculate_install_estimate(
-        session: AsyncSession, payload: ManagerInstallEstimateCalculatePayload
+        session: AsyncSession,
+        payload: ManagerInstallEstimateCalculatePayload,
+        tenant_scope: TenantScope | None = None,
     ) -> ManagerInstallEstimateResponse:
-        tariff = await ServiceEstimateService._resolve_tariff(session, payload)
+        tariff = await ServiceEstimateService._resolve_tariff(
+            session, payload, tenant_scope
+        )
         lines = await ServiceEstimateService._build_lines(payload, tariff)
         subtotal = ServiceEstimateService._round_money(sum(float(line.line_total or 0.0) for line in lines))
         discount_amount = ServiceEstimateService._round_money(min(float(payload.discount_amount or 0.0), subtotal))
@@ -347,18 +360,33 @@ class ServiceEstimateService:
         session: AsyncSession,
         payload: ManagerInstallEstimateSavePayload,
         created_by: Optional[str],
+        tenant_scope: TenantScope | None = None,
     ) -> ManagerServiceEstimateResponse:
         if payload.customer_id is not None:
-            customer = await session.get(Customer, payload.customer_id)
+            customer_stmt = select(Customer).where(
+                Customer.id == payload.customer_id
+            )
+            if tenant_scope is not None:
+                customer_stmt = customer_stmt.where(
+                    Customer.tenant_id == tenant_scope.tenant_id
+                )
+            customer = (await session.execute(customer_stmt)).scalars().first()
             if customer is None:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Customer #{payload.customer_id} not found",
                 )
 
-        calculation = await ServiceEstimateService.calculate_install_estimate(session, payload)
+        calculation = await ServiceEstimateService.calculate_install_estimate(
+            session, payload, tenant_scope
+        )
         default_title = f"Смета: {calculation.tariff.short_name}"
         estimate = ServiceEstimate(
+            tenant_id=(
+                None
+                if tenant_scope is None
+                else service_catalog_write_tenant_id(tenant_scope)
+            ),
             customer_id=payload.customer_id,
             tariff_id=calculation.tariff.id,
             title=(payload.title or default_title).strip(),
@@ -393,8 +421,14 @@ class ServiceEstimateService:
         return ServiceEstimateService._map_estimate_to_response(saved)
 
     @staticmethod
-    async def get_estimate_by_id(session: AsyncSession, estimate_id: int) -> ManagerServiceEstimateResponse:
-        estimate = await ServiceEstimateDAO.get_by_id(session, estimate_id)
+    async def get_estimate_by_id(
+        session: AsyncSession,
+        estimate_id: int,
+        tenant_scope: TenantScope | None = None,
+    ) -> ManagerServiceEstimateResponse:
+        estimate = await ServiceEstimateDAO.get_by_id(
+            session, estimate_id, tenant_scope
+        )
         if estimate is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -408,6 +442,7 @@ class ServiceEstimateService:
         page: int = 1,
         limit: int = 20,
         customer_id: Optional[int] = None,
+        tenant_scope: TenantScope | None = None,
     ) -> ManagerServiceEstimateListResponse:
         safe_page = max(1, page)
         safe_limit = max(1, min(limit, 100))
@@ -416,6 +451,7 @@ class ServiceEstimateService:
             page=safe_page,
             limit=safe_limit,
             customer_id=customer_id,
+            tenant_scope=tenant_scope,
         )
         return ManagerServiceEstimateListResponse(
             items=[ServiceEstimateService._map_estimate_to_response(item) for item in items],
@@ -508,8 +544,11 @@ class ServiceEstimateService:
         estimate_id: int,
         mode: ManagerServiceEstimateOrderLinesMode = ManagerServiceEstimateOrderLinesMode.detailed,
         description_mode: ManagerServiceDescriptionMode = ManagerServiceDescriptionMode.short,
+        tenant_scope: TenantScope | None = None,
     ) -> ManagerServiceEstimateOrderLinesResponse:
-        estimate = await ServiceEstimateDAO.get_by_id(session, estimate_id)
+        estimate = await ServiceEstimateDAO.get_by_id(
+            session, estimate_id, tenant_scope
+        )
         if estimate is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -557,8 +596,16 @@ class ServiceEstimateService:
         )
 
     @staticmethod
-    async def delete_estimate(session: AsyncSession, estimate_id: int) -> ManagerActionMessageResponse:
-        deleted = await ServiceEstimateDAO.delete_by_id(session=session, estimate_id=estimate_id)
+    async def delete_estimate(
+        session: AsyncSession,
+        estimate_id: int,
+        tenant_scope: TenantScope | None = None,
+    ) -> ManagerActionMessageResponse:
+        deleted = await ServiceEstimateDAO.delete_by_id(
+            session=session,
+            estimate_id=estimate_id,
+            tenant_scope=tenant_scope,
+        )
         if not deleted:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

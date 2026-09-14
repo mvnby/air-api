@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "tenant": {
+    "slug": "test1",
+    "display_name": "Test 1",
+    "kind": "independent_seller",
+    "is_system": false,
+    "lifecycle": "managed"
+  },
+  "storefront": {
+    "slug": "main",
+    "display_name": "Test 1",
+    "city": null,
+    "default_locale": "ru-BY",
+    "currency": "BYN",
+    "is_default": true
+  },
+  "allowed_hostnames": ["test1.mvn.by"],
+  "offers": []
+}

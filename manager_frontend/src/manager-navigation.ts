@@ -81,9 +81,9 @@ export const navSections: NavSection[] = [
     label: 'Услуги',
     items: [
       { path: '/manager/equipment', label: 'Оборудование', icon: Boxes, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.crmManage },
-      { path: '/manager/installation-rates', label: 'Публичный монтаж', icon: Wallet, match: 'exact', requiredCapability: MANAGER_CAPABILITY.platformManage },
-      { path: '/manager/tariffs', label: 'Тарифы смет', icon: Wallet, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.platformManage },
-      { path: '/manager/service-estimates', label: 'Сметы услуг', icon: Calculator, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.platformManage },
+      { path: '/manager/installation-rates', label: 'Публичный монтаж', icon: Wallet, match: 'exact', requiredCapability: MANAGER_CAPABILITY.servicesManage },
+      { path: '/manager/tariffs', label: 'Тарифы смет', icon: Wallet, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.servicesManage },
+      { path: '/manager/service-estimates', label: 'Сметы услуг', icon: Calculator, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.servicesManage },
     ],
   },
   {
@@ -111,8 +111,9 @@ export const navSections: NavSection[] = [
     id: 'system',
     label: 'Системное',
     items: [
-      { path: '/manager/settings', label: 'Настройки сайта', icon: Settings, match: 'exact', requiredCapability: MANAGER_CAPABILITY.infrastructureManage },
+      { path: '/manager/settings', label: 'Настройки', icon: Settings, match: 'exact', requiredCapability: MANAGER_CAPABILITY.settingsManage },
       { path: '/manager/settings/documents', label: 'Документы CRM', icon: ReceiptText, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.documentsManage },
+      { path: '/manager/settings/platform', label: 'Платформа', icon: Settings, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.infrastructureManage },
       { path: '/manager/settings/backup', label: 'DR / Бэкапы', icon: Database, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.infrastructureManage },
     ],
   },

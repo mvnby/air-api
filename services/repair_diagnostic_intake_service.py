@@ -182,7 +182,11 @@ class RepairDiagnosticIntakeService:
             repair_meta,
             default_status=OrderService.REPAIR_DEFAULT_STATUS,
         )
-        await OrderService._maybe_add_default_repair_diagnostic(session, order)
+        await OrderService._maybe_add_default_repair_diagnostic(
+            session,
+            order,
+            tenant_scope=tenant_scope,
+        )
         session.add(order)
         await session.flush()
         await RepairDiagnosticAiJobService.enqueue(

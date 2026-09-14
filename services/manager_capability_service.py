@@ -15,6 +15,8 @@ class ManagerCapabilityService:
     INFRASTRUCTURE_MANAGE = "infrastructure.manage"
     ANALYTICS_MANAGE = "analytics.manage"
     DOCUMENTS_MANAGE = "documents.manage"
+    SETTINGS_MANAGE = "settings.manage"
+    SERVICES_MANAGE = "services.manage"
 
     ORDERED_CAPABILITIES = (
         CRM_MANAGE,
@@ -26,6 +28,8 @@ class ManagerCapabilityService:
         INFRASTRUCTURE_MANAGE,
         ANALYTICS_MANAGE,
         DOCUMENTS_MANAGE,
+        SETTINGS_MANAGE,
+        SERVICES_MANAGE,
     )
 
     @classmethod
@@ -39,6 +43,7 @@ class ManagerCapabilityService:
                     cls.CATALOG_MASTER_READ,
                     cls.STOREFRONT_OFFERS_READ,
                     cls.STOREFRONT_COLLECTIONS_MANAGE,
+                    cls.SERVICES_MANAGE,
                 }
             )
         if auth.is_system_tenant:
@@ -47,6 +52,7 @@ class ManagerCapabilityService:
             capabilities.add(cls.STAFF_MANAGE)
             capabilities.add(cls.ANALYTICS_MANAGE)
             capabilities.add(cls.DOCUMENTS_MANAGE)
+            capabilities.add(cls.SETTINGS_MANAGE)
             if auth.is_system_tenant:
                 capabilities.add(cls.INFRASTRUCTURE_MANAGE)
         return [

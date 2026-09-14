@@ -33,6 +33,7 @@ from .feature import (
 )
 from .bot_fsm import BotFsmState, BotRuntimeLease
 from .bot_voice import BotVoiceTranscriptionAudit
+from .storefront_settings import StorefrontSettings
 from .auth_security import AuthLoginThrottle
 from .analytics_connection import AnalyticsConnection
 from .order_workspace_usage import OrderWorkspaceUsageDaily
@@ -244,6 +245,7 @@ __all__ = [
     "TenantMembership",
     "TenantOffer",
     "Storefront",
+    "StorefrontSettings",
     "StorefrontDomain",
     "StorageReconciliationCursor",
     "Payment",

@@ -25,7 +25,6 @@ from models import (
     Payment,
     PaymentCurrency,
     PaymentType,
-    Service,
 )
 from models.common import EquipmentStatus
 from schemas import (
@@ -44,6 +43,7 @@ from schemas import (
     ManagerOrderTransferWorkStage,
 )
 from services.order_product_transfer_service import OrderProductTransferService
+from services.order_transfer_service_resolver import OrderTransferServiceResolver
 from services.order_service import OrderService
 from services.customer_party import signing_mode_for_customer_type
 from services.tenant_entity_access_service import TenantEntityAccessService
@@ -349,22 +349,6 @@ class OrderTransferService:
         return None, "will_create"
 
     @staticmethod
-    async def _find_service(session: AsyncSession, service_ref: Optional[ManagerOrderTransferServiceRef]) -> Optional[Service]:
-        if not service_ref:
-            return None
-        slug = OrderTransferService._optional_clean(service_ref.slug)
-        if slug:
-            result = await session.execute(select(Service).where(Service.slug == slug).limit(1))
-            service = result.scalars().first()
-            if service:
-                return service
-        title = OrderTransferService._optional_clean(service_ref.title)
-        if title:
-            result = await session.execute(select(Service).where(func.lower(Service.title) == title.lower()).limit(1))
-            return result.scalars().first()
-        return None
-
-    @staticmethod
     async def preview_import(
         session: AsyncSession,
         payload: ManagerOrderImportPreviewRequest,
@@ -633,7 +617,11 @@ class OrderTransferService:
                     )
 
                 for service_line in proposal_data.service_lines:
-                    service = await OrderTransferService._find_service(session, service_line.service)
+                    service = await OrderTransferServiceResolver.find_service(
+                        session,
+                        service_line.service,
+                        tenant_scope=tenant_scope,
+                    )
                     session.add(
                         OrderServiceLink(
                             order_id=int(order.id),

@@ -44,11 +44,11 @@ const currentStorefront = computed(() => {
 const canManageAnalytics = computed(() => (
   hasManagerCapability(props.auth, MANAGER_CAPABILITY.analyticsManage)
 ));
-const canManageInfrastructure = computed(() => (
-  hasManagerCapability(props.auth, MANAGER_CAPABILITY.infrastructureManage)
-));
 const canManageDocuments = computed(() => (
   hasManagerCapability(props.auth, MANAGER_CAPABILITY.documentsManage)
+));
+const canManageSettings = computed(() => (
+  hasManagerCapability(props.auth, MANAGER_CAPABILITY.settingsManage)
 ));
 
 const navigate = (path: string) => {
@@ -158,7 +158,7 @@ onBeforeUnmount(() => {
         Документы CRM
       </button>
       <button
-        v-if="canManageInfrastructure"
+        v-if="canManageSettings"
         class="account-menu-item text-gray-700 hover:bg-gray-50 hover:text-gray-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-white"
         type="button"
         role="menuitem"

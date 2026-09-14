@@ -26,6 +26,7 @@
 | Публичная витрина | [Граница отдельного репозитория](web-service-extraction.md); UI, сборка и деплой — в `mvnby/mvn-web` |
 | Контекст витрины, tenant и цены | [Подписанный контекст](storefront-context-contract.md), [tenant scope](tenant-scope-rollout.md), [предложения](tenant-offer-contract.md), [селектор Manager](manager-storefront-selector-contract.md) |
 | Подключение витрины и общий каталог | [Onboarding](storefront-onboarding.md), [системные grants](shared-catalog-grant.md) |
+| Настройки партнёра и копирование услуг | [Настройки сайта](partner-site-settings.md) |
 | Фид Яндекс Бизнеса | [Контракт и проверка фида](yandex-business-feed.md) |
 
 ## Эксплуатация
