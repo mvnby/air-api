@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "name": "polotsk-presentation-v2",
+  "public_catalog_url": "https://api.mvn.by/api/v1/products",
+  "expected_public_product_count": 1239,
+  "expected_public_snapshot_sha256": "b0dc0931c0fb206c25d77ed8cab7b581012d0a96a6de6c00ae66e276fff5902d",
+  "expected_db_snapshot_sha256": "64f3d72915bad99bb09d6338e6454b65e605d46fde7197214013be62a50b866d",
+  "sources": [
+    {
+      "old_url": "https://www.lg.com/content/dam/channel/wcms/nl/images/air-conditioning/h09s1d_ns1_eebn_nl_c/gallery/large02.jpg",
+      "action": "blocked",
+      "expected_product_ids": [
+        126,
+        127,
+        128
+      ],
+      "blocked_reason": "external_rights_review_required"
+    },
+    {
+      "old_url": "https://cdn.mvn.by/library/original/22c0464f2ef5490f701ed85c066eecefdfe7a0326136dc00773505deb464f9b0.webp",
+      "action": "ingest",
+      "expected_product_ids": [
+        1429,
+        1430,
+        1431
+      ]
+    }
+  ]
+}

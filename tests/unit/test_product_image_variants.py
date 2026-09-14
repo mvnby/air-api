@@ -302,13 +302,13 @@ async def test_repeated_set_main_image_does_not_repeat_revision_or_outbox(
         title="Revision media product",
         slug="revision-media-product",
         price=1000,
-        main_image="/media/products/old.webp",
+        main_image="/media/products/shared/old.webp",
     )
     sqlite_session.add(product)
     await sqlite_session.flush()
     image = ProductImage(
         product_id=product.id,
-        url="/media/products/new.webp",
+        url="/media/products/shared/new.webp",
     )
     sqlite_session.add(image)
     await sqlite_session.commit()

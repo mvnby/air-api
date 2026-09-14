@@ -27,7 +27,32 @@ or `https://cdn.mvn.by/products/variants/original/` are accepted.
 - Supplier mappings, cost, prices, offers, grants, and publication state are
   outside this command's mutation surface.
 
-## Polotsk presentation snapshot
+## Текущий статус 2026-09-14
+
+Публичный read-only аудит показал 1 239 товаров и шесть товаров / 18 полей вне
+контракта. Три LG (`126`–`128`) по-прежнему используют один внешний источник и
+ждут проверки прав. Три новых TCL (`1429`–`1431`) используют существующий файл
+из `library/original`, но товарная витрина принимает его только после переноса
+в `products/shared` или `products/variants/original`.
+
+Manifest `polotsk-presentation-v1.json` ожидает 1 235 товаров, не содержит URL
+новых TCL и больше не совпадает с публичным snapshot. Он непригоден для execute.
+Текущий `polotsk-presentation-v2.json` фиксирует новый публичный snapshot и
+ограничивает исполняемую часть тремя TCL. Перед исправлением обязателен свежий
+database-aware plan на primary; старый токен или вручную изменённую команду
+использовать нельзя.
+
+Текущая read-only команда:
+
+```bash
+python3 scripts/manage_product_media_url_backfill.py plan \
+  --manifest config/product_media_url_backfills/polotsk-presentation-v2.json
+```
+
+Готовый план должен показывать ровно три исполняемых TCL и три отложенных LG,
+без неизвестных URL и без drift публичного или DB snapshot.
+
+## Polotsk presentation v1 snapshot (история)
 
 Manifest:
 `config/product_media_url_backfills/polotsk-presentation-v1.json`

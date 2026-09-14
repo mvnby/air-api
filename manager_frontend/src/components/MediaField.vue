@@ -36,6 +36,7 @@ const emit = defineEmits<{
     'update:modelValue': [value: string];
     uploaded: [url: string];
     picked: [url: string];
+    selected: [asset: ManagerMediaAssetResponse | null];
 }>();
 
 type ClipboardImageItem = {
@@ -87,9 +88,10 @@ const chooseFile = () => {
     fileInput.value?.click();
 };
 
-const pickedUrl = (url: string) => {
+const pickedUrl = (url: string, asset?: ManagerMediaAssetResponse) => {
     value.value = url;
     emit('picked', url);
+    if (asset) emit('selected', asset);
 };
 
 const rememberUploadedAsset = (asset: ManagerMediaAssetResponse) => {
@@ -108,7 +110,7 @@ const uploadFile = async (file: File) => {
     if (!uploaded?.url) {
         throw new Error('Загрузка завершилась без URL файла');
     }
-    pickedUrl(uploaded.url);
+    pickedUrl(uploaded.url, uploaded);
     emit('uploaded', uploaded.url);
     rememberUploadedAsset(uploaded);
 };
@@ -141,6 +143,7 @@ const onFileChange = async (event: Event) => {
 
 const clearValue = () => {
     value.value = '';
+    emit('selected', null);
     error.value = '';
 };
 
@@ -153,10 +156,10 @@ const loadAssets = async (page = pickerPage.value) => {
             page: pickerPage.value,
             limit: 24,
             q: pickerQuery.value.trim() || null,
-            kind: null,
-            status: null,
+            kind: props.kind,
+            status: 'ready',
         });
-        assets.value = response.items || [];
+        assets.value = (response.items || []).filter((asset) => asset.variant_type === 'original');
         pickerTotal.value = response.meta.total;
         pickerPages.value = response.meta.pages || 1;
     } catch (err) {
@@ -174,7 +177,7 @@ const openPicker = async () => {
 };
 
 const selectAsset = (asset: ManagerMediaAssetResponse) => {
-    pickedUrl(asset.url);
+    pickedUrl(asset.url, asset);
     pickerOpen.value = false;
 };
 
@@ -200,7 +203,7 @@ const uploadFromUrl = async (urlValue = remoteUrl.value.trim() || normalizedUrl.
         if (!uploaded?.url) {
             throw new Error('Загрузка завершилась без URL файла');
         }
-        pickedUrl(uploaded.url);
+        pickedUrl(uploaded.url, uploaded);
         emit('uploaded', uploaded.url);
         remoteUrl.value = '';
         rememberUploadedAsset(uploaded);
@@ -313,9 +316,10 @@ const pasteFromClipboard = async () => {
                     <input
                         v-model="value"
                         type="text"
+                        readonly
                         :placeholder="placeholder"
-                        class="w-full rounded-lg border border-gray-200 bg-slate-100 px-3 py-2 pr-10 dark:border-slate-700 dark:bg-slate-900"
-                        @keydown.enter.prevent="canImportCurrentUrl ? uploadFromUrl() : undefined"
+                        title="URL назначается через медиатеку"
+                        class="w-full cursor-default rounded-lg border border-gray-200 bg-slate-100 px-3 py-2 pr-10 text-gray-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
                     />
                     <button
                         v-if="canImportCurrentUrl"

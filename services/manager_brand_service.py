@@ -18,6 +18,7 @@ from models import (
     TagGroup,
 )
 from services.catalog_invalidation_commit_service import CatalogInvalidationCommitService
+from services.catalog_media_policy import CatalogMediaKind, CatalogMediaPolicy
 from services.manager_brand_mutation_state import (
     snapshot_brand,
     snapshot_brand_feature,
@@ -93,6 +94,11 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
             session.add(category)
             await session.flush()
             category_id = int(category.id)
+        image_url = ManagerBrandService._require_content_media(
+            payload.get("image_url"),
+            field="feature.image_url",
+        )
+        icon = ManagerBrandService._require_feature_icon(payload.get("icon"))
         feature = Feature(
             brand_id=brand_id,
             category_id=category_id,
@@ -100,8 +106,8 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
             name=title,
             slug=slug,
             full_description=ManagerBrandService._clean_optional_text(payload.get("text")),
-            image_url=ManagerBrandService._clean_optional_text(payload.get("image_url")),
-            icon=ManagerBrandService._clean_optional_text(payload.get("icon")),
+            image_url=image_url,
+            icon=icon,
             footnote=ManagerBrandService._clean_optional_text(payload.get("footnote")),
             source_url=ManagerBrandService._clean_optional_text(payload.get("source_url")),
             aliases=ManagerBrandService._normalize_string_list(payload.get("aliases")),
@@ -150,9 +156,12 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
         if "text" in payload:
             feature.full_description = ManagerBrandService._clean_optional_text(payload["text"])
         if "image_url" in payload:
-            feature.image_url = ManagerBrandService._clean_optional_text(payload["image_url"])
+            feature.image_url = ManagerBrandService._require_content_media(
+                payload["image_url"],
+                field="feature.image_url",
+            )
         if "icon" in payload:
-            feature.icon = ManagerBrandService._clean_optional_text(payload["icon"])
+            feature.icon = ManagerBrandService._require_feature_icon(payload["icon"])
         if "footnote" in payload:
             feature.footnote = ManagerBrandService._clean_optional_text(payload["footnote"])
         if "source_url" in payload:
@@ -229,10 +238,14 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
         if existing_brand is not None:
             raise HTTPException(status_code=400, detail=f"Бренд со slug '{slug}' уже существует.")
 
+        logo_url = ManagerBrandService._require_content_media(
+            payload.get("logo_url"),
+            field="brand.logo_url",
+        )
         brand = Brand(
             title=title,
             slug=slug,
-            logo_url=ManagerBrandService._clean_optional_text(payload.get("logo_url")),
+            logo_url=logo_url,
             short_description=ManagerBrandService._clean_optional_text(
                 payload.get("short_description")
             ),
@@ -293,7 +306,10 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
                 brand.slug = new_slug
 
         if "logo_url" in payload:
-            brand.logo_url = ManagerBrandService._clean_optional_text(payload["logo_url"])
+            brand.logo_url = ManagerBrandService._require_content_media(
+                payload["logo_url"],
+                field="brand.logo_url",
+            )
         if "short_description" in payload:
             brand.short_description = ManagerBrandService._clean_optional_text(
                 payload["short_description"]
@@ -493,6 +509,27 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
         if not feature_slug:
             raise HTTPException(status_code=400, detail="Не удалось сформировать slug фичи.")
         return feature_slug
+
+    @staticmethod
+    def _require_content_media(value: Any, *, field: str) -> Optional[str]:
+        try:
+            return CatalogMediaPolicy.require_allowed(
+                ManagerBrandService._clean_optional_text(value),
+                kind=CatalogMediaKind.CONTENT,
+                field=field,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @staticmethod
+    def _require_feature_icon(value: Any) -> Optional[str]:
+        try:
+            return CatalogMediaPolicy.require_optional_content_reference(
+                ManagerBrandService._clean_optional_text(value),
+                field="feature.icon",
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @staticmethod
     def _clean_optional_text(value: Any) -> Optional[str]:

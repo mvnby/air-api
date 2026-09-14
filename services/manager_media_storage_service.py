@@ -8,7 +8,6 @@ from io import BytesIO
 from pathlib import Path
 from typing import List
 
-import httpx
 from duckduckgo_search import DDGS
 from PIL import Image, ImageOps
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +18,7 @@ from models import Product, ProductImage, ProductImageVariant
 from services.catalog_invalidation_commit_service import (
     CatalogInvalidationCommitService,
 )
+from services.catalog_media_policy import CatalogMediaKind, CatalogMediaPolicy
 from services.product_image_processing_contract import (
     ProductImageProcessingStatus,
     ProductImageVariantType,
@@ -54,6 +54,8 @@ class ManagerMediaStorageOperations:
         product = await session.get(Product, product_id)
         if not product:
             raise ValueError("Product not found")
+
+        source_image_url = await cls.canonicalize_product_source_url(source_image_url)
 
         existing = (
             await session.execute(
@@ -144,14 +146,7 @@ class ManagerMediaStorageOperations:
     ) -> dict:
         """Download an image and attach it through the atomic upload boundary."""
 
-        try:
-            async with httpx.AsyncClient(follow_redirects=True) as client:
-                response = await client.get(url, timeout=10.0)
-                response.raise_for_status()
-                image_content = response.content
-        except Exception as exc:
-            logger.warning("Failed to download external image: %s", exc)
-            raise ValueError(f"Failed to download image: {exc}") from exc
+        image_content = await cls.load_image_source_content(url)
 
         return await cls.save_image_from_bytes(
             image_content=image_content,
@@ -352,15 +347,31 @@ class ManagerMediaStorageOperations:
 
         if url.startswith("http://") or url.startswith("https://"):
             try:
-                async with httpx.AsyncClient(follow_redirects=True) as client:
-                    response = await client.get(url, timeout=15.0)
-                    response.raise_for_status()
-                    return response.content
+                from services.media_library_service import MediaLibraryService
+
+                content, _ = await MediaLibraryService.download_remote_image(url)
+                return content
             except Exception as exc:
                 logger.error("Failed to download source image for crop: %s", exc)
                 raise ValueError("Source image is not available") from exc
 
         raise ValueError("Source image is not available in local media storage")
+
+    @classmethod
+    async def canonicalize_product_source_url(cls, url: str) -> str:
+        """Return a product URL that every partner storefront may publish."""
+
+        candidate = str(url or "").strip()
+        if CatalogMediaPolicy.is_allowed(candidate, kind=CatalogMediaKind.PRODUCT):
+            return candidate
+        content = await cls.load_image_source_content(candidate)
+        try:
+            original = await ProductOriginalMediaService.save_shared_original(content)
+        except Exception as exc:
+            raise ValueError(
+                "Изображение товара не удалось перенести в общую медиатеку"
+            ) from exc
+        return original.url
 
     @staticmethod
     def crop_image_bytes(

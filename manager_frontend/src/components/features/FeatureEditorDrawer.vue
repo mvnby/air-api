@@ -9,6 +9,7 @@ import {
   type ManagerBrandResponse,
   type ManagerFeatureResponse,
 } from "../../client";
+import type { ManagerMediaAssetResponse } from "../../api";
 import MediaField from "../MediaField.vue";
 import { getApiErrorMessage } from "../../utils/api-errors";
 import { confirmDialog } from "../../services/ui-feedback";
@@ -51,7 +52,9 @@ const blankDraft = (): FeatureDraft => ({
   brand_id: null,
   replaces_feature_id: null,
   icon: null,
+  icon_media_id: null,
   image_url: null,
+  image_media_id: null,
   video_url: null,
   footnote: null,
   source_url: null,
@@ -98,7 +101,9 @@ const resetDraft = (feature: CatalogFeature | null) => {
         brand_id: feature.brand_id || null,
         replaces_feature_id: feature.replaces_feature_id || null,
         icon: feature.icon || null,
+        icon_media_id: feature.icon_media_id || null,
         image_url: feature.image_url || null,
+        image_media_id: feature.image_media_id || null,
         video_url: feature.video_url || null,
         footnote: feature.footnote || null,
         source_url: feature.source_url || null,
@@ -137,6 +142,14 @@ watch(
 );
 
 const close = () => emit("close");
+
+const selectIconAsset = (asset: ManagerMediaAssetResponse | null) => {
+  draft.icon_media_id = asset?.id || null;
+};
+
+const selectImageAsset = (asset: ManagerMediaAssetResponse | null) => {
+  draft.image_media_id = asset?.id || null;
+};
 
 const selectScope = (next: "universal" | "brand") => {
   draft.scope_type = next;
@@ -418,12 +431,14 @@ const generateContentDraft = async (mode: DraftMode) => {
           :tags="['feature', 'icon']"
           accept="image/svg+xml,.svg,image/png,image/jpeg,image/webp"
           placeholder="/media/library/original/feature-icon.svg"
+          @selected="selectIconAsset"
         />
         <MediaField
           v-model="imageValue"
           label="Иллюстрация"
           kind="feature"
           :tags="['feature', 'illustration']"
+          @selected="selectImageAsset"
         />
         <label
           ><span class="field-label flex items-center justify-between gap-2"

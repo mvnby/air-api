@@ -20,6 +20,14 @@ from services.catalog_invalidation_contracts import (
 from services.catalog_revision_service import CatalogRevisionService
 
 
+CONTENT_A = f"/media/library/original/{'a' * 64}.webp"
+CONTENT_B = f"/media/library/original/{'b' * 64}.webp"
+CONTENT_C = f"/media/library/original/{'c' * 64}.webp"
+CONTENT_D = f"/media/library/original/{'d' * 64}.webp"
+CONTENT_E = f"/media/library/original/{'e' * 64}.webp"
+CONTENT_SVG = f"/media/library/original/{'f' * 64}.svg"
+
+
 async def _auth_headers(async_client):
     response = await async_client.post(
         "/login/access-token",
@@ -192,7 +200,7 @@ async def _create_brand_fixture(async_client, headers) -> dict[str, int]:
         json={
             "title": "Semantic Brand",
             "slug": "semantic-brand",
-            "logo_url": "https://example.com/brand.webp",
+            "logo_url": CONTENT_SVG,
             "short_description": "Short brand summary",
             "description": "Brand description",
             "is_published": True,
@@ -207,7 +215,7 @@ async def _create_brand_fixture(async_client, headers) -> dict[str, int]:
             "title": "Balanced Air",
             "slug": "balanced-air",
             "text": "Balanced airflow",
-            "image_url": "/media/balanced.webp",
+            "image_url": CONTENT_A,
             "icon": "air",
             "footnote": "Model dependent",
             "source_url": "https://example.com/balanced",
@@ -250,14 +258,14 @@ async def _create_brand_fixture(async_client, headers) -> dict[str, int]:
             "tagline": "Series tagline",
             "short_description": "Short description",
             "description": "Series description",
-            "hero_image": "/media/hero.webp",
-            "gallery_images": ["/media/one.webp", "/media/two.webp"],
+            "hero_image": CONTENT_B,
+            "gallery_images": [CONTENT_C, CONTENT_D],
             "features": ["Wi-Fi", "Quiet"],
             "feature_blocks": [
                 {
                     "title": "Comfort",
                     "text": "Comfort text",
-                    "image_url": "/media/comfort.webp",
+                    "image_url": CONTENT_E,
                     "icon": "comfort",
                     "footnote": "Feature note",
                 }
@@ -267,7 +275,7 @@ async def _create_brand_fixture(async_client, headers) -> dict[str, int]:
                     "kind": "image_text",
                     "title": "Details",
                     "text": "Detailed text",
-                    "image_url": "/media/details.webp",
+                    "image_url": CONTENT_A,
                     "layout": "text_right",
                 }
             ],
@@ -322,7 +330,7 @@ async def test_manager_brand_mutations_skip_semantic_noops(async_client, db):
         json={
             "title": "  Semantic Brand  ",
             "slug": " semantic-brand ",
-            "logo_url": " https://example.com/brand.webp ",
+            "logo_url": f" {CONTENT_SVG} ",
             "short_description": " Short brand summary ",
             "description": " Brand description ",
             "is_published": True,
@@ -341,7 +349,7 @@ async def test_manager_brand_mutations_skip_semantic_noops(async_client, db):
             "title": " Balanced Air ",
             "slug": " balanced-air ",
             "text": " Balanced airflow ",
-            "image_url": " /media/balanced.webp ",
+            "image_url": f" {CONTENT_A} ",
             "icon": " air ",
             "footnote": " Model dependent ",
             "source_url": " https://example.com/balanced ",
@@ -361,18 +369,18 @@ async def test_manager_brand_mutations_skip_semantic_noops(async_client, db):
             "tagline": " Series tagline ",
             "short_description": " Short description ",
             "description": " Series description ",
-            "hero_image": " /media/hero.webp ",
+            "hero_image": f" {CONTENT_B} ",
             "gallery_images": [
-                " /media/one.webp ",
-                "/media/two.webp",
-                "/media/one.webp",
+                f" {CONTENT_C} ",
+                CONTENT_D,
+                CONTENT_C,
             ],
             "features": [" Wi-Fi ", "Quiet", "Wi-Fi"],
             "feature_blocks": [
                 {
                     "title": " Comfort ",
                     "text": " Comfort text ",
-                    "image_url": " /media/comfort.webp ",
+                    "image_url": f" {CONTENT_E} ",
                     "icon": " comfort ",
                     "footnote": " Feature note ",
                 }
@@ -382,7 +390,7 @@ async def test_manager_brand_mutations_skip_semantic_noops(async_client, db):
                     "kind": "image_text",
                     "title": " Details ",
                     "text": " Detailed text ",
-                    "image_url": " /media/details.webp ",
+                    "image_url": f" {CONTENT_A} ",
                     "layout": "text_right",
                 }
             ],

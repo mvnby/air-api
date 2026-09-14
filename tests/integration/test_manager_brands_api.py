@@ -5,6 +5,14 @@ from models import Product, ProductSeries
 from services.catalog_revision_service import CatalogRevisionService
 
 
+CONTENT_A = f"/media/library/original/{'a' * 64}.webp"
+CONTENT_B = f"/media/library/original/{'b' * 64}.webp"
+CONTENT_C = f"/media/library/original/{'c' * 64}.webp"
+CONTENT_D = f"/media/library/original/{'d' * 64}.webp"
+CONTENT_E = f"/media/library/original/{'e' * 64}.webp"
+CONTENT_SVG = f"/media/library/original/{'f' * 64}.svg"
+
+
 async def _auth_headers(async_client):
     login_resp = await async_client.post(
         "/login/access-token",
@@ -24,7 +32,7 @@ async def test_manager_brands_crud(async_client):
         headers=headers,
         json={
             "title": "Brand Test TCL",
-            "logo_url": "https://example.com/tcl.png",
+            "logo_url": CONTENT_SVG,
             "short_description": "  Calm brand summary.  ",
             "description": "Test description",
             "sort_order": 50,
@@ -35,6 +43,7 @@ async def test_manager_brands_crud(async_client):
     created = create_resp.json()
     assert created["title"] == "Brand Test TCL"
     assert created["slug"] == "brand-test-tcl"
+    assert created["logo_url"] == CONTENT_SVG
     assert created["short_description"] == "Calm brand summary."
     brand_id = created["id"]
 
@@ -62,6 +71,24 @@ async def test_manager_brands_crud(async_client):
 
     delete_resp = await async_client.delete(f"/api/manager/brands/{brand_id}", headers=headers)
     assert delete_resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_manager_brand_rejects_media_that_bypasses_library(async_client):
+    headers = await _auth_headers(async_client)
+
+    create_resp = await async_client.post(
+        "/api/manager/brands",
+        headers=headers,
+        json={
+            "title": "External Logo Brand",
+            "slug": "external-logo-brand",
+            "logo_url": "https://vendor.example/logo.svg",
+        },
+    )
+
+    assert create_resp.status_code == 400
+    assert "загрузить в медиатеку" in create_resp.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -109,7 +136,7 @@ async def test_manager_brand_series_crud(async_client):
         json={
             "title": "Gentle Breeze",
             "text": "Soft airflow pattern",
-            "image_url": "/media/series/gentle-breeze.webp",
+            "image_url": CONTENT_A,
             "aliases": ["breeze", "soft airflow"],
             "sort_order": 2,
         },
@@ -127,14 +154,14 @@ async def test_manager_brand_series_crud(async_client):
             "tagline": "Fresh air without drafts",
             "short_description": "Line preview text",
             "description": "Fresh air product line",
-            "hero_image": "/media/series/freshin.webp",
-            "gallery_images": ["/media/series/freshin-1.webp", "", "/media/series/freshin-1.webp"],
+            "hero_image": CONTENT_B,
+            "gallery_images": [CONTENT_C, "", CONTENT_C],
             "features": [" fresh air ", "", "Wi-Fi", "Wi-Fi"],
             "feature_blocks": [
                 {
                     "title": "Fresh flow",
                     "text": "Adds outside air",
-                    "image_url": "/media/series/fresh-flow.webp",
+                    "image_url": CONTENT_D,
                     "icon": "air",
                     "footnote": "Depends on model",
                 },
@@ -145,7 +172,7 @@ async def test_manager_brand_series_crud(async_client):
                     "kind": "image_text",
                     "title": "How it works",
                     "text": "A short section",
-                    "image_url": "/media/series/content.webp",
+                    "image_url": CONTENT_E,
                     "layout": "text_right",
                 }
             ],
@@ -163,13 +190,13 @@ async def test_manager_brand_series_crud(async_client):
     assert created["slug"] == "freshin"
     assert created["tagline"] == "Fresh air without drafts"
     assert created["short_description"] == "Line preview text"
-    assert created["gallery_images"] == ["/media/series/freshin-1.webp"]
+    assert created["gallery_images"] == [CONTENT_C]
     assert created["features"] == ["fresh air", "Wi-Fi"]
     assert created["feature_blocks"] == [
         {
             "title": "Fresh flow",
             "text": "Adds outside air",
-            "image_url": "/media/series/fresh-flow.webp",
+            "image_url": CONTENT_D,
             "icon": "air",
             "footnote": "Depends on model",
         }
@@ -179,7 +206,7 @@ async def test_manager_brand_series_crud(async_client):
             "kind": "image_text",
             "title": "How it works",
             "text": "A short section",
-            "image_url": "/media/series/content.webp",
+            "image_url": CONTENT_E,
             "layout": "text_right",
         }
     ]
@@ -231,7 +258,7 @@ async def test_manager_brand_series_crud(async_client):
             "title": "FreshIN Updated",
             "slug": "freshin-updated",
             "tagline": "Updated tagline",
-            "gallery_images": ["/media/series/updated.webp"],
+            "gallery_images": [CONTENT_A],
             "features": ["Fresh air", "Self-cleaning"],
             "feature_blocks": [{"title": "Self cleaning", "text": "Keeps exchanger clean"}],
             "content_blocks": [],
@@ -247,7 +274,7 @@ async def test_manager_brand_series_crud(async_client):
     assert updated["title"] == "FreshIN Updated"
     assert updated["slug"] == "freshin-updated"
     assert updated["tagline"] == "Updated tagline"
-    assert updated["gallery_images"] == ["/media/series/updated.webp"]
+    assert updated["gallery_images"] == [CONTENT_A]
     assert updated["features"] == ["Fresh air", "Self-cleaning"]
     assert updated["feature_blocks"] == [
         {
