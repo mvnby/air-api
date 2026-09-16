@@ -36,6 +36,9 @@ describe('product collection internal stock rule permissions', () => {
     const wrapper = mount(ProductCollectionsView);
     await flushPromises();
 
+    await wrapper.findAll('button').find(button => button.text().includes('Создать'))!.trigger('click');
+    await flushPromises();
+
     expect(wrapper.find('[data-testid="internal-stock-rules"]').exists()).toBe(false);
     expect(sanitizeProductCollectionRuleConfig({
       product_kinds: ['complete_split_system'],
@@ -55,11 +58,9 @@ describe('product collection internal stock rule permissions', () => {
     } as any;
     const wrapper = mount(ProductCollectionsView);
     await flushPromises();
-    const modeSelect = wrapper.findAll('select').find(
-      select => select.find('option[value="automatic"]').exists(),
-    );
-    expect(modeSelect).toBeDefined();
-    await modeSelect!.setValue('automatic');
+    await wrapper.findAll('button').find(button => button.text().includes('Создать'))!.trigger('click');
+    await flushPromises();
+    await wrapper.findAll('button').find(button => button.text().trim() === 'По правилам')!.trigger('click');
 
     expect(wrapper.find('[data-testid="internal-stock-rules"]').exists()).toBe(true);
     expect(sanitizeProductCollectionRuleConfig({

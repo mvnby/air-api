@@ -19,6 +19,7 @@ from services.manager_product_collection_validation import (
     ManagerProductCollectionValidation,
 )
 from services.product_collection_resolver import ProductCollectionResolver
+from services.product_collection_placement_display import display_config, present_items
 from services.product_collection_rule_policy import ProductCollectionRulePolicy
 
 
@@ -210,45 +211,8 @@ class ManagerProductCollectionService:
         )
         if collection is None:
             raise HTTPException(status_code=404, detail="Подборка не найдена.")
-        data = ManagerProductCollectionValidation.clean_fields(payload)
-        ManagerProductCollectionValidation.required_text(data)
-        if "rule_config" in data:
-            ProductCollectionRulePolicy.validate_write(
-                rule_config=data.get("rule_config") or {},
-                tenant_scope=tenant_scope,
-            )
-        if "slug" in data:
-            data["slug"] = await ManagerProductCollectionValidation.unique_slug(
-                session,
-                requested=data["slug"],
-                fallback=data.get("internal_name") or collection.internal_name,
-                exclude_id=collection_id,
-                tenant_scope=tenant_scope,
-            )
-        fallback_id = data.get("fallback_collection_id")
-        if fallback_id == collection_id:
-            raise HTTPException(status_code=400, detail="Подборка не может ссылаться сама на себя.")
-        if "fallback_collection_id" in data:
-            await ManagerProductCollectionValidation.fallback(
-                session,
-                fallback_id=fallback_id,
-                tenant_scope=tenant_scope,
-            )
-
-        min_items = int(data.get("min_items", collection.min_items))
-        max_items = int(data.get("max_items", collection.max_items))
-        if max_items < min_items:
-            raise HTTPException(
-                status_code=400,
-                detail="Максимальное количество не может быть меньше минимального.",
-            )
-        starts_at = data.get("starts_at", collection.starts_at)
-        ends_at = data.get("ends_at", collection.ends_at)
-        if starts_at and ends_at and ends_at <= starts_at:
-            raise HTTPException(status_code=400, detail="Дата окончания должна быть позже начала.")
-        ManagerProductCollectionValidation.automation(
-            mode=data.get("mode", collection.mode),
-            rule_config=data.get("rule_config", collection.rule_config) or {},
+        data = await ManagerProductCollectionValidation.update_fields(
+            session, collection, payload, tenant_scope=tenant_scope,
         )
 
         change_set: dict[str, dict[str, Any]] = {}
@@ -298,21 +262,9 @@ class ManagerProductCollectionService:
         )
         if collection is None:
             raise HTTPException(status_code=404, detail="Подборка не найдена.")
-        product_ids = [int(item["product_id"]) for item in items]
-        if len(product_ids) != len(set(product_ids)):
-            raise HTTPException(status_code=400, detail="Один товар нельзя добавить дважды.")
-        projections = await ProductCollectionCatalogAccess.visible_by_ids(
-            session,
-            tenant_scope=tenant_scope,
-            product_ids=product_ids,
+        product_ids = await ManagerProductCollectionValidation.items(
+            session, items, tenant_scope=tenant_scope,
         )
-        if len(projections) != len(product_ids):
-            found_ids = set(projections)
-            missing = [product_id for product_id in product_ids if product_id not in found_ids]
-            raise HTTPException(
-                status_code=404,
-                detail=f"Товары недоступны для этой витрины: {', '.join(map(str, missing))}.",
-            )
         before_ids = [
             int(item.product_id)
             for item in sorted(collection.items, key=lambda row: (row.position, row.id))
@@ -360,29 +312,19 @@ class ManagerProductCollectionService:
         )
         if collection is None:
             raise HTTPException(status_code=404, detail="Подборка не найдена.")
-        seen: set[tuple[str, str]] = set()
-        for placement in placements:
-            surface = ManagerProductCollectionValidation.placement_key(
-                placement["surface_key"]
-            )
-            slot = ManagerProductCollectionValidation.placement_key(
-                placement["slot_key"]
-            )
-            key = (surface, slot)
-            if key in seen:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Размещение {surface}.{slot} указано дважды.",
-                )
-            seen.add(key)
-            placement["surface_key"] = surface
-            placement["slot_key"] = slot
+        ManagerProductCollectionValidation.placements(placements)
         before_placements = [
             {
                 "surface_key": row.surface_key,
                 "slot_key": row.slot_key,
                 "position": row.position,
                 "is_enabled": row.is_enabled,
+                "display_mode": row.display_mode,
+                "item_limit": row.item_limit,
+                "grid_columns": row.grid_columns,
+                "rotation_mode": row.rotation_mode,
+                "starts_at": row.starts_at,
+                "ends_at": row.ends_at,
             }
             for row in sorted(collection.placements, key=lambda row: (row.position, row.id))
         ]
@@ -417,6 +359,79 @@ class ManagerProductCollectionService:
         )
 
     @staticmethod
+    async def save_workspace(
+        session: AsyncSession,
+        collection_id: int,
+        payload: dict[str, Any],
+        *,
+        items: list[dict],
+        placements: list[dict],
+        tenant_scope: TenantScope,
+        actor_username: str,
+        actor_staff_user_id: int | None,
+    ) -> dict:
+        # Validate the complete command before staging any mutation. The parent
+        # row lock also serializes existing child-only and metadata commands.
+        try:
+            collection = await ProductCollectionDAO.get(
+                session, collection_id, tenant_scope=tenant_scope, for_update=True,
+            )
+            if collection is None:
+                raise HTTPException(status_code=404, detail="Подборка не найдена.")
+            data = await ManagerProductCollectionValidation.update_fields(
+                session, collection, payload, tenant_scope=tenant_scope,
+            )
+            await ManagerProductCollectionValidation.items(session, items, tenant_scope=tenant_scope)
+            ManagerProductCollectionValidation.placements(placements)
+            change_set = {
+                field: {"before": getattr(collection, field), "after": value}
+                for field, value in data.items()
+                if getattr(collection, field) != value
+            }
+            change_set["items"] = {
+                "before": [
+                    {"product_id": row.product_id, "is_pinned": row.is_pinned, "editorial_note": row.editorial_note}
+                    for row in sorted(collection.items, key=lambda row: (row.position, row.id))
+                ],
+                "after": items,
+            }
+            placement_fields = (
+                "surface_key", "slot_key", "position", "is_enabled", "starts_at", "ends_at",
+                "display_mode", "item_limit", "grid_columns", "rotation_mode",
+            )
+            change_set["placements"] = {
+                "before": [
+                    {field: getattr(row, field) for field in placement_fields}
+                    for row in sorted(collection.placements, key=lambda row: (row.position, row.id))
+                ],
+                "after": placements,
+            }
+
+            async def stage_workspace() -> None:
+                for field, value in data.items():
+                    setattr(collection, field, value)
+                collection.updated_at = utc_now()
+                await ProductCollectionDAO.replace_items(
+                    session, collection_id=collection_id, tenant_scope=tenant_scope, items=items,
+                )
+                await ProductCollectionDAO.replace_placements(
+                    session, collection_id=collection_id, tenant_scope=tenant_scope, placements=placements,
+                )
+
+            await ManagerProductCollectionService._commit_mutation(
+                session, collection=collection, tenant_scope=tenant_scope,
+                actor_username=actor_username, actor_staff_user_id=actor_staff_user_id,
+                action="product_collection.workspace_saved", change_set=change_set,
+                stage_changes=stage_workspace,
+            )
+        except Exception:
+            await session.rollback()
+            raise
+        return await ManagerProductCollectionService.get_collection(
+            session, collection_id, tenant_scope=tenant_scope,
+        )
+
+    @staticmethod
     async def preview(
         session: AsyncSession,
         *,
@@ -432,7 +447,24 @@ class ManagerProductCollectionService:
         )
         if collection is None:
             raise HTTPException(status_code=404, detail="Подборка не найдена.")
-        return await ProductCollectionResolver.resolve(
+        placement = next((
+            row for row in collection.placements
+            if row.surface_key == surface_key and row.slot_key == slot_key
+        ), None)
+        config = display_config(placement)
+        if collection.status == "published" and config["rotation_mode"] == "daily":
+            public_slot = await ProductCollectionResolver.resolve_placement(
+                session,
+                surface_key=surface_key,
+                slot_key=slot_key,
+                tenant_scope=tenant_scope,
+                preview_collection_id=collection_id,
+            )
+            if "preview" in public_slot:
+                return public_slot["preview"]
+        # Draft or nonselected daily collections still have an independent
+        # preview; they do not claim to be the slot's currently displayed row.
+        resolved = await ProductCollectionResolver.resolve(
             session,
             collection=collection,
             surface_key=surface_key,
@@ -440,6 +472,11 @@ class ManagerProductCollectionService:
             enforce_publication=False,
             tenant_scope=tenant_scope,
         )
+        return {
+            **resolved,
+            **config,
+            "items": present_items(resolved["items"], config, day=utc_now().date().toordinal()),
+        }
 
     @staticmethod
     async def archive(

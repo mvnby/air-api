@@ -12,6 +12,7 @@ import KitlaneShell from './components/kitlane/KitlaneShell.vue';
 import KitlaneNavigation from './components/kitlane/KitlaneNavigation.vue';
 import { useKitlaneIdentity } from './composables/useKitlaneIdentity';
 import { confirmDialog } from './services/ui-feedback';
+import { runGuardedNavigation } from './services/unsaved-navigation-guard';
 import {
   clearManagerSession,
   loginManagerWithPassword,
@@ -87,6 +88,8 @@ const leadsCount = ref(0);
 const toast = ref('');
 const toastType = ref<'success' | 'error'>('success');
 const currentLocation = ref(`${window.location.pathname}${window.location.search}`);
+const acceptedBrowserLocation = ref(currentLocation.value);
+const viewRevision = ref(0);
 const THEME_STORAGE_KEY = 'manager_theme';
 const NAV_SECTIONS_STORAGE_KEY = 'manager_nav_sections_v1';
 const telegramLoginBotUsername = String(import.meta.env.VITE_TELEGRAM_LOGIN_BOT_USERNAME || '').trim();
@@ -238,13 +241,31 @@ const rebuildButtonTitle = computed(() => {
   if (!isDesktopNavCollapsed.value) return '';
   return rebuildButtonLabel.value;
 });
-const onPopState = () => {
-  currentLocation.value = `${window.location.pathname}${window.location.search}`;
+const onPopState = async () => {
+  const acceptedLocation = acceptedBrowserLocation.value;
+  const targetLocation = `${window.location.pathname}${window.location.search}`;
+  await runGuardedNavigation(
+    () => {
+      const browserLocation = `${window.location.pathname}${window.location.search}`;
+      if (browserLocation !== targetLocation) {
+        window.history.pushState({}, '', targetLocation);
+      }
+      currentLocation.value = targetLocation;
+      acceptedBrowserLocation.value = targetLocation;
+      viewRevision.value += 1;
+    },
+    () => window.history.pushState({}, '', acceptedLocation),
+  );
 };
-const navigate = (path: string) => {
+const navigate = async (path: string) => {
   if (window.location.pathname !== path) {
-    window.history.pushState({}, '', path);
-    currentLocation.value = `${window.location.pathname}${window.location.search}`;
+    const navigated = await runGuardedNavigation(() => {
+      window.history.pushState({}, '', path);
+      currentLocation.value = `${window.location.pathname}${window.location.search}`;
+      acceptedBrowserLocation.value = currentLocation.value;
+      viewRevision.value += 1;
+    });
+    if (!navigated) return;
   }
   isMobileNavOpen.value = false;
 };
@@ -533,7 +554,7 @@ watch(currentPath, () => {
       <MediaLibraryView v-else-if="authorizedView === 'media-library'" :key="currentLocation" />
       <CatalogQualityView v-else-if="authorizedView === 'catalog-quality'" :key="currentLocation" />
       <CatalogDecisionWorkspaceView v-else-if="authorizedView === 'catalog-decision' && canManagePlatform" :key="currentLocation" />
-      <ProductCollectionsView v-else-if="authorizedView === 'product-collections'" :key="currentLocation" />
+      <ProductCollectionsView v-else-if="authorizedView === 'product-collections'" :key="`${currentLocation}:${viewRevision}`" @location-change="acceptedBrowserLocation = $event" />
       <CustomerProfileView v-else-if="authorizedView === 'customer-profile'" :key="currentLocation" />
       <CustomersView v-else-if="authorizedView === 'customers'" :key="currentLocation" />
       <InstallersView v-else-if="authorizedView === 'installers'" :key="currentLocation" />
