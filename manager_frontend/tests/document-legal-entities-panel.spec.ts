@@ -111,6 +111,22 @@ describe('DocumentLegalEntitiesPanel', () => {
     ]);
   });
 
+  it('loads, updates and clears seller contacts independently for each entity', async () => {
+    const wrapper = mountPanel(entity({ requisites: { phone: '+375291111111', email: 'old@example.by' } }));
+    expect(wrapper.get<HTMLInputElement>('[data-testid="seller-phone"]').element.value).toBe('+375291111111');
+    expect(wrapper.get<HTMLInputElement>('[data-testid="seller-email"]').element.value).toBe('old@example.by');
+    await wrapper.get('[data-testid="seller-phone"]').setValue('  +375292222222  ');
+    await wrapper.get('[data-testid="seller-email"]').setValue('new@example.by');
+    await wrapper.get('form.grid').trigger('submit');
+    expect(wrapper.emitted('update')?.[0]?.[1].requisites).toMatchObject({ phone: '+375292222222', email: 'new@example.by' });
+
+    await wrapper.setProps({ items: [entity({ id: 8 })], selectedId: 8 });
+    expect(wrapper.get<HTMLInputElement>('[data-testid="seller-phone"]').element.value).toBe('');
+    expect(wrapper.get<HTMLInputElement>('[data-testid="seller-email"]').element.value).toBe('');
+    await wrapper.get('form.grid').trigger('submit');
+    expect(wrapper.emitted('update')?.[1]).toEqual([8, expect.objectContaining({ requisites: expect.objectContaining({ phone: null, email: null }) })]);
+  });
+
   it('normalizes UNP and IBAN and fills blank requisites from shared lookups', async () => {
     const wrapper = mountPanel();
 
@@ -160,7 +176,7 @@ describe('DocumentLegalEntitiesPanel', () => {
       .toBe('MANUALBIC');
   });
 
-  it('saves consumer offer policy without resubmitting unrelated requisites', async () => {
+  it('preserves seller contacts when saving consumer offer policy', async () => {
     const wrapper = mountPanel(entity({
       requisites: {
         phone: '+375291234567',
@@ -178,7 +194,7 @@ describe('DocumentLegalEntitiesPanel', () => {
         default_goods_warranty_months: 48,
       }),
     }));
-    expect(wrapper.emitted('update')?.[0]?.[1].requisites).not.toHaveProperty('phone');
+    expect(wrapper.emitted('update')?.[0]?.[1].requisites.phone).toBe('+375291234567');
   });
 });
 
