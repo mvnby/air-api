@@ -25402,6 +25402,63 @@
         }
       }
     },
+    "/api/manager/product-collections/{collection_id}/workspace": {
+      "put": {
+        "tags": [
+          "manager product collections"
+        ],
+        "summary": "Save Manager Product Collection Workspace",
+        "operationId": "save_manager_product_collection_workspace",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "collection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Collection Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerProductCollectionWorkspacePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerProductCollectionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/tenant-offers/audit": {
       "get": {
         "tags": [
@@ -51041,6 +51098,46 @@
       },
       "ManagerProductCollectionPlacementPayload": {
         "properties": {
+          "display_mode": {
+            "type": "string",
+            "enum": [
+              "carousel",
+              "grid",
+              "tiles",
+              "single"
+            ],
+            "title": "Display Mode",
+            "default": "carousel"
+          },
+          "item_limit": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 24.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Limit"
+          },
+          "grid_columns": {
+            "type": "integer",
+            "maximum": 4.0,
+            "minimum": 2.0,
+            "title": "Grid Columns",
+            "default": 3
+          },
+          "rotation_mode": {
+            "type": "string",
+            "enum": [
+              "none",
+              "daily"
+            ],
+            "title": "Rotation Mode",
+            "default": "none"
+          },
           "surface_key": {
             "type": "string",
             "maxLength": 80,
@@ -51098,6 +51195,46 @@
       },
       "ManagerProductCollectionPlacementResponse": {
         "properties": {
+          "display_mode": {
+            "type": "string",
+            "enum": [
+              "carousel",
+              "grid",
+              "tiles",
+              "single"
+            ],
+            "title": "Display Mode",
+            "default": "carousel"
+          },
+          "item_limit": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 24.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Limit"
+          },
+          "grid_columns": {
+            "type": "integer",
+            "maximum": 4.0,
+            "minimum": 2.0,
+            "title": "Grid Columns",
+            "default": 3
+          },
+          "rotation_mode": {
+            "type": "string",
+            "enum": [
+              "none",
+              "daily"
+            ],
+            "title": "Rotation Mode",
+            "default": "none"
+          },
           "id": {
             "type": "integer",
             "title": "Id"
@@ -51673,6 +51810,36 @@
         },
         "type": "object",
         "title": "ManagerProductCollectionUpdate"
+      },
+      "ManagerProductCollectionWorkspacePayload": {
+        "properties": {
+          "collection": {
+            "$ref": "#/components/schemas/ManagerProductCollectionUpdate"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerProductCollectionItemPayload"
+            },
+            "type": "array",
+            "maxItems": 24,
+            "title": "Items"
+          },
+          "placements": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerProductCollectionPlacementPayload"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Placements"
+          }
+        },
+        "type": "object",
+        "required": [
+          "collection",
+          "items",
+          "placements"
+        ],
+        "title": "ManagerProductCollectionWorkspacePayload"
       },
       "ManagerProductFeatureWorkspaceResponse": {
         "properties": {
@@ -59084,6 +59251,46 @@
       },
       "ProductCollectionPreviewResponse": {
         "properties": {
+          "display_mode": {
+            "type": "string",
+            "enum": [
+              "carousel",
+              "grid",
+              "tiles",
+              "single"
+            ],
+            "title": "Display Mode",
+            "default": "carousel"
+          },
+          "item_limit": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 24.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Limit"
+          },
+          "grid_columns": {
+            "type": "integer",
+            "maximum": 4.0,
+            "minimum": 2.0,
+            "title": "Grid Columns",
+            "default": 3
+          },
+          "rotation_mode": {
+            "type": "string",
+            "enum": [
+              "none",
+              "daily"
+            ],
+            "title": "Rotation Mode",
+            "default": "none"
+          },
           "collection_id": {
             "type": "integer",
             "title": "Collection Id"
@@ -62500,6 +62707,46 @@
       },
       "PublicProductCollectionResponse": {
         "properties": {
+          "display_mode": {
+            "type": "string",
+            "enum": [
+              "carousel",
+              "grid",
+              "tiles",
+              "single"
+            ],
+            "title": "Display Mode",
+            "default": "carousel"
+          },
+          "item_limit": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 24.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Limit"
+          },
+          "grid_columns": {
+            "type": "integer",
+            "maximum": 4.0,
+            "minimum": 2.0,
+            "title": "Grid Columns",
+            "default": 3
+          },
+          "rotation_mode": {
+            "type": "string",
+            "enum": [
+              "none",
+              "daily"
+            ],
+            "title": "Rotation Mode",
+            "default": "none"
+          },
           "slug": {
             "type": "string",
             "title": "Slug"

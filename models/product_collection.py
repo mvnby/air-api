@@ -181,6 +181,10 @@ class ProductCollectionItem(SQLModel, table=True):
 class ProductCollectionPlacement(SQLModel, table=True):
     __tablename__ = "product_collection_placement"
     __table_args__ = (
+        CheckConstraint("display_mode IN ('carousel', 'grid', 'tiles', 'single')", name="ck_collection_placement_display_mode"),
+        CheckConstraint("item_limit IS NULL OR (item_limit >= 1 AND item_limit <= 24)", name="ck_collection_placement_item_limit"),
+        CheckConstraint("grid_columns >= 2 AND grid_columns <= 4", name="ck_collection_placement_grid_columns"),
+        CheckConstraint("rotation_mode IN ('none', 'daily') AND (rotation_mode = 'none' OR display_mode = 'single')", name="ck_collection_placement_rotation_mode"),
         ForeignKeyConstraint(
             ["storefront_id", "tenant_id"],
             ["storefront.id", "storefront.tenant_id"],
@@ -216,6 +220,10 @@ class ProductCollectionPlacement(SQLModel, table=True):
     collection_id: int = Field(
         sa_column=Column(Integer, nullable=False, index=True),
     )
+    display_mode: str = Field(default="carousel", sa_column=Column(String(16), nullable=False, server_default="carousel"))
+    item_limit: Optional[int] = Field(default=None, sa_column=Column(Integer, nullable=True))
+    grid_columns: int = Field(default=3, sa_column=Column(Integer, nullable=False, server_default="3"))
+    rotation_mode: str = Field(default="none", sa_column=Column(String(16), nullable=False, server_default="none"))
     position: int = Field(default=0, index=True)
     is_enabled: bool = Field(default=True, sa_column=Column(Boolean, nullable=False, index=True))
     starts_at: Optional[datetime] = Field(

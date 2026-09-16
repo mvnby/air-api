@@ -391,6 +391,7 @@ export type { ManagerProductCollectionProductOptionListResponse } from './models
 export type { ManagerProductCollectionProductOptionResponse } from './models/ManagerProductCollectionProductOptionResponse';
 export type { ManagerProductCollectionResponse } from './models/ManagerProductCollectionResponse';
 export type { ManagerProductCollectionUpdate } from './models/ManagerProductCollectionUpdate';
+export type { ManagerProductCollectionWorkspacePayload } from './models/ManagerProductCollectionWorkspacePayload';
 export type { ManagerProductFeaturesUpdatePayload } from './models/ManagerProductFeaturesUpdatePayload';
 export type { ManagerProductFeatureWorkspaceResponse } from './models/ManagerProductFeatureWorkspaceResponse';
 export type { ManagerQuickTariffListResponse } from './models/ManagerQuickTariffListResponse';

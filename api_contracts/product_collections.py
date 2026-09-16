@@ -113,7 +113,20 @@ class ManagerProductCollectionItemsPayload(BaseModel):
     items: list[ManagerProductCollectionItemPayload] = Field(default_factory=list, max_length=24)
 
 
-class ManagerProductCollectionPlacementPayload(BaseModel):
+class ProductCollectionPlacementDisplayConfig(BaseModel):
+    display_mode: Literal["carousel", "grid", "tiles", "single"] = "carousel"
+    item_limit: int | None = Field(default=None, ge=1, le=24)
+    grid_columns: int = Field(default=3, ge=2, le=4)
+    rotation_mode: Literal["none", "daily"] = "none"
+
+    @model_validator(mode="after")
+    def validate_rotation(self):
+        if self.rotation_mode != "none" and self.display_mode != "single":
+            raise ValueError("daily rotation is supported only for single display mode")
+        return self
+
+
+class ManagerProductCollectionPlacementPayload(ProductCollectionPlacementDisplayConfig):
     surface_key: str = Field(min_length=1, max_length=80)
     slot_key: str = Field(min_length=1, max_length=80)
     position: int = Field(default=0, ge=0)
@@ -132,6 +145,12 @@ class ManagerProductCollectionPlacementsPayload(BaseModel):
     placements: list[ManagerProductCollectionPlacementPayload] = Field(default_factory=list, max_length=20)
 
 
+class ManagerProductCollectionWorkspacePayload(BaseModel):
+    collection: ManagerProductCollectionUpdate
+    items: list[ManagerProductCollectionItemPayload] = Field(max_length=24)
+    placements: list[ManagerProductCollectionPlacementPayload] = Field(max_length=20)
+
+
 class ManagerProductCollectionItemResponse(BaseModel):
     id: int
     product_id: int
@@ -146,7 +165,7 @@ class ManagerProductCollectionItemResponse(BaseModel):
     main_image: str | None = None
 
 
-class ManagerProductCollectionPlacementResponse(BaseModel):
+class ManagerProductCollectionPlacementResponse(ProductCollectionPlacementDisplayConfig):
     id: int
     surface_key: str
     slot_key: str
@@ -213,7 +232,7 @@ class PublicProductCollectionItemResponse(BaseModel):
     product: ProductResponse
 
 
-class ProductCollectionPreviewResponse(BaseModel):
+class ProductCollectionPreviewResponse(ProductCollectionPlacementDisplayConfig):
     collection_id: int
     collection_slug: str
     below_min_items: bool
@@ -222,7 +241,7 @@ class ProductCollectionPreviewResponse(BaseModel):
     excluded_items: list[ProductCollectionExclusionResponse] = Field(default_factory=list)
 
 
-class PublicProductCollectionResponse(BaseModel):
+class PublicProductCollectionResponse(ProductCollectionPlacementDisplayConfig):
     slug: str
     title: str
     description: str | None = None

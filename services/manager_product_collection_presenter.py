@@ -86,6 +86,10 @@ class ManagerProductCollectionPresenter:
                     "slot_key": placement.slot_key,
                     "position": placement.position,
                     "is_enabled": placement.is_enabled,
+                    "display_mode": placement.display_mode,
+                    "item_limit": placement.item_limit,
+                    "grid_columns": placement.grid_columns,
+                    "rotation_mode": placement.rotation_mode,
                     "starts_at": placement.starts_at,
                     "ends_at": placement.ends_at,
                 }

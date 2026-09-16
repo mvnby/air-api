@@ -9,6 +9,7 @@ from api_contracts.product_collections import (
     ManagerProductCollectionProductOptionListResponse,
     ManagerProductCollectionResponse,
     ManagerProductCollectionUpdate,
+    ManagerProductCollectionWorkspacePayload,
     ProductCollectionPreviewResponse,
     ProductCollectionRuleOptionsResponse,
 )
@@ -31,6 +32,7 @@ from routers.manager_operation_ids import (
     REPLACE_MANAGER_PRODUCT_COLLECTION_PLACEMENTS,
     SEARCH_MANAGER_PRODUCT_COLLECTION_PRODUCTS,
     UPDATE_MANAGER_PRODUCT_COLLECTION,
+    SAVE_MANAGER_PRODUCT_COLLECTION_WORKSPACE,
 )
 from routers.manager_permission_policy import ManagerPermissionRoute
 from services.manager_product_collection_service import ManagerProductCollectionService
@@ -255,4 +257,28 @@ async def preview_manager_product_collection(
         surface_key=surface,
         slot_key=slot,
         tenant_scope=tenant_scope,
+    )
+
+
+@router.put(
+    "/{collection_id}/workspace",
+    response_model=ManagerProductCollectionResponse,
+    operation_id=SAVE_MANAGER_PRODUCT_COLLECTION_WORKSPACE,
+)
+async def save_manager_product_collection_workspace(
+    collection_id: int,
+    payload: ManagerProductCollectionWorkspacePayload,
+    session: AsyncSession = Depends(get_session),
+    auth: AuthenticatedUser = Depends(require_manager_access),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
+):
+    return await ManagerProductCollectionService.save_workspace(
+        session,
+        collection_id,
+        payload.collection.model_dump(exclude_unset=True),
+        items=[item.model_dump() for item in payload.items],
+        placements=[placement.model_dump() for placement in payload.placements],
+        tenant_scope=tenant_scope,
+        actor_username=auth.username,
+        actor_staff_user_id=auth.staff_user_id,
     )

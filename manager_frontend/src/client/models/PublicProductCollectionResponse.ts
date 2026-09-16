@@ -4,6 +4,10 @@
 /* eslint-disable */
 import type { PublicProductCollectionItemResponse } from './PublicProductCollectionItemResponse';
 export type PublicProductCollectionResponse = {
+    display_mode?: 'carousel' | 'grid' | 'tiles' | 'single';
+    item_limit?: (number | null);
+    grid_columns?: number;
+    rotation_mode?: 'none' | 'daily';
     slug: string;
     title: string;
     description?: (string | null);
