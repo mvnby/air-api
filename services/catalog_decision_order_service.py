@@ -34,6 +34,7 @@ class CatalogDecisionOrderService:
         order_id: int,
         product_ids: list[int],
         mode: str,
+        proposal_mode: str = "bundle",
         tenant_scope: TenantScope,
         proposal_id: int | None = None,
     ) -> dict[str, Any]:
@@ -41,6 +42,8 @@ class CatalogDecisionOrderService:
         ids = [int(product_id) for product_id in product_ids]
         if len(ids) != len(set(ids)):
             raise ValueError("Один товар нельзя добавить дважды")
+        if proposal_mode not in {"bundle", "alternatives"}:
+            raise ValueError("Неизвестный режим предложений")
 
         async with command_transaction(session):
             order = await OrderProposalCommandService._load_order_for_write(
@@ -55,6 +58,8 @@ class CatalogDecisionOrderService:
             active_ids = {int(proposal.id) for proposal in active_proposals if proposal.id is not None}
             has_products = any(link.proposal_id in active_ids for link in order.product_links)
             if mode == "append_to_proposal":
+                if proposal_mode != "bundle":
+                    raise ValueError("Добавление в предложение поддерживает только режим bundle")
                 proposal = CatalogDecisionOrderService._append_target_proposal(
                     order.proposals,
                     proposal_id=proposal_id,
@@ -82,6 +87,8 @@ class CatalogDecisionOrderService:
                     snapshots=snapshots,
                 )
             else:
+                if proposal_mode == "alternatives" and mode != "new_alternative":
+                    raise ValueError("Режим alternatives поддерживается только для нового варианта")
                 snapshots = await CatalogDecisionOrderService._load_snapshots(
                     session,
                     tenant_scope=tenant_scope,
@@ -92,30 +99,67 @@ class CatalogDecisionOrderService:
                         "В заказе уже есть товары. Выберите замену основного предложения или новый вариант."
                     )
 
-                if not has_products or mode == "replace_selected":
-                    proposal = OrderService._selected_proposal(order)
-                    if proposal is None:
-                        raise RuntimeError("У заказа не создано основное предложение")
-                elif mode == "new_alternative":
-                    proposal = OrderProposal(
-                        order_id=order_id,
-                        name=f"Вариант {len(active_proposals) + 1}",
-                        status="draft",
-                        is_selected=False,
-                        sort_order=len(active_proposals) * 10,
+                if mode == "new_alternative" and proposal_mode == "alternatives":
+                    selected = OrderService._selected_proposal(order)
+                    selected_is_empty_draft = (
+                        not has_products
+                        and selected is not None
+                        and normalize_proposal_status(selected.status) == "draft"
+                        and not any(link.proposal_id == selected.id for link in order.product_links)
+                        and not any(link.proposal_id == selected.id for link in order.service_links)
                     )
-                    session.add(proposal)
-                    await session.flush()
+                    remaining_ids = ids
+                    if selected_is_empty_draft:
+                        await CatalogDecisionOrderLineService.replace(
+                            session,
+                            order_id=order_id,
+                            proposal_id=int(selected.id),
+                            product_ids=[ids[0]],
+                            snapshots=snapshots,
+                        )
+                        remaining_ids = ids[1:]
+                    for index, product_id in enumerate(remaining_ids):
+                        proposal = OrderProposal(
+                            order_id=order_id,
+                            name=f"Вариант {len(active_proposals) + index + 1}",
+                            status="draft",
+                            is_selected=False,
+                            sort_order=(len(active_proposals) + index) * 10,
+                        )
+                        session.add(proposal)
+                        await session.flush()
+                        await CatalogDecisionOrderLineService.replace(
+                            session,
+                            order_id=order_id,
+                            proposal_id=int(proposal.id),
+                            product_ids=[product_id],
+                            snapshots=snapshots,
+                        )
                 else:
-                    raise ValueError("Неизвестный режим добавления товаров")
+                    if not has_products or mode == "replace_selected":
+                        proposal = OrderService._selected_proposal(order)
+                        if proposal is None:
+                            raise RuntimeError("У заказа не создано основное предложение")
+                    elif mode == "new_alternative":
+                        proposal = OrderProposal(
+                            order_id=order_id,
+                            name=f"Вариант {len(active_proposals) + 1}",
+                            status="draft",
+                            is_selected=False,
+                            sort_order=len(active_proposals) * 10,
+                        )
+                        session.add(proposal)
+                        await session.flush()
+                    else:
+                        raise ValueError("Неизвестный режим добавления товаров")
 
-                await CatalogDecisionOrderLineService.replace(
-                    session,
-                    order_id=order_id,
-                    proposal_id=int(proposal.id),
-                    product_ids=ids,
-                    snapshots=snapshots,
-                )
+                    await CatalogDecisionOrderLineService.replace(
+                        session,
+                        order_id=order_id,
+                        proposal_id=int(proposal.id),
+                        product_ids=ids,
+                        snapshots=snapshots,
+                    )
             await OrderService._refresh_order_financials(session, order)
             session.add(order)
 

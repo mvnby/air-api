@@ -13,6 +13,10 @@ BTU_MAPPING: Dict[str, Dict[str, Tuple[float, float]]] = {
     "12": {"area": (33, 42),   "power": (3.2, 4.0)},
     "18": {"area": (45, 60),   "power": (5.0, 5.8)},
     "24": {"area": (65, 80),   "power": (6.5, 8.0)},
+    # 30k BTU is the distinct 8.8 kW equipment class.  Keep its band inside
+    # the adjacent 24k/36k boundaries so an exact 8.0 or 9.5 kW nominal is
+    # never classified as two sizes.
+    "30": {"area": (81, 89),   "power": (8.1, 9.4)},
     "36": {"area": (90, 110),  "power": (9.5, 11.0)},
     "42": {"area": (110, 130), "power": (11.0, 13.0)},
     "60": {"area": (150, 180), "power": (15.0, 18.0)},

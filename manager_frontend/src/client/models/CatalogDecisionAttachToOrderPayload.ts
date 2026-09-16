@@ -5,6 +5,7 @@
 export type CatalogDecisionAttachToOrderPayload = {
     product_ids: Array<number>;
     mode?: 'auto' | 'replace_selected' | 'new_alternative' | 'append_to_proposal';
+    proposal_mode?: 'bundle' | 'alternatives';
     proposal_id?: (number | null);
 };
 

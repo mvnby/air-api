@@ -6,5 +6,6 @@ export type CatalogDecisionCreateOrderPayload = {
     product_ids: Array<number>;
     idempotency_key: string;
     prospect_type?: 'individual' | 'company';
+    proposal_mode?: 'bundle' | 'alternatives';
 };
 

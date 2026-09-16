@@ -22,6 +22,9 @@ from models.tenancy import TenantScope
 from services.fx_rate_service import FxRateService
 
 
+SUPPORTED_COOLING_BTU_CLASSES = frozenset({7, 9, 12, 18, 24, 30, 36, 42, 60})
+
+
 class CatalogDecisionScopeError(PermissionError):
     """Raised when a non-system scope reaches the system supplier projection."""
 
@@ -32,6 +35,8 @@ class CatalogDecisionFilters:
     cooling_btu_classes: tuple[int, ...] = ()
     cooling_min_kw: float | None = None
     cooling_max_kw: float | None = None
+    retail_min_byn: float | None = None
+    retail_max_byn: float | None = None
     area_min: float | None = None
     area_max: float | None = None
     category: Literal["household", "multi", "semi_industrial"] | None = None
@@ -44,6 +49,7 @@ class CatalogDecisionFilters:
     wifi: Literal["builtin", "ready", "none"] | None = None
     availability: Literal["in_stock", "out_of_stock"] | None = None
     is_published: bool | None = None
+    product_ids: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -90,6 +96,14 @@ class CatalogDecisionQueryService:
         "multi": "cat-multi",
         "semi_industrial": "cat-industrial",
     }
+
+    @staticmethod
+    def _validate_filters(filters: CatalogDecisionFilters) -> None:
+        if filters.retail_min_byn is not None and filters.retail_max_byn is not None and filters.retail_min_byn > filters.retail_max_byn:
+            raise ValueError("retail_min_byn cannot exceed retail_max_byn")
+        unsupported_btu_classes = set(filters.cooling_btu_classes) - SUPPORTED_COOLING_BTU_CLASSES
+        if unsupported_btu_classes:
+            raise ValueError("Unsupported cooling BTU class")
 
     @staticmethod
     def _json_float_path(session: AsyncSession, *path: str):
@@ -181,7 +195,7 @@ class CatalogDecisionQueryService:
         )
 
     @classmethod
-    def _conditions(cls, session: AsyncSession, filters: CatalogDecisionFilters, *, availability, cooling_nominal, cooling_min, cooling_max, area, heating_min):
+    def _conditions(cls, session: AsyncSession, filters: CatalogDecisionFilters, *, availability, retail, cooling_nominal, cooling_min, cooling_max, area, heating_min):
         conditions = []
         search = (filters.search or "").strip()
         if search:
@@ -220,6 +234,10 @@ class CatalogDecisionQueryService:
             conditions.append(cooling_nominal >= filters.cooling_min_kw)
         if filters.cooling_max_kw is not None:
             conditions.append(cooling_nominal <= filters.cooling_max_kw)
+        if filters.retail_min_byn is not None:
+            conditions.append(retail >= filters.retail_min_byn)
+        if filters.retail_max_byn is not None:
+            conditions.append(retail <= filters.retail_max_byn)
         if filters.area_min is not None:
             conditions.append(area >= filters.area_min)
         if filters.area_max is not None:
@@ -253,6 +271,8 @@ class CatalogDecisionQueryService:
             conditions.append(availability == filters.availability)
         if filters.is_published is not None:
             conditions.append(Product.is_published.is_(filters.is_published))
+        if filters.product_ids:
+            conditions.append(Product.id.in_(filters.product_ids))
         return conditions
 
     @classmethod
@@ -261,6 +281,7 @@ class CatalogDecisionQueryService:
         page: int, limit: int, sort: str, direction: Literal["asc", "desc"],
     ) -> dict:
         SystemCatalogDecisionProjection.require_scope(tenant_scope)
+        cls._validate_filters(filters)
         usd_byn_rate = await FxRateService.get_supplier_usd_byn_rate(session)
         metrics = cls._metrics_cte(usd_byn_rate=usd_byn_rate)
         local_stock = cls._local_stock_cte()
@@ -278,7 +299,7 @@ class CatalogDecisionQueryService:
             cls._json_float_path(session, "__typed_specs", "temp_range_heat", "min"),
             cls._json_float(session, "__filter_min_heat"),
         ).label("heating_min_c")
-        conditions = cls._conditions(session, filters, availability=availability, cooling_nominal=cooling_nominal, cooling_min=cooling_min, cooling_max=cooling_max, area=area, heating_min=heating_min)
+        conditions = cls._conditions(session, filters, availability=availability, retail=retail, cooling_nominal=cooling_nominal, cooling_min=cooling_min, cooling_max=cooling_max, area=area, heating_min=heating_min)
         base = (
             select(
                 Product, Brand.title.label("brand_title"), ProductSeries.title.label("series_title"),

@@ -1,4 +1,4 @@
-from typing import Annotated, Literal
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,7 +23,11 @@ from routers.manager_operation_ids import (
     LIST_MANAGER_CATALOG_DECISION_PRODUCTS,
 )
 from routers.manager_permission_policy import ManagerPermissionRoute
-from services.catalog_decision_projection import CatalogDecisionFilters, CatalogDecisionQueryService
+from services.catalog_decision_projection import (
+    SUPPORTED_COOLING_BTU_CLASSES,
+    CatalogDecisionFilters,
+    CatalogDecisionQueryService,
+)
 from services.catalog_decision_collection_service import CatalogDecisionCollectionService
 from services.catalog_decision_order_service import (
     CatalogDecisionOrderConflict,
@@ -46,18 +50,25 @@ async def list_catalog_decision_filter_options(
 async def list_catalog_decision_products(
     page: int = Query(1, ge=1), limit: int = Query(40, ge=1, le=100), search: str | None = Query(None, max_length=200),
     cooling_btu_classes: list[int] | None = Query(None), cooling_min_kw: float | None = Query(None, ge=0), cooling_max_kw: float | None = Query(None, ge=0),
+    retail_min_byn: float | None = Query(None, ge=0), retail_max_byn: float | None = Query(None, ge=0),
     area_min: float | None = Query(None, ge=0), area_max: float | None = Query(None, ge=0),
     category: Literal["household", "multi", "semi_industrial"] | None = None,
     indoor_form_factor: Literal["wall", "cassette", "duct", "floor_ceiling", "column", "console"] | None = None,
     brand_ids: list[int] | None = Query(None), series_ids: list[int] | None = Query(None), is_inverter: bool | None = None,
-    has_wifi: bool | None = None, wifi: Literal["builtin", "ready", "none"] | None = None, availability: Literal["in_stock", "out_of_stock"] | None = "in_stock",
+    has_wifi: bool | None = None, wifi: Literal["builtin", "ready", "none"] | None = None, availability: Literal["in_stock", "out_of_stock"] | None = None,
+    include_orderable: bool = False, product_ids: list[int] | None = Query(None, min_length=1, max_length=24),
     is_published: bool | None = None, sort: CatalogDecisionSort = "title", direction: Literal["asc", "desc"] = "asc",
     heating_min: int | None = Query(None, ge=-30, le=-20, multiple_of=5, description="Required outdoor heating temperature in Celsius; includes colder-rated models."),
     session: AsyncSession = Depends(get_session), tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    if retail_min_byn is not None and retail_max_byn is not None and retail_min_byn > retail_max_byn:
+        raise HTTPException(status_code=422, detail="retail_min_byn cannot exceed retail_max_byn")
+    if any(btu not in SUPPORTED_COOLING_BTU_CLASSES for btu in cooling_btu_classes or ()):
+        raise HTTPException(status_code=422, detail="Unsupported cooling BTU class")
+    effective_availability = None if include_orderable else (availability or "in_stock")
     return await CatalogDecisionQueryService.list_system_products(
         session, tenant_scope=tenant_scope, page=page, limit=limit, sort=sort, direction=direction,
-        filters=CatalogDecisionFilters(search=search, cooling_btu_classes=tuple(cooling_btu_classes or ()), cooling_min_kw=cooling_min_kw, cooling_max_kw=cooling_max_kw, area_min=area_min, area_max=area_max, category=category, indoor_form_factor=indoor_form_factor, brand_ids=tuple(brand_ids or ()), series_ids=tuple(series_ids or ()), is_inverter=is_inverter, has_wifi=has_wifi, wifi=wifi, availability=availability, is_published=is_published, heating_min=heating_min),
+        filters=CatalogDecisionFilters(search=search, cooling_btu_classes=tuple(cooling_btu_classes or ()), cooling_min_kw=cooling_min_kw, cooling_max_kw=cooling_max_kw, retail_min_byn=retail_min_byn, retail_max_byn=retail_max_byn, area_min=area_min, area_max=area_max, category=category, indoor_form_factor=indoor_form_factor, brand_ids=tuple(brand_ids or ()), series_ids=tuple(series_ids or ()), is_inverter=is_inverter, has_wifi=has_wifi, wifi=wifi, availability=effective_availability, is_published=is_published, heating_min=heating_min, product_ids=tuple(product_ids or ())),
     )
 
 
@@ -99,6 +110,7 @@ async def attach_catalog_decision_to_order(
             order_id=order_id,
             product_ids=payload.product_ids,
             mode=payload.mode,
+            proposal_mode=payload.proposal_mode,
             proposal_id=payload.proposal_id,
             tenant_scope=tenant_scope,
         )
@@ -124,6 +136,7 @@ async def create_catalog_decision_order(
             product_ids=payload.product_ids,
             idempotency_key=payload.idempotency_key,
             prospect_type=payload.prospect_type,
+            proposal_mode=payload.proposal_mode,
             tenant_scope=tenant_scope,
         )
     except ValueError as exc:

@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DOMWrapper, flushPromises, mount } from '@vue/test-utils';
 
-import { ManagerCatalogDecisionService } from '../src/client';
+import { ManagerCatalogDecisionService, ManagerOrdersService } from '../src/client';
+import CatalogDecisionOrderDialog from '../src/components/catalog-decision/CatalogDecisionOrderDialog.vue';
 import CatalogDecisionCollectionDialog from '../src/components/catalog-decision/CatalogDecisionCollectionDialog.vue';
 import CatalogDecisionQuickOrderDialog from '../src/components/catalog-decision/CatalogDecisionQuickOrderDialog.vue';
 import CatalogDecisionSelectionTray from '../src/components/catalog-decision/CatalogDecisionSelectionTray.vue';
@@ -23,7 +24,7 @@ describe('catalog decision basket actions', () => {
     const buttons = wrapper.findAll('button');
 
     await buttons.find(button => button.text() === 'Создать подборку')!.trigger('click');
-    await buttons.find(button => button.text() === 'К существующему')!.trigger('click');
+    await buttons.find(button => button.text() === 'В существующий заказ')!.trigger('click');
     await buttons.find(button => button.text() === 'Новый заказ')!.trigger('click');
 
     expect(wrapper.emitted('createCollection')).toHaveLength(1);
@@ -31,7 +32,7 @@ describe('catalog decision basket actions', () => {
     expect(wrapper.emitted('createOrder')).toHaveLength(1);
   });
 
-  it('creates one anonymous negotiation order from every selected product', async () => {
+  it('creates a negotiation order with separate alternatives by default', async () => {
     const create = vi.spyOn(ManagerCatalogDecisionService, 'createManagerCatalogDecisionOrder')
       .mockResolvedValue({ id: 88 } as never);
     const wrapper = mount(CatalogDecisionQuickOrderDialog, {
@@ -48,9 +49,54 @@ describe('catalog decision basket actions', () => {
     expect(create.mock.calls[0][0]).toMatchObject({
       product_ids: [11, 22],
       prospect_type: 'company',
+      proposal_mode: 'alternatives',
     });
     expect(create.mock.calls[0][0].idempotency_key.length).toBeGreaterThanOrEqual(8);
     expect(wrapper.emitted('created')).toEqual([[88]]);
+  });
+
+  it('allows an explicit bundle and does not close a saving dialog with Escape', async () => {
+    let finish!: (value: any) => void;
+    const create = vi.spyOn(ManagerCatalogDecisionService, 'createManagerCatalogDecisionOrder')
+      .mockImplementation(() => new Promise(resolve => { finish = resolve; }) as any);
+    const wrapper = mount(CatalogDecisionQuickOrderDialog, { props: { open: true, items: selection }, global: { stubs: { teleport: true } } });
+    await wrapper.findAll('button').find(button => button.text() === 'Один комплект')!.trigger('click');
+    await wrapper.findAll('button').find(button => button.text() === 'Создать заказ')!.trigger('click');
+    expect(create.mock.calls[0][0].proposal_mode).toBe('bundle');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(wrapper.emitted('close')).toBeUndefined();
+    finish({ id: 88 });
+    await flushPromises();
+    wrapper.unmount();
+  });
+
+  it('enables comparison only for two to four selections', async () => {
+    const wrapper = mount(CatalogDecisionSelectionTray, { props: { items: selection } });
+    const compare = () => wrapper.findAll('button').find(button => button.text().startsWith('Сравнить'))!;
+    await compare().trigger('click');
+    expect(wrapper.emitted('compare')).toHaveLength(1);
+    await wrapper.setProps({ items: [selection[0]!] });
+    expect(compare().attributes('disabled')).toBeDefined();
+    await wrapper.setProps({ items: Array.from({ length: 5 }, (_, id) => ({ id, title: String(id) })) });
+    expect(compare().attributes('disabled')).toBeDefined();
+    wrapper.unmount();
+  });
+
+  it('adds separate alternatives to an existing order without requesting replacement', async () => {
+    vi.spyOn(ManagerOrdersService, 'getManagerOrders').mockResolvedValue({ items: [{ id: 88, title: 'Офис' }], meta: {} } as any);
+    vi.spyOn(ManagerOrdersService, 'getManagerOrderDetail').mockResolvedValue({ id: 88, status: 'negotiation', proposals: [{ id: 1, is_selected: true, product_lines: [{ product_id: 99 }] }] } as any);
+    const attach = vi.spyOn(ManagerCatalogDecisionService, 'attachManagerCatalogDecisionToOrder').mockResolvedValue({ id: 88 } as any);
+    const wrapper = mount(CatalogDecisionOrderDialog, { props: { open: true, items: selection }, attachTo: document.body });
+    await flushPromises();
+    const dialog = new DOMWrapper(document.body.querySelector<HTMLElement>('[role="dialog"]')!);
+    expect(dialog.text()).toContain('Офис');
+    await dialog.findAll('button').find(button => button.text().includes('Офис'))!.trigger('click');
+    await flushPromises();
+    await dialog.findAll('button').find(button => button.text() === 'Прикрепить')!.trigger('click');
+    await flushPromises();
+    expect(attach).toHaveBeenCalledWith(88, { product_ids: [11, 22], mode: 'new_alternative', proposal_mode: 'alternatives' });
+    expect(wrapper.emitted('attached')).toEqual([[88]]);
+    wrapper.unmount();
   });
 
   it('creates one draft collection from all selected product ids', async () => {
