@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import './documents-settings.css';
 import type { DocumentLegalEntityItem, DocumentLegalEntityUpdatePayload } from '../../../client';
 import { useB2BLookup } from '../../../composables/useB2BLookup';
 import { normalizeIban, normalizeUnp } from '../../../utils/legal-requisites';
@@ -23,6 +24,8 @@ const emit = defineEmits<{
 const newName = ref('');
 const legalName = ref('');
 const unp = ref('');
+const phone = ref('');
+const email = ref('');
 const entityType = ref<SellerEntityType>('organization');
 const isVatPayer = ref(false);
 const city = ref('');
@@ -69,6 +72,8 @@ const syncForm = () => {
   const entity = props.items.find((item) => item.id === props.selectedId);
   legalName.value = entity?.legal_name || '';
   unp.value = entity?.unp || '';
+  phone.value = entity?.requisites.phone || '';
+  email.value = entity?.requisites.email || '';
   entityType.value = entity?.entity_type === 'individual_entrepreneur'
     ? 'individual_entrepreneur'
     : 'organization';
@@ -157,6 +162,8 @@ const updateWarrantyMonths = (kind: 'goods' | 'work', event: Event) => {
 const save = () => {
   if (!props.selectedId) return;
   const requisites = {
+    phone: phone.value.trim() || null,
+    email: email.value.trim() || null,
     offer_url: offerUrl.value.trim() || null,
     offer_version: offerVersion.value.trim() || null,
     offer_published_on: offerPublishedOn.value.trim() || null,
@@ -193,7 +200,7 @@ const save = () => {
     </div>
 
     <div class="mt-5 grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
-      <div class="space-y-2">
+      <div class="min-w-0 space-y-2">
         <button
           v-for="entity in items"
           :key="entity.id"
@@ -202,20 +209,20 @@ const save = () => {
           :class="entity.id === selectedId ? 'border-brand-500 bg-brand-50 dark:bg-brand-950/30' : 'border-slate-200 hover:border-slate-300 dark:border-slate-700'"
           @click="emit('select', entity.id)"
         >
-          <span class="flex items-center justify-between gap-3">
-            <span class="font-semibold text-slate-900 dark:text-white">{{ entity.display_name }}</span>
-            <span v-if="entity.is_default" class="rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-bold text-brand-800">По умолчанию</span>
+          <span class="flex flex-wrap items-start justify-between gap-2">
+            <span class="min-w-0 break-words font-semibold text-slate-900 dark:text-white">{{ entity.display_name }}</span>
+            <span v-if="entity.is_default" class="shrink-0 rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-bold text-brand-800">По умолчанию</span>
           </span>
           <span class="mt-1 block text-xs text-slate-500">{{ entity.unp ? `УНП ${entity.unp}` : 'УНП не указан' }}</span>
         </button>
 
-        <form class="flex gap-2 pt-2" @submit.prevent="create">
-          <input v-model="newName" class="settings-input min-w-0 flex-1" placeholder="ООО МВН или ИП Иванов" />
+        <form class="flex flex-col gap-2 pt-2 sm:flex-row" @submit.prevent="create">
+          <input v-model="newName" class="settings-input min-w-0 sm:flex-1" placeholder="ООО МВН или ИП Иванов" />
           <button class="settings-button-secondary" type="submit" :disabled="saving || !newName.trim()">+Добавить</button>
         </form>
       </div>
 
-      <form v-if="selectedId" class="grid gap-4 sm:grid-cols-2" @submit.prevent="save">
+      <form v-if="selectedId" class="grid min-w-0 gap-4 sm:grid-cols-2" @submit.prevent="save">
         <div class="settings-field sm:col-span-2">
           <span>Тип продавца</span>
           <div data-testid="seller-entity-type" class="grid grid-cols-2 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-950">
@@ -248,13 +255,21 @@ const save = () => {
         </label>
         <button
           type="button"
-          class="mt-6 flex h-10 items-center justify-between rounded-xl border px-3 text-sm font-semibold"
+          class="sm:mt-6 flex h-10 items-center justify-between rounded-xl border px-3 text-sm font-semibold"
           :class="isVatPayer ? 'border-brand-500 bg-brand-50 text-brand-800' : 'border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300'"
           @click="isVatPayer = !isVatPayer"
         >
           <span>Плательщик НДС</span>
           <span class="material-icons-round text-[20px]">{{ isVatPayer ? 'toggle_on' : 'toggle_off' }}</span>
         </button>
+        <label class="settings-field">
+          <span>Рабочий телефон</span>
+          <input v-model="phone" data-testid="seller-phone" class="settings-input" type="tel" autocomplete="tel" maxlength="64" placeholder="+375 29 123-45-67" />
+        </label>
+        <label class="settings-field">
+          <span>E-mail для связи</span>
+          <input v-model="email" data-testid="seller-email" class="settings-input" type="email" autocomplete="email" maxlength="254" placeholder="mail@example.by" />
+        </label>
         <div class="settings-field rounded-xl border border-brand-100 bg-brand-50/60 p-4 sm:col-span-2 dark:border-brand-900/60 dark:bg-brand-950/20">
           <span class="text-sm font-bold text-brand-950 dark:text-brand-100">Документы для физлиц</span>
           <span class="font-normal text-slate-500">Оферта и гарантия подставляются в заказ-акты. В документе всегда сохраняется значение на дату создания черновика.</span>
