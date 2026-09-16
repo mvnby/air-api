@@ -90,6 +90,37 @@ Historical products whose original console type was already overwritten need
 source-backed correction; see [the equipment data audit](../catalog-decision-equipment-data-audit.md).
 This change does not run a production backfill.
 
+## Selection workspace UX
+
+The filter bar uses recognizable indoor-unit silhouettes and two capacity groups
+(7–24 and 30–60 thousand BTU/h). Class 30 has a nominal band of 8.1–9.4 kW;
+the area fallback applies only without a known nominal capacity. Unsupported
+classes are rejected. Existing public installation range semantics are preserved.
+Retail budget bounds are evaluated before both count and pagination. Stock is
+the default; `include_orderable=true` explicitly requests all availability states.
+Wi-Fi distinguishes a built-in module from an optional module.
+
+Filter, sort and page criteria are stored in the URL without replacing order,
+proposal or return-navigation parameters. Invalid URL values are ignored. Rows
+remain visible but inactive while criteria are loading or a request has failed.
+Filter-option failures have their own retry action.
+
+The 24-hour basket continues to persist only IDs and titles, scoped to the
+tenant, staff member and optional proposal. Comparing two to four models fetches
+current values using `product_ids` and the same authorization/publication policy;
+commercial values are never restored from browser storage. Quick model details
+do not navigate away from the workspace. Prices use the official NBRB SVG sign,
+with a textual BYN fallback for accessibility/copying; currency contracts stay BYN.
+
+Order creation and general attachment distinguish a bundle from alternatives.
+API callers retain `proposal_mode=bundle` by default for compatibility. The UI
+defaults a multi-model selection to alternatives, one model per proposal.
+Existing-order alternatives require `mode=new_alternative` and preserve populated
+or locked proposals. An entirely empty selected draft can receive the first
+alternative; remaining models receive new proposals. Exact-target `append_to_proposal` remains bundle-only. Quantities in a
+bundle start at one and can be edited in the order. Creating proposals does not
+send anything to the customer or publish a collection.
+
 ## Follow-up phases
 
 1. Add a system-admin-owned supplier visibility policy contract and migration.

@@ -32,6 +32,12 @@ LEGACY_AREA_TAG_TO_BTU_CLASS = {
 
 
 def _btu_power_bounds(btu_class: int) -> tuple[float, float] | None:
+    # Tariff selectors historically treat 30k as its nominal 8.8 kW point.
+    # Keep that public legacy contract even though catalog filtering uses a
+    # narrow class band around the same nominal.
+    if btu_class == 30:
+        nominal = BTU_TO_KW_MAP[btu_class]
+        return nominal, nominal
     mapping = BTU_MAPPING.get(str(btu_class)) or BTU_MAPPING.get(f"{btu_class:02d}")
     if mapping is not None:
         lower, upper = mapping["power"]

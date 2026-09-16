@@ -75,10 +75,13 @@ CatalogDecisionOrderAttachMode = Literal[
     "append_to_proposal",
 ]
 
+CatalogDecisionProposalMode = Literal["bundle", "alternatives"]
+
 
 class CatalogDecisionAttachToOrderPayload(BaseModel):
     product_ids: list[int] = Field(min_length=1, max_length=24)
     mode: CatalogDecisionOrderAttachMode = "auto"
+    proposal_mode: CatalogDecisionProposalMode = "bundle"
     proposal_id: int | None = Field(default=None, gt=0)
 
 
@@ -86,3 +89,4 @@ class CatalogDecisionCreateOrderPayload(BaseModel):
     product_ids: list[int] = Field(min_length=1, max_length=24)
     idempotency_key: str = Field(min_length=8, max_length=128)
     prospect_type: Literal["individual", "company"] = "individual"
+    proposal_mode: CatalogDecisionProposalMode = "bundle"

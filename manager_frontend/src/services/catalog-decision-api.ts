@@ -10,6 +10,9 @@ export type CatalogDecisionSort = 'retail_price' | 'purchase_cost' | 'rrc' | 'ma
 export type CatalogDecisionFilters = {
   search?: string;
   coolingBtuClasses?: number[];
+  retailMinByn?: number;
+  retailMaxByn?: number;
+  productIds?: number[];
   coolingMinKw?: number;
   coolingMaxKw?: number;
   areaMin?: number;
@@ -38,10 +41,10 @@ export const catalogDecisionApi = {
   list(page: number, limit: number, filters: CatalogDecisionFilters, sort: CatalogDecisionSort, direction: 'asc' | 'desc'): Promise<CatalogDecisionListResponse> {
     return ManagerCatalogDecisionService.listManagerCatalogDecisionProducts(
       page, limit, filters.search, filters.coolingBtuClasses, filters.coolingMinKw, filters.coolingMaxKw,
-      filters.areaMin, filters.areaMax, filters.category, filters.indoorFormFactor,
+      filters.retailMinByn, filters.retailMaxByn, filters.areaMin, filters.areaMax, filters.category, filters.indoorFormFactor,
       filters.brandIds, filters.seriesIds, filters.isInverter, filters.hasWifi, filters.wifi,
       filters.includeOrderable ? undefined : (filters.availability ?? 'in_stock'),
-      filters.isPublished, sort, direction, filters.heatingMin,
+      Boolean(filters.includeOrderable), filters.productIds, filters.isPublished, sort, direction, filters.heatingMin,
     );
   },
 };

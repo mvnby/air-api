@@ -7746,6 +7746,40 @@
             }
           },
           {
+            "name": "retail_min_byn",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Retail Min Byn"
+            }
+          },
+          {
+            "name": "retail_max_byn",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Retail Max Byn"
+            }
+          },
+          {
             "name": "area_min",
             "in": "query",
             "required": false,
@@ -7932,8 +7966,38 @@
                   "type": "null"
                 }
               ],
-              "default": "in_stock",
               "title": "Availability"
+            }
+          },
+          {
+            "name": "include_orderable",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Orderable"
+            }
+          },
+          {
+            "name": "product_ids",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  },
+                  "minItems": 1,
+                  "maxItems": 24
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Product Ids"
             }
           },
           {
@@ -30506,6 +30570,15 @@
             "title": "Mode",
             "default": "auto"
           },
+          "proposal_mode": {
+            "type": "string",
+            "enum": [
+              "bundle",
+              "alternatives"
+            ],
+            "title": "Proposal Mode",
+            "default": "bundle"
+          },
           "proposal_id": {
             "anyOf": [
               {
@@ -30575,6 +30648,15 @@
             ],
             "title": "Prospect Type",
             "default": "individual"
+          },
+          "proposal_mode": {
+            "type": "string",
+            "enum": [
+              "bundle",
+              "alternatives"
+            ],
+            "title": "Proposal Mode",
+            "default": "bundle"
           }
         },
         "type": "object",

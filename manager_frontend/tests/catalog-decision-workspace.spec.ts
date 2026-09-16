@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import CatalogDecisionWorkspaceView from '../src/views/CatalogDecisionWorkspaceView.vue';
 import CatalogDecisionFilters from '../src/components/catalog-decision/CatalogDecisionFilters.vue';
+import CatalogDecisionCompareDialog from '../src/components/catalog-decision/CatalogDecisionCompareDialog.vue';
 import CatalogDecisionTable from '../src/components/catalog-decision/CatalogDecisionTable.vue';
 import CatalogDecisionSelectionTray from '../src/components/catalog-decision/CatalogDecisionSelectionTray.vue';
 import { catalogDecisionApi } from '../src/services/catalog-decision-api';
@@ -35,6 +36,7 @@ const startWorkspace = async (search = '') => {
   workspace = mount(CatalogDecisionWorkspaceView, { global: { stubs: {
     CatalogDecisionFilters: true, CatalogDecisionTable: true, CatalogDecisionSelectionTray: true,
     CatalogDecisionCollectionDialog: true, CatalogDecisionOrderDialog: true, CatalogDecisionQuickOrderDialog: true,
+    CatalogDecisionCompareDialog: true, CatalogDecisionProductDetailsDialog: true,
   } } });
   await flushPromises();
   return workspace;
@@ -114,5 +116,49 @@ describe('order-bound equipment selection', () => {
     finishOld({ items: [{ ...selectedModel, id: 20 }], meta: { page: 1, pages: 1, total: 1, limit: 40 } });
     await flushPromises();
     expect(wrapper.findComponent(CatalogDecisionTable).props('items').map((item: any) => item.id)).toEqual([30]);
+  });
+});
+
+
+describe('catalog workspace usability', () => {
+  it('restores bookmarked criteria and retains exact target context on changes', async () => {
+    const wrapper = await startWorkspace('?orderId=42&proposalId=51&coolingBtuClasses=30&retailMaxByn=4000&page=2&sort=retail_price');
+    expect(catalogDecisionApi.list).toHaveBeenCalledWith(2, 40, expect.objectContaining({ coolingBtuClasses: [30], retailMaxByn: 4000 }), 'retail_price', 'asc');
+    wrapper.findComponent(CatalogDecisionFilters).vm.$emit('update:modelValue', { isPublished: true, wifi: 'ready' });
+    await flushPromises();
+    expect(new URLSearchParams(location.search).get('wifi')).toBe('ready');
+    expect(new URLSearchParams(location.search).get('proposalId')).toBe('51');
+    expect(new URLSearchParams(location.search).has('coolingBtuClasses')).toBe(false);
+  });
+
+  it('retains table rows while loading but blocks selection of stale results', async () => {
+    const wrapper = await startWorkspace();
+    let finish!: (value: any) => void;
+    vi.mocked(catalogDecisionApi.list).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    wrapper.findComponent(CatalogDecisionFilters).vm.$emit('update:modelValue', { heatingMin: -30 });
+    await flushPromises();
+    const table = wrapper.findComponent(CatalogDecisionTable);
+    expect(table.props('items')).toEqual([selectedModel]);
+    expect(table.props('busy')).toBe(true);
+    table.vm.$emit('toggle', selectedModel);
+    await flushPromises();
+    expect(wrapper.findComponent(CatalogDecisionSelectionTray).props('items')).toEqual([]);
+    finish({ items: [], meta: { page: 1, pages: 0, total: 0, limit: 40 } });
+    await flushPromises();
+    expect(wrapper.text()).toContain('Страница 1 из 1');
+    expect(wrapper.text()).toContain('Показать также заказные');
+  });
+
+  it('hydrates restored cross-page selections with fresh server values for comparison', async () => {
+    saveCatalogDecisionSelection([{ id: 11, title: 'Old title' }, { id: 22, title: 'Other page' }], catalogDecisionSelectionStorageKey(identity));
+    const wrapper = await startWorkspace();
+    vi.mocked(catalogDecisionApi.list).mockResolvedValueOnce({ items: [{ ...selectedModel, retail_price_byn: 2200 }, { id: 22, title: 'Other model', retail_price_byn: 3300 } as any], meta: { page: 1, pages: 1, total: 2, limit: 24 } });
+    wrapper.findComponent(CatalogDecisionSelectionTray).vm.$emit('compare');
+    await flushPromises();
+    expect(catalogDecisionApi.list).toHaveBeenLastCalledWith(1, 24, { isPublished: true, includeOrderable: true, productIds: [11, 22] }, 'title', 'asc');
+    const dialog = wrapper.findComponent(CatalogDecisionCompareDialog);
+    expect(dialog.props('open')).toBe(true);
+    expect(dialog.props('items').map((item: any) => item.retail_price_byn)).toEqual([2200, 3300]);
+    expect(loadCatalogDecisionSelection(catalogDecisionSelectionStorageKey(identity))).toEqual([{ id: 11, title: 'Old title' }, { id: 22, title: 'Other page' }]);
   });
 });
