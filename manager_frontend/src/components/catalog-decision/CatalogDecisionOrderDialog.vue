@@ -109,10 +109,10 @@ const submit = async () => {
 <template>
   <Teleport to="body">
     <div v-if="open" class="fixed inset-0 z-50 flex items-end justify-center bg-gray-950/40 p-0 sm:items-center sm:p-4" @click.self="close">
-      <section ref="dialogRef" role="dialog" aria-modal="true" aria-labelledby="attach-order-title" tabindex="-1" class="flex max-h-[90vh] w-full flex-col rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-xl sm:rounded-2xl">
+      <section ref="dialogRef" role="dialog" aria-modal="true" aria-labelledby="attach-order-title" tabindex="-1" class="max-h-[90vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-xl sm:rounded-2xl">
         <div class="flex items-start justify-between gap-4"><div><h2 id="attach-order-title" class="text-lg font-bold text-gray-900">Прикрепить к заказу</h2><p class="mt-1 text-sm text-gray-500">Выберите заказ в переговорах.</p></div><button type="button" class="material-icons-round text-gray-400" aria-label="Закрыть" @click="close">close</button></div>
         <input v-model="search" :disabled="saving" aria-label="Номер заказа, клиент или телефон" class="mt-4 w-full rounded-xl border border-gray-300 px-3 py-2.5 outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100" placeholder="Номер заказа, клиент или телефон" inputmode="search" />
-        <div class="mt-3 min-h-28 overflow-y-auto rounded-xl border border-gray-200">
+        <div class="mt-3 max-h-48 min-h-28 overflow-y-auto rounded-xl border border-gray-200">
           <p v-if="loading" class="p-4 text-center text-sm text-gray-500">Загрузка…</p>
           <p v-else-if="!orders.length" class="p-4 text-center text-sm text-gray-500">Подходящих заказов не найдено.</p>
           <template v-else><button v-for="order in orders" :key="order.id" type="button" class="flex w-full items-center gap-3 border-b border-gray-100 px-3 py-3 text-left last:border-0" :class="selectedOrder?.id === order.id ? 'bg-brand-50' : 'hover:bg-gray-50'" :disabled="saving" @click="chooseOrder(order)"><span class="font-semibold text-brand-700">#{{ order.id }}</span><span class="min-w-0 flex-1"><span class="block truncate text-sm font-medium text-gray-900">{{ orderLabel(order) }}</span><span class="block truncate text-xs text-gray-500">{{ order.customer?.phone || 'Телефон не указан' }}</span></span><span v-if="selectedOrder?.id === order.id" class="material-icons-round text-brand-600">check_circle</span></button></template>
