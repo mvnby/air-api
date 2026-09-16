@@ -32,6 +32,8 @@ export class ManagerCatalogDecisionService {
      * @param coolingBtuClasses
      * @param coolingMinKw
      * @param coolingMaxKw
+     * @param retailMinByn
+     * @param retailMaxByn
      * @param areaMin
      * @param areaMax
      * @param category
@@ -42,6 +44,8 @@ export class ManagerCatalogDecisionService {
      * @param hasWifi
      * @param wifi
      * @param availability
+     * @param includeOrderable
+     * @param productIds
      * @param isPublished
      * @param sort
      * @param direction
@@ -56,6 +60,8 @@ export class ManagerCatalogDecisionService {
         coolingBtuClasses?: (Array<number> | null),
         coolingMinKw?: (number | null),
         coolingMaxKw?: (number | null),
+        retailMinByn?: (number | null),
+        retailMaxByn?: (number | null),
         areaMin?: (number | null),
         areaMax?: (number | null),
         category?: ('household' | 'multi' | 'semi_industrial' | null),
@@ -66,6 +72,8 @@ export class ManagerCatalogDecisionService {
         hasWifi?: (boolean | null),
         wifi?: ('builtin' | 'ready' | 'none' | null),
         availability?: ('in_stock' | 'out_of_stock' | null),
+        includeOrderable: boolean = false,
+        productIds?: (Array<number> | null),
         isPublished?: (boolean | null),
         sort: 'retail_price' | 'purchase_cost' | 'rrc' | 'margin_abs' | 'margin_pct' | 'availability' | 'cooling_power' | 'title' = 'title',
         direction: 'asc' | 'desc' = 'asc',
@@ -81,6 +89,8 @@ export class ManagerCatalogDecisionService {
                 'cooling_btu_classes': coolingBtuClasses,
                 'cooling_min_kw': coolingMinKw,
                 'cooling_max_kw': coolingMaxKw,
+                'retail_min_byn': retailMinByn,
+                'retail_max_byn': retailMaxByn,
                 'area_min': areaMin,
                 'area_max': areaMax,
                 'category': category,
@@ -91,6 +101,8 @@ export class ManagerCatalogDecisionService {
                 'has_wifi': hasWifi,
                 'wifi': wifi,
                 'availability': availability,
+                'include_orderable': includeOrderable,
+                'product_ids': productIds,
                 'is_published': isPublished,
                 'sort': sort,
                 'direction': direction,

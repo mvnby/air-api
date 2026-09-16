@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
+import { useDialogA11y } from '../../composables/useDialogA11y';
 import { ManagerCatalogDecisionService } from '../../client';
 import type { CatalogDecisionSelectionItem } from '../../services/catalog-decision-selection';
 import { getApiErrorMessage } from '../../utils/api-errors';
@@ -10,6 +11,9 @@ const title = ref('');
 const saving = ref(false);
 const error = ref('');
 const titleInput = ref<HTMLInputElement | null>(null);
+const dialogRef = ref<HTMLElement | null>(null);
+const close = () => { if (!saving.value) emit('close'); };
+useDialogA11y({ open: computed(() => props.open), dialogRef, initialFocusRef: titleInput, close });
 
 const defaultTitle = () => `Подборка ${new Intl.DateTimeFormat('ru-BY', { dateStyle: 'short' }).format(new Date())}`;
 
@@ -42,15 +46,15 @@ const submit = async () => {
 
 <template>
   <Teleport to="body">
-    <div v-if="open" class="fixed inset-0 z-50 flex items-end justify-center bg-gray-950/40 p-0 sm:items-center sm:p-4" @click.self="emit('close')">
-      <form class="w-full rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-lg sm:rounded-2xl" @submit.prevent="submit">
+    <div v-if="open" class="fixed inset-0 z-50 flex items-end justify-center bg-gray-950/40 p-0 sm:items-center sm:p-4" @click.self="close">
+      <form ref="dialogRef" role="dialog" aria-modal="true" aria-labelledby="collection-title" tabindex="-1" class="w-full rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-lg sm:rounded-2xl" @submit.prevent="submit">
         <div class="flex items-start justify-between gap-4">
-          <div><h2 class="text-lg font-bold text-gray-900">Создать подборку</h2><p class="mt-1 text-sm text-gray-500">В неё войдут {{ items.length }} выбранных моделей.</p></div>
-          <button type="button" class="material-icons-round text-gray-400" aria-label="Закрыть" @click="emit('close')">close</button>
+          <div><h2 id="collection-title" class="text-lg font-bold text-gray-900">Создать подборку</h2><p class="mt-1 text-sm text-gray-500">В неё войдут {{ items.length }} выбранных моделей.</p></div>
+          <button type="button" class="material-icons-round text-gray-400" aria-label="Закрыть" @click="close">close</button>
         </div>
         <label class="mt-5 block text-sm font-medium text-gray-700">Название<input ref="titleInput" v-model="title" maxlength="180" class="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5 outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100" /></label>
         <p v-if="error" class="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{{ error }}</p>
-        <div class="mt-5 flex justify-end gap-2"><button type="button" class="rounded-xl px-4 py-2.5 text-sm font-semibold text-gray-600" @click="emit('close')">Отмена</button><button type="submit" class="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50" :disabled="saving || !title.trim()">{{ saving ? 'Создаём…' : 'Создать' }}</button></div>
+        <div class="mt-5 flex justify-end gap-2"><button type="button" class="rounded-xl px-4 py-2.5 text-sm font-semibold text-gray-600" @click="close">Отмена</button><button type="submit" class="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50" :disabled="saving || !title.trim()">{{ saving ? 'Создаём…' : 'Создать' }}</button></div>
       </form>
     </div>
   </Teleport>

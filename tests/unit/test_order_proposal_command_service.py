@@ -26,6 +26,7 @@ from services.catalog_decision_order_service import (
     CatalogDecisionOrderConflict,
     CatalogDecisionOrderService,
 )
+from services.catalog_decision_order_lines import CatalogDecisionOrderLineService
 
 
 TEST_TENANT_SCOPE = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
@@ -381,6 +382,164 @@ async def test_catalog_selection_creates_unselected_alternative_without_overwrit
     assert [line["product_id"] for line in selected["product_lines"]] == [int(products[0].id)]
     assert [line["product_id"] for line in alternative["product_lines"]] == [int(products[1].id)]
     assert alternative["name"] == "Вариант 2"
+
+
+@pytest.mark.asyncio
+async def test_catalog_selection_creates_one_alternative_per_product_when_requested(
+    proposal_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    order_id = await _create_order(proposal_session)
+    products = await _create_products(proposal_session)
+    _stub_catalog_snapshots(monkeypatch, products)
+    replace_calls: list[list[int]] = []
+    original_replace = CatalogDecisionOrderLineService.replace
+
+    async def record_replace(session, *, product_ids, **kwargs):
+        replace_calls.append(list(product_ids))
+        await original_replace(session, product_ids=product_ids, **kwargs)
+
+    monkeypatch.setattr(
+        CatalogDecisionOrderLineService,
+        "replace",
+        staticmethod(record_replace),
+    )
+    main = OrderProposal(order_id=order_id, name="Основное", is_selected=True, sort_order=0)
+    proposal_session.add(main)
+    await proposal_session.flush()
+    proposal_session.add(OrderProductLink(
+        order_id=order_id,
+        proposal_id=int(main.id),
+        product_id=int(products[0].id),
+        quantity=1,
+        price=2200,
+        cost=900,
+    ))
+    await proposal_session.commit()
+
+    detail = await CatalogDecisionOrderService.attach(
+        proposal_session,
+        order_id=order_id,
+        product_ids=[int(product.id) for product in products],
+        mode="new_alternative",
+        proposal_mode="alternatives",
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+
+    assert [(proposal["name"], proposal["is_selected"]) for proposal in detail["proposals"]] == [
+        ("Основное", True),
+        ("Вариант 2", False),
+        ("Вариант 3", False),
+    ]
+    assert replace_calls == [[int(product.id)] for product in products]
+    assert [
+        [line["product_id"] for line in proposal["product_lines"]]
+        for proposal in detail["proposals"]
+    ] == [
+        [int(products[0].id)],
+        [int(products[0].id)],
+        [int(products[1].id)],
+    ]
+
+
+@pytest.mark.asyncio
+async def test_catalog_selection_alternatives_fill_empty_selected_draft_first(
+    proposal_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    order_id = await _create_order(proposal_session)
+    products = await _create_products(proposal_session)
+    _stub_catalog_snapshots(monkeypatch, products)
+
+    detail = await CatalogDecisionOrderService.attach(
+        proposal_session,
+        order_id=order_id,
+        product_ids=[int(product.id) for product in products],
+        mode="new_alternative",
+        proposal_mode="alternatives",
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+
+    assert [(proposal["name"], proposal["is_selected"]) for proposal in detail["proposals"]] == [
+        ("Основное", True),
+        ("Вариант 2", False),
+    ]
+    assert [
+        [line["product_id"] for line in proposal["product_lines"]]
+        for proposal in detail["proposals"]
+    ] == [[int(product.id)] for product in products]
+
+
+@pytest.mark.asyncio
+async def test_catalog_selection_alternatives_preserve_service_only_selected_draft(
+    proposal_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    order_id = await _create_order(proposal_session)
+    products = await _create_products(proposal_session)
+    _stub_catalog_snapshots(monkeypatch, products)
+    main = OrderProposal(order_id=order_id, name="Основное", is_selected=True, sort_order=0)
+    proposal_session.add(main)
+    await proposal_session.flush()
+    proposal_session.add(OrderServiceLink(
+        order_id=order_id,
+        proposal_id=int(main.id),
+        title="Монтаж",
+        quantity=1,
+        price=100,
+        cost=50,
+    ))
+    await proposal_session.commit()
+
+    detail = await CatalogDecisionOrderService.attach(
+        proposal_session,
+        order_id=order_id,
+        product_ids=[int(product.id) for product in products],
+        mode="new_alternative",
+        proposal_mode="alternatives",
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+
+    assert [
+        [line["product_id"] for line in proposal["product_lines"]]
+        for proposal in detail["proposals"]
+    ] == [[], [int(products[0].id)], [int(products[1].id)]]
+    assert detail["proposals"][0]["service_lines"][0]["service_title"] == "Монтаж"
+
+
+@pytest.mark.asyncio
+async def test_catalog_selection_rejects_alternatives_for_append_or_replacement(
+    proposal_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    order_id = await _create_order(proposal_session)
+    products = await _create_products(proposal_session)
+    _stub_catalog_snapshots(monkeypatch, products)
+    product_id = int(products[0].id)
+    proposal = OrderProposal(order_id=order_id, name="Основное", is_selected=True)
+    proposal_session.add(proposal)
+    await proposal_session.commit()
+    proposal_id = int(proposal.id)
+
+    with pytest.raises(ValueError, match="только для нового варианта"):
+        await CatalogDecisionOrderService.attach(
+            proposal_session,
+            order_id=order_id,
+            product_ids=[product_id],
+            mode="replace_selected",
+            proposal_mode="alternatives",
+            tenant_scope=TEST_TENANT_SCOPE,
+        )
+    with pytest.raises(ValueError, match="только режим bundle"):
+        await CatalogDecisionOrderService.attach(
+            proposal_session,
+            order_id=order_id,
+            product_ids=[product_id],
+            mode="append_to_proposal",
+            proposal_mode="alternatives",
+            proposal_id=proposal_id,
+            tenant_scope=TEST_TENANT_SCOPE,
+        )
 
 
 @pytest.mark.asyncio

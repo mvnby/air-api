@@ -54,6 +54,7 @@ class CatalogDecisionQuickOrderService:
         product_ids: list[int],
         idempotency_key: str,
         prospect_type: Literal["individual", "company"],
+        proposal_mode: Literal["bundle", "alternatives"] = "bundle",
         tenant_scope: TenantScope,
     ) -> dict[str, Any]:
         SystemCatalogDecisionProjection.require_scope(tenant_scope)
@@ -62,6 +63,8 @@ class CatalogDecisionQuickOrderService:
             raise ValueError("Один товар нельзя добавить дважды")
         if not idempotency_key.strip():
             raise ValueError("Не указан ключ создания заказа")
+        if proposal_mode not in {"bundle", "alternatives"}:
+            raise ValueError("Неизвестный режим предложений")
         fingerprint = cls._fingerprint(
             tenant_scope=tenant_scope,
             idempotency_key=idempotency_key,
@@ -114,22 +117,24 @@ class CatalogDecisionQuickOrderService:
                 session.add(order)
                 await session.flush()
                 order_id = int(order.id)
-                proposal = OrderProposal(
-                    order_id=order_id,
-                    name="Основное",
-                    status="draft",
-                    is_selected=True,
-                    sort_order=0,
-                )
-                session.add(proposal)
-                await session.flush()
-                await CatalogDecisionOrderLineService.replace(
-                    session,
-                    order_id=order_id,
-                    proposal_id=int(proposal.id),
-                    product_ids=ids,
-                    snapshots=snapshots,
-                )
+                proposal_products = [ids] if proposal_mode == "bundle" else [[product_id] for product_id in ids]
+                for index, proposal_product_ids in enumerate(proposal_products):
+                    proposal = OrderProposal(
+                        order_id=order_id,
+                        name="Основное" if index == 0 else f"Вариант {index + 1}",
+                        status="draft",
+                        is_selected=index == 0,
+                        sort_order=index * 10,
+                    )
+                    session.add(proposal)
+                    await session.flush()
+                    await CatalogDecisionOrderLineService.replace(
+                        session,
+                        order_id=order_id,
+                        proposal_id=int(proposal.id),
+                        product_ids=proposal_product_ids,
+                        snapshots=snapshots,
+                    )
                 await OrderService._refresh_order_financials(session, order)
                 session.add(order)
         except IntegrityError:

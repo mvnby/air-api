@@ -3,7 +3,7 @@ from sqlalchemy import event
 from sqlmodel import select
 
 from core.config import settings
-from models import Brand, Order, Product, ProductSeries, ProductTagLink, Tag, TagGroup
+from models import Brand, Order, Product, ProductSeries, Tag, TagGroup
 from models.supplier import ProductSupplierMapping, Supplier, SupplierOffer
 from models.tenancy import TenantScope
 from services.catalog_decision_projection import (
@@ -72,6 +72,32 @@ async def test_catalog_decision_filters_use_normalized_power_and_form_factor(db)
 
 
 @pytest.mark.asyncio
+async def test_catalog_decision_filters_retail_before_pagination_and_count(db):
+    low = Product(title="DECISION retail A low", slug="decision-retail-low", price=100)
+    middle = Product(title="DECISION retail B middle", slug="decision-retail-middle", price=200)
+    high = Product(title="DECISION retail C high", slug="decision-retail-high", price=300)
+    db.add_all([low, middle, high])
+    await db.commit()
+
+    result = await CatalogDecisionQueryService.list_system_products(
+        db,
+        tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
+        filters=CatalogDecisionFilters(
+            search="DECISION retail",
+            retail_min_byn=150,
+            retail_max_byn=250,
+        ),
+        page=1,
+        limit=1,
+        sort="title",
+        direction="asc",
+    )
+
+    assert [item["id"] for item in result["items"]] == [middle.id]
+    assert result["meta"]["total"] == 1
+
+
+@pytest.mark.asyncio
 async def test_catalog_decision_filters_use_nominal_cooling_power_not_modulation_or_title(db):
     wall = Product(
         title="DECISION rated household wall",
@@ -136,6 +162,37 @@ async def test_catalog_decision_filters_use_nominal_cooling_power_not_modulation
     assert oversized.id not in {item["id"] for item in kw_result["items"]}
     assert btu_result["meta"]["total"] == 0
     assert title_trap.id not in {item["id"] for item in btu_result["items"]}
+
+
+@pytest.mark.asyncio
+async def test_catalog_decision_btu_30_uses_its_nominal_band_and_area_fallback(db):
+    lower = Product(title="DECISION class lower", slug="decision-class-lower", price=1000, power_cooling=8.0)
+    nominal = Product(title="DECISION class nominal", slug="decision-class-nominal", price=1000, power_cooling=8.8)
+    upper = Product(title="DECISION class upper", slug="decision-class-upper", price=1000, power_cooling=9.5)
+    fallback = Product(title="DECISION class fallback", slug="decision-class-fallback", price=1000, specs={"area_m2": 85})
+    db.add_all([lower, nominal, upper, fallback])
+    await db.commit()
+    scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
+
+    thirty = await CatalogDecisionQueryService.list_system_products(
+        db, tenant_scope=scope,
+        filters=CatalogDecisionFilters(search="DECISION class", cooling_btu_classes=(30,)),
+        page=1, limit=20, sort="title", direction="asc",
+    )
+    twenty_four = await CatalogDecisionQueryService.list_system_products(
+        db, tenant_scope=scope,
+        filters=CatalogDecisionFilters(search="DECISION class", cooling_btu_classes=(24,)),
+        page=1, limit=20, sort="title", direction="asc",
+    )
+    thirty_six = await CatalogDecisionQueryService.list_system_products(
+        db, tenant_scope=scope,
+        filters=CatalogDecisionFilters(search="DECISION class", cooling_btu_classes=(36,)),
+        page=1, limit=20, sort="title", direction="asc",
+    )
+
+    assert {item["id"] for item in thirty["items"]} == {nominal.id, fallback.id}
+    assert {item["id"] for item in twenty_four["items"]} == {lower.id}
+    assert {item["id"] for item in thirty_six["items"]} == {upper.id}
 
 
 @pytest.mark.asyncio
@@ -232,6 +289,47 @@ async def test_catalog_decision_http_heating_threshold_coerces_and_validates(asy
     assert eligible.id in [item["id"] for item in filtered.json()["items"]]
     assert no_threshold.status_code == 200, no_threshold.text
     assert invalid.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_catalog_decision_http_hydrates_exact_ids_and_validates_retail_and_btu_filters(async_client, db):
+    published = Product(title="DECISION HTTP published", slug="decision-http-published", price=200, is_published=True)
+    unpublished = Product(title="DECISION HTTP unpublished", slug="decision-http-unpublished", price=300, is_published=False)
+    db.add_all([published, unpublished])
+    await db.commit()
+    headers = await _auth_headers(async_client)
+
+    hydrated = await async_client.get(
+        "/api/manager/catalog-decision/products",
+        headers=headers,
+        params=[
+            ("include_orderable", "true"),
+            ("is_published", "true"),
+            ("product_ids", published.id),
+            ("product_ids", unpublished.id),
+        ],
+    )
+    default_availability = await async_client.get(
+        "/api/manager/catalog-decision/products",
+        headers=headers,
+        params=[("product_ids", published.id)],
+    )
+    invalid_range = await async_client.get(
+        "/api/manager/catalog-decision/products?retail_min_byn=300&retail_max_byn=200",
+        headers=headers,
+    )
+    invalid_btu = await async_client.get(
+        "/api/manager/catalog-decision/products?cooling_btu_classes=48",
+        headers=headers,
+    )
+
+    assert hydrated.status_code == 200, hydrated.text
+    assert [item["id"] for item in hydrated.json()["items"]] == [published.id]
+    assert hydrated.json()["meta"]["total"] == 1
+    assert default_availability.status_code == 200, default_availability.text
+    assert default_availability.json()["items"] == []
+    assert invalid_range.status_code == 422
+    assert invalid_btu.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -342,6 +440,33 @@ async def test_catalog_decision_quick_order_is_anonymous_atomic_and_idempotent(d
     assert order.technical_meta["customer_state"] == "unidentified"
     assert order.technical_meta["prospect_type"] == "company"
     assert len((await db.execute(select(Order).where(Order.source_fingerprint == order.source_fingerprint))).scalars().all()) == 1
+
+
+@pytest.mark.asyncio
+async def test_catalog_decision_quick_order_alternatives_create_one_proposal_per_product(db):
+    products = [
+        Product(title="DECISION quick alternative 12", slug="decision-quick-alternative-12", price=2200),
+        Product(title="DECISION quick alternative 18", slug="decision-quick-alternative-18", price=3100),
+    ]
+    db.add_all(products)
+    await db.commit()
+
+    detail = await CatalogDecisionQuickOrderService.create(
+        db,
+        product_ids=[int(product.id) for product in products],
+        idempotency_key="quick-order-alternatives-1",
+        prospect_type="individual",
+        proposal_mode="alternatives",
+        tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
+    )
+
+    assert [(proposal["name"], proposal["is_selected"]) for proposal in detail["proposals"]] == [
+        ("Основное", True),
+        ("Вариант 2", False),
+    ]
+    assert [proposal["product_lines"][0]["product_id"] for proposal in detail["proposals"]] == [
+        int(product.id) for product in products
+    ]
 
 
 @pytest.mark.asyncio
