@@ -9,6 +9,7 @@ import type { ManagerProductCollectionPlacementsPayload } from '../models/Manage
 import type { ManagerProductCollectionProductOptionListResponse } from '../models/ManagerProductCollectionProductOptionListResponse';
 import type { ManagerProductCollectionResponse } from '../models/ManagerProductCollectionResponse';
 import type { ManagerProductCollectionUpdate } from '../models/ManagerProductCollectionUpdate';
+import type { ManagerProductCollectionWorkspacePayload } from '../models/ManagerProductCollectionWorkspacePayload';
 import type { ProductCollectionPreviewResponse } from '../models/ProductCollectionPreviewResponse';
 import type { ProductCollectionRuleOptionsResponse } from '../models/ProductCollectionRuleOptionsResponse';
 import type { CancelablePromise } from '../core/CancelablePromise';
@@ -234,6 +235,30 @@ export class ManagerProductCollectionsService {
                 'surface': surface,
                 'slot': slot,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Save Manager Product Collection Workspace
+     * @param collectionId
+     * @param requestBody
+     * @returns ManagerProductCollectionResponse Successful Response
+     * @throws ApiError
+     */
+    public static saveManagerProductCollectionWorkspace(
+        collectionId: number,
+        requestBody: ManagerProductCollectionWorkspacePayload,
+    ): CancelablePromise<ManagerProductCollectionResponse> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/manager/product-collections/{collection_id}/workspace',
+            path: {
+                'collection_id': collectionId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

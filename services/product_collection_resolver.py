@@ -11,6 +11,10 @@ from models import ProductCollection
 from models.tenancy import TenantScope
 from services.feature_resolver_service import FeatureResolverService
 from services.installation_discount_service import InstallationDiscountService
+from services.product_collection_placement_display import (
+    display_config,
+    present_collections,
+)
 from services.product_collection_eligibility import ProductCollectionEligibility
 from services.product_collection_rule_matcher import ProductCollectionRuleMatcher
 from services.product_collection_rule_policy import ProductCollectionRulePolicy
@@ -353,6 +357,7 @@ class ProductCollectionResolver:
         surface_key: str,
         slot_key: str,
         tenant_scope: TenantScope,
+        preview_collection_id: int | None = None,
     ) -> dict:
         use_offer_projection = bool(
             not await PublicCatalogVisibilityService.is_canonical_scope(
@@ -360,17 +365,20 @@ class ProductCollectionResolver:
                 tenant_scope,
             )
         )
+        now = utc_now()
         rows = await ProductCollectionDAO.list_placements(
             session,
             surface_key=surface_key,
             slot_key=slot_key,
-            now=utc_now(),
+            now=now,
             tenant_scope=tenant_scope,
         )
         if surface_key == "home" and slot_key == "featured_products":
             rows = rows[:4]
 
+        day = now.date().toordinal()
         collections: list[dict] = []
+        preview_candidate = None
         for placement, collection in rows:
             resolved = await ProductCollectionResolver.resolve(
                 session,
@@ -383,6 +391,9 @@ class ProductCollectionResolver:
             )
             if resolved["below_min_items"]:
                 continue
+            config = display_config(placement)
+            if collection.id == preview_collection_id:
+                preview_candidate = (collection.slug, resolved, config)
             collections.append(
                 {
                     "slug": collection.slug,
@@ -393,11 +404,19 @@ class ProductCollectionResolver:
                     "cta_url": collection.cta_url,
                     "position": int(placement.position),
                     "updated_at": collection.updated_at,
+                    **config,
                     "items": resolved["items"],
                 }
             )
-        return {
+        displayed = present_collections(collections, day=day)
+        result = {
             "surface": surface_key,
             "slot": slot_key,
-            "collections": collections,
+            "collections": displayed,
         }
+        if preview_candidate is not None:
+            slug, resolved, config = preview_candidate
+            selected = next((row for row in displayed if row["slug"] == slug), None)
+            if selected is not None:
+                result["preview"] = {**resolved, **config, "items": selected["items"]}
+        return result

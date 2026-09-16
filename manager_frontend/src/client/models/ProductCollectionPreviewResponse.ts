@@ -5,6 +5,10 @@
 import type { ProductCollectionExclusionResponse } from './ProductCollectionExclusionResponse';
 import type { PublicProductCollectionItemResponse } from './PublicProductCollectionItemResponse';
 export type ProductCollectionPreviewResponse = {
+    display_mode?: 'carousel' | 'grid' | 'tiles' | 'single';
+    item_limit?: (number | null);
+    grid_columns?: number;
+    rotation_mode?: 'none' | 'daily';
     collection_id: number;
     collection_slug: string;
     below_min_items: boolean;

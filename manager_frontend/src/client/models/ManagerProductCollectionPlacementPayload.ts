@@ -3,6 +3,10 @@
 /* tslint:disable */
 /* eslint-disable */
 export type ManagerProductCollectionPlacementPayload = {
+    display_mode?: 'carousel' | 'grid' | 'tiles' | 'single';
+    item_limit?: (number | null);
+    grid_columns?: number;
+    rotation_mode?: 'none' | 'daily';
     surface_key: string;
     slot_key: string;
     position?: number;
