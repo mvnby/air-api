@@ -16,6 +16,11 @@ DEPLOY_LOCK_FILE="${API_DEPLOY_LOCK_FILE:-${PROJECT_DIR}/.deploy.lock}"
 DEPLOY_LOCK_FD="${API_DEPLOY_LOCK_FD:-}"
 DEPLOY_LOCK_HELPER="${API_DEPLOY_LOCK_HELPER:-${SCRIPT_DIR}/ha/safe_deploy_lock.py}"
 DEPLOY_LOCK_HELPER_SHA256="${API_DEPLOY_LOCK_HELPER_SHA256:-}"
+SHARED_HOST_BELZAKUPKI_GUARD="${API_SHARED_HOST_BELZAKUPKI_GUARD:-auto}"
+SHARED_HOST_BELZAKUPKI_GUARD_ACTIVE="${API_SHARED_HOST_BELZAKUPKI_GUARD_ACTIVE:-}"
+SHARED_HOST_BELZAKUPKI_LOCK_FILE="${API_SHARED_HOST_BELZAKUPKI_LOCK_FILE:-/var/lock/mvn-shared-host-belzakupki.lock}"
+SHARED_HOST_BELZAKUPKI_LOCK_FD="${API_SHARED_HOST_BELZAKUPKI_LOCK_FD:-}"
+SHARED_HOST_BELZAKUPKI_GUARD_SCRIPT="${API_SHARED_HOST_BELZAKUPKI_GUARD_SCRIPT:-${SCRIPT_DIR}/shared_host_belzakupki_suspend.sh}"
 STOP_SERVICES_AFTER_DEPLOY="${API_STOP_SERVICES_AFTER_DEPLOY:-}"
 ACTIVE_SLOT_FILE="${API_ACTIVE_SLOT_FILE:-${PROJECT_DIR}/.active-api-slot}"
 PREVIOUS_BACKEND_IMAGE="${API_PREVIOUS_BACKEND_IMAGE:-}"
@@ -44,14 +49,17 @@ failed_candidate() {
   set +e
   if promotion_committed; then
     echo "candidate compose promotion committed; preserving the consistent new runtime" >&2
-    exit "${status}"
+  else
+    if [[ "${TRANSACTION_ENABLED}" == "true" ]]; then
+      transaction cleanup || restoration_failed=true
+    fi
+    if ! API_COMPOSE_FILE="$(basename "${CANONICAL_FILE}")" \
+      API_RECONCILE_BACKEND_IMAGE="${PREVIOUS_BACKEND_IMAGE}" \
+      bash "${RECONCILE_SCRIPT}"; then
+      restoration_failed=true
+    fi
   fi
-  if [[ "${TRANSACTION_ENABLED}" == "true" ]]; then
-    transaction cleanup || restoration_failed=true
-  fi
-  if ! API_COMPOSE_FILE="$(basename "${CANONICAL_FILE}")" \
-    API_RECONCILE_BACKEND_IMAGE="${PREVIOUS_BACKEND_IMAGE}" \
-    bash "${RECONCILE_SCRIPT}"; then
+  if ! restore_shared_host_belzakupki; then
     restoration_failed=true
   fi
   if [[ "${restoration_failed}" == "true" ]]; then
@@ -59,6 +67,13 @@ failed_candidate() {
     exit 90
   fi
   exit "${status}"
+}
+
+restore_shared_host_belzakupki() {
+  [[ "${SHARED_HOST_BELZAKUPKI_GUARD_ACTIVE}" == "true" ]] || return 0
+  API_SHARED_HOST_BELZAKUPKI_GUARD="${SHARED_HOST_BELZAKUPKI_GUARD}" \
+    API_SHARED_HOST_BELZAKUPKI_GUARD_ACTIVE="${SHARED_HOST_BELZAKUPKI_GUARD_ACTIVE}" \
+    bash "${SHARED_HOST_BELZAKUPKI_GUARD_SCRIPT}" restore
 }
 
 promotion_committed() {
@@ -150,6 +165,49 @@ fi
   exit 1
 }
 python3 "${DEPLOY_LOCK_HELPER}" verify "${DEPLOY_LOCK_FILE}" "${DEPLOY_LOCK_FD}"
+case "${SHARED_HOST_BELZAKUPKI_GUARD}" in
+  false|auto|true) ;;
+  *)
+    echo "API_SHARED_HOST_BELZAKUPKI_GUARD must be auto, true, or false" >&2
+    exit 1
+    ;;
+esac
+if [[ -z "${SHARED_HOST_BELZAKUPKI_GUARD_ACTIVE}" ]]; then
+  [[ -f "${SHARED_HOST_BELZAKUPKI_GUARD_SCRIPT}" \
+    && ! -L "${SHARED_HOST_BELZAKUPKI_GUARD_SCRIPT}" ]] || {
+    echo "shared Belzakupki guard script is missing or unsafe" >&2; exit 1;
+  }
+  guard_status="$(API_SHARED_HOST_BELZAKUPKI_GUARD="${SHARED_HOST_BELZAKUPKI_GUARD}" \
+    bash "${SHARED_HOST_BELZAKUPKI_GUARD_SCRIPT}" enabled)"
+  case "${guard_status}" in
+    enabled) SHARED_HOST_BELZAKUPKI_GUARD_ACTIVE=true ;;
+    disabled) SHARED_HOST_BELZAKUPKI_GUARD_ACTIVE=false ;;
+    *) echo "shared Belzakupki guard returned an invalid status" >&2; exit 1 ;;
+  esac
+  export API_SHARED_HOST_BELZAKUPKI_GUARD_ACTIVE="${SHARED_HOST_BELZAKUPKI_GUARD_ACTIVE}"
+fi
+if [[ "${SHARED_HOST_BELZAKUPKI_GUARD_ACTIVE}" == "true" ]]; then
+    [[ "${SHARED_HOST_BELZAKUPKI_LOCK_FILE}" == "/var/lock/mvn-shared-host-belzakupki.lock" ]] || {
+      echo "shared Belzakupki lock path is fixed" >&2; exit 1;
+    }
+    [[ -f "${SHARED_HOST_BELZAKUPKI_GUARD_SCRIPT}" \
+      && ! -L "${SHARED_HOST_BELZAKUPKI_GUARD_SCRIPT}" ]] || {
+      echo "shared Belzakupki guard script is missing or unsafe" >&2; exit 1;
+    }
+    if [[ -z "${SHARED_HOST_BELZAKUPKI_LOCK_FD}" ]]; then
+      exec python3 "${DEPLOY_LOCK_HELPER}" exec-with-fd \
+        "${SHARED_HOST_BELZAKUPKI_LOCK_FILE}" 8 \
+        API_SHARED_HOST_BELZAKUPKI_LOCK_FD bash "$0" "$@"
+    fi
+    [[ "${SHARED_HOST_BELZAKUPKI_LOCK_FD}" == "8" ]] || {
+      echo "shared Belzakupki guard requires inherited lock fd 8" >&2; exit 1;
+    }
+    python3 "${DEPLOY_LOCK_HELPER}" verify \
+      "${SHARED_HOST_BELZAKUPKI_LOCK_FILE}" "${SHARED_HOST_BELZAKUPKI_LOCK_FD}"
+elif [[ "${SHARED_HOST_BELZAKUPKI_GUARD_ACTIVE}" != "false" ]]; then
+    echo "API_SHARED_HOST_BELZAKUPKI_GUARD_ACTIVE must be true or false" >&2
+    exit 1
+fi
 resolve_previous_backend_image
 
 if [[ "${TRANSACTION_ENABLED}" == "true" ]]; then
@@ -159,6 +217,12 @@ if [[ "${TRANSACTION_ENABLED}" == "true" ]]; then
   fi
 fi
 trap failed_candidate EXIT
+trap 'exit 143' INT TERM
+
+if [[ "${SHARED_HOST_BELZAKUPKI_GUARD_ACTIVE}" == "true" ]]; then
+  API_SHARED_HOST_BELZAKUPKI_GUARD_ACTIVE="${SHARED_HOST_BELZAKUPKI_GUARD_ACTIVE}" \
+    bash "${SHARED_HOST_BELZAKUPKI_GUARD_SCRIPT}" prepare
+fi
 
 candidate_name="$(basename "${CANDIDATE_FILE}")"
 case "${DEPLOY_STRATEGY}" in
@@ -191,5 +255,7 @@ COMPOSE_FILE="${CANDIDATE_FILE}" bash "${SMOKE_SCRIPT}"
 if [[ "${TRANSACTION_ENABLED}" == "true" ]]; then
   transaction promote
 fi
+restore_shared_host_belzakupki
 trap - EXIT
+trap - INT TERM
 echo "backend candidate activation, smoke, and compose promotion completed"

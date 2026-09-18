@@ -634,6 +634,18 @@ class Settings(BaseSettings):
     MAIL_IMAP_LEAD_IMPORT_INTERVAL_MINUTES: int = 20
     MAIL_IMAP_LEAD_INITIAL_LOOKBACK_DAYS: int = 5
     MAIL_IMAP_LEAD_KEYWORDS: str = ""
+
+    # Belzakupki opportunities are polled only by the active primary scheduler.
+    # The target scope is deliberately opt-in rather than inferred from a request.
+    BELZAKUPKI_IMPORT_ENABLED: bool = False
+    BELZAKUPKI_API_BASE_URL: str = ""
+    BELZAKUPKI_INTEGRATION_KEY: str = Field(default="", repr=False, exclude=True)
+    BELZAKUPKI_IMPORT_TENANT_SLUG: str = ""
+    BELZAKUPKI_IMPORT_STOREFRONT_SLUG: str = ""
+    BELZAKUPKI_IMPORT_INTERVAL_MINUTES: int = Field(default=5, ge=1, le=1440)
+    BELZAKUPKI_IMPORT_PAGE_SIZE: int = Field(default=100, ge=1, le=100)
+    BELZAKUPKI_IMPORT_INCLUDE_RULES_ONLY: bool = False
+    BELZAKUPKI_IMPORT_TIMEOUT_SECONDS: float = Field(default=10.0, ge=0.1, le=60.0)
     MAIL_SMTP_HOST: str = "smtp.yandex.ru"
     MAIL_SMTP_PORT: int = 465
     MAIL_SMTP_USE_SSL: bool = True

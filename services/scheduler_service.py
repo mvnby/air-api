@@ -189,6 +189,9 @@ class SchedulerService:
         # Run email lead IMAP import loop. Disabled by default to avoid unplanned AI usage.
         tasks.append(asyncio.create_task(self._email_lead_import_loop()))
 
+        # Pull one bounded Belzakupki opportunity page for the explicitly scoped inbox.
+        tasks.append(asyncio.create_task(self._belzakupki_import_loop()))
+
         try:
             # Keep the main loop alive.
             while True:
@@ -591,6 +594,31 @@ class SchedulerService:
                 )
             except Exception:
                 logger.exception("❌ Email lead import loop error")
+            await asyncio.sleep(interval_minutes * 60)
+
+    async def _belzakupki_import_loop(self):
+        while True:
+            interval_minutes = max(1, int(settings.BELZAKUPKI_IMPORT_INTERVAL_MINUTES or 5))
+            try:
+                from services.belzakupki_import_service import BelzakupkiImportService
+
+                if not BelzakupkiImportService.is_configured():
+                    logger.info("Belzakupki import skipped: integration is not configured or disabled.")
+                else:
+                    result = await BelzakupkiImportService.run_scheduled_import()
+                    logger.info(
+                        "BELZAKUPKI_IMPORT_DONE processed=%s accepted=%s created=%s updated=%s unchanged=%s skipped=%s stale=%s cursor_after=%s",
+                        result.processed,
+                        result.accepted,
+                        result.created,
+                        result.updated,
+                        result.unchanged,
+                        result.skipped,
+                        result.stale,
+                        bool(result.cursor_after),
+                    )
+            except Exception:
+                logger.exception("BELZAKUPKI_IMPORT_FAILED")
             await asyncio.sleep(interval_minutes * 60)
 
 scheduler_service = SchedulerService()

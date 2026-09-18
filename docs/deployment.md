@@ -84,6 +84,34 @@ API_LOCAL_HEALTH_URL=http://127.0.0.1:18000/api/health
 This keeps the emergency Caddy/network compose on `zakup` intact while still
 allowing backend image deploys from `main`.
 
+### Shared Belarus host: Kitlane worker suspension
+
+The Belarus Patroni node may also host Kitlane at `/opt/belzakupki`. Its RQ
+worker can use enough memory to make a CRM migration or blue-green activation
+unreliable on the 4 GB host. The Patroni release bundle therefore checks a
+local, root-owned opt-in marker before every migration and deployment step:
+
+```bash
+install -o root -g root -m 600 /dev/null /opt/belzakupki/.kitlane-deploy-guard-enabled
+```
+
+With that marker present, the release takes
+`/var/lock/mvn-shared-host-belzakupki.lock`, verifies the exact Docker labels
+and names for `belzakupki-scheduler-1` and `belzakupki-worker-1`, then sends
+`SIGTERM` to the scheduler first and worker second. It waits up to 120 seconds
+for each process to drain. It never sends `SIGKILL`, runs `docker compose down`,
+or touches Kitlane Caddy, API, or database containers. A drain timeout aborts
+the CRM release before its migration/image work begins.
+
+The guard records the pre-release state in
+`/opt/belzakupki/.air-api-deploy-suspension` and restores only services that
+were running before the release, on success, failure, `INT`, or `TERM`.
+Kitlane's own deploy must take the same lock. Do not remove a recovery record
+by hand: let the next verified CRM release recover it first. If a process is
+still draining, wait for it to exit and rerun the verified release; this proves
+recovery instead of replacing an in-flight job. Remove the opt-in marker only
+when no release or recovery record is active.
+
 Production compose binds backend-only ports to localhost:
 
 ```yaml

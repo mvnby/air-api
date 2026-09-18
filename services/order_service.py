@@ -2355,6 +2355,26 @@ class OrderService:
         return cleaned or None
 
     @staticmethod
+    def _lead_inbox_customer_name(order: Order) -> Optional[str]:
+        if order.customer:
+            return OrderService._clean_order_title(order.customer.name)
+
+        source = (
+            order.lead_source.value
+            if hasattr(order.lead_source, "value")
+            else str(order.lead_source or "")
+        )
+        if source != LeadSource.BELZAKUPKI.value:
+            return None
+
+        meta = order.technical_meta if isinstance(order.technical_meta, dict) else {}
+        source_meta = meta.get("belzakupki")
+        tender = source_meta.get("tender") if isinstance(source_meta, dict) else None
+        if not isinstance(tender, dict):
+            return None
+        return OrderService._clean_order_title(tender.get("customer_name"))
+
+    @staticmethod
     async def get_leads_inbox(
         session: AsyncSession,
         *,
@@ -2437,7 +2457,7 @@ class OrderService:
                     == "new_lead"
                 ),
                 customer_id=order.customer_id,
-                customer_name=order.customer.name if order.customer else None,
+                customer_name=OrderService._lead_inbox_customer_name(order),
                 phone=order.customer.phone if order.customer else None,
                 email=order.customer.email if order.customer else None,
                 source=(

@@ -281,6 +281,7 @@ jobs:
             scripts/post_deploy_smoke_check.sh scripts/compose_candidate_transaction.sh
             scripts/reconcile_backend_compose_runtime.sh
             scripts/deploy_backend_candidate_transaction.sh
+            scripts/shared_host_belzakupki_suspend.sh
             scripts/ha/safe_deploy_lock.py
           )
           lock_helper_sha256="$(sha256sum scripts/ha/safe_deploy_lock.py | awk '{print $1}')"

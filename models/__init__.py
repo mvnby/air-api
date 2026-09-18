@@ -79,6 +79,7 @@ from .service_asset import (
 )
 from .staff import StaffUser
 from .storage_maintenance import StorageReconciliationCursor
+from .belzakupki import BelzakupkiImportCheckpoint
 from .tenancy import (
     Storefront,
     StorefrontDomain,
@@ -150,6 +151,7 @@ __all__ = [
     "DocumentDriveConnection",
     "AuthLoginThrottle",
     "BankReceipt",
+    "BelzakupkiImportCheckpoint",
     "Cart",
     "CartItem",
     "Brand",

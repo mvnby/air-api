@@ -88,23 +88,42 @@ def _verify(path: str, descriptor: int) -> None:
 
 def main() -> int:
     _verify_self()
-    if len(sys.argv) < 4 or sys.argv[1] not in {"exec", "verify"}:
-        raise RuntimeError("usage: safe_deploy_lock.py exec|verify LOCK command...")
+    if len(sys.argv) < 4 or sys.argv[1] not in {"exec", "verify", "exec-with-fd"}:
+        raise RuntimeError(
+            "usage: safe_deploy_lock.py exec|verify|exec-with-fd LOCK command..."
+        )
     operation, path = sys.argv[1:3]
     if operation == "verify":
         if len(sys.argv) != 4 or not sys.argv[3].isdigit():
             raise RuntimeError("verify requires one numeric inherited descriptor")
         _verify(path, int(sys.argv[3]))
         return 0
+    if operation == "exec-with-fd":
+        if len(sys.argv) < 6 or not sys.argv[3].isdigit() or not re.fullmatch(
+            r"[A-Z][A-Z0-9_]*", sys.argv[4]
+        ):
+            raise RuntimeError(
+                "exec-with-fd requires LOCK FD ENVIRONMENT_VARIABLE command..."
+            )
+        descriptor_target = int(sys.argv[3])
+        if descriptor_target < 3 or descriptor_target > 255 or descriptor_target == LOCK_FD:
+            raise RuntimeError("exec-with-fd requires an auxiliary descriptor from 3 to 255")
+        environment_variable = sys.argv[4]
+        command = sys.argv[5:]
+    else:
+        descriptor_target = LOCK_FD
+        environment_variable = "API_DEPLOY_LOCK_FD"
+        command = sys.argv[3:]
+
     descriptor = _open(path)
-    if descriptor != LOCK_FD:
-        os.dup2(descriptor, LOCK_FD, inheritable=True)
+    if descriptor != descriptor_target:
+        os.dup2(descriptor, descriptor_target, inheritable=True)
         os.close(descriptor)
     else:
         os.set_inheritable(descriptor, True)
     environment = os.environ.copy()
-    environment["API_DEPLOY_LOCK_FD"] = str(LOCK_FD)
-    os.execvpe(sys.argv[3], sys.argv[3:], environment)
+    environment[environment_variable] = str(descriptor_target)
+    os.execvpe(command[0], command, environment)
     return 1
 
 
