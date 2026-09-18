@@ -244,18 +244,17 @@ async def test_import_failure_rolls_back_page_and_keeps_prior_checkpoint(db, mon
 
 @pytest.mark.asyncio
 async def test_import_isolated_by_tenant_and_storefront(db):
-    db.add_all(
-        [
-            Tenant(id=2, slug="second", display_name="Second", status="active"),
-            Storefront(
-                id=2,
-                tenant_id=2,
-                slug="main",
-                display_name="Second main",
-                status="active",
-                is_default=True,
-            ),
-        ]
+    db.add(Tenant(id=2, slug="second", display_name="Second", status="active"))
+    await db.flush()
+    db.add(
+        Storefront(
+            id=2,
+            tenant_id=2,
+            slug="main",
+            display_name="Second main",
+            status="active",
+            is_default=True,
+        )
     )
     await db.commit()
     second_scope = TenantScope(

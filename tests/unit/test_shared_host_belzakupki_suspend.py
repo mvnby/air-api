@@ -7,6 +7,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SOURCE = REPO_ROOT / "scripts/shared_host_belzakupki_suspend.sh"
 PATRONI_RUNNER = REPO_ROOT / "scripts/ha/run_patroni_candidate_transaction.sh"
 PATRONI_REMOTE = REPO_ROOT / "scripts/ha/run_patroni_node_remote.sh"
+GUARD_LIFECYCLE = REPO_ROOT / "scripts/ha/shared_host_belzakupki_guard_lifecycle.sh"
 SCHEDULER_ID = "a" * 64
 WORKER_ID = "b" * 64
 
@@ -189,12 +190,18 @@ def test_patroni_release_bundles_the_guard_and_suspends_before_migration_or_depl
     remote = PATRONI_REMOTE.read_text(encoding="utf-8")
 
     assert "shared_host_belzakupki_suspend.sh" in remote
+    assert "shared_host_belzakupki_guard_lifecycle.sh" in remote
     assert "API_SHARED_HOST_BELZAKUPKI_GUARD_SCRIPT" in remote
-    migration_prepare = transaction.index('bash "${SHARED_HOST_BELZAKUPKI_GUARD_SCRIPT}" prepare')
+    assert "bash \"${SHARED_HOST_BELZAKUPKI_GUARD_SCRIPT}\" prepare" in GUARD_LIFECYCLE.read_text(
+        encoding="utf-8"
+    )
+    migration_prepare = transaction.index(
+        "shared_belzakupki_guard_prepare_with_signal_recovery"
+    )
     migration_start = transaction.index('bash "${MIGRATION_SCRIPT}"')
     deploy_start = transaction.index('bash "${DEPLOY_SCRIPT}"')
     deploy_prepare = transaction.rindex(
-        'bash "${SHARED_HOST_BELZAKUPKI_GUARD_SCRIPT}" prepare', 0, deploy_start
+        "shared_belzakupki_guard_prepare_with_signal_recovery", 0, deploy_start
     )
     assert migration_prepare < migration_start
     assert deploy_prepare < deploy_start
