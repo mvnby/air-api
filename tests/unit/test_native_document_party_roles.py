@@ -54,6 +54,8 @@ def test_existing_snapshots_without_role_leave_template_literals_unchanged():
     ('Продавец и Покупатель', 'seller_buyer'),
     ('Исполнителем и Заказчиком', 'executor_customer'),
     ('Подрядчик — Заказчик', 'contractor_customer'),
+    ('Продавцом и Плательщиком', 'seller_payer'),
+    ('Исполнителю и Плательщику', 'executor_payer'),
     ('Продавец Покупатель Исполнитель Заказчик', None),
     ('{{ seller.legal_name }} и {{ customer.full_name }}', None),
 ])
@@ -72,10 +74,11 @@ def order(role='seller_buyer'):
 
 
 @pytest.mark.asyncio
-async def test_frozen_basis_beats_order_and_template_and_explicit_choice_wins():
-    basis = SimpleNamespace(render_snapshot={'meta': {'document_role_type': 'contractor_customer'}})
+@pytest.mark.parametrize('basis_role', list(ROLE_FORMS))
+async def test_frozen_basis_beats_order_and_template_and_explicit_choice_wins(basis_role):
+    basis = SimpleNamespace(render_snapshot={'meta': {'document_role_type': basis_role}})
     args = dict(order=order(), base_document=basis, base_contract=None, template=SimpleNamespace(document_role_type='executor_customer'))
-    assert await resolve_party_roles(AsyncMock(), selection=selection(), **args) == ('contractor_customer', 'basis')
+    assert await resolve_party_roles(AsyncMock(), selection=selection(), **args) == (basis_role, 'basis')
     assert await resolve_party_roles(AsyncMock(), selection=selection('executor_customer'), **args) == ('executor_customer', 'explicit')
 
 

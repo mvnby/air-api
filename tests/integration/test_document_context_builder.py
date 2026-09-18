@@ -752,14 +752,14 @@ async def test_context_builder_rejects_cross_tenant_issuer(db):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("document_type", ["act", "invoice"])
-@pytest.mark.parametrize("override,expected", [(None, "contractor_customer"), ("executor_customer", "executor_customer")])
+@pytest.mark.parametrize("override,expected", [(None, "executor_payer"), ("seller_payer", "seller_payer")])
 async def test_party_roles_inherit_frozen_contract_and_allow_override(db, document_type, override, expected):
     order, issuer, selected, *_ = await _seed_order(db)
     contract = OrderDocument(
         tenant_id=1, legal_entity_id=issuer.id, order_id=order.id,
         proposal_id=selected.id, doc_type="contract", status="issued",
         number="roles-contract", internal_reference="roles-contract",
-        render_snapshot={"meta": {"document_role_type": "contractor_customer"}},
+        render_snapshot={"meta": {"document_role_type": "executor_payer"}},
         google_file_id=None, google_edit_url=None,
     )
     order.document_role_type = "seller_buyer"
@@ -776,6 +776,6 @@ async def test_party_roles_inherit_frozen_contract_and_allow_override(db, docume
     assert snapshot["meta"]["base_document_id"] == contract.id
     assert snapshot["meta"]["document_role_type"] == expected
     assert snapshot["values"]["document.role_type"] == expected
-    assert snapshot["values"]["seller.role_gen"] == ("Подрядчика" if expected == "contractor_customer" else "Исполнителя")
-    assert snapshot["values"]["customer.role_ins"] == "Заказчиком"
-    assert contract.render_snapshot == {"meta": {"document_role_type": "contractor_customer"}}
+    assert snapshot["values"]["seller.role_gen"] == ("Продавца" if expected == "seller_payer" else "Исполнителя")
+    assert snapshot["values"]["customer.role_ins"] == "Плательщиком"
+    assert contract.render_snapshot == {"meta": {"document_role_type": "executor_payer"}}

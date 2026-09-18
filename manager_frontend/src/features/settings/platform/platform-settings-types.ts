@@ -1,4 +1,4 @@
-export type DocumentRoleType = 'seller_buyer' | 'executor_customer' | 'contractor_customer';
+export type DocumentRoleType = 'seller_buyer' | 'executor_customer' | 'contractor_customer' | 'seller_payer' | 'executor_payer';
 export type SettingsTab = 'general' | 'documentTemplates' | 'repairComplaints' | 'emailLeads' | 'botSelection';
 export type ManagedDocumentType = 'contract' | 'act' | 'invoice' | 'retail_receipt' | 'service_act' | 'maintenance_service_act' | 'warranty_certificate' | 'defect_act';
 export type DocumentTemplateFileOption = {
@@ -43,7 +43,9 @@ export type RepairComplaintPresetForm = {
 };
 export const DOCUMENT_ROLE_OPTIONS: Array<{ value: DocumentRoleType; label: string }> = [
     { value: 'seller_buyer', label: 'Продавец / Покупатель' },
+    { value: 'seller_payer', label: 'Продавец / Плательщик' },
     { value: 'executor_customer', label: 'Исполнитель / Заказчик' },
+    { value: 'executor_payer', label: 'Исполнитель / Плательщик' },
     { value: 'contractor_customer', label: 'Подрядчик / Заказчик' },
 ];
 export const EMAIL_LEAD_AUTO_IMPORT_KEY = 'mail_lead_auto_import_enabled';
@@ -142,7 +144,7 @@ export const REPAIR_COMPLAINT_GROUP_OPTIONS = [
 
 export const normalizeRoleType = (value: unknown): DocumentRoleType => {
     const raw = String(value || '').trim();
-    if (raw === 'executor_customer' || raw === 'contractor_customer') return raw;
+    if (raw === 'executor_customer' || raw === 'contractor_customer' || raw === 'seller_payer' || raw === 'executor_payer') return raw;
     return 'seller_buyer';
 };
 

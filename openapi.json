@@ -38239,7 +38239,9 @@
                 "enum": [
                   "seller_buyer",
                   "executor_customer",
-                  "contractor_customer"
+                  "contractor_customer",
+                  "seller_payer",
+                  "executor_payer"
                 ]
               },
               {
@@ -38465,7 +38467,9 @@
                 "enum": [
                   "seller_buyer",
                   "executor_customer",
-                  "contractor_customer"
+                  "contractor_customer",
+                  "seller_payer",
+                  "executor_payer"
                 ]
               },
               {
@@ -57921,7 +57925,9 @@
                 "enum": [
                   "seller_buyer",
                   "executor_customer",
-                  "contractor_customer"
+                  "contractor_customer",
+                  "seller_payer",
+                  "executor_payer"
                 ]
               },
               {
@@ -58001,7 +58007,9 @@
                 "enum": [
                   "seller_buyer",
                   "executor_customer",
-                  "contractor_customer"
+                  "contractor_customer",
+                  "seller_payer",
+                  "executor_payer"
                 ]
               },
               {
@@ -58120,7 +58128,9 @@
                 "enum": [
                   "seller_buyer",
                   "executor_customer",
-                  "contractor_customer"
+                  "contractor_customer",
+                  "seller_payer",
+                  "executor_payer"
                 ]
               },
               {

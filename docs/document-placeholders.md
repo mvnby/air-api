@@ -33,9 +33,10 @@ Use the party conditions instead of writing one fixed preamble:
 
 ### Party names in native documents
 
-Contracts, invoices, proposals and work acts support three pairs:
-**Продавец / Покупатель**, **Исполнитель / Заказчик**, and
-**Подрядчик / Заказчик**. In the order document form, acts and invoices default
+Contracts, invoices, proposals and work acts support five pairs:
+**Продавец / Покупатель**, **Исполнитель / Заказчик**, **Подрядчик / Заказчик**,
+**Продавец / Плательщик**, and **Исполнитель / Плательщик**.
+In the order document form, acts and invoices default
 to **Как в договоре**; an explicit selection overrides inheritance for that
 new document only. Invoices may select a contract as their optional basis.
 
@@ -108,6 +109,8 @@ For acts and invoices only, the generator can replace these words and their comm
 - `seller_buyer`: no replacement
 - `executor_customer`: продавец -> исполнитель, покупатель -> заказчик
 - `contractor_customer`: продавец -> подрядчик, покупатель -> заказчик
+- `seller_payer`: продавец -> продавец, покупатель -> плательщик
+- `executor_payer`: продавец -> исполнитель, покупатель -> плательщик
 
 The role type can come from the contract template default, the open customer contract, or the order override.
 

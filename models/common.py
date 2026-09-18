@@ -115,6 +115,8 @@ class DocumentRoleType(str, Enum):
     SELLER_BUYER = "seller_buyer"
     EXECUTOR_CUSTOMER = "executor_customer"
     CONTRACTOR_CUSTOMER = "contractor_customer"
+    SELLER_PAYER = "seller_payer"
+    EXECUTOR_PAYER = "executor_payer"
 
 
 class OrderStageStatus(str, Enum):

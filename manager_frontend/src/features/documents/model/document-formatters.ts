@@ -6,7 +6,7 @@ export const formatMoney = (value: number | null | undefined) => `${Number(value
 
 export const normalizeRoleType = (value: unknown): DocumentRoleType => {
   const raw = String(value || '').trim();
-  if (raw === 'executor_customer' || raw === 'contractor_customer') return raw;
+  if (raw === 'executor_customer' || raw === 'contractor_customer' || raw === 'seller_payer' || raw === 'executor_payer') return raw;
   return 'seller_buyer';
 };
 

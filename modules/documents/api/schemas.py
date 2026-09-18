@@ -14,7 +14,9 @@ from modules.documents.domain import (
 from .business_schemas import ActTermsPayload, BusinessDocumentTermsPayload
 
 
-DocumentPartyRoleType = Literal["seller_buyer", "executor_customer", "contractor_customer"]
+DocumentPartyRoleType = Literal[
+    "seller_buyer", "executor_customer", "contractor_customer", "seller_payer", "executor_payer",
+]
 
 
 NATIVE_DOCUMENT_TYPE_PATTERN = (

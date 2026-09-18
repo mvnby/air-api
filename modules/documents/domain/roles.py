@@ -21,23 +21,29 @@ class RoleForms:
 
 SELLER_FORMS = RoleForms("продавец", "продавца", "продавцу", "продавца", "продавцом", "продавце")
 BUYER_FORMS = RoleForms("покупатель", "покупателя", "покупателю", "покупателя", "покупателем", "покупателе")
+EXECUTOR_FORMS = RoleForms("исполнитель", "исполнителя", "исполнителю", "исполнителя", "исполнителем", "исполнителе")
+PAYER_FORMS = RoleForms("плательщик", "плательщика", "плательщику", "плательщика", "плательщиком", "плательщике")
 
 ROLE_FORMS: dict[str, tuple[RoleForms, RoleForms]] = {
     "seller_buyer": (SELLER_FORMS, BUYER_FORMS),
     "executor_customer": (
-        RoleForms("исполнитель", "исполнителя", "исполнителю", "исполнителя", "исполнителем", "исполнителе"),
+        EXECUTOR_FORMS,
         RoleForms("заказчик", "заказчика", "заказчику", "заказчика", "заказчиком", "заказчике"),
     ),
     "contractor_customer": (
         RoleForms("подрядчик", "подрядчика", "подрядчику", "подрядчика", "подрядчиком", "подрядчике"),
         RoleForms("заказчик", "заказчика", "заказчику", "заказчика", "заказчиком", "заказчике"),
     ),
+    "seller_payer": (SELLER_FORMS, PAYER_FORMS),
+    "executor_payer": (EXECUTOR_FORMS, PAYER_FORMS),
 }
 
 ROLE_LABELS: dict[str, str] = {
     "seller_buyer": "Продавец / Покупатель",
     "executor_customer": "Исполнитель / Заказчик",
     "contractor_customer": "Подрядчик / Заказчик",
+    "seller_payer": "Продавец / Плательщик",
+    "executor_payer": "Исполнитель / Плательщик",
 }
 
 
