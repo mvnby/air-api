@@ -47,6 +47,22 @@ afterEach(() => {
 });
 
 describe('CreateCustomerModal', () => {
+  it('requires a company type for MEDO instead of silently creating an individual', async () => {
+    const wrapper = mountModal();
+    await wrapper.get('[data-testid="customer-name"]').setValue('Частное торговое унитарное предприятие "МЭДО"');
+    expect(wrapper.get('[role="alert"]').text()).toContain('Выберите «Юрлицо»');
+    await wrapper.get('[data-testid="submit-customer"]').trigger('click');
+    expect(api.createManagerCustomer).not.toHaveBeenCalled();
+
+    await wrapper.findAll('button').find((button) => button.text().includes('Юрлицо'))!.trigger('click');
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    await wrapper.get('[data-testid="submit-customer"]').trigger('click');
+    await flushPromises();
+    expect(api.createManagerCustomer).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'company', signing_mode: 'statutory_body',
+    }));
+  });
+
   it('creates a sparse customer and returns the new profile', async () => {
     const wrapper = mountModal();
 

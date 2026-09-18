@@ -10,6 +10,7 @@ import AddressSuggestInput from '../ui/AddressSuggestInput.vue';
 import LeadCustomerTypeChooser from '../leads/LeadCustomerTypeChooser.vue';
 import {
   buildCustomerCreatePayload,
+  customerPartyTypeWarning,
   defaultSigningMode,
   isBusinessCustomer,
   validateCustomerProfileForm,
@@ -56,6 +57,7 @@ const phoneModel = computed({
 const phoneMask = useBelarusPhoneMask(phoneInputRef, phoneModel);
 const { lookupCompany, isEgrLoading, egrError } = useB2BLookup();
 const business = computed(() => isBusinessCustomer(form.value.type));
+const partyTypeWarning = computed(() => customerPartyTypeWarning(form.value));
 
 const inputClass = (field: keyof CustomerForm) => [
   'w-full rounded-xl border bg-slate-900 px-4 py-3 text-sm text-slate-100 outline-none transition-all placeholder:text-slate-600 focus:ring-2 focus:ring-brand-500 disabled:opacity-50',
@@ -167,6 +169,7 @@ watch(
                 :show-error="Boolean(serverErrors.type)"
                 @update:model-value="setCustomerType"
               />
+              <p v-if="partyTypeWarning" role="alert" class="mt-2 text-sm text-amber-600 dark:text-amber-300">{{ partyTypeWarning }}</p>
             </div>
 
             <div class="grid gap-4 sm:grid-cols-2">

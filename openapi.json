@@ -48294,9 +48294,15 @@
             "title": "Service Type"
           },
           "customer_type": {
-            "type": "string",
-            "title": "Customer Type",
-            "default": "individual"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Type"
           },
           "customer_inn": {
             "anyOf": [

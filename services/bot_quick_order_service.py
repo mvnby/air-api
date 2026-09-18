@@ -517,7 +517,6 @@ class BotQuickOrderService:
                     name=normalized.get("name"),
                     phone=normalized.get("phone"),
                     delivery_address=normalized.get("address"),
-                    customer_type="individual",
                     order_comment=request_text,
                 ),
                 tenant_scope=tenant_scope,

@@ -583,7 +583,7 @@ class ManagerOrderCreatePayload(BaseModel):
     source: str
     request_text: str
     service_type: Optional[str] = None
-    customer_type: str = "individual"
+    customer_type: Optional[str] = None
     customer_inn: Optional[str] = None
     customer_full_legal_name: Optional[str] = None
     target_date: Optional[datetime] = None

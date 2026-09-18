@@ -44,6 +44,20 @@ export type CustomerProfileValidation = {
   ibanError: string;
 };
 
+export const customerPartyTypeWarning = (
+  form: Pick<CustomerForm, 'type' | 'name' | 'full_legal_name' | 'inn'>,
+): string => {
+  if (form.type !== 'individual') return '';
+  const identity = `${form.name} ${form.full_legal_name}`.toLocaleLowerCase();
+  // Match whole Cyrillic words; JavaScript's \b only understands ASCII letters.
+  const entrepreneur = /(?:^|[^а-яёіўa-z])(?:ип|индивидуальный\s+предприниматель|індывідуальны\s+прадпрымальнік)(?=$|[^а-яёіўa-z])/u.test(identity);
+  const company = /(?:^|[^а-яёіўa-z])(?:ооо|одо|оао|зао|пао|ао|иооо|уп|чуп|чтуп|пуп|руп|куп|гуп|таа|тда|аат|зат)(?=$|[^а-яёіўa-z])|унитарное\s+предприятие|унітарнае\s+прадпрыемства|общество\s+с\s+(?:ограниченной|дополнительной)\s+ответственностью|акционерное\s+общество/u.test(identity);
+  if (company) return 'Вы сохраняете организацию как физлицо. Выберите «Юрлицо» перед сохранением.';
+  if (entrepreneur) return 'В названии указан предприниматель, но выбран тип «Физлицо». Выберите «ИП» перед сохранением.';
+  if (form.inn.trim()) return 'У клиента указан УНП, но выбран тип «Физлицо». Проверьте реквизиты и выберите «ИП» или «Юрлицо» перед сохранением.';
+  return '';
+};
+
 const normalizers: Partial<Record<keyof CustomerForm, (value: string) => string>> = {
   phone: normalizePhoneForApi,
   email: normalizeEmail,
@@ -101,9 +115,12 @@ export const validateCustomerProfileForm = (
   if (!form.name.trim()) {
     fieldErrors.name = 'Имя клиента не может быть пустым';
   }
+  const partyWarning = customerPartyTypeWarning(form);
+  if (partyWarning) fieldErrors.type = partyWarning;
 
   const issues = [
     fieldErrors.name && `Название — ${fieldErrors.name}`,
+    fieldErrors.type,
     phoneError && `Телефон — ${phoneError}`,
     emailError && `Email — ${emailError}`,
     innError && `УНП — ${innError}`,
