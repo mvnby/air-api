@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import DocumentLegalEntity, DocumentTemplate, DocumentTemplateVersion
 from models.tenancy import TenantScope
+from services.document_role_service import DocumentRoleService
 from modules.documents.infrastructure.renderers import (
     DocumentTemplateVersion as RenderTemplateVersion,
     NativeDocxRenderer,
@@ -144,6 +145,7 @@ class NativeTemplateVersionService:
         description: str | None = None,
         contract_scenario: str | None = None,
         business_role: str | None = None,
+        document_role_type: str | None = None,
     ) -> DocumentTemplate:
         legal_entity_id = _positive_id(legal_entity_id, "legal_entity_id")
         issuer = await cls._get_legal_entity(
@@ -173,6 +175,7 @@ class NativeTemplateVersionService:
                 business_role,
                 doc_type=normalized_doc_type,
             ),
+            document_role_type=DocumentRoleService.nullable_role_type(document_role_type),
             google_template_id=None,
             is_active=True,
         )
@@ -229,6 +232,7 @@ class NativeTemplateVersionService:
         description: str | None = None,
         contract_scenario: str | None = None,
         business_role: str | None = None,
+        document_role_type: str | None = None,
     ) -> DocumentTemplate:
         template = await cls._get_scoped_template(
             session,
@@ -238,6 +242,7 @@ class NativeTemplateVersionService:
         )
         template.name = _required_text(name, "Название", 200)
         template.description = _optional_text(description, 1000)
+        template.document_role_type = DocumentRoleService.nullable_role_type(document_role_type)
         template.contract_scenario = _template_contract_scenario(
             contract_scenario,
             doc_type=template.doc_type,

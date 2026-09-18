@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
+import { DOCUMENT_ROLE_OPTIONS } from '../model/document-constants';
 import type { ManagerOrderDetailResponse } from '../../../client';
 import DocumentSendModal from '../../../components/orders/DocumentSendModal.vue';
 import { getOrderDocumentAccess } from '../../../components/orders/order-document-access';
@@ -85,6 +86,8 @@ const formatDate = (value: string | null | undefined) => value
   : '—';
 const selectedBasisValue = ref('');
 const basisRequired = computed(() => ['act', 'tn2', 'ttn1'].includes(workspace.documentType.value));
+const basisSupported = computed(() => basisRequired.value || workspace.documentType.value === 'invoice');
+const partyRolesSupported = computed(() => ['contract', 'invoice', 'act', 'offer'].includes(workspace.documentType.value));
 const isConsumerDocument = computed(() => isConsumerDocumentType(workspace.documentType.value));
 const isBusinessTermsDocument = computed(() => isBusinessTermsDocumentType(workspace.documentType.value));
 const customerIsConsumer = computed(() => props.order.customer?.type === 'individual');
@@ -139,7 +142,7 @@ const basisOptions = computed<BasisOption[]>(() => {
 });
 
 const syncBasis = () => {
-  if (!basisRequired.value) {
+  if (!basisSupported.value) {
     selectedBasisValue.value = '';
     workspace.baseDocumentId.value = null;
     workspace.baseCustomerContractId.value = null;
@@ -153,7 +156,7 @@ const syncBasis = () => {
   workspace.baseCustomerContractId.value = selected?.customerContractId || null;
 };
 
-watch([basisRequired, basisOptions, selectedBasisValue], syncBasis, { immediate: true });
+watch([basisSupported, basisOptions, selectedBasisValue], syncBasis, { immediate: true });
 watch(workspace.documentType, (type) => {
   documentAudience.value = isConsumerDocumentType(type) ? 'consumer' : 'business';
 });
@@ -360,13 +363,22 @@ const createDraft = async () => {
           <button class="mt-1 font-semibold underline underline-offset-2" type="button" @click="openCustomerProfile">Открыть карточку клиента</button>
         </div>
 
-        <label v-if="basisRequired" class="native-field mt-4">
+        <label v-if="basisSupported" class="native-field mt-4">
           <span>Документ-основание</span>
           <select v-model="selectedBasisValue" class="native-input" data-testid="native-document-basis">
-            <option value="" disabled>Выберите договор, счёт-оферту или КП</option>
+            <option value="" :disabled="basisRequired">{{ basisRequired ? 'Выберите договор, счёт-оферту или КП' : 'Автоматически' }}</option>
             <option v-for="basis in basisOptions" :key="basis.value" :value="basis.value">{{ basis.label }}</option>
           </select>
           <span class="font-normal text-slate-500">Первым предлагается договор. Обычный счёт на оплату основанием не считается.</span>
+        </label>
+
+        <label v-if="partyRolesSupported" class="native-field mt-4">
+          <span>Названия сторон</span>
+          <select v-model="workspace.documentRoleType.value" class="native-input" data-testid="native-document-party-roles">
+            <option :value="null">{{ ['act', 'invoice'].includes(workspace.documentType.value) ? 'Как в договоре (по умолчанию)' : 'По шаблону / настройкам заказа' }}</option>
+            <option v-for="option in DOCUMENT_ROLE_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
+          </select>
+          <span class="font-normal text-slate-500">Названия заменяются во всём документе с сохранением падежей. Для акта и счёта берутся из выбранного основания; без него — из настроек заказа или шаблона.</span>
         </label>
 
         <div v-if="workspace.documentType.value === 'invoice'" class="mt-4">

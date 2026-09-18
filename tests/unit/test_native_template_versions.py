@@ -177,7 +177,9 @@ async def test_native_template_metadata_can_be_corrected_without_reupload(
                 name="Черновое название",
                 doc_type="contract",
                 contract_scenario="repair",
+                document_role_type="seller_buyer",
             )
+            assert template.document_role_type == "seller_buyer"
             updated = await NativeTemplateVersionService.update_template_metadata(
                 session,
                 tenant_scope=scope,
@@ -186,12 +188,14 @@ async def test_native_template_metadata_can_be_corrected_without_reupload(
                 name="Договор услуг",
                 description="Исправленная карточка",
                 contract_scenario="services",
+                document_role_type="executor_customer",
             )
 
             assert updated.name == "Договор услуг"
             assert updated.description == "Исправленная карточка"
             assert updated.contract_scenario == "services"
             assert updated.business_role is None
+            assert updated.document_role_type == "executor_customer"
 
             with pytest.raises(TemplateVersionError, match="роль"):
                 await NativeTemplateVersionService.update_template_metadata(

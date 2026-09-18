@@ -1,6 +1,6 @@
 export type ToastType = 'success' | 'error';
 
-export type DocumentRoleType = 'seller_buyer' | 'executor_customer' | 'contractor_customer';
+export type DocumentRoleType = 'seller_buyer' | 'executor_customer' | 'contractor_customer' | 'seller_payer' | 'executor_payer';
 
 export type LogisticsComponentKind = 'indoor' | 'outdoor' | 'accessory' | 'other';
 

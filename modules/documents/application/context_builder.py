@@ -12,6 +12,8 @@ from sqlmodel import select
 from models import (
     CustomerContract,
     DocumentLegalEntity,
+    DocumentTemplate,
+    DocumentTemplateVersion,
     Order,
     OrderDocument,
     OrderProductLink,
@@ -45,6 +47,9 @@ from .consumer_context import (
     build_consumer_document_context,
 )
 from .commercial_rows import line_rows
+from .party_roles import resolve_party_roles
+from modules.documents.infrastructure.template_source_storage import TemplateSourceStorage
+from modules.documents.domain.roles import PARTY_ROLE_DOCUMENT_TYPES, ROLE_FORMS
 from .consumer_equipment import resolve_consumer_equipment_defaults
 from .logistics_rows import build_logistics_rows
 from .transport_context import build_transport_document_context
@@ -72,6 +77,7 @@ class DocumentContextSelection:
     scope_service_line_quantities: Mapping[int, int] | None = None
     scope_product_line_ids: tuple[int, ...] = ()
     business_role: str | None = None
+    document_role_type: str | None = None
     consumer_terms: ConsumerDocumentTerms | None = None
     business_terms: BusinessDocumentTerms | None = None
     act_terms: ActTerms | None = None
@@ -81,7 +87,7 @@ class DocumentContextSelection:
 class DocumentContextBuilder:
     """Build a JSON-safe immutable source snapshot without mutating ORM state."""
 
-    SNAPSHOT_VERSION = 4
+    SNAPSHOT_VERSION = 5
     NATIVE_TYPES = SUPPORTED_NATIVE_DOCUMENT_TYPES
     BASE_TYPES = frozenset({"offer", "invoice", "contract"})
     CLOSING_TYPES = frozenset({"act", "tn2", "ttn1"})
@@ -93,6 +99,9 @@ class DocumentContextBuilder:
         *,
         tenant_scope: TenantScope,
         selection: DocumentContextSelection,
+        template: DocumentTemplate | None = None,
+        template_version: DocumentTemplateVersion | None = None,
+        template_storage: TemplateSourceStorage | None = None,
     ) -> dict[str, Any]:
         document_type = str(selection.document_type or "").strip().lower()
         if document_type not in cls.NATIVE_TYPES:
@@ -163,6 +172,20 @@ class DocumentContextBuilder:
             raise DocumentContextError(
                 "Для закрывающего документа нужен договор или акцептованный счет-оферта"
             )
+
+        role_type = role_source = None
+        if document_type in PARTY_ROLE_DOCUMENT_TYPES:
+            try:
+                role_type, role_source = await resolve_party_roles(
+                    session, selection=selection, order=order,
+                    base_document=base_document, base_contract=base_contract,
+                    template=template, version=template_version,
+                    template_storage=template_storage,
+                )
+            except ValueError as exc:
+                raise DocumentContextError(str(exc)) from exc
+        elif selection.document_role_type is not None:
+            raise DocumentContextError("Названия сторон доступны для договора, счета, КП и акта")
 
         rows = (
             build_logistics_rows(product_links)
@@ -366,6 +389,12 @@ class DocumentContextBuilder:
             values["customer.signer_position"] = ""
             values["customer.acting_basis"] = ""
 
+        if role_type is not None:
+            values["document.role_type"] = role_type
+            for prefix, forms in zip(("seller", "customer"), ROLE_FORMS[role_type]):
+                for case in ("nom", "gen", "dat", "acc", "ins", "prep"):
+                    values[f"{prefix}.role_{case}"] = getattr(forms, case).capitalize()
+
         conditions = {
             "document.invoice_is_payment_request": (
                 document_type == "invoice" and business_role == "payment_request"
@@ -407,6 +436,8 @@ class DocumentContextBuilder:
                 if base_contract
                 else None,
                 "business_role": business_role,
+                "document_role_type": role_type,
+                "document_role_source": role_source,
                 "issue_city": issue_city,
             },
             "values": values,
@@ -530,13 +561,14 @@ class DocumentContextBuilder:
         base_document_id: int | None,
         base_customer_contract_id: int | None,
     ) -> tuple[OrderDocument | None, CustomerContract | None]:
-        if document_type not in cls.CLOSING_TYPES:
+        if document_type not in cls.CLOSING_TYPES | {"invoice"}:
             return None, None
         if base_document_id:
             document = await session.get(OrderDocument, base_document_id)
             if (
                 document is None
                 or document.order_id != order.id
+                or document.tenant_id not in {None, order.tenant_id}
                 or document.doc_type not in cls.BASE_TYPES
                 or document.status not in {None, "issued", "sent", "signed"}
             ):
@@ -554,8 +586,10 @@ class DocumentContextBuilder:
                 or contract.customer_id != order.customer_id
                 or contract.status != "active"
             ):
-                raise DocumentContextError("Договор клиента не найден")
-            return None, contract
+                if base_customer_contract_id or document_type != "invoice":
+                    raise DocumentContextError("Договор клиента не найден")
+            else:
+                return None, contract
 
         result = await session.execute(
             select(OrderDocument)

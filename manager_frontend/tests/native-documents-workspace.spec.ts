@@ -422,6 +422,36 @@ describe('NativeDocumentsWorkspace', () => {
       .toContain('почты вашей организации');
   });
 
+  it.each([
+    { documentType: 'act', override: 'seller_payer' },
+    { documentType: 'invoice', override: 'executor_payer' },
+  ])('inherits party names by default and submits the $override override for $documentType', async ({ documentType, override }) => {
+    const wrapper = await mountWorkspace();
+    await wrapper.get('[data-testid="native-document-type"]').setValue(documentType);
+    await flushPromises();
+    expect(wrapper.get('[data-testid="native-document-party-roles"]').text()).toContain('Как в договоре');
+    await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
+    await flushPromises();
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenLastCalledWith(
+      42, expect.objectContaining({ document_role_type: null, base_customer_contract_id: 91 }),
+    );
+    const partyRoles = wrapper.get('[data-testid="native-document-party-roles"]');
+    expect(partyRoles.text()).toContain(override === 'seller_payer' ? 'Продавец / Плательщик' : 'Исполнитель / Плательщик');
+    await partyRoles.setValue(override);
+    await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
+    await flushPromises();
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenLastCalledWith(
+      42, expect.objectContaining({ document_role_type: override }),
+    );
+    await wrapper.get('[data-testid="native-document-type"]').setValue(documentType === 'act' ? 'invoice' : 'act');
+    await flushPromises();
+    await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
+    await flushPromises();
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenLastCalledWith(
+      42, expect.objectContaining({ document_role_type: null }),
+    );
+  });
+
   it('uses the active customer contract as the default basis for an act', async () => {
     const wrapper = await mountWorkspace();
 

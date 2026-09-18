@@ -22,7 +22,9 @@ export const DOCUMENT_TYPES = [
 
 export const DOCUMENT_ROLE_OPTIONS: Array<{ value: DocumentRoleType; label: string }> = [
   { value: 'seller_buyer', label: 'Продавец / Покупатель' },
+  { value: 'seller_payer', label: 'Продавец / Плательщик' },
   { value: 'executor_customer', label: 'Исполнитель / Заказчик' },
+  { value: 'executor_payer', label: 'Исполнитель / Плательщик' },
   { value: 'contractor_customer', label: 'Подрядчик / Заказчик' },
 ];
 

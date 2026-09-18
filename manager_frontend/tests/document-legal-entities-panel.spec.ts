@@ -229,9 +229,13 @@ describe('NativeTemplateLibrary', () => {
     wrappers.push(wrapper);
     await flushPromises();
 
+    expect(wrapper.findAll('[data-testid="native-template-metadata"]')).toHaveLength(1);
+    expect(wrapper.find('button button').exists()).toBe(false);
+
     await wrapper.get('[data-testid="native-template-metadata-name"]').setValue('Договор услуг');
     await wrapper.get('[data-testid="native-template-metadata-description"]').setValue('Исправленная карточка');
     await wrapper.get('[data-testid="native-template-metadata-contract-scenario"]').setValue('services');
+    await wrapper.get('[data-testid="native-template-metadata-document-role-type"]').setValue('executor_customer');
     await wrapper.get('[data-testid="native-template-metadata"]').trigger('submit');
     await flushPromises();
 
@@ -241,8 +245,13 @@ describe('NativeTemplateLibrary', () => {
       description: 'Исправленная карточка',
       contract_scenario: 'services',
       business_role: null,
+      document_role_type: 'executor_customer',
     });
     expect(ManagerDocumentSystemService.createManagerNativeDocumentTemplate).not.toHaveBeenCalled();
+
+    await wrapper.findAll('button').find((button) => button.text().includes('Товарная накладная ТН-2'))!.trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="native-template-metadata-document-role-type"]').exists()).toBe(false);
   });
 
   it('opens and imports an online template edit only when Google Drive is connected', async () => {
@@ -294,6 +303,10 @@ describe('NativeTemplateLibrary', () => {
     await flushPromises();
 
     expect(wrapper.get('[data-testid="template-google-connected"]').text()).toContain('docs@example.com');
+    expect(wrapper.text()).toContain('История версий 1');
+    expect(wrapper.text()).not.toContain('contract.docx');
+    await wrapper.findAll('button').find((button) => button.text().includes('История версий'))!.trigger('click');
+    await flushPromises();
     const edit = wrapper.findAll('button').find((button) => button.text().includes('Редактировать в Google Docs'));
     expect(edit).toBeDefined();
     await edit!.trigger('click');

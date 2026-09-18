@@ -181,7 +181,7 @@ async def test_context_snapshot_uses_selected_proposal_and_does_not_mutate_order
         ),
     )
 
-    assert snapshot["schema_version"] == 4
+    assert snapshot["schema_version"] == 5
     assert snapshot["meta"]["proposal_id"] == selected.id
     assert snapshot["meta"]["business_role"] == "payment_request"
     assert snapshot["conditions"]["document.invoice_is_payment_request"] is True
@@ -450,7 +450,7 @@ async def test_b2c_context_is_self_contained_and_snapshots_consumer_terms(
         ),
     )
 
-    assert snapshot["schema_version"] == 4
+    assert snapshot["schema_version"] == 5
     assert snapshot["meta"]["base_document_id"] is None
     assert snapshot["meta"]["base_customer_contract_id"] is None
     assert snapshot["values"]["offer.url"] == "https://mvn.by/offer"
@@ -748,3 +748,34 @@ async def test_context_builder_rejects_cross_tenant_issuer(db):
                 issue_date=date(2026, 8, 26),
             ),
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("document_type", ["act", "invoice"])
+@pytest.mark.parametrize("override,expected", [(None, "executor_payer"), ("seller_payer", "seller_payer")])
+async def test_party_roles_inherit_frozen_contract_and_allow_override(db, document_type, override, expected):
+    order, issuer, selected, *_ = await _seed_order(db)
+    contract = OrderDocument(
+        tenant_id=1, legal_entity_id=issuer.id, order_id=order.id,
+        proposal_id=selected.id, doc_type="contract", status="issued",
+        number="roles-contract", internal_reference="roles-contract",
+        render_snapshot={"meta": {"document_role_type": "executor_payer"}},
+        google_file_id=None, google_edit_url=None,
+    )
+    order.document_role_type = "seller_buyer"
+    db.add_all([order, contract])
+    await db.commit()
+    snapshot = await DocumentContextBuilder.build(
+        db, tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
+        selection=DocumentContextSelection(
+            order_id=order.id, legal_entity_id=issuer.id, document_type=document_type,
+            issue_date=date(2026, 9, 18), document_role_type=override,
+            act_terms=ActTerms(claims_status="none") if document_type == "act" else None,
+        ),
+    )
+    assert snapshot["meta"]["base_document_id"] == contract.id
+    assert snapshot["meta"]["document_role_type"] == expected
+    assert snapshot["values"]["document.role_type"] == expected
+    assert snapshot["values"]["seller.role_gen"] == ("Продавца" if expected == "seller_payer" else "Исполнителя")
+    assert snapshot["values"]["customer.role_ins"] == "Плательщиком"
+    assert contract.render_snapshot == {"meta": {"document_role_type": "executor_payer"}}

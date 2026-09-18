@@ -184,6 +184,7 @@ async def create_native_document_template(
             description=payload.description,
             contract_scenario=payload.contract_scenario,
             business_role=payload.business_role,
+            document_role_type=payload.document_role_type,
         )
     except TemplateVersionNotFoundError as exc:
         raise _template_error(
@@ -227,6 +228,7 @@ async def update_native_document_template(
             description=payload.description,
             contract_scenario=payload.contract_scenario,
             business_role=payload.business_role,
+            document_role_type=payload.document_role_type,
         )
     except TemplateVersionNotFoundError as exc:
         raise _template_error(

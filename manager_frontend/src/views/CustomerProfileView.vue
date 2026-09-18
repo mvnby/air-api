@@ -143,10 +143,12 @@ const contractSaving = ref(false);
 const contractUploadSaving = ref(false);
 const showContractForm = ref(false);
 const showContractUploadForm = ref(false);
-type DocumentRoleType = 'seller_buyer' | 'executor_customer' | 'contractor_customer';
+type DocumentRoleType = 'seller_buyer' | 'executor_customer' | 'contractor_customer' | 'seller_payer' | 'executor_payer';
 const DOCUMENT_ROLE_OPTIONS: Array<{ value: DocumentRoleType; label: string }> = [
   { value: 'seller_buyer', label: 'Продавец / Покупатель' },
+  { value: 'seller_payer', label: 'Продавец / Плательщик' },
   { value: 'executor_customer', label: 'Исполнитель / Заказчик' },
+  { value: 'executor_payer', label: 'Исполнитель / Плательщик' },
   { value: 'contractor_customer', label: 'Подрядчик / Заказчик' },
 ];
 const contractTemplates = ref<DocumentTemplateItem[]>([]);
@@ -178,7 +180,7 @@ const EQUIPMENT_COMPONENT_OPTIONS = [
 
 const normalizeRoleType = (value: unknown): DocumentRoleType => {
   const raw = String(value || '').trim();
-  if (raw === 'executor_customer' || raw === 'contractor_customer') return raw;
+  if (raw === 'executor_customer' || raw === 'contractor_customer' || raw === 'seller_payer' || raw === 'executor_payer') return raw;
   return 'seller_buyer';
 };
 

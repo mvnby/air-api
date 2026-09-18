@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type NativeDocumentTemplateUpdatePayload = {
+    document_role_type?: ('seller_buyer' | 'executor_customer' | 'contractor_customer' | 'seller_payer' | 'executor_payer' | null);
     legal_entity_id: number;
     name: string;
     description?: (string | null);

@@ -33,6 +33,12 @@ SCALAR_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
     PlaceholderDescriptor("document.issued_on", "Дата документа", "Документ"),
     PlaceholderDescriptor("document.issue_city", "Город документа", "Документ"),
     PlaceholderDescriptor("document.type", "Тип документа", "Документ"),
+    PlaceholderDescriptor("document.role_type", "Названия сторон (код)", "Документ"),
+    *(
+        PlaceholderDescriptor(f"{party}.role_{case}", f"{label}: {case_label}", "Названия сторон")
+        for party, label in (("seller", "Наша сторона"), ("customer", "Сторона клиента"))
+        for case, case_label in (("nom", "кто"), ("gen", "кого"), ("dat", "кому"), ("acc", "кого (винительный)"), ("ins", "кем"), ("prep", "о ком"))
+    ),
     *(
         PlaceholderDescriptor(f"installation.{name}", label, "Этапы монтажа")
         for name, label in (

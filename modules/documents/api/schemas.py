@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -11,6 +12,11 @@ from modules.documents.domain import (
     WAYBILL_DOCUMENT_TYPES,
 )
 from .business_schemas import ActTermsPayload, BusinessDocumentTermsPayload
+
+
+DocumentPartyRoleType = Literal[
+    "seller_buyer", "executor_customer", "contractor_customer", "seller_payer", "executor_payer",
+]
 
 
 NATIVE_DOCUMENT_TYPE_PATTERN = (
@@ -130,6 +136,8 @@ class DocumentNumberPolicyPayload(BaseModel):
 
 
 class NativeDocumentTemplateCreatePayload(BaseModel):
+    document_role_type: DocumentPartyRoleType | None = None
+
     model_config = ConfigDict(extra="forbid")
 
     legal_entity_id: int = Field(gt=0)
@@ -155,6 +163,8 @@ class NativeDocumentTemplateCreatePayload(BaseModel):
 
 
 class NativeDocumentTemplateItem(BaseModel):
+    document_role_type: DocumentPartyRoleType | None = None
+
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -172,6 +182,8 @@ class NativeDocumentTemplateItem(BaseModel):
 
 
 class NativeDocumentTemplateUpdatePayload(BaseModel):
+    document_role_type: DocumentPartyRoleType | None = None
+
     model_config = ConfigDict(extra="forbid")
 
     legal_entity_id: int = Field(gt=0)
@@ -257,6 +269,8 @@ class NativePlaceholderCatalogResponse(BaseModel):
 
 
 class ManagedDocumentDraftPayload(BaseModel):
+    document_role_type: DocumentPartyRoleType | None = None
+
     model_config = ConfigDict(extra="forbid")
 
     legal_entity_id: int = Field(gt=0)
@@ -403,6 +417,7 @@ class ManagedDocumentArtifactAccessResponse(BaseModel):
 
 
 class ManagedDocumentItem(BaseModel):
+    document_role_type: DocumentPartyRoleType | None = None
     id: int
     order_id: int
     legal_entity_id: int | None = None

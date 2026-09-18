@@ -47,6 +47,7 @@ def build_render_inputs(
     snapshot_conditions = snapshot.get("conditions")
     snapshot_tables = snapshot.get("table_rows", {})
     context = RenderContext(
+        document_role_type=(snapshot.get("meta") or {}).get("document_role_type"),
         values={field: snapshot_values.get(field, "") for field in field_catalog},
         conditions=_condition_values(condition_catalog, snapshot_conditions),
         table_rows={
