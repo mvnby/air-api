@@ -7,6 +7,7 @@ import type { BusinessDocumentTermsPayload } from './BusinessDocumentTermsPayloa
 import type { ConsumerDocumentTermsPayload } from './ConsumerDocumentTermsPayload';
 import type { TransportTermsPayload } from './TransportTermsPayload';
 export type ManagedDocumentDraftPayload = {
+    document_role_type?: ('seller_buyer' | 'executor_customer' | 'contractor_customer' | null);
     legal_entity_id: number;
     document_type: string;
     issue_date: string;

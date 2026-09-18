@@ -180,6 +180,7 @@ async def create_managed_document_draft(
                 scope_service_line_quantities=payload.scope_service_line_quantities,
                 scope_product_line_ids=tuple(payload.scope_product_line_ids),
                 business_role=payload.business_role,
+                document_role_type=payload.document_role_type,
                 consumer_terms=(
                     ConsumerDocumentTerms(**payload.consumer_terms.model_dump())
                     if payload.consumer_terms is not None
@@ -213,6 +214,7 @@ async def create_managed_document_draft(
             ),
             template_id=payload.template_id,
             replaces_document_id=payload.replaces_document_id,
+            template_storage=PrivateTemplateSourceStorage(_legacy_private_storage()),
         )
     except ManagedDocumentNotFoundError as exc:
         raise _document_error(
@@ -225,6 +227,12 @@ async def create_managed_document_draft(
         raise _document_error(
             409, CREATE_MANAGER_MANAGED_DOCUMENT_DRAFT, "managed_document_conflict", exc
         )
+    except OSError as exc:
+        raise _document_error(
+            503, CREATE_MANAGER_MANAGED_DOCUMENT_DRAFT,
+            "managed_document_template_unavailable",
+            ValueError("Не удалось прочитать шаблон документа"),
+        ) from exc
     except (ManagedDocumentError, ValueError) as exc:
         raise _document_error(
             400, CREATE_MANAGER_MANAGED_DOCUMENT_DRAFT, "managed_document_invalid", exc
@@ -513,6 +521,7 @@ def _document_item_from_parts(document, artifacts) -> ManagedDocumentItem:
         proposal_id=document.proposal_id,
         doc_type=document.doc_type,
         business_role=document.business_role,
+        document_role_type=((document.render_snapshot or {}).get("meta") or {}).get("document_role_type"),
         status=document.status or "issued",
         provider=provider,
         internal_reference=document.internal_reference,

@@ -1,47 +1,17 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any, Dict, Iterable, Optional
 
 from models import DocumentRoleType
+from modules.documents.domain.roles import (
+    BUYER_FORMS,
+    SELLER_FORMS,
+    ROLE_FORMS,
+    ROLE_LABELS,
+)
 
 
 DEFAULT_DOCUMENT_ROLE_TYPE = DocumentRoleType.SELLER_BUYER.value
-
-
-@dataclass(frozen=True)
-class RoleForms:
-    nom: str
-    gen: str
-    dat: str
-    acc: str
-    ins: str
-    prep: str
-
-    def values(self) -> tuple[str, str, str, str, str, str]:
-        return (self.nom, self.gen, self.dat, self.acc, self.ins, self.prep)
-
-
-SELLER_FORMS = RoleForms("продавец", "продавца", "продавцу", "продавца", "продавцом", "продавце")
-BUYER_FORMS = RoleForms("покупатель", "покупателя", "покупателю", "покупателя", "покупателем", "покупателе")
-
-ROLE_FORMS: Dict[str, tuple[RoleForms, RoleForms]] = {
-    DocumentRoleType.SELLER_BUYER.value: (SELLER_FORMS, BUYER_FORMS),
-    DocumentRoleType.EXECUTOR_CUSTOMER.value: (
-        RoleForms("исполнитель", "исполнителя", "исполнителю", "исполнителя", "исполнителем", "исполнителе"),
-        RoleForms("заказчик", "заказчика", "заказчику", "заказчика", "заказчиком", "заказчике"),
-    ),
-    DocumentRoleType.CONTRACTOR_CUSTOMER.value: (
-        RoleForms("подрядчик", "подрядчика", "подрядчику", "подрядчика", "подрядчиком", "подрядчике"),
-        RoleForms("заказчик", "заказчика", "заказчику", "заказчика", "заказчиком", "заказчике"),
-    ),
-}
-
-ROLE_LABELS: Dict[str, str] = {
-    DocumentRoleType.SELLER_BUYER.value: "Продавец / Покупатель",
-    DocumentRoleType.EXECUTOR_CUSTOMER.value: "Исполнитель / Заказчик",
-    DocumentRoleType.CONTRACTOR_CUSTOMER.value: "Подрядчик / Заказчик",
-}
 
 
 class DocumentRoleService:

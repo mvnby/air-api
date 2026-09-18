@@ -31,6 +31,34 @@ Use the party conditions instead of writing one fixed preamble:
 - `seller.organization_statutory_body` / `customer.organization_statutory_body`
 - `seller.signs_by_power_of_attorney` / `customer.signs_by_power_of_attorney`
 
+### Party names in native documents
+
+Contracts, invoices, proposals and work acts support three pairs:
+**Продавец / Покупатель**, **Исполнитель / Заказчик**, and
+**Подрядчик / Заказчик**. In the order document form, acts and invoices default
+to **Как в договоре**; an explicit selection overrides inheritance for that
+new document only. Invoices may select a contract as their optional basis.
+
+The selected basis takes precedence over order/template settings. New drafts
+freeze the resolved pair in their snapshot, so later order changes do not alter
+an issued document or its dependent act. Older native bases without this field
+use their exact saved template revision when available; legacy customer
+contracts use their stored party-role setting. Without a basis, the generator
+uses order settings, a template override or an unambiguous pair found in its
+text, then the contract scenario/default seller-buyer pair.
+
+In template settings, **Названия сторон → По тексту шаблона** preserves automatic
+recognition; an explicit pair sets the template fallback. Literal role words
+are replaced in all six Russian cases, including capitalized and uppercase
+forms, across body paragraphs, tables, headers and footers. Replacement occurs
+before inserting names, requisites and line items, preserving their values and
+Word formatting. Existing snapshots without party-role metadata retain their
+previous rendering. B2C order-acts and regulated TN-2/TTN-1 labels are unchanged.
+
+For precise placement, templates may instead use `{{ seller.role_nom }}` and
+`{{ customer.role_nom }}`. The suffixes `gen`, `dat`, `acc`, `ins`, and `prep`
+provide the other cases; `{{ document.role_type }}` exposes the frozen pair code.
+
 ### Conditions and formatting
 
 For a conditional phrase, keep both markers and the phrase in **one paragraph**:

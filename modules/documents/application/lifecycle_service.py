@@ -180,6 +180,7 @@ class ManagedDocumentService:
         selection: DocumentContextSelection,
         template_id: int | None = None,
         replaces_document_id: int | None = None,
+        template_storage: TemplateSourceStorage | None = None,
     ) -> OrderDocument:
         order = await cls._get_mutable_scoped_order(
             session,
@@ -220,6 +221,9 @@ class ManagedDocumentService:
             session,
             tenant_scope=tenant_scope,
             selection=selection,
+            template=template,
+            template_version=version,
+            template_storage=template_storage,
         )
         internal_reference = new_internal_reference()
         issue_datetime = datetime.combine(selection.issue_date, time.min)

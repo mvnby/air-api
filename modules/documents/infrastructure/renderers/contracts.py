@@ -14,6 +14,8 @@ import re
 from types import MappingProxyType
 from typing import Any, Mapping
 
+from modules.documents.domain.roles import ROLE_FORMS
+
 
 _IDENTIFIER_PATTERN = re.compile(r"[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*\Z")
 
@@ -124,8 +126,11 @@ class RenderContext:
         default_factory=dict
     )
     conditions: Mapping[str, bool] = field(default_factory=dict)
+    document_role_type: str | None = None
 
     def __post_init__(self) -> None:
+        if self.document_role_type is not None and self.document_role_type not in ROLE_FORMS:
+            raise ValueError("Некорректный тип ролей сторон")
         values = _freeze_text_mapping(self.values, label="values")
         rows: dict[str, tuple[Mapping[str, str], ...]] = {}
         for table_name, table_rows in self.table_rows.items():

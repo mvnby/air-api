@@ -38232,6 +38232,22 @@
       },
       "ManagedDocumentDraftPayload": {
         "properties": {
+          "document_role_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "seller_buyer",
+                  "executor_customer",
+                  "contractor_customer"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Role Type"
+          },
           "legal_entity_id": {
             "type": "integer",
             "exclusiveMinimum": 0.0,
@@ -38442,6 +38458,22 @@
       },
       "ManagedDocumentItem": {
         "properties": {
+          "document_role_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "seller_buyer",
+                  "executor_customer",
+                  "contractor_customer"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Role Type"
+          },
           "id": {
             "type": "integer",
             "title": "Id"
@@ -57882,6 +57914,22 @@
       },
       "NativeDocumentTemplateCreatePayload": {
         "properties": {
+          "document_role_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "seller_buyer",
+                  "executor_customer",
+                  "contractor_customer"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Role Type"
+          },
           "legal_entity_id": {
             "type": "integer",
             "exclusiveMinimum": 0.0,
@@ -57946,6 +57994,22 @@
       },
       "NativeDocumentTemplateItem": {
         "properties": {
+          "document_role_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "seller_buyer",
+                  "executor_customer",
+                  "contractor_customer"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Role Type"
+          },
           "id": {
             "type": "integer",
             "title": "Id"
@@ -58049,6 +58113,22 @@
       },
       "NativeDocumentTemplateUpdatePayload": {
         "properties": {
+          "document_role_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "seller_buyer",
+                  "executor_customer",
+                  "contractor_customer"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Role Type"
+          },
           "legal_entity_id": {
             "type": "integer",
             "exclusiveMinimum": 0.0,

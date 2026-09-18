@@ -422,6 +422,31 @@ describe('NativeDocumentsWorkspace', () => {
       .toContain('почты вашей организации');
   });
 
+  it.each(['act', 'invoice'])('inherits party names by default and permits override for %s', async (documentType) => {
+    const wrapper = await mountWorkspace();
+    await wrapper.get('[data-testid="native-document-type"]').setValue(documentType);
+    await flushPromises();
+    expect(wrapper.get('[data-testid="native-document-party-roles"]').text()).toContain('Как в договоре');
+    await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
+    await flushPromises();
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenLastCalledWith(
+      42, expect.objectContaining({ document_role_type: null, base_customer_contract_id: 91 }),
+    );
+    await wrapper.get('[data-testid="native-document-party-roles"]').setValue('contractor_customer');
+    await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
+    await flushPromises();
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenLastCalledWith(
+      42, expect.objectContaining({ document_role_type: 'contractor_customer' }),
+    );
+    await wrapper.get('[data-testid="native-document-type"]').setValue(documentType === 'act' ? 'invoice' : 'act');
+    await flushPromises();
+    await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
+    await flushPromises();
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenLastCalledWith(
+      42, expect.objectContaining({ document_role_type: null }),
+    );
+  });
+
   it('uses the active customer contract as the default basis for an act', async () => {
     const wrapper = await mountWorkspace();
 

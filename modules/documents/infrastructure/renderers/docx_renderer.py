@@ -23,6 +23,7 @@ from .contracts import (
     TemplateValidationResult,
     make_rendered_docx,
 )
+from .docx_party_roles import replace_party_role_words
 from .docx_conditions import DocxConditionProcessor, iter_section_story_areas
 
 
@@ -229,6 +230,9 @@ class NativeDocxRenderer:
 
         document = Document(BytesIO(template.source))
         DocxConditionProcessor().render(document, context.conditions)
+        if context.document_role_type is not None:
+            for paragraph, _, _ in self._iter_paragraphs(document):
+                replace_party_role_words(paragraph, context.document_role_type)
         for table, _ in self._iter_tables(document):
             self._render_table_blocks(table, template.table_blocks, context)
         for paragraph, _, _ in self._iter_paragraphs(document):

@@ -1,4 +1,5 @@
 import { computed, ref, watch } from 'vue';
+import type { DocumentRoleType } from '../model/document-types';
 import {
   ManagerDocumentSystemService,
   type DocumentLegalEntityItem,
@@ -65,6 +66,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   const selectedTemplateId = ref<number | null>(null);
   const documentType = ref('contract');
   const businessRole = ref<'payment_request' | 'offer'>('payment_request');
+  const documentRoleType = ref<DocumentRoleType | null>(null);
   const issueDate = ref(new Date().toISOString().slice(0, 10));
   const issueCity = ref('');
   const replacesDocumentId = ref<number | null>(null);
@@ -366,6 +368,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     () => void loadTemplates(),
     { flush: 'sync' },
   );
+  watch(documentType, () => { documentRoleType.value = null; }, { flush: 'sync' });
   watch(documentType, (nextType, previousType) => {
     if (isConsumerDocumentType(nextType) && !isConsumerDocumentType(previousType)) {
       resetConsumerTerms();
@@ -437,6 +440,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
         template_id: selectedTemplateId.value,
         proposal_id: input.proposalId() || null,
         business_role: documentType.value === 'invoice' ? businessRole.value : null,
+        document_role_type: ['contract', 'invoice', 'act', 'offer'].includes(documentType.value) ? documentRoleType.value : null,
         base_document_id: baseDocumentId.value,
         base_customer_contract_id: baseCustomerContractId.value,
         replaces_document_id: replacesDocumentId.value,
@@ -558,6 +562,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     documentType.value = document.doc_type;
     selectedLegalEntityId.value = document.legal_entity_id || selectedLegalEntityId.value;
     businessRole.value = document.business_role === 'offer' ? 'offer' : 'payment_request';
+    documentRoleType.value = document.document_role_type || null;
     issueDate.value = (document.official_date || document.date).slice(0, 10);
     issueCity.value = document.issue_city
       || String(legalEntities.value.find((item) => item.id === selectedLegalEntityId.value)?.requisites.city || '').trim();
@@ -598,6 +603,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     baseCustomerContractId,
     baseDocumentId,
     businessRole,
+    documentRoleType,
     businessTerms,
     busy,
     consumerTerms,

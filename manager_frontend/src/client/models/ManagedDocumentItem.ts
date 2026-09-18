@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { ManagedDocumentArtifactItem } from './ManagedDocumentArtifactItem';
 export type ManagedDocumentItem = {
+    document_role_type?: ('seller_buyer' | 'executor_customer' | 'contractor_customer' | null);
     id: number;
     order_id: number;
     legal_entity_id?: (number | null);
