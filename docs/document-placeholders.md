@@ -31,6 +31,27 @@ Use the party conditions instead of writing one fixed preamble:
 - `seller.organization_statutory_body` / `customer.organization_statutory_body`
 - `seller.signs_by_power_of_attorney` / `customer.signs_by_power_of_attorney`
 
+### Conditions and formatting
+
+For a conditional phrase, keep both markers and the phrase in **one paragraph**:
+
+```text
+{{#if seller.individual_entrepreneur_self}}{{ seller.legal_name }}, “Исполнитель”{{/if seller.individual_entrepreneur_self}} и {{ customer.full_name }}, “Заказчик”.
+```
+
+Multiple and nested inline conditions are supported in body text, headers,
+footers, and table-cell paragraphs. Their opening and closing markers must
+balance within that paragraph. Format individual words directly in Word or the
+Google Drive DOCX editor: generation preserves the surviving text's bold/italic
+formatting, quotes, and paragraph settings. It does not insert paragraph breaks
+between inline branches or automatically normalize spaces and punctuation.
+
+For an optional **whole block**, continue placing each marker in its own
+paragraph. For optional table rows, each marker must occupy its own entire row.
+These block markers and excluded blocks are removed during generation. Inline
+and block conditions can coexist, but an inline condition cannot close a block
+condition or continue into another paragraph or cell.
+
 For printable TN-2/TTN-1 templates, transport values are available as
 `transport.car_model`, `transport.car_number`, `transport.driver_name`, and
 `transport.carrier`. This does not submit an electronic waybill to EDI.
