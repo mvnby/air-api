@@ -182,6 +182,11 @@ async def test_stale_page_does_not_process_or_advance_checkpoint(db):
 
 @pytest.mark.asyncio
 async def test_import_excludes_ineligible_rejected_and_expired_items_but_commits_terminal_cursor(db):
+    await BelzakupkiImportService.import_page(
+        db, tenant_scope=TENANT_SCOPE,
+        page={"items": [], "next_cursor": "previous", "has_more": True},
+        cursor_before=None, now=NOW,
+    )
     result = await BelzakupkiImportService.import_page(
         db,
         tenant_scope=TENANT_SCOPE,
@@ -216,11 +221,14 @@ async def test_import_failure_rolls_back_page_and_keeps_prior_checkpoint(db, mon
         now=NOW,
     )
 
-    async def fail_checkpoint(*_args, **_kwargs):
-        raise RuntimeError("simulated checkpoint failure")
+    original_upsert = BelzakupkiImportService._upsert_opportunity
 
-    monkeypatch.setattr(BelzakupkiImportService, "_locked_checkpoint", fail_checkpoint)
-    with pytest.raises(RuntimeError, match="simulated checkpoint failure"):
+    async def fail_after_insert(*args, **kwargs):
+        await original_upsert(*args, **kwargs)
+        raise RuntimeError("simulated failure after order insert")
+
+    monkeypatch.setattr(BelzakupkiImportService, "_upsert_opportunity", fail_after_insert)
+    with pytest.raises(RuntimeError, match="simulated failure after order insert"):
         await BelzakupkiImportService.import_page(
             db,
             tenant_scope=TENANT_SCOPE,
