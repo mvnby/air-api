@@ -401,7 +401,7 @@ const googleBusy = (version: NativeTemplateVersionItem) => {
 
       <aside class="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
         <h3 class="font-semibold text-slate-900 dark:text-white">Каталог плейсхолдеров</h3>
-        <p class="mt-1 text-xs text-slate-500">Вставляйте синтаксис в Word обычным текстом. Условные маркеры ставьте отдельными абзацами или строками таблицы.</p>
+        <p class="mt-1 text-xs text-slate-500">Вставляйте синтаксис в Word обычным текстом. Условие внутри текста открывайте и закрывайте в одном абзаце. Для целых блоков ставьте маркеры отдельными абзацами или строками таблицы.</p>
         <div class="mt-4 max-h-[560px] space-y-4 overflow-auto pr-1">
           <div v-for="[group, fields] in groupedFields" :key="group">
             <h4 class="text-xs font-bold uppercase tracking-wide text-slate-400">{{ group }}</h4>
@@ -422,7 +422,7 @@ const googleBusy = (version: NativeTemplateVersionItem) => {
               <div v-for="condition in conditions" :key="condition.name" class="rounded-lg bg-violet-50 p-2 dark:bg-violet-950/30">
                 <code class="block text-xs font-semibold text-violet-800 dark:text-violet-200">{{ condition.start_syntax }}</code>
                 <code class="block text-xs font-semibold text-violet-800 dark:text-violet-200">{{ condition.end_syntax }}</code>
-                <p class="mt-1 text-xs text-slate-500">{{ condition.label }}. Маркеры ставятся отдельными абзацами или строками таблицы.</p>
+                <p class="mt-1 text-xs text-slate-500">{{ condition.label }}. Можно использовать внутри одного абзаца или выделять целые абзацы и строки таблицы.</p>
               </div>
             </div>
           </div>

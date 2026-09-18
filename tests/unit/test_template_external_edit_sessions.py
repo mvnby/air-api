@@ -371,8 +371,10 @@ async def test_stale_remote_initialization_lease_can_recover(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("inline_conditions", [False, True])
 async def test_google_sync_creates_new_draft_without_overwriting_active_version(
     tmp_path: Path,
+    inline_conditions: bool,
 ) -> None:
     engine, sessions = await _database(tmp_path)
     storage = PrivateTemplateSourceStorage(
@@ -407,6 +409,17 @@ async def test_google_sync_creates_new_draft_without_overwriting_active_version(
             provider.content = _docx_bytes(
                 "document.official_number", "customer.full_name"
             )
+            if inline_conditions:
+                edited = Document(BytesIO(provider.content))
+                p = edited.add_paragraph(
+                    "{{#if customer.organization_statutory_body}}"
+                    "{{ customer.full_name }}, “"
+                )
+                p.add_run("Заказчик").bold = True
+                p.add_run("”{{/if customer.organization_statutory_body}}. Договор.")
+                content = BytesIO()
+                edited.save(content)
+                provider.content = content.getvalue()
             provider.revision = "revision-2"
             changed = await TemplateExternalEditSessionService.get_session(
                 session,
@@ -441,6 +454,10 @@ async def test_google_sync_creates_new_draft_without_overwriting_active_version(
                 "customer.full_name",
                 "document.official_number",
             ]
+            if inline_conditions:
+                assert result.new_template_version.placeholder_schema["conditions"] == [
+                    "customer.organization_statutory_body"
+                ]
             versions = (
                 (
                     await session.execute(

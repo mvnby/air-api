@@ -72,25 +72,33 @@ class DocxConditionProcessor:
                     )
                 if not parsed:
                     continue
-                if exact is None or len(parsed) != 1:
-                    issues.append(
-                        self._issue(
-                            "condition_marker_placement", placement_message, location
+                # Standalone markers retain their paragraph/row scope. Mixed
+                # content uses a separate stack for each paragraph, so inline
+                # conditions cannot accidentally consume neighbouring content.
+                if exact is not None and len(parsed) == 1:
+                    groups = [(parsed, stack)]
+                else:
+                    groups = [(self._parse_markers(text)[0], []) for text in texts]
+                for markers, marker_stack in groups:
+                    for item in markers:
+                        marker = _ConditionMarker(item.kind, item.name, location)
+                        used.add(marker.name)
+                        if marker.name not in condition_catalog:
+                            issues.append(
+                                self._issue(
+                                    "unknown_condition",
+                                    f"Condition '{marker.name}' is not in this template version's catalogue",
+                                    location,
+                                    marker.name,
+                                )
+                            )
+                        self._advance_stack(marker_stack, marker, issues)
+                    if marker_stack is not stack and marker_stack:
+                        issues.append(
+                            self._issue(
+                                "condition_marker_placement", placement_message, location
+                            )
                         )
-                    )
-                    continue
-                marker = _ConditionMarker(exact.kind, exact.name, location)
-                used.add(marker.name)
-                if marker.name not in condition_catalog:
-                    issues.append(
-                        self._issue(
-                            "unknown_condition",
-                            f"Condition '{marker.name}' is not in this template version's catalogue",
-                            location,
-                            marker.name,
-                        )
-                    )
-                self._advance_stack(stack, marker, issues)
             issues.extend(
                 self._issue(
                     "unbalanced_condition_marker",
@@ -126,6 +134,56 @@ class DocxConditionProcessor:
                     self._update_active(active, marker, conditions)
                 elif False in active:
                     table._tbl.remove(row._tr)
+
+        # Work on the surviving stories and rows only, after block filtering.
+        for paragraphs in self._all_paragraph_collections(document):
+            for paragraph in paragraphs:
+                self._render_inline(paragraph._p, conditions)
+
+    def _render_inline(self, paragraph, conditions: Mapping[str, bool]) -> None:
+        source = self._text(paragraph)
+        matches = list(_CONDITION_PATTERN.finditer(source))
+        if not matches:
+            return
+        active: list[bool] = []
+        removed: list[tuple[int, int]] = []
+        hidden: list[tuple[int, int]] = []
+        cursor = 0
+        for match in matches:
+            if False in active:
+                removed.append((cursor, match.start()))
+                hidden.append((cursor, match.start()))
+            removed.append(match.span())
+            self._update_active(
+                active, _ConditionMarker(match.group(1), match.group(2)), conditions
+            )
+            cursor = match.end()
+
+        # Edit text nodes in place: assigning paragraph.text would flatten runs,
+        # lose emphasis/hyperlinks, and change the user's template formatting.
+        cursor = 0
+        nontext_tags = {
+            qn(f"w:{name}")
+            for name in ("br", "cr", "tab", "drawing", "pict", "object")
+        }
+        for node in list(paragraph.iter()):
+            if node.tag == qn("w:t"):
+                text = node.text or ""
+                end = cursor + len(text)
+                node.text = "".join(
+                    char
+                    for index, char in enumerate(text, cursor)
+                    if not any(start <= index < stop for start, stop in removed)
+                )
+                if node.text.startswith(" ") or node.text.endswith(" "):
+                    node.set(qn("xml:space"), "preserve")
+                cursor = end
+            elif node.tag in nontext_tags and any(
+                start <= cursor <= stop for start, stop in hidden
+            ):
+                parent = node.getparent()
+                if parent is not None:
+                    parent.remove(node)
 
     @staticmethod
     def _update_active(
@@ -173,9 +231,10 @@ class DocxConditionProcessor:
                 )
 
     def _iter_candidates(self, document):
-        paragraph_message = "Condition marker must be the only content of its paragraph"
+        paragraph_message = "Inline conditions must open and close in the same paragraph"
         row_message = (
-            "Condition marker must be the only content of its entire table row"
+            "Block condition markers must occupy their entire table row; "
+            "inline conditions must open and close in the same paragraph"
         )
         for paragraphs, scope, _container in self._paragraph_scopes(document):
             yield (
