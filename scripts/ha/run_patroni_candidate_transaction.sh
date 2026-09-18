@@ -177,7 +177,7 @@ stage_candidate_compose() {
       return 1
     }
     CANDIDATE_OWNED=true
-    trap cleanup_candidate_only EXIT
+    trap shared_belzakupki_guard_cleanup_candidate_transaction EXIT
     return 0
   fi
   [[ -f "${CANDIDATE_SOURCE}" && ! -L "${CANDIDATE_SOURCE}" ]] || {
@@ -189,7 +189,7 @@ stage_candidate_compose() {
     return 1
   }
   CANDIDATE_OWNED=true
-  trap cleanup_candidate_only EXIT
+  trap shared_belzakupki_guard_cleanup_candidate_transaction EXIT
   temporary="$(mktemp "${CANDIDATE_FILE}.tmp.XXXXXX")"
   if ! cp -p -- "${CANDIDATE_SOURCE}" "${temporary}"; then
     rm -f -- "${temporary}"
