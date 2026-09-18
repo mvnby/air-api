@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 from docx import Document
 import pytest
+from models import DocumentTemplate, DocumentTemplateVersion as StoredTemplateVersion
 
 from modules.documents.application.context_builder import DocumentContextSelection
 from modules.documents.application.party_roles import resolve_party_roles
@@ -88,12 +89,14 @@ async def test_historical_basis_uses_exact_version_not_current_template():
     d = Document()
     d.add_paragraph('Подрядчик — Заказчик')
     storage = SimpleNamespace(read_persisted=AsyncMock(return_value=source_bytes(d)))
-    version = SimpleNamespace(id=7, tenant_id=1, template_id=5, version=3, source_storage_key='source', source_filename='old.docx', checksum_sha256='checksum')
-    session = SimpleNamespace(get=AsyncMock(return_value=version))
+    version = StoredTemplateVersion(id=7, template_id=5, version=3, renderer='docx', source_storage_key='source', source_filename='old.docx', checksum_sha256='checksum')
+    template = DocumentTemplate(id=5, tenant_id=1, name='Old contract', doc_type='contract')
+    session = SimpleNamespace(get=AsyncMock(side_effect=lambda model, _id: template if model is DocumentTemplate else version))
     basis = SimpleNamespace(render_snapshot={}, template_version_id=7, document_template_id=5)
     assert await resolve_party_roles(session, selection=selection(), order=order(), base_document=basis, base_contract=None, template_storage=storage) == ('contractor_customer', 'basis_template')
     assert storage.read_persisted.call_args.kwargs['version'] == 3
-    version.tenant_id = 2
+    assert storage.read_persisted.call_args.kwargs['tenant_id'] == 1
+    template.tenant_id = 2
     with pytest.raises(ValueError, match='не принадлежит'):
         await resolve_party_roles(session, selection=selection(), order=order(), base_document=basis, base_contract=None, template_storage=storage)
 
@@ -102,3 +105,19 @@ async def test_historical_basis_uses_exact_version_not_current_template():
 async def test_template_default_and_detected_roles_are_available_without_contract():
     assert await resolve_party_roles(AsyncMock(), selection=selection(), order=order(None), base_document=None, base_contract=None, template=SimpleNamespace(document_role_type='executor_customer')) == ('executor_customer', 'template')
     assert await resolve_party_roles(AsyncMock(), selection=selection(), order=order(None), base_document=None, base_contract=None) == ('seller_buyer', 'default')
+
+
+@pytest.mark.asyncio
+async def test_current_template_source_uses_order_tenant_with_real_version_model():
+    document = Document()
+    document.add_paragraph('Исполнитель и Заказчик')
+    storage = SimpleNamespace(read_persisted=AsyncMock(return_value=source_bytes(document)))
+    version = StoredTemplateVersion(
+        id=7, template_id=5, version=3, renderer='docx',
+        source_storage_key='source', source_filename='current.docx', checksum_sha256='checksum',
+    )
+    assert await resolve_party_roles(
+        AsyncMock(), selection=selection(), order=order(None),
+        base_document=None, base_contract=None, version=version, template_storage=storage,
+    ) == ('executor_customer', 'template')
+    assert storage.read_persisted.call_args.kwargs['tenant_id'] == 1

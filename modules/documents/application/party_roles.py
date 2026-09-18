@@ -37,11 +37,12 @@ def snapshot_role(snapshot: dict[str, Any] | None) -> str | None:
 async def _source_role(
     version: DocumentTemplateVersion | None,
     storage: TemplateSourceStorage | None,
+    tenant_id: int,
 ) -> str | None:
     if version is None or storage is None:
         return None
     source = await storage.read_persisted(
-        tenant_id=version.tenant_id,
+        tenant_id=tenant_id,
         template_id=version.template_id,
         version=version.version,
         storage_key=version.source_storage_key,
@@ -72,6 +73,10 @@ async def resolve_party_roles(
         frozen = snapshot_role(base_document.render_snapshot)
         if frozen:
             return frozen, "basis"
+        old_template = (
+            await session.get(DocumentTemplate, base_document.document_template_id)
+            if base_document.document_template_id else None
+        )
         # Before role snapshots existed, inspect the exact immutable template
         # revision of the basis, not today's active template or order settings.
         old_version = (
@@ -80,21 +85,18 @@ async def resolve_party_roles(
         )
         if old_version is not None:
             if (
-                old_version.tenant_id != order.tenant_id
+                old_template is None
+                or old_template.tenant_id != order.tenant_id
                 or old_version.template_id != base_document.document_template_id
             ):
                 raise ValueError("Версия шаблона договора не принадлежит заказу")
-            detected = await _source_role(old_version, template_storage)
+            detected = await _source_role(old_version, template_storage, order.tenant_id)
             if detected:
                 return detected, "basis_template"
-        if base_document.document_template_id:
-            old_template = await session.get(
-                DocumentTemplate, base_document.document_template_id
-            )
-            if old_template is not None and old_template.tenant_id == order.tenant_id:
-                role = _role(old_template.document_role_type)
-                if role:
-                    return role, "basis_template"
+        if old_template is not None and old_template.tenant_id == order.tenant_id:
+            role = _role(old_template.document_role_type)
+            if role:
+                return role, "basis_template"
         scenario = ((base_document.render_snapshot or {}).get("values") or {}).get(
             "contract.scenario"
         )
@@ -121,7 +123,7 @@ async def resolve_party_roles(
     template_role = _role(getattr(template, "document_role_type", None))
     if template_role:
         return template_role, "template"
-    detected = await _source_role(version, template_storage)
+    detected = await _source_role(version, template_storage, order.tenant_id)
     if detected:
         return detected, "template"
     scenario = getattr(selection.business_terms, "contract_scenario", None)

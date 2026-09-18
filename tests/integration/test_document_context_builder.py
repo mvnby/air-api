@@ -758,7 +758,8 @@ async def test_party_roles_inherit_frozen_contract_and_allow_override(db, docume
     contract = OrderDocument(
         tenant_id=1, legal_entity_id=issuer.id, order_id=order.id,
         proposal_id=selected.id, doc_type="contract", status="issued",
-        number="roles-contract", render_snapshot={"meta": {"document_role_type": "contractor_customer"}},
+        number="roles-contract", internal_reference="roles-contract",
+        render_snapshot={"meta": {"document_role_type": "contractor_customer"}},
         google_file_id=None, google_edit_url=None,
     )
     order.document_role_type = "seller_buyer"
