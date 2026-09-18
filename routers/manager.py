@@ -6,6 +6,7 @@ from routers import manager_backups
 from routers import manager_brands
 from routers import manager_calendar
 from routers import manager_catalog
+from routers import manager_catalog_management
 from routers import manager_catalog_decision
 from routers import manager_catalog_quality
 from routers import manager_content_ai
@@ -25,6 +26,7 @@ from routers import manager_media
 from routers import manager_mdv_catalog
 from routers import manager_orders
 from routers import manager_order_usage
+from routers import manager_catalog_usage
 from routers import manager_repair_complaints
 from routers import manager_specs
 from routers import manager_installers
@@ -53,6 +55,7 @@ router.include_router(manager_backups.router)
 router.include_router(manager_google_auth.router)
 router.include_router(manager_features.router)
 router.include_router(manager_catalog.router)
+router.include_router(manager_catalog_management.router)
 router.include_router(manager_catalog_decision.router)
 router.include_router(manager_catalog_quality.router)
 router.include_router(manager_content_ai.router)
@@ -65,6 +68,7 @@ router.include_router(manager_document_drive.router)
 router.include_router(manager_document_system_router)
 router.include_router(manager_orders.router)
 router.include_router(manager_order_usage.router)
+router.include_router(manager_catalog_usage.router)
 router.include_router(manager_equipment.router)
 router.include_router(manager_equipment_links.router)
 router.include_router(manager_repair_complaints.router)

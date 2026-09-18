@@ -20,6 +20,8 @@ from routers import (
     manager_backups,
     manager_brands,
     manager_catalog,
+    manager_catalog_usage,
+    manager_catalog_management,
     manager_catalog_decision,
     manager_catalog_quality,
     manager_content_ai,
@@ -56,8 +58,10 @@ from routers.manager_permission_policy import (
     PLATFORM_MANAGER_OPERATION_IDS,
     STOREFRONT_COLLECTION_OPERATION_IDS,
     SYSTEM_OWNER_OPERATION_IDS,
+    SYSTEM_ANALYTICS_OPERATION_IDS,
     TENANT_SERVICE_OPERATION_IDS,
     require_storefront_collections_manage,
+    require_system_analytics_manage,
 )
 from services.settings_service import SettingsService
 from services.manager_catalog_service import ManagerCatalogService
@@ -69,6 +73,8 @@ from services.tenant_offer_service import TenantOfferService
 
 PLATFORM_ROUTERS = (
     manager_catalog.router,
+    manager_catalog_usage.router,
+    manager_catalog_management.router,
     manager_catalog_decision.router,
     manager_brands.router,
     manager_tags.router,
@@ -242,6 +248,14 @@ def test_all_collection_routes_require_the_scoped_collection_capability():
             by_operation_id[operation_id],
             require_system_manager_tenant_scope,
         ), operation_id
+
+
+def test_catalog_usage_report_requires_system_analytics_capability():
+    routes = _api_routes(manager_catalog_usage.router)
+    by_operation_id = {route.operation_id: route for route in routes}
+    assert SYSTEM_ANALYTICS_OPERATION_IDS <= by_operation_id.keys()
+    for operation_id in SYSTEM_ANALYTICS_OPERATION_IDS:
+        assert _has_direct_dependency(by_operation_id[operation_id], require_system_analytics_manage)
 
 
 def test_every_global_mutation_in_policy_routers_requires_system_manager():

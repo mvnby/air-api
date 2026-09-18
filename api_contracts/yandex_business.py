@@ -1,4 +1,23 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
+
+
+class YandexBusinessFeedSettingsPayload(BaseModel):
+    selection_mode: Literal["all_published", "curated_collections"] = "all_published"
+    include_services: bool = True
+    require_ready_image: bool = False
+    require_in_stock: bool = False
+
+
+class YandexBusinessFeedSettingsResponse(YandexBusinessFeedSettingsPayload):
+    pass
+
+
+class YandexBusinessFeedProductExclusion(BaseModel):
+    product_id: int
+    product_title: str
+    reason: str
 
 
 class YandexBusinessEditorialCategoryQuality(BaseModel):
@@ -43,3 +62,11 @@ class YandexBusinessFeedQualityReport(BaseModel):
     collection_conflicts: list[YandexBusinessCollectionConflict] = Field(
         default_factory=list
     )
+    excluded_product_count: int = Field(default=0, ge=0)
+    excluded_products: list[YandexBusinessFeedProductExclusion] = Field(
+        default_factory=list
+    )
+
+
+class YandexBusinessFeedPreview(YandexBusinessFeedQualityReport):
+    settings: YandexBusinessFeedSettingsResponse

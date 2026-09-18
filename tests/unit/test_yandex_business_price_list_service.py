@@ -19,6 +19,10 @@ from services.yandex_business_price_list_service import (
     YandexCategory,
 )
 from services.tenant_scope_service import SystemTenantScopeResolver
+from services.yandex_business_feed_settings_service import (
+    YandexBusinessFeedConfiguration,
+    YandexBusinessFeedSettingsService,
+)
 
 
 @pytest.mark.parametrize(
@@ -104,6 +108,48 @@ def test_product_picture_uses_ready_yandex_feed_variant():
 
 
 @pytest.mark.asyncio
+async def test_ready_image_requirement_excludes_only_products_without_variant():
+    ready = Product(
+        id=1,
+        title="Ready",
+        slug="ready",
+        price=100,
+        main_image="/media/ready.webp",
+    )
+    ready.gallery_images = [
+        ProductImage(
+            id=1,
+            product_id=1,
+            url="/media/ready.webp",
+            variants=[
+                ProductImageVariant(
+                    id=1,
+                    product_image_id=1,
+                    variant_type="yandex_feed",
+                    processing_status="ready",
+                    url="/media/ready.jpg",
+                    width=800,
+                    height=800,
+                )
+            ],
+        )
+    ]
+    missing = Product(id=2, title="Missing", slug="missing", price=100)
+
+    eligible, excluded = await YandexBusinessPriceListService._eligible_products(
+        session=None,
+        products=[ready, missing],
+        configuration=YandexBusinessFeedConfiguration(require_ready_image=True),
+        base_url="https://mvn.by",
+    )
+
+    assert [product.id for product in eligible] == [1]
+    assert [(item.product_id, item.reason) for item in excluded] == [
+        (2, "missing_ready_yandex_image")
+    ]
+
+
+@pytest.mark.asyncio
 async def test_yandex_business_price_list_builds_catalog(monkeypatch):
     monkeypatch.setattr(settings, "PUBLIC_SITE_URL", "https://example.mvn.by/")
     brand = Brand(id=1, title="Daichi", slug="daichi")
@@ -172,17 +218,27 @@ async def test_yandex_business_price_list_builds_catalog(monkeypatch):
         _products,
         *,
         tenant_scope: TenantScope,
+        configuration,
+        base_url: str,
     ):
         assert tenant_scope.is_system
+        assert configuration.selection_mode == "all_published"
+        assert base_url == "https://example.mvn.by"
         return ProductCatalogBuild(
             categories=[brand_category],
             offers=[ProductOffer(product=product, category=brand_category)],
             collection_conflicts=[],
+            excluded_products=[],
         )
 
     monkeypatch.setattr(YandexBusinessPriceListService, "_load_products", load_products)
     monkeypatch.setattr(YandexBusinessPriceListService, "_load_tariffs", load_tariffs)
     monkeypatch.setattr(SystemTenantScopeResolver, "resolve", resolve_scope)
+    monkeypatch.setattr(
+        YandexBusinessFeedSettingsService,
+        "get",
+        lambda *_args, **_kwargs: _default_yandex_feed_configuration(),
+    )
     monkeypatch.setattr(
         YandexBusinessPriceListService,
         "_build_product_catalog",
@@ -217,6 +273,65 @@ async def test_yandex_business_price_list_builds_catalog(monkeypatch):
     assert report.products_without_picture == []
 
 
+@pytest.mark.asyncio
+async def test_current_product_offer_ids_uses_configured_product_catalog(monkeypatch):
+    product = Product(id=11, title="Daichi", slug="daichi", price=100)
+    scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
+    configuration = await _default_yandex_feed_configuration()
+
+    async def load_products(_session):
+        return [product]
+
+    async def resolve_scope(_session):
+        return scope
+
+    async def get_configuration(*_args, **_kwargs):
+        return configuration_to_use
+
+    async def build_product_catalog(
+        _session,
+        products,
+        *,
+        tenant_scope,
+        configuration: YandexBusinessFeedConfiguration,
+        base_url: str,
+    ):
+        assert products == [product]
+        assert tenant_scope == scope
+        assert configuration is configuration_to_use
+        assert base_url
+        return ProductCatalogBuild(
+            categories=[],
+            offers=[ProductOffer(product=product, category=YandexBusinessPriceListService.UNBRANDED_CATEGORY)],
+            collection_conflicts=[],
+            excluded_products=[],
+        )
+
+    configuration_to_use = configuration
+    monkeypatch.setattr(YandexBusinessPriceListService, "_load_products", load_products)
+    monkeypatch.setattr(SystemTenantScopeResolver, "resolve", resolve_scope)
+    monkeypatch.setattr(
+        YandexBusinessFeedSettingsService,
+        "get",
+        get_configuration,
+    )
+    monkeypatch.setattr(
+        YandexBusinessPriceListService,
+        "_build_product_catalog",
+        build_product_catalog,
+    )
+
+    assert await YandexBusinessPriceListService.current_product_offer_ids(session=None) == {11}
+
+
+async def _default_yandex_feed_configuration():
+    from services.yandex_business_feed_settings_service import (
+        YandexBusinessFeedConfiguration,
+    )
+
+    return YandexBusinessFeedConfiguration()
+
+
 def test_category_id_ranges_do_not_overlap():
     ids = {
         YandexBusinessPriceListService.COLLECTION_CATEGORY_OFFSET + 1,
@@ -236,3 +351,23 @@ def test_category_source_ids_cannot_cross_reserved_ranges():
             YandexBusinessPriceListService.COLLECTION_CATEGORY_OFFSET,
             YandexBusinessPriceListService.CATEGORY_RANGE_SIZE,
         )
+
+
+@pytest.mark.asyncio
+async def test_empty_curated_collections_exclude_products_without_fallback(monkeypatch):
+    from unittest.mock import AsyncMock
+    from crud.product_collection import ProductCollectionDAO
+
+    monkeypatch.setattr(ProductCollectionDAO, "list_placements", AsyncMock(return_value=[]))
+    products = [Product(id=1, title="Specific model", slug="specific", price=100)]
+    catalog = await YandexBusinessPriceListService._build_product_catalog(
+        None,
+        products,
+        tenant_scope=TenantScope(tenant_id=1, storefront_id=1),
+        configuration=YandexBusinessFeedConfiguration(selection_mode="curated_collections"),
+        base_url="https://mvn.by",
+    )
+    assert catalog.offers == []
+    assert [(item.product_id, item.reason) for item in catalog.excluded_products] == [
+        (1, "not_in_curated_collections"),
+    ]

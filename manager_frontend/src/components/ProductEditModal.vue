@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useCatalogUsage } from '../composables/useCatalogUsage';
+const catalogUsage = useCatalogUsage();
 import { ref, watch, computed } from 'vue';
 import { api, type Product, type ManagerBrand, type ProductCreate, type ProductDuplicatePayload, type ProductUpdate } from '../api';
 import { X, Save, Plus, Trash2, Edit3, Tag } from 'lucide-vue-next';
@@ -1225,6 +1227,8 @@ const save = async (): Promise<boolean> => {
         }
     }
 
+    const started = performance.now();
+    const usageAction = props.workspaceSection === 'specifications' ? 'edit_specifications' : 'edit_basics';
     loading.value = true;
     formMessage.value = '';
     formServerErrors.value = {};
@@ -1270,10 +1274,12 @@ const save = async (): Promise<boolean> => {
         }
         categorySelectionTouched.value = false;
         cleanFingerprint.value = editorFingerprint();
+        catalogUsage.track(usageAction, 'success', performance.now() - started);
         emit('success');
         if (!isWorkspace.value) close();
         return true;
     } catch (e) {
+        catalogUsage.track(usageAction, 'failed', performance.now() - started);
         const parsed = parseApiFieldErrors(e, [
             'title',
             'slug',

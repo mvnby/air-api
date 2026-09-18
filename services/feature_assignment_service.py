@@ -49,8 +49,10 @@ class FeatureAssignmentService:
         session: AsyncSession,
         product_id: int,
         assignments: list[FeatureLinkPayload],
+        *,
+        commit: bool = True,
     ) -> ManagerProductFeatureWorkspaceResponse:
-        product = await session.get(Product, product_id)
+        product = (await session.execute(select(Product).where(Product.id == product_id).with_for_update())).scalar_one_or_none()
         if product is None:
             raise HTTPException(status_code=404, detail="Товар не найден")
         feature_ids = [item.feature_id for item in assignments]
@@ -80,6 +82,7 @@ class FeatureAssignmentService:
         existing_by_feature_id = {
             int(link.feature_id): link for link in existing_links
         }
+        changed = False
         series_feature_ids: set[int] = set()
         if product.series_id is not None:
             series_feature_ids = set(
@@ -111,27 +114,42 @@ class FeatureAssignmentService:
         for link in existing_links:
             if link.source == "manual" and int(link.feature_id) not in requested_ids:
                 await session.delete(link)
+                changed = True
 
         now = datetime.now()
         for item in assignments:
             link = existing_by_feature_id.get(item.feature_id)
+            link_changed = False
             if link is None:
                 link = FeatureProductLink(
                     product_id=product_id,
                     feature_id=item.feature_id,
                     created_at=now,
                 )
+                changed = True
+                link_changed = True
             for key, value in item.model_dump(exclude={"feature_id"}).items():
-                setattr(link, key, value)
-            link.source = "manual"
-            link.updated_at = now
-            session.add(link)
-        await CatalogRevisionService.stage_invalidation(
-            session,
-            reason="product_features_update",
-            product_ids=[product_id],
-        )
-        await session.commit()
+                if getattr(link, key) != value:
+                    setattr(link, key, value)
+                    changed = True
+                    link_changed = True
+            if link.source != "manual":
+                link.source = "manual"
+                changed = True
+                link_changed = True
+            if link_changed:
+                link.updated_at = now
+                session.add(link)
+        if changed:
+            await CatalogRevisionService.stage_invalidation(
+                session,
+                reason="product_features_update",
+                product_ids=[product_id],
+            )
+        if commit:
+            await session.commit()
+        else:
+            await session.flush()
         return await FeatureAssignmentService.get_product_workspace(session, product_id)
 
     @staticmethod

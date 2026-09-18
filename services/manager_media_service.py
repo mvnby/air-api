@@ -172,6 +172,19 @@ class ManagerMediaService(ManagerMediaStorageOperations):
         return {"id": image.id, "url": image.url}
 
     @staticmethod
+    async def replace_gallery_image_from_bytes(
+        session: AsyncSession,
+        image_id: int,
+        *,
+        image_content: bytes,
+    ) -> dict:
+        return await ManagerMediaStorageOperations.replace_gallery_image_from_bytes(
+            session,
+            image_id,
+            image_content=image_content,
+        )
+
+    @staticmethod
     async def remove_background_gallery_image(
         session: AsyncSession,
         image_id: int,

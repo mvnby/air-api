@@ -16,6 +16,7 @@ from routers.manager_operation_ids import (
     DELETE_IMAGE,
     LINK_SEARCH_RESULT,
     PROCESS_MISSING_IMAGE_VARIANTS,
+    REPLACE_PRODUCT_IMAGE_LOCAL,
     REUSE_IMAGE,
     REMOVE_PRODUCT_IMAGE_BACKGROUND,
     REPROCESS_IMAGE_VARIANT,
@@ -48,6 +49,8 @@ router = APIRouter(
     tags=["manager"],
     route_class=ManagerPermissionRoute,
 )
+
+MAX_LOCAL_CROP_UPLOAD_BYTES = 25 * 1024 * 1024
 
 
 @router.post(
@@ -132,6 +135,33 @@ async def crop_product_image(
             height=payload.height,
             mode=payload.mode,
             set_main=payload.set_main,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post(
+    "/gallery/{image_id}/replace-local",
+    response_model=ManagerMediaImageLinkResponse,
+    operation_id=REPLACE_PRODUCT_IMAGE_LOCAL,
+)
+async def replace_product_image_local(
+    image_id: int,
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_session),
+    username: str = Depends(get_current_username),
+):
+    """Replace one gallery link using browser-prepared bytes without server-side crop work."""
+    try:
+        content = await file.read(MAX_LOCAL_CROP_UPLOAD_BYTES + 1)
+        if not content:
+            raise ValueError("Image file is empty")
+        if len(content) > MAX_LOCAL_CROP_UPLOAD_BYTES:
+            raise ValueError("Image file exceeds the 25 MB limit")
+        return await ManagerMediaService.replace_gallery_image_from_bytes(
+            session,
+            image_id,
+            image_content=content,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

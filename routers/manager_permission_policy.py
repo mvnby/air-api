@@ -26,6 +26,10 @@ PLATFORM_MANAGER_OPERATION_IDS = frozenset(
     {
         # Catalog products and imports.
         operation_ids.GET_MANAGER_PRODUCTS,
+        operation_ids.QUERY_MANAGER_CATALOG,
+        operation_ids.SELECT_MANAGER_CATALOG,
+        operation_ids.PREVIEW_MANAGER_CATALOG_BULK,
+        operation_ids.APPLY_MANAGER_CATALOG_BULK,
         operation_ids.LIST_MANAGER_CATALOG_DECISION_PRODUCTS,
         operation_ids.LIST_MANAGER_CATALOG_DECISION_FILTER_OPTIONS,
         operation_ids.CREATE_MANAGER_CATALOG_DECISION_COLLECTION,
@@ -49,6 +53,8 @@ PLATFORM_MANAGER_OPERATION_IDS = frozenset(
         operation_ids.START_MDV_CATALOG_IMPORT_JOB,
         operation_ids.GET_MANAGER_CATALOG_QUALITY_REPORT,
         operation_ids.GET_MANAGER_YANDEX_BUSINESS_QUALITY_REPORT,
+        operation_ids.GET_MANAGER_YANDEX_BUSINESS_FEED_SETTINGS,
+        operation_ids.PREVIEW_MANAGER_YANDEX_BUSINESS_FEED_SETTINGS,
         # Catalog dictionaries and projections.
         operation_ids.CREATE_MANAGER_BRAND,
         operation_ids.UPDATE_MANAGER_BRAND,
@@ -143,6 +149,7 @@ PLATFORM_MANAGER_OPERATION_IDS = frozenset(
         operation_ids.SET_MAIN_IMAGE,
         operation_ids.DELETE_IMAGE,
         operation_ids.CROP_PRODUCT_IMAGE,
+        operation_ids.REPLACE_PRODUCT_IMAGE_LOCAL,
         operation_ids.REMOVE_PRODUCT_IMAGE_BACKGROUND,
         operation_ids.REUSE_IMAGE,
         operation_ids.BULK_ADD_GALLERY_IMAGES,
@@ -173,6 +180,7 @@ PLATFORM_MANAGER_OPERATION_IDS = frozenset(
         operation_ids.LIST_MAIN_IMAGE_CLEANUP_SKIP_REASONS,
         # Platform-wide telemetry, not tenant CRM data.
         operation_ids.GET_MANAGER_CRM_HEALTH_REPORT,
+        operation_ids.RECORD_MANAGER_CATALOG_USAGE,
     }
 )
 
@@ -230,11 +238,23 @@ async def require_storefront_collections_manage(
     return auth
 
 
+async def require_system_analytics_manage(
+    auth: AuthenticatedUser = Depends(require_manager_access),
+) -> AuthenticatedUser:
+    if not auth.is_system_tenant or ManagerCapabilityService.ANALYTICS_MANAGE not in ManagerCapabilityService.for_auth(auth):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="System analytics management access required",
+        )
+    return auth
+
+
 SYSTEM_OWNER_OPERATION_IDS = frozenset(
     {
         operation_ids.LIST_MANAGER_SETTINGS,
         operation_ids.UPDATE_MANAGER_SETTING,
         operation_ids.CREATE_MANAGER_SETTING,
+        operation_ids.UPDATE_MANAGER_YANDEX_BUSINESS_FEED_SETTINGS,
         operation_ids.GET_MANAGER_GOOGLE_AUTH_STATUS,
         operation_ids.GET_MANAGER_GOOGLE_AUTH_URL,
         operation_ids.LIST_MANAGER_BACKUPS,
@@ -243,6 +263,10 @@ SYSTEM_OWNER_OPERATION_IDS = frozenset(
         operation_ids.START_MANAGER_BACKUP_RESTORE,
         operation_ids.GET_MANAGER_BACKUP_RESTORE_STATUS,
     }
+)
+
+SYSTEM_ANALYTICS_OPERATION_IDS = frozenset(
+    {operation_ids.GET_MANAGER_CATALOG_USAGE}
 )
 
 
@@ -272,6 +296,8 @@ STOREFRONT_OWNER_OPERATION_IDS = frozenset(
 
 
 def required_permission_dependency(operation_id: str | None):
+    if operation_id in SYSTEM_ANALYTICS_OPERATION_IDS:
+        return require_system_analytics_manage
     if operation_id in TENANT_SERVICE_OPERATION_IDS:
         return require_manager_access
     if operation_id in STOREFRONT_OWNER_OPERATION_IDS:

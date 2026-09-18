@@ -75,6 +75,16 @@ async def test_common_gallery_images_returns_only_intersection(async_client: Asy
 
 
 @pytest.mark.asyncio
+async def test_local_crop_replacement_requires_manager_authorization(async_client: AsyncClient):
+    response = await async_client.post(
+        "/api/manager/gallery/1/replace-local",
+        files={"file": ("crop.webp", b"not-an-image", "image/webp")},
+    )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
 async def test_bulk_delete_common_removes_only_selected_products(async_client: AsyncClient, db):
     p1 = _make_product(11)
     p2 = _make_product(12)

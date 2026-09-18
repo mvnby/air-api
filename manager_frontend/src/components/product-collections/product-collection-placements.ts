@@ -2,6 +2,12 @@ import type { ManagerProductCollectionPlacementPayload } from "../../client";
 
 export const placementLocations = [
   {
+    key: "yandex_business/categories",
+    label: "Яндекс Бизнес · Категории",
+    surface: "yandex_business",
+    slot: "categories",
+  },
+  {
     key: "home/featured_products",
     label: "Главная · Основные подборки",
     surface: "home",

@@ -338,11 +338,19 @@ class ProductWriteService:
         product_id: int,
         update_data: Dict[str, Any],
         tag_ids: Optional[List[int]] = None,
+        *,
+        commit: bool = True,
+        sync_derived_fields: bool = True,
     ) -> Optional[Dict[str, Any]]:
         payload = dict(update_data)
         manuals_payload = payload.pop("manuals", None)
         explicit_series_override = "series_id" in payload
         explicit_series_id = payload.pop("series_id", None)
+        # Coordinate ordinary writers with bulk apply. PostgreSQL keeps this
+        # lock until the caller commits, while SQLite safely ignores it.
+        await session.execute(
+            select(Product.id).where(Product.id == product_id).with_for_update()
+        )
         existing_product = await ProductDAO.get_by_id(session, product_id)
         if not existing_product:
             return None
@@ -395,7 +403,9 @@ class ProductWriteService:
                 payload["specs"],
                 wifi_tag_slugs=wifi_tag_slugs,
                 strict_wifi_from_tags=False,
-                title=payload.get("title") or (existing_product.title if existing_product else ""),
+                title=(
+                    payload.get("title") or (existing_product.title if existing_product else "")
+                ) if sync_derived_fields else None,
             )
 
         previous_brand_slugs = await CatalogRevisionService.get_product_brand_slugs(
@@ -409,6 +419,7 @@ class ProductWriteService:
             product.product_kind == "unknown"
             and "specs" in payload
             and "product_kind" not in payload
+            and sync_derived_fields
         ):
             product.product_kind = ProductKindService.derive_from_specs(product.specs)
             session.add(product)
@@ -419,8 +430,8 @@ class ProductWriteService:
             product.product_kind,
         )
         if (
-            category_inputs_changed
-            or "catalog_category_override" in payload
+            "catalog_category_override" in payload
+            or (sync_derived_fields and category_inputs_changed)
             or (tag_ids is not None and product.catalog_category_override is not None)
         ):
             await sync_product_catalog_category(
@@ -440,24 +451,25 @@ class ProductWriteService:
 
         explicit_brand_override = "brand_id" in payload
         explicit_brand_id = payload.get("brand_id") if explicit_brand_override else None
-        await sync_product_brand_series(
-            session,
-            product=product,
-            specs=payload.get("specs", product.specs),
-            title=payload.get("title", product.title),
-            tags=selected_tags,
-            explicit_brand_id=explicit_brand_id,
-            explicit_brand_override=explicit_brand_override,
-            explicit_series_id=explicit_series_id,
-            explicit_series_override=explicit_series_override,
-            original_brand_id=original_brand_id,
-            allow_series_title_fallback=(
-                explicit_series_override
-                or "title" in payload
-                or "specs" in payload
-                or tag_ids is not None
-            ),
-        )
+        if sync_derived_fields or explicit_brand_override or explicit_series_override:
+            await sync_product_brand_series(
+                session,
+                product=product,
+                specs=payload.get("specs", product.specs),
+                title=payload.get("title", product.title),
+                tags=selected_tags,
+                explicit_brand_id=explicit_brand_id,
+                explicit_brand_override=explicit_brand_override,
+                explicit_series_id=explicit_series_id,
+                explicit_series_override=explicit_series_override,
+                original_brand_id=original_brand_id,
+                allow_series_title_fallback=(
+                    explicit_series_override
+                    or "title" in payload
+                    or "specs" in payload
+                    or tag_ids is not None
+                ),
+            )
         await CatalogRevisionService.stage_invalidation(
             session,
             reason="product_update",
@@ -465,7 +477,10 @@ class ProductWriteService:
             slugs=[product.slug],
             brand_slugs=previous_brand_slugs,
         )
-        await session.commit()
+        if commit:
+            await session.commit()
+        else:
+            await session.flush()
         return {"message": "Product updated", "id": product.id}
 
     @staticmethod

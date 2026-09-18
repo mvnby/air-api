@@ -3,29 +3,30 @@ import { ref, onMounted, onUnmounted, watch, computed, nextTick } from 'vue';
 import { watchDebounced } from '@vueuse/core';
 import {
     api,
-    type ManagerBrand,
     type Product,
-    type ProductImageCropPayload,
     type ProductImageVariantBatchProcessResponse,
     type ProductImageVariantCandidateResponse,
     type ProductImageVariantResponse,
 } from '../api';
 import {
-    Search, RefreshCw, UploadCloud, Edit3, CheckSquare, Square, Images,
+    RefreshCw, UploadCloud, Edit3, CheckSquare, Square, Images,
     Settings, ArrowLeft, LayoutGrid, List, Package, Link2, ExternalLink,
-    Star, SlidersHorizontal, X, Trash2, Download, Crop, Wand2, MoreHorizontal, ClipboardPaste,
+    Star, X, Trash2, Download, Crop, MoreHorizontal, ClipboardPaste,
     Plus, Copy,
 } from 'lucide-vue-next';
-import BulkSpecsModal from '../components/BulkSpecsModal.vue';
+import CatalogBulkEditDialog from '../components/CatalogBulkEditDialog.vue';
+import CatalogManagementFilters from '../components/products/CatalogManagementFilters.vue';
+import { catalogManagementApi, defaultManagementFilters, type CatalogManagementFilterState, type CatalogManagementSort } from '../services/catalog-management-api';
 import BulkCompatibilityModal from '../components/BulkCompatibilityModal.vue';
 import ProductEditModal from '../components/ProductEditModal.vue';
 import OnlinerImportModal from '../components/OnlinerImportModal.vue';
-import ImageCropSelector, { type ImageCropSourceSize } from '../components/ImageCropSelector.vue';
+import ProductImageCropDialog from '../components/ProductImageCropDialog.vue';
+import YandexBusinessFeedSettingsDialog from '../components/yandex-business/YandexBusinessFeedSettingsDialog.vue';
+import CatalogUsageReport from '../components/catalog/CatalogUsageReport.vue';
+import { useCatalogUsage } from '../composables/useCatalogUsage';
+import { hasManagerCapability, MANAGER_CAPABILITY } from '../manager-capabilities';
+import { managerSession } from '../services/manager-session';
 import { getApiErrorMessage } from '../utils/api-errors';
-import {
-    backgroundRemovalProviderOptions,
-    type BackgroundRemovalProvider,
-} from '../utils/media-processing';
 import { optimizeImageForUpload } from '../utils/image-upload-optimization';
 import { uploadSequentially } from '../utils/sequential-upload';
 import { confirmDialog } from '../services/ui-feedback';
@@ -42,6 +43,10 @@ import {
     YANDEX_BUSINESS_PUBLIC_FEED_PATH,
 } from '../utils/yandex-business-feed';
 
+const catalogUsage = useCatalogUsage();
+const usageReportOpen = ref(false);
+const yandexFeedSettingsOpen = ref(false);
+const canViewUsageReport = computed(() => hasManagerCapability(managerSession.auth.value, MANAGER_CAPABILITY.analyticsManage));
 // Product state
 const products = ref<Product[]>([]);
 const loading = ref(false);
@@ -70,14 +75,12 @@ const showOnlinerImportModal = ref(false);
 const yandexPriceListLoading = ref(false);
 const variantLimit = ref(50);
 const includeInstallationVariants = ref(false);
-const variantProvider = ref<BackgroundRemovalProvider>('noop');
-const productBackgroundProvider = ref<BackgroundRemovalProvider>('rembg');
+const variantProvider = ref<'noop'>('noop');
 const productGallerySettingsOpen = ref(false);
 const applyingSeriesGallery = ref(false);
 const variantCandidatesLoading = ref(false);
 const variantProcessingLoading = ref(false);
 const variantReprocessingImageId = ref<number | null>(null);
-const backgroundRemovingImageId = ref<number | null>(null);
 const variantCandidates = ref<ProductImageVariantCandidateResponse[]>([]);
 const variantRecordsByImageId = ref<Record<number, ProductImageVariantResponse[]>>({});
 const variantBatchResult = ref<ProductImageVariantBatchProcessResponse | null>(null);
@@ -217,37 +220,24 @@ const priceBuffer = ref<string>('');
 
 // Lazy Loading
 const page = ref(1);
-const limit = 40;
 const hasMore = ref(true);
 const loadingMore = ref(false);
 const sentinel = ref<HTMLElement | null>(null);
 
-// Filters
-const searchQuery = ref('');
-const areaMin = ref<number | undefined>();
-const areaMax = ref<number | undefined>();
-const isInverter = ref<boolean | undefined>();
-const heatingMin = ref<number | undefined>();
-const hasWifi = ref<boolean | undefined>();
-const hasFreshAir = ref<boolean | undefined>();
-const selectedBrandSlug = ref<string | null>(null);
-const selectedSeriesId = ref<number | null>(null);
-const selectedSeriesTitle = ref('');
-const brands = ref<ManagerBrand[]>([]);
-const loadingBrands = ref(false);
-const filtersOpen = ref(false);
+// Shared equipment filters plus catalog administration fields.
+const managementFilters = ref<CatalogManagementFilterState>(defaultManagementFilters());
 const viewType = ref<'grid' | 'table'>('grid');
-const SMART_SEARCH_LIMIT = 100;
-const sortMode = ref<'recommended' | 'newest' | 'price_asc' | 'price_desc' | 'title'>('recommended');
+const sortMode = ref<CatalogManagementSort>('recommended');
+const totalProducts = ref(0);
+const selectingAll = ref(false);
+const favoriteTagId = ref<number | null>(null);
+const favoriteUpdatingIds = ref<Set<number>>(new Set());
 const FAVORITE_TAG_SLUG = 'manager-favorite';
 const FAVORITE_TAG_TITLE = 'Избранное';
 const FAVORITE_TAG_GROUP_SLUG = 'manager-flags';
 const FAVORITE_TAG_GROUP_TITLE = 'Метки менеджера';
-const hasSearchQuery = computed(() => searchQuery.value.trim().length > 0);
-type CatalogCategorySlug = 'cat-household' | 'cat-multi' | 'cat-industrial';
-type CategoryFilterValue = CatalogCategorySlug | 'missing';
-type CatalogCategoryFilterValue = CategoryFilterValue | 'all';
-const categoryFilter = ref<CatalogCategoryFilterValue>('cat-household');
+type CatalogCategoryFilterValue = 'all' | 'cat-household' | 'cat-multi' | 'cat-industrial' | 'missing';
+const categoryFilter = ref<CatalogCategoryFilterValue>('all');
 const CATEGORY_FILTER_TABS: Array<{ value: CatalogCategoryFilterValue; title: string }> = [
     { value: 'all', title: 'Все категории' },
     { value: 'cat-household', title: 'Бытовые' },
@@ -255,179 +245,53 @@ const CATEGORY_FILTER_TABS: Array<{ value: CatalogCategoryFilterValue; title: st
     { value: 'cat-industrial', title: 'Полупром' },
     { value: 'missing', title: 'Без категории' },
 ];
-const skipNextSearchReload = ref(false);
-
 const currentRelativeUrl = () => `${window.location.pathname}${window.location.search}`;
 const getProductsScrollContainer = (): HTMLElement | null => document.querySelector('main.flex-1.overflow-auto');
-
-const productListState = (): Record<string, unknown> => ({
-    searchQuery: searchQuery.value,
-    areaMin: areaMin.value ?? null,
-    areaMax: areaMax.value ?? null,
-    isInverter: isInverter.value ?? null,
-    heatingMin: heatingMin.value ?? null,
-    hasWifi: hasWifi.value ?? null,
-    hasFreshAir: hasFreshAir.value ?? null,
-    selectedBrandSlug: selectedBrandSlug.value,
-    selectedSeriesId: selectedSeriesId.value,
-    selectedSeriesTitle: selectedSeriesTitle.value,
-    filtersOpen: filtersOpen.value,
-    viewType: viewType.value,
-    sortMode: sortMode.value,
-    categoryFilter: categoryFilter.value,
+const currentFilters = (): CatalogManagementFilterState => ({
+    ...managementFilters.value,
+    category: ({ 'cat-household': 'household', 'cat-multi': 'multi', 'cat-industrial': 'semi_industrial' } as const)[categoryFilter.value as 'cat-household' | 'cat-multi' | 'cat-industrial'],
+    categoryMissing: categoryFilter.value === 'missing',
 });
-
+const productListState = (): Record<string, unknown> => ({
+    managementFilters: managementFilters.value, viewType: viewType.value, sortMode: sortMode.value,
+    categoryFilter: categoryFilter.value, selectedProductIds: Array.from(selectedProductIds.value),
+});
 const restoreProductListState = (context: ProductListWorkspaceContext): void => {
     const state = context.listState;
-    const restoredSearch = typeof state.searchQuery === 'string' ? state.searchQuery : '';
-    if (restoredSearch !== searchQuery.value) skipNextSearchReload.value = true;
-    searchQuery.value = restoredSearch;
-    areaMin.value = state.areaMin == null ? undefined : Number(state.areaMin);
-    areaMax.value = state.areaMax == null ? undefined : Number(state.areaMax);
-    isInverter.value = typeof state.isInverter === 'boolean' ? state.isInverter : undefined;
-    heatingMin.value = state.heatingMin == null ? undefined : Number(state.heatingMin);
-    hasWifi.value = typeof state.hasWifi === 'boolean' ? state.hasWifi : undefined;
-    hasFreshAir.value = typeof state.hasFreshAir === 'boolean' ? state.hasFreshAir : undefined;
-    selectedBrandSlug.value = typeof state.selectedBrandSlug === 'string' ? state.selectedBrandSlug : null;
-    selectedSeriesId.value = state.selectedSeriesId == null ? null : Number(state.selectedSeriesId);
-    selectedSeriesTitle.value = typeof state.selectedSeriesTitle === 'string' ? state.selectedSeriesTitle : '';
-    filtersOpen.value = Boolean(state.filtersOpen);
+    if (state.managementFilters && typeof state.managementFilters === 'object') managementFilters.value = state.managementFilters as CatalogManagementFilterState;
     viewType.value = state.viewType === 'table' ? 'table' : 'grid';
-    sortMode.value = ['newest', 'price_asc', 'price_desc', 'title'].includes(String(state.sortMode))
-        ? state.sortMode as typeof sortMode.value
-        : 'recommended';
-    categoryFilter.value = CATEGORY_FILTER_TABS.some((item) => item.value === state.categoryFilter)
-        ? state.categoryFilter as CatalogCategoryFilterValue
-        : 'cat-household';
+    sortMode.value = ['newest', 'price_asc', 'price_desc', 'title'].includes(String(state.sortMode)) ? state.sortMode as CatalogManagementSort : 'recommended';
+    categoryFilter.value = CATEGORY_FILTER_TABS.some(item => item.value === state.categoryFilter) ? state.categoryFilter as CatalogCategoryFilterValue : 'all';
+    selectedProductIds.value = new Set(Array.isArray(state.selectedProductIds) ? state.selectedProductIds.filter((id): id is number => Number.isInteger(id) && Number(id) > 0) : []);
 };
-const isMissingCategoryFilter = computed(() => categoryFilter.value === 'missing');
-const categorySlug = computed<CatalogCategorySlug | undefined>(() => (
-    isMissingCategoryFilter.value || categoryFilter.value === 'all' ? undefined : categoryFilter.value as CatalogCategorySlug
-));
-const categoryStatus = computed<'missing' | undefined>(() => (
-    isMissingCategoryFilter.value ? 'missing' : undefined
-));
-const usesSmartSearch = computed(() => hasSearchQuery.value && !isMissingCategoryFilter.value && selectedSeriesId.value === null);
-const favoriteTagId = ref<number | null>(null);
-const favoriteUpdatingIds = ref<Set<number>>(new Set());
-const availableBrands = computed(() => (
-    [...brands.value]
-        .filter((brand) => (brand.products_count ?? 0) > 0)
-        .sort((left, right) => (left.sort_order - right.sort_order) || left.title.localeCompare(right.title))
-));
-const hasAdvancedFilters = computed(() => (
-    areaMin.value !== undefined
-    || areaMax.value !== undefined
-    || isInverter.value !== undefined
-    || heatingMin.value !== undefined
-    || hasWifi.value !== undefined
-    || hasFreshAir.value !== undefined
-    || selectedBrandSlug.value !== null
-    || selectedSeriesId.value !== null
-    || sortMode.value !== 'recommended'
-));
-
 const applyFilters = () => {
-    page.value = 1;
-    loadProducts();
-};
-
-const onCategoryChange = () => {
-    if (isMissingCategoryFilter.value && sortMode.value === 'recommended') {
-        sortMode.value = 'newest';
-    }
     selectedProductIds.value.clear();
-    page.value = 1;
-    loadProducts();
+    catalogUsage.track('filter_apply');
+    void loadProducts();
 };
-
-const removeSeriesQueryParams = () => {
-    const params = new URLSearchParams(window.location.search);
-    params.delete('seriesId');
-    params.delete('seriesTitle');
-    params.delete('brand');
-    window.history.replaceState({}, '', `${window.location.pathname}${params.size ? `?${params.toString()}` : ''}`);
+const updateFilters = (filters: CatalogManagementFilterState) => {
+    managementFilters.value = filters;
+    selectedProductIds.value.clear();
 };
-
+const onCategoryChange = applyFilters;
 const resetFilters = () => {
-    searchQuery.value = '';
-    areaMin.value = undefined;
-    areaMax.value = undefined;
-    isInverter.value = undefined;
-    heatingMin.value = undefined;
-    hasWifi.value = undefined;
-    hasFreshAir.value = undefined;
-    selectedBrandSlug.value = null;
-    selectedSeriesId.value = null;
-    selectedSeriesTitle.value = '';
+    managementFilters.value = defaultManagementFilters();
+    categoryFilter.value = 'all';
     sortMode.value = 'recommended';
-    categoryFilter.value = 'cat-household';
-    removeSeriesQueryParams();
     selectedProductIds.value.clear();
-    page.value = 1;
-    loadProducts();
+    const params = new URLSearchParams(window.location.search);
+    ['seriesId', 'seriesTitle', 'brand'].forEach(key => params.delete(key));
+    window.history.replaceState({}, '', `${window.location.pathname}${params.size ? `?${params}` : ''}`);
 };
-
-const getManagerProductFilters = () => ({
-    heatingMin: heatingMin.value,
-    hasWifi: hasWifi.value,
-    hasFreshAir: hasFreshAir.value,
-    brandSlugs: selectedBrandSlug.value ? [selectedBrandSlug.value] : undefined,
-    areaMin: areaMin.value,
-    areaMax: areaMax.value,
-    categoryStatus: categoryStatus.value,
-    seriesId: selectedSeriesId.value ?? undefined,
-});
-
-const clearSeriesFilter = () => {
-    selectedSeriesId.value = null;
-    selectedSeriesTitle.value = '';
-    removeSeriesQueryParams();
-    applyFilters();
-};
-
-const toggleBrand = (slug: string | null) => {
-    selectedBrandSlug.value = selectedBrandSlug.value === slug ? null : slug;
-    applyFilters();
-};
-
-const setCompressorFilter = (value: boolean) => {
-    isInverter.value = isInverter.value === value ? undefined : value;
-    applyFilters();
-};
-
-const toggleWifiFilter = () => {
-    hasWifi.value = hasWifi.value === true ? undefined : true;
-    applyFilters();
-};
-
-const toggleFreshAirFilter = () => {
-    hasFreshAir.value = hasFreshAir.value === true ? undefined : true;
-    applyFilters();
-};
-
-const setHeatingFilter = (value: number) => {
-    heatingMin.value = heatingMin.value === value ? undefined : value;
-    applyFilters();
-};
-
-const filterChipClass = (active: boolean) => (
-    active
-        ? 'bg-brand-600 text-white border-brand-600 shadow-sm'
-        : 'bg-white dark:bg-slate-900 text-gray-700 dark:text-slate-200 border-gray-300 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700'
-);
-
-const loadBrands = async () => {
-    loadingBrands.value = true;
+const selectAllResults = async () => {
+    selectingAll.value = true;
+    const signature = JSON.stringify(currentFilters());
     try {
-        const response = await api.listManagerBrands();
-        brands.value = response.items || [];
-    } catch (e) {
-        setToast(`Ошибка загрузки брендов: ${getApiErrorMessage(e)}`);
-        console.error(e);
-    } finally {
-        loadingBrands.value = false;
-    }
+        const result = await catalogManagementApi.selection(currentFilters());
+        if (signature !== JSON.stringify(currentFilters())) return;
+        selectedProductIds.value = new Set(result.product_ids);
+    } catch (error) { setToast(getApiErrorMessage(error)); }
+    finally { selectingAll.value = false; }
 };
 
 const isFavoriteProduct = (product: Product) => (
@@ -514,14 +378,14 @@ const toggleSelection = (id: number) => {
 };
 
 const allSelected = computed(() => {
-    return products.value.length > 0 && selectedProductIds.value.size === products.value.length;
+    return products.value.length > 0 && products.value.every(product => selectedProductIds.value.has(product.id));
 });
 const selectedIdsArray = computed(() => Array.from(selectedProductIds.value));
 const isBulkMode = computed(() => modalMode.value === 'bulk');
 
 const toggleSelectAll = () => {
     if (allSelected.value) {
-        selectedProductIds.value.clear();
+        products.value.forEach(product => selectedProductIds.value.delete(product.id));
     } else {
         products.value.forEach(p => selectedProductIds.value.add(p.id));
     }
@@ -535,6 +399,7 @@ const openBulkUpdate = () => {
 
 const openBulkCompatibility = () => {
     if (selectedProductIds.value.size === 0) return;
+    if (selectedProductIds.value.size !== selectedProductsForBulkCompatibility.value.length) { setToast('Для совместимости выберите товары из загруженного списка.'); return; }
     showBulkActionsMenu.value = false;
     showBulkCompatibilityModal.value = true;
 };
@@ -577,7 +442,7 @@ const openBulkImageModal = async () => {
 const handleBulkSuccess = async () => {
     await loadProducts();
     selectedProductIds.value.clear();
-    setToast('Характеристики обновлены');
+    setToast('Товары обновлены');
 };
 
 const handleFileSelect = async (e: Event) => {
@@ -746,43 +611,18 @@ watch(showModal, (val) => {
   }
 });
 
-watch(filtersOpen, (isOpen) => {
-    if (isOpen && brands.value.length === 0 && !loadingBrands.value) {
-        loadBrands();
-    }
-});
-
+let listGeneration = 0;
 const loadProducts = async () => {
+  const generation = ++listGeneration;
   loading.value = true;
   page.value = 1;
   try {
-    if (usesSmartSearch.value) {
-      const smartResults = await api.smartSearchProducts(
-          searchQuery.value.trim(),
-          SMART_SEARCH_LIMIT,
-          isInverter.value,
-          hasWifi.value,
-          categorySlug.value,
-          getManagerProductFilters(),
-      );
-      products.value = smartResults;
-      hasMore.value = false;
-    } else {
-      const data = await api.getManagerProducts(
-          1,
-          limit,
-          isMissingCategoryFilter.value ? searchQuery.value.trim() || undefined : undefined,
-          undefined, // isPublished (not exposed yet)
-          areaMin.value,
-          areaMax.value,
-          isInverter.value,
-          categorySlug.value,
-          sortMode.value,
-          getManagerProductFilters(),
-      );
-      products.value = data.items ? data.items : (Array.isArray(data) ? data : []);
-      hasMore.value = products.value.length >= limit;
-    }
+    const data = await catalogManagementApi.list(currentFilters(), 1, sortMode.value);
+    if (generation !== listGeneration) return;
+    products.value = data.items;
+    totalProducts.value = data.meta.total;
+    if (!data.meta.total) catalogUsage.track('filter_zero_results', 'zero_results');
+    hasMore.value = products.value.length < data.meta.total;
     if (pendingEditProductId.value && !pendingEditHandled.value) {
       let target = products.value.find((p) => p.id === pendingEditProductId.value)
         || (pendingEditProductQuery.value
@@ -805,41 +645,29 @@ const loadProducts = async () => {
       }
     }
   } catch (e) {
+    if (generation !== listGeneration) return;
     setToast(`Ошибка загрузки товаров: ${getApiErrorMessage(e)}`);
     console.error(e);
   } finally {
-    loading.value = false;
+    if (generation === listGeneration) loading.value = false;
   }
 };
 
 const loadMore = async () => {
-    if (loadingMore.value || !hasMore.value || usesSmartSearch.value) return;
+    if (loading.value || loadingMore.value || !hasMore.value) return;
+    const generation = listGeneration;
     loadingMore.value = true;
-    page.value++;
+    const nextPage = page.value + 1;
     try {
-        const data = await api.getManagerProducts(
-            page.value, 
-            limit, 
-            searchQuery.value || undefined, 
-            undefined, 
-            areaMin.value, 
-            areaMax.value, 
-            isInverter.value,
-            categorySlug.value,
-            sortMode.value,
-            getManagerProductFilters(),
-        );
-        const newItems = data.items ? data.items : (Array.isArray(data) ? data : []);
-        if (newItems.length < limit) {
-            hasMore.value = false;
-        }
-        products.value.push(...newItems);
-    } catch (e) {
-        setToast(`Ошибка догрузки товаров: ${getApiErrorMessage(e)}`);
-        console.error(e);
-    } finally {
-        loadingMore.value = false;
-    }
+        const data = await catalogManagementApi.list(currentFilters(), nextPage, sortMode.value);
+        if (generation !== listGeneration) return;
+        page.value = nextPage;
+        const seen = new Set(products.value.map(item => item.id));
+        products.value.push(...data.items.filter(item => !seen.has(item.id)));
+        totalProducts.value = data.meta.total;
+        hasMore.value = page.value < data.meta.pages;
+    } catch (error) { if (generation === listGeneration) setToast(getApiErrorMessage(error)); }
+    finally { loadingMore.value = false; }
 };
 
 const startEditingPrice = (product: Product) => {
@@ -863,11 +691,14 @@ const savePrice = async (product: Product) => {
         return;
     }
 
+    const started = performance.now();
     try {
         await api.updateProduct(product.id, { price: newPrice });
         product.price = newPrice;
+        catalogUsage.track('edit_pricing', 'success', performance.now() - started);
         cancelEditingPrice();
     } catch (e) {
+        catalogUsage.track('edit_pricing', 'failed', performance.now() - started);
         setToast(`Ошибка при сохранении цены: ${getApiErrorMessage(e)}`);
         console.error(e);
     }
@@ -926,6 +757,14 @@ const refreshSelectedProduct = () => {
     }
 };
 
+let catalogObserver: IntersectionObserver | null = null;
+let galleryOpenedAt = 0;
+let galleryInitialState = '';
+const galleryState = () => JSON.stringify(modalMode.value === 'single' ? selectedProduct.value?.gallery_images : products.value.map(product => product.gallery_images));
+watch(showModal, (open) => {
+    if (open) { galleryOpenedAt = performance.now(); galleryInitialState = galleryState(); }
+    else if (galleryOpenedAt && galleryInitialState === galleryState() && performance.now() - galleryOpenedAt < 5000) catalogUsage.track('gallery_quick_exit', 'quick_exit', performance.now() - galleryOpenedAt);
+});
 const openSearchModal = (product: Product) => {
   modalMode.value = 'single';
   selectedProduct.value = product;
@@ -946,6 +785,8 @@ const openProductWorkspace = (
     product: Product,
     section: ProductWorkspaceSection = 'main',
 ) => {
+    catalogUsage.track('product_open');
+    catalogUsage.flush();
     const scrollTop = getProductsScrollContainer()?.scrollTop || 0;
     saveProductWorkspaceContext({
         returnTo: currentRelativeUrl(),
@@ -1011,12 +852,6 @@ type VariantStatus = 'ready' | 'failed' | 'skipped' | 'pending' | 'unknown';
 
 const cropEditorOpen = ref(false);
 const cropEditorImage = ref<GalleryImage | null>(null);
-const cropSaving = ref(false);
-const cropMode = ref<'append' | 'replace'>('replace');
-const cropSetMain = ref(false);
-const cropSourceSize = ref({ width: 0, height: 0 });
-const cropForm = ref({ x: 0, y: 0, width: 0, height: 0 });
-
 const boundedVariantLimit = computed(() => {
     const parsed = Number(variantLimit.value);
     if (!Number.isFinite(parsed)) return 50;
@@ -1043,99 +878,17 @@ const selectedMainGalleryImage = computed<GalleryImage | null>(() => {
 
 const canApplyGalleryToSeries = computed(() => Boolean(selectedProduct.value?.id && selectedProduct.value?.series_id));
 
-const cropCanSetMain = computed(() => Boolean(cropEditorImage.value && !cropEditorImage.value.is_installation_photo));
-
-const clampCropForm = () => {
-    const source = cropSourceSize.value;
-    if (!source.width || !source.height) return;
-
-    const maxX = Math.max(0, source.width - 1);
-    const maxY = Math.max(0, source.height - 1);
-    const x = Math.max(0, Math.min(Math.trunc(Number(cropForm.value.x) || 0), maxX));
-    const y = Math.max(0, Math.min(Math.trunc(Number(cropForm.value.y) || 0), maxY));
-    const maxWidth = Math.max(1, source.width - x);
-    const maxHeight = Math.max(1, source.height - y);
-
-    cropForm.value = {
-        x,
-        y,
-        width: Math.max(1, Math.min(Math.trunc(Number(cropForm.value.width) || 1), maxWidth)),
-        height: Math.max(1, Math.min(Math.trunc(Number(cropForm.value.height) || 1), maxHeight)),
-    };
-};
-
-const resetCropToFullFrame = () => {
-    const source = cropSourceSize.value;
-    if (!source.width || !source.height) return;
-    cropForm.value = { x: 0, y: 0, width: source.width, height: source.height };
-};
-
-const setCenteredSquareCrop = () => {
-    const source = cropSourceSize.value;
-    if (!source.width || !source.height) return;
-    const side = Math.min(source.width, source.height);
-    cropForm.value = {
-        x: Math.round((source.width - side) / 2),
-        y: Math.round((source.height - side) / 2),
-        width: side,
-        height: side,
-    };
-};
-
-const openCropEditor = (image: GalleryImage) => {
-    cropEditorImage.value = image;
-    cropMode.value = 'replace';
-    cropSetMain.value = false;
-    cropSourceSize.value = { width: 0, height: 0 };
-    cropForm.value = { x: 0, y: 0, width: 0, height: 0 };
-    cropEditorOpen.value = true;
-};
-
-const closeCropEditor = () => {
-    if (cropSaving.value) return;
-    cropEditorOpen.value = false;
-    cropEditorImage.value = null;
-};
-
-const resetCropEditor = () => {
-    cropEditorOpen.value = false;
-    cropEditorImage.value = null;
-    cropSaving.value = false;
-    cropSetMain.value = false;
-};
-
-const handleCropSourceLoad = (size: ImageCropSourceSize) => {
-    cropSourceSize.value = size;
-    resetCropToFullFrame();
-};
-
-const saveCrop = async () => {
-    if (!cropEditorImage.value) return;
-    clampCropForm();
-
-    const payload: ProductImageCropPayload = {
-        x: cropForm.value.x,
-        y: cropForm.value.y,
-        width: cropForm.value.width,
-        height: cropForm.value.height,
-        mode: cropMode.value,
-        set_main: cropCanSetMain.value ? cropSetMain.value : false,
-    };
-
-    cropSaving.value = true;
-    try {
-        await api.cropGalleryImage(cropEditorImage.value.id, payload);
-        await loadProducts();
-        refreshSelectedProduct();
-        setToast(cropMode.value === 'replace' ? 'Фото заменено после кропа' : 'Кроп добавлен в галерею');
-        cropEditorOpen.value = false;
-        cropEditorImage.value = null;
-    } catch (e) {
-        setToast(`Ошибка кропа: ${getApiErrorMessage(e)}`);
-        console.error(e);
-    } finally {
-        cropSaving.value = false;
-    }
+const openCropEditor = (image: GalleryImage) => { cropEditorImage.value = image; cropEditorOpen.value = true; };
+const resetCropEditor = () => { cropEditorOpen.value = false; cropEditorImage.value = null; };
+const handleLocalCropSaved = async () => {
+    const id = selectedProduct.value?.id;
+    resetCropEditor();
+    if (!id) return;
+    const fresh = await api.getManagerProduct(id);
+    selectedProduct.value = fresh;
+    products.value = products.value.map(item => item.id === id ? fresh : item);
+    catalogUsage.track('edit_gallery');
+    setToast('Фото сохранено');
 };
 
 const mergeVariantRecords = (variants: ProductImageVariantResponse[] = []) => {
@@ -1231,7 +984,6 @@ const resetVariantState = () => {
     variantCandidatesLoading.value = false;
     variantProcessingLoading.value = false;
     variantReprocessingImageId.value = null;
-    backgroundRemovingImageId.value = null;
     productGallerySettingsOpen.value = false;
 };
 
@@ -1291,28 +1043,6 @@ const reprocessCardVariant = async (imageId: number) => {
         console.error(e);
     } finally {
         variantReprocessingImageId.value = null;
-    }
-};
-
-const removeGalleryImageBackground = async (image: GalleryImage) => {
-    if (backgroundRemovingImageId.value) return;
-    backgroundRemovingImageId.value = image.id;
-    try {
-        await api.removeProductImageBackground(
-            image.id,
-            productBackgroundProvider.value,
-            null,
-            'replace',
-            false,
-        );
-        await loadProducts();
-        refreshSelectedProduct();
-        setToast('Фото заменено версией без фона');
-    } catch (e) {
-        setToast(`Ошибка удаления фона: ${getApiErrorMessage(e)}`);
-        console.error(e);
-    } finally {
-        backgroundRemovingImageId.value = null;
     }
 };
 
@@ -1505,11 +1235,14 @@ onMounted(async () => {
     if (savedContext && contextMatchesList) restoreProductListState(savedContext);
     const seriesIdRaw = Number(params.get('seriesId'));
     if (Number.isInteger(seriesIdRaw) && seriesIdRaw > 0) {
-        selectedSeriesId.value = seriesIdRaw;
-        selectedSeriesTitle.value = params.get('seriesTitle') || `#${seriesIdRaw}`;
-        selectedBrandSlug.value = params.get('brand');
+        managementFilters.value.seriesIds = [seriesIdRaw];
+        const brandSlug = params.get('brand');
+        if (brandSlug) {
+            const response = await api.listManagerBrands();
+            const brand = response.items.find(item => item.slug === brandSlug);
+            if (brand) managementFilters.value.brandIds = [brand.id];
+        }
         categoryFilter.value = 'all';
-        filtersOpen.value = true;
     }
     const editProductIdRaw = params.get('editProductId');
     const parsedEditProductId = editProductIdRaw ? Number(editProductIdRaw) : NaN;
@@ -1518,7 +1251,6 @@ onMounted(async () => {
     pendingReturnTo.value = params.get('returnTo') || '';
     pendingProductPanel.value = params.get('productPanel') === 'media' ? 'media' : 'edit';
     document.addEventListener('paste', onProductImagePaste);
-    void loadBrands();
     await loadProducts();
     if (savedContext && contextMatchesList) {
         while (page.value < savedContext.page && hasMore.value) {
@@ -1529,19 +1261,21 @@ onMounted(async () => {
         if (scrollContainer) scrollContainer.scrollTop = savedContext.scrollTop;
     }
 
-    const observer = new IntersectionObserver((entries) => {
+    catalogObserver = new IntersectionObserver((entries) => {
         if (entries[0]?.isIntersecting && hasMore.value && !loadingMore.value) {
             loadMore();
         }
     }, { threshold: 0.1 });
 
+    initialized = true;
     // Watch for sentinel element
     watch(sentinel, (el) => {
-        if (el) observer.observe(el);
+        if (el) catalogObserver?.observe(el);
     });
 });
 
 onUnmounted(() => {
+    catalogObserver?.disconnect();
     document.removeEventListener('paste', onProductImagePaste);
 });
 
@@ -1572,18 +1306,13 @@ const deleteProduct = async (product: Product) => {
     }
 };
 
+let initialized = false;
 watchDebounced(
-    searchQuery,
-    () => {
-        if (skipNextSearchReload.value) {
-            skipNextSearchReload.value = false;
-            return;
-        }
-        page.value = 1;
-        loadProducts();
-    },
-    { debounce: 400, maxWait: 1200 },
+    () => [managementFilters.value, sortMode.value],
+    () => { if (initialized) applyFilters(); },
+    { debounce: 350, maxWait: 1000, deep: true },
 );
+
 </script>
 
 <template>
@@ -1660,7 +1389,7 @@ watchDebounced(
                       <Images class="w-4 h-4" /> Изображения
                   </button>
                   <button @click="openBulkUpdate" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 dark:text-slate-200 dark:hover:bg-slate-800">
-                      <Edit3 class="w-4 h-4" /> Характеристики
+                      <Edit3 class="w-4 h-4" /> Изменить выбранные
                   </button>
                   <button @click="openBulkCompatibility" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 dark:text-slate-200 dark:hover:bg-slate-800">
                       <Link2 class="w-4 h-4" /> Совместимость
@@ -1683,7 +1412,7 @@ watchDebounced(
                   <Images class="w-3.5 h-3.5" /> Изображения
               </button>
               <button @click="openBulkUpdate" class="flex items-center gap-1 bg-brand-600 text-white px-3 py-1.5 rounded-md text-sm hover:bg-brand-700 transition-colors">
-                  <Edit3 class="w-3.5 h-3.5" /> Характеристики
+                  <Edit3 class="w-3.5 h-3.5" /> Изменить выбранные
               </button>
               <button @click="openBulkCompatibility" class="flex items-center gap-1 bg-indigo-600 text-white px-3 py-1.5 rounded-md text-sm hover:bg-indigo-700 transition-colors">
                   <Link2 class="w-3.5 h-3.5" /> Совместимость
@@ -1708,11 +1437,6 @@ watchDebounced(
           </div>
       </div>
       <div class="flex flex-wrap gap-2">
-          <button @click="toggleSelectAll" class="px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 flex items-center gap-2 text-gray-700 dark:text-slate-200 text-sm transition-colors">
-              <CheckSquare v-if="allSelected" class="w-4 h-4 text-brand-600" />
-              <Square v-else class="w-4 h-4 text-gray-400" />
-              Выбрать все
-          </button>
           <button
             @click="openCreateProductModal"
             class="flex items-center gap-1.5 px-3 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
@@ -1741,10 +1465,10 @@ watchDebounced(
           <button
             @click="copyYandexBusinessFeedLink"
             class="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-200 rounded-lg text-sm font-medium transition-colors shadow-sm"
-            title="Скопировать ссылку feed"
+            title="Скопировать ссылку Яндекса"
           >
             <Copy class="w-4 h-4" />
-            Скопировать ссылку feed
+            Скопировать ссылку Яндекса
           </button>
       </div>
     </header>
@@ -1755,205 +1479,22 @@ watchDebounced(
         </div>
       </Transition>
 
-    <!-- Filters -->
-    <div class="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 mb-6 space-y-4">
-        <div class="flex flex-col gap-3 lg:flex-row lg:items-end">
-            <div class="flex-1 min-w-[240px]">
-                <label class="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Поиск по модели</label>
-                <div class="relative">
-                    <Search class="w-4 h-4 text-gray-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                        v-model="searchQuery"
-                        @keyup.enter="applyFilters"
-                        placeholder="Например: lg 12"
-                        class="w-full pl-9 pr-4 py-2.5 border border-gray-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-gray-900 dark:text-slate-100 dark:placeholder-slate-500 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none shadow-inner"
-                    />
-                </div>
-            </div>
-
-            <div class="flex flex-wrap gap-2">
-                <button
-                    type="button"
-                    class="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-semibold transition-colors"
-                    :class="filtersOpen
-                        ? 'bg-brand-600 text-white border-brand-600'
-                        : 'bg-white dark:bg-slate-900 text-gray-700 dark:text-slate-200 border-gray-300 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700'"
-                    @click="filtersOpen = !filtersOpen"
-                >
-                    <SlidersHorizontal class="w-4 h-4" />
-                    Фильтры
-                    <span
-                        v-if="hasAdvancedFilters"
-                        class="inline-flex h-2 w-2 rounded-full"
-                        :class="filtersOpen ? 'bg-white' : 'bg-brand-500'"
-                    ></span>
-                </button>
-                <button
-                    type="button"
-                    class="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
-                    @click="resetFilters"
-                >
-                    <X class="w-4 h-4" />
-                    Сбросить фильтры
-                </button>
-            </div>
-        </div>
-
-        <div v-if="selectedSeriesId" class="flex flex-wrap items-center gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm dark:border-brand-900/60 dark:bg-brand-950/30">
-            <span class="font-medium text-brand-900 dark:text-brand-100">Серия: {{ selectedSeriesTitle }}</span>
-            <button
-                type="button"
-                class="inline-flex h-7 w-7 items-center justify-center rounded-md text-brand-700 transition-colors hover:bg-brand-100 dark:text-brand-300 dark:hover:bg-brand-900/50"
-                title="Показать товары всех серий"
-                aria-label="Сбросить фильтр серии"
-                @click="clearSeriesFilter"
-            >
-                <X class="h-4 w-4" />
-            </button>
-        </div>
-
-        <Transition name="fade">
-            <div v-if="filtersOpen" class="space-y-4 border-t border-gray-100 dark:border-slate-700 pt-4">
-                <div>
-                    <div class="mb-2 flex items-center gap-2">
-                        <span class="block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Бренд</span>
-                        <span v-if="loadingBrands" class="text-xs text-gray-400 dark:text-slate-500">обновляем...</span>
-                    </div>
-                    <div class="flex flex-wrap gap-2">
-                        <button
-                            type="button"
-                            class="rounded-lg border px-3 py-2 text-sm font-semibold transition-colors"
-                            :class="filterChipClass(selectedBrandSlug === null)"
-                            @click="toggleBrand(null)"
-                        >
-                            Все бренды
-                        </button>
-                        <button
-                            v-for="brand in availableBrands"
-                            :key="brand.slug"
-                            type="button"
-                            class="rounded-lg border px-3 py-2 text-sm font-semibold transition-colors"
-                            :class="filterChipClass(selectedBrandSlug === brand.slug)"
-                            @click="toggleBrand(brand.slug)"
-                        >
-                            {{ brand.title }}
-                        </button>
-                    </div>
-                </div>
-
-                <div class="grid gap-4 lg:grid-cols-[minmax(220px,320px)_1fr] lg:items-end">
-                    <div>
-                        <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-2" for="manager-products-sort">
-                            Сортировка
-                        </label>
-                        <select
-                            id="manager-products-sort"
-                            v-model="sortMode"
-                            class="w-full px-3 py-2.5 border border-gray-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-gray-900 dark:text-slate-100 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 outline-none shadow-inner"
-                            @change="applyFilters"
-                        >
-                            <option value="recommended">Рекомендуемые</option>
-                            <option value="price_asc">Сначала дешевле</option>
-                            <option value="price_desc">Сначала дороже</option>
-                            <option value="newest">Сначала новые</option>
-                            <option value="title">По названию</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="grid gap-4 lg:grid-cols-[minmax(220px,320px)_1fr]">
-                    <div>
-                        <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-2">Площадь (м²)</label>
-                        <div class="flex gap-2 items-center">
-                            <input
-                                v-model.number="areaMin"
-                                type="number"
-                                placeholder="От"
-                                class="w-full px-3 py-2.5 border border-gray-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-gray-900 dark:text-slate-100 dark:placeholder-slate-500 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 outline-none shadow-inner"
-                            />
-                            <span class="text-gray-400">-</span>
-                            <input
-                                v-model.number="areaMax"
-                                type="number"
-                                placeholder="До"
-                                class="w-full px-3 py-2.5 border border-gray-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-gray-900 dark:text-slate-100 dark:placeholder-slate-500 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 outline-none shadow-inner"
-                            />
-                            <button
-                                type="button"
-                                @click="applyFilters"
-                                class="px-4 py-2.5 bg-brand-600 dark:bg-brand-600 text-white rounded-lg hover:bg-brand-700 dark:hover:bg-brand-700 font-medium text-sm transition-colors shadow-sm"
-                            >
-                                OK
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="grid gap-4 md:grid-cols-3">
-                        <div>
-                            <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Тип компрессора</div>
-                            <div class="flex flex-wrap gap-2">
-                                <button
-                                    type="button"
-                                    class="rounded-lg border px-3 py-2 text-sm font-semibold transition-colors"
-                                    :class="filterChipClass(isInverter === true)"
-                                    @click="setCompressorFilter(true)"
-                                >
-                                    Инвертор
-                                </button>
-                                <button
-                                    type="button"
-                                    class="rounded-lg border px-3 py-2 text-sm font-semibold transition-colors"
-                                    :class="filterChipClass(isInverter === false)"
-                                    @click="setCompressorFilter(false)"
-                                >
-                                    On/Off
-                                </button>
-                            </div>
-                        </div>
-
-                        <div>
-                            <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Дополнительно</div>
-                            <div class="flex flex-wrap gap-2">
-                                <button
-                                    type="button"
-                                    class="rounded-lg border px-3 py-2 text-sm font-semibold transition-colors"
-                                    :class="filterChipClass(hasWifi === true)"
-                                    @click="toggleWifiFilter"
-                                >
-                                    Wi-Fi
-                                </button>
-                                <button
-                                    type="button"
-                                    class="rounded-lg border px-3 py-2 text-sm font-semibold transition-colors"
-                                    :class="filterChipClass(hasFreshAir === true)"
-                                    @click="toggleFreshAirFilter"
-                                >
-                                    Приток воздуха
-                                </button>
-                            </div>
-                        </div>
-
-                        <div>
-                            <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Обогрев</div>
-                            <div class="flex flex-wrap gap-2">
-                                <button
-                                    v-for="value in [-15, -20, -25, -30]"
-                                    :key="value"
-                                    type="button"
-                                    class="rounded-lg border px-3 py-2 text-sm font-semibold transition-colors"
-                                    :class="filterChipClass(heatingMin === value)"
-                                    @click="setHeatingFilter(value)"
-                                >
-                                    до {{ value }}°C
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </Transition>
+    <div class="mb-3 flex flex-wrap gap-2 text-sm">
+      <button type="button" class="rounded-lg border px-3 py-2" @click="yandexFeedSettingsOpen = true">Настроить Яндекс</button>
+      <button type="button" class="rounded-lg border px-3 py-2" :aria-pressed="catalogUsage.enabled.value" @click="catalogUsage.setOptIn(!catalogUsage.enabled.value)">Наблюдение: {{ catalogUsage.enabled.value ? 'вкл.' : 'выкл.' }}</button>
+      <button v-if="canViewUsageReport" type="button" class="rounded-lg border px-3 py-2" @click="usageReportOpen = true">Отчёт об удобстве</button>
     </div>
-    
+    <CatalogManagementFilters :model-value="managementFilters" :sort="sortMode" @update:model-value="updateFilters" @update:sort="sortMode = $event" @reset="resetFilters" />
+    <div class="mb-4 flex flex-wrap items-center gap-3 text-sm text-gray-600 dark:text-slate-300">
+      <span>Найдено: {{ totalProducts }} · загружено: {{ products.length }}</span>
+      <button type="button" class="rounded-lg border px-3 py-2" :disabled="!products.length" @click="toggleSelectAll">{{ allSelected ? 'Снять выбор загруженных' : 'Выбрать загруженные' }}</button>
+      <button v-if="totalProducts > products.length" type="button" class="rounded-lg border px-3 py-2" :disabled="selectingAll || loading || totalProducts > 500" @click="selectAllResults">Выбрать все {{ totalProducts }}</button>
+      <span v-if="totalProducts > 500" class="text-xs">Для массового изменения сузьте выбор до 500 товаров.</span>
+      <span v-if="selectedProductIds.size">Выбрано: {{ selectedProductIds.size }}</span>
+      <button v-if="selectedProductIds.size" type="button" class="rounded-lg bg-brand-600 px-3 py-2 font-semibold text-white" @click="openBulkUpdate">Изменить выбранные</button>
+      <button v-if="selectedProductIds.size" type="button" class="underline" @click="selectedProductIds.clear()">Снять весь выбор</button>
+    </div>
+
     <!-- Product Grid -->
     <div v-if="loading" class="py-20">
       <div class="flex items-center justify-center gap-3 text-gray-500">
@@ -1969,6 +1510,7 @@ watchDebounced(
              class="relative cursor-pointer overflow-hidden rounded-lg border-2 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:bg-slate-800"
              :class="selectedProductIds.has(product.id) ? 'border-brand-500 ring-2 ring-brand-100 dark:ring-brand-900/50' : 'border-transparent'"
              @click="openProductWorkspace(product)"
+             role="link" tabindex="0" @keydown.enter.self="openProductWorkspace(product)"
         >
              <!-- Selection Checkbox Overlay -->
              <div class="absolute top-2.5 left-2.5 z-10">
@@ -1990,7 +1532,7 @@ watchDebounced(
                     />
                  </button>
              </div>
-            <div class="aspect-[16/8.5] bg-gray-100 dark:bg-slate-700 relative" title="Открыть быстрый редактор фотографий" @click.stop="openSearchModal(product)">
+            <div class="aspect-[16/8.5] bg-gray-100 dark:bg-slate-700 relative" title="Открыть товар">
                 <img v-if="product.main_image" :src="getImageUrl(product.main_image)" class="w-full h-full object-contain p-2" />
                 <div v-else class="w-full h-full flex items-center justify-center text-gray-300">
                     <Package class="w-10 h-10" />
@@ -2117,7 +1659,7 @@ watchDebounced(
                 </button>
               </td>
               <td class="p-4">
-                <div class="w-16 h-10 bg-gray-100 dark:bg-slate-700 rounded overflow-hidden shadow-sm relative cursor-pointer" title="Открыть фотографии" @click.stop="openSearchModal(product)">
+                <div class="w-16 h-10 bg-gray-100 dark:bg-slate-700 rounded overflow-hidden shadow-sm relative cursor-pointer" title="Открыть товар">
                     <img v-if="product.main_image" :src="getImageUrl(product.main_image)" class="w-full h-full object-contain p-0.5" />
                     <div v-else class="w-full h-full flex items-center justify-center text-gray-300">
                       <Package class="w-5 h-5" />
@@ -2367,7 +1909,7 @@ watchDebounced(
                       {{ isBulkMode ? 'Общая галерея' : 'Текущая галерея' }}
                   </div>
                   <div class="mt-1 text-xs text-gray-500">
-                      Кнопки ниже запускают глобальную проверку/батч по всей галерее в пределах лимита. Оригинал и main_image не меняются.
+                      Эти служебные действия проверяют всю галерею и создают уменьшенные копии на сервере. Обработка может занять время; удаление фона отключено.
                   </div>
                   <div class="mt-3 flex flex-wrap items-center gap-2">
                       <label class="flex items-center gap-1 text-xs text-gray-600">
@@ -2380,19 +1922,6 @@ watchDebounced(
                               class="h-8 w-16 rounded-md border border-gray-300 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500"
                           />
                       </label>
-                      <select
-                          v-model="variantProvider"
-                          class="h-8 rounded-md border border-gray-300 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500"
-                          title="Провайдер обработки variant card"
-                      >
-                          <option
-                              v-for="option in backgroundRemovalProviderOptions"
-                              :key="option.value"
-                              :value="option.value"
-                          >
-                              {{ option.label }}
-                          </option>
-                      </select>
                       <label class="flex items-center gap-1 text-xs text-gray-600">
                           <input v-model="includeInstallationVariants" type="checkbox" class="rounded border-gray-300 text-brand-600 focus:ring-brand-500" />
                           монтажные
@@ -2411,7 +1940,7 @@ watchDebounced(
                           :disabled="variantProcessingLoading || variantCandidatesLoading"
                           class="rounded-md bg-brand-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
                       >
-                          {{ variantProcessingLoading ? 'Обработка...' : 'Создать card batch' }}
+                          {{ variantProcessingLoading ? 'Обработка...' : 'Подготовить копии' }}
                       </button>
                   </div>
                   <div class="mt-1 text-[11px] leading-snug text-gray-500">
@@ -2461,22 +1990,6 @@ watchDebounced(
                           v-if="productGallerySettingsOpen"
                           class="absolute right-0 top-11 w-56 rounded-xl border border-gray-200 bg-white p-3 text-xs text-gray-700 shadow-xl"
                       >
-                          <label class="block">
-                              <span class="font-semibold uppercase tracking-wide text-gray-500">Без фона</span>
-                              <select
-                                  v-model="productBackgroundProvider"
-                                  class="mt-2 h-9 w-full rounded-md border border-gray-300 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                                  title="Провайдер удаления фона для текущего фото"
-                              >
-                                  <option
-                                      v-for="option in backgroundRemovalProviderOptions"
-                                      :key="option.value"
-                                      :value="option.value"
-                                  >
-                                      {{ option.label }}
-                                  </option>
-                              </select>
-                          </label>
                           <button
                               type="button"
                               class="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
@@ -2508,15 +2021,7 @@ watchDebounced(
                               <Crop class="h-3 w-3" />
                               Кроп
                           </button>
-                          <button
-                              @click="removeGalleryImageBackground(selectedMainGalleryImage)"
-                              :disabled="backgroundRemovingImageId === selectedMainGalleryImage.id"
-                              class="inline-flex w-full items-center justify-center gap-1 rounded bg-brand-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-brand-700 disabled:opacity-60"
-                              title="Удалить фон и заменить главное фото"
-                          >
-                              <Wand2 class="h-3 w-3" />
-                              {{ backgroundRemovingImageId === selectedMainGalleryImage.id ? 'Обработка...' : 'Без фона' }}
-                          </button>
+                          <span class="block px-2 py-1 text-[10px] text-gray-500">Удаление фона пока недоступно. Можно загрузить готовое фото.</span>
                           <button
                               @click="reprocessCardVariant(selectedMainGalleryImage.id)"
                               :disabled="variantReprocessingImageId === selectedMainGalleryImage.id || variantProcessingLoading"
@@ -2571,15 +2076,7 @@ watchDebounced(
                               <Crop class="h-3 w-3" />
                               Кроп
                            </button>
-                           <button
-                              @click="removeGalleryImageBackground(img)"
-                              :disabled="backgroundRemovingImageId === img.id"
-                              class="inline-flex w-full items-center justify-center gap-1 rounded bg-brand-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-brand-700 disabled:opacity-60"
-                              title="Удалить фон и заменить это фото"
-                           >
-                              <Wand2 class="h-3 w-3" />
-                              {{ backgroundRemovingImageId === img.id ? 'Обработка...' : 'Без фона' }}
-                           </button>
+                           <span class="block px-2 py-1 text-[10px] text-gray-500">Удаление фона пока недоступно. Можно загрузить готовое фото.</span>
                            <button
                               @click="reprocessCardVariant(img.id)"
                               :disabled="variantReprocessingImageId === img.id || variantProcessingLoading"
@@ -2599,116 +2096,13 @@ watchDebounced(
                   </div>
               </template>
           </div>
-          <div
-              v-if="cropEditorOpen && cropEditorImage"
-              class="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/55 p-3 sm:p-6"
-              @click.self="closeCropEditor"
-          >
-              <div class="flex max-h-full w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
-                  <div class="flex items-start justify-between gap-4 border-b border-gray-200 px-4 py-3 sm:px-5">
-                      <div class="min-w-0">
-                          <h3 class="truncate text-lg font-semibold text-gray-950">Кроп фото товара</h3>
-                          <p class="mt-0.5 truncate text-sm text-gray-500">
-                              {{ cropSourceSize.width || '...' }}×{{ cropSourceSize.height || '...' }} · #{{ cropEditorImage.id }}
-                          </p>
-                      </div>
-                      <button
-                          type="button"
-                          class="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
-                          @click="closeCropEditor"
-                      >
-                          <X class="h-5 w-5" />
-                      </button>
-                  </div>
-
-                  <div class="grid min-h-0 flex-1 gap-4 overflow-y-auto p-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-                      <div class="flex min-h-[260px] items-center justify-center rounded-lg bg-gray-100 p-3">
-                          <ImageCropSelector
-                              v-model="cropForm"
-                              :src="getImageUrl(cropEditorImage.url)"
-                              :source-width="cropSourceSize.width"
-                              :source-height="cropSourceSize.height"
-                              image-alt="Фото товара для кропа"
-                              @source-load="handleCropSourceLoad"
-                          />
-                      </div>
-
-                      <div class="space-y-4">
-                          <div class="grid grid-cols-2 gap-3">
-                              <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                  X
-                                  <input id="product-crop-x" v-model.number="cropForm.x" name="product-crop-x" type="number" min="0" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" @change="clampCropForm" />
-                              </label>
-                              <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                  Y
-                                  <input id="product-crop-y" v-model.number="cropForm.y" name="product-crop-y" type="number" min="0" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" @change="clampCropForm" />
-                              </label>
-                              <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                  Ширина
-                                  <input id="product-crop-width" v-model.number="cropForm.width" name="product-crop-width" type="number" min="1" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" @change="clampCropForm" />
-                              </label>
-                              <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                  Высота
-                                  <input id="product-crop-height" v-model.number="cropForm.height" name="product-crop-height" type="number" min="1" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" @change="clampCropForm" />
-                              </label>
-                          </div>
-
-                          <div class="flex flex-wrap gap-2">
-                              <button type="button" class="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50" @click="resetCropToFullFrame">
-                                  Весь кадр
-                              </button>
-                              <button type="button" class="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50" @click="setCenteredSquareCrop">
-                                  Квадрат по центру
-                              </button>
-                          </div>
-
-                          <div class="rounded-lg border border-gray-200 p-2">
-                              <label class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                                  <input v-model="cropMode" name="product-crop-mode" type="radio" value="replace" class="text-brand-600 focus:ring-brand-500" />
-                                  Заменить это фото
-                              </label>
-                              <label class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                                  <input v-model="cropMode" name="product-crop-mode" type="radio" value="append" class="text-brand-600 focus:ring-brand-500" />
-                                  Добавить как новое фото
-                              </label>
-                          </div>
-
-                          <label class="flex items-center gap-2 text-sm text-gray-700" :class="{ 'opacity-50': !cropCanSetMain }">
-                              <input id="product-crop-set-main" v-model="cropSetMain" name="product-crop-set-main" type="checkbox" class="rounded border-gray-300 text-brand-600 focus:ring-brand-500" :disabled="!cropCanSetMain" />
-                              Сделать главным
-                          </label>
-                      </div>
-                  </div>
-
-                  <div class="flex flex-col-reverse gap-2 border-t border-gray-200 p-4 sm:flex-row sm:justify-end">
-                      <button
-                          type="button"
-                          class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                          :disabled="cropSaving"
-                          @click="closeCropEditor"
-                      >
-                          Отмена
-                      </button>
-                      <button
-                          type="button"
-                          class="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
-                          :disabled="cropSaving || !cropSourceSize.width"
-                          @click="saveCrop"
-                      >
-                          <Crop class="h-4 w-4" />
-                          {{ cropSaving ? 'Сохраняем...' : 'Сохранить кроп' }}
-                      </button>
-                  </div>
-              </div>
-          </div>
       </div>
   </div>
+    <ProductImageCropDialog v-if="selectedProduct" :open="cropEditorOpen" :product-id="selectedProduct.id" :image="cropEditorImage" @close="resetCropEditor" @saved="handleLocalCropSaved" />
+    <YandexBusinessFeedSettingsDialog :open="yandexFeedSettingsOpen" @close="yandexFeedSettingsOpen = false" />
+    <CatalogUsageReport :open="usageReportOpen" @close="usageReportOpen = false" />
     <!-- Bulk Specs Modal -->
-    <BulkSpecsModal 
-        v-model="showBulkSpecsModal"
-        :selected-product-ids="Array.from(selectedProductIds)"
-        @success="handleBulkSuccess"
-    />
+    <CatalogBulkEditDialog :open="showBulkSpecsModal" :product-ids="selectedIdsArray" @close="showBulkSpecsModal = false" @applied="handleBulkSuccess" />
     <BulkCompatibilityModal
         v-model="showBulkCompatibilityModal"
         :selected-products="selectedProductsForBulkCompatibility"
