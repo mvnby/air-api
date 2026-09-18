@@ -53,6 +53,7 @@ MANAGER_MEDIA_GLOBAL_MUTATION_PRODUCERS = frozenset(
         "manager_media.set_main_image",
         "manager_media.delete_gallery_image",
         "manager_media.crop_gallery_image",
+        "manager_media.replace_gallery_image_from_bytes",
         "manager_media.remove_background_gallery_image",
         "manager_media.reuse_image_link",
         "manager_media.save_image_from_bytes",
@@ -129,6 +130,9 @@ PUBLIC_CATALOG_MUTATION_ENTRYPOINTS: Mapping[str, frozenset[str]] = MappingProxy
         ),
         "ManagerMediaService.crop_gallery_image": frozenset(
             {"manager_media.crop_gallery_image"}
+        ),
+        "ManagerMediaService.replace_gallery_image_from_bytes": frozenset(
+            {"manager_media.replace_gallery_image_from_bytes"}
         ),
         "ManagerMediaService.remove_background_gallery_image": frozenset(
             {"manager_media.remove_background_gallery_image"}
@@ -254,6 +258,10 @@ GLOBAL_CATALOG_MUTATION_CONTRACTS: Mapping[
         ),
         "manager_media.crop_gallery_image": _contract(
             "manager_media.crop_gallery_image",
+            "product_media_crop",
+        ),
+        "manager_media.replace_gallery_image_from_bytes": _contract(
+            "manager_media.replace_gallery_image_from_bytes",
             "product_media_crop",
         ),
         "manager_media.remove_background_gallery_image": _contract(

@@ -34,9 +34,11 @@ from .feature import (
 from .bot_fsm import BotFsmState, BotRuntimeLease
 from .bot_voice import BotVoiceTranscriptionAudit
 from .storefront_settings import StorefrontSettings
+from .yandex_business import YandexBusinessFeedSettings
 from .auth_security import AuthLoginThrottle
 from .analytics_connection import AnalyticsConnection
 from .order_workspace_usage import OrderWorkspaceUsageDaily
+from .catalog_workspace_usage import CatalogWorkspaceUsageDaily
 from .document_drive_connection import DocumentDriveConnection
 from .legacy_owner_auth import LegacyOwnerAuthState
 from .cart import Cart, CartItem
@@ -144,6 +146,7 @@ __all__ = [
     "Article",
     "AnalyticsConnection",
     "OrderWorkspaceUsageDaily",
+    "CatalogWorkspaceUsageDaily",
     "DocumentDriveConnection",
     "AuthLoginThrottle",
     "BankReceipt",
@@ -195,6 +198,7 @@ __all__ = [
     "EquipmentWarrantyDecision",
     "Favorite",
     "GlobalConfig",
+    "YandexBusinessFeedSettings",
     "InstallationRate",
     "IntegrationOutboxEvent",
     "ImportMediaCache",

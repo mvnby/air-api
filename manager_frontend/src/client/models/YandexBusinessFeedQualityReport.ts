@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { YandexBusinessCollectionConflict } from './YandexBusinessCollectionConflict';
 import type { YandexBusinessEditorialCategoryQuality } from './YandexBusinessEditorialCategoryQuality';
+import type { YandexBusinessFeedProductExclusion } from './YandexBusinessFeedProductExclusion';
 import type { YandexBusinessProductImageIssue } from './YandexBusinessProductImageIssue';
 export type YandexBusinessFeedQualityReport = {
     product_offer_count: number;
@@ -14,5 +15,7 @@ export type YandexBusinessFeedQualityReport = {
     products_without_picture?: Array<YandexBusinessProductImageIssue>;
     image_generation_errors?: Array<YandexBusinessProductImageIssue>;
     collection_conflicts?: Array<YandexBusinessCollectionConflict>;
+    excluded_product_count?: number;
+    excluded_products?: Array<YandexBusinessFeedProductExclusion>;
 };
 

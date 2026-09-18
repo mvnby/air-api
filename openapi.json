@@ -7613,6 +7613,190 @@
         }
       }
     },
+    "/api/manager/catalog-management/query": {
+      "post": {
+        "tags": [
+          "manager-catalog-management"
+        ],
+        "summary": "Query Catalog",
+        "operationId": "query_manager_catalog",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogManagementQuery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerCatalogProductListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/catalog-management/selection": {
+      "post": {
+        "tags": [
+          "manager-catalog-management"
+        ],
+        "summary": "Select Catalog",
+        "operationId": "select_manager_catalog",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogManagementFilters"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogManagementSelection"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/catalog-management/bulk/preview": {
+      "post": {
+        "tags": [
+          "manager-catalog-management"
+        ],
+        "summary": "Preview Bulk",
+        "operationId": "preview_manager_catalog_bulk",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogBulkPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogBulkPreviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/catalog-management/bulk/apply": {
+      "post": {
+        "tags": [
+          "manager-catalog-management"
+        ],
+        "summary": "Apply Bulk",
+        "operationId": "apply_manager_catalog_bulk",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogBulkApplyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogBulkApplyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/catalog-decision/filter-options": {
       "get": {
         "tags": [
@@ -10760,6 +10944,64 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ProductImageCropPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerMediaImageLinkResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/gallery/{image_id}/replace-local": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Replace Product Image Local",
+        "description": "Replace one gallery link using browser-prepared bytes without server-side crop work.",
+        "operationId": "replace_product_image_local",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "image_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Image Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_replace_product_image_local"
               }
             }
           }
@@ -15740,6 +15982,192 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/OrderUsageReport"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/catalog-usage/batch": {
+      "post": {
+        "tags": [
+          "manager-catalog-usage"
+        ],
+        "summary": "Record Manager Catalog Usage",
+        "operationId": "record_manager_catalog_usage",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogUsageBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogUsageAccepted"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/catalog-usage/daily": {
+      "get": {
+        "tags": [
+          "manager-catalog-usage"
+        ],
+        "summary": "Get Manager Catalog Usage",
+        "operationId": "get_manager_catalog_usage",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 90,
+              "minimum": 1,
+              "default": 30,
+              "title": "Days"
+            }
+          },
+          {
+            "name": "layout_version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "catalog_workspace_v1",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Layout Version"
+            }
+          },
+          {
+            "name": "device",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "mobile",
+                    "tablet",
+                    "desktop"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Device"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "product_open",
+                    "filter_apply",
+                    "filter_zero_results",
+                    "edit_basics",
+                    "edit_pricing",
+                    "edit_specifications",
+                    "edit_gallery",
+                    "edit_features",
+                    "bulk_edit",
+                    "gallery_quick_exit",
+                    "media_load"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Action"
+            }
+          },
+          {
+            "name": "outcome",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "success",
+                    "cancelled",
+                    "failed",
+                    "zero_results",
+                    "quick_exit"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Outcome"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogUsageReport"
                 }
               }
             }
@@ -24559,6 +24987,122 @@
         }
       }
     },
+    "/api/manager/yandex-business/settings": {
+      "get": {
+        "tags": [
+          "manager/yandex-business"
+        ],
+        "summary": "Get Manager Yandex Business Feed Settings",
+        "operationId": "get_manager_yandex_business_feed_settings",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YandexBusinessFeedSettingsResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "manager/yandex-business"
+        ],
+        "summary": "Update Manager Yandex Business Feed Settings",
+        "operationId": "update_manager_yandex_business_feed_settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/YandexBusinessFeedSettingsPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YandexBusinessFeedSettingsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/yandex-business/settings/preview": {
+      "post": {
+        "tags": [
+          "manager/yandex-business"
+        ],
+        "summary": "Preview Manager Yandex Business Feed Settings",
+        "operationId": "preview_manager_yandex_business_feed_settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/YandexBusinessFeedSettingsPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YandexBusinessFeedPreview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/yandex-business/price-list.yml": {
       "get": {
         "tags": [
@@ -27726,6 +28270,20 @@
         ],
         "title": "Body_register_manager_external_contract"
       },
+      "Body_replace_product_image_local": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_replace_product_image_local"
+      },
       "Body_upload_local_images": {
         "properties": {
           "files": {
@@ -30548,6 +31106,236 @@
         "type": "object",
         "title": "CartItemPayload"
       },
+      "CatalogBulkApplyRequest": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "maxLength": 200000,
+            "minLength": 1,
+            "title": "Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token"
+        ],
+        "title": "CatalogBulkApplyRequest"
+      },
+      "CatalogBulkApplyResponse": {
+        "properties": {
+          "updated": {
+            "type": "integer",
+            "title": "Updated"
+          },
+          "product_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Product Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "updated",
+          "product_ids"
+        ],
+        "title": "CatalogBulkApplyResponse"
+      },
+      "CatalogBulkChange": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "relations",
+              "specs",
+              "features",
+              "publication",
+              "category"
+            ],
+            "title": "Kind"
+          },
+          "brand_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand Id"
+          },
+          "series_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Id"
+          },
+          "specs": {
+            "additionalProperties": true,
+            "type": "object",
+            "maxProperties": 30,
+            "title": "Specs"
+          },
+          "spec_mode": {
+            "type": "string",
+            "enum": [
+              "set",
+              "fill_empty",
+              "remove"
+            ],
+            "title": "Spec Mode",
+            "default": "set"
+          },
+          "feature_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Feature Ids"
+          },
+          "feature_mode": {
+            "type": "string",
+            "enum": [
+              "add",
+              "hide",
+              "inherit"
+            ],
+            "title": "Feature Mode",
+            "default": "add"
+          },
+          "is_published": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Published"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "cat-household",
+                  "cat-multi",
+                  "cat-industrial"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "title": "CatalogBulkChange"
+      },
+      "CatalogBulkPreviewItem": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "before": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Before"
+          },
+          "after": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "After"
+          },
+          "changed": {
+            "type": "boolean",
+            "title": "Changed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "title",
+          "before",
+          "after",
+          "changed"
+        ],
+        "title": "CatalogBulkPreviewItem"
+      },
+      "CatalogBulkPreviewRequest": {
+        "properties": {
+          "product_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Product Ids"
+          },
+          "change": {
+            "$ref": "#/components/schemas/CatalogBulkChange"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_ids",
+          "change"
+        ],
+        "title": "CatalogBulkPreviewRequest"
+      },
+      "CatalogBulkPreviewResponse": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "Token"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogBulkPreviewItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "changed_count": {
+            "type": "integer",
+            "title": "Changed Count"
+          },
+          "expires_in_seconds": {
+            "type": "integer",
+            "title": "Expires In Seconds",
+            "default": 900
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "items",
+          "changed_count"
+        ],
+        "title": "CatalogBulkPreviewResponse"
+      },
       "CatalogDecisionAttachToOrderPayload": {
         "properties": {
           "product_ids": {
@@ -31169,6 +31957,359 @@
         ],
         "title": "CatalogImportResultResponse"
       },
+      "CatalogManagementFilters": {
+        "properties": {
+          "search": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search"
+          },
+          "brand_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Brand Ids"
+          },
+          "series_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Series Ids"
+          },
+          "supplier_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Id"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "household",
+                  "multi",
+                  "semi_industrial"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "category_missing": {
+            "type": "boolean",
+            "title": "Category Missing",
+            "default": false
+          },
+          "cooling_btu_classes": {
+            "items": {
+              "type": "integer",
+              "enum": [
+                7,
+                9,
+                12,
+                18,
+                24,
+                30,
+                36,
+                42,
+                60
+              ]
+            },
+            "type": "array",
+            "maxItems": 9,
+            "title": "Cooling Btu Classes"
+          },
+          "cooling_min_kw": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cooling Min Kw"
+          },
+          "cooling_max_kw": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cooling Max Kw"
+          },
+          "retail_min_byn": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retail Min Byn"
+          },
+          "retail_max_byn": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retail Max Byn"
+          },
+          "area_min": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Area Min"
+          },
+          "area_max": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Area Max"
+          },
+          "indoor_form_factor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "wall",
+                  "cassette",
+                  "duct",
+                  "floor_ceiling",
+                  "column",
+                  "console"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indoor Form Factor"
+          },
+          "heating_min": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "enum": [
+                  -20,
+                  -25,
+                  -30
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heating Min"
+          },
+          "is_inverter": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Inverter"
+          },
+          "wifi": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "builtin",
+                  "ready",
+                  "none"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wifi"
+          },
+          "availability": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "in_stock",
+                  "out_of_stock"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Availability"
+          },
+          "is_published": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Published"
+          },
+          "missing": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "brand",
+                  "series",
+                  "image",
+                  "price"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missing"
+          },
+          "feature_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feature Id"
+          },
+          "has_feature": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Has Feature"
+          },
+          "in_yandex_feed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In Yandex Feed"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CatalogManagementFilters"
+      },
+      "CatalogManagementQuery": {
+        "properties": {
+          "filters": {
+            "$ref": "#/components/schemas/CatalogManagementFilters"
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Page",
+            "default": 1
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 40
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "recommended",
+              "newest",
+              "price_asc",
+              "price_desc",
+              "title"
+            ],
+            "title": "Sort",
+            "default": "recommended"
+          }
+        },
+        "type": "object",
+        "title": "CatalogManagementQuery"
+      },
+      "CatalogManagementSelection": {
+        "properties": {
+          "product_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Product Ids"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_ids",
+          "total"
+        ],
+        "title": "CatalogManagementSelection"
+      },
       "CatalogResponse": {
         "properties": {
           "items": {
@@ -31217,6 +32358,230 @@
           "updated_at"
         ],
         "title": "CatalogRevisionResponse"
+      },
+      "CatalogUsageAccepted": {
+        "properties": {
+          "accepted": {
+            "type": "integer",
+            "title": "Accepted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "accepted"
+        ],
+        "title": "CatalogUsageAccepted"
+      },
+      "CatalogUsageBatch": {
+        "properties": {
+          "layout_version": {
+            "type": "string",
+            "const": "catalog_workspace_v1",
+            "title": "Layout Version",
+            "default": "catalog_workspace_v1"
+          },
+          "pilot_opt_in": {
+            "type": "boolean",
+            "const": true,
+            "title": "Pilot Opt In",
+            "default": true
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogUsageEvent"
+            },
+            "type": "array",
+            "maxItems": 25,
+            "minItems": 1,
+            "title": "Events"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "events"
+        ],
+        "title": "CatalogUsageBatch"
+      },
+      "CatalogUsageDailyItem": {
+        "properties": {
+          "device": {
+            "type": "string",
+            "enum": [
+              "mobile",
+              "tablet",
+              "desktop"
+            ],
+            "title": "Device"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "product_open",
+              "filter_apply",
+              "filter_zero_results",
+              "edit_basics",
+              "edit_pricing",
+              "edit_specifications",
+              "edit_gallery",
+              "edit_features",
+              "bulk_edit",
+              "gallery_quick_exit",
+              "media_load"
+            ],
+            "title": "Action"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "success",
+              "cancelled",
+              "failed",
+              "zero_results",
+              "quick_exit"
+            ],
+            "title": "Outcome"
+          },
+          "duration_bucket": {
+            "type": "string",
+            "enum": [
+              "none",
+              "under_1s",
+              "1_3s",
+              "3_10s",
+              "10_30s",
+              "over_30s"
+            ],
+            "title": "Duration Bucket",
+            "default": "none"
+          },
+          "day": {
+            "type": "string",
+            "format": "date",
+            "title": "Day"
+          },
+          "layout_version": {
+            "type": "string",
+            "const": "catalog_workspace_v1",
+            "title": "Layout Version"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "device",
+          "action",
+          "outcome",
+          "day",
+          "layout_version",
+          "count"
+        ],
+        "title": "CatalogUsageDailyItem"
+      },
+      "CatalogUsageEvent": {
+        "properties": {
+          "device": {
+            "type": "string",
+            "enum": [
+              "mobile",
+              "tablet",
+              "desktop"
+            ],
+            "title": "Device"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "product_open",
+              "filter_apply",
+              "filter_zero_results",
+              "edit_basics",
+              "edit_pricing",
+              "edit_specifications",
+              "edit_gallery",
+              "edit_features",
+              "bulk_edit",
+              "gallery_quick_exit",
+              "media_load"
+            ],
+            "title": "Action"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "success",
+              "cancelled",
+              "failed",
+              "zero_results",
+              "quick_exit"
+            ],
+            "title": "Outcome"
+          },
+          "duration_bucket": {
+            "type": "string",
+            "enum": [
+              "none",
+              "under_1s",
+              "1_3s",
+              "3_10s",
+              "10_30s",
+              "over_30s"
+            ],
+            "title": "Duration Bucket",
+            "default": "none"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "device",
+          "action",
+          "outcome"
+        ],
+        "title": "CatalogUsageEvent"
+      },
+      "CatalogUsageReport": {
+        "properties": {
+          "days": {
+            "type": "integer",
+            "title": "Days"
+          },
+          "since": {
+            "type": "string",
+            "format": "date",
+            "title": "Since"
+          },
+          "through": {
+            "type": "string",
+            "format": "date",
+            "title": "Through"
+          },
+          "timezone": {
+            "type": "string",
+            "const": "Europe/Minsk",
+            "title": "Timezone",
+            "default": "Europe/Minsk"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogUsageDailyItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "days",
+          "since",
+          "through",
+          "items"
+        ],
+        "title": "CatalogUsageReport"
       },
       "CommonGalleryImageResponse": {
         "properties": {
@@ -68270,6 +69635,107 @@
         ],
         "title": "YandexBusinessEditorialCategoryQuality"
       },
+      "YandexBusinessFeedPreview": {
+        "properties": {
+          "product_offer_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Product Offer Count"
+          },
+          "product_picture_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Product Picture Count"
+          },
+          "service_offer_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Service Offer Count"
+          },
+          "editorial_categories": {
+            "items": {
+              "$ref": "#/components/schemas/YandexBusinessEditorialCategoryQuality"
+            },
+            "type": "array",
+            "title": "Editorial Categories"
+          },
+          "categories_below_minimum_pictures": {
+            "items": {
+              "$ref": "#/components/schemas/YandexBusinessEditorialCategoryQuality"
+            },
+            "type": "array",
+            "title": "Categories Below Minimum Pictures"
+          },
+          "products_without_picture": {
+            "items": {
+              "$ref": "#/components/schemas/YandexBusinessProductImageIssue"
+            },
+            "type": "array",
+            "title": "Products Without Picture"
+          },
+          "image_generation_errors": {
+            "items": {
+              "$ref": "#/components/schemas/YandexBusinessProductImageIssue"
+            },
+            "type": "array",
+            "title": "Image Generation Errors"
+          },
+          "collection_conflicts": {
+            "items": {
+              "$ref": "#/components/schemas/YandexBusinessCollectionConflict"
+            },
+            "type": "array",
+            "title": "Collection Conflicts"
+          },
+          "excluded_product_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Excluded Product Count",
+            "default": 0
+          },
+          "excluded_products": {
+            "items": {
+              "$ref": "#/components/schemas/YandexBusinessFeedProductExclusion"
+            },
+            "type": "array",
+            "title": "Excluded Products"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/YandexBusinessFeedSettingsResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_offer_count",
+          "product_picture_count",
+          "service_offer_count",
+          "settings"
+        ],
+        "title": "YandexBusinessFeedPreview"
+      },
+      "YandexBusinessFeedProductExclusion": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "product_title": {
+            "type": "string",
+            "title": "Product Title"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "product_title",
+          "reason"
+        ],
+        "title": "YandexBusinessFeedProductExclusion"
+      },
       "YandexBusinessFeedQualityReport": {
         "properties": {
           "product_offer_count": {
@@ -68321,6 +69787,19 @@
             },
             "type": "array",
             "title": "Collection Conflicts"
+          },
+          "excluded_product_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Excluded Product Count",
+            "default": 0
+          },
+          "excluded_products": {
+            "items": {
+              "$ref": "#/components/schemas/YandexBusinessFeedProductExclusion"
+            },
+            "type": "array",
+            "title": "Excluded Products"
           }
         },
         "type": "object",
@@ -68330,6 +69809,66 @@
           "service_offer_count"
         ],
         "title": "YandexBusinessFeedQualityReport"
+      },
+      "YandexBusinessFeedSettingsPayload": {
+        "properties": {
+          "selection_mode": {
+            "type": "string",
+            "enum": [
+              "all_published",
+              "curated_collections"
+            ],
+            "title": "Selection Mode",
+            "default": "all_published"
+          },
+          "include_services": {
+            "type": "boolean",
+            "title": "Include Services",
+            "default": true
+          },
+          "require_ready_image": {
+            "type": "boolean",
+            "title": "Require Ready Image",
+            "default": false
+          },
+          "require_in_stock": {
+            "type": "boolean",
+            "title": "Require In Stock",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "YandexBusinessFeedSettingsPayload"
+      },
+      "YandexBusinessFeedSettingsResponse": {
+        "properties": {
+          "selection_mode": {
+            "type": "string",
+            "enum": [
+              "all_published",
+              "curated_collections"
+            ],
+            "title": "Selection Mode",
+            "default": "all_published"
+          },
+          "include_services": {
+            "type": "boolean",
+            "title": "Include Services",
+            "default": true
+          },
+          "require_ready_image": {
+            "type": "boolean",
+            "title": "Require Ready Image",
+            "default": false
+          },
+          "require_in_stock": {
+            "type": "boolean",
+            "title": "Require In Stock",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "YandexBusinessFeedSettingsResponse"
       },
       "YandexBusinessProductImageIssue": {
         "properties": {

@@ -13,6 +13,7 @@ from sqlmodel import select
 from api_contracts.yandex_business import (
     YandexBusinessCollectionConflict,
     YandexBusinessEditorialCategoryQuality,
+    YandexBusinessFeedProductExclusion,
     YandexBusinessFeedQualityReport,
     YandexBusinessProductImageIssue,
 )
@@ -28,7 +29,12 @@ from services.product_image_processing_contract import (
 from services.tariffs_service import TariffsService
 from services.service_catalog_scope import canonical_service_catalog_clause
 from services.tenant_scope_service import SystemTenantScopeResolver
+from services.product_read_service import ProductReadService
 from services.yandex_business_feed_text import sanitize_yandex_description
+from services.yandex_business_feed_settings_service import (
+    YandexBusinessFeedConfiguration,
+    YandexBusinessFeedSettingsService,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -52,6 +58,7 @@ class ProductCatalogBuild:
     categories: list[YandexCategory]
     offers: list[ProductOffer]
     collection_conflicts: list[YandexBusinessCollectionConflict]
+    excluded_products: list[YandexBusinessFeedProductExclusion]
 
 
 @dataclass(frozen=True)
@@ -287,8 +294,16 @@ class YandexBusinessPriceListService:
         products: list[Product],
         *,
         tenant_scope: TenantScope,
+        configuration: YandexBusinessFeedConfiguration,
+        base_url: str,
     ) -> ProductCatalogBuild:
-        products_by_id = {int(product.id): product for product in products}
+        eligible_products, excluded_products = await cls._eligible_products(
+            session,
+            products,
+            configuration=configuration,
+            base_url=base_url,
+        )
+        products_by_id = {int(product.id): product for product in eligible_products}
         claimed_ids: set[int] = set()
         selected_collections: dict[int, YandexCategory] = {}
         categories: list[YandexCategory] = []
@@ -351,9 +366,26 @@ class YandexBusinessPriceListService:
                 selected_collections[int(product.id)] = category
             offers.extend(ProductOffer(product=product, category=category) for product in selected)
 
-        remaining = [
-            product for product in products if int(product.id) not in claimed_ids
-        ]
+        if configuration.selection_mode == "curated_collections":
+            excluded_products.extend(
+                YandexBusinessFeedProductExclusion(
+                    product_id=int(product.id),
+                    product_title=product.title,
+                    reason="not_in_curated_collections",
+                )
+                for product in eligible_products
+                if int(product.id) not in claimed_ids
+            )
+
+        remaining = (
+            []
+            if configuration.selection_mode == "curated_collections"
+            else [
+                product
+                for product in eligible_products
+                if int(product.id) not in claimed_ids
+            ]
+        )
         branded: dict[int, list[Product]] = {}
         brands = {}
         unbranded: list[Product] = []
@@ -407,7 +439,46 @@ class YandexBusinessPriceListService:
             categories=categories,
             offers=offers,
             collection_conflicts=collection_conflicts,
+            excluded_products=excluded_products,
         )
+
+    @classmethod
+    async def _eligible_products(
+        cls,
+        session: AsyncSession,
+        products: list[Product],
+        *,
+        configuration: YandexBusinessFeedConfiguration,
+        base_url: str,
+    ) -> tuple[list[Product], list[YandexBusinessFeedProductExclusion]]:
+        supply_metrics = (
+            await ProductReadService.get_supply_metrics_map(session, products)
+            if configuration.require_in_stock
+            else {}
+        )
+        eligible: list[Product] = []
+        excluded: list[YandexBusinessFeedProductExclusion] = []
+        for product in products:
+            reason = None
+            if configuration.require_ready_image and not cls._product_picture(product, base_url):
+                reason = "missing_ready_yandex_image"
+            elif (
+                configuration.require_in_stock
+                and supply_metrics.get(int(product.id), {}).get("availability_status")
+                != "in_stock_now"
+            ):
+                reason = "not_in_stock"
+            if reason is None:
+                eligible.append(product)
+            else:
+                excluded.append(
+                    YandexBusinessFeedProductExclusion(
+                        product_id=int(product.id),
+                        product_title=product.title,
+                        reason=reason,
+                    )
+                )
+        return eligible, excluded
 
     @classmethod
     def _append_product_offer(
@@ -478,9 +549,18 @@ class YandexBusinessPriceListService:
         )
 
     @classmethod
-    async def _build(cls, session: AsyncSession) -> YandexBusinessFeedBuild:
+    async def _build(
+        cls,
+        session: AsyncSession,
+        *,
+        configuration: YandexBusinessFeedConfiguration | None = None,
+    ) -> YandexBusinessFeedBuild:
         tenant_scope = await SystemTenantScopeResolver.resolve(session)
         base_url = cls._normalize_base_url(settings.PUBLIC_SITE_URL)
+        configuration = configuration or await YandexBusinessFeedSettingsService.get(
+            session,
+            tenant_scope=tenant_scope,
+        )
         products = await cls._load_products(session)
         tariffs = await cls._load_tariffs(session)
         supported_tariffs = [
@@ -492,6 +572,8 @@ class YandexBusinessPriceListService:
             session,
             products,
             tenant_scope=tenant_scope,
+            configuration=configuration,
+            base_url=base_url,
         )
         service_kinds = {tariff.service_kind for tariff in supported_tariffs}
 
@@ -501,11 +583,12 @@ class YandexBusinessPriceListService:
         offers_node = ET.SubElement(shop, "offers")
 
         categories = list(product_catalog.categories)
-        categories.extend(
-            category
-            for kind, category in cls.SERVICE_KIND_CATEGORIES.items()
-            if kind in service_kinds
-        )
+        if configuration.include_services:
+            categories.extend(
+                category
+                for kind, category in cls.SERVICE_KIND_CATEGORIES.items()
+                if kind in service_kinds
+            )
         category_ids = [category.id for category in categories]
         if len(category_ids) != len(set(category_ids)):
             raise ValueError("Yandex Business category ID collision")
@@ -515,8 +598,9 @@ class YandexBusinessPriceListService:
 
         for offer_data in product_catalog.offers:
             cls._append_product_offer(offers_node, offer_data, base_url)
-        for tariff in supported_tariffs:
-            cls._append_service_offer(offers_node, tariff, base_url)
+        if configuration.include_services:
+            for tariff in supported_tariffs:
+                cls._append_service_offer(offers_node, tariff, base_url)
 
         offer_ids = [offer.attrib["id"] for offer in offers_node.findall("offer")]
         if len(offer_ids) != len(set(offer_ids)):
@@ -557,7 +641,7 @@ class YandexBusinessPriceListService:
         quality_report = YandexBusinessFeedQualityReport(
             product_offer_count=len(product_catalog.offers),
             product_picture_count=len(product_catalog.offers) - len(image_issues),
-            service_offer_count=len(supported_tariffs),
+            service_offer_count=(len(supported_tariffs) if configuration.include_services else 0),
             editorial_categories=editorial_quality,
             categories_below_minimum_pictures=[
                 category
@@ -571,6 +655,8 @@ class YandexBusinessPriceListService:
                 if issue.reason == "image_generation_failed"
             ],
             collection_conflicts=product_catalog.collection_conflicts,
+            excluded_product_count=len(product_catalog.excluded_products),
+            excluded_products=product_catalog.excluded_products[:100],
         )
         if (
             image_issues
@@ -609,3 +695,30 @@ class YandexBusinessPriceListService:
         session: AsyncSession,
     ) -> YandexBusinessFeedQualityReport:
         return (await cls._build(session)).quality_report
+
+    @classmethod
+    async def current_product_offer_ids(cls, session: AsyncSession) -> set[int]:
+        """Return product offers in the configured feed without producing XML."""
+        tenant_scope = await SystemTenantScopeResolver.resolve(session)
+        base_url = cls._normalize_base_url(settings.PUBLIC_SITE_URL)
+        configuration = await YandexBusinessFeedSettingsService.get(
+            session,
+            tenant_scope=tenant_scope,
+        )
+        catalog = await cls._build_product_catalog(
+            session,
+            await cls._load_products(session),
+            tenant_scope=tenant_scope,
+            configuration=configuration,
+            base_url=base_url,
+        )
+        return {int(offer.product.id) for offer in catalog.offers if offer.product.id is not None}
+
+    @classmethod
+    async def preview_quality_report(
+        cls,
+        session: AsyncSession,
+        *,
+        configuration: YandexBusinessFeedConfiguration,
+    ) -> YandexBusinessFeedQualityReport:
+        return (await cls._build(session, configuration=configuration)).quality_report

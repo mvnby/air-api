@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { Body_bulk_upload_local_images } from '../models/Body_bulk_upload_local_images';
 import type { Body_recognize_manager_customer_requisites } from '../models/Body_recognize_manager_customer_requisites';
+import type { Body_replace_product_image_local } from '../models/Body_replace_product_image_local';
 import type { Body_upload_local_images } from '../models/Body_upload_local_images';
 import type { BulkGalleryAddRequest } from '../models/BulkGalleryAddRequest';
 import type { BulkGalleryDeleteRequest } from '../models/BulkGalleryDeleteRequest';
@@ -1228,6 +1229,31 @@ export class ManagerService {
             },
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Replace Product Image Local
+     * Replace one gallery link using browser-prepared bytes without server-side crop work.
+     * @param imageId
+     * @param formData
+     * @returns ManagerMediaImageLinkResponse Successful Response
+     * @throws ApiError
+     */
+    public static replaceProductImageLocal(
+        imageId: number,
+        formData: Body_replace_product_image_local,
+    ): CancelablePromise<ManagerMediaImageLinkResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/gallery/{image_id}/replace-local',
+            path: {
+                'image_id': imageId,
+            },
+            formData: formData,
+            mediaType: 'multipart/form-data',
             errors: {
                 422: `Validation Error`,
             },

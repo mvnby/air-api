@@ -232,6 +232,62 @@ class ManagerMediaStorageOperations:
         return uploaded_images
 
     @classmethod
+    async def replace_gallery_image_from_bytes(
+        cls,
+        session: AsyncSession,
+        image_id: int,
+        *,
+        image_content: bytes,
+    ) -> dict:
+        """Replace one gallery link with validated local bytes, keeping its identity."""
+        image = await session.get(ProductImage, image_id)
+        if not image:
+            raise ValueError("Image not found")
+        product = await session.get(Product, image.product_id)
+        if not product:
+            raise ValueError("Product not found")
+
+        try:
+            original = await ProductOriginalMediaService.save_shared_original(image_content)
+        except Exception as exc:
+            raise ValueError("Invalid image file") from exc
+
+        was_main = product.main_image == image.url
+        variant_rows = (
+            await session.execute(
+                select(ProductImageVariant).where(
+                    ProductImageVariant.product_image_id == image.id
+                )
+            )
+        ).scalars().all()
+        for variant in variant_rows:
+            await session.delete(variant)
+
+        image.url = original.url
+        session.add(image)
+        await session.flush()
+        await ProductImageVariantService.ensure_original_variant(
+            session,
+            image,
+            source_content=original.content,
+            extension="webp",
+            width=original.width,
+            height=original.height,
+        )
+        if was_main:
+            product.main_image = original.url
+            session.add(product)
+        await cls._sync_legacy_images(session, product.id)
+        await CatalogInvalidationCommitService.commit_registered_global_mutation(
+            session,
+            producer="manager_media.replace_gallery_image_from_bytes",
+            changed=True,
+            product_ids=[product.id],
+        )
+        await session.refresh(image)
+        return {"id": image.id, "url": image.url}
+
+    @classmethod
     async def _stage_image_from_bytes(
         cls,
         image_content: bytes,

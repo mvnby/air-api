@@ -12,6 +12,7 @@ const props = defineProps<{
   brands: Array<{ id: number; title: string }>;
   series: Array<{ id: number; title: string; brandId?: number | null }>;
   resetKey?: number;
+  hideSearch?: boolean;
 }>();
 const emit = defineEmits<{ 'update:modelValue': [value: FilterState]; reset: [] }>();
 
@@ -97,7 +98,7 @@ const setWifi = (wifi: FilterState['wifi'] | undefined) => update({ wifi, hasWif
 <template>
   <section class="space-y-3 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm md:p-4" aria-label="Быстрые фильтры">
     <div class="flex flex-wrap items-center gap-2">
-      <label class="relative basis-full sm:basis-72 sm:flex-1"><span class="material-icons-round pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">search</span><input :value="modelValue.search ?? ''" class="w-full rounded-xl border border-gray-200 py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" placeholder="Например, Gree 12" aria-label="Поиск модели, бренда или серии" @input="update({ search: ($event.target as HTMLInputElement).value || undefined })" /></label>
+      <label v-if="!hideSearch" class="relative basis-full sm:basis-72 sm:flex-1"><span class="material-icons-round pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">search</span><input :value="modelValue.search ?? ''" class="w-full rounded-xl border border-gray-200 py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" placeholder="Например, Gree 12" aria-label="Поиск модели, бренда или серии" @input="update({ search: ($event.target as HTMLInputElement).value || undefined })" /></label>
       <button type="button" :class="modelValue.isInverter ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-gray-200 text-gray-700'" class="inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl border px-3 text-sm transition" :aria-pressed="Boolean(modelValue.isInverter)" @click="update({ isInverter: modelValue.isInverter ? undefined : true })">Только инвертор</button>
       <div class="inline-flex overflow-hidden rounded-xl border border-gray-200" aria-label="Наличие">
         <button type="button" class="min-h-10 border-r border-gray-200 px-3 text-sm transition" :class="!modelValue.includeOrderable ? 'bg-brand-600 text-white' : 'text-gray-700'" :aria-pressed="!modelValue.includeOrderable" @click="update({ includeOrderable: false })">В наличии</button>

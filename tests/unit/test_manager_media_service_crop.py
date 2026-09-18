@@ -118,6 +118,46 @@ async def test_crop_gallery_image_replaces_source_and_main_image(sqlite_session)
 
 
 @pytest.mark.asyncio
+async def test_replace_gallery_image_from_local_bytes_preserves_link_identity(sqlite_session):
+    product, source_image = await make_product_with_image(sqlite_session)
+    source_image_id = source_image.id
+
+    result = await ManagerMediaService.replace_gallery_image_from_bytes(
+        sqlite_session,
+        source_image_id,
+        image_content=image_bytes(size=(64, 48), color=(210, 120, 30)),
+    )
+
+    await sqlite_session.refresh(product)
+    await sqlite_session.refresh(source_image)
+    rows = (
+        await sqlite_session.execute(
+            select(ProductImage).where(ProductImage.product_id == product.id)
+        )
+    ).scalars().all()
+
+    assert result["id"] == source_image_id
+    assert source_image.id == source_image_id
+    assert source_image.url == result["url"]
+    assert result["url"].startswith("/media/products/shared/")
+    assert product.main_image == result["url"]
+    assert product.images == [result["url"]]
+    assert [row.id for row in rows] == [source_image_id]
+
+
+@pytest.mark.asyncio
+async def test_replace_gallery_image_from_local_bytes_rejects_invalid_content(sqlite_session):
+    _product, source_image = await make_product_with_image(sqlite_session)
+
+    with pytest.raises(ValueError, match="Invalid image file"):
+        await ManagerMediaService.replace_gallery_image_from_bytes(
+            sqlite_session,
+            source_image.id,
+            image_content=b"not-an-image",
+        )
+
+
+@pytest.mark.asyncio
 async def test_crop_gallery_image_downloads_remote_source(sqlite_session, monkeypatch):
     product = Product(
         title="Remote Crop Test",

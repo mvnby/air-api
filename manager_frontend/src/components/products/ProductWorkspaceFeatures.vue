@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useCatalogUsage } from '../../composables/useCatalogUsage';
+const catalogUsage = useCatalogUsage();
 import { computed, onMounted, ref } from "vue";
 import { Check, Trash2 } from "lucide-vue-next";
 import {
@@ -109,6 +111,7 @@ const load = async () => {
 
 const persist = async () => {
   if (saving.value) return;
+  const started = performance.now();
   saving.value = true;
   error.value = "";
   try {
@@ -120,7 +123,9 @@ const persist = async () => {
     );
     workspace.value = normalizeWorkspace(next);
     syncAssignments(workspace.value);
+    catalogUsage.track('edit_features', 'success', performance.now() - started);
   } catch (cause) {
+    catalogUsage.track('edit_features', 'failed', performance.now() - started);
     error.value = getApiErrorMessage(cause);
   } finally {
     saving.value = false;
