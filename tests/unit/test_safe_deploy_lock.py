@@ -81,6 +81,34 @@ def test_safe_lock_verify_rejects_forged_inherited_descriptor(tmp_path):
     assert "Bad file descriptor" in result.stderr
 
 
+def test_safe_lock_can_hold_a_second_named_lock_without_replacing_deploy_fd(tmp_path):
+    lock = tmp_path / "shared-host.lock"
+
+    result = subprocess.run(
+        [
+            "python3",
+            str(HELPER),
+            "exec-with-fd",
+            str(lock),
+            "8",
+            "API_SHARED_HOST_BELZAKUPKI_LOCK_FD",
+            "bash",
+            "-c",
+            'test "$API_SHARED_HOST_BELZAKUPKI_LOCK_FD" = 8; test -e /dev/fd/8',
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+        env={
+            **os.environ,
+            "API_DEPLOY_LOCK_HELPER_SHA256": hashlib.sha256(HELPER.read_bytes()).hexdigest(),
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert stat.S_IMODE(lock.stat().st_mode) == 0o600
+
+
 def test_candidate_and_migration_verify_inherited_lock_before_marker_check():
     candidate = (REPO_ROOT / "scripts/ha/run_patroni_candidate_transaction.sh").read_text(
         encoding="utf-8"

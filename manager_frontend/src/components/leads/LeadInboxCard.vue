@@ -24,6 +24,7 @@ const sourceLabel: Record<string, string> = {
   bot: 'Бот',
   email: 'Email',
   manager: 'Менеджер',
+  belzakupki: 'Belzakupki',
   other: 'Другое',
 };
 
@@ -33,6 +34,7 @@ const sourceIcon: Record<string, string> = {
   bot: 'smart_toy',
   email: 'email',
   manager: 'person',
+  belzakupki: 'business_center',
   other: 'help_outline',
 };
 

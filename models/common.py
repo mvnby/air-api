@@ -60,6 +60,7 @@ class LeadSource(str, Enum):
     EMAIL = "email"
     MANAGER = "manager"
     REFERRAL = "referral"
+    BELZAKUPKI = "belzakupki"
     OTHER = "other"
 
 

@@ -37,6 +37,7 @@ DEPLOY_LOCK_FILE="${API_DEPLOY_LOCK_FILE:-${PROJECT_DIR}/.deploy.lock}"
 DEPLOY_LOCK_FD="${API_DEPLOY_LOCK_FD:-}"
 DEPLOY_LOCK_HELPER="${API_DEPLOY_LOCK_HELPER:-${SCRIPT_DIR}/safe_deploy_lock.py}"
 DEPLOY_LOCK_HELPER_SHA256="${API_DEPLOY_LOCK_HELPER_SHA256:-}"
+SHARED_HOST_BELZAKUPKI_GUARD_LIFECYCLE="${API_SHARED_HOST_BELZAKUPKI_GUARD_LIFECYCLE:-${SCRIPT_DIR}/shared_host_belzakupki_guard_lifecycle.sh}"
 PATRONI_CUTOVER_MARKER="${PATRONI_CUTOVER_MARKER:-${PROJECT_DIR}/.patroni-cutover-in-progress}"
 PITR_MAINTENANCE_MARKER="${API_PITR_MAINTENANCE_MARKER:-/run/mvn-postgres-pitr-maintenance}"
 ACTIVE_SLOT_FILE="${API_ACTIVE_SLOT_FILE:-${PROJECT_DIR}/.active-api-slot}"
@@ -77,6 +78,9 @@ fi
 [[ -f "${PATRONI_ATTESTED_COMPOSE_GUARD}" \
   && ! -L "${PATRONI_ATTESTED_COMPOSE_GUARD}" ]] \
   || { echo "PITR-attested Compose guard is missing or unsafe" >&2; exit 1; }
+[[ -f "${SHARED_HOST_BELZAKUPKI_GUARD_LIFECYCLE}" \
+  && ! -L "${SHARED_HOST_BELZAKUPKI_GUARD_LIFECYCLE}" ]] \
+  || { echo "shared Belzakupki guard lifecycle is missing or unsafe" >&2; exit 1; }
 [[ -f "${VOICE_ENV_SYNC}" && ! -L "${VOICE_ENV_SYNC}" ]] \
   || { echo "voice env sync helper is missing or unsafe" >&2; exit 1; }
 # shellcheck disable=SC1090
@@ -87,6 +91,10 @@ source "${PATRONI_COMMUNICATIONS_CANDIDATE_LIFECYCLE}"
 source "${PATRONI_ROLE_AGENT_CANDIDATE_ASSETS}"
 # shellcheck disable=SC1090
 source "${PATRONI_ATTESTED_COMPOSE_GUARD}"
+# shellcheck disable=SC1090
+source "${SHARED_HOST_BELZAKUPKI_GUARD_LIFECYCLE}"
+API_SHARED_HOST_BELZAKUPKI_GUARD_SCRIPT="${API_SHARED_HOST_BELZAKUPKI_GUARD_SCRIPT:-${SCRIPT_DIR}/../shared_host_belzakupki_suspend.sh}"
+shared_belzakupki_guard_initialize
 sync_bot_voice_env_locked() {
   local secret="${VOICE_SECRET}"
   local status=0
@@ -139,27 +147,24 @@ fi
   exit 1
 }
 python3 "${DEPLOY_LOCK_HELPER}" verify "${DEPLOY_LOCK_FILE}" "${DEPLOY_LOCK_FD}"
-
+shared_belzakupki_guard_setup "$@"
 require_no_patroni_cutover() {
   if [[ -e "${PATRONI_CUTOVER_MARKER}" || -L "${PATRONI_CUTOVER_MARKER}" ]]; then
     echo "Patroni database rollout is in progress: ${PATRONI_CUTOVER_MARKER}" >&2
     return 1
   fi
 }
-
 require_no_pitr_maintenance() {
   if [[ -e "${PITR_MAINTENANCE_MARKER}" || -L "${PITR_MAINTENANCE_MARKER}" ]]; then
     echo "PITR release maintenance is active: ${PITR_MAINTENANCE_MARKER}" >&2
     return 1
   fi
 }
-
 transaction() {
   CANONICAL_COMPOSE_FILE="${CANONICAL_FILE}" \
     CANDIDATE_COMPOSE_FILE="${CANDIDATE_FILE}" \
     bash "${TRANSACTION_SCRIPT}" "$1"
 }
-
 stage_candidate_compose() {
   local temporary=""
   [[ "$(dirname "${CANONICAL_FILE}")" == "$(dirname "${CANDIDATE_FILE}")" ]] || {
@@ -172,7 +177,7 @@ stage_candidate_compose() {
       return 1
     }
     CANDIDATE_OWNED=true
-    trap cleanup_candidate_only EXIT
+    trap shared_belzakupki_guard_cleanup_candidate_transaction EXIT
     return 0
   fi
   [[ -f "${CANDIDATE_SOURCE}" && ! -L "${CANDIDATE_SOURCE}" ]] || {
@@ -184,7 +189,7 @@ stage_candidate_compose() {
     return 1
   }
   CANDIDATE_OWNED=true
-  trap cleanup_candidate_only EXIT
+  trap shared_belzakupki_guard_cleanup_candidate_transaction EXIT
   temporary="$(mktemp "${CANDIDATE_FILE}.tmp.XXXXXX")"
   if ! cp -p -- "${CANDIDATE_SOURCE}" "${temporary}"; then
     rm -f -- "${temporary}"
@@ -194,20 +199,6 @@ stage_candidate_compose() {
     rm -f -- "${temporary}"
     return 1
   fi
-}
-cleanup_migration_candidate() {
-  local status=$?
-  trap - EXIT
-  set +e
-  [[ "${CANDIDATE_OWNED}" == "true" ]] && transaction cleanup
-  exit "${status}"
-}
-cleanup_candidate_only() {
-  local status=$?
-  trap - EXIT
-  set +e
-  [[ "${CANDIDATE_OWNED}" == "true" ]] && transaction cleanup
-  exit "${status}"
 }
 resolve_previous_backend_image() {
   local active_service="app"
@@ -485,6 +476,7 @@ reconcile_failed_deploy() {
     patroni_role_assets_cleanup_backups \
       || echo "warning: stale Patroni role asset backup remains" >&2
     [[ -z "${PROXY_CONFIG_BACKUP}" ]] || rm -f -- "${PROXY_CONFIG_BACKUP}"
+    shared_belzakupki_guard_restore || exit 90
     exit "${status}"
   fi
   if ! patroni_communications_fence_candidate; then
@@ -537,6 +529,7 @@ reconcile_failed_deploy() {
     fi
   fi
   patroni_role_assets_cleanup_sources || restoration_failed=true
+  shared_belzakupki_guard_restore || restoration_failed=true
   if [[ "${restoration_failed}" == "true" ]]; then
     communications_worker_set_release_fence || true
   elif ! patroni_communications_restore_release_fence; then
@@ -598,13 +591,16 @@ require_no_patroni_cutover
 stage_candidate_compose
 require_pitr_attested_candidate
 CANDIDATE_CHECKSUM="$(cksum < "${CANDIDATE_FILE}")"
-trap cleanup_candidate_only EXIT
+trap shared_belzakupki_guard_cleanup_candidate_transaction EXIT
 sync_bot_voice_env_locked
 if [[ "${OPERATION}" == "migrate" ]]; then
-  trap cleanup_migration_candidate EXIT
+  trap shared_belzakupki_guard_cleanup_candidate_transaction EXIT
+  shared_belzakupki_guard_prepare_with_signal_recovery
   API_DEPLOY_LOCK_FD="${DEPLOY_LOCK_FD}" \
     API_COMPOSE_FILE="$(basename "${CANDIDATE_FILE}")" bash "${MIGRATION_SCRIPT}"
+  shared_belzakupki_guard_restore
   trap - EXIT
+  shared_belzakupki_guard_clear_signal_recovery
   transaction cleanup
   exit 0
 fi
@@ -626,6 +622,8 @@ patroni_role_assets_install
 capture_proxy_runtime_state
 stage_proxy_files
 
+shared_belzakupki_guard_prepare_with_signal_recovery
+
 API_COMPOSE_FILE="$(basename "${CANDIDATE_FILE}")" \
   API_DEPLOY_LOCK_FD="${DEPLOY_LOCK_FD}" \
   API_COMMUNICATIONS_WORKER_EXPECTED_PROFILE="${CANDIDATE_WORKER_GATE_PROFILE}" \
@@ -642,7 +640,9 @@ if [[ "${CANDIDATE_WORKER_SUPPORTED}" == "true" ]]; then
   patroni_communications_require_runtime \
     "${CANONICAL_FILE}" "${BACKEND_IMAGE}" "${CANDIDATE_WORKER_GATE_PROFILE}"
 fi
+shared_belzakupki_guard_restore
 trap - EXIT
+shared_belzakupki_guard_clear_signal_recovery
 patroni_role_assets_cleanup_backups \
   || echo "warning: stale Patroni role asset backup remains" >&2
 [[ -z "${PROXY_CONFIG_BACKUP}" ]] || rm -f -- "${PROXY_CONFIG_BACKUP}" \

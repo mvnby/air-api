@@ -16,6 +16,7 @@ DEPLOY_LOCK_FILE="${API_DEPLOY_LOCK_FILE:-${PROJECT_DIR}/.deploy.lock}"
 DEPLOY_LOCK_FD="${API_DEPLOY_LOCK_FD:-}"
 DEPLOY_LOCK_HELPER="${API_DEPLOY_LOCK_HELPER:-${SCRIPT_DIR}/ha/safe_deploy_lock.py}"
 DEPLOY_LOCK_HELPER_SHA256="${API_DEPLOY_LOCK_HELPER_SHA256:-}"
+SHARED_HOST_BELZAKUPKI_GUARD_LIFECYCLE="${API_SHARED_HOST_BELZAKUPKI_GUARD_LIFECYCLE:-${SCRIPT_DIR}/ha/shared_host_belzakupki_guard_lifecycle.sh}"
 STOP_SERVICES_AFTER_DEPLOY="${API_STOP_SERVICES_AFTER_DEPLOY:-}"
 ACTIVE_SLOT_FILE="${API_ACTIVE_SLOT_FILE:-${PROJECT_DIR}/.active-api-slot}"
 PREVIOUS_BACKEND_IMAGE="${API_PREVIOUS_BACKEND_IMAGE:-}"
@@ -44,14 +45,17 @@ failed_candidate() {
   set +e
   if promotion_committed; then
     echo "candidate compose promotion committed; preserving the consistent new runtime" >&2
-    exit "${status}"
+  else
+    if [[ "${TRANSACTION_ENABLED}" == "true" ]]; then
+      transaction cleanup || restoration_failed=true
+    fi
+    if ! API_COMPOSE_FILE="$(basename "${CANONICAL_FILE}")" \
+      API_RECONCILE_BACKEND_IMAGE="${PREVIOUS_BACKEND_IMAGE}" \
+      bash "${RECONCILE_SCRIPT}"; then
+      restoration_failed=true
+    fi
   fi
-  if [[ "${TRANSACTION_ENABLED}" == "true" ]]; then
-    transaction cleanup || restoration_failed=true
-  fi
-  if ! API_COMPOSE_FILE="$(basename "${CANONICAL_FILE}")" \
-    API_RECONCILE_BACKEND_IMAGE="${PREVIOUS_BACKEND_IMAGE}" \
-    bash "${RECONCILE_SCRIPT}"; then
+  if ! shared_belzakupki_guard_restore; then
     restoration_failed=true
   fi
   if [[ "${restoration_failed}" == "true" ]]; then
@@ -150,6 +154,15 @@ fi
   exit 1
 }
 python3 "${DEPLOY_LOCK_HELPER}" verify "${DEPLOY_LOCK_FILE}" "${DEPLOY_LOCK_FD}"
+[[ -f "${SHARED_HOST_BELZAKUPKI_GUARD_LIFECYCLE}" \
+  && ! -L "${SHARED_HOST_BELZAKUPKI_GUARD_LIFECYCLE}" ]] || {
+  echo "shared Belzakupki guard lifecycle is missing or unsafe" >&2; exit 1;
+}
+# shellcheck disable=SC1090
+source "${SHARED_HOST_BELZAKUPKI_GUARD_LIFECYCLE}"
+API_SHARED_HOST_BELZAKUPKI_GUARD_SCRIPT="${API_SHARED_HOST_BELZAKUPKI_GUARD_SCRIPT:-${SCRIPT_DIR}/shared_host_belzakupki_suspend.sh}"
+shared_belzakupki_guard_initialize
+shared_belzakupki_guard_setup "$@"
 resolve_previous_backend_image
 
 if [[ "${TRANSACTION_ENABLED}" == "true" ]]; then
@@ -159,6 +172,7 @@ if [[ "${TRANSACTION_ENABLED}" == "true" ]]; then
   fi
 fi
 trap failed_candidate EXIT
+shared_belzakupki_guard_prepare_with_signal_recovery
 
 candidate_name="$(basename "${CANDIDATE_FILE}")"
 case "${DEPLOY_STRATEGY}" in
@@ -191,5 +205,7 @@ COMPOSE_FILE="${CANDIDATE_FILE}" bash "${SMOKE_SCRIPT}"
 if [[ "${TRANSACTION_ENABLED}" == "true" ]]; then
   transaction promote
 fi
+shared_belzakupki_guard_restore
 trap - EXIT
+shared_belzakupki_guard_clear_signal_recovery
 echo "backend candidate activation, smoke, and compose promotion completed"
