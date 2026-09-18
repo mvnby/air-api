@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel, select
 
-from models import Customer, Lead, LeadStatus, Order, OrderProposal
+from models import Customer, CustomerType, Lead, LeadStatus, Order, OrderProposal
 from models.tenancy import TenantScope
 from schemas import (
     LeadCreatePayload,
@@ -103,6 +103,50 @@ async def test_create_manager_order_rolls_back_customer_order_and_proposal(
     assert list((await command_session.execute(select(Customer))).scalars()) == []
     assert list((await command_session.execute(select(Order))).scalars()) == []
     assert list((await command_session.execute(select(OrderProposal))).scalars()) == []
+
+
+@pytest.mark.parametrize("match_by", ["id", "phone"])
+@pytest.mark.parametrize(
+    ("party_type", "signing_mode"),
+    [(CustomerType.company, "statutory_body"), (CustomerType.company, "power_of_attorney"),
+     (CustomerType.individual_entrepreneur, "self"), (CustomerType.individual, "self")],
+)
+async def test_manager_order_preserves_customer_party_when_type_is_omitted(
+    command_session, match_by, party_type, signing_mode,
+):
+    customer = Customer(
+        tenant_id=1, name='Частное торговое унитарное предприятие "МЭДО"',
+        phone="+375291234567", type=party_type, signing_mode=signing_mode,
+    )
+    command_session.add(customer)
+    await command_session.commit()
+    match = {"customer_id": customer.id} if match_by == "id" else {"phone": customer.phone}
+    result = await OrderCreateCommandService.create_manager_order(
+        command_session,
+        ManagerOrderCreatePayload(source="manager", request_text="Новый заказ", **match),
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+    await command_session.refresh(customer)
+    order = await command_session.get(Order, result["id"])
+    assert order.customer_id == customer.id
+    assert customer.type == party_type
+    assert customer.signing_mode == signing_mode
+
+
+@pytest.mark.parametrize("selected_type", [None, "company", "individual_entrepreneur"])
+async def test_manager_order_creates_customer_with_default_or_selected_type(command_session, selected_type):
+    fields = {"customer_type": selected_type} if selected_type else {}
+    result = await OrderCreateCommandService.create_manager_order(
+        command_session,
+        ManagerOrderCreatePayload(
+            source="manager", request_text="Новый заказ", name="Новый клиент", **fields,
+        ),
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+    order = await command_session.get(Order, result["id"])
+    customer = await command_session.get(Customer, order.customer_id)
+    assert customer.type == (selected_type or "individual")
+    assert customer.signing_mode == ("statutory_body" if selected_type == "company" else "self")
 
 
 @pytest.mark.asyncio

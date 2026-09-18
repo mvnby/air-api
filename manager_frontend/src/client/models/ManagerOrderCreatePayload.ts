@@ -9,7 +9,7 @@ export type ManagerOrderCreatePayload = {
     source: string;
     request_text: string;
     service_type?: (string | null);
-    customer_type?: string;
+    customer_type?: (string | null);
     customer_inn?: (string | null);
     customer_full_legal_name?: (string | null);
     target_date?: (string | null);
