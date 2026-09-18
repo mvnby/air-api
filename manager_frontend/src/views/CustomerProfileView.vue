@@ -15,6 +15,7 @@ import {
   defaultSigningMode,
   isBusinessCustomer,
   normalizeCustomerPartyType,
+  customerPartyTypeWarning,
   normalizeCustomerSigningMode,
   validateCustomerProfileForm,
   type CustomerForm,
@@ -576,6 +577,7 @@ const formDiff = computed<Record<keyof CustomerForm, boolean>>(() => {
 const hasChanges = computed(() => Object.values(formDiff.value).some(Boolean));
 const isCompany = computed(() => currentForm.value.type === 'company');
 const isBusiness = computed(() => isBusinessCustomer(currentForm.value.type));
+const partyTypeWarning = computed(() => customerPartyTypeWarning(currentForm.value));
 const customerTypeLabel = computed(() => customerPartyLabel(normalizeCustomerPartyType(customer.value?.type)));
 
 const setCustomerType = (type: CustomerPartyType) => {
@@ -1524,6 +1526,7 @@ onMounted(() => {
                   <button type="button" class="flex-1 rounded-md px-2 py-2 text-sm transition-all" :class="form.type === 'individual_entrepreneur' ? 'bg-white font-medium text-brand-700 shadow-sm dark:bg-slate-600 dark:text-brand-300' : 'text-[var(--mv-text-muted)]'" @click="setCustomerType('individual_entrepreneur')">ИП</button>
                   <button type="button" class="flex-1 rounded-md px-2 py-2 text-sm transition-all" :class="form.type === 'company' ? 'bg-white font-medium text-brand-700 shadow-sm dark:bg-slate-600 dark:text-brand-300' : 'text-[var(--mv-text-muted)]'" @click="setCustomerType('company')">Юрлицо</button>
                 </div>
+                <p v-if="partyTypeWarning" role="alert" class="text-sm text-amber-600 dark:text-amber-300">{{ partyTypeWarning }}</p>
                 <input v-model="form.name" type="text" :placeholder="isCompany ? 'Компания' : 'Имя клиента'" :class="fieldClass('name')" />
                 <AddressSuggestInput
                   v-if="!isBusiness"
