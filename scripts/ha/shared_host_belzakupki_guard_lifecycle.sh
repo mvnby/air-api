@@ -5,7 +5,7 @@
 shared_belzakupki_guard_initialize() {
   : "${SHARED_HOST_BELZAKUPKI_GUARD:=${API_SHARED_HOST_BELZAKUPKI_GUARD:-auto}}"
   : "${SHARED_HOST_BELZAKUPKI_GUARD_ACTIVE:=${API_SHARED_HOST_BELZAKUPKI_GUARD_ACTIVE:-}}"
-  : "${SHARED_HOST_BELZAKUPKI_LOCK_FILE:=${API_SHARED_HOST_BELZAKUPKI_LOCK_FILE:-/var/lock/mvn-shared-host-belzakupki.lock}}"
+  : "${SHARED_HOST_BELZAKUPKI_LOCK_FILE:=${API_SHARED_HOST_BELZAKUPKI_LOCK_FILE:-/opt/belzakupki/.kitlane-deploy.lock}}"
   : "${SHARED_HOST_BELZAKUPKI_LOCK_FD:=${API_SHARED_HOST_BELZAKUPKI_LOCK_FD:-}}"
   : "${SHARED_HOST_BELZAKUPKI_GUARD_SCRIPT:=${API_SHARED_HOST_BELZAKUPKI_GUARD_SCRIPT:?shared Belzakupki guard script is required}}"
 }
@@ -31,7 +31,7 @@ shared_belzakupki_guard_setup() {
     export API_SHARED_HOST_BELZAKUPKI_GUARD_ACTIVE="${SHARED_HOST_BELZAKUPKI_GUARD_ACTIVE}"
   fi
   if [[ "${SHARED_HOST_BELZAKUPKI_GUARD_ACTIVE}" == "true" ]]; then
-    [[ "${SHARED_HOST_BELZAKUPKI_LOCK_FILE}" == "/var/lock/mvn-shared-host-belzakupki.lock" ]] || {
+    [[ "${SHARED_HOST_BELZAKUPKI_LOCK_FILE}" == "/opt/belzakupki/.kitlane-deploy.lock" ]] || {
       echo "shared Belzakupki lock path is fixed" >&2; return 1;
     }
     if [[ -z "${SHARED_HOST_BELZAKUPKI_LOCK_FD}" ]]; then

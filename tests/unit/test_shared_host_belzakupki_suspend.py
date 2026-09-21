@@ -1,3 +1,4 @@
+import hashlib
 import os
 import subprocess
 from pathlib import Path
@@ -205,3 +206,38 @@ def test_patroni_release_bundles_the_guard_and_suspends_before_migration_or_depl
     )
     assert migration_prepare < migration_start
     assert deploy_prepare < deploy_start
+
+
+def test_lifecycle_acquires_protected_lock_and_preserves_primary_descriptor(tmp_path):
+    env, guard, command_log = _environment(tmp_path)
+    project = Path(env["API_SHARED_HOST_BELZAKUPKI_DIR"])
+    lifecycle = tmp_path / "lifecycle.sh"
+    lifecycle.write_text(GUARD_LIFECYCLE.read_text().replace("/opt/belzakupki", str(project)))
+    helper = REPO_ROOT / "scripts/ha/safe_deploy_lock.py"
+    env.update({
+        "API_SHARED_HOST_BELZAKUPKI_GUARD_SCRIPT": str(guard),
+        "DEPLOY_LOCK_HELPER": str(helper),
+        "API_DEPLOY_LOCK_HELPER_SHA256": hashlib.sha256(helper.read_bytes()).hexdigest(),
+        "LIFECYCLE": str(lifecycle),
+        "PRIMARY_LOCK": str(tmp_path / "primary.lock"),
+    })
+    runner = tmp_path / "runner.sh"
+    _write_executable(runner, '''#!/usr/bin/env bash
+set -Eeuo pipefail
+source "$LIFECYCLE"
+shared_belzakupki_guard_initialize
+shared_belzakupki_guard_setup "$@"
+test "$1" = preserved-argument
+python3 "$DEPLOY_LOCK_HELPER" verify "$PRIMARY_LOCK" "$API_DEPLOY_LOCK_FD"
+shared_belzakupki_guard_prepare_with_signal_recovery
+shared_belzakupki_guard_restore
+''')
+    result = subprocess.run(
+        ["python3", str(helper), "exec", env["PRIMARY_LOCK"], "bash", str(runner), "preserved-argument"],
+        env=env, text=True, capture_output=True, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert (project / ".kitlane-deploy.lock").stat().st_mode & 0o777 == 0o600
+    assert command_log.read_text().splitlines() == [
+        "kill scheduler", "kill worker", "start worker", "start scheduler",
+    ]
