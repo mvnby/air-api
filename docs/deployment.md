@@ -95,8 +95,14 @@ local, root-owned opt-in marker before every migration and deployment step:
 install -o root -g root -m 600 /dev/null /opt/belzakupki/.kitlane-deploy-guard-enabled
 ```
 
+The parent `/opt/belzakupki` must be a real root-owned directory without group
+or other write permission (normally `root:root`, mode `0755`). Confirm its
+ownership before enabling the guard; a protected marker alone is insufficient.
+Use the matching Belzakupki deploy script with this same lock path. Do not use
+`/var/lock`: on these hosts it is a symlink to the shared writable `/run/lock`.
+
 With that marker present, the release takes
-`/var/lock/mvn-shared-host-belzakupki.lock`, verifies the exact Docker labels
+`/opt/belzakupki/.kitlane-deploy.lock`, verifies the exact Docker labels
 and names for `belzakupki-scheduler-1` and `belzakupki-worker-1`, then sends
 `SIGTERM` to the scheduler first and worker second. It waits up to 120 seconds
 for each process to drain. It never sends `SIGKILL`, runs `docker compose down`,
