@@ -60,12 +60,6 @@ PROXY_UPSTREAM_CREATED=false
 PROXY_FILES_CHANGED=false
 PROXY_DIR_CREATED=false
 PROXY_RUNTIME_STATE=not-applicable
-if [[ "${DEPLOY_LOCK_FD}" == "9" && -z "${VOICE_SECRET}" ]]; then
-  IFS= read -r VOICE_SECRET || {
-    echo "voice transcription API key transport is missing" >&2
-    exit 1
-  }
-fi
 [[ -f "${COMMUNICATIONS_WORKER_RELEASE_HELPER}" \
   && ! -L "${COMMUNICATIONS_WORKER_RELEASE_HELPER}" ]] \
   || { echo "communications worker release helper is missing or unsafe" >&2; exit 1; }
@@ -148,6 +142,13 @@ fi
 }
 python3 "${DEPLOY_LOCK_HELPER}" verify "${DEPLOY_LOCK_FILE}" "${DEPLOY_LOCK_FD}"
 shared_belzakupki_guard_setup "$@"
+# Consume the secret only after both lock helpers have finished re-executing.
+if [[ "${DEPLOY_LOCK_FD}" == "9" && -z "${VOICE_SECRET}" ]]; then
+  IFS= read -r VOICE_SECRET || {
+    echo "voice transcription API key transport is missing" >&2
+    exit 1
+  }
+fi
 require_no_patroni_cutover() {
   if [[ -e "${PATRONI_CUTOVER_MARKER}" || -L "${PATRONI_CUTOVER_MARKER}" ]]; then
     echo "Patroni database rollout is in progress: ${PATRONI_CUTOVER_MARKER}" >&2
