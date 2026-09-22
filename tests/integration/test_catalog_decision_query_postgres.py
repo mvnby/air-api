@@ -72,6 +72,22 @@ async def test_catalog_decision_filters_use_normalized_power_and_form_factor(db)
 
 
 @pytest.mark.asyncio
+async def test_catalog_decision_finds_legacy_wall_30_and_console_with_visible_form(db):
+    wall = Product(title="DECISION legacy wall 30", slug="decision-legacy-wall-30", price=1000, power_cooling=8.8, specs={"indoor_type": "настенный", "__typed_specs": {"indoor_type": {"value": "настенный"}}})
+    console = Product(title="DECISION legacy console", slug="decision-legacy-console", price=1000, power_cooling=3.5, specs={"indoor_type": "консольный", "__typed_specs": {"indoor_type": {"value": "column"}}})
+    db.add_all([wall, console])
+    await db.commit()
+    scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
+
+    wall_result = await CatalogDecisionQueryService.list_system_products(db, tenant_scope=scope, filters=CatalogDecisionFilters(search="DECISION legacy", cooling_btu_classes=(30,), indoor_form_factor="wall"), page=1, limit=20, sort="title", direction="asc")
+    console_result = await CatalogDecisionQueryService.list_system_products(db, tenant_scope=scope, filters=CatalogDecisionFilters(search="DECISION legacy", indoor_form_factor="console"), page=1, limit=20, sort="title", direction="asc")
+
+    assert [item["id"] for item in wall_result["items"]] == [wall.id]
+    assert wall_result["items"][0]["indoor_form_factor"] == "wall"
+    assert [item["id"] for item in console_result["items"]] == [console.id]
+
+
+@pytest.mark.asyncio
 async def test_catalog_decision_filters_retail_before_pagination_and_count(db):
     low = Product(title="DECISION retail A low", slug="decision-retail-low", price=100)
     middle = Product(title="DECISION retail B middle", slug="decision-retail-middle", price=200)

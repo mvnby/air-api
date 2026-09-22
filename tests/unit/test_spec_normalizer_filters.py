@@ -388,6 +388,33 @@ def test_indoor_type_filter_key_for_semi_industrial():
     assert console["__typed_specs"]["indoor_type"]["value"] == "console"
 
 
+def test_wall_form_factor_uses_the_same_canonical_value_in_both_internal_layers():
+    specs = normalize_specs({"indoor_type": "Настенный"})
+
+    assert specs["indoor_type"] == "настенный"
+    assert specs["__filter_indoor_type"] == "wall"
+    assert specs["__typed_specs"]["indoor_type"]["value"] == "wall"
+
+
+def test_explicit_wifi_value_overrides_stale_derived_values():
+    none = normalize_specs({"wifi_ready": "нет", "wifi_state": "ready", "wifi_builtin": True})
+    ready = normalize_specs({"wifi_ready": "ready", "wifi_state": "builtin", "wifi_builtin": True})
+
+    assert (none["wifi_ready"], none["wifi_state"], none["__filter_wifi"]) == (False, "none", False)
+    assert (ready["wifi_ready"], ready["wifi_state"], ready["__filter_wifi_builtin"]) == ("ready", "ready", False)
+
+
+def test_hyphenated_positive_temperature_range_keeps_positive_upper_bound():
+    specs = normalize_specs({"temp_range_heat": "0-30 °C", "temp_range_cool": "16 — 52 °C"})
+    freezing = normalize_specs({"temp_range_heat": "-25--10 °C"})
+
+    assert specs["__filter_min_heat"] == 0
+    assert specs["__typed_specs"]["temp_range_heat"]["values"] == [0, 30]
+    assert specs["__typed_specs"]["temp_range_cool"]["values"] == [16, 52]
+    assert freezing["__filter_min_heat"] == -25
+    assert freezing["__typed_specs"]["temp_range_heat"]["values"] == [-25, -10]
+
+
 def test_hobot_power_and_controls_keys_are_normalized():
     specs = normalize_specs(
         {

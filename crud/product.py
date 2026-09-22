@@ -14,6 +14,7 @@ from sqlmodel import select
 from models import Brand, Product, ProductImage, ProductSeries, FeatureSeriesLink, Tag, TagGroup, ProductTagLink
 from models.product_constants import BTU_MAPPING
 from models.supplier import ProductLocalStock, ProductSupplierMapping, SupplierOffer
+from services.catalog_form_factor import indoor_form_factor_expr
 
 
 ALLOWED_FILTER_GROUP_SLUGS = {"brand", "series", "expert-badge", "type", "category"}
@@ -329,14 +330,7 @@ class ProductDAO:
                 if value and str(value).strip().lower() in ALLOWED_INDOOR_TYPE_FILTERS
             ]
             if normalized_types:
-                typed_indoor_type_expr = ProductDAO._json_path_text_expr(
-                    session,
-                    "__typed_specs",
-                    "indoor_type",
-                    "value",
-                )
-                legacy_indoor_type_expr = ProductDAO._json_text_expr(session, "__filter_indoor_type")
-                stmt = stmt.where(func.coalesce(typed_indoor_type_expr, legacy_indoor_type_expr).in_(normalized_types))
+                stmt = stmt.where(indoor_form_factor_expr(session).in_(normalized_types))
 
         if tag_slugs:
             normalized_slugs = [slug.strip().lower() for slug in tag_slugs if slug and slug.strip()]

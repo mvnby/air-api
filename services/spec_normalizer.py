@@ -2,10 +2,13 @@ import re
 from typing import Any, Dict, List, Optional, Sequence
 
 from services.spec_registry import (
+    INDOOR_TYPE_LABELS,
     REGISTRY_DIMENSIONS_MAP,
     REGISTRY_KEY_MAP,
     REGISTRY_UNORDERED_DIMENSION_KEYS,
     build_typed_specs,
+    canonical_indoor_type_slug,
+    normalize_numeric_range_separators,
     normalize_registered_value,
 )
 from services.tag_logic import extract_brand_name, extract_brand_slug, is_invalid_brand_name
@@ -218,28 +221,9 @@ def clean_value(key: str, val: Any, keep_units: bool = True, source_key: str | N
         return val
 
     if key == "indoor_type":
-        text = val_lower.replace("—", "-")
-        text = re.sub(r"\s+", " ", text)
-        if "консол" in text or "console" in text:
-            return "консольный"
-        if "каналь" in text:
-            return "канальный"
-        if "кассет" in text:
-            return "кассетный"
-        if (
-            "напольно" in text
-            or "подпотолоч" in text
-            or "потолоч" in text
-            or "универсальн" in text
-            or "floor-ceiling" in text
-            or "floor ceiling" in text
-        ):
-            return "напольно-потолочный"
-        if "колон" in text or "column" in text:
-            return "колонный"
-        if "настенн" in text or "wall" in text:
-            return "настенный"
-        return text
+        slug = canonical_indoor_type_slug(val)
+        text = re.sub(r"\s+", " ", val_lower.replace("—", "-"))
+        return INDOOR_TYPE_LABELS[slug] if slug else text
 
     if key == "remote_control":
         no_markers = ("нет", "отсутств", "нету", "no")
@@ -327,7 +311,7 @@ def _parse_numbers(value: Any) -> List[int]:
     if isinstance(value, (int, float)):
         return [int(value)]
 
-    text = str(value).replace("−", "-").replace("—", "-")
+    text = normalize_numeric_range_separators(value)
     matches = re.findall(r"[-+]?\d+(?:[.,]\d+)?", text)
     numbers: List[int] = []
     for match in matches:
@@ -382,31 +366,8 @@ def _normalize_compressor_type(value: Any, inverter_value: Any) -> str | None:
 
 def _normalize_indoor_type_kind(*values: Any) -> str | None:
     for raw in values:
-        text = str(raw or "").strip().lower().replace("ё", "е")
-        if not text:
-            continue
-        text = text.replace("—", "-")
-        text = re.sub(r"\s+", " ", text)
-
-        if "консол" in text or "console" in text:
-            return "console"
-        if "каналь" in text or "duct" in text:
-            return "duct"
-        if "кассет" in text or "cassette" in text:
-            return "cassette"
-        if (
-            "напольно" in text
-            or "подпотолоч" in text
-            or "потолоч" in text
-            or "универсальн" in text
-            or "floor-ceiling" in text
-            or "floor ceiling" in text
-        ):
-            return "floor_ceiling"
-        if "колонн" in text or "column" in text:
-            return "column"
-        if "настенн" in text or "wall" in text:
-            return "wall"
+        if slug := canonical_indoor_type_slug(raw):
+            return slug
     return None
 
 
@@ -534,16 +495,18 @@ def _apply_wifi_state(
     strict_wifi_from_tags: bool = False,
 ) -> Dict[str, Any]:
     enriched = dict(specs)
-    wifi_candidates = (
+    source_candidates = (
         enriched.get("wifi_ready"),
-        enriched.get("wifi_builtin"),
-        enriched.get("wifi_state"),
         enriched.get("wifi_module"),
         enriched.get("wi_fi"),
         enriched.get("wifi"),
     )
-    wifi_kinds = [_classify_wifi_value(value) for value in wifi_candidates]
-    wifi_kinds = [kind for kind in wifi_kinds if kind is not None]
+    source_kinds = [_classify_wifi_value(value) for value in source_candidates]
+    source_kinds = [kind for kind in source_kinds if kind is not None]
+    # wifi_state/wifi_builtin are derived on a previous normalization pass.
+    # They must not undo a later edit to the source Wi-Fi value.
+    derived_kinds = [_classify_wifi_value(value) for value in (enriched.get("wifi_builtin"), enriched.get("wifi_state"))]
+    wifi_kinds = source_kinds or [kind for kind in derived_kinds if kind is not None]
     explicit_builtin_flag = _parse_bool(enriched.get("wifi_builtin"))
     explicit_ready_flag = _parse_bool(enriched.get("wifi_ready"))
     if explicit_builtin_flag is False and explicit_ready_flag is True:

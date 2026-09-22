@@ -15,6 +15,41 @@ import re
 from typing import Any, Iterable, Mapping
 
 
+INDOOR_TYPE_LABELS = {
+    "console": "консольный",
+    "duct": "канальный",
+    "cassette": "кассетный",
+    "floor_ceiling": "напольно-потолочный",
+    "column": "колонный",
+    "wall": "настенный",
+}
+
+# The order matters: a floor console must not be classified as floor/ceiling.
+INDOOR_TYPE_MARKERS = (
+    ("console", ("консол", "console")),
+    ("duct", ("каналь", "duct")),
+    ("cassette", ("кассет", "cassette")),
+    ("floor_ceiling", ("напольно", "подпотолоч", "потолоч", "универсальн", "floor-ceiling", "floor ceiling", "floor_ceiling")),
+    ("column", ("колон", "column")),
+    ("wall", ("настенн", "wall")),
+)
+
+
+def canonical_indoor_type_slug(value: Any) -> str | None:
+    text = str(value or "").strip().casefold().replace("ё", "е").replace("—", "-")
+    text = re.sub(r"\s+", " ", text)
+    for slug, markers in INDOOR_TYPE_MARKERS:
+        if any(marker in text for marker in markers):
+            return slug
+    return None
+
+
+def normalize_numeric_range_separators(value: Any) -> str:
+    """Keep a signed bound signed, but treat a dash after a digit as a range separator."""
+    text = str(value).replace("−", "-").replace("–", "-").replace("—", "-").replace("\xa0", " ")
+    return re.sub(r"(?<=\d)\s*-\s*(?=[+]?\d)", " to ", text)
+
+
 class SpecValueType(str, Enum):
     TEXT = "text"
     BOOLEAN = "boolean"
@@ -1535,7 +1570,7 @@ def _extract_numbers(value: Any) -> list[Decimal]:
     if isinstance(value, (int, float, Decimal)):
         return [Decimal(str(value))]
 
-    text = str(value).replace("−", "-").replace("—", "-").replace("\xa0", " ")
+    text = normalize_numeric_range_separators(value)
     numbers: list[Decimal] = []
     for match in re.findall(r"[-+]?\d+(?:[.,]\d+)?", text):
         parsed = _to_decimal(match)
@@ -1792,24 +1827,7 @@ def _build_scalar_payload(spec: SpecDefinition, value: Any) -> dict[str, Any] | 
         if not text:
             return None
         if spec.key == "indoor_type":
-            normalized = text.casefold().replace("ё", "е")
-            if "консол" in normalized or "console" in normalized:
-                text = "console"
-            elif "каналь" in normalized or "duct" in normalized:
-                text = "duct"
-            elif "кассет" in normalized or "cassette" in normalized:
-                text = "cassette"
-            elif (
-                "напольно" in normalized
-                or "подпотолоч" in normalized
-                or "потолоч" in normalized
-                or "универсальн" in normalized
-                or "floor-ceiling" in normalized
-                or "floor ceiling" in normalized
-            ):
-                text = "floor_ceiling"
-            elif "колон" in normalized or "column" in normalized:
-                text = "column"
+            text = canonical_indoor_type_slug(text) or text
         payload["value"] = text
         return payload
     return None

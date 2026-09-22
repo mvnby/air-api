@@ -4,6 +4,7 @@ from sqlalchemy import func
 from sqlmodel import select
 from models import Brand, Product, ProductSeries
 from core.config import settings
+from services.spec_normalizer import normalize_specs
 
 
 async def _auth_headers(async_client: AsyncClient) -> dict[str, str]:
@@ -124,6 +125,32 @@ async def test_bulk_update_logic(async_client: AsyncClient, db):
         assert p.specs["__filter_wifi"] is True
         assert p.specs["warranty"] == "3 years"
         assert p.specs["old"] == "val"
+
+
+@pytest.mark.asyncio
+async def test_bulk_wifi_state_edit_overrides_old_normalized_value(async_client: AsyncClient, db):
+    product = Product(
+        title="Wi-Fi bulk edit",
+        slug="wifi-bulk-edit",
+        price=1000,
+        specs=normalize_specs({"wifi_ready": False, "area_m2": 35}),
+    )
+    db.add(product)
+    await db.flush()
+    product_id = product.id
+    await db.commit()
+
+    response = await async_client.post(
+        "/api/manager/specs/bulk-update",
+        json={"product_ids": [product_id], "specs": {"wifi_state": "ready"}, "operation": "merge"},
+        headers=await _auth_headers(async_client),
+    )
+
+    assert response.status_code == 200, response.text
+    db.expire_all()
+    updated = await db.get(Product, product_id)
+    assert updated.specs["wifi_ready"] == "ready"
+    assert updated.specs["__typed_specs"]["wifi_state"]["value"] == "ready"
 
 
 @pytest.mark.asyncio
