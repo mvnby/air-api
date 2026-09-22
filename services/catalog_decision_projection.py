@@ -196,7 +196,7 @@ class CatalogDecisionQueryService:
         )
 
     @classmethod
-    def _conditions(cls, session: AsyncSession, filters: CatalogDecisionFilters, *, availability, retail, cooling_nominal, cooling_min, cooling_max, area, heating_min, indoor_form):
+    def _conditions(cls, session: AsyncSession, filters: CatalogDecisionFilters, *, availability, retail, cooling_nominal, cooling_min, cooling_max, area, heating_min):
         conditions = []
         search = (filters.search or "").strip()
         if search:
@@ -250,7 +250,7 @@ class CatalogDecisionQueryService:
         if filters.category:
             conditions.append(exists(select(ProductTagLink.product_id).join(Tag, Tag.id == ProductTagLink.tag_id).where(ProductTagLink.product_id == Product.id, Tag.slug == cls._CATEGORY_SLUGS[filters.category])))
         if filters.indoor_form_factor:
-            conditions.append(indoor_form == filters.indoor_form_factor)
+            conditions.append(indoor_form_factor_expr(session) == filters.indoor_form_factor)
         if filters.brand_ids:
             conditions.append(Product.brand_id.in_(filters.brand_ids))
         if filters.series_ids:
@@ -301,7 +301,7 @@ class CatalogDecisionQueryService:
             cls._json_float(session, "__filter_min_heat"),
         ).label("heating_min_c")
         indoor_form = indoor_form_factor_expr(session)
-        conditions = cls._conditions(session, filters, availability=availability, retail=retail, cooling_nominal=cooling_nominal, cooling_min=cooling_min, cooling_max=cooling_max, area=area, heating_min=heating_min, indoor_form=indoor_form)
+        conditions = cls._conditions(session, filters, availability=availability, retail=retail, cooling_nominal=cooling_nominal, cooling_min=cooling_min, cooling_max=cooling_max, area=area, heating_min=heating_min)
         base = (
             select(
                 Product, Brand.title.label("brand_title"), ProductSeries.title.label("series_title"),
