@@ -537,7 +537,14 @@ async def test_catalog_filters_by_indoor_types(async_client: AsyncClient, db):
         is_published=True,
         specs=normalize_specs({"area_m2": 35, "Тип внутреннего блока": "консольный"}),
     )
-    db.add_all([cassette, duct, console])
+    legacy_console = Product(
+        title="Legacy Console Unit",
+        slug="legacy-console-unit",
+        price=2200,
+        is_published=True,
+        specs={"area_m2": 35, "indoor_type": "консольный", "__typed_specs": {"indoor_type": {"value": "column"}}},
+    )
+    db.add_all([cassette, duct, console, legacy_console])
     await db.commit()
 
     response = await async_client.get("/api/v1/products?indoor_types=cassette")
@@ -551,4 +558,5 @@ async def test_catalog_filters_by_indoor_types(async_client: AsyncClient, db):
     assert console_response.status_code == 200
     console_slugs = [item["slug"] for item in console_response.json()["items"]]
     assert "console-unit" in console_slugs
+    assert "legacy-console-unit" in console_slugs
     assert "cassette-unit" not in console_slugs

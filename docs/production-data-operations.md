@@ -54,6 +54,10 @@ Production server intentionally runs from Docker images only (no git checkout in
      see [tenant demo setup](tenant-demo-setup.md).
    - Product media URL audit/plan (read-only default):
      `python3 scripts/manage_product_media_url_backfill.py plan --manifest config/product_media_url_backfills/polotsk-presentation-v3.json`
+   - Indoor form filter repair: start with the read-only plan, then use its
+     exact digest on the verified primary; see [indoor form repair](catalog-indoor-filter-repair.md).
+   - Confirmed MDV Wi-Fi correction: use the separate read-only plan and its
+     exact digest; see [Wi-Fi repair](catalog-indoor-filter-repair.md#подтверждённые-исправления-wi-fi).
    - Product media URL execution is primary-only and manual-only. Resolve every
      manifest blocker, review the exact source hashes/locations, and run only
      the fresh plan's expiring `reviewed_execute_command`; see

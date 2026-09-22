@@ -7,10 +7,23 @@ from models import Product
 from schemas import BulkSpecUpdate
 from services.brand_series_service import SERIES_SPEC_KEYS, sync_product_brand_series
 from services.catalog_revision_service import CatalogRevisionService
-from services.spec_normalizer import normalize_specs
+from services.spec_normalizer import KEY_MAP, normalize_specs
 
 
 SERIES_SPEC_KEY_LOOKUP = {key.strip().lower() for key in SERIES_SPEC_KEYS}
+WIFI_SOURCE_KEYS = {"wifi_ready", "wifi_builtin", "wifi_state", "wifi_module", "wi_fi", "wifi"}
+
+
+def _merge_spec_update(current: dict, patch: dict) -> dict:
+    merged = dict(current)
+    # A Wi-Fi edit replaces the old source and its derived values as one group.
+    # Otherwise an earlier `wifi_ready=False` can silently defeat wifi_state=ready.
+    if any(key in WIFI_SOURCE_KEYS or KEY_MAP.get(key) == "wifi_ready" for key in patch):
+        for key in list(merged):
+            if key not in patch and (key in WIFI_SOURCE_KEYS or KEY_MAP.get(key) == "wifi_ready"):
+                merged.pop(key)
+    merged.update(patch)
+    return merged
 
 
 def _payload_touches_series(payload: BulkSpecUpdate) -> bool:
@@ -54,7 +67,7 @@ class ManagerSpecsService:
                 for key in payload.specs.keys():
                     _delete_spec_key(current_specs, str(key))
             else:
-                current_specs.update(payload.specs)
+                current_specs = _merge_spec_update(current_specs, payload.specs)
 
             product.specs = normalize_specs(current_specs)
             await sync_product_brand_series(

@@ -20,6 +20,7 @@ from models.product_constants import BTU_MAPPING
 from models.supplier import ProductLocalStock, ProductSupplierMapping, Supplier, SupplierOffer
 from models.tenancy import TenantScope
 from services.fx_rate_service import FxRateService
+from services.catalog_form_factor import indoor_form_factor_expr
 
 
 SUPPORTED_COOLING_BTU_CLASSES = frozenset({7, 9, 12, 18, 24, 30, 36, 42, 60})
@@ -195,7 +196,7 @@ class CatalogDecisionQueryService:
         )
 
     @classmethod
-    def _conditions(cls, session: AsyncSession, filters: CatalogDecisionFilters, *, availability, retail, cooling_nominal, cooling_min, cooling_max, area, heating_min):
+    def _conditions(cls, session: AsyncSession, filters: CatalogDecisionFilters, *, availability, retail, cooling_nominal, cooling_min, cooling_max, area, heating_min, indoor_form):
         conditions = []
         search = (filters.search or "").strip()
         if search:
@@ -249,7 +250,7 @@ class CatalogDecisionQueryService:
         if filters.category:
             conditions.append(exists(select(ProductTagLink.product_id).join(Tag, Tag.id == ProductTagLink.tag_id).where(ProductTagLink.product_id == Product.id, Tag.slug == cls._CATEGORY_SLUGS[filters.category])))
         if filters.indoor_form_factor:
-            conditions.append(cls._json_text(session, "__filter_indoor_type") == filters.indoor_form_factor)
+            conditions.append(indoor_form == filters.indoor_form_factor)
         if filters.brand_ids:
             conditions.append(Product.brand_id.in_(filters.brand_ids))
         if filters.series_ids:
@@ -299,14 +300,15 @@ class CatalogDecisionQueryService:
             cls._json_float_path(session, "__typed_specs", "temp_range_heat", "min"),
             cls._json_float(session, "__filter_min_heat"),
         ).label("heating_min_c")
-        conditions = cls._conditions(session, filters, availability=availability, retail=retail, cooling_nominal=cooling_nominal, cooling_min=cooling_min, cooling_max=cooling_max, area=area, heating_min=heating_min)
+        indoor_form = indoor_form_factor_expr(session)
+        conditions = cls._conditions(session, filters, availability=availability, retail=retail, cooling_nominal=cooling_nominal, cooling_min=cooling_min, cooling_max=cooling_max, area=area, heating_min=heating_min, indoor_form=indoor_form)
         base = (
             select(
                 Product, Brand.title.label("brand_title"), ProductSeries.title.label("series_title"),
                 purchase, metrics.c.recommended_price_byn, metrics.c.supplier_name, metrics.c.supplier_qty,
                 margin_abs, margin_pct, availability, cooling_nominal, cooling_min, cooling_max, heating_min,
                 area.label("area_m2"),
-                cls._json_text(session, "__filter_indoor_type").label("indoor_form_factor"),
+                indoor_form.label("indoor_form_factor"),
                 cls._json_text(session, "wifi_ready").label("wifi_raw"),
             )
             .select_from(Product)
