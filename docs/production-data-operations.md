@@ -58,8 +58,8 @@ Production server intentionally runs from Docker images only (no git checkout in
      exact digest on the verified primary; see [indoor form repair](catalog-indoor-filter-repair.md).
    - Confirmed MDV Wi-Fi correction: use the separate read-only plan and its
      exact digest; see [Wi-Fi repair](catalog-indoor-filter-repair.md#подтверждённые-исправления-wi-fi).
-   - Missing TCL Wi-Fi tags: use the exact read-only plan and digest; see
-     [TCL tag repair](catalog-indoor-filter-repair.md#отсутствующие-теги-wi-fi-у-tcl).
+   - TCL mixed-series Wi-Fi feature correction: use the exact read-only plan
+     and digest; see [TCL feature repair](catalog-indoor-filter-repair.md#встроенный-wi-fi-у-смешанных-серий-tcl).
    - Product media URL execution is primary-only and manual-only. Resolve every
      manifest blocker, review the exact source hashes/locations, and run only
      the fresh plan's expiring `reviewed_execute_command`; see
