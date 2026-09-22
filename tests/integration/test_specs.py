@@ -136,17 +136,19 @@ async def test_bulk_wifi_state_edit_overrides_old_normalized_value(async_client:
         specs=normalize_specs({"wifi_ready": False, "area_m2": 35}),
     )
     db.add(product)
+    await db.flush()
+    product_id = product.id
     await db.commit()
 
     response = await async_client.post(
         "/api/manager/specs/bulk-update",
-        json={"product_ids": [product.id], "specs": {"wifi_state": "ready"}, "operation": "merge"},
+        json={"product_ids": [product_id], "specs": {"wifi_state": "ready"}, "operation": "merge"},
         headers=await _auth_headers(async_client),
     )
 
     assert response.status_code == 200, response.text
     db.expire_all()
-    updated = await db.get(Product, product.id)
+    updated = await db.get(Product, product_id)
     assert updated.specs["wifi_ready"] == "ready"
     assert updated.specs["__typed_specs"]["wifi_state"]["value"] == "ready"
 
