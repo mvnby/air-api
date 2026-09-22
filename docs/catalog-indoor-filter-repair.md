@@ -87,3 +87,20 @@ INTEGRA Pro Black [официальный каталог INTEGRA Pro](https://md
 2. Выполнить только `python3 scripts/repair_catalog_wifi.py --execute-plan-digest <plan_digest>`.
 3. Повторить план и убедиться, что `changed=0`, а публичные карточки содержат
    исправленные типизированные значения и фильтры.
+
+## Отсутствующие теги Wi-Fi у TCL
+
+После исправления характеристик проверка связей с тегами выявила шесть TCL:
+ID 88–91 имеют `wifi_state=builtin`, ID 159 и 715 — `wifi_state=ready`,
+но ни у одного не был привязан соответствующий тег `wifi-builtin` или
+`wifi-ready`. Скрипт `scripts/repair_catalog_wifi_tags.py` только добавляет
+подтверждённый уже сохранённой характеристикой тег. Он проверяет точные
+названия моделей, текущее состояние Wi-Fi, отсутствие конфликтующего тега,
+наличие обоих канонических тегов и digest плана.
+
+На подтверждённом primary после выпуска кода запустить read-only
+`python3 scripts/repair_catalog_wifi_tags.py`, сверить шесть ID и тегов,
+затем под блокировкой deploy выполнить только
+`python3 scripts/repair_catalog_wifi_tags.py --execute-plan-digest <plan_digest>`.
+Повторный план должен показать `changed=0`; проверить фильтрацию по тегу
+`wifi-builtin` и наличие связей у всех шести товаров.
