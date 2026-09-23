@@ -94,6 +94,8 @@ async def test_leads_inbox_search_and_source_filter_before_pagination_with_tenan
     assert combined.items[0].comment == "special tender"
     no_foreign = await OrderService.get_leads_inbox(db, tenant_scope=TEST_TENANT_SCOPE, search="Foreign special tender")
     assert no_foreign.total == 0
+    literal_wildcard = await OrderService.get_leads_inbox(db, tenant_scope=TEST_TENANT_SCOPE, search="%")
+    assert literal_wildcard.total == 0
 
 
 @pytest.mark.asyncio
@@ -117,6 +119,32 @@ async def test_leads_inbox_exposes_tender_context_without_changing_comment(db):
     assert item.tender.deadline_at == datetime(2026, 10, 1, 10, tzinfo=timezone.utc)
     assert item.tender.reason == "Подходит профиль"
     assert item.tender.profile_name == "Вентиляция"
+
+
+@pytest.mark.asyncio
+async def test_leads_inbox_searches_visible_tender_customer_name_from_metadata(db):
+    for idx in range(3):
+        db.add(Order(
+            tenant_id=1, storefront_id=1, customer_id=None,
+            status=OrderStatus.NEW_LEAD, lead_source=LeadSource.BELZAKUPKI,
+            title=f"Закупка {idx}", comment="Комментарий менеджера",
+            technical_meta={"belzakupki": {"tender": {
+                "customer_name": "Управление здравоохранения" if idx < 2 else "Другое учреждение",
+            }}},
+            created_at=datetime(2026, 9, 1, 10),
+        ))
+    await db.commit()
+
+    first = await OrderService.get_leads_inbox(
+        db, tenant_scope=TEST_TENANT_SCOPE, search="здравоохранения", page=1, limit=1,
+    )
+    second = await OrderService.get_leads_inbox(
+        db, tenant_scope=TEST_TENANT_SCOPE, search="здравоохранения", page=2, limit=1,
+    )
+    assert first.total == second.total == 2
+    assert first.meta.pages == second.meta.pages == 2
+    assert first.items[0].customer_name == second.items[0].customer_name == "Управление здравоохранения"
+    assert first.items[0].id != second.items[0].id
 
 
 @pytest.mark.asyncio

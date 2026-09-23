@@ -2464,17 +2464,21 @@ class OrderService:
 
         if search and search.strip():
             # Treat wildcard characters as literal search text.
-            term = search.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            term = search.strip().replace("!", "!!").replace("%", "!%").replace("_", "!_")
             pattern = f"%{term}%"
             search_clause = or_(
-                Order.title.ilike(pattern, escape="\\"),
-                Order.comment.ilike(pattern, escape="\\"),
-                cast(Order.id, String).ilike(pattern, escape="\\"),
-                Customer.name.ilike(pattern, escape="\\"),
-                Customer.full_legal_name.ilike(pattern, escape="\\"),
-                Customer.phone.ilike(pattern, escape="\\"),
-                Customer.email.ilike(pattern, escape="\\"),
-                Customer.inn.ilike(pattern, escape="\\"),
+                Order.title.ilike(pattern, escape="!"),
+                Order.comment.ilike(pattern, escape="!"),
+                cast(Order.id, String).ilike(pattern, escape="!"),
+                Customer.name.ilike(pattern, escape="!"),
+                Customer.full_legal_name.ilike(pattern, escape="!"),
+                Customer.phone.ilike(pattern, escape="!"),
+                Customer.email.ilike(pattern, escape="!"),
+                Customer.inn.ilike(pattern, escape="!"),
+                and_(
+                    Order.lead_source == LeadSource.BELZAKUPKI,
+                    Order.technical_meta["belzakupki"]["tender"]["customer_name"].as_string().ilike(pattern, escape="!"),
+                ),
             )
             stmt = stmt.where(search_clause)
             count_stmt = count_stmt.where(search_clause)

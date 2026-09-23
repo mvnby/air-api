@@ -91,16 +91,6 @@ const tenderUrl = computed(() => {
     return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : null;
   } catch { return null; }
 });
-const displayComment = computed(() => {
-  const comment = props.item.comment || '';
-  if (!props.item.tender || !comment.startsWith('Тендер Belzakupki')) return comment;
-  return comment.split('\n').filter(line => {
-    if (line.startsWith('Срок:')) return !props.item.tender?.deadline_at;
-    if (line.startsWith('Ссылка:')) return !tenderUrl.value;
-    if (line.startsWith('Причина соответствия:')) return !props.item.tender?.reason;
-    return true;
-  }).join('\n');
-});
 
 const getRelativeTime = (dt: string | null | undefined) => {
   if (!dt) return '';
@@ -126,7 +116,7 @@ const getRelativeTime = (dt: string | null | undefined) => {
   return rtf.format(-diffInDays, 'day');
 };
 
-const hasLongComment = computed(() => displayComment.value.length > 140);
+const hasLongComment = computed(() => (props.item.comment || '').length > 140);
 const isBusinessCustomer = computed(() => (
   props.item.customer_type === 'individual_entrepreneur' || props.item.customer_type === 'company'
 ));
@@ -249,14 +239,14 @@ const isBusinessCustomer = computed(() => (
 
     <!-- Comment (the core decision-making field) -->
     <div
-      v-if="displayComment"
+      v-if="item.comment"
       class="mx-4 mb-3 px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-700/50 border border-slate-100 dark:border-slate-700"
     >
       <p
         class="whitespace-pre-line text-sm text-slate-700 dark:text-slate-200 leading-relaxed"
         :class="{ 'line-clamp-3': !isCommentExpanded }"
       >
-        {{ displayComment }}
+        {{ item.comment }}
       </p>
       <button
         v-if="hasLongComment"
