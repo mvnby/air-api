@@ -10,6 +10,8 @@ import type {
 } from '../client';
 import { getApiErrorMessage } from '../utils/api-errors';
 import { confirmDialog } from '../services/ui-feedback';
+import CustomerSearchSelect from '../components/customers/CustomerSearchSelect.vue';
+import type { ManagerCatalogCustomerItemResponse } from '../client';
 
 const tariffs = ref<ManagerTariffResponse[]>([]);
 const loadingTariffs = ref(false);
@@ -28,13 +30,14 @@ const ruleInputMap = ref<Record<number, number>>({});
 
 const calculating = ref(false);
 const calculation = ref<ManagerInstallEstimateResponse | null>(null);
+let calculationRevision = 0;
 
 const saveForm = ref({
   title: '',
   comment: '',
-  customer_id: '',
   status: 'draft',
 });
+const selectedCustomer = ref<ManagerCatalogCustomerItemResponse | null>(null);
 const saving = ref(false);
 
 const listLoading = ref(false);
@@ -42,6 +45,8 @@ const listPage = ref(1);
 const listLimit = ref(20);
 const listTotal = ref(0);
 const estimates = ref<ManagerServiceEstimateResponse[]>([]);
+const tariffsError = ref('');
+const listError = ref('');
 
 const detailLoading = ref(false);
 const selectedEstimate = ref<ManagerServiceEstimateResponse | null>(null);
@@ -59,6 +64,16 @@ const serviceKindOptions: Array<{ value: ManagerTariffServiceKind; label: string
   { value: 'maintenance', label: 'Обслуживание' },
   { value: 'repair', label: 'Ремонт' },
 ];
+const estimateStatusOptions = [
+  { value: 'draft', label: 'Черновик' },
+  { value: 'sent', label: 'Отправлена' },
+  { value: 'approved', label: 'Согласована' },
+  { value: 'rejected', label: 'Отклонена' },
+] as const;
+
+const statusLabel = (status: string) => (
+  estimateStatusOptions.find((option) => option.value === status)?.label || status || 'Черновик'
+);
 
 const hasRuleType = (type: ManagerTariffRuleType) =>
   selectedRules.value.some((rule) => rule.is_active && rule.rule_type === type);
@@ -118,9 +133,15 @@ const normalizeNumber = (value: number, min = 0) => {
 const normalizeInt = (value: number, min = 0) =>
   Math.max(min, Math.trunc(normalizeNumber(value, min)));
 
+const invalidateCalculation = () => {
+  calculationRevision += 1;
+  calculation.value = null;
+  calculating.value = false;
+};
+
 const loadTariffs = async () => {
   loadingTariffs.value = true;
-  error.value = '';
+  tariffsError.value = '';
   try {
     const response = await api.listManagerTariffsByKind(selectedServiceKind.value, true);
     tariffs.value = response.items || [];
@@ -133,7 +154,7 @@ const loadTariffs = async () => {
       estimateForm.value.tariff_id = tariffs.value[0]!.id;
     }
   } catch (e) {
-    error.value = getApiErrorMessage(e);
+    tariffsError.value = getApiErrorMessage(e);
     tariffs.value = [];
     estimateForm.value.tariff_id = null;
   } finally {
@@ -142,7 +163,7 @@ const loadTariffs = async () => {
 };
 
 watch(selectedServiceKind, async () => {
-  calculation.value = null;
+  invalidateCalculation();
   await loadTariffs();
 });
 
@@ -154,13 +175,28 @@ watch(
       nextMap[rule.id] = rule.rule_type === 'fixed_once' ? (rule.is_optional ? 0 : 1) : 0;
     }
     ruleInputMap.value = nextMap;
-    calculation.value = null;
+    invalidateCalculation();
   },
   { immediate: true }
 );
 
+watch(
+  [
+    () => estimateForm.value.route_length_m,
+    () => estimateForm.value.quantity,
+    () => estimateForm.value.extra_holes_count,
+    () => estimateForm.value.discount_amount,
+    ruleInputMap,
+  ],
+  () => {
+    invalidateCalculation();
+  },
+  { deep: true },
+);
+
 const loadEstimates = async (page = listPage.value) => {
   listLoading.value = true;
+  listError.value = '';
   try {
     const response = await api.listManagerServiceEstimates(page, listLimit.value);
     listPage.value = response.page;
@@ -168,7 +204,7 @@ const loadEstimates = async (page = listPage.value) => {
     listTotal.value = response.total;
     estimates.value = response.items;
   } catch (e) {
-    error.value = getApiErrorMessage(e);
+    listError.value = getApiErrorMessage(e);
   } finally {
     listLoading.value = false;
   }
@@ -193,15 +229,20 @@ const calculateEstimate = async () => {
     error.value = 'Выберите тариф для расчета сметы.';
     return;
   }
+  const revision = ++calculationRevision;
   calculating.value = true;
+  calculation.value = null;
   error.value = '';
   try {
-    calculation.value = await api.calculateManagerInstallEstimate(buildPayload());
+    const response = await api.calculateManagerInstallEstimate(buildPayload());
+    if (revision !== calculationRevision) return;
+    calculation.value = response;
   } catch (e) {
+    if (revision !== calculationRevision) return;
     calculation.value = null;
     error.value = getApiErrorMessage(e);
   } finally {
-    calculating.value = false;
+    if (revision === calculationRevision) calculating.value = false;
   }
 };
 
@@ -217,6 +258,7 @@ const openEstimate = async (estimateId: number) => {
 };
 
 const saveEstimate = async () => {
+  if (saving.value) return;
   if (!calculation.value) {
     await calculateEstimate();
     if (!calculation.value) return;
@@ -224,12 +266,11 @@ const saveEstimate = async () => {
   saving.value = true;
   error.value = '';
   try {
-    const normalizedCustomerId = Number.parseInt(saveForm.value.customer_id, 10);
     const response = await api.createManagerServiceEstimate({
       ...buildPayload(),
       title: saveForm.value.title.trim() || null,
       comment: saveForm.value.comment.trim() || null,
-      customer_id: Number.isFinite(normalizedCustomerId) ? normalizedCustomerId : null,
+      customer_id: selectedCustomer.value?.id ?? null,
       status: saveForm.value.status.trim() || 'draft',
     });
     setToast(`Смета #${response.id} сохранена`);
@@ -358,6 +399,14 @@ onMounted(async () => {
           <p v-if="selectedTariff" class="text-xs text-gray-500 dark:text-slate-400">
             {{ selectedTariff.full_description || selectedTariff.short_name || selectedTariff.selector_label }}
           </p>
+          <div v-else-if="!loadingTariffs && !tariffsError" class="rounded-lg border border-dashed border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            <p>Для выбранного направления пока нет тарифов.</p>
+            <button type="button" class="mt-1 text-xs font-semibold underline" @click="loadTariffs">Повторить загрузку</button>
+          </div>
+          <div v-if="tariffsError" class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+            Не удалось загрузить тарифы: {{ tariffsError }}
+            <button type="button" class="ml-1 font-semibold underline" @click="loadTariffs">Повторить</button>
+          </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label class="block">
@@ -508,16 +557,10 @@ onMounted(async () => {
                   class="w-full rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
                 />
               </label>
-              <label class="block">
-                <span class="mb-1 block text-sm text-gray-600 dark:text-slate-300">ID клиента (опц.)</span>
-                <input
-                  v-model="saveForm.customer_id"
-                  type="number"
-                  min="1"
-                  placeholder="123"
-                  class="w-full rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
-                />
-              </label>
+              <div class="block">
+                <span class="mb-1 block text-sm text-gray-600 dark:text-slate-300">Клиент (опционально)</span>
+                <CustomerSearchSelect v-model="selectedCustomer" result-test-id-prefix="estimate-customer" />
+              </div>
             </div>
 
             <label class="block">
@@ -526,10 +569,7 @@ onMounted(async () => {
                 v-model="saveForm.status"
                 class="w-full rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
               >
-                <option value="draft">draft</option>
-                <option value="sent">sent</option>
-                <option value="approved">approved</option>
-                <option value="rejected">rejected</option>
+                <option v-for="option in estimateStatusOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
               </select>
             </label>
 
@@ -576,7 +616,56 @@ onMounted(async () => {
         </button>
       </div>
 
-      <div class="rounded-xl border border-gray-200 dark:border-slate-700 overflow-hidden">
+      <div v-if="listError" class="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+        Не удалось загрузить сметы: {{ listError }}
+        <button type="button" class="ml-1 font-semibold underline" @click="loadEstimates(listPage)">Повторить</button>
+      </div>
+
+      <div v-if="estimates.length" class="space-y-3 xl:hidden">
+        <article
+          v-for="item in estimates"
+          :key="item.id"
+          class="rounded-xl border border-gray-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800/50"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <p class="text-xs font-medium text-slate-500 dark:text-slate-400">Смета #{{ item.id }}</p>
+              <h3 class="mt-1 break-words font-semibold text-gray-900 dark:text-slate-100">{{ item.title }}</h3>
+            </div>
+            <span class="shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium" :class="statusBadgeClass(item.status)">
+              {{ statusLabel(item.status) }}
+            </span>
+          </div>
+          <p class="mt-2 text-xs text-gray-500 dark:text-slate-400">{{ item.tariff?.short_name || item.tariff?.selector_label || 'legacy' }}</p>
+          <p v-if="item.comment" class="mt-1 text-sm text-gray-600 dark:text-slate-300">{{ item.comment }}</p>
+          <div class="mt-3 flex items-center justify-between gap-3 border-t border-gray-100 pt-3 dark:border-slate-700">
+            <p class="font-semibold text-gray-900 dark:text-slate-100">{{ formatMoney(item.total) }} {{ item.currency }}</p>
+            <div class="flex shrink-0 gap-2">
+              <button
+                class="inline-flex items-center gap-1 rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50 dark:border-slate-600 dark:hover:bg-slate-700"
+                @click="openEstimate(item.id)"
+              >
+                <span class="material-icons-round text-[15px]">visibility</span>
+                Открыть
+              </button>
+              <button
+                class="inline-flex items-center gap-1 rounded-md border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
+                :disabled="deletingEstimateId === item.id"
+                @click="deleteEstimate(item)"
+              >
+                <span class="material-icons-round text-[15px]">delete</span>
+                Удалить
+              </button>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <div v-else-if="!listLoading" class="rounded-xl border border-gray-200 px-6 py-10 text-center text-sm text-gray-500 dark:border-slate-700 dark:text-slate-400 xl:hidden">
+        {{ listError ? 'Не удалось загрузить сметы' : 'Сметы еще не сохранены' }}
+      </div>
+
+      <div class="hidden overflow-hidden rounded-xl border border-gray-200 dark:border-slate-700 xl:block">
         <table class="min-w-full divide-y divide-gray-200 dark:divide-slate-700 text-sm">
           <thead class="bg-gray-50 dark:bg-slate-800/80">
             <tr>
@@ -604,7 +693,7 @@ onMounted(async () => {
               </td>
               <td class="px-3 py-2 text-center">
                 <span class="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium" :class="statusBadgeClass(item.status)">
-                  {{ item.status }}
+                  {{ statusLabel(item.status) }}
                 </span>
               </td>
               <td class="px-3 py-2 text-right text-xs text-gray-500 dark:text-slate-400 hidden lg:table-cell">
@@ -632,7 +721,8 @@ onMounted(async () => {
             </tr>
             <tr v-if="!estimates.length && !listLoading">
               <td colspan="7" class="px-6 py-10 text-center text-sm text-gray-500 dark:text-slate-400">
-                Сметы еще не сохранены
+                {{ listError ? 'Не удалось загрузить сметы' : 'Сметы еще не сохранены' }}
+                <button v-if="listError" type="button" class="ml-1 font-semibold text-brand-700 underline" @click="loadEstimates(listPage)">Повторить</button>
               </td>
             </tr>
           </tbody>
@@ -666,7 +756,7 @@ onMounted(async () => {
         <div v-if="detailLoading" class="text-sm text-gray-500 dark:text-slate-400">Загрузка...</div>
         <div v-else class="space-y-2">
           <div class="text-xs text-gray-500 dark:text-slate-400">
-            Тариф: {{ selectedEstimate.tariff?.short_name || selectedEstimate.tariff?.selector_label || 'legacy' }} · статус {{ selectedEstimate.status }}
+            Тариф: {{ selectedEstimate.tariff?.short_name || selectedEstimate.tariff?.selector_label || 'legacy' }} · статус {{ statusLabel(selectedEstimate.status) }}
           </div>
           <div class="rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden">
             <table class="min-w-full text-sm">
