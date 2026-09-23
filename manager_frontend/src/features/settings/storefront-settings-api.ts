@@ -10,6 +10,10 @@ export type StorefrontSiteSettings = {
   address: string;
   work_hours: string;
   support_telegram_url: string;
+  logo_asset_id: number | null;
+  compact_logo_asset_id: number | null;
+  logo_url?: string | null;
+  compact_logo_url?: string | null;
 };
 
 export type StorefrontServiceSettings = {
@@ -62,7 +66,7 @@ const call = async <T>(method: 'GET' | 'PUT' | 'POST', url: string, body?: unkno
 };
 
 const savePayload = (settings: StorefrontSettings) => ({
-  site: settings.site,
+  site: Object.fromEntries(Object.entries(settings.site).filter(([key]) => key !== 'logo_url' && key !== 'compact_logo_url')),
   services: settings.services,
   version: settings.version,
 });
@@ -70,6 +74,14 @@ const savePayload = (settings: StorefrontSettings) => ({
 export const storefrontSettingsApi = {
   get: () => call<StorefrontSettings>('GET', '/api/manager/storefront-settings'),
   save: (settings: StorefrontSettings) => call<StorefrontSettings>('PUT', '/api/manager/storefront-settings', savePayload(settings)),
+  brand: () => call<{ display_name: string; logo_url: string | null; compact_logo_url: string | null }>('GET', '/api/manager/storefront-settings/brand'),
+  uploadLogo: async (file: File) => {
+    const result = await request<{ items: Array<{ id: number; url: string }> }>(OpenAPI, {
+      method: 'POST', url: '/api/manager/storefront-settings/logo', formData: { file }, mediaType: 'multipart/form-data',
+    });
+    if (!result.items[0]?.id || !result.items[0]?.url) throw new Error('Загрузка завершилась без логотипа');
+    return result.items[0];
+  },
   previewTemplate: () => call<ServiceCatalogTemplatePreview>('GET', '/api/manager/service-catalog/template-preview'),
   cloneTemplate: (expected_fingerprint: string) => call<ServiceCatalogCloneResult>('POST', '/api/manager/service-catalog/clone-template', { expected_fingerprint }),
 };

@@ -20878,6 +20878,78 @@
         }
       }
     },
+    "/api/manager/storefront-settings/brand": {
+      "get": {
+        "tags": [
+          "manager-storefront-settings"
+        ],
+        "summary": "Get Storefront Brand",
+        "operationId": "get_manager_storefront_brand",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorefrontBrandResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/storefront-settings/logo": {
+      "post": {
+        "tags": [
+          "manager-storefront-settings"
+        ],
+        "summary": "Upload Storefront Logo",
+        "operationId": "upload_manager_storefront_logo",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_manager_storefront_logo"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerMediaAssetUploadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/storefront-settings": {
       "get": {
         "tags": [
@@ -28627,6 +28699,20 @@
           "file"
         ],
         "title": "Body_upload_manager_order_document"
+      },
+      "Body_upload_manager_storefront_logo": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_manager_storefront_logo"
       },
       "Body_upload_media_assets": {
         "properties": {
@@ -65514,6 +65600,41 @@
         ],
         "title": "SpecsKeysResponse"
       },
+      "StorefrontBrandResponse": {
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
+          },
+          "compact_logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compact Logo Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "display_name"
+        ],
+        "title": "StorefrontBrandResponse"
+      },
       "StorefrontSettingsPayload": {
         "properties": {
           "site": {
@@ -65546,7 +65667,7 @@
       "StorefrontSettingsResponse": {
         "properties": {
           "site": {
-            "$ref": "#/components/schemas/StorefrontSiteSettings"
+            "$ref": "#/components/schemas/StorefrontSiteSettingsResponse"
           },
           "services": {
             "items": {
@@ -65627,6 +65748,30 @@
             "maxLength": 300,
             "title": "Support Telegram Url",
             "default": ""
+          },
+          "logo_asset_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Asset Id"
+          },
+          "compact_logo_asset_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compact Logo Asset Id"
           }
         },
         "additionalProperties": false,
@@ -65635,6 +65780,104 @@
           "display_name"
         ],
         "title": "StorefrontSiteSettings"
+      },
+      "StorefrontSiteSettingsResponse": {
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Display Name"
+          },
+          "city": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "City",
+            "default": ""
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 80,
+            "title": "Phone",
+            "default": ""
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "title": "Email",
+            "default": ""
+          },
+          "address": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Address",
+            "default": ""
+          },
+          "work_hours": {
+            "type": "string",
+            "maxLength": 300,
+            "title": "Work Hours",
+            "default": ""
+          },
+          "support_telegram_url": {
+            "type": "string",
+            "maxLength": 300,
+            "title": "Support Telegram Url",
+            "default": ""
+          },
+          "logo_asset_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Asset Id"
+          },
+          "compact_logo_asset_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compact Logo Asset Id"
+          },
+          "logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
+          },
+          "compact_logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compact Logo Url"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "display_name"
+        ],
+        "title": "StorefrontSiteSettingsResponse"
       },
       "SupplierContactCreatePayload": {
         "properties": {

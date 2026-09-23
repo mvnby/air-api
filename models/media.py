@@ -1,14 +1,17 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import Column, String
+from sqlalchemy import Column, ForeignKeyConstraint, String
 from sqlmodel import Field, JSON, SQLModel
 
 
 class MediaAsset(SQLModel, table=True):
     __tablename__ = "media_asset"
+    __table_args__ = (ForeignKeyConstraint(["storefront_id", "tenant_id"], ["storefront.id", "storefront.tenant_id"], name="fk_media_asset_storefront_scope"),)
 
     id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: Optional[int] = Field(default=None, foreign_key="tenant.id", index=True)
+    storefront_id: Optional[int] = Field(default=None, index=True)
     parent_asset_id: Optional[int] = Field(default=None, foreign_key="media_asset.id", index=True)
     title: str = Field(default="", index=True)
     alt_text: Optional[str] = Field(default=None)

@@ -30,6 +30,8 @@ class StorefrontSiteSettings(BaseModel):
     address: str = Field(default="", max_length=500)
     work_hours: str = Field(default="", max_length=300)
     support_telegram_url: str = Field(default="", max_length=300)
+    logo_asset_id: int | None = Field(default=None, ge=1)
+    compact_logo_asset_id: int | None = Field(default=None, ge=1)
 
     @field_validator("email")
     @classmethod
@@ -88,7 +90,19 @@ class StorefrontSettingsPayload(BaseModel):
 
 
 class StorefrontSettingsResponse(StorefrontSettingsPayload):
+    site: "StorefrontSiteSettingsResponse"
     updated_at: datetime | None = None
+
+
+class StorefrontSiteSettingsResponse(StorefrontSiteSettings):
+    logo_url: str | None = None
+    compact_logo_url: str | None = None
+
+
+class StorefrontBrandResponse(BaseModel):
+    display_name: str
+    logo_url: str | None = None
+    compact_logo_url: str | None = None
 
 
 def default_service_directions(*, enabled: bool) -> list[ServiceDirectionSetting]:

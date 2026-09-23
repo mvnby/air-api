@@ -5,7 +5,7 @@ import KitlanePartnerIdentity from './KitlanePartnerIdentity.vue';
 import KitlanePlatformBrand from './KitlanePlatformBrand.vue';
 import ManagerStorefrontSwitcherHost from '../manager/ManagerStorefrontSwitcherHost.vue';
 
-const props = defineProps<{ name: string | null; contextKey: string; collapsed: boolean; mobileOpen: boolean; theme: 'light' | 'dark' }>();
+const props = defineProps<{ name: string | null; logoUrl?: string | null; compactLogoUrl?: string | null; contextKey: string; collapsed: boolean; mobileOpen: boolean; theme: 'light' | 'dark' }>();
 const emit = defineEmits<{
   'update:collapsed': [value: boolean];
   'update:mobileOpen': [value: boolean];
@@ -51,7 +51,7 @@ onBeforeUnmount(() => {
     <aside ref="sidebar" id="manager-mobile-navigation" class="kitlane-sidebar" :inert="!desktop && !drawerOpen" :role="drawerOpen ? 'dialog' : undefined" :aria-modal="drawerOpen || undefined" aria-label="Основная навигация" tabindex="-1">
       <div class="kitlane-sidebar-brand">
         <button class="kitlane-home" type="button" :aria-label="`${name || 'Рабочее пространство'} — главная`" @click="emit('home')">
-          <KitlanePartnerIdentity :name="name" :context-key="contextKey" :desktop-compact="collapsed" />
+          <KitlanePartnerIdentity :name="name" :logo-url="logoUrl" :compact-logo-url="compactLogoUrl" :context-key="contextKey" :desktop-compact="collapsed" />
         </button>
         <button class="kitlane-collapse" type="button" :aria-label="collapsed ? 'Развернуть меню' : 'Свернуть меню'" :aria-expanded="!collapsed" @click="emit('update:collapsed', !collapsed)">
           <ChevronRight v-if="collapsed" :size="16" /><ChevronLeft v-else :size="16" />
@@ -68,7 +68,7 @@ onBeforeUnmount(() => {
       <header class="kitlane-topbar">
         <div class="kitlane-mobile-company">
           <button ref="menuButton" class="kitlane-icon-button" type="button" aria-label="Открыть меню" aria-controls="manager-mobile-navigation" :aria-expanded="mobileOpen" @click="emit('update:mobileOpen', true)"><Menu :size="20" /></button>
-          <button class="kitlane-home" type="button" :aria-label="`${name || 'Рабочее пространство'} — главная`" @click="emit('home')"><KitlanePartnerIdentity :name="name" :context-key="contextKey" compact /></button>
+          <button class="kitlane-home" type="button" :aria-label="`${name || 'Рабочее пространство'} — главная`" @click="emit('home')"><KitlanePartnerIdentity :name="name" :logo-url="logoUrl" :compact-logo-url="compactLogoUrl" :context-key="contextKey" compact /></button>
         </div>
         <div class="kitlane-topbar-actions">
           <button class="kitlane-icon-button" type="button" :aria-label="theme === 'light' ? 'Тёмная тема' : 'Светлая тема'" :title="theme === 'light' ? 'Тёмная тема' : 'Светлая тема'" @click="emit('toggleTheme')"><Moon v-if="theme === 'light'" :size="19" /><Sun v-else :size="19" /></button>
