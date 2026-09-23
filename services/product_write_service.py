@@ -68,11 +68,7 @@ class ProductWriteService:
                 select(Tag).where(Tag.id.in_(tag_ids)).options(selectinload(Tag.group))
             )
         ).scalars().all()
-        return list(rows)
-
-    @staticmethod
-    def _wifi_tag_slugs(tags: List[Tag]) -> List[str]:
-        return [tag.slug for tag in tags if tag.slug in {"wifi-builtin", "wifi-ready"}]
+        return [tag for tag in rows if tag.slug not in {"wifi-builtin", "wifi-ready"}]
 
     @staticmethod
     async def create_product(
@@ -96,8 +92,6 @@ class ProductWriteService:
         )
         specs = normalize_specs(
             deepcopy(payload.get("specs") or {}),
-            wifi_tag_slugs=ProductWriteService._wifi_tag_slugs(selected_tags),
-            strict_wifi_from_tags=False,
             title=title,
         )
 
@@ -180,7 +174,9 @@ class ProductWriteService:
         if tag_ids is not None:
             selected_tags = await ProductWriteService._resolve_tags(session, tag_ids)
         elif copy_tags:
-            selected_tags = list(source.tags or [])
+            selected_tags = [
+                tag for tag in (source.tags or []) if tag.slug not in {"wifi-builtin", "wifi-ready"}
+            ]
         else:
             selected_tags = []
 
@@ -188,8 +184,6 @@ class ProductWriteService:
         specs_payload = payload.get("specs", source_specs)
         specs = normalize_specs(
             deepcopy(specs_payload or {}),
-            wifi_tag_slugs=ProductWriteService._wifi_tag_slugs(selected_tags),
-            strict_wifi_from_tags=False,
             title=title,
         )
         slug = await ProductWriteService._unique_slug(
@@ -371,7 +365,6 @@ class ProductWriteService:
             requested_series_id=explicit_series_id,
             explicit_series_override=explicit_series_override,
         )
-        wifi_tag_slugs: Optional[List[str]] = None
         selected_tags: Optional[List[Tag]] = None
         if tag_ids is not None:
             tag_rows = (
@@ -379,7 +372,9 @@ class ProductWriteService:
                     select(Tag).where(Tag.id.in_(tag_ids)).options(selectinload(Tag.group))
                 )
             ).scalars().all()
-            selected_tags = list(tag_rows)
+            selected_tags = [
+                tag for tag in tag_rows if tag.slug not in {"wifi-builtin", "wifi-ready"}
+            ]
             # Catalog groups have their own command. A form opened before a
             # previous save may still submit old category tag IDs, including
             # after switching back to Auto. Preserve the stored group here;
@@ -390,19 +385,10 @@ class ProductWriteService:
                 tag for tag in existing_product.tags if tag.slug in CATALOG_CATEGORY_SLUGS
             ]
             tag_ids = [tag.id for tag in selected_tags]
-            wifi_tag_slugs = [tag.slug for tag in selected_tags if tag.slug in {"wifi-builtin", "wifi-ready"}]
 
         if "specs" in payload and payload["specs"] is not None:
-            if wifi_tag_slugs is None:
-                wifi_tag_slugs = [
-                    tag.slug
-                    for tag in (existing_product.tags or [])
-                    if tag.slug in {"wifi-builtin", "wifi-ready"}
-                ] if existing_product else []
             payload["specs"] = normalize_specs(
                 payload["specs"],
-                wifi_tag_slugs=wifi_tag_slugs,
-                strict_wifi_from_tags=False,
                 title=(
                     payload.get("title") or (existing_product.title if existing_product else "")
                 ) if sync_derived_fields else None,

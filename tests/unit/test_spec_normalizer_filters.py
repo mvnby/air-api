@@ -93,6 +93,27 @@ def test_wifi_option_value_maps_to_ready():
     assert specs["__filter_wifi_builtin"] is False
 
 
+def test_wifi_module_included_is_builtin_but_mixed_series_text_is_not_guessed():
+    bundled = normalize_specs({"Wi-Fi": "Wi-Fi-модуль в комплекте"})
+    integrated = normalize_specs({"Wi-Fi": "встроенный Wi-Fi модуль"})
+    mixed = normalize_specs({"Wi-Fi": "в комплекте для 09, опция для 18"})
+
+    assert bundled["wifi_state"] == "builtin"
+    assert bundled["__filter_wifi_builtin"] is True
+    assert integrated["wifi_state"] == "builtin"
+    assert mixed["wifi_state"] == "none"
+
+
+def test_wifi_module_not_included_but_optional_is_ready():
+    specs = normalize_specs({"Wi-Fi": "Модуль не входит в комплект, приобретается отдельно"})
+    assert specs["wifi_state"] == "ready"
+
+
+def test_wifi_module_availability_is_not_mistaken_for_built_in():
+    specs = normalize_specs({"Wi-Fi": "Есть возможность установки Wi-Fi модуля"})
+    assert specs["wifi_state"] == "ready"
+
+
 def test_explicit_wifi_ready_and_builtin_fields_can_represent_optional_module():
     specs = normalize_specs({"wifi_ready": True, "wifi_builtin": False})
 

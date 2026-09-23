@@ -51,7 +51,6 @@ class MdvCatalogPreviewService:
             normalized_specs = normalize_specs(
                 payload.get("specs") or {},
                 title=payload.get("title") or "",
-                strict_wifi_from_tags=False,
             )
             existing = await find_existing_product_for_import(
                 session,

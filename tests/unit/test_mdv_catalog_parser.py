@@ -260,6 +260,29 @@ def test_mdv_price_wifi_override_requires_exact_model_pair():
     assert "wifi_ready" not in parser._build_specs(record)
 
 
+@pytest.mark.parametrize(
+    ("indoor", "outdoor", "catalog", "expected"),
+    [
+        ("MDSC-09HRDN8", "MDOC-09HDN8", "household", "builtin"),
+        ("MDSC-12HRDN8", "MDOC-12HDN8", "household", "ready"),
+        ("MDSAN-18HRFN8", "MDOAN-18HFN8", "household", "ready"),
+        ("MDSAJ-07HRFN8", "MDOAJ-07HFN8", "household", "builtin"),
+        ("MDSAJ-07HRFN8", None, "multi", "builtin"),
+    ],
+)
+def test_user_confirmed_mdv_wifi_survives_reimport(indoor, outdoor, catalog, expected):
+    properties = {"UNIT_INDOOR": indoor}
+    if outdoor:
+        properties["UNIT_OUTDOOR"] = outdoor
+    record = MdvCatalogRecord(
+        catalog=catalog,
+        item={"SECTIONS": {"SECTION_3": "iERA inverter"}, "PROPERTIES": properties},
+        source_url="",
+    )
+
+    assert MdvCatalogParser()._build_specs(record)["wifi_ready"] == expected
+
+
 def test_mdv_promoted_keys_cover_supplier_mapping_fields():
     for key in (
         "UNIT_INDOOR",

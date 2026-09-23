@@ -1,4 +1,4 @@
-"""Intrinsic MDV model facts confirmed against the Biocond model-level price."""
+"""MDV model Wi-Fi states confirmed by the price and the catalog owner."""
 
 from __future__ import annotations
 
@@ -9,18 +9,20 @@ from typing import Any
 
 
 MANIFEST_PATH = Path(__file__).resolve().parents[1] / "config/catalog_repairs/mdv_price_2026_09_23.json"
+CONFIRMED_MANIFEST_PATH = Path(__file__).resolve().parents[1] / "config/catalog_repairs/mdv_wifi_confirmed_2026_09_23.json"
 
 
 @lru_cache(maxsize=1)
 def wifi_states_by_model_pair() -> dict[tuple[str, str], str]:
-    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     result: dict[tuple[str, str], str] = {}
-    for entry in manifest["wifi"]:
-        key = (entry["model_indoor"].upper(), entry["model_outdoor"].upper())
-        state = entry["new_state"]
-        if state not in ("ready", "builtin") or key in result:
-            raise ValueError(f"Invalid MDV Wi-Fi override for {key}")
-        result[key] = state
+    for path in (MANIFEST_PATH, CONFIRMED_MANIFEST_PATH):
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        for entry in manifest["wifi"]:
+            key = (entry["model_indoor"].upper(), (entry.get("model_outdoor") or "").upper())
+            state = entry["new_state"]
+            if state not in ("ready", "builtin") or key in result:
+                raise ValueError(f"Invalid MDV Wi-Fi override for {key}")
+            result[key] = state
     return result
 
 

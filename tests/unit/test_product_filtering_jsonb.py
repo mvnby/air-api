@@ -99,9 +99,10 @@ async def test_jsonb_filters_and_allowed_tag_groups(db):
     )
     assert [p.slug for p in filtered] == ["p1"]
 
-    # Technical tags are ignored for storefront filter compatibility.
+    # Legacy Wi-Fi slugs resolve through specs, including when a stale tag
+    # disagrees with the product's explicit Wi-Fi state.
     by_technical_slug = await ProductDAO.get_filtered(db, tag_slugs=["wifi-builtin"])
-    assert {p.slug for p in by_technical_slug} == {"p1", "p2", "p3"}
+    assert {p.slug for p in by_technical_slug} == {"p1", "p3"}
 
     # OR within one group (brand), AND across groups (brand + category).
     grouped_legacy_filter = await ProductDAO.get_filtered(

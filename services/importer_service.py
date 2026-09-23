@@ -44,20 +44,6 @@ logger = logging.getLogger(__name__)
 ImportProgressCallback = Callable[[Dict[str, object]], Awaitable[None]]
 
 
-def _augment_auto_slugs_with_wifi_specs(auto_slugs: List[str], specs: dict) -> List[str]:
-    result = list(auto_slugs)
-    normalized_specs_probe = normalize_specs(
-        specs or {},
-        strict_wifi_from_tags=False,
-    )
-    wifi_state = normalized_specs_probe.get("wifi_ready")
-    if wifi_state is True and "wifi-builtin" not in result:
-        result.append("wifi-builtin")
-    elif wifi_state == "ready" and "wifi-ready" not in result:
-        result.append("wifi-ready")
-    return result
-
-
 def _should_replace_imported_main_image(existing_url: str | None) -> bool:
     current = str(existing_url or "").strip()
     if not current:
@@ -297,15 +283,10 @@ class ImporterService:
             # A product's category is applied once its persistent override is
             # known. Do not let an inferred parser tag coexist with it.
             auto_slugs = [slug for slug in auto_slugs if slug not in CATALOG_CATEGORY_SLUGS]
-            # Derive Wi-Fi technical tags from parsed specs so import preserves
-            # "builtin" vs "ready" even before any manual manager edits.
-            auto_slugs = _augment_auto_slugs_with_wifi_specs(auto_slugs, raw_specs)
 
             auto_tag_slugs_from_normalizer: List[str] = []
             normalized_specs = normalize_specs(
                 canonicalize_area_specs(raw_specs, fallback_area=metrics.get("area")),
-                wifi_tag_slugs=[slug for slug in auto_slugs if slug in {"wifi-builtin", "wifi-ready"}],
-                strict_wifi_from_tags=False,
                 title=title,
                 auto_tag_slugs=auto_tag_slugs_from_normalizer,
             )

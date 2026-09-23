@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping
 
 from services.spec_normalizer import normalize_specs
 
@@ -19,8 +19,6 @@ INTERNAL_SPEC_KEYS = (
 def build_specs_with_typed_internal_layer(
     specs: Mapping[str, Any] | None,
     *,
-    wifi_tag_slugs: Sequence[str] | None = None,
-    strict_wifi_from_tags: bool = False,
     title: str = "",
 ) -> dict[str, Any]:
     """Return specs with refreshed internal typed/filter keys only.
@@ -34,8 +32,6 @@ def build_specs_with_typed_internal_layer(
     normalized = normalize_specs(
         original,
         keep_units=True,
-        wifi_tag_slugs=wifi_tag_slugs,
-        strict_wifi_from_tags=strict_wifi_from_tags,
         title=title,
     )
     updated = dict(original)
@@ -45,4 +41,3 @@ def build_specs_with_typed_internal_layer(
         else:
             updated.pop(key, None)
     return updated
-

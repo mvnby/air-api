@@ -13,13 +13,12 @@ import sys
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
 
 sys.path.append(".")
 
 from core.database import async_session_maker  # noqa: E402
-from models import Product, Tag  # noqa: E402
+from models import Product  # noqa: E402
 from services.spec_typed_backfill_service import (  # noqa: E402
     INTERNAL_SPEC_KEYS,
     build_specs_with_typed_internal_layer,
@@ -35,9 +34,8 @@ async def run(
     execute: bool,
     limit: int,
     product_id: int | None,
-    strict_wifi_from_tags: bool,
 ) -> dict[str, Any]:
-    query = select(Product).options(selectinload(Product.tags).selectinload(Tag.group)).order_by(Product.id)
+    query = select(Product).order_by(Product.id)
     if product_id is not None:
         query = query.where(Product.id == product_id)
     if limit:
@@ -50,15 +48,8 @@ async def run(
 
         for product in products:
             old_specs = dict(product.specs or {})
-            wifi_tag_slugs = [
-                tag.slug
-                for tag in (product.tags or [])
-                if tag.slug in {"wifi-builtin", "wifi-ready"}
-            ]
             new_specs = build_specs_with_typed_internal_layer(
                 old_specs,
-                wifi_tag_slugs=wifi_tag_slugs,
-                strict_wifi_from_tags=strict_wifi_from_tags,
                 title=product.title or "",
             )
             if new_specs == old_specs:
@@ -95,7 +86,6 @@ async def run(
         "changed": changed,
         "limit": limit,
         "product_id": product_id,
-        "strict_wifi_from_tags": strict_wifi_from_tags,
         "samples": samples,
     }
 
@@ -124,11 +114,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Maximum products to inspect in this run (1-5000, default: 500).",
     )
     parser.add_argument("--product-id", type=int, default=None, help="Inspect/update one product only.")
-    parser.add_argument(
-        "--strict-wifi-from-tags",
-        action="store_true",
-        help="Treat Wi-Fi tags as authoritative when rebuilding internal Wi-Fi filters.",
-    )
     return parser
 
 
@@ -149,7 +134,6 @@ def main() -> None:
             execute=args.execute and not args.dry_run,
             limit=args.limit,
             product_id=args.product_id,
-            strict_wifi_from_tags=args.strict_wifi_from_tags,
         )
     )
     print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
@@ -157,4 +141,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

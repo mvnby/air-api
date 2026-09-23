@@ -167,8 +167,11 @@ class ProductReadService(ProductFilterService, ProductSeriesService):
         limit: int = 5,
     ) -> List[Dict[str, Any]]:
         faceted_tag_ids = None
-        if tag_slugs:
-            faceted_tag_ids = await ProductReadService.resolve_slugs_to_grouped_ids(session, tag_slugs)
+        normalized_slugs = [str(slug).strip().lower() for slug in (tag_slugs or []) if str(slug).strip()]
+        wifi_slugs = [slug for slug in normalized_slugs if slug in {"wifi-builtin", "wifi-ready"}]
+        other_tag_slugs = [slug for slug in normalized_slugs if slug not in {"wifi-builtin", "wifi-ready"}]
+        if other_tag_slugs:
+            faceted_tag_ids = await ProductReadService.resolve_slugs_to_grouped_ids(session, other_tag_slugs)
 
         products = await ProductDAO.get_filtered(
             session,
@@ -181,6 +184,7 @@ class ProductReadService(ProductFilterService, ProductSeriesService):
             min_price=min_price,
             max_price=max_price,
             is_published=True,
+            tag_slugs=wifi_slugs,
             faceted_tag_ids=faceted_tag_ids,
             sort="area_asc",
             limit=limit,

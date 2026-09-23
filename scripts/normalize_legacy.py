@@ -140,18 +140,11 @@ async def run_normalize():
         
         for p in products:
             old_specs = p.specs.copy() if isinstance(p.specs, dict) else {}
-            wifi_tag_slugs = [
-                tag.slug
-                for tag in (p.tags or [])
-                if tag.slug in {"wifi-builtin", "wifi-ready"}
-            ]
             auto_tag_slugs: list[str] = []
             
             new_specs = normalize_specs(
                 old_specs,
                 keep_units=KEEP_UNITS,
-                wifi_tag_slugs=wifi_tag_slugs,
-                strict_wifi_from_tags=True,
                 title=p.title or "",
                 auto_tag_slugs=auto_tag_slugs,
             )
