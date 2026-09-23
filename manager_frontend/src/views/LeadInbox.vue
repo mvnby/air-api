@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { api, type LeadsInboxItemResponse } from '../api';
+import { managerSession } from '../services/manager-session';
+import { managerStorefrontSelection, managerStorefrontStorageKey } from '../services/manager-storefront-selection';
 import LeadInboxCard from '../components/leads/LeadInboxCard.vue';
 import LeadQualifyModal from '../components/leads/LeadQualifyModal.vue';
 import EmailLeadImportPanel from '../components/leads/EmailLeadImportPanel.vue';
@@ -9,29 +11,57 @@ import { useBelarusPhoneMask } from '../composables/useBelarusPhoneMask';
 import { useB2BLookup } from '../composables/useB2BLookup';
 
 type Scope = 'active' | 'archive';
+type Source = '' | 'site' | 'email' | 'belzakupki' | 'phone' | 'bot' | 'manager' | 'referral' | 'other';
+const pageLimit = 50;
+const sourceOptions: { value: Source; label: string }[] = [
+  { value: '', label: 'Все источники' },
+  { value: 'site', label: 'Сайт' },
+  { value: 'email', label: 'Почта' },
+  { value: 'belzakupki', label: 'Тендеры' },
+  { value: 'phone', label: 'Телефон' },
+  { value: 'bot', label: 'Бот' },
+  { value: 'manager', label: 'Менеджер' },
+  { value: 'referral', label: 'Рекомендация' },
+  { value: 'other', label: 'Другое' },
+];
 
 const scope = ref<Scope>('active');
+const source = ref<Source>('');
+const page = ref(1);
 const items = ref<LeadsInboxItemResponse[]>([]);
 const total = ref(0);
 const loading = ref(false);
 const loadError = ref('');
 const toast = ref('');
 const search = ref('');
+const appliedSearch = ref('');
+let inboxSearchTimeout: ReturnType<typeof setTimeout> | null = null;
 let loadRequestId = 0;
 let disposed = false;
+let ready = false;
 
-const matchingItems = computed(() => {
-  const query = search.value.trim().toLocaleLowerCase('ru-RU');
-  if (!query) return items.value;
-  return items.value.filter((item) => [
-    item.customer_name || item.customer_full_legal_name || 'Имя не указано',
-    item.customer_full_legal_name,
-    item.phone,
-    item.email,
-    item.customer_inn,
-    item.comment,
-  ].some((value) => String(value || '').toLocaleLowerCase('ru-RU').includes(query)));
-});
+const contextStorageKey = () => {
+  const auth = managerSession.auth.value;
+  const storefront = managerStorefrontSelection.selectedSlug.value;
+  return auth && storefront ? `${managerStorefrontStorageKey(auth)}:${storefront}:lead-inbox` : null;
+};
+const saveContext = () => {
+  const key = contextStorageKey();
+  if (!key) return;
+  try { window.sessionStorage.setItem(key, JSON.stringify({ scope: scope.value, source: source.value, search: appliedSearch.value, page: page.value })); }
+  catch { /* Browsing still works when storage is unavailable. */ }
+};
+const restoreContext = () => {
+  const key = contextStorageKey();
+  if (!key) return;
+  try {
+    const saved = JSON.parse(window.sessionStorage.getItem(key) || '{}');
+    if (saved.scope === 'active' || saved.scope === 'archive') scope.value = saved.scope;
+    if (sourceOptions.some(option => option.value === saved.source)) source.value = saved.source;
+    if (typeof saved.search === 'string') search.value = appliedSearch.value = saved.search.slice(0, 200);
+    if (Number.isSafeInteger(saved.page) && saved.page > 0) page.value = saved.page;
+  } catch { /* Ignore malformed or inaccessible storage. */ }
+};
 
 // Qualify / Reject modals
 const qualifyTarget = ref<LeadsInboxItemResponse | null>(null);
@@ -129,27 +159,19 @@ const setToast = (msg: string) => {
 
 const load = async () => {
   const requestId = ++loadRequestId;
-  const currentScope = scope.value;
   loading.value = true;
   loadError.value = '';
+  saveContext();
   try {
-    const pageLimit = 100;
-    const firstPage = await api.getLeadsInbox(currentScope, 1, pageLimit);
+    const result = await api.getLeadsInbox(scope.value, page.value, pageLimit, appliedSearch.value || undefined, source.value || undefined);
     if (disposed || requestId !== loadRequestId) return;
-    const loadedItems = [...firstPage.items];
-    const totalPages = Math.max(1, firstPage.meta?.pages || 1);
-    const pageBatchSize = 4;
-    const remainingPages = Array.from({ length: Math.max(0, totalPages - 1) }, (_, index) => index + 2);
-    for (let index = 0; index < remainingPages.length; index += pageBatchSize) {
-      const pageBatch = remainingPages.slice(index, index + pageBatchSize);
-      const nextPages = await Promise.all(
-        pageBatch.map((page) => api.getLeadsInbox(currentScope, page, pageLimit)),
-      );
-      if (disposed || requestId !== loadRequestId) return;
-      nextPages.forEach((page) => loadedItems.push(...page.items));
+    const nextTotal = result.meta?.total ?? result.total;
+    if (page.value > 1 && page.value > Math.max(1, result.meta?.pages ?? Math.ceil(nextTotal / pageLimit))) {
+      page.value = Math.max(1, result.meta?.pages ?? Math.ceil(nextTotal / pageLimit));
+      return;
     }
-    items.value = loadedItems;
-    total.value = firstPage.meta?.total ?? firstPage.total;
+    items.value = result.items;
+    total.value = nextTotal;
   } catch (e) {
     if (disposed || requestId !== loadRequestId) return;
     console.error(e);
@@ -160,14 +182,37 @@ const load = async () => {
 };
 
 onMounted(async () => {
+  restoreContext();
+  await nextTick();
+  ready = true;
   await load();
 });
-watch(scope, load);
+watch([scope, source], () => {
+  if (inboxSearchTimeout) clearTimeout(inboxSearchTimeout);
+  appliedSearch.value = search.value.trim().slice(0, 200);
+  page.value = 1;
+}, { flush: 'sync' });
+watch([scope, source, page, appliedSearch], () => { if (ready) void load(); });
+watch(search, (value) => {
+  if (!ready) return;
+  loadRequestId += 1;
+  loading.value = true;
+  if (inboxSearchTimeout) clearTimeout(inboxSearchTimeout);
+  inboxSearchTimeout = setTimeout(() => {
+    const nextSearch = value.trim().slice(0, 200);
+    const changed = appliedSearch.value !== nextSearch || page.value !== 1;
+    appliedSearch.value = nextSearch;
+    page.value = 1;
+    if (!changed) void load();
+  }, 300);
+});
 onBeforeUnmount(() => {
   disposed = true;
+  ready = false;
   loadRequestId += 1;
   customerSearchRequestId += 1;
   if (searchTimeout.value) clearTimeout(searchTimeout.value);
+  if (inboxSearchTimeout) clearTimeout(inboxSearchTimeout);
 });
 
 // ── Create Lead ───────────────────────────────────────────────────────────────
@@ -364,10 +409,16 @@ const onEmailImported = async () => {
           @click="search = ''"
         ><span class="material-icons-round text-[18px]">close</span></button>
       </label>
+      <label class="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+        <span>Источник</span>
+        <select v-model="source" aria-label="Источник входящих" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-white">
+          <option v-for="option in sourceOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+        </select>
+      </label>
       <p v-if="loading" class="text-sm text-slate-500 dark:text-slate-400" aria-live="polite">Обновляем список…</p>
       <p v-else-if="loadError" class="text-sm text-red-600 dark:text-red-300" aria-live="polite">Список не загружен</p>
       <p v-else class="text-sm text-slate-500 dark:text-slate-400" aria-live="polite">
-        Найдено: {{ matchingItems.length }} из {{ items.length }}
+        Найдено: {{ total }}
       </p>
     </div>
 
@@ -384,19 +435,19 @@ const onEmailImported = async () => {
 
     <!-- Empty state -->
     <div
-      v-else-if="items.length === 0 || matchingItems.length === 0"
+      v-else-if="items.length === 0"
       class="text-center py-16 text-slate-400 dark:text-slate-500"
     >
       <span class="material-icons-round text-5xl mb-3 block opacity-30">inbox</span>
       <p class="text-lg font-medium">
-        {{ items.length === 0 ? (scope === 'active' ? 'Входящих нет — всё обработано!' : 'Архив пуст') : 'По этому запросу обращений нет' }}
+        {{ search || source ? 'По этому запросу обращений нет' : (scope === 'active' ? 'Входящих нет — всё обработано!' : 'Архив пуст') }}
       </p>
     </div>
 
     <!-- Feed -->
     <div v-else class="grid grid-cols-1 xl:grid-cols-2 gap-4">
       <LeadInboxCard
-        v-for="item in matchingItems"
+        v-for="item in items"
         :key="item.id"
         :item="item"
         :is-archive="scope === 'archive'"
@@ -405,6 +456,12 @@ const onEmailImported = async () => {
         @no-answer="markNoAnswer($event)"
       />
     </div>
+
+    <nav v-if="!loading && !loadError && total > pageLimit" class="mt-6 flex items-center justify-center gap-3" aria-label="Страницы входящих">
+      <button type="button" class="rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:opacity-40 dark:border-slate-700" :disabled="page <= 1" @click="page--">Назад</button>
+      <span class="text-sm text-slate-600 dark:text-slate-300">{{ page }} из {{ Math.ceil(total / pageLimit) }}</span>
+      <button type="button" class="rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:opacity-40 dark:border-slate-700" :disabled="page >= Math.ceil(total / pageLimit)" @click="page++">Далее</button>
+    </nav>
 
     <!-- Toast -->
     <transition name="slide-up">

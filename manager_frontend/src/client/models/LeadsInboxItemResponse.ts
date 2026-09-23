@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { LeadsInboxTenderResponse } from './LeadsInboxTenderResponse';
 export type LeadsInboxItemResponse = {
     id: number;
     status: string;
@@ -24,5 +25,6 @@ export type LeadsInboxItemResponse = {
     equipment_class?: (string | null);
     marketing_source?: (string | null);
     attachment_count?: number;
+    tender?: (LeadsInboxTenderResponse | null);
 };
 

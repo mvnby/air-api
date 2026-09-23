@@ -24,7 +24,8 @@ const sourceLabel: Record<string, string> = {
   bot: 'Бот',
   email: 'Email',
   manager: 'Менеджер',
-  belzakupki: 'Belzakupki',
+  referral: 'Рекомендация',
+  belzakupki: 'Тендер',
   other: 'Другое',
 };
 
@@ -34,6 +35,7 @@ const sourceIcon: Record<string, string> = {
   bot: 'smart_toy',
   email: 'email',
   manager: 'person',
+  referral: 'group',
   belzakupki: 'business_center',
   other: 'help_outline',
 };
@@ -81,6 +83,24 @@ const formatEmail = (email: string | null | undefined): string => {
 };
 
 const displayDate = computed(() => props.item.source_created_at || props.item.created_at);
+const tenderUrl = computed(() => {
+  const raw = props.item.tender?.url;
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : null;
+  } catch { return null; }
+});
+const displayComment = computed(() => {
+  const comment = props.item.comment || '';
+  if (!props.item.tender || !comment.startsWith('Тендер Belzakupki')) return comment;
+  return comment.split('\n').filter(line => {
+    if (line.startsWith('Срок:')) return !props.item.tender?.deadline_at;
+    if (line.startsWith('Ссылка:')) return !tenderUrl.value;
+    if (line.startsWith('Причина соответствия:')) return !props.item.tender?.reason;
+    return true;
+  }).join('\n');
+});
 
 const getRelativeTime = (dt: string | null | undefined) => {
   if (!dt) return '';
@@ -106,7 +126,7 @@ const getRelativeTime = (dt: string | null | undefined) => {
   return rtf.format(-diffInDays, 'day');
 };
 
-const hasLongComment = computed(() => (props.item.comment || '').length > 140);
+const hasLongComment = computed(() => displayComment.value.length > 140);
 const isBusinessCustomer = computed(() => (
   props.item.customer_type === 'individual_entrepreneur' || props.item.customer_type === 'company'
 ));
@@ -219,16 +239,24 @@ const isBusinessCustomer = computed(() => (
       />
     </div>
 
+    <div v-if="item.tender" class="mx-4 mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600 dark:text-slate-300">
+      <span v-if="item.tender.source">Площадка: {{ item.tender.source }}</span>
+      <span v-if="item.tender.deadline_at">Срок подачи: {{ formatDate(item.tender.deadline_at) }}</span>
+      <a v-if="tenderUrl" :href="tenderUrl" target="_blank" rel="noopener noreferrer" class="font-semibold text-brand-600 underline dark:text-brand-400">Открыть закупку</a>
+      <span v-if="item.tender.profile_name">Профиль: {{ item.tender.profile_name }}</span>
+      <span v-if="item.tender.reason">Причина: {{ item.tender.reason }}</span>
+    </div>
+
     <!-- Comment (the core decision-making field) -->
     <div
-      v-if="item.comment"
+      v-if="displayComment"
       class="mx-4 mb-3 px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-700/50 border border-slate-100 dark:border-slate-700"
     >
       <p
         class="whitespace-pre-line text-sm text-slate-700 dark:text-slate-200 leading-relaxed"
         :class="{ 'line-clamp-3': !isCommentExpanded }"
       >
-        {{ item.comment }}
+        {{ displayComment }}
       </p>
       <button
         v-if="hasLongComment"

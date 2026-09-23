@@ -4,7 +4,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
-from sqlalchemy import func, or_, and_, delete, inspect
+from sqlalchemy import String, cast, func, or_, and_, delete, inspect
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import NO_VALUE, flag_modified
 
@@ -2375,6 +2375,38 @@ class OrderService:
         return OrderService._clean_order_title(tender.get("customer_name"))
 
     @staticmethod
+    def _lead_inbox_tender(order: Order):
+        from schemas import LeadsInboxTenderResponse
+
+        if order.lead_source != LeadSource.BELZAKUPKI:
+            return None
+        meta = order.technical_meta if isinstance(order.technical_meta, dict) else {}
+        source_meta = meta.get("belzakupki")
+        if not isinstance(source_meta, dict):
+            return None
+        tender = source_meta.get("tender")
+        if not isinstance(tender, dict):
+            return None
+        matches = source_meta.get("matches")
+        match = next(
+            (value for _, value in sorted(matches.items(), key=lambda pair: str(pair[0])) if isinstance(value, dict)),
+            {},
+        ) if isinstance(matches, dict) else {}
+        profile = match.get("profile") if isinstance(match.get("profile"), dict) else {}
+        raw_deadline = tender.get("deadline_at")
+        try:
+            deadline = datetime.fromisoformat(str(raw_deadline).replace("Z", "+00:00")) if raw_deadline else None
+        except ValueError:
+            deadline = None
+        return LeadsInboxTenderResponse(
+            source=str(tender.get("source") or "").strip() or None,
+            url=str(tender.get("url") or "").strip() or None,
+            deadline_at=deadline,
+            reason=str(match.get("reason") or "").strip() or None,
+            profile_name=str(profile.get("name") or "").strip() or None,
+        )
+
+    @staticmethod
     async def get_leads_inbox(
         session: AsyncSession,
         *,
@@ -2382,6 +2414,8 @@ class OrderService:
         scope: str = "active",
         page: int = 1,
         limit: int = 50,
+        search: Optional[str] = None,
+        source: Optional[LeadSource] = None,
     ):
         """Return triage inbox items based on scope.
 
@@ -2424,15 +2458,36 @@ class OrderService:
         stmt = stmt.where(*scope_filters)
         count_stmt = count_stmt.where(*scope_filters)
 
+        if source is not None:
+            stmt = stmt.where(Order.lead_source == source)
+            count_stmt = count_stmt.where(Order.lead_source == source)
+
+        if search and search.strip():
+            # Treat wildcard characters as literal search text.
+            term = search.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            pattern = f"%{term}%"
+            search_clause = or_(
+                Order.title.ilike(pattern, escape="\\"),
+                Order.comment.ilike(pattern, escape="\\"),
+                cast(Order.id, String).ilike(pattern, escape="\\"),
+                Customer.name.ilike(pattern, escape="\\"),
+                Customer.full_legal_name.ilike(pattern, escape="\\"),
+                Customer.phone.ilike(pattern, escape="\\"),
+                Customer.email.ilike(pattern, escape="\\"),
+                Customer.inn.ilike(pattern, escape="\\"),
+            )
+            stmt = stmt.where(search_clause)
+            count_stmt = count_stmt.where(search_clause)
+
         if scope == "active":
             # new_lead orders float to top, then newest first
             priority_expr = sa_case(
                 (Order.status == OrderStatus.NEW_LEAD, 0),
                 else_=1,
             )
-            stmt = stmt.order_by(priority_expr, Order.created_at.desc())
+            stmt = stmt.order_by(priority_expr, Order.created_at.desc(), Order.id.desc())
         else:
-            stmt = stmt.order_by(Order.created_at.desc())
+            stmt = stmt.order_by(Order.created_at.desc(), Order.id.desc())
 
         total_result = await session.execute(count_stmt)
         total = int(total_result.scalar() or 0)
@@ -2479,6 +2534,7 @@ class OrderService:
                 service_type=OrderService._lead_inbox_meta_text(order, "service_type"),
                 equipment_class=OrderService._lead_inbox_meta_text(order, "equipment_class"),
                 marketing_source=OrderService._lead_inbox_meta_text(order, "marketing_source"),
+                tender=OrderService._lead_inbox_tender(order),
                 attachment_count=attachment_counts.get(int(order.id or 0), 0),
             )
             for order in orders

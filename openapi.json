@@ -17511,6 +17511,39 @@
               "default": 50,
               "title": "Limit"
             }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/LeadSource"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
           }
         ],
         "responses": {
@@ -37889,6 +37922,21 @@
         ],
         "title": "LeadResponse"
       },
+      "LeadSource": {
+        "type": "string",
+        "enum": [
+          "site",
+          "bot",
+          "phone",
+          "email",
+          "manager",
+          "referral",
+          "belzakupki",
+          "other"
+        ],
+        "title": "LeadSource",
+        "description": "\u0418\u0441\u0442\u043e\u0447\u043d\u0438\u043a \u043b\u0438\u0434\u0430 - \u043e\u0442\u043a\u0443\u0434\u0430 \u043f\u0440\u0438\u0448\u0451\u043b \u043a\u043b\u0438\u0435\u043d\u0442"
+      },
       "LeadUpdatePayload": {
         "properties": {
           "status": {
@@ -38270,6 +38318,16 @@
             "type": "integer",
             "title": "Attachment Count",
             "default": 0
+          },
+          "tender": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LeadsInboxTenderResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -38305,6 +38363,68 @@
           "meta"
         ],
         "title": "LeadsInboxListResponse"
+      },
+      "LeadsInboxTenderResponse": {
+        "properties": {
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "deadline_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline At"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "profile_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Name"
+          }
+        },
+        "type": "object",
+        "title": "LeadsInboxTenderResponse"
       },
       "ManagedDocumentArtifactAccessResponse": {
         "properties": {
