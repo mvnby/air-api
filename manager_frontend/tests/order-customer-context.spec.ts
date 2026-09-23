@@ -186,6 +186,24 @@ describe('OrderCustomerContext', () => {
     expect(wrapper.emitted('reload')).toEqual([[42]]);
   });
 
+  it('returns to customer search after an assignment error', async () => {
+    vi.useFakeTimers();
+    apiMock.patchManagerOrder.mockRejectedValueOnce(new Error('offline'));
+    const wrapper = mountContext();
+    await flushPromises();
+
+    await wrapper.get('button[aria-label="Редактировать клиента"]').trigger('click');
+    await wrapper.findAll('button').find((button) => button.text().includes('Сменить клиента'))?.trigger('click');
+    await wrapper.get('[data-testid="customer-search"]').setValue('Новый');
+    await vi.advanceTimersByTimeAsync(450);
+    await flushPromises();
+    await wrapper.get('[data-testid="assign-customer-22"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="customer-search"]').exists()).toBe(true);
+    expect(wrapper.emitted('toast')).toContainEqual([{ message: 'Ошибка смены клиента: offline', type: 'error' }]);
+  });
+
   it('offers company-name address suggestions only after an explicit request and selection', async () => {
     suggestAddress.mockResolvedValue({
       items: [{ value: 'Минск, проспект Победителей, 1', title: 'Минск, проспект Победителей, 1' }],
