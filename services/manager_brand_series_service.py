@@ -235,25 +235,27 @@ class ManagerBrandSeriesOperations(ManagerBrandSeriesFeatureOperations):
                 feature_ids=payload.get("brand_feature_ids"),
             )
 
-        await CatalogInvalidationCommitService.commit_registered_global_mutation(
-            session,
-            producer="manager_brand.update_brand_series",
-            changed=entity_changed or relation_changed,
-            brand_slugs=[brand.slug],
-        )
-        await session.refresh(series)
-
+        # Capture this mutation's response while the series row is still locked.
+        # After commit, another writer may already have replaced its assignments.
+        await session.flush()
         products_count = (
             await session.execute(
                 select(func.count(Product.id)).where(Product.series_id == series.id)
             )
         ).scalar_one()
         feature_map = await cls._load_series_brand_features(session, [int(series.id or 0)])
-        return cls._serialize_series(
+        response = cls._serialize_series(
             series,
             products_count=int(products_count or 0),
             brand_features=feature_map.get(int(series.id or 0), []),
         )
+        await CatalogInvalidationCommitService.commit_registered_global_mutation(
+            session,
+            producer="manager_brand.update_brand_series",
+            changed=entity_changed or relation_changed,
+            brand_slugs=[brand.slug],
+        )
+        return response
 
     @classmethod
     async def apply_series_gallery_to_products(

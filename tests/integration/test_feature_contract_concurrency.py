@@ -96,7 +96,7 @@ async def test_postgres_concurrent_featured_assignments_keep_max_three(db_engine
 
 
 @pytest.mark.asyncio
-async def test_postgres_concurrent_series_replacements_remain_coherent(db_engine):
+async def test_postgres_concurrent_series_replacements_remain_coherent(db_engine, monkeypatch):
     assert db_engine.dialect.name == "postgresql"
     factory = sessionmaker(bind=db_engine, class_=AsyncSession, expire_on_commit=False)
     async with factory() as setup:
@@ -144,6 +144,16 @@ async def test_postgres_concurrent_series_replacements_remain_coherent(db_engine
         for feature_id in [feature_ids[0], feature_ids[1], feature_ids[3]]
     ]
     barrier = asyncio.Barrier(2)
+    committed = asyncio.Barrier(2)
+    original_commit = AsyncSession.commit
+
+    async def commit_then_allow_competing_writer(session):
+        await original_commit(session)
+        # Release both row locks before either request can do post-commit reads.
+        # This makes the response race deterministic instead of scheduler-dependent.
+        await committed.wait()
+
+    monkeypatch.setattr(AsyncSession, "commit", commit_then_allow_competing_writer)
 
     async def replace(assignments):
         async with factory() as session:
