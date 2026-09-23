@@ -91,6 +91,22 @@ class DocumentLegalEntity(SQLModel, table=True):
     )
 
 
+class DocumentConditionPreset(SQLModel, table=True):
+    """Reusable clause shared by managers of one tenant."""
+
+    __tablename__ = "document_condition_preset"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "normalized_text", name="uq_document_condition_preset_tenant_text"),
+        CheckConstraint("length(trim(text)) > 0", name="ck_document_condition_preset_text_nonempty"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: int = Field(foreign_key="tenant.id", nullable=False, index=True)
+    text: str = Field(sa_column=Column(String(1000), nullable=False))
+    normalized_text: str = Field(sa_column=Column(String(1000), nullable=False))
+    created_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
 class DocumentArtifact(SQLModel, table=True):
     """Immutable stored bytes produced from a document/template snapshot."""
 

@@ -64,7 +64,7 @@ describe('OrderDocumentsWorkspace', () => {
     expect(wrapper.get('a[href^="viber://"]').attributes('href')).toContain('375291112233');
   });
 
-  it('marks a company without a base document as incomplete', () => {
+  it('offers document creation without requiring a contract first', () => {
     const wrapper = shallowMount(OrderDocumentsWorkspace, {
       props: {
         order: {
@@ -81,7 +81,7 @@ describe('OrderDocumentsWorkspace', () => {
 
     const section = wrapper.getComponent({ name: 'OrderDrawerSection' });
     expect(section.props('summary')).toBe('Документов нет');
-    expect(section.props('hasError')).toBe(true);
+    expect(section.props('hasError')).toBe(false);
   });
 
   it('mounts the Google editor only on first use and keeps it mounted when returning to CRM documents', async () => {

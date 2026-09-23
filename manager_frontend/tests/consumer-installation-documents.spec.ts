@@ -83,7 +83,7 @@ describe('consumer installation documents', () => {
     const wrapper = await mountConsumerWorkspace();
     await wrapper.get('[data-testid="installation-two-stages-toggle"]').trigger('click');
     await wrapper.get('[data-testid="installation-first-stage-amount"]').setValue('3000');
-    await wrapper.get('[data-testid="native-document-type"]').setValue(documentType);
+    await wrapper.get(`[data-testid="native-document-type-${documentType}"]`).trigger('click');
     await flushPromises();
     await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
     await flushPromises();
@@ -204,7 +204,7 @@ describe('consumer installation documents', () => {
     await flushPromises();
     expect(wrapper.get<HTMLInputElement>('[data-testid="consumer-equipment-brand"]').element.value).toBe('Новая модель');
     expect(wrapper.get<HTMLInputElement>('[data-testid="consumer-equipment-serial"]').element.value).toBe('');
-    await wrapper.get('[data-testid="native-document-type"]').setValue('b2c_customer_equipment_installation_act');
+    await wrapper.get('[data-testid="native-document-type-b2c_customer_equipment_installation_act"]').trigger('click');
     await flushPromises();
     expect(wrapper.get<HTMLInputElement>('[data-testid="consumer-equipment-brand"]').element.value).toBe('');
   });

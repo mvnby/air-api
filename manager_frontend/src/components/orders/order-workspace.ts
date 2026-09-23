@@ -1,4 +1,4 @@
-import type { ManagerOrderDocumentItem } from '../../client';
+import type { ManagedDocumentItem, ManagerOrderDocumentItem } from '../../client';
 import { EXECUTION_STATUS_LABELS, NEGOTIATION_STATUS_LABELS, formatRelativeAge } from './order-utils';
 import { normalizeProposalStatus, type ProposalLifecycleStatus } from './proposal-lifecycle';
 
@@ -72,6 +72,7 @@ export type OrderWorkspaceInput = {
   serviceCount: number;
   linkedEquipmentCount: number;
   documents: ManagerOrderDocumentItem[];
+  managedDocuments?: ManagedDocumentItem[];
   documentEmailStatus?: 'unknown' | 'none' | 'pending' | 'sent' | 'failed';
   sentDocumentTypes?: string[];
   missingReferencedInvoice?: string | null;
@@ -145,13 +146,18 @@ export const buildOrderWorkspaceViewModel = (input: OrderWorkspaceInput): OrderW
   const blockers: string[] = [];
   if (!input.productCount && !input.serviceCount) blockers.push('Смета не заполнена');
   if (input.balance > 0) blockers.push(`Остаток ${Math.round(input.balance).toLocaleString('ru-RU')} BYN`);
-  if (inExecution && substatus === 'work_done' && !input.documents.length) blockers.push('Нет закрывающих документов');
   if (input.missingReferencedInvoice) blockers.push(`Не найден счёт ${input.missingReferencedInvoice} из назначения платежа`);
 
   const proposalStatus = normalizeProposalStatus(input.activeProposalStatus);
   const hasActiveProposal = Boolean(input.activeProposalId);
   const proposalHasValidLines = Number(input.activeProposalLineCount || 0) > 0 && Number(input.activeProposalTotal || 0) > 0;
   const sentDocumentTypes = new Set(input.sentDocumentTypes || []);
+  const activeManagedDocuments = (input.managedDocuments || []).filter((item) => !['void', 'replaced'].includes(item.status));
+  const hasManagedDraft = activeManagedDocuments.some((item) => item.status === 'draft');
+  const hasManagedIssued = activeManagedDocuments.some((item) => item.status === 'issued');
+  const hasManagedSent = activeManagedDocuments.some((item) => ['sent', 'signed'].includes(item.status));
+  const documentCount = new Set([...input.documents.map((item) => item.id), ...activeManagedDocuments.map((item) => item.id)]).size;
+  if (inExecution && substatus === 'work_done' && !documentCount) blockers.push('Нет закрывающих документов');
   const createdDocumentTypes = new Set(input.documents.map((item) => item.doc_type));
   const hasAlternativeDocuments = createdDocumentTypes.has('invoice') || createdDocumentTypes.has('contract');
 
@@ -159,6 +165,8 @@ export const buildOrderWorkspaceViewModel = (input: OrderWorkspaceInput): OrderW
   if (isClosed) nextAction = { label: 'Проверить историю', target: 'documents', tone: 'slate', command: 'open' };
   else if (!inExecution && (sentDocumentTypes.has('invoice') || substatus === 'awaiting_payment')) nextAction = { label: `Ожидать оплату ${Math.round(input.balance).toLocaleString('ru-RU')} BYN`, target: 'payments', tone: 'emerald', command: 'open' };
   else if (!inExecution && (sentDocumentTypes.has('contract') || substatus === 'awaiting_signature')) nextAction = { label: 'Ожидать подписанный договор', target: 'documents', tone: 'amber', command: 'open' };
+  else if (!inExecution && hasManagedIssued) nextAction = { label: 'Отправить документ', target: 'documents', tone: 'teal', command: 'open' };
+  else if (!inExecution && hasManagedDraft) nextAction = { label: 'Проверить черновик', target: 'documents', tone: 'amber', command: 'open' };
   else if (!inExecution && hasAlternativeDocuments) nextAction = {
     label: 'Перейти к документам',
     target: 'documents',
@@ -166,6 +174,7 @@ export const buildOrderWorkspaceViewModel = (input: OrderWorkspaceInput): OrderW
     command: 'open',
   };
   else if (!inExecution && (sentDocumentTypes.has('offer') || substatus === 'proposal_sent')) nextAction = { label: 'Зафиксировать ответ', target: 'proposal', tone: 'amber', command: 'record_proposal_response' };
+  else if (!inExecution && documentCount) nextAction = { label: 'Перейти к документам', target: 'documents', tone: 'sky', command: 'open' };
   else if (!inExecution && !hasActiveProposal) nextAction = { label: 'Создать предложение', target: 'proposal', tone: 'sky', command: 'create_proposal' };
   else if (!inExecution && proposalStatus === 'draft' && !proposalHasValidLines) nextAction = { label: 'Заполнить предложение', target: 'proposal', tone: 'sky', command: 'open' };
   else if (!inExecution && proposalStatus === 'draft') nextAction = { label: 'Завершить подготовку', target: 'proposal', tone: 'sky', command: 'finish_proposal' };
@@ -180,7 +189,12 @@ export const buildOrderWorkspaceViewModel = (input: OrderWorkspaceInput): OrderW
   else if (substatus === 'needs_schedule' || substatus === 'scheduled') nextAction = { label: 'Открыть планирование', target: 'planning', tone: 'teal', command: 'open' };
   else if (substatus === 'work_done' || substatus === 'awaiting_documents') {
     if (input.missingReferencedInvoice) nextAction = { label: `Проверить счёт ${input.missingReferencedInvoice}`, target: 'documents', tone: 'amber', command: 'open' };
-    else if (!input.documents.length) nextAction = { label: 'Создать комплект документов', target: 'documents', tone: 'teal', command: 'open' };
+    else if (!documentCount) nextAction = { label: 'Создать комплект документов', target: 'documents', tone: 'teal', command: 'open' };
+    else if (hasManagedDraft) nextAction = { label: 'Проверить черновик', target: 'documents', tone: 'amber', command: 'open' };
+    else if (hasManagedIssued) nextAction = { label: 'Отправить документы', target: 'documents', tone: 'teal', command: 'open' };
+    else if (hasManagedSent) nextAction = input.balance > 0
+      ? { label: `Ожидать оплату ${Math.round(input.balance).toLocaleString('ru-RU')} BYN`, target: 'payments', tone: 'emerald', command: 'open' }
+      : { label: 'Проверить завершение заказа', target: 'payments', tone: 'emerald', command: 'open' };
     else if (input.documentEmailStatus === 'unknown') nextAction = { label: 'Проверить комплект документов', target: 'documents', tone: 'amber', command: 'open' };
     else if (input.documentEmailStatus === 'failed') nextAction = { label: 'Повторить отправку документов', target: 'documents', tone: 'rose', command: 'open' };
     else if (input.documentEmailStatus === 'pending') nextAction = { label: 'Проверить отправку документов', target: 'documents', tone: 'amber', command: 'open' };
@@ -230,16 +244,19 @@ export const buildOrderWorkspaceViewModel = (input: OrderWorkspaceInput): OrderW
       {
         id: 'documents',
         label: 'Документы',
-        status: input.documents.length ? `${input.documents.length} ${plural(input.documents.length, 'документ', 'документа', 'документов')}` : 'Не созданы',
+        status: documentCount ? `${documentCount} ${plural(documentCount, 'документ', 'документа', 'документов')}` : 'Не созданы',
         detail: input.missingReferencedInvoice
           ? `Счёт ${input.missingReferencedInvoice} из платежа не найден`
+          : hasManagedDraft ? 'Черновик нужно проверить и выпустить'
+          : hasManagedIssued ? 'Выпущен · готов к отправке'
+          : hasManagedSent ? 'Отправлен клиенту'
           : input.documents.length
             ? `${documentTypesLabel(input.documents)} · ${documentDeliveryLabel(input.documentEmailStatus)}`
             : 'Создайте документы из актуальной сметы',
         actionLabel: input.missingReferencedInvoice
           ? 'Проверить счёт'
-          : input.documents.length ? 'Открыть комплект' : 'Создать документы',
-        tone: input.missingReferencedInvoice || input.documentEmailStatus === 'failed' ? 'rose' : input.documentEmailStatus === 'unknown' || !input.documents.length ? 'amber' : 'teal',
+          : documentCount ? 'Открыть комплект' : 'Создать документы',
+        tone: input.missingReferencedInvoice || input.documentEmailStatus === 'failed' ? 'rose' : hasManagedDraft || (!documentCount && input.documentEmailStatus === 'unknown') ? 'amber' : 'teal',
         target: 'documents',
       },
       {

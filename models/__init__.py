@@ -47,6 +47,7 @@ from .catalog_revision import StorefrontCatalogRevision
 from .content import Article, GlobalConfig
 from .document import (
     DocumentArtifact,
+    DocumentConditionPreset,
     DocumentLegalEntity,
     DocumentNumberPolicy,
     DocumentNumberReservation,
@@ -181,6 +182,7 @@ __all__ = [
     "DocumentRoleType",
     "DocumentArtifact",
     "DocumentLegalEntity",
+    "DocumentConditionPreset",
     "DocumentNumberPolicy",
     "DocumentNumberReservation",
     "DocumentNumberSequence",

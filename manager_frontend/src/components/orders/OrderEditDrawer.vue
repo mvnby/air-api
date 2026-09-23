@@ -241,6 +241,8 @@ const catalogNavigation = useOrderCatalogNavigation({
 const {
   documentEmailStatus,
   loadOrderEmails,
+  loadManagedDocuments,
+  managedDocuments,
   missingReferencedInvoice,
   orderDocuments,
   resetOrderEmails,
@@ -332,6 +334,7 @@ const orderWorkspace = computed(() => buildOrderWorkspaceViewModel({
   serviceCount: serviceLines.value.length,
   linkedEquipmentCount: props.order?.linked_equipment_count || 0,
   documents: orderDocuments.value,
+  managedDocuments: managedDocuments.value,
   documentEmailStatus: documentEmailStatus.value,
   sentDocumentTypes: sentDocumentTypes.value,
   missingReferencedInvoice: missingReferencedInvoice.value,
@@ -343,13 +346,17 @@ const beforeDocumentGenerate = orderSaving.beforeDocumentGenerate;
 
 const handleDocumentPanelToast = (payload: { message: string; type?: 'success' | 'error' }) => {
   setToast(payload.message, payload.type || 'success');
-  if (props.order?.id) window.setTimeout(() => void loadOrderEmails(props.order!.id), 500);
+  if (props.order?.id) window.setTimeout(() => {
+    void loadOrderEmails(props.order!.id);
+    void loadManagedDocuments(props.order!.id);
+  }, 500);
 };
 
 const refreshOrderFromDocumentsPanel = () => {
   if (props.order?.id) {
     emit('reload', props.order.id);
     void loadOrderEmails(props.order.id);
+    void loadManagedDocuments(props.order.id);
   }
 };
 
@@ -385,6 +392,7 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   await Promise.all([
     loadOrderSupplyRequests(order.id),
     loadOrderEmails(order.id),
+    loadManagedDocuments(order.id),
   ]);
 };
 
@@ -536,6 +544,8 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
                 ref="documentsWorkspaceRef"
                 v-model:expanded="expandedDrawerSections.documents"
                 :order="order"
+                :managed-documents="managedDocuments"
+                :workflow-type="workflowType"
                 :active-proposal-id="activeProposalId"
                 :product-lines="productLines"
                 :total="totalPreview"
