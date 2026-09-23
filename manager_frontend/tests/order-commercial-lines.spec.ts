@@ -158,6 +158,7 @@ describe('OrderProductLinesEditor', () => {
         descriptionMode: 'short', serviceOptions: [], serviceLookupLoading: false,
         activeSuggestionIndex: null, estimateOptions: [], estimateOptionsLoading: false,
         importingEstimate: false, formatServiceKind: () => 'монтаж',
+        workflow: 'sales_installation',
       },
     });
     mountedWrappers.push(productWrapper, serviceWrapper);
@@ -185,6 +186,7 @@ describe('OrderServiceLinesEditor', () => {
         estimateOptionsLoading: false,
         importingEstimate: false,
         formatServiceKind: () => 'монтаж',
+        workflow: 'sales_installation',
       },
     });
     mountedWrappers.push(wrapper);
@@ -195,6 +197,6 @@ describe('OrderServiceLinesEditor', () => {
 
     expect(wrapper.emitted('select')).toEqual([[{ index: 0, option: serviceOption }]]);
     expect(wrapper.emitted('importEstimate')).toEqual([[]]);
-    expect(wrapper.emitted('add')).toEqual([[]]);
+    expect(wrapper.find('[data-testid="service-catalog-picker"]').exists()).toBe(true);
   });
 });

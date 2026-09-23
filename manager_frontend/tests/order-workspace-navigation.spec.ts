@@ -14,9 +14,8 @@ const sections = () => ({
 });
 
 const createNavigation = (status = 'negotiation') => {
-  const documentsWorkspaceRef = ref({ openSend: vi.fn(), openCreate: vi.fn() });
+  const documentsWorkspaceRef = ref({ openNative: vi.fn() });
   const equipmentPanelRef = ref({ collapse: vi.fn(), expand: vi.fn() });
-  const setToast = vi.fn();
   const expandedSections = ref(sections());
   const navigation = useOrderWorkspaceNavigation({
     status: ref(status),
@@ -24,9 +23,8 @@ const createNavigation = (status = 'negotiation') => {
     expandedSections,
     equipmentPanelRef,
     documentsWorkspaceRef,
-    setToast,
   });
-  return { navigation, expandedSections, documentsWorkspaceRef, setToast };
+  return { navigation, expandedSections, documentsWorkspaceRef };
 };
 
 describe('useOrderWorkspaceNavigation', () => {
@@ -41,19 +39,11 @@ describe('useOrderWorkspaceNavigation', () => {
     expect(navigation.activeWorkspaceTarget.value).toBeNull();
   });
 
-  it('routes proposal sending to create or send based on an existing offer', async () => {
-    const { navigation, documentsWorkspaceRef, setToast } = createNavigation();
-    const proposal = { id: 17 } as any;
-
-    await navigation.openProposalSend(proposal, []);
-    expect(documentsWorkspaceRef.value.openCreate).toHaveBeenCalledOnce();
-    expect(setToast).toHaveBeenCalledWith(
-      'Сначала создайте коммерческое предложение для активного варианта',
-      'error',
-    );
-
-    await navigation.openProposalSend(proposal, [{ doc_type: 'offer', proposal_id: 17 }] as any);
-    expect(documentsWorkspaceRef.value.openSend).toHaveBeenCalledOnce();
+  it('opens CRM documents from the proposal without launching an email', async () => {
+    const { navigation, documentsWorkspaceRef } = createNavigation();
+    await navigation.openWorkspaceTarget('documents');
+    expect(navigation.activeWorkspaceSection.value).toBe('documents');
+    expect(documentsWorkspaceRef.value.openNative).toHaveBeenCalledOnce();
   });
 
   it('opens the execution payment workspace from the focused payments tab', () => {

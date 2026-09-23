@@ -6,6 +6,7 @@ import OrderDrawerSection from './OrderDrawerSection.vue';
 import OrderProductLinesEditor from './OrderProductLinesEditor.vue';
 import OrderProposalToolbar from './OrderProposalToolbar.vue';
 import OrderServiceLinesEditor from './OrderServiceLinesEditor.vue';
+import type { OrderWorkflowType } from './order-workspace';
 
 const props = defineProps<{
   commercial: ReturnType<typeof useOrderCommercialEditor>;
@@ -18,9 +19,11 @@ const props = defineProps<{
   catalogOpening?: boolean;
   catalogNeedsSave?: boolean;
   formatServiceKind: (kind?: string | null) => string;
+  workflow: OrderWorkflowType;
+  customerId?: number | null;
 }>();
 
-const emit = defineEmits<{ send: []; catalog: [] }>();
+const emit = defineEmits<{ catalog: []; documents: [] }>();
 const expanded = defineModel<boolean>('expanded', { required: true });
 const toolbarRef = ref<InstanceType<typeof OrderProposalToolbar> | null>(null);
 const commercial = reactive(props.commercial);
@@ -55,7 +58,7 @@ defineExpose({
         @rename="proposal.renameProposal"
         @archive="proposal.archiveProposal"
         @change-status="proposal.changeActiveProposalStatus"
-        @send="emit('send')"
+        @send="emit('documents')"
       />
 
       <div v-if="proposal.activeProposalLocked" class="mb-3 flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
@@ -109,6 +112,8 @@ defineExpose({
           :estimate-options-loading="commercial.estimateOptionsLoading"
           :importing-estimate="commercial.importingEstimate"
           :format-service-kind="formatServiceKind"
+          :workflow="workflow"
+          :customer-id="customerId"
           @focus="commercial.onServiceTitleFocus"
           @input="commercial.onServiceTitleInput"
           @blur="commercial.onServiceTitleBlur"
@@ -116,12 +121,15 @@ defineExpose({
           @description-mode="commercial.setServiceLineDescriptionMode($event.index, $event.mode)"
           @remove="commercial.removeServiceLine"
           @add="commercial.addServiceLine"
+          @add-tariff="commercial.addServiceTariff"
+          @append-estimate="commercial.addCreatedEstimate($event.id, $event.lines)"
           @toggle-estimate="commercial.toggleEstimateImport"
           @import-estimate="commercial.applyEstimateToServices"
           @load-estimates="commercial.loadEstimateOptions"
           @remember-description-mode="commercial.setDefaultServiceDescriptionMode"
         />
       </fieldset>
+      <button v-if="commercial.total > 0" type="button" class="btn-mini-outline mt-5 w-full justify-center" data-testid="proposal-to-documents" @click="emit('documents')">Перейти к документам →</button>
     </div>
   </OrderDrawerSection>
 </template>

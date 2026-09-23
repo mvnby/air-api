@@ -384,6 +384,27 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
     editingServiceLineIndex.value = serviceLines.value.length - 1;
   };
 
+  const addServiceTariff = (option: ManagerQuickTariffResponse) => {
+    addServiceLine();
+    selectServiceTariffForLine(serviceLines.value.length - 1, option);
+    editingServiceLineIndex.value = null;
+  };
+
+  const appendEstimateLines = (lines: Array<{ service_id?: number | null; title: string; quantity: number; price: number; cost?: number | null }>) => {
+    serviceLines.value.push(...lines.map((line) => ({
+      service_id: line.service_id ?? null,
+      title: line.title || 'Услуга',
+      quantity: Math.max(1, Number(line.quantity || 1)),
+      price: Number(line.price || 0),
+      cost: Number(line.cost || 0),
+    })));
+  };
+
+  const addCreatedEstimate = (id: number, lines: Array<{ service_id?: number | null; title: string; quantity: number; price: number; cost?: number | null }>) => {
+    appendEstimateLines(lines);
+    setToast(`Смета #${id} сохранена и добавлена в заказ`);
+  };
+
   const debouncedLoadServiceTariffOptions = useDebounceFn(async (index: number, query: string, requestId: number) => {
     try {
       serviceTariffLookupLoading.value = true;
@@ -447,15 +468,13 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
   const loadEstimateOptions = async () => {
     estimateOptionsLoading.value = true;
     try {
-      const response = await api.listManagerServiceEstimates(1, 10);
+      const response = await api.listManagerServiceEstimates(1, 100);
       estimateOptions.value = response.items;
       if (!response.items.length) {
         selectedEstimateId.value = null;
         return;
       }
-      if (!selectedEstimateId.value || !response.items.some((item) => item.id === selectedEstimateId.value)) {
-        selectedEstimateId.value = response.items[0]!.id;
-      }
+      if (!response.items.some((item) => item.id === selectedEstimateId.value)) selectedEstimateId.value = null;
     } catch (error) {
       console.warn('Failed to load service estimates', error);
       estimateOptions.value = [];
@@ -489,14 +508,8 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
         setToast('В выбранной смете нет строк', 'error');
         return;
       }
-      const mappedLines: ServiceLine[] = response.services.map((line) => ({
-        service_id: line.service_id ?? null,
-        title: line.title || 'Услуга',
-        quantity: Math.max(1, Number(line.quantity || 1)),
-        price: Number(line.price || 0),
-        cost: Number(line.cost || 0),
-      }));
-      serviceLines.value = [...serviceLines.value, ...mappedLines];
+      const mappedLines = response.services;
+      appendEstimateLines(mappedLines);
       showEstimateImport.value = false;
       setToast(response.mode === 'collapsed'
         ? `Смета #${response.estimate_id} добавлена одной строкой`
@@ -605,6 +618,9 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
     activeSuggestionIndex,
     addProductLine,
     addServiceLine,
+    addServiceTariff,
+    addCreatedEstimate,
+    appendEstimateLines,
     applyEstimateToServices,
     applyTariffTemplateToLine,
     buildLinesPayload,

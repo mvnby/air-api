@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import type { ManagerQuickTariffResponse, ManagerServiceEstimateResponse } from '../../client';
+import OrderServiceCatalogPicker from './OrderServiceCatalogPicker.vue';
+import type { OrderWorkflowType } from './order-workspace';
 import ServiceDescriptionModeSwitch from './ServiceDescriptionModeSwitch.vue';
 import type { ServiceLine } from './order-editor-types';
 import { formatMoney } from './order-utils';
@@ -16,6 +18,8 @@ const props = defineProps<{
   estimateOptionsLoading: boolean;
   importingEstimate: boolean;
   formatServiceKind: (kind?: string | null) => string;
+  workflow: OrderWorkflowType;
+  customerId?: number | null;
 }>();
 
 const emit = defineEmits<{
@@ -26,6 +30,8 @@ const emit = defineEmits<{
   descriptionMode: [payload: { index: number; mode: ServiceDescriptionMode }];
   remove: [index: number];
   add: [];
+  addTariff: [option: ManagerQuickTariffResponse];
+  appendEstimate: [payload: { id: number; lines: Array<{ service_id?: number | null; title: string; quantity: number; price: number; cost?: number | null }> }];
   toggleEstimate: [];
   importEstimate: [];
   loadEstimates: [];
@@ -33,6 +39,19 @@ const emit = defineEmits<{
 }>();
 
 const lines = defineModel<ServiceLine[]>('lines', { required: true });
+const showCatalog = ref(false);
+const chooseTariff = (option: ManagerQuickTariffResponse) => {
+  emit('addTariff', option);
+  showCatalog.value = false;
+};
+const createEstimate = (payload: { id: number; lines: Array<{ service_id?: number | null; title: string; quantity: number; price: number; cost?: number | null }> }) => {
+  emit('appendEstimate', payload);
+  showCatalog.value = false;
+};
+const addCustom = () => {
+  emit('add');
+  showCatalog.value = false;
+};
 const demoReadOnly = useDemoReadOnly();
 const editingIndex = defineModel<number | null>('editingIndex', { required: true });
 const showEstimateImport = defineModel<boolean>('showEstimateImport', { required: true });
@@ -128,9 +147,18 @@ const updatePreferredMode = (mode: ServiceDescriptionMode) => {
     </div>
 
     <div class="mt-3 grid grid-cols-2 gap-2">
-      <button type="button" data-testid="add-service-line" data-order-usage="order_service_add" class="btn-mini justify-center" @click="emit('add')">+ услуга</button>
+      <button type="button" data-testid="add-service-line" data-order-usage="order_service_add" class="btn-mini justify-center" @click="showCatalog = !showCatalog">+ услуга</button>
       <button type="button" class="btn-mini-outline justify-center" :class="showEstimateImport ? 'border-brand-200 bg-brand-50 text-brand-700' : ''" @click="emit('toggleEstimate')">Из сметы</button>
     </div>
+    <OrderServiceCatalogPicker
+      v-if="showCatalog"
+      :workflow="workflow"
+      :customer-id="customerId"
+      @choose="chooseTariff"
+      @custom="addCustom"
+      @created-estimate="createEstimate"
+      @close="showCatalog = false"
+    />
     <div v-if="showEstimateImport" class="mt-3 grid gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3">
       <div class="grid gap-2 md:grid-cols-3">
         <label class="space-y-1 md:col-span-3">
@@ -147,8 +175,9 @@ const updatePreferredMode = (mode: ServiceDescriptionMode) => {
       <div class="flex flex-col gap-2 sm:flex-row">
         <button type="button" data-testid="import-estimate" class="btn-mini justify-center whitespace-nowrap" :disabled="importingEstimate || !selectedEstimateId" @click="emit('importEstimate')">{{ importingEstimate ? 'Добавляю...' : 'Добавить из сметы' }}</button>
         <button type="button" class="btn-mini-outline justify-center whitespace-nowrap" :disabled="estimateOptionsLoading" title="Обновить список смет" @click="emit('loadEstimates')">Обновить</button>
+        <button type="button" class="btn-mini-outline justify-center whitespace-nowrap" @click="showEstimateImport = false; showCatalog = true">Создать новую смету</button>
       </div>
-      <p class="text-xs text-gray-500">Показываем 10 последних смет. Структура определяет количество строк, а формат текста — краткую или подробную формулировку.</p>
+      <p class="text-xs text-gray-500">Показываем до 100 последних смет. Структура определяет количество строк, а формат текста — краткую или подробную формулировку.</p>
     </div>
   </section>
 </template>

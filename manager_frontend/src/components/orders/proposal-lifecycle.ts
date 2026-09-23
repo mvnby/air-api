@@ -41,7 +41,7 @@ export const proposalPrimaryActionLabel = (value: unknown) => {
   if (!action) return '';
   return {
     finish: 'Завершить подготовку',
-    send: 'Отправить предложение',
+    send: 'Перейти к документам',
     record_response: 'Зафиксировать ответ',
     create_variant: 'Подготовить новый вариант',
   }[action];
