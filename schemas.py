@@ -2784,6 +2784,14 @@ class LeadsCounterResponse(BaseModel):
     has_new: bool
 
 
+class LeadsInboxTenderResponse(BaseModel):
+    source: Optional[str] = None
+    url: Optional[str] = None
+    deadline_at: Optional[datetime] = None
+    reason: Optional[str] = None
+    profile_name: Optional[str] = None
+
+
 class LeadsInboxItemResponse(BaseModel):
     id: int
     status: str
@@ -2806,6 +2814,7 @@ class LeadsInboxItemResponse(BaseModel):
     equipment_class: Optional[str] = None
     marketing_source: Optional[str] = None
     attachment_count: int = 0
+    tender: Optional[LeadsInboxTenderResponse] = None
 
 
 class LeadsInboxListResponse(BaseModel):

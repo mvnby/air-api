@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { LeadsCounterResponse } from '../models/LeadsCounterResponse';
 import type { LeadsInboxListResponse } from '../models/LeadsInboxListResponse';
+import type { LeadSource } from '../models/LeadSource';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -30,6 +31,8 @@ export class ManagerLeadsInboxService {
      * @param scope
      * @param page
      * @param limit
+     * @param search
+     * @param source
      * @returns LeadsInboxListResponse Successful Response
      * @throws ApiError
      */
@@ -37,6 +40,8 @@ export class ManagerLeadsInboxService {
         scope: string = 'active',
         page: number = 1,
         limit: number = 50,
+        search?: (string | null),
+        source?: (LeadSource | null),
     ): CancelablePromise<LeadsInboxListResponse> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -45,6 +50,8 @@ export class ManagerLeadsInboxService {
                 'scope': scope,
                 'page': page,
                 'limit': limit,
+                'search': search,
+                'source': source,
             },
             errors: {
                 422: `Validation Error`,

@@ -125,6 +125,7 @@ import { managerSession } from './services/manager-session';
 import { ManagerTagsService } from './client/services/ManagerTagsService';
 import { ManagerLeadsInboxService } from './client/services/ManagerLeadsInboxService';
 import type { LeadsInboxItemResponse } from './client/models/LeadsInboxItemResponse';
+import type { LeadSource } from './client/models/LeadSource';
 
 OpenAPI.WITH_CREDENTIALS = true;
 
@@ -1347,7 +1348,10 @@ export const api = {
         return await ManagerLeadsInboxService.getManagerLeadsCounter();
     },
 
-    async getLeadsInbox(scope: 'active' | 'archive' = 'active', page = 1, limit = 50) {
-        return await ManagerLeadsInboxService.getManagerLeadsInbox(scope, page, limit);
+    async getLeadsInbox(
+        scope: 'active' | 'archive' = 'active', page = 1, limit = 50,
+        search?: string, source?: LeadSource,
+    ) {
+        return await ManagerLeadsInboxService.getManagerLeadsInbox(scope, page, limit, search, source);
     },
 };

@@ -243,6 +243,7 @@ beforeAll(() => {
 beforeEach(() => {
   clearManagerSession();
   window.localStorage.clear();
+  window.sessionStorage.clear();
   vi.clearAllMocks();
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   networkFetch.mockImplementation(async () => okResponse());

@@ -4,7 +4,7 @@ import pytest
 from sqlmodel import select
 
 from core.config import settings
-from models import Customer, CustomerBranch, CustomerType, Lead, Order  # noqa: F401 - ensure SQLModel metadata includes lead table
+from models import Customer, CustomerBranch, CustomerType, Lead, LeadSource, Order, OrderStatus  # noqa: F401 - ensure SQLModel metadata includes lead table
 
 
 async def _auth_headers(async_client):
@@ -15,6 +15,24 @@ async def _auth_headers(async_client):
     assert login_resp.status_code == 200
     token = login_resp.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.mark.asyncio
+async def test_manager_inbox_filters_and_validates_source(async_client, db):
+    headers = await _auth_headers(async_client)
+    for source, title in ((LeadSource.SITE, "Монтаж"), (LeadSource.EMAIL, "Ремонт")):
+        db.add(Order(tenant_id=1, storefront_id=1, status=OrderStatus.NEW_LEAD, lead_source=source, title=title))
+    await db.commit()
+
+    response = await async_client.get(
+        "/api/manager/leads/inbox", headers=headers,
+        params={"source": "email", "search": "Ремонт", "page": 1, "limit": 1},
+    )
+    assert response.status_code == 200
+    assert response.json()["total"] == response.json()["meta"]["total"] == 1
+    assert response.json()["items"][0]["source"] == "email"
+    assert (await async_client.get("/api/manager/leads/inbox?source=invalid", headers=headers)).status_code == 422
+    assert (await async_client.get("/api/manager/leads/inbox?limit=101", headers=headers)).status_code == 422
 
 
 @pytest.mark.asyncio

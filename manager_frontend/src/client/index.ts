@@ -222,6 +222,8 @@ export type { LeadResponse } from './models/LeadResponse';
 export type { LeadsCounterResponse } from './models/LeadsCounterResponse';
 export type { LeadsInboxItemResponse } from './models/LeadsInboxItemResponse';
 export type { LeadsInboxListResponse } from './models/LeadsInboxListResponse';
+export type { LeadsInboxTenderResponse } from './models/LeadsInboxTenderResponse';
+export type { LeadSource } from './models/LeadSource';
 export type { LeadUpdatePayload } from './models/LeadUpdatePayload';
 export type { ManagedDocumentArtifactAccessResponse } from './models/ManagedDocumentArtifactAccessResponse';
 export type { ManagedDocumentArtifactItem } from './models/ManagedDocumentArtifactItem';

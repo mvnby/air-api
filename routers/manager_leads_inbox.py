@@ -12,6 +12,7 @@ from core.security import get_current_manager_tenant_scope, get_current_username
 from models.tenancy import TenantScope
 from routers.manager_operation_ids import GET_MANAGER_LEADS_COUNTER, GET_MANAGER_LEADS_INBOX
 from schemas import LeadsCounterResponse, LeadsInboxListResponse
+from models import LeadSource
 from services.order_service import OrderService
 
 router = APIRouter(prefix="/api/manager/leads", tags=["manager-leads-inbox"])
@@ -38,6 +39,8 @@ async def get_leads_inbox(
     scope: str = Query("active", pattern="^(active|archive)$"),
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=100),
+    search: str | None = Query(None, max_length=200),
+    source: LeadSource | None = Query(None),
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
@@ -53,4 +56,6 @@ async def get_leads_inbox(
         scope=scope,
         page=page,
         limit=limit,
+        search=search,
+        source=source,
     )

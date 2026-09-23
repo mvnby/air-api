@@ -98,6 +98,20 @@ afterEach(() => {
 });
 
 describe('LeadInboxCard read-only attachments', () => {
+  it('shows tender context and permits only HTTP links', async () => {
+    const wrapper = mount(LeadInboxCard, { props: { item: {
+      ...lead, source: 'belzakupki', comment: 'Тендер Belzakupki\nСрок: 2026-10-01',
+      tender: { source: 'goszakupki', url: 'https://example.test/tender', deadline_at: '2026-10-01T10:00:00', reason: 'Вентиляция', profile_name: 'Профиль 1' },
+    } } });
+    expect(wrapper.text()).toContain('Площадка: goszakupki');
+    expect(wrapper.text()).toContain('Профиль: Профиль 1');
+    expect(wrapper.text()).toContain('Срок подачи:');
+    expect(wrapper.text()).toContain('Срок: 2026-10-01');
+    expect(wrapper.get('a[href="https://example.test/tender"]').attributes('rel')).toContain('noopener');
+    await wrapper.setProps({ item: { ...lead, source: 'belzakupki', tender: { url: 'javascript:alert(1)' } } });
+    expect(wrapper.find('a[href^="javascript:"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
   it('opens photos before qualification and restores focus after the viewer closes', async () => {
     const wrapper = mountCard();
     expect(wrapper.find('[data-testid="lead-readonly-attachments"]').exists()).toBe(false);

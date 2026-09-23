@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -7,6 +7,7 @@ from schemas import ManagerOrderUpdatePayload
 from services.order_service import OrderService
 
 from models.tenancy import TenantScope
+from models.tenancy import Storefront, Tenant
 
 TEST_TENANT_SCOPE = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
 
@@ -39,6 +40,112 @@ async def test_leads_inbox_is_paginated(db):
     assert response.meta.pages == 2
     assert len(response.items) == 2
     assert [item.customer_name for item in response.items] == ["Lead 2", "Lead 1"]
+
+
+@pytest.mark.asyncio
+async def test_leads_inbox_search_and_source_filter_before_pagination_with_tenant_scope(db):
+    foreign_tenant = Tenant(slug="foreign-inbox", display_name="Foreign")
+    db.add(foreign_tenant)
+    await db.flush()
+    foreign_storefront = Storefront(tenant_id=foreign_tenant.id, slug="main", display_name="Foreign")
+    db.add(foreign_storefront)
+    await db.flush()
+
+    when = datetime(2026, 9, 1, 10)
+    for idx in range(6):
+        customer = Customer(
+            tenant_id=1,
+            name=f"Customer {idx}",
+            phone=f"+3752900001{idx:02d}",
+            email="deep@example.test" if idx == 0 else None,
+        )
+        db.add(customer)
+        await db.flush()
+        db.add(Order(
+            tenant_id=1, storefront_id=1, customer_id=customer.id,
+            status=OrderStatus.NEW_LEAD,
+            lead_source=LeadSource.EMAIL if idx < 3 else LeadSource.SITE,
+            comment="special tender" if idx == 1 else None,
+            created_at=when,
+        ))
+    foreign_customer = Customer(tenant_id=foreign_tenant.id, name="Foreign special tender", phone="+375290000199")
+    db.add(foreign_customer)
+    await db.flush()
+    db.add(Order(
+        tenant_id=foreign_tenant.id, storefront_id=foreign_storefront.id,
+        customer_id=foreign_customer.id, status=OrderStatus.NEW_LEAD,
+        lead_source=LeadSource.EMAIL, comment="special tender", created_at=when,
+    ))
+    await db.commit()
+
+    first = await OrderService.get_leads_inbox(db, tenant_scope=TEST_TENANT_SCOPE, page=1, limit=2)
+    second = await OrderService.get_leads_inbox(db, tenant_scope=TEST_TENANT_SCOPE, page=2, limit=2)
+    assert first.total == second.total == 6
+    assert [item.id for item in first.items] == sorted([item.id for item in first.items], reverse=True)
+    assert set(item.id for item in first.items).isdisjoint(item.id for item in second.items)
+
+    email = await OrderService.get_leads_inbox(db, tenant_scope=TEST_TENANT_SCOPE, page=2, limit=2, source=LeadSource.EMAIL)
+    assert email.total == email.meta.total == 3
+    assert len(email.items) == 1
+    deep = await OrderService.get_leads_inbox(db, tenant_scope=TEST_TENANT_SCOPE, page=1, limit=2, search="deep@example.test")
+    assert deep.total == 1
+    assert deep.items[0].email == "deep@example.test"
+    combined = await OrderService.get_leads_inbox(db, tenant_scope=TEST_TENANT_SCOPE, page=1, limit=2, search="special tender", source=LeadSource.EMAIL)
+    assert combined.total == 1
+    assert combined.items[0].comment == "special tender"
+    no_foreign = await OrderService.get_leads_inbox(db, tenant_scope=TEST_TENANT_SCOPE, search="Foreign special tender")
+    assert no_foreign.total == 0
+    literal_wildcard = await OrderService.get_leads_inbox(db, tenant_scope=TEST_TENANT_SCOPE, search="%")
+    assert literal_wildcard.total == 0
+
+
+@pytest.mark.asyncio
+async def test_leads_inbox_exposes_tender_context_without_changing_comment(db):
+    order = Order(
+        tenant_id=1, storefront_id=1, status=OrderStatus.NEW_LEAD,
+        lead_source=LeadSource.BELZAKUPKI, comment="Менеджерский комментарий",
+        technical_meta={"belzakupki": {
+            "tender": {"source": "goszakupki", "url": "https://example.test/tender/1", "deadline_at": "2026-10-01T10:00:00+00:00", "customer_name": "Заказчик"},
+            "matches": {"42": {"reason": "Подходит профиль", "profile": {"name": "Вентиляция"}}},
+        }},
+    )
+    db.add(order)
+    await db.commit()
+    response = await OrderService.get_leads_inbox(db, tenant_scope=TEST_TENANT_SCOPE)
+    item = response.items[0]
+    assert item.customer_name == "Заказчик"
+    assert item.comment == "Менеджерский комментарий"
+    assert item.tender.source == "goszakupki"
+    assert item.tender.url == "https://example.test/tender/1"
+    assert item.tender.deadline_at == datetime(2026, 10, 1, 10, tzinfo=timezone.utc)
+    assert item.tender.reason == "Подходит профиль"
+    assert item.tender.profile_name == "Вентиляция"
+
+
+@pytest.mark.asyncio
+async def test_leads_inbox_searches_visible_tender_customer_name_from_metadata(db):
+    for idx in range(3):
+        db.add(Order(
+            tenant_id=1, storefront_id=1, customer_id=None,
+            status=OrderStatus.NEW_LEAD, lead_source=LeadSource.BELZAKUPKI,
+            title=f"Закупка {idx}", comment="Комментарий менеджера",
+            technical_meta={"belzakupki": {"tender": {
+                "customer_name": "Управление здравоохранения" if idx < 2 else "Другое учреждение",
+            }}},
+            created_at=datetime(2026, 9, 1, 10),
+        ))
+    await db.commit()
+
+    first = await OrderService.get_leads_inbox(
+        db, tenant_scope=TEST_TENANT_SCOPE, search="здравоохранения", page=1, limit=1,
+    )
+    second = await OrderService.get_leads_inbox(
+        db, tenant_scope=TEST_TENANT_SCOPE, search="здравоохранения", page=2, limit=1,
+    )
+    assert first.total == second.total == 2
+    assert first.meta.pages == second.meta.pages == 2
+    assert first.items[0].customer_name == second.items[0].customer_name == "Управление здравоохранения"
+    assert first.items[0].id != second.items[0].id
 
 
 @pytest.mark.asyncio
