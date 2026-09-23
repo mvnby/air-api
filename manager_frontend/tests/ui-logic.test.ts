@@ -485,8 +485,8 @@ assert(
   'valid draft proposal must lead to preparation completion',
 );
 assert(
-  buildOrderWorkspaceViewModel({ ...workspaceBase, activeProposalStatus: 'ready_to_send' }).nextAction.command === 'send_proposal',
-  'ready proposal must lead to sending',
+  buildOrderWorkspaceViewModel({ ...workspaceBase, activeProposalStatus: 'ready_to_send' }).nextAction.target === 'documents',
+  'ready proposal must lead to document creation',
 );
 assert(
   buildOrderWorkspaceViewModel({ ...workspaceBase, activeProposalStatus: 'sent' }).nextAction.command === 'record_proposal_response',
@@ -507,8 +507,8 @@ assert(
     ...workspaceBase,
     activeProposalStatus: 'draft',
     documents: [invoiceDocument],
-  }).nextAction.label === 'Отправить счёт',
-  'created invoice must be sendable without forcing a commercial offer',
+  }).nextAction.label === 'Перейти к документам',
+  'created invoice must lead to the document workspace',
 );
 assert(
   buildOrderWorkspaceViewModel({
@@ -540,8 +540,8 @@ assert(
     activeProposalStatus: 'sent',
     documents: [invoiceDocument],
     sentDocumentTypes: ['offer'],
-  }).nextAction.label === 'Отправить счёт',
-  'a prepared invoice must be offered after a commercial offer was sent',
+  }).nextAction.label === 'Перейти к документам',
+  'a prepared invoice must lead to document review after a commercial offer was sent',
 );
 assert(proposalPrimaryAction('approved') === null, 'accepted proposal must not expose another proposal action');
 assert(isProposalRevisionLocked('sent'), 'sent proposal revision must be locked');

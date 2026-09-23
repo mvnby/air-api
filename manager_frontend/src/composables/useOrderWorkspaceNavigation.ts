@@ -1,12 +1,10 @@
 import { nextTick, ref, type Ref } from 'vue';
-import type { ManagerOrderDocumentItem, OrderProposalResponse } from '../client';
 import type { OrderDrawerSectionsState } from './useOrderDrawerPersistence';
 import type { OrderWorkflowType, OrderWorkspaceTarget } from '../components/orders/order-workspace';
 import type { OrderWorkspaceSection } from '../components/orders/OrderWorkspaceNav.vue';
 
-type ToastHandler = (message: string, type?: 'success' | 'error') => void;
 type EquipmentPanelHandle = { collapse: () => void; expand: () => Promise<void> | void };
-type DocumentsWorkspaceHandle = { openSend: () => void; openCreate: () => void };
+type DocumentsWorkspaceHandle = { openNative: () => void };
 
 type UseOrderWorkspaceNavigationOptions = {
   status: Readonly<Ref<string>>;
@@ -14,7 +12,6 @@ type UseOrderWorkspaceNavigationOptions = {
   expandedSections: Ref<OrderDrawerSectionsState>;
   equipmentPanelRef: Ref<EquipmentPanelHandle | null>;
   documentsWorkspaceRef: Ref<DocumentsWorkspaceHandle | null>;
-  setToast: ToastHandler;
 };
 
 export const useOrderWorkspaceNavigation = ({
@@ -23,7 +20,6 @@ export const useOrderWorkspaceNavigation = ({
   expandedSections,
   equipmentPanelRef,
   documentsWorkspaceRef,
-  setToast,
 }: UseOrderWorkspaceNavigationOptions) => {
   const executionWorkspaceOpen = ref(false);
   const activeWorkspaceTarget = ref<OrderWorkspaceTarget | null>(null);
@@ -74,6 +70,7 @@ export const useOrderWorkspaceNavigation = ({
       else expandedSections.value.payments = true;
     }
     await nextTick();
+    if (target === 'documents') documentsWorkspaceRef.value?.openNative();
     if (target === 'equipment') {
       expandedSections.value.proposals = true;
       await equipmentPanelRef.value?.expand();
@@ -85,42 +82,10 @@ export const useOrderWorkspaceNavigation = ({
     document.getElementById(elementId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  const openProposalSend = async (
-    proposal: OrderProposalResponse | null | undefined,
-    documents: ManagerOrderDocumentItem[],
-  ) => {
-    if (!proposal) return;
-    selectWorkspaceSection('documents');
-    expandedSections.value.documents = true;
-    activeWorkspaceTarget.value = 'documents';
-    await nextTick();
-    const offerExists = documents.some((document) => (
-      document.doc_type === 'offer'
-      && (!document.proposal_id || document.proposal_id === proposal.id)
-    ));
-    if (offerExists) documentsWorkspaceRef.value?.openSend();
-    else {
-      documentsWorkspaceRef.value?.openCreate();
-      setToast('Сначала создайте коммерческое предложение для активного варианта', 'error');
-    }
-    document.getElementById('order-workspace-documents')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
-  const openDocumentsSend = async () => {
-    selectWorkspaceSection('documents');
-    expandedSections.value.documents = true;
-    activeWorkspaceTarget.value = 'documents';
-    await nextTick();
-    documentsWorkspaceRef.value?.openSend();
-    document.getElementById('order-workspace-documents')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
   return {
     activeWorkspaceTarget,
     activeWorkspaceSection,
     executionWorkspaceOpen,
-    openDocumentsSend,
-    openProposalSend,
     openWorkspaceTarget,
     resetWorkspaceNavigation,
     selectWorkspaceSection,

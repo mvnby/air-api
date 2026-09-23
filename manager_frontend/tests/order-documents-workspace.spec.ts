@@ -95,7 +95,8 @@ describe('OrderDocumentsWorkspace', () => {
     await wrapper.get('button:nth-of-type(2)').trigger('click');
     expect(wrapper.findComponent({ name: 'OrderDocumentsPanel' }).exists()).toBe(true);
     await wrapper.get('[data-testid="google-doc-draft"]').setValue('Незаписанный черновик');
-    await wrapper.get('button:nth-of-type(1)').trigger('click');
+    (wrapper.vm as unknown as { openNative: () => void }).openNative();
+    await wrapper.vm.$nextTick();
     expect(wrapper.findComponent({ name: 'OrderDocumentsPanel' }).exists()).toBe(true);
     expect((wrapper.get('[data-testid="google-doc-draft"]').element as HTMLInputElement).value).toBe('Незаписанный черновик');
     expect(wrapper.text()).toContain('DOCX · В CRM');

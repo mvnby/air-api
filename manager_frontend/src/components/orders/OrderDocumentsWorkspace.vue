@@ -79,7 +79,9 @@ const selectProvider = (provider: 'native' | 'google') => {
   if (provider === 'google') googleProviderMounted.value = true;
 };
 
-defineExpose({ openSend, openCreate });
+const openNative = () => { activeProvider.value = 'native'; };
+
+defineExpose({ openSend, openCreate, openNative });
 </script>
 
 <template>

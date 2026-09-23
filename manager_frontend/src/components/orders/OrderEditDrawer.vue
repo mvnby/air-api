@@ -181,7 +181,6 @@ const proposalLifecycle = useOrderProposalLifecycle({
   },
 });
 const {
-  activeProposal,
   activeProposalId,
   activeProposalLocked,
   changeActiveProposalStatus,
@@ -255,8 +254,6 @@ const {
   activeWorkspaceTarget,
   activeWorkspaceSection,
   executionWorkspaceOpen,
-  openDocumentsSend,
-  openProposalSend: openProposalDocuments,
   openWorkspaceTarget,
   resetWorkspaceNavigation,
   selectWorkspaceSection,
@@ -266,16 +263,11 @@ const {
   expandedSections: expandedDrawerSections,
   equipmentPanelRef,
   documentsWorkspaceRef,
-  setToast,
 });
 const documentsMounted = ref(false);
 watch(activeWorkspaceSection, (section) => {
   if (section === 'documents') documentsMounted.value = true;
 }, { immediate: true });
-const openProposalSend = async () => {
-  if (await orderSaving.beforeDocumentGenerate()) openProposalDocuments(activeProposal.value, orderDocuments.value);
-};
-
 const customer = computed(() => props.order?.customer ?? null);
 const orderWorkspaceUsage = useOrderWorkspaceUsage({
   open: computed(() => props.modelValue),
@@ -433,8 +425,6 @@ const handleWorkspaceNextAction = async () => {
   const action = orderWorkspace.value.nextAction;
   if (action.command === 'create_proposal') return createProposal();
   if (action.command === 'finish_proposal') return changeActiveProposalStatus('ready_to_send');
-  if (action.command === 'send_proposal') return openProposalSend();
-  if (action.command === 'send_documents') return openDocumentsSend();
   if (action.command === 'record_proposal_response') {
     openWorkspaceTarget('proposal');
     await nextTick();
@@ -530,11 +520,13 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
                 :products-error="getFieldError('products')"
                 :services-error="getFieldError('services')"
                 :format-service-kind="formatServiceKind"
+                :workflow="workflowType"
+                :customer-id="order?.customer?.id"
                 :catalog-available="catalogNavigation.available.value"
                 :catalog-opening="catalogNavigation.opening.value"
                 :catalog-needs-save="hasUnsavedChanges"
                 @catalog="catalogNavigation.open"
-                @send="openProposalSend"
+                @documents="openWorkspaceTarget('documents')"
               />
             </section>
 

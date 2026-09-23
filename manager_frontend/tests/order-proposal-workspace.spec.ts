@@ -48,6 +48,7 @@ describe('OrderProposalWorkspace', () => {
       estimateOptions: ref([]),
       estimateOptionsLoading: ref(false),
       importingEstimate: ref(false),
+      total: ref(550),
       supplyBadgeForLine: vi.fn(),
     } as any;
     const wrapper = mount(OrderProposalWorkspace, {
@@ -58,6 +59,7 @@ describe('OrderProposalWorkspace', () => {
         title: 'Предложения',
         showProductLines: true,
         formatServiceKind: (kind?: string | null) => kind || '',
+        workflow: 'sales_installation',
       },
       global: {
         stubs: {
@@ -70,6 +72,8 @@ describe('OrderProposalWorkspace', () => {
     });
 
     expect(wrapper.text()).toContain('принята клиентом');
+    await wrapper.get('[data-testid="proposal-to-documents"]').trigger('click');
+    expect(wrapper.emitted('documents')).toEqual([[]]);
     await wrapper.findAll('button').find((button) => button.text().includes('Создать копию'))?.trigger('click');
     await wrapper.findAll('button').find((button) => button.text().includes('В черновик'))?.trigger('click');
 

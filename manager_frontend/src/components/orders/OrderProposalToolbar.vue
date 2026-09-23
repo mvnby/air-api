@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { Archive, Check, Copy, MoreHorizontal, Pencil, Plus, RotateCcw, Send, ThumbsDown, ThumbsUp } from 'lucide-vue-next';
+import { Archive, ArrowRight, Check, Copy, MoreHorizontal, Pencil, Plus, RotateCcw, Send, ThumbsDown, ThumbsUp } from 'lucide-vue-next';
 import type { OrderProposalResponse } from '../../client';
 import {
   PROPOSAL_STATUS_META,
@@ -127,7 +127,7 @@ defineExpose({
         @click="runPrimary"
       >
         <Check v-if="!activeProposal.is_selected || primaryAction === 'finish'" :size="15" />
-        <Send v-else-if="primaryAction === 'send'" :size="15" />
+        <ArrowRight v-else-if="primaryAction === 'send'" :size="15" />
         <Plus v-else-if="primaryAction === 'create_variant'" :size="15" />
         <span>{{ !activeProposal.is_selected ? 'Сделать активным' : primaryLabel }}</span>
       </button>
