@@ -1,7 +1,14 @@
 import os
+import signal
 import subprocess
 import time
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+import pytest
+
+from scripts.ci import wait_for_stable_postgres as waiter
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -68,7 +75,6 @@ def _run_waiter(
             "FAKE_DOCKER_CALLS": str(tmp_path / "docker-calls"),
             "FAKE_DOCKER_MARKER": str(tmp_path / "docker-marker"),
             "FAKE_DOCKER_PID_FILE": str(tmp_path / "docker-child-pid"),
-            "FAKE_DOCKER_TERM_MARKER": str(tmp_path / "docker-term-marker"),
         },
         text=True,
         capture_output=True,
@@ -153,7 +159,8 @@ def test_hung_sql_probe_is_killed_within_remaining_global_budget(tmp_path):
         tmp_path,
         """#!/usr/bin/env bash
 set -euo pipefail
-trap 'printf terminated > "${FAKE_DOCKER_TERM_MARKER}"; exit 143' TERM
+# Cleanup may exceed the TERM grace; the waiter must still kill the group.
+trap 'sleep 3; exit 143' TERM
 (
   trap '' TERM
   sleep 3
@@ -172,7 +179,6 @@ printf '2026-07-13 20:04:00+00\n'
     assert result.returncode != 0
     assert elapsed < 1.75
     assert "within 1s" in result.stderr
-    assert (tmp_path / "docker-term-marker").read_text(encoding="utf-8") == "terminated"
 
     child_pid = int((tmp_path / "docker-child-pid").read_text(encoding="utf-8"))
     cleanup_deadline = time.monotonic() + 0.5
@@ -182,6 +188,57 @@ printf '2026-07-13 20:04:00+00\n'
         raise AssertionError(f"timed-out probe child {child_pid} is still running")
 
     assert not (tmp_path / "docker-marker").exists()
+
+
+@pytest.mark.parametrize("budget", [0.1, 1.0])
+def test_probe_timeout_sends_term_then_kill_within_budget(monkeypatch, budget):
+    now = 0.0
+    signals = []
+    communicate_timeouts = []
+
+    def sleep(seconds):
+        nonlocal now
+        now += seconds
+
+    def communicate(*, timeout):
+        communicate_timeouts.append(timeout)
+        if len(communicate_timeouts) == 1:
+            sleep(timeout)
+            raise subprocess.TimeoutExpired("probe", timeout)
+        return "", None
+
+    process = SimpleNamespace(pid=123, communicate=communicate)
+    popen = Mock(return_value=process)
+    monkeypatch.setattr(waiter, "time", SimpleNamespace(monotonic=lambda: now, sleep=sleep))
+    monkeypatch.setattr(
+        waiter, "os",
+        SimpleNamespace(killpg=lambda pid, sig: signals.append((pid, sig, now))),
+    )
+    monkeypatch.setattr(
+        waiter, "subprocess",
+        SimpleNamespace(
+            Popen=popen, PIPE=subprocess.PIPE, DEVNULL=subprocess.DEVNULL,
+            TimeoutExpired=subprocess.TimeoutExpired,
+        ),
+    )
+
+    result = waiter.run_with_process_group_timeout(["probe"], timeout_seconds=budget)
+
+    term_grace = min(waiter.MAX_TERM_GRACE_SECONDS, budget / 4)
+    reap_grace = min(waiter.MAX_REAP_GRACE_SECONDS, budget / 4)
+    assert result.timed_out is True
+    assert result.returncode == 124
+    assert [(pid, sig) for pid, sig, _ in signals] == [
+        (123, signal.SIGTERM), (123, signal.SIGKILL),
+    ]
+    assert signals[0][2] == pytest.approx(budget - reap_grace - term_grace)
+    assert signals[1][2] == pytest.approx(budget - reap_grace)
+    assert communicate_timeouts[1] == pytest.approx(reap_grace)
+    assert now <= budget
+    popen.assert_called_once_with(
+        ["probe"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        text=True, start_new_session=True,
+    )
 
 
 def test_linux_proc_state_distinguishes_live_process_from_zombie(tmp_path):
