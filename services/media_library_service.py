@@ -323,14 +323,23 @@ class MediaLibraryService:
         if not asset:
             raise LookupError("Media asset not found")
 
+        normalized_kind = MediaLibraryService._normalize_kind(kind) if kind is not None else None
+        if kind is not None:
+            if normalized_kind != asset.kind and asset.kind == "storefront_logo":
+                published_logo = await session.scalar(select(StorefrontSettings.storefront_id).where(
+                    (StorefrontSettings.logo_asset_id == asset_id)
+                    | (StorefrontSettings.compact_logo_asset_id == asset_id)
+                ).limit(1))
+                if published_logo is not None:
+                    raise ValueError("Published storefront logo kind cannot be changed. Remove it from storefront settings first.")
         if title is not None:
             asset.title = title.strip()
         if alt_text is not None:
             asset.alt_text = alt_text.strip() or None
         if description is not None:
             asset.description = description.strip() or None
-        if kind is not None:
-            asset.kind = MediaLibraryService._normalize_kind(kind)
+        if normalized_kind is not None:
+            asset.kind = normalized_kind
         if tags is not None:
             asset.tags = MediaLibraryService._normalize_tags(tags)
         asset.updated_at = datetime.now()

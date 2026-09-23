@@ -172,7 +172,7 @@ const bytesLabel = (value?: number | null) => {
 };
 
 const kindLabel = (value?: string | null) => (
-  kindOptions.find((item) => item.value === value)?.label || 'Разное'
+  value === 'storefront_logo' ? 'Логотип витрины' : kindOptions.find((item) => item.value === value)?.label || 'Разное'
 );
 
 const variantLabel = (value?: string | null) => {
@@ -1013,7 +1013,8 @@ onUnmounted(() => {
               <div class="grid grid-cols-2 gap-3">
                 <label class="block">
                   <span class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Тип</span>
-                  <select v-model="editForm.kind" class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-white">
+                  <select v-model="editForm.kind" :disabled="selectedAsset?.kind === 'storefront_logo'" class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-white">
+                    <option v-if="selectedAsset?.kind === 'storefront_logo'" value="storefront_logo">Логотип витрины</option>
                     <option v-for="item in kindOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
                   </select>
                 </label>

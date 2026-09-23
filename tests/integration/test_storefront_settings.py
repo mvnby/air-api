@@ -112,6 +112,10 @@ async def test_brand_assets_are_scoped_for_manager_and_public_reads(async_client
     saved = await async_client.put("/api/manager/storefront-settings", headers=owner_a, json=state)
     assert saved.status_code == 200
     assert saved.json()["site"]["logo_url"] == logo.url
+    with pytest.raises(ValueError, match="kind cannot be changed"):
+        await MediaLibraryService.update_asset(db, asset_id=logo.id, kind="misc")
+    await MediaLibraryService.update_asset(db, asset_id=logo.id, kind="storefront_logo", title="Обновлённое название")
+    assert (await async_client.get("/api/manager/storefront-settings/brand", headers=owner_a)).json()["logo_url"] == logo.url
     with pytest.raises(ValueError, match="published storefront logo"):
         await MediaLibraryService.delete_asset(db, asset_id=logo.id, force=True)
 
