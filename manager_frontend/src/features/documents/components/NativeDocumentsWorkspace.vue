@@ -323,11 +323,6 @@ defineExpose({
           <template v-else>Для онлайн-редактирования обратитесь к владельцу аккаунта.</template>
         </p>
       </div>
-      <div class="flex flex-wrap items-center gap-2 sm:justify-end">
-        <button v-if="access.canSend && sendableDocuments.length && canSendNativeEmail" class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand-600 px-3 text-xs font-semibold text-white shadow-sm hover:bg-brand-700" type="button" data-testid="native-document-email" @click="sendOpen = true">
-          <span class="material-icons-round text-[17px]">send</span>Письмо
-        </button>
-      </div>
     </div>
 
     <div v-if="workspace.loading.value" class="flex items-center justify-center gap-2 py-10 text-sm text-slate-500">
@@ -504,6 +499,9 @@ defineExpose({
           <p class="mt-2 text-sm font-semibold text-slate-600 dark:text-slate-300">Внутренних документов пока нет</p>
           <p class="mt-1 text-xs text-slate-500">Начните с коммерческого предложения или счёта. Договор можно выбрать отдельно.</p>
         </div>
+      </div>
+      <div v-if="access.canSend && sendableDocuments.length && canSendNativeEmail" class="mt-4 flex justify-end border-t border-slate-100 pt-4 dark:border-slate-800">
+        <button class="inline-flex h-10 items-center gap-2 rounded-xl bg-brand-600 px-5 text-sm font-bold text-white hover:bg-brand-700" type="button" data-testid="native-document-email" @click="sendOpen = true"><span class="material-icons-round text-[18px]">send</span>Отправить письмо с документом</button>
       </div>
     </template>
   </section>
