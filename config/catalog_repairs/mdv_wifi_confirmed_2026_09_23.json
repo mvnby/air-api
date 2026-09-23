@@ -1,0 +1,258 @@
+{
+  "source_sheet": "MDV RAC",
+  "user_confirmed_at": "2026-09-23",
+  "wifi": [
+    {
+      "id": 59,
+      "title": "MDV INFINI UVpro Inverter MDSAL-09HRFN8/MDOAG-09HFN8",
+      "product_kind": "complete_split_system",
+      "model_indoor": "MDSAL-09HRFN8",
+      "model_outdoor": "MDOAG-09HFN8",
+      "old_state": "none",
+      "old_ready": false,
+      "old_wifi_tags": [
+        "wifi-ready"
+      ],
+      "new_state": "ready",
+      "price_row": 91,
+      "claim_row": 90
+    },
+    {
+      "id": 60,
+      "title": "MDV INFINI UVpro Inverter MDSAL-12HRFN8/MDOAG-12HFN8",
+      "product_kind": "complete_split_system",
+      "model_indoor": "MDSAL-12HRFN8",
+      "model_outdoor": "MDOAG-12HFN8",
+      "old_state": "none",
+      "old_ready": false,
+      "old_wifi_tags": [
+        "wifi-ready"
+      ],
+      "new_state": "ready",
+      "price_row": 92,
+      "claim_row": 90
+    },
+    {
+      "id": 100,
+      "title": "MDV Classic Inverter MDSC-09HRDN8/MDOC-09HDN8",
+      "product_kind": "complete_split_system",
+      "model_indoor": "MDSC-09HRDN8",
+      "model_outdoor": "MDOC-09HDN8",
+      "old_state": "ready",
+      "old_ready": "ready",
+      "old_wifi_tags": [
+        "wifi-ready"
+      ],
+      "new_state": "builtin",
+      "price_row": 46,
+      "claim_row": 44
+    },
+    {
+      "id": 101,
+      "title": "MDV INFINI Nordic Heat Pump MDSAN-24HRFN8/MDOAN-24HFN8",
+      "product_kind": "complete_split_system",
+      "model_indoor": "MDSAN-24HRFN8",
+      "model_outdoor": "MDOAN-24HFN8",
+      "old_state": "none",
+      "old_ready": false,
+      "old_wifi_tags": [
+        "wifi-ready"
+      ],
+      "new_state": "ready",
+      "price_row": 129,
+      "claim_row": 125
+    },
+    {
+      "id": 103,
+      "title": "MDV Classic Inverter MDSC-07HRDN8/MDOC-07HDN8",
+      "product_kind": "complete_split_system",
+      "model_indoor": "MDSC-07HRDN8",
+      "model_outdoor": "MDOC-07HDN8",
+      "old_state": "none",
+      "old_ready": false,
+      "old_wifi_tags": [
+        "wifi-ready"
+      ],
+      "new_state": "builtin",
+      "price_row": 45,
+      "claim_row": 44
+    },
+    {
+      "id": 104,
+      "title": "MDV Classic Inverter MDSC-12HRDN8/MDOC-12HDN8",
+      "product_kind": "complete_split_system",
+      "model_indoor": "MDSC-12HRDN8",
+      "model_outdoor": "MDOC-12HDN8",
+      "old_state": "none",
+      "old_ready": false,
+      "old_wifi_tags": [
+        "wifi-ready"
+      ],
+      "new_state": "ready",
+      "price_row": 47,
+      "claim_row": 44
+    },
+    {
+      "id": 107,
+      "title": "MDV INFINI Nordic Heat Pump MDSAN-09HRFN8/MDOAN-09HFN8",
+      "product_kind": "complete_split_system",
+      "model_indoor": "MDSAN-09HRFN8",
+      "model_outdoor": "MDOAN-09HFN8",
+      "old_state": "none",
+      "old_ready": false,
+      "old_wifi_tags": [
+        "wifi-ready"
+      ],
+      "new_state": "builtin",
+      "price_row": 126,
+      "claim_row": 125
+    },
+    {
+      "id": 108,
+      "title": "MDV INFINI Nordic Heat Pump MDSAN-12HRFN8/MDOAN-12HFN8",
+      "product_kind": "complete_split_system",
+      "model_indoor": "MDSAN-12HRFN8",
+      "model_outdoor": "MDOAN-12HFN8",
+      "old_state": "none",
+      "old_ready": false,
+      "old_wifi_tags": [
+        "wifi-ready"
+      ],
+      "new_state": "builtin",
+      "price_row": 127,
+      "claim_row": 125
+    },
+    {
+      "id": 109,
+      "title": "MDV INFINI Nordic Heat Pump MDSAN-18HRFN8/MDOAN-18HFN8",
+      "product_kind": "complete_split_system",
+      "model_indoor": "MDSAN-18HRFN8",
+      "model_outdoor": "MDOAN-18HFN8",
+      "old_state": "none",
+      "old_ready": false,
+      "old_wifi_tags": [
+        "wifi-ready"
+      ],
+      "new_state": "ready",
+      "price_row": 128,
+      "claim_row": 125
+    },
+    {
+      "id": 900,
+      "title": "MDV iERA inverter MDSAJ-07HRFN8/MDOAJ-07HFN8",
+      "product_kind": "complete_split_system",
+      "model_indoor": "MDSAJ-07HRFN8",
+      "model_outdoor": "MDOAJ-07HFN8",
+      "old_state": "none",
+      "old_ready": false,
+      "old_wifi_tags": [],
+      "new_state": "builtin",
+      "price_row": 83,
+      "claim_row": 82
+    },
+    {
+      "id": 901,
+      "title": "MDV iERA inverter MDSAJ-09HRFN8/MDOAJ-09HFN8",
+      "product_kind": "complete_split_system",
+      "model_indoor": "MDSAJ-09HRFN8",
+      "model_outdoor": "MDOAJ-09HFN8",
+      "old_state": "none",
+      "old_ready": false,
+      "old_wifi_tags": [],
+      "new_state": "builtin",
+      "price_row": 84,
+      "claim_row": 82
+    },
+    {
+      "id": 902,
+      "title": "Внутренний блок MDV iERA inverter MDSAJ-12HRFN8",
+      "product_kind": "indoor_unit",
+      "model_indoor": "MDSAJ-12HRFN8",
+      "model_outdoor": null,
+      "old_state": "none",
+      "old_ready": false,
+      "old_wifi_tags": [],
+      "new_state": "builtin",
+      "price_row": 85,
+      "claim_row": 82
+    },
+    {
+      "id": 903,
+      "title": "Внутренний блок MDV iERA inverter MDSAJ-18HRFN8",
+      "product_kind": "indoor_unit",
+      "model_indoor": "MDSAJ-18HRFN8",
+      "model_outdoor": null,
+      "old_state": "none",
+      "old_ready": false,
+      "old_wifi_tags": [],
+      "new_state": "builtin",
+      "price_row": 86,
+      "claim_row": 82
+    },
+    {
+      "id": 904,
+      "title": "Внутренний блок MDV iERA inverter MDSAJ-24HRFN8",
+      "product_kind": "indoor_unit",
+      "model_indoor": "MDSAJ-24HRFN8",
+      "model_outdoor": null,
+      "old_state": "none",
+      "old_ready": false,
+      "old_wifi_tags": [],
+      "new_state": "builtin",
+      "price_row": 87,
+      "claim_row": 82
+    },
+    {
+      "id": 905,
+      "title": "MDV INFINI MEGA MDSAG-30HRFN8/MDOAG-30HFN8",
+      "product_kind": "complete_split_system",
+      "model_indoor": "MDSAG-30HRFN8",
+      "model_outdoor": "MDOAG-30HFN8",
+      "old_state": "none",
+      "old_ready": false,
+      "old_wifi_tags": [],
+      "new_state": "builtin",
+      "price_row": 40,
+      "claim_row": 39
+    },
+    {
+      "id": 906,
+      "title": "MDV INFINI MEGA MDSAG-36HRFN8/MDOAG-36HFN8",
+      "product_kind": "complete_split_system",
+      "model_indoor": "MDSAG-36HRFN8",
+      "model_outdoor": "MDOAG-36HFN8",
+      "old_state": "none",
+      "old_ready": false,
+      "old_wifi_tags": [],
+      "new_state": "builtin",
+      "price_row": 41,
+      "claim_row": 39
+    },
+    {
+      "id": 1055,
+      "title": "Внутренний блок MDV iERA inverter MDSAJ-07HRFN8",
+      "product_kind": "indoor_unit",
+      "model_indoor": "MDSAJ-07HRFN8",
+      "model_outdoor": null,
+      "old_state": "none",
+      "old_ready": false,
+      "old_wifi_tags": [],
+      "new_state": "builtin",
+      "price_row": 83,
+      "claim_row": 82
+    },
+    {
+      "id": 1056,
+      "title": "Внутренний блок MDV iERA inverter MDSAJ-09HRFN8",
+      "product_kind": "indoor_unit",
+      "model_indoor": "MDSAJ-09HRFN8",
+      "model_outdoor": null,
+      "old_state": "none",
+      "old_ready": false,
+      "old_wifi_tags": [],
+      "new_state": "builtin",
+      "price_row": 84,
+      "claim_row": 82
+    }
+  ]
+}

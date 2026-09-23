@@ -1,5 +1,5 @@
 import re
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional
 
 from services.spec_registry import (
     INDOOR_TYPE_LABELS,
@@ -424,33 +424,38 @@ def _classify_wifi_value(value: Any) -> str | None:
     text = str(value).strip().lower().replace("ё", "е")
     text = text.replace("—", "-")
 
-    none_markers = (
-        "не поддерж",
-        "отсутств",
-        "нет",
-        "false",
-        "no",
-    )
-    if any(marker in text for marker in none_markers):
-        return "none"
-
     ready_markers = (
         "приобрета",
         "отдельно",
         "опцион",
         "опци",
         "ready",
-        "модул",
         "поддержива",
     )
-    if any(marker in text for marker in ready_markers):
+    optional = any(marker in text for marker in ready_markers)
+    if "не входит в комплект" in text:
+        return "ready" if optional else "none"
+    if (
+        any(marker in text for marker in ("не поддерж", "отсутств"))
+        or re.search(r"\b(?:нет|false|no)\b", text)
+    ):
+        return "none"
+    bundled = any(marker in text for marker in ("в комплекте", "комплектный"))
+    # A series-wide text can describe different model configurations. Do not
+    # guess from a mixed statement; exact model evidence must resolve it.
+    if bundled and optional:
+        return None
+    if bundled:
+        return "builtin"
+    if optional:
+        return "ready"
+
+    if any(marker in text for marker in ("встро", "built-in", "built in", "builtin")):
+        return "builtin"
+    if "модул" in text:
         return "ready"
 
     builtin_markers = (
-        "встро",
-        "built-in",
-        "built in",
-        "builtin",
         "check",
         "галоч",
         "true",
@@ -489,11 +494,7 @@ def _resolve_dynamic_system_key(key: Any) -> str | None:
     return None
 
 
-def _apply_wifi_state(
-    specs: Dict[str, Any],
-    wifi_tag_slugs: Optional[Sequence[str]] = None,
-    strict_wifi_from_tags: bool = False,
-) -> Dict[str, Any]:
+def _apply_wifi_state(specs: Dict[str, Any]) -> Dict[str, Any]:
     enriched = dict(specs)
     source_candidates = (
         enriched.get("wifi_ready"),
@@ -526,34 +527,6 @@ def _apply_wifi_state(
         if key in enriched:
             del enriched[key]
 
-    tag_set = {slug.strip().lower() for slug in (wifi_tag_slugs or []) if slug}
-    has_builtin_tag = "wifi-builtin" in tag_set
-    has_ready_tag = "wifi-ready" in tag_set
-
-    if has_builtin_tag:
-        enriched["wifi_ready"] = True
-        enriched["wifi_builtin"] = True
-        enriched["wifi_state"] = "builtin"
-        enriched["__filter_wifi"] = True
-        enriched["__filter_wifi_builtin"] = True
-        return enriched
-
-    if has_ready_tag:
-        enriched["wifi_ready"] = "ready"
-        enriched["wifi_builtin"] = False
-        enriched["wifi_state"] = "ready"
-        enriched["__filter_wifi"] = True
-        enriched["__filter_wifi_builtin"] = False
-        return enriched
-
-    if strict_wifi_from_tags:
-        enriched["wifi_ready"] = False
-        enriched["wifi_builtin"] = False
-        enriched["wifi_state"] = "none"
-        enriched["__filter_wifi"] = False
-        enriched["__filter_wifi_builtin"] = False
-        return enriched
-
     wifi_kind = None
     if "builtin" in wifi_kinds:
         wifi_kind = "builtin"
@@ -584,11 +557,7 @@ def _apply_wifi_state(
     return enriched
 
 
-def enrich_filter_keys(
-    specs: Dict[str, Any],
-    wifi_tag_slugs: Optional[Sequence[str]] = None,
-    strict_wifi_from_tags: bool = False,
-) -> Dict[str, Any]:
+def enrich_filter_keys(specs: Dict[str, Any]) -> Dict[str, Any]:
     enriched = dict(specs)
 
     # Always rebuild internal filter keys on each pass to avoid stale values.
@@ -601,11 +570,7 @@ def enrich_filter_keys(
     if heat_numbers:
         enriched["__filter_min_heat"] = min(heat_numbers)
 
-    enriched = _apply_wifi_state(
-        enriched,
-        wifi_tag_slugs=wifi_tag_slugs,
-        strict_wifi_from_tags=strict_wifi_from_tags,
-    )
+    enriched = _apply_wifi_state(enriched)
 
     noise_numbers = _parse_numbers(enriched.get("noise_indoor"))
     if noise_numbers:
@@ -630,8 +595,6 @@ def enrich_filter_keys(
 def normalize_specs(
     specs: Dict[str, Any],
     keep_units: bool = True,
-    wifi_tag_slugs: Optional[Sequence[str]] = None,
-    strict_wifi_from_tags: bool = False,
     title: Optional[str] = None,
     auto_tag_slugs: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
@@ -643,11 +606,7 @@ def normalize_specs(
     Returns a NEW dictionary with normalized specs.
     """
     if specs is None:
-        return enrich_filter_keys(
-            {},
-            wifi_tag_slugs=wifi_tag_slugs,
-            strict_wifi_from_tags=strict_wifi_from_tags,
-        )
+        return enrich_filter_keys({})
     if not isinstance(specs, dict):
         specs = {}
         
@@ -836,11 +795,7 @@ def normalize_specs(
     if auto_tag_slugs is not None and brand_slug and brand_slug not in auto_tag_slugs:
         auto_tag_slugs.append(brand_slug)
             
-    enriched_specs = enrich_filter_keys(
-        new_specs,
-        wifi_tag_slugs=wifi_tag_slugs,
-        strict_wifi_from_tags=strict_wifi_from_tags,
-    )
+    enriched_specs = enrich_filter_keys(new_specs)
     typed_specs = build_typed_specs(enriched_specs)
     if typed_specs:
         enriched_specs["__typed_specs"] = typed_specs

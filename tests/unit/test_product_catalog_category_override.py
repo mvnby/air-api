@@ -14,6 +14,8 @@ from schemas import ProductUpdate
 from services.product_write_service import ProductWriteService
 from services.product_manager_service import ProductManagerService
 from services.product_catalog_category_service import sync_product_catalog_category
+from services.spec_normalizer import normalize_specs
+from crud.product import ProductDAO
 
 
 @pytest.fixture
@@ -34,7 +36,7 @@ async def _seed_tags(session: AsyncSession) -> tuple[Tag, Tag, Tag]:
     await session.flush()
     industrial = Tag(title="Полупромышленные", slug="cat-industrial", group_id=category.id)
     household = Tag(title="Бытовые", slug="cat-household", group_id=category.id)
-    preserved = Tag(title="Wi-Fi", slug="wifi-builtin", group_id=feature.id)
+    preserved = Tag(title="Очистка воздуха", slug="health-air", group_id=feature.id)
     session.add_all([industrial, household, preserved])
     await session.commit()
     return industrial, household, preserved
@@ -97,11 +99,62 @@ async def test_manager_override_replaces_stale_category_and_preserves_other_tags
     )
     all_slugs = set(all_tags.scalars())
     # Brand synchronization may add the canonical TCL tag, but no stale
-    # canonical category survives and the unrelated Wi-Fi tag remains.
-    assert all_slugs == {"cat-household", "tcl", "wifi-builtin"}
+    # canonical category survives and the unrelated feature tag remains.
+    assert all_slugs == {"cat-household", "tcl", "health-air"}
     manager_payload = await ProductManagerService.get_manager_product(sqlite_session, product.id)
     assert manager_payload["catalog_category_override"] == "cat-household"
     assert manager_payload["catalog_category"] == "cat-household"
+
+
+@pytest.mark.asyncio
+async def test_manager_save_ignores_stale_wifi_tag_selection(sqlite_session):
+    _industrial, _household, preserved = await _seed_tags(sqlite_session)
+    stale_wifi = Tag(title="Wi-Fi опция", slug="wifi-ready", group_id=preserved.group_id)
+    sqlite_session.add(stale_wifi)
+    await sqlite_session.flush()
+    product = Product(
+        title="MDV Wi-Fi confirmed",
+        slug="mdv-wifi-confirmed",
+        price=1000,
+        product_kind="complete_split_system",
+        specs=normalize_specs({"wifi_state": "builtin"}),
+        tags=[stale_wifi],
+    )
+    sqlite_session.add(product)
+    await sqlite_session.commit()
+
+    await ProductWriteService.update_product(
+        sqlite_session,
+        product.id,
+        update_data={"specs": dict(product.specs)},
+        tag_ids=[stale_wifi.id],
+    )
+
+    refreshed = await sqlite_session.get(Product, product.id)
+    assert refreshed.specs["wifi_state"] == "builtin"
+    tag_slugs = (await sqlite_session.execute(
+        select(Tag.slug).join(Tag.products).where(Product.id == product.id)
+    )).scalars().all()
+    assert "wifi-ready" not in tag_slugs
+
+
+@pytest.mark.asyncio
+async def test_legacy_wifi_filter_slug_reads_specs_without_product_tags(sqlite_session):
+    products = [
+        Product(title="Built in", slug="wifi-built-in", price=1000, specs=normalize_specs({"wifi_state": "builtin"})),
+        Product(title="Ready", slug="wifi-ready-product", price=1000, specs=normalize_specs({"wifi_state": "ready"})),
+        Product(title="None", slug="wifi-none", price=1000, specs=normalize_specs({"wifi_state": "none"})),
+    ]
+    sqlite_session.add_all(products)
+    await sqlite_session.commit()
+
+    builtin = await ProductDAO.get_filtered(sqlite_session, tag_slugs=["wifi-builtin"])
+    ready = await ProductDAO.get_filtered(sqlite_session, tag_slugs=["wifi-ready"])
+    any_wifi = await ProductDAO.get_filtered(sqlite_session, has_wifi=True)
+
+    assert [product.slug for product in builtin] == ["wifi-built-in"]
+    assert [product.slug for product in ready] == ["wifi-ready-product"]
+    assert {product.slug for product in any_wifi} == {"wifi-built-in", "wifi-ready-product"}
 
 
 @pytest.mark.asyncio

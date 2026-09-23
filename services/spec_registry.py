@@ -158,8 +158,8 @@ SPEC_DEFINITIONS: Mapping[str, SpecDefinition] = {
         SpecValueType.STATE,
         enum_values=("builtin", "ready", "none"),
         description=(
-            "Единое состояние Wi-Fi: встроенный модуль, подготовка под отдельный модуль "
-            "или отсутствие поддержки."
+            "Единое состояние Wi-Fi: модуль в штатной комплектации, возможность "
+            "докупить модуль или отсутствие поддержки."
         ),
     ),
     "wifi_ready": _spec(
@@ -167,7 +167,7 @@ SPEC_DEFINITIONS: Mapping[str, SpecDefinition] = {
         "Wi-Fi Ready",
         SpecValueType.STATE,
         enum_values=("true", "ready", "false"),
-        description="Совместимое поле Wi-Fi: true означает встроенный модуль, ready — модуль приобретается отдельно.",
+        description="Совместимое поле Wi-Fi: true означает модуль в штатной комплектации, ready — модуль приобретается отдельно.",
     ),
     "wifi_builtin": _spec("wifi_builtin", "Wi-Fi встроенный", SpecValueType.BOOLEAN),
     "capacity_cooling_kw": _spec(

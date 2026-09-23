@@ -209,6 +209,21 @@ class ProductDAO:
         return func.lower(func.jsonb_extract_path_text(cast(Product.specs, JSONB), *path))
 
     @staticmethod
+    def wifi_state_expr(session: AsyncSession):
+        """Resolve Wi-Fi from specs; legacy tags are never authoritative."""
+        ready = ProductDAO._json_text_expr(session, "wifi_ready")
+        return func.coalesce(
+            ProductDAO._json_path_text_expr(session, "__typed_specs", "wifi_state", "value"),
+            ProductDAO._json_text_expr(session, "wifi_state"),
+            case(
+                (ready.in_(("true", "1")), "builtin"),
+                (ready == "ready", "ready"),
+                (ready.in_(("false", "0")), "none"),
+                else_=None,
+            ),
+        )
+
+    @staticmethod
     def _apply_common_filters(
         session: AsyncSession,
         stmt,
@@ -256,34 +271,20 @@ class ProductDAO:
 
         if has_wifi is not None:
             wifi_expr = ProductDAO._json_bool_expr(session, "__filter_wifi")
-            wifi_state_expr = ProductDAO._json_path_text_expr(
-                session,
-                "__typed_specs",
-                "wifi_state",
-                "value",
-            )
-            legacy_wifi_tag_subq = (
-                select(ProductTagLink.product_id)
-                .join(Tag, ProductTagLink.tag_id == Tag.id)
-                .where(Tag.slug == "wifi-builtin")
-            )
+            wifi_state_expr = ProductDAO.wifi_state_expr(session)
             if session.bind is not None and session.bind.dialect.name == "sqlite":
                 if has_wifi:
                     stmt = stmt.where(
                         or_(
                             wifi_state_expr.in_(("builtin", "ready")),
                             and_(wifi_state_expr.is_(None), wifi_expr == 1),
-                            Product.id.in_(legacy_wifi_tag_subq),
                         )
                     )
                 else:
                     stmt = stmt.where(
-                        and_(
-                            or_(
-                                wifi_state_expr == "none",
-                                and_(wifi_state_expr.is_(None), wifi_expr == 0),
-                            ),
-                            ~Product.id.in_(legacy_wifi_tag_subq),
+                        or_(
+                            wifi_state_expr == "none",
+                            and_(wifi_state_expr.is_(None), wifi_expr == 0),
                         )
                     )
             else:
@@ -292,17 +293,13 @@ class ProductDAO:
                         or_(
                             wifi_state_expr.in_(("builtin", "ready")),
                             and_(wifi_state_expr.is_(None), wifi_expr == True),
-                            Product.id.in_(legacy_wifi_tag_subq),
                         )
                     )
                 else:
                     stmt = stmt.where(
-                        and_(
-                            or_(
-                                wifi_state_expr == "none",
-                                and_(wifi_state_expr.is_(None), wifi_expr == False),
-                            ),
-                            ~Product.id.in_(legacy_wifi_tag_subq),
+                        or_(
+                            wifi_state_expr == "none",
+                            and_(wifi_state_expr.is_(None), wifi_expr == False),
                         )
                     )
 
@@ -334,6 +331,13 @@ class ProductDAO:
 
         if tag_slugs:
             normalized_slugs = [slug.strip().lower() for slug in tag_slugs if slug and slug.strip()]
+            wifi_states = {
+                "wifi-builtin": "builtin", "wifi-ready": "ready"
+            }
+            requested_wifi_states = {wifi_states[slug] for slug in normalized_slugs if slug in wifi_states}
+            if requested_wifi_states:
+                stmt = stmt.where(ProductDAO.wifi_state_expr(session).in_(sorted(requested_wifi_states)))
+            normalized_slugs = [slug for slug in normalized_slugs if slug not in wifi_states]
             # AND between groups, OR within each group.
             for group_slug in sorted(ALLOWED_FILTER_GROUP_SLUGS):
                 group_subq = (
