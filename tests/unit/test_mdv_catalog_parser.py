@@ -1,6 +1,6 @@
 import pytest
 
-from parsers.mdv_catalog import MDV_EXPORT_URLS, MDV_PROMOTED_PROP_KEYS, MdvCatalogParser
+from parsers.mdv_catalog import MDV_EXPORT_URLS, MDV_PROMOTED_PROP_KEYS, MdvCatalogParser, MdvCatalogRecord
 from services.supplier_match_service import build_product_match_profile
 
 
@@ -199,6 +199,65 @@ def test_mdv_catalog_preserves_console_indoor_form_factor():
     assert MdvCatalogParser._infer_indoor_type("Полупромышленные консольные блоки") == "консольный"
     assert MdvCatalogParser._inner_block_label("консольный") == "Внутренний консольный блок"
     assert MdvCatalogParser._semi_descriptor("консольный") == "Консольный"
+
+
+@pytest.mark.parametrize(
+    ("section_3", "expected"),
+    [
+        ("Инверторные канальные сплит-системы MDT2II", "канальный"),
+        ("Кассетные однопоточные сплит-системы MDCA1I", "кассетный"),
+        ("Консольные сплит-системы MDFFI", "консольный"),
+    ],
+)
+def test_mdv_household_uses_specific_indoor_section(section_3, expected):
+    item = {
+        "SECTIONS": {
+            "SECTION_1": "Бытовые сплит-системы MDV",
+            "SECTION_2": "Кассетные, канальные, консольные сплит-системы",
+            "SECTION_3": section_3,
+        },
+        "PROPERTIES": {"UNIT_INDOOR": "MDCA1I-12HRFN8", "UNIT_OUTDOOR": "MDOAG-12HFN8"},
+    }
+    record = MdvCatalogRecord(catalog="household", item=item, source_url="")
+
+    assert MdvCatalogParser()._system_type_specs(record)["indoor_type"] == expected
+
+
+def test_mdv_household_does_not_guess_from_mixed_section():
+    item = {"SECTIONS": {"SECTION_2": "Кассетные, канальные, консольные сплит-системы"}}
+    record = MdvCatalogRecord(catalog="household", item=item, source_url="")
+
+    assert "indoor_type" not in MdvCatalogParser()._system_type_specs(record)
+
+
+def test_mdv_multi_console_uses_console_section():
+    item = {
+        "SECTIONS": {
+            "SECTION_1": "Мультисплит-системы MDV",
+            "SECTION_2": "Консольные блоки",
+            "SECTION_3": "Консольные внутренние блоки",
+        },
+        "PROPERTIES": {"UNIT_INDOOR": "MDFFI-12HRFN8"},
+    }
+    record = MdvCatalogRecord(catalog="multi", item=item, source_url="")
+
+    assert MdvCatalogParser()._system_type_specs(record) == {
+        "type": "внутренний блок",
+        "indoor_type": "консольный",
+    }
+
+
+def test_mdv_price_wifi_override_requires_exact_model_pair():
+    item = {
+        "SECTIONS": {"SECTION_3": "INFINI Loft ERP Inverter"},
+        "PROPERTIES": {"UNIT_INDOOR": "MDSALF-09HRFN8", "UNIT_OUTDOOR": "MDOALF-09HFN8"},
+    }
+    record = MdvCatalogRecord(catalog="household", item=item, source_url="")
+    parser = MdvCatalogParser()
+
+    assert parser._build_specs(record)["wifi_ready"] == "ready"
+    item["PROPERTIES"]["UNIT_OUTDOOR"] = "OTHER-09HFN8"
+    assert "wifi_ready" not in parser._build_specs(record)
 
 
 def test_mdv_promoted_keys_cover_supplier_mapping_fields():

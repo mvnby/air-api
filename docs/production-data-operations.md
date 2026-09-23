@@ -60,6 +60,8 @@ Production server intentionally runs from Docker images only (no git checkout in
      exact digest; see [Wi-Fi repair](catalog-indoor-filter-repair.md#подтверждённые-исправления-wi-fi).
    - TCL mixed-series Wi-Fi feature correction: use the exact read-only plan
      and digest; see [TCL feature repair](catalog-indoor-filter-repair.md#встроенный-wi-fi-у-смешанных-серий-tcl).
+   - Biocond MDV price catalog correction: use the exact read-only plan and
+     digest after inspecting the [MDV price audit](catalog-mdv-price-audit.md).
    - Product media URL execution is primary-only and manual-only. Resolve every
      manifest blocker, review the exact source hashes/locations, and run only
      the fresh plan's expiring `reviewed_execute_command`; see

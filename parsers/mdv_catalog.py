@@ -10,6 +10,8 @@ from urllib.parse import quote, unquote, urlsplit, urlunsplit
 import httpx
 import slugify
 
+from services.mdv_price_overrides import apply_mdv_price_wifi_override
+
 from .base import BaseParser
 
 
@@ -309,13 +311,12 @@ class MdvCatalogParser(BaseParser):
         self._copy_temp_range(props, specs, "TEMP_HEATING_LOW", "TEMP_HEATING_HIGH", "temp_range_heat")
         self._copy_dimensions(props, specs, "INDOOR", "dimensions_indoor_package_mm")
         self._copy_dimensions(props, specs, "OUTDOOR", "dimensions_outdoor_package_mm")
-        return specs
+        return apply_mdv_price_wifi_override(specs)
 
     def _system_type_specs(self, record: MdvCatalogRecord) -> dict[str, Any]:
         sections = self._sections(record.item)
         props = self._props(record.item)
-        section_text = " ".join(str(value or "") for value in sections.values())
-        indoor_type = self._infer_indoor_type(section_text)
+        indoor_type = self._infer_indoor_type_from_sections(sections)
         if record.catalog == "multi" and props.get("UNIT_OUTDOOR") and not props.get("UNIT_INDOOR"):
             return {"type": "наружный блок"}
         if record.catalog == "multi" and props.get("UNIT_INDOOR") and not props.get("UNIT_OUTDOOR"):
@@ -330,7 +331,16 @@ class MdvCatalogParser(BaseParser):
             if indoor_type:
                 data["indoor_type"] = indoor_type
             return data
-        return {"type": "сплит-система", "indoor_type": "настенный"}
+        data = {"type": "сплит-система"}
+        if indoor_type:
+            data["indoor_type"] = indoor_type
+        elif not any(
+            marker in " ".join(str(value or "") for value in sections.values()).lower().replace("ё", "е")
+            for marker, form in _INDOOR_TYPE_MARKERS
+            if form != "настенный"
+        ):
+            data["indoor_type"] = "настенный"
+        return data
 
     async def _manuals_for_url(self, source_url: str) -> list[dict[str, str]]:
         if not source_url or source_url.startswith("mdv-catalog://"):
@@ -538,10 +548,16 @@ class MdvCatalogParser(BaseParser):
     @staticmethod
     def _infer_indoor_type(text: str) -> str:
         normalized = text.lower().replace("ё", "е")
-        for marker, value in _INDOOR_TYPE_MARKERS:
-            if marker in normalized:
-                return value
-        return "настенный" if "настенн" in normalized else ""
+        matches = {value for marker, value in _INDOOR_TYPE_MARKERS if marker in normalized}
+        return next(iter(matches)) if len(matches) == 1 else ""
+
+    @classmethod
+    def _infer_indoor_type_from_sections(cls, sections: dict[str, Any]) -> str:
+        for key in ("SECTION_3", "SECTION_2", "SECTION_1"):
+            indoor_type = cls._infer_indoor_type(str(sections.get(key) or ""))
+            if indoor_type:
+                return indoor_type
+        return ""
 
     @staticmethod
     def _inner_block_label(indoor_type: str) -> str:

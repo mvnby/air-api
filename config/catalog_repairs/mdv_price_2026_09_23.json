@@ -1,0 +1,533 @@
+{
+  "spreadsheet_url": "https://docs.google.com/spreadsheets/d/1oQIe3HonJQbTek7NTINg0x1eslNrJ6m_YaiOxRTD7-8/edit",
+  "spreadsheet_modified_at": "2026-09-23T08:39:08.712Z",
+  "indoor_forms": [
+    {
+      "id": 180,
+      "title": "Кассетный кондиционер TCL TCC-60CHRA/U3-L",
+      "old_form": "настенный",
+      "new_form": "кассетный",
+      "source": "TCL PAC, row 9"
+    },
+    {
+      "id": 881,
+      "title": "MDV Инверторные канальные сплит-системы MDV MDT2II 3D-DC Inverter R32 MDT2II-09HWFN8/MDOAG-09HFN8",
+      "old_form": "настенный",
+      "new_form": "канальный",
+      "source": "MDV RAC, rows 201-206"
+    },
+    {
+      "id": 882,
+      "title": "MDV Инверторные канальные сплит-системы MDV MDT2II 3D-DC Inverter R32 MDT2II-12HWFN8/MDOAG-12HFN8",
+      "old_form": "настенный",
+      "new_form": "канальный",
+      "source": "MDV RAC, rows 201-206"
+    },
+    {
+      "id": 883,
+      "title": "MDV Инверторные канальные сплит-системы MDV MDT2II 3D-DC Inverter R32 MDT2II-18HWFN8/MDOAG-18HFN8",
+      "old_form": "настенный",
+      "new_form": "канальный",
+      "source": "MDV RAC, rows 201-206"
+    },
+    {
+      "id": 884,
+      "title": "MDV Инверторные канальные сплит-системы MDV MDT2II 3D-DC Inverter R32 MDT2II-24HWFN8/MDOAG-24HFN8",
+      "old_form": "настенный",
+      "new_form": "канальный",
+      "source": "MDV RAC, rows 201-206"
+    },
+    {
+      "id": 885,
+      "title": "MDV Инверторные канальные сплит-системы MDV MDT2II DC Inverter R32 MDT2II-07HWFN8/MDOAG-07HDN8",
+      "old_form": "настенный",
+      "new_form": "канальный",
+      "source": "MDV RAC, rows 201-206"
+    },
+    {
+      "id": 886,
+      "title": "MDV Инверторные канальные сплит-системы MDV MDT2II DC Inverter R32 MDT2II-09HWFN8/MDOAG-09HDN8",
+      "old_form": "настенный",
+      "new_form": "канальный",
+      "source": "MDV RAC, rows 201-206"
+    },
+    {
+      "id": 887,
+      "title": "MDV Инверторные канальные сплит-системы MDV MDT2II DC Inverter R32 MDT2II-12HWFN8/MDOAG-12HDN8",
+      "old_form": "настенный",
+      "new_form": "канальный",
+      "source": "MDV RAC, rows 201-206"
+    },
+    {
+      "id": 888,
+      "title": "MDV Кассетные однопоточные сплит-системы MDCA1I MDCA1I-12HRFN8/MDOAG-12HFN8",
+      "old_form": "настенный",
+      "new_form": "кассетный",
+      "source": "https://mdv-aircond.ru/catalog/bytovye-split-sistemy/kassetnye-kanalnye-konsolnye-split-sistemy/kassetnye-odnopotochnye-split-sistemy-mdca1i/mdca1i-18hrfn8-mdoag-18hfn8/"
+    },
+    {
+      "id": 889,
+      "title": "MDV Кассетные однопоточные сплит-системы MDCA1I MDCA1I-18HRFN8/MDOAG-18HFN8",
+      "old_form": "настенный",
+      "new_form": "кассетный",
+      "source": "https://mdv-aircond.ru/catalog/bytovye-split-sistemy/kassetnye-kanalnye-konsolnye-split-sistemy/kassetnye-odnopotochnye-split-sistemy-mdca1i/mdca1i-18hrfn8-mdoag-18hfn8/"
+    },
+    {
+      "id": 890,
+      "title": "MDV Кассетные однопоточные сплит-системы MDCA1I MDCA1I-12HRFN8/MDOAG-12HDN8",
+      "old_form": "настенный",
+      "new_form": "кассетный",
+      "source": "https://mdv-aircond.ru/catalog/bytovye-split-sistemy/kassetnye-kanalnye-konsolnye-split-sistemy/kassetnye-odnopotochnye-split-sistemy-mdca1i/mdca1i-18hrfn8-mdoag-18hfn8/"
+    },
+    {
+      "id": 891,
+      "title": "MDV Компактные кассетные сплит-системы MDCAС4I 3D DC-INVERTER ERP, R32 MDCAС4I-09HRFN8/MDOAG-09HFN8",
+      "old_form": "настенный",
+      "new_form": "кассетный",
+      "source": "MDV RAC, rows 193-197"
+    },
+    {
+      "id": 892,
+      "title": "MDV Компактные кассетные сплит-системы MDCAС4I 3D DC-INVERTER ERP, R32 MDCAС4I-12HRFN8/MDOAG-12HFN8",
+      "old_form": "настенный",
+      "new_form": "кассетный",
+      "source": "MDV RAC, rows 193-197"
+    },
+    {
+      "id": 893,
+      "title": "MDV Компактные кассетные сплит-системы MDCAС4I 3D DC-INVERTER ERP, R32 MDCAС4I-18HRFN8/MDOAG-18HFN8",
+      "old_form": "настенный",
+      "new_form": "кассетный",
+      "source": "MDV RAC, rows 193-197"
+    },
+    {
+      "id": 894,
+      "title": "MDV Компактные кассетные сплит-системы MDCAС4I DC-INVERTER, R32 MDCAС4I-07HRFN8/MDOAG-07HDN8",
+      "old_form": "настенный",
+      "new_form": "кассетный",
+      "source": "MDV RAC, rows 193-197"
+    },
+    {
+      "id": 895,
+      "title": "MDV Компактные кассетные сплит-системы MDCAС4I DC-INVERTER, R32 MDCAС4I-09HRFN8/MDOAG-09HDN8",
+      "old_form": "настенный",
+      "new_form": "кассетный",
+      "source": "MDV RAC, rows 193-197"
+    },
+    {
+      "id": 896,
+      "title": "MDV Компактные кассетные сплит-системы MDCAС4I DC-INVERTER, R32 MDCAС4I-12HRFN8/MDOAG-12HDN8",
+      "old_form": "настенный",
+      "new_form": "кассетный",
+      "source": "MDV RAC, rows 193-197"
+    },
+    {
+      "id": 897,
+      "title": "MDV Консольные сплит-системы 3D DC-INVERTER ERP, R32 MDFFI-12HRFN8/MDOAG-12HFN8",
+      "old_form": "настенный",
+      "new_form": "консольный",
+      "source": "MDV PAC, rows 51-53"
+    },
+    {
+      "id": 898,
+      "title": "MDV Консольные сплит-системы 3D DC-INVERTER ERP, R32 MDFFI-18HRFN8/MDOAG-18HFN8",
+      "old_form": "настенный",
+      "new_form": "консольный",
+      "source": "MDV PAC, rows 51-53"
+    },
+    {
+      "id": 899,
+      "title": "MDV Консольные сплит-системы 3D DC-INVERTER ERP, R32 MDFFI-12HRFN8/MDOAG-12HDN8",
+      "old_form": "настенный",
+      "new_form": "консольный",
+      "source": "MDV PAC, rows 51-53"
+    },
+    {
+      "id": 919,
+      "title": "MDV Кассетные однопоточные сплит-системы MDCA2I MDCA2I-18HRFN8/MDOAG-18HFN8",
+      "old_form": "настенный",
+      "new_form": "кассетный",
+      "source": "MDV PAC, rows 54-56"
+    },
+    {
+      "id": 920,
+      "title": "MDV Кассетные однопоточные сплит-системы MDCA2I MDCA2I-24HRFN8/MDOAG-24HFN8",
+      "old_form": "настенный",
+      "new_form": "кассетный",
+      "source": "MDV PAC, rows 54-56"
+    },
+    {
+      "id": 921,
+      "title": "MDV Кассетные однопоточные сплит-системы MDCA2I MDCA2I-09HRFN8/MDOAG-09HFN8",
+      "old_form": "настенный",
+      "new_form": "кассетный",
+      "source": "MDV PAC, rows 54-56"
+    },
+    {
+      "id": 922,
+      "title": "MDV Кассетные однопоточные сплит-системы MDCA2I MDCA2I-12HRFN8/MDOAG-12HFN8",
+      "old_form": "настенный",
+      "new_form": "кассетный",
+      "source": "MDV PAC, rows 54-56"
+    },
+    {
+      "id": 1021,
+      "title": "Внутренний напольно-потолочный блок MDV Консольные внутренние блоки MDFFI-12HRFN8",
+      "old_form": "напольно-потолочный",
+      "new_form": "консольный",
+      "source": "MDV RAC, rows 198-200",
+      "new_title": "Внутренний консольный блок MDV Консольные внутренние блоки MDFFI-12HRFN8"
+    },
+    {
+      "id": 1022,
+      "title": "Внутренний напольно-потолочный блок MDV Консольные внутренние блоки MDFFI-18HRFN8",
+      "old_form": "напольно-потолочный",
+      "new_form": "консольный",
+      "source": "MDV RAC, rows 198-200",
+      "new_title": "Внутренний консольный блок MDV Консольные внутренние блоки MDFFI-18HRFN8"
+    }
+  ],
+  "wifi": [
+    {
+      "id": 33,
+      "title": "MDV INFINI Loft ERP Inverter MDSALF-09HRFN8/MDOALF-09HFN8",
+      "old_state": "none",
+      "old_ready": false,
+      "new_state": "ready",
+      "source_row": 98,
+      "claim_row": 97,
+      "model_indoor": "MDSALF-09HRFN8",
+      "model_outdoor": "MDOALF-09HFN8"
+    },
+    {
+      "id": 34,
+      "title": "MDV INFINI Loft ERP Inverter MDSALF-12HRFN8/MDOALF-12HFN8",
+      "old_state": "none",
+      "old_ready": false,
+      "new_state": "ready",
+      "source_row": 99,
+      "claim_row": 97,
+      "model_indoor": "MDSALF-12HRFN8",
+      "model_outdoor": "MDOALF-12HFN8"
+    },
+    {
+      "id": 35,
+      "title": "MDV INFINI Loft ERP Inverter MDSALF-18HRFN8/MDOALF-18HFN8",
+      "old_state": "none",
+      "old_ready": false,
+      "new_state": "ready",
+      "source_row": 100,
+      "claim_row": 97,
+      "model_indoor": "MDSALF-18HRFN8",
+      "model_outdoor": "MDOALF-18HFN8"
+    },
+    {
+      "id": 36,
+      "title": "MDV INFINI Loft ERP Inverter MDSALF-24HRFN8/MDOALF-24HFN8",
+      "old_state": "none",
+      "old_ready": false,
+      "new_state": "ready",
+      "source_row": 101,
+      "claim_row": 97,
+      "model_indoor": "MDSALF-24HRFN8",
+      "model_outdoor": "MDOALF-24HFN8"
+    },
+    {
+      "id": 46,
+      "title": "MDV INFINI Standard Inverter MDSAG-07HRDN8/MDOAG-07HDN8",
+      "old_state": "none",
+      "old_ready": false,
+      "new_state": "ready",
+      "source_row": 67,
+      "claim_row": 66,
+      "model_indoor": "MDSAG-07HRDN8",
+      "model_outdoor": "MDOAG-07HDN8"
+    },
+    {
+      "id": 47,
+      "title": "MDV INFINI Standard Inverter MDSAG-09HRDN8/MDOAG-09HDN8",
+      "old_state": "none",
+      "old_ready": false,
+      "new_state": "ready",
+      "source_row": 68,
+      "claim_row": 66,
+      "model_indoor": "MDSAG-09HRDN8",
+      "model_outdoor": "MDOAG-09HDN8"
+    },
+    {
+      "id": 48,
+      "title": "MDV INFINI Standard Inverter MDSAG-12HRDN8/MDOAG-12HDN8",
+      "old_state": "none",
+      "old_ready": false,
+      "new_state": "ready",
+      "source_row": 69,
+      "claim_row": 66,
+      "model_indoor": "MDSAG-12HRDN8",
+      "model_outdoor": "MDOAG-12HDN8"
+    },
+    {
+      "id": 61,
+      "title": "MDV INFINI UVpro Inverter MDSAL-18HRFN8/MDOAG-18HFN8",
+      "old_state": "none",
+      "old_ready": false,
+      "new_state": "ready",
+      "source_row": 93,
+      "claim_row": 90,
+      "model_indoor": "MDSAL-18HRFN8",
+      "model_outdoor": "MDOAG-18HFN8"
+    },
+    {
+      "id": 62,
+      "title": "MDV INFINI UVpro Inverter MDSAL-24HRFN8/MDOAG-24HFN8",
+      "old_state": "none",
+      "old_ready": false,
+      "new_state": "ready",
+      "source_row": 94,
+      "claim_row": 90,
+      "model_indoor": "MDSAL-24HRFN8",
+      "model_outdoor": "MDOAG-24HFN8"
+    },
+    {
+      "id": 92,
+      "title": "MDV NOVA 3-IN-1 MDSAH-09HRFN8/MDOAH-09HFN8",
+      "old_state": "none",
+      "old_ready": false,
+      "new_state": "builtin",
+      "source_row": 133,
+      "claim_row": 132,
+      "model_indoor": "MDSAH-09HRFN8",
+      "model_outdoor": "MDOAH-09HFN8"
+    },
+    {
+      "id": 93,
+      "title": "MDV NOVA 3-IN-1 MDSAH-12HRFN8/MDOAH-12HFN8",
+      "old_state": "none",
+      "old_ready": false,
+      "new_state": "builtin",
+      "source_row": 134,
+      "claim_row": 132,
+      "model_indoor": "MDSAH-12HRFN8",
+      "model_outdoor": "MDOAH-12HFN8"
+    },
+    {
+      "id": 102,
+      "title": "MDV FOREST R32 On/Off MDSAF-12HRN8/MDOAF-12HN8",
+      "old_state": "none",
+      "old_ready": false,
+      "new_state": "ready",
+      "source_row": 8,
+      "claim_row": 5,
+      "model_indoor": "MDSAF-12HRN8",
+      "model_outdoor": "MDOAF-12HN8"
+    },
+    {
+      "id": 105,
+      "title": "MDV Classic Inverter MDSC-18HRFN8/MDOC-18HFN8",
+      "old_state": "none",
+      "old_ready": false,
+      "new_state": "ready",
+      "source_row": 48,
+      "claim_row": 44,
+      "model_indoor": "MDSC-18HRFN8",
+      "model_outdoor": "MDOC-18HFN8"
+    },
+    {
+      "id": 106,
+      "title": "MDV Classic Inverter MDSC-24HRFN8/MDOC-24HFN8",
+      "old_state": "none",
+      "old_ready": false,
+      "new_state": "ready",
+      "source_row": 49,
+      "claim_row": 44,
+      "model_indoor": "MDSC-24HRFN8",
+      "model_outdoor": "MDOC-24HFN8"
+    },
+    {
+      "id": 110,
+      "title": "MDV FOREST R32 On/Off MDSAF-07HRN8/MDOAF-07HN8",
+      "old_state": "none",
+      "old_ready": false,
+      "new_state": "ready",
+      "source_row": 6,
+      "claim_row": 5,
+      "model_indoor": "MDSAF-07HRN8",
+      "model_outdoor": "MDOAF-07HN8"
+    },
+    {
+      "id": 111,
+      "title": "MDV FOREST R32 On/Off MDSAF-09HRN8/MDOAF-09HN8",
+      "old_state": "none",
+      "old_ready": false,
+      "new_state": "ready",
+      "source_row": 7,
+      "claim_row": 5,
+      "model_indoor": "MDSAF-09HRN8",
+      "model_outdoor": "MDOAF-09HN8"
+    },
+    {
+      "id": 112,
+      "title": "MDV FOREST R32 On/Off MDSAF-18HRN8/MDOAF-18HN8",
+      "old_state": "none",
+      "old_ready": false,
+      "new_state": "ready",
+      "source_row": 9,
+      "claim_row": 5,
+      "model_indoor": "MDSAF-18HRN8",
+      "model_outdoor": "MDOAF-18HN8"
+    },
+    {
+      "id": 113,
+      "title": "MDV FOREST R32 On/Off MDSAF-24HRN8/MDOAF-24HN8",
+      "old_state": "none",
+      "old_ready": false,
+      "new_state": "ready",
+      "source_row": 10,
+      "claim_row": 5,
+      "model_indoor": "MDSAF-24HRN8",
+      "model_outdoor": "MDOAF-24HN8"
+    },
+    {
+      "id": 142,
+      "title": "MDV All Easy MDSAE-09HRFN8/MDOAE-09HFN8",
+      "old_state": null,
+      "old_ready": "ready",
+      "new_state": "ready",
+      "source_row": 60,
+      "claim_row": 59,
+      "model_indoor": "MDSAE-09HRFN8",
+      "model_outdoor": "MDOAE-09HFN8"
+    },
+    {
+      "id": 143,
+      "title": "MDV OP Smart Heat Pump MDSOPS-09HRFN8/MDOOPS-09HFN8",
+      "old_state": "none",
+      "old_ready": false,
+      "new_state": "ready",
+      "source_row": 141,
+      "claim_row": 140,
+      "model_indoor": "MDSOPS-09HRFN8",
+      "model_outdoor": "MDOOPS-09HFN8"
+    },
+    {
+      "id": 144,
+      "title": "MDV OP Smart Heat Pump MDSOPS-12HRFN8/MDOOPS-12HFN8",
+      "old_state": "none",
+      "old_ready": false,
+      "new_state": "ready",
+      "source_row": 142,
+      "claim_row": 140,
+      "model_indoor": "MDSOPS-12HRFN8",
+      "model_outdoor": "MDOOPS-12HFN8"
+    },
+    {
+      "id": 145,
+      "title": "MDV OP Smart Heat Pump MDSOPS-18HRFN8/MDOOPS-18HFN8",
+      "old_state": "none",
+      "old_ready": false,
+      "new_state": "ready",
+      "source_row": 143,
+      "claim_row": 140,
+      "model_indoor": "MDSOPS-18HRFN8",
+      "model_outdoor": "MDOOPS-18HFN8"
+    },
+    {
+      "id": 867,
+      "title": "MDV INTEGRA Pro Black MDSBI2-07HRFN8/MDOBI2-07HFN8",
+      "old_state": "none",
+      "old_ready": false,
+      "new_state": "builtin",
+      "source_row": 112,
+      "claim_row": 111,
+      "model_indoor": "MDSBI2-07HRFN8",
+      "model_outdoor": "MDOBI2-07HFN8"
+    },
+    {
+      "id": 868,
+      "title": "MDV INTEGRA Pro Black MDSBI2-09HRFN8/MDOBI2-09HFN8",
+      "old_state": "none",
+      "old_ready": false,
+      "new_state": "builtin",
+      "source_row": 113,
+      "claim_row": 111,
+      "model_indoor": "MDSBI2-09HRFN8",
+      "model_outdoor": "MDOBI2-09HFN8"
+    },
+    {
+      "id": 869,
+      "title": "MDV INTEGRA Pro Black MDSBI2-12HRFN8/MDOBI2-12HFN8",
+      "old_state": "none",
+      "old_ready": false,
+      "new_state": "builtin",
+      "source_row": 114,
+      "claim_row": 111,
+      "model_indoor": "MDSBI2-12HRFN8",
+      "model_outdoor": "MDOBI2-12HFN8"
+    },
+    {
+      "id": 872,
+      "title": "MDV INTEGRA Inverter MDSI-07HRDN8/MDOI-07HDN8",
+      "old_state": "none",
+      "old_ready": false,
+      "new_state": "ready",
+      "source_row": 75,
+      "claim_row": 74,
+      "model_indoor": "MDSI-07HRDN8",
+      "model_outdoor": "MDOI-07HDN8"
+    },
+    {
+      "id": 873,
+      "title": "MDV INTEGRA Inverter MDSI-09HRDN8/MDOI-09HDN8",
+      "old_state": "none",
+      "old_ready": false,
+      "new_state": "ready",
+      "source_row": 76,
+      "claim_row": 74,
+      "model_indoor": "MDSI-09HRDN8",
+      "model_outdoor": "MDOI-09HDN8"
+    },
+    {
+      "id": 874,
+      "title": "MDV INTEGRA Inverter MDSI-12HRDN8/MDOI-12HDN8",
+      "old_state": "none",
+      "old_ready": false,
+      "new_state": "ready",
+      "source_row": 77,
+      "claim_row": 74,
+      "model_indoor": "MDSI-12HRDN8",
+      "model_outdoor": "MDOI-12HDN8"
+    },
+    {
+      "id": 875,
+      "title": "MDV INTEGRA Inverter MDSI-18HRFN8/MDOI-18HFN8",
+      "old_state": "none",
+      "old_ready": false,
+      "new_state": "ready",
+      "source_row": 78,
+      "claim_row": 74,
+      "model_indoor": "MDSI-18HRFN8",
+      "model_outdoor": "MDOI-18HFN8"
+    },
+    {
+      "id": 876,
+      "title": "MDV INTEGRA Inverter MDSI-24HRFN8/MDOI-24HFN8",
+      "old_state": "none",
+      "old_ready": false,
+      "new_state": "ready",
+      "source_row": 79,
+      "claim_row": 74,
+      "model_indoor": "MDSI-24HRFN8",
+      "model_outdoor": "MDOI-24HFN8"
+    },
+    {
+      "id": 879,
+      "title": "MDV INFINI On/Off R32 MDSAG-09HRN8/MDOAG-09HN8",
+      "old_state": "none",
+      "old_ready": false,
+      "new_state": "ready",
+      "source_row": 16,
+      "claim_row": 15,
+      "model_indoor": "MDSAG-09HRN8",
+      "model_outdoor": "MDOAG-09HN8"
+    }
+  ]
+}
