@@ -56,6 +56,7 @@ async def test_leads_inbox_search_and_source_filter_before_pagination_with_tenan
         customer = Customer(
             tenant_id=1,
             name=f"Customer {idx}",
+            phone=f"+3752900001{idx:02d}",
             email="deep@example.test" if idx == 0 else None,
         )
         db.add(customer)
@@ -67,7 +68,7 @@ async def test_leads_inbox_search_and_source_filter_before_pagination_with_tenan
             comment="special tender" if idx == 1 else None,
             created_at=when,
         ))
-    foreign_customer = Customer(tenant_id=foreign_tenant.id, name="Foreign special tender")
+    foreign_customer = Customer(tenant_id=foreign_tenant.id, name="Foreign special tender", phone="+375290000199")
     db.add(foreign_customer)
     await db.flush()
     db.add(Order(
