@@ -173,8 +173,8 @@ afterEach(() => {
   managerSession.auth.value = null;
 });
 
-const mountWorkspace = async (beforeGenerate?: (type: string) => unknown | Promise<unknown>) => {
-  const wrapper = mount(NativeDocumentsWorkspace, { props: { order: baseOrder, beforeGenerate } });
+const mountWorkspace = async (beforeGenerate?: (type: string) => unknown | Promise<unknown>, order = baseOrder) => {
+  const wrapper = mount(NativeDocumentsWorkspace, { props: { order, beforeGenerate } });
   wrappers.push(wrapper);
   await flushPromises();
   return wrapper;
@@ -214,7 +214,7 @@ describe('NativeDocumentsWorkspace', () => {
     const barrier = deferred<{ mutated: boolean }>();
     const beforeGenerate = vi.fn(() => barrier.promise);
     const wrapper = await mountWorkspace(beforeGenerate);
-    await wrapper.get('[data-testid="native-document-type"]').setValue('act');
+    await wrapper.get('[data-testid="native-document-type-act"]').trigger('click');
     await flushPromises();
 
     expect(wrapper.get('[data-testid="create-native-draft"]').attributes('data-order-usage')).toBe('document_create');
@@ -235,7 +235,7 @@ describe('NativeDocumentsWorkspace', () => {
   it('does not create a native draft when the parent blocks unsaved manual changes', async () => {
     const beforeGenerate = vi.fn().mockResolvedValue(false);
     const wrapper = await mountWorkspace(beforeGenerate);
-    await wrapper.get('[data-testid="native-document-type"]').setValue('act');
+    await wrapper.get('[data-testid="native-document-type-act"]').trigger('click');
     await flushPromises();
 
     await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
@@ -427,13 +427,13 @@ describe('NativeDocumentsWorkspace', () => {
     { documentType: 'invoice', override: 'executor_payer' },
   ])('inherits party names by default and submits the $override override for $documentType', async ({ documentType, override }) => {
     const wrapper = await mountWorkspace();
-    await wrapper.get('[data-testid="native-document-type"]').setValue(documentType);
+    await wrapper.get(`[data-testid="native-document-type-${documentType}"]`).trigger('click');
     await flushPromises();
     expect(wrapper.get('[data-testid="native-document-party-roles"]').text()).toContain('Как в договоре');
     await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
     await flushPromises();
     expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenLastCalledWith(
-      42, expect.objectContaining({ document_role_type: null, base_customer_contract_id: 91 }),
+      42, expect.objectContaining({ document_role_type: documentType === 'invoice' ? 'seller_buyer' : null, base_customer_contract_id: 91 }),
     );
     const partyRoles = wrapper.get('[data-testid="native-document-party-roles"]');
     expect(partyRoles.text()).toContain(override === 'seller_payer' ? 'Продавец / Плательщик' : 'Исполнитель / Плательщик');
@@ -443,19 +443,19 @@ describe('NativeDocumentsWorkspace', () => {
     expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenLastCalledWith(
       42, expect.objectContaining({ document_role_type: override }),
     );
-    await wrapper.get('[data-testid="native-document-type"]').setValue(documentType === 'act' ? 'invoice' : 'act');
+    await wrapper.get(`[data-testid="native-document-type-${documentType === 'act' ? 'invoice' : 'act'}"]`).trigger('click');
     await flushPromises();
     await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
     await flushPromises();
     expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenLastCalledWith(
-      42, expect.objectContaining({ document_role_type: null }),
+      42, expect.objectContaining({ document_role_type: documentType === 'act' ? 'seller_buyer' : null }),
     );
   });
 
   it('uses the active customer contract as the default basis for an act', async () => {
     const wrapper = await mountWorkspace();
 
-    await wrapper.get('[data-testid="native-document-type"]').setValue('act');
+    await wrapper.get('[data-testid="native-document-type-act"]').trigger('click');
     await flushPromises();
 
     expect(wrapper.get('[data-testid="native-document-basis"]').element).toHaveProperty(
@@ -480,7 +480,7 @@ describe('NativeDocumentsWorkspace', () => {
   it('requires remarks text when an act is created with customer remarks', async () => {
     const wrapper = await mountWorkspace();
 
-    await wrapper.get('[data-testid="native-document-type"]').setValue('act');
+    await wrapper.get('[data-testid="native-document-type-act"]').trigger('click');
     await flushPromises();
     await wrapper.get('[data-testid="act-claims-present"]').trigger('click');
 
@@ -504,7 +504,7 @@ describe('NativeDocumentsWorkspace', () => {
   it('shows the invoice role as a direct two-state switch', async () => {
     const wrapper = await mountWorkspace();
 
-    await wrapper.get('[data-testid="native-document-type"]').setValue('invoice');
+    await wrapper.get('[data-testid="native-document-type-invoice"]').trigger('click');
     await flushPromises();
 
     const toggle = wrapper.get('[data-testid="invoice-role-toggle"]');
@@ -516,13 +516,13 @@ describe('NativeDocumentsWorkspace', () => {
     expect(toggle.text()).toContain('Счёт-оферта');
   });
 
-  it('requires one of seven direct contract scenarios before creating a B2B contract', async () => {
+  it('starts with an offer and suggests the contract scenario from the order workflow', async () => {
     const wrapper = await mountWorkspace();
-    const create = wrapper.get('[data-testid="create-native-draft"]');
-
-    expect(create.attributes('disabled')).toBeDefined();
-    expect(create.attributes('title')).toContain('Выберите сценарий договора');
+    expect(wrapper.get('[data-testid="native-document-type-offer"]').attributes('aria-pressed')).toBe('true');
+    await wrapper.get('[data-testid="native-document-type-contract"]').trigger('click');
+    await flushPromises();
     expect(wrapper.findAll('button[data-testid^="contract-scenario-"]')).toHaveLength(7);
+    expect(wrapper.get('[data-testid="contract-scenario-supply_installation"]').attributes('aria-pressed')).toBe('true');
 
     await wrapper.get('[data-testid="contract-scenario-supply_installation"]').trigger('click');
     await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
@@ -544,17 +544,32 @@ describe('NativeDocumentsWorkspace', () => {
     );
   });
 
+  it('prefers a maintenance template and executor roles for a maintenance order', async () => {
+    vi.mocked(ManagerDocumentSystemService.listManagerNativeDocumentTemplates).mockImplementation(
+      async (_legalEntityId, documentType) => ({ items: documentType === 'contract' ? [
+        { id: 120, tenant_id: 1, legal_entity_id: 5, name: 'Универсальный', doc_type: 'contract', is_default: true, is_active: true, sort_order: 0, created_at: NOW },
+        { id: 121, tenant_id: 1, legal_entity_id: 5, name: 'Техническое обслуживание', doc_type: 'contract', contract_scenario: 'maintenance', is_default: false, is_active: true, sort_order: 1, created_at: NOW },
+      ] : [{ id: 100, tenant_id: 1, legal_entity_id: 5, name: 'КП', doc_type: documentType || 'offer', is_default: true, is_active: true, sort_order: 0, created_at: NOW }] }),
+    );
+    const wrapper = await mountWorkspace(undefined, { ...baseOrder, workflow_type: 'maintenance' });
+    await wrapper.get('[data-testid="native-document-type-contract"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="contract-scenario-maintenance"]').attributes('aria-pressed')).toBe('true');
+    expect(wrapper.get<HTMLSelectElement>('[data-testid="native-document-party-roles"]').element.value).toBe('executor_customer');
+    expect(wrapper.get<HTMLSelectElement>('[data-testid="native-document-template"]').element.value).toBe('121');
+    expect(wrapper.get('[data-testid="warranty-terms-details"]').text()).toContain('оборудование не указано');
+  });
+
   it('sends B2C terms only for a consumer order document', async () => {
     const wrapper = await mountWorkspace();
 
-    expect(wrapper.get('[data-testid="native-document-type"]').findAll('option')
-      .map((option) => option.attributes('value'))).not.toContain('b2c_route_laying_act');
+    expect(wrapper.find('[data-testid="native-document-type-b2c_route_laying_act"]').exists()).toBe(false);
     await wrapper.get('[data-testid="native-audience-consumer"]').trigger('click');
     await flushPromises();
-    expect(wrapper.get('[data-testid="native-document-type"]').findAll('option')
-      .map((option) => option.attributes('value'))).toContain('b2c_route_laying_act');
+    expect(wrapper.find('[data-testid="native-document-type-b2c_route_laying_act"]').exists()).toBe(true);
 
-    await wrapper.get('[data-testid="native-document-type"]').setValue('b2c_route_laying_act');
+    await wrapper.get('[data-testid="native-document-type-b2c_route_laying_act"]').trigger('click');
     await flushPromises();
 
     expect(wrapper.get('[data-testid="consumer-document-terms"]').text())
@@ -600,7 +615,7 @@ describe('NativeDocumentsWorkspace', () => {
 
     await wrapper.get('[data-testid="native-audience-consumer"]').trigger('click');
     await flushPromises();
-    await wrapper.get('[data-testid="native-document-type"]').setValue('b2c_supply_installation_act');
+    await wrapper.get('[data-testid="native-document-type-b2c_supply_installation_act"]').trigger('click');
     await flushPromises();
     await wrapper.get('[data-testid="consumer-equipment-brand"]').setValue('Midea');
     await wrapper.get('[data-testid="consumer-goods-warranty"]').setValue('60');
@@ -636,7 +651,7 @@ describe('NativeDocumentsWorkspace', () => {
       });
     const wrapper = await mountWorkspace();
 
-    await wrapper.get('[data-testid="native-document-type"]').setValue('act');
+    await wrapper.get('[data-testid="native-document-type-act"]').trigger('click');
     const create = wrapper.get('[data-testid="create-native-draft"]');
     expect(create.attributes('disabled')).toBeDefined();
     expect(create.attributes('title')).toContain('Загружаем подходящий шаблон');

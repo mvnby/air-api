@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { BusinessDocumentTerms } from '../model/business-document-terms';
 
-const props = defineProps<{ terms: BusinessDocumentTerms; showSupply: boolean; showWarranty: boolean; showValidUntil: boolean }>();
+const props = defineProps<{ terms: BusinessDocumentTerms; showSupply: boolean; showWarranty: boolean; showValidUntil: boolean; embedded?: boolean }>();
 const emit = defineEmits<{ updateTerms: [terms: BusinessDocumentTerms] }>();
 
 const update = (changes: Partial<BusinessDocumentTerms>) => emit('updateTerms', { ...props.terms, ...changes });
@@ -17,10 +17,10 @@ const updateText = (field: 'subject' | 'goods_warranty_terms' | 'work_warranty_t
 </script>
 
 <template>
-  <section class="business-section" data-testid="supply-warranty-terms-panel">
+  <section :class="embedded ? 'mt-2' : 'business-section'" data-testid="supply-warranty-terms-panel">
     <template v-if="showSupply">
       <div>
-        <h4 class="business-heading">Предмет и сроки</h4>
+        <h4 v-if="!embedded" class="business-heading">Предмет и сроки</h4>
         <p class="business-help">Оставьте пустым то, что уже однозначно описано в выбранном предложении или спецификации.</p>
       </div>
       <div class="mt-3 grid gap-3 sm:grid-cols-2">
@@ -31,7 +31,7 @@ const updateText = (field: 'subject' | 'goods_warranty_terms' | 'work_warranty_t
       </div>
     </template>
     <template v-if="showWarranty">
-      <div :class="showSupply ? 'mt-5 border-t border-slate-200 pt-4 dark:border-slate-700' : ''"><h4 class="business-heading">Гарантия</h4><p class="business-help">Укажите согласованный срок отдельно для оборудования и выполненных работ. 0 — не указывать договорную гарантию.</p></div>
+      <div :class="showSupply ? 'mt-5 border-t border-slate-200 pt-4 dark:border-slate-700' : ''"><h4 v-if="!embedded" class="business-heading">Гарантия</h4><p class="business-help">Укажите согласованный срок отдельно для оборудования и выполненных работ. 0 — не указывать договорную гарантию.</p></div>
       <div class="mt-3 grid gap-3 sm:grid-cols-2"><label class="business-field"><span>На оборудование, мес.</span><input :value="terms.goods_warranty_months ?? ''" class="business-input" type="number" min="0" max="240" @input="updateNumber('goods_warranty_months', $event)" /></label><label class="business-field"><span>На работы, мес.</span><input :value="terms.work_warranty_months ?? ''" class="business-input" type="number" min="0" max="240" @input="updateNumber('work_warranty_months', $event)" /></label></div>
       <div class="mt-3 grid gap-3 sm:grid-cols-2"><label class="business-field"><span>Условия гарантии на оборудование</span><textarea :value="terms.goods_warranty_terms || ''" class="business-input min-h-20 py-2" placeholder="Например: по условиям изготовителя" @input="updateText('goods_warranty_terms', $event)" /></label><label class="business-field"><span>Условия гарантии на работы</span><textarea :value="terms.work_warranty_terms || ''" class="business-input min-h-20 py-2" placeholder="Например: при соблюдении правил эксплуатации" @input="updateText('work_warranty_terms', $event)" /></label></div>
     </template>

@@ -41,6 +41,7 @@ import { openNativeDocumentPreview } from '../integrations/native-document-previ
 
 type ManagedWorkspaceInput = {
   orderId: () => number;
+  workflowType: () => string | null | undefined;
   proposalId: () => number | null;
   proposalTotalCents: () => number | null;
   notify: (message: string, type?: 'success' | 'error') => void;
@@ -64,7 +65,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   const pdfRuntime = ref<DocumentPdfRuntimeStatus | null>(null);
   const selectedLegalEntityId = ref<number | null>(null);
   const selectedTemplateId = ref<number | null>(null);
-  const documentType = ref('contract');
+  const documentType = ref('offer');
   const businessRole = ref<'payment_request' | 'offer'>('payment_request');
   const documentRoleType = ref<DocumentRoleType | null>(null);
   const issueDate = ref(new Date().toISOString().slice(0, 10));
@@ -97,6 +98,8 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     if (documentType.value === 'invoice') return businessRole.value;
     return '';
   });
+  const suggestedDocumentRole = (): DocumentRoleType => input.workflowType() === 'sales_installation' || !input.workflowType()
+    ? 'seller_buyer' : 'executor_customer';
 
   const defaultGoodsWarrantyMonths = (legalEntityId = selectedLegalEntityId.value) => {
     if (isConsumerDocumentType(documentType.value)) return 36;
@@ -187,7 +190,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     }
   };
   const resetBusinessTerms = () => {
-    businessTerms.value = createDefaultBusinessDocumentTerms();
+    businessTerms.value = createDefaultBusinessDocumentTerms(input.workflowType());
   };
   const resetActTerms = () => {
     actTerms.value = createDefaultActTerms();
@@ -322,7 +325,14 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
         templates.value = activeTemplates;
       }
       const preferred = templates.value.find((item) => item.id === preferredTemplateId);
+      const exactTemplates = documentType.value === 'contract'
+        ? templates.value.filter((item) => item.contract_scenario === templateUseCaseKey.value)
+        : documentType.value === 'invoice'
+          ? templates.value.filter((item) => item.business_role === templateUseCaseKey.value)
+          : [];
       selectedTemplateId.value = preferred?.id
+        || exactTemplates.find((item) => item.is_default)?.id
+        || exactTemplates[0]?.id
         || templates.value.find((item) => item.is_default)?.id
         || templates.value[0]?.id
         || null;
@@ -341,6 +351,8 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   const loadWorkspace = async () => {
     loading.value = true;
     replacesDocumentId.value = null;
+    documentRoleType.value = ['contract', 'offer', 'invoice'].includes(documentType.value)
+      ? suggestedDocumentRole() : null;
     baseDocumentId.value = null;
     baseCustomerContractId.value = null;
     resetConsumerTerms();
@@ -368,7 +380,9 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     () => void loadTemplates(),
     { flush: 'sync' },
   );
-  watch(documentType, () => { documentRoleType.value = null; }, { flush: 'sync' });
+  watch(documentType, (type) => {
+    documentRoleType.value = ['contract', 'offer', 'invoice'].includes(type) ? suggestedDocumentRole() : null;
+  }, { flush: 'sync' });
   watch(documentType, (nextType, previousType) => {
     if (isConsumerDocumentType(nextType) && !isConsumerDocumentType(previousType)) {
       resetConsumerTerms();

@@ -4,7 +4,7 @@ import type { BusinessDocumentTerms, PaymentScheduleItem } from '../model/busine
 
 type PaymentMode = 'full_prepayment' | 'equipment_prepayment' | 'postpayment' | 'custom';
 
-const props = defineProps<{ terms: BusinessDocumentTerms }>();
+const props = defineProps<{ terms: BusinessDocumentTerms; embedded?: boolean }>();
 const emit = defineEmits<{ updateTerms: [terms: BusinessDocumentTerms] }>();
 
 const modes: Array<{ value: PaymentMode; label: string; note: string }> = [
@@ -63,9 +63,9 @@ const removeItem = (index: number) => update(
 </script>
 
 <template>
-  <section class="business-section" data-testid="payment-terms-panel">
+  <section :class="embedded ? 'mt-2' : 'business-section'" data-testid="payment-terms-panel">
     <div>
-      <h4 class="business-heading">Порядок оплаты</h4>
+      <h4 v-if="!embedded" class="business-heading">Порядок оплаты</h4>
       <p class="business-help">Это согласованный график расчётов, а не факт поступивших платежей.</p>
     </div>
     <div class="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">

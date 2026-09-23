@@ -1,6 +1,6 @@
 import { computed, ref, type Ref } from 'vue';
-import type { ManagerOrderDetailResponse, OutgoingEmailResponse, PaymentResponse } from '../client';
-import { ManagerMailService } from '../client';
+import type { ManagedDocumentItem, ManagerOrderDetailResponse, OutgoingEmailResponse, PaymentResponse } from '../client';
+import { ManagerDocumentSystemService, ManagerMailService } from '../client';
 
 type UseOrderDocumentStatusOptions = {
   order: Readonly<Ref<ManagerOrderDetailResponse | null>>;
@@ -13,8 +13,10 @@ const normalizeDocumentIdentity = (value: unknown) => (
 
 export const useOrderDocumentStatus = ({ order, payments }: UseOrderDocumentStatusOptions) => {
   const orderEmails = ref<OutgoingEmailResponse[]>([]);
+  const managedDocuments = ref<ManagedDocumentItem[]>([]);
   const orderEmailsLoaded = ref(false);
   let orderEmailsRequestId = 0;
+  let managedDocumentsRequestId = 0;
   const orderDocuments = computed(() => order.value?.documents || []);
 
   const documentEmailStatus = computed<'unknown' | 'none' | 'pending' | 'sent' | 'failed'>(() => {
@@ -31,6 +33,9 @@ export const useOrderDocumentStatus = ({ order, payments }: UseOrderDocumentStat
 
   const sentDocumentTypes = computed(() => {
     const types = new Set<string>();
+    for (const document of managedDocuments.value) {
+      if (document.status === 'sent' || document.status === 'signed') types.add(document.doc_type);
+    }
     const documentsByNumber = new Map(
       orderDocuments.value
         .filter((document) => document.number)
@@ -61,9 +66,12 @@ export const useOrderDocumentStatus = ({ order, payments }: UseOrderDocumentStat
 
   const missingReferencedInvoice = computed(() => {
     const invoiceNumbers = new Set(
-      orderDocuments.value
-        .filter((document) => document.doc_type === 'invoice')
-        .map((document) => normalizeDocumentIdentity(document.number))
+      [
+        ...orderDocuments.value.filter((document) => document.doc_type === 'invoice').map((document) => document.number),
+        ...managedDocuments.value.filter((document) => document.doc_type === 'invoice' && !['void', 'replaced'].includes(document.status))
+          .map((document) => document.official_full_number || document.official_number || document.display_number),
+      ]
+        .map(normalizeDocumentIdentity)
         .filter(Boolean),
     );
     for (const payment of payments.value) {
@@ -79,8 +87,10 @@ export const useOrderDocumentStatus = ({ order, payments }: UseOrderDocumentStat
 
   const resetOrderEmails = () => {
     orderEmailsRequestId += 1;
+    managedDocumentsRequestId += 1;
     orderEmails.value = [];
     orderEmailsLoaded.value = false;
+    managedDocuments.value = [];
   };
 
   const loadOrderEmails = async (orderId: number) => {
@@ -98,9 +108,24 @@ export const useOrderDocumentStatus = ({ order, payments }: UseOrderDocumentStat
     }
   };
 
+  const loadManagedDocuments = async (orderId: number) => {
+    const requestId = ++managedDocumentsRequestId;
+    try {
+      const response = await ManagerDocumentSystemService.listManagerManagedOrderDocuments(orderId);
+      if (requestId !== managedDocumentsRequestId || order.value?.id !== orderId) return;
+      managedDocuments.value = response.items.filter((item) => item.provider === 'native');
+    } catch (error) {
+      if (requestId !== managedDocumentsRequestId) return;
+      console.warn('Failed to load managed order documents', error);
+      managedDocuments.value = [];
+    }
+  };
+
   return {
     documentEmailStatus,
     loadOrderEmails,
+    loadManagedDocuments,
+    managedDocuments,
     missingReferencedInvoice,
     orderDocuments,
     resetOrderEmails,

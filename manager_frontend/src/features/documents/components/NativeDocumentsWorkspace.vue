@@ -9,6 +9,7 @@ import { managerSession } from '../../../services/manager-session';
 import { useManagedDocumentWorkspace } from '../composables/use-managed-document-workspace';
 import ConsumerDocumentTermsPanel from './ConsumerDocumentTermsPanel.vue';
 import B2BContractTermsPanel from './B2BContractTermsPanel.vue';
+import ContractScenarioChooser from './ContractScenarioChooser.vue';
 import ActTermsPanel from './ActTermsPanel.vue';
 import TransportTermsPanel from './TransportTermsPanel.vue';
 import GoogleDocumentEditorActions from './GoogleDocumentEditorActions.vue';
@@ -17,6 +18,7 @@ import type { GoogleDocumentEditTarget } from '../integrations/google-document-e
 import { isConsumerDocumentType } from '../model/consumer-document-terms';
 import { proposalLineTotalCents } from '../model/installation-two-stages';
 import { isBusinessTermsDocumentType } from '../model/business-document-terms';
+import { contractScenarioForWorkflow, withContractScenario, type ContractScenario } from '../model/business-document-terms';
 import { getCustomerDocumentWarnings } from '../model/customer-document-readiness';
 import {
   BUSINESS_NATIVE_DOCUMENT_TYPES,
@@ -29,6 +31,7 @@ import {
 
 const props = defineProps<{
   order: ManagerOrderDetailResponse;
+  workflowType?: string | null;
   activeProposalId?: number | null;
   beforeGenerate?: (type: string) => BeforeGenerateResult | Promise<BeforeGenerateResult>;
 }>();
@@ -58,6 +61,7 @@ const canManageDocumentSettings = computed(() => (
 const canSendNativeEmail = computed(() => managerSession.auth.value?.is_system_tenant === true);
 const workspace = useManagedDocumentWorkspace({
   orderId: () => props.order.id,
+  workflowType: () => props.workflowType || props.order.workflow_type,
   proposalId: () => proposalId.value,
   proposalTotalCents: () => activeProposalTotalCents.value,
   notify: (message, type = 'success') => emit('toast', { message, type }),
@@ -66,6 +70,21 @@ const workspace = useManagedDocumentWorkspace({
 const sendableDocuments = computed(() => workspace.documents.value.filter((document) => (
   ['issued', 'sent', 'signed'].includes(document.status)
 )));
+const draftCount = computed(() => workspace.documents.value.filter((document) => document.status === 'draft').length);
+const documentTypes = computed(() => documentAudience.value === 'business'
+  ? BUSINESS_NATIVE_DOCUMENT_TYPES : CONSUMER_NATIVE_DOCUMENT_TYPES);
+const documentTypeIcon = (type: string) => ({
+  offer: 'request_quote', invoice: 'receipt_long', contract: 'handshake', act: 'fact_check',
+  tn2: 'local_shipping', ttn1: 'local_shipping',
+  b2c_supply_installation_act: 'home_repair_service',
+  b2c_customer_equipment_installation_act: 'build',
+  b2c_maintenance_repair_act: 'handyman', b2c_route_laying_act: 'route',
+}[type] || 'description');
+const setContractScenario = (scenario: ContractScenario) => {
+  workspace.businessTerms.value = withContractScenario(
+    workspace.businessTerms.value, scenario, workspace.selectedGoodsWarrantyDefault.value,
+  );
+};
 const googleEditor = useGoogleDocumentEditor({
   notify: (message, type = 'success') => emit('toast', { message, type }),
   onSynced: async (target) => {
@@ -173,9 +192,19 @@ watch(() => props.order.id, () => {
   documentAudience.value = audience;
   workspace.documentType.value = audience === 'consumer'
     ? CONSUMER_NATIVE_DOCUMENT_TYPES[0].value
-    : 'contract';
+    : 'offer';
   void workspace.loadWorkspace();
 }, { immediate: true });
+watch(() => props.workflowType, (next, previous) => {
+  if (!previous || !next || next === previous) return;
+  if (workspace.businessTerms.value.contract_scenario === contractScenarioForWorkflow(previous)) {
+    setContractScenario(contractScenarioForWorkflow(next));
+  }
+  const roleFor = (workflow: string) => workflow === 'sales_installation' ? 'seller_buyer' : 'executor_customer';
+  if (workspace.documentRoleType.value === roleFor(previous)) {
+    workspace.documentRoleType.value = roleFor(next);
+  }
+});
 
 const openCustomerProfile = () => {
   if (!props.order.customer?.id) return;
@@ -264,6 +293,10 @@ const createDraft = async () => {
     preparingDraft.value = false;
   }
 };
+defineExpose({
+  openCreate: () => formRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+  openSend: () => { if (sendableDocuments.value.length && canSendNativeEmail.value) sendOpen.value = true; },
+});
 </script>
 
 <template>
@@ -281,7 +314,7 @@ const createDraft = async () => {
           <h3 class="font-['Space_Grotesk'] text-lg font-bold text-slate-900 dark:text-white">Документы CRM</h3>
           <span class="rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-brand-800 dark:bg-brand-950/60 dark:text-brand-300">DOCX + PDF</span>
         </div>
-        <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Черновик фиксирует данные. Официальный номер выдаётся только при явном выпуске.</p>
+        <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Выберите тип → создайте черновик → проверьте PDF → выпустите документ → отправьте клиенту.</p>
         <p v-if="googleEditor.connectionState.value === 'connected'" class="mt-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300" data-testid="document-google-connected">
           Google подключён<span v-if="googleEditor.accountLabel.value">: {{ googleEditor.accountLabel.value }}</span>. Черновики можно править онлайн; изменения сохраняются в CRM после возвращения во вкладку.
         </p>
@@ -289,14 +322,6 @@ const createDraft = async () => {
           <template v-if="googleEditor.canConnect.value">Для онлайн-редактирования <button class="font-semibold text-brand-700 underline underline-offset-2" type="button" @click="googleEditor.connect">подключите Google</button>.</template>
           <template v-else>Для онлайн-редактирования обратитесь к владельцу аккаунта.</template>
         </p>
-      </div>
-      <div class="flex flex-wrap items-center gap-2 sm:justify-end">
-        <button v-if="access.canSend && sendableDocuments.length && canSendNativeEmail" class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand-600 px-3 text-xs font-semibold text-white shadow-sm hover:bg-brand-700" type="button" data-testid="native-document-email" @click="sendOpen = true">
-          <span class="material-icons-round text-[17px]">send</span>Письмо
-        </button>
-        <button v-if="canManageDocumentSettings" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:border-brand-400 hover:text-brand-700 dark:border-slate-700 dark:text-slate-300" type="button" @click="openSettings">
-          <span class="material-icons-round text-[17px]">settings</span>Юрлица и шаблоны
-        </button>
       </div>
     </div>
 
@@ -325,37 +350,30 @@ const createDraft = async () => {
           <span class="text-xs font-semibold text-slate-500">В карточке клиента: {{ customerTypeLabel }}</span>
         </div>
 
-        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-[150px_minmax(160px,.8fr)_minmax(220px,1.2fr)_140px_160px_auto] xl:items-end">
-          <label class="native-field">
-            <span>Тип</span>
-            <select v-model="workspace.documentType.value" class="native-input" data-testid="native-document-type">
-              <option v-for="type in documentAudience === 'business' ? BUSINESS_NATIVE_DOCUMENT_TYPES : CONSUMER_NATIVE_DOCUMENT_TYPES" :key="type.value" :value="type.value">{{ type.label }}</option>
-            </select>
-          </label>
-          <label class="native-field">
-            <span>Юрлицо</span>
-            <select v-model="workspace.selectedLegalEntityId.value" class="native-input" data-testid="native-legal-entity">
-              <option v-for="entity in workspace.legalEntities.value" :key="entity.id" :value="entity.id">{{ entity.display_name }}</option>
-            </select>
-          </label>
-          <label class="native-field">
-            <span>Шаблон</span>
-            <select v-model="workspace.selectedTemplateId.value" class="native-input">
-              <option v-for="template in workspace.templates.value" :key="template.id" :value="template.id">{{ template.name }}</option>
-            </select>
-          </label>
-          <label class="native-field">
-            <span>Дата документа</span>
-            <input v-model="workspace.issueDate.value" class="native-input" data-testid="native-document-issue-date" type="date" />
-          </label>
-          <label class="native-field">
-            <span>Город документа</span>
-            <input v-model="workspace.issueCity.value" class="native-input" data-testid="native-document-issue-city" placeholder="Витебск" />
-          </label>
-          <button class="inline-flex h-10 items-center justify-center rounded-xl bg-brand-600 px-4 text-sm font-bold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50" type="button" data-testid="create-native-draft" data-order-usage="document_create" :disabled="preparingDraft || workspace.busy.value || Boolean(workspace.draftBlockedReason.value)" :title="workspace.draftBlockedReason.value" @click="createDraft">
-            Создать черновик
+        <div class="flex items-center justify-between gap-3">
+          <h4 class="text-sm font-bold text-slate-800 dark:text-white">1. Выберите документ</h4>
+          <details class="relative" data-testid="native-document-more">
+            <summary class="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-brand-700 dark:border-slate-700 dark:bg-slate-900" aria-label="Дополнительные настройки документов"><span class="material-icons-round">more_horiz</span></summary>
+            <div class="absolute right-0 z-20 mt-1 w-64 rounded-xl border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+              <label class="native-field"><span>Наше юрлицо</span><select v-model="workspace.selectedLegalEntityId.value" class="native-input" data-testid="native-legal-entity"><option v-for="entity in workspace.legalEntities.value" :key="entity.id" :value="entity.id">{{ entity.display_name }}</option></select></label>
+              <button v-if="canManageDocumentSettings" class="mt-3 text-xs font-semibold text-brand-700 underline" type="button" @click="openSettings">Юрлица и шаблоны</button>
+            </div>
+          </details>
+        </div>
+        <div class="mt-3 flex gap-2 overflow-x-auto pb-2" data-testid="native-document-type">
+          <button v-for="type in documentTypes" :key="type.value" type="button" class="flex min-h-20 min-w-28 max-w-36 flex-1 flex-col items-center justify-center gap-1 rounded-xl border px-2 py-2 text-center text-xs font-bold transition" :class="workspace.documentType.value === type.value ? 'border-brand-600 bg-brand-600 text-white' : 'border-slate-200 bg-white text-slate-700 hover:border-brand-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'" :aria-pressed="workspace.documentType.value === type.value" :data-testid="`native-document-type-${type.value}`" @click="workspace.documentType.value = type.value">
+            <span class="material-icons-round text-[23px]">{{ documentTypeIcon(type.value) }}</span>{{ type.label }}
           </button>
         </div>
+        <ContractScenarioChooser v-if="workspace.documentType.value === 'contract'" :model-value="workspace.businessTerms.value.contract_scenario" @update:model-value="setContractScenario" />
+        <details class="mt-3 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900" data-testid="native-document-options">
+          <summary class="cursor-pointer text-sm font-semibold text-slate-700 dark:text-slate-200">Шаблон и реквизиты <span class="font-normal text-slate-500">· {{ workspace.templates.value.find((item) => item.id === workspace.selectedTemplateId.value)?.name || 'не выбран' }}</span></summary>
+          <div class="mt-3 grid gap-3 sm:grid-cols-3">
+            <label class="native-field"><span>Шаблон</span><select v-model="workspace.selectedTemplateId.value" class="native-input" data-testid="native-document-template"><option v-for="template in workspace.templates.value" :key="template.id" :value="template.id">{{ template.name }}</option></select></label>
+            <label class="native-field"><span>Дата документа</span><input v-model="workspace.issueDate.value" class="native-input" data-testid="native-document-issue-date" type="date" /></label>
+            <label class="native-field"><span>Город документа</span><input v-model="workspace.issueCity.value" class="native-input" data-testid="native-document-issue-city" placeholder="Витебск" /></label>
+          </div>
+        </details>
 
         <div v-if="customerWarnings.length || audienceMismatchWarning" class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" data-testid="native-customer-readiness-warning">
           <p v-if="audienceMismatchWarning">{{ audienceMismatchWarning }}</p>
@@ -399,8 +417,8 @@ const createDraft = async () => {
         <B2BContractTermsPanel
           v-if="isBusinessTermsDocument"
           :document-type="workspace.documentType.value"
-          :default-goods-warranty-months="workspace.selectedGoodsWarrantyDefault.value"
           :terms="workspace.businessTerms.value"
+          :order-conditions="order.additional_conditions"
           @update-terms="workspace.businessTerms.value = $event"
         />
         <ActTermsPanel
@@ -415,6 +433,10 @@ const createDraft = async () => {
           @update-terms="workspace.transportTerms.value = $event"
         />
         <p v-if="workspace.draftBlockedReason.value && !workspace.hasInstallationTwoStagesError.value" class="mt-3 text-xs font-semibold text-amber-700 dark:text-amber-300" data-testid="native-draft-blocked-reason">{{ workspace.draftBlockedReason.value }}. <button v-if="canManageDocumentSettings" class="underline" type="button" @click="openSettings">Исправить в настройках</button></p>
+        <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4 dark:border-slate-700">
+          <span class="text-xs text-slate-500">Черновик можно проверить до присвоения номера.</span>
+          <button class="inline-flex h-10 items-center justify-center rounded-xl bg-brand-600 px-5 text-sm font-bold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50" type="button" data-testid="create-native-draft" data-order-usage="document_create" :disabled="preparingDraft || workspace.busy.value || Boolean(workspace.draftBlockedReason.value)" :title="workspace.draftBlockedReason.value" @click="createDraft">Создать черновик</button>
+        </div>
       </div>
 
       <p v-else-if="!access.canCreate" class="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-500 dark:bg-slate-800">{{ access.summary }}</p>
@@ -426,7 +448,8 @@ const createDraft = async () => {
         Отправка из CRM появится после подключения почты вашей организации. PDF уже можно скачать и отправить вручную.
       </p>
 
-      <div class="mt-4 space-y-3">
+      <h4 v-if="workspace.documents.value.length" class="mt-5 text-sm font-bold text-slate-800 dark:text-white">{{ draftCount ? '2. Проверьте черновик и выпустите' : 'Готовые документы' }}</h4>
+      <div class="mt-3 space-y-3">
         <article v-for="document in workspace.documents.value" :key="document.id" class="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
           <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div class="min-w-0">
@@ -474,8 +497,11 @@ const createDraft = async () => {
         <div v-if="!workspace.documents.value.length" class="rounded-xl border border-dashed border-slate-300 p-8 text-center dark:border-slate-700">
           <span class="material-icons-round text-4xl text-slate-300">description</span>
           <p class="mt-2 text-sm font-semibold text-slate-600 dark:text-slate-300">Внутренних документов пока нет</p>
-          <p class="mt-1 text-xs text-slate-500">Создайте черновик, чтобы проверить, отредактировать и затем выпустить документ.</p>
+          <p class="mt-1 text-xs text-slate-500">Начните с коммерческого предложения или счёта. Договор можно выбрать отдельно.</p>
         </div>
+      </div>
+      <div v-if="access.canSend && sendableDocuments.length && canSendNativeEmail" class="mt-4 flex justify-end border-t border-slate-100 pt-4 dark:border-slate-800">
+        <button class="inline-flex h-10 items-center gap-2 rounded-xl bg-brand-600 px-5 text-sm font-bold text-white hover:bg-brand-700" type="button" data-testid="native-document-email" @click="sendOpen = true"><span class="material-icons-round text-[18px]">send</span>Отправить письмо с документом</button>
       </div>
     </template>
   </section>

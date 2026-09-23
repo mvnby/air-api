@@ -489,6 +489,24 @@ assert(
   'ready proposal must lead to document creation',
 );
 assert(
+  buildOrderWorkspaceViewModel({ ...workspaceBase, activeProposalStatus: 'ready_to_send', managedDocuments: [
+    { id: 201, doc_type: 'offer', status: 'draft' },
+  ] as never }).nextAction.label === 'Проверить черновик',
+  'CRM draft must lead to review before email',
+);
+assert(
+  buildOrderWorkspaceViewModel({ ...workspaceBase, activeProposalStatus: 'ready_to_send', managedDocuments: [
+    { id: 201, doc_type: 'offer', status: 'issued' },
+  ] as never }).nextAction.label === 'Отправить документ',
+  'issued CRM document must lead to email',
+);
+assert(
+  buildOrderWorkspaceViewModel({ ...workspaceBase, activeProposalStatus: 'ready_to_send', managedDocuments: [
+    { id: 201, doc_type: 'offer', status: 'sent' },
+  ] as never, sentDocumentTypes: ['offer'] }).nextAction.command === 'record_proposal_response',
+  'sent CRM offer must lead to recording the customer response',
+);
+assert(
   buildOrderWorkspaceViewModel({ ...workspaceBase, activeProposalStatus: 'sent' }).nextAction.command === 'record_proposal_response',
   'sent proposal must lead to recording the response',
 );

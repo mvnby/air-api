@@ -3,6 +3,9 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { Body_upload_manager_native_template_version } from '../models/Body_upload_manager_native_template_version';
+import type { ConditionPresetItem } from '../models/ConditionPresetItem';
+import type { ConditionPresetList } from '../models/ConditionPresetList';
+import type { ConditionPresetPayload } from '../models/ConditionPresetPayload';
 import type { ConsumerEquipmentDefaultsResponse } from '../models/ConsumerEquipmentDefaultsResponse';
 import type { DocumentLegalEntityCreatePayload } from '../models/DocumentLegalEntityCreatePayload';
 import type { DocumentLegalEntityItem } from '../models/DocumentLegalEntityItem';
@@ -36,6 +39,56 @@ import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class ManagerDocumentSystemService {
+    /**
+     * List Presets
+     * @returns ConditionPresetList Successful Response
+     * @throws ApiError
+     */
+    public static listManagerDocumentConditionPresets(): CancelablePromise<ConditionPresetList> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/document-system/condition-presets',
+        });
+    }
+    /**
+     * Create Preset
+     * @param requestBody
+     * @returns ConditionPresetItem Successful Response
+     * @throws ApiError
+     */
+    public static createManagerDocumentConditionPreset(
+        requestBody: ConditionPresetPayload,
+    ): CancelablePromise<ConditionPresetItem> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/document-system/condition-presets',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Delete Preset
+     * @param presetId
+     * @returns void
+     * @throws ApiError
+     */
+    public static deleteManagerDocumentConditionPreset(
+        presetId: number,
+    ): CancelablePromise<void> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/manager/document-system/condition-presets/{preset_id}',
+            path: {
+                'preset_id': presetId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
     /**
      * Get Manager Consumer Equipment Defaults
      * @param orderId

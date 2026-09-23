@@ -41,20 +41,53 @@ export const isBusinessTermsDocumentType = (documentType: string) => (
   BUSINESS_TERMS_DOCUMENT_TYPES.has(documentType)
 );
 
-export const createDefaultBusinessDocumentTerms = (): BusinessDocumentTerms => ({
-  contract_scenario: null,
+const WORKFLOW_CONTRACT_SCENARIO: Record<string, ContractScenario> = {
+  sales_installation: 'supply_installation',
+  service_work: 'installation',
+  maintenance: 'maintenance',
+  repair: 'repair',
+};
+
+export const contractScenarioForWorkflow = (workflow?: string | null): ContractScenario => (
+  WORKFLOW_CONTRACT_SCENARIO[workflow || ''] || 'supply_installation'
+);
+
+export const createDefaultBusinessDocumentTerms = (workflow?: string | null): BusinessDocumentTerms => ({
+  contract_scenario: contractScenarioForWorkflow(workflow),
   subject: null,
   delivery_deadline: null,
   performance_deadline: null,
   valid_until: null,
   additional_conditions: null,
   additional_conditions_overridden: false,
-  payment_schedule: [{ share_percent: 100, due_event: 'before_supply', due_days: null, due_day_kind: 'banking', note: null }],
-  goods_warranty_months: null,
+  payment_schedule: [{ share_percent: 100, due_event: workflow === 'service_work' || workflow === 'maintenance' || workflow === 'repair' ? 'before_work' : 'before_supply', due_days: null, due_day_kind: 'banking', note: null }],
+  goods_warranty_months: workflow === 'maintenance' || workflow === 'repair' || workflow === 'service_work' ? null : 36,
   goods_warranty_terms: null,
   work_warranty_months: null,
   work_warranty_terms: null,
 });
+
+export const withContractScenario = (
+  terms: BusinessDocumentTerms,
+  scenario: ContractScenario,
+  defaultGoodsWarrantyMonths: number,
+): BusinessDocumentTerms => {
+  const schedule = terms.payment_schedule;
+  const untouchedPrepayment = schedule.length === 1 && schedule[0]?.share_percent === 100
+    && schedule[0].due_days === null && schedule[0].due_event.startsWith('before_');
+  const suppliesEquipment = scenario === 'supply' || scenario === 'supply_installation';
+  return {
+    ...terms,
+    contract_scenario: scenario,
+    goods_warranty_months: suppliesEquipment
+      ? terms.goods_warranty_months ?? defaultGoodsWarrantyMonths
+      : terms.goods_warranty_months === defaultGoodsWarrantyMonths && !terms.goods_warranty_terms
+        ? null : terms.goods_warranty_months,
+    payment_schedule: untouchedPrepayment
+      ? [{ ...schedule[0]!, due_event: suppliesEquipment ? 'before_supply' : 'before_work' }]
+      : schedule,
+  };
+};
 
 const picked = <T extends readonly (keyof BusinessDocumentTerms)[]>(
   terms: BusinessDocumentTerms,

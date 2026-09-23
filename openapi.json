@@ -12639,6 +12639,116 @@
         ]
       }
     },
+    "/api/manager/document-system/condition-presets": {
+      "get": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "List Presets",
+        "operationId": "list_manager_document_condition_presets",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConditionPresetList"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Create Preset",
+        "operationId": "create_manager_document_condition_preset",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConditionPresetPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConditionPresetItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/document-system/condition-presets/{preset_id}": {
+      "delete": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Delete Preset",
+        "operationId": "delete_manager_document_condition_preset",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "preset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Preset Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/document-system/orders/{order_id}/consumer-defaults": {
       "get": {
         "tags": [
@@ -32600,6 +32710,55 @@
           "product_count"
         ],
         "title": "CommonGalleryImageResponse"
+      },
+      "ConditionPresetItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "text"
+        ],
+        "title": "ConditionPresetItem"
+      },
+      "ConditionPresetList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ConditionPresetItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ConditionPresetList"
+      },
+      "ConditionPresetPayload": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "ConditionPresetPayload"
       },
       "ConsumerDocumentTermsPayload": {
         "properties": {

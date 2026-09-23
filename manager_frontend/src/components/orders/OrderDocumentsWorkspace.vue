@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue';
-import type { ManagerOrderDetailResponse } from '../../client';
+import type { ManagedDocumentItem, ManagerOrderDetailResponse } from '../../client';
 import type { ProductLine } from './order-editor-types';
 import NativeDocumentsWorkspace from '../../features/documents/components/NativeDocumentsWorkspace.vue';
 import OrderDocumentsPanel from './OrderDocumentsPanel.vue';
 import OrderDrawerSection from './OrderDrawerSection.vue';
-import { isBusinessCustomer } from '../../utils/customer-party';
 
 type BeforeGenerateResult = boolean | void | { proceed?: boolean; mutated?: boolean };
 
 const props = defineProps<{
   order: ManagerOrderDetailResponse;
+  managedDocuments?: ManagedDocumentItem[];
+  workflowType?: string | null;
   activeProposalId?: number | null;
   productLines: ProductLine[];
   total: number;
@@ -23,20 +24,14 @@ const emit = defineEmits<{
 }>();
 
 const expanded = defineModel<boolean>('expanded', { required: true });
-const panelRef = ref<InstanceType<typeof OrderDocumentsPanel> | null>(null);
+const nativeRef = ref<InstanceType<typeof NativeDocumentsWorkspace> | null>(null);
 const activeProvider = ref<'native' | 'google'>('native');
 const googleProviderMounted = ref(false);
 
 const documents = computed(() => props.order.documents || []);
-const isCompanyOrder = computed(() => isBusinessCustomer(props.order.customer));
-const hasOrderContract = computed(() => documents.value.some((document) => document.doc_type === 'contract'));
-const hasContract = computed(() => (
-  (isCompanyOrder.value ? Boolean(props.order.customer_contract_id) : false) || hasOrderContract.value
-));
-const hasInvoice = computed(() => documents.value.some((document) => document.doc_type === 'invoice'));
-const hasClosingBaseDocument = computed(() => hasContract.value || hasInvoice.value);
+const activeManagedDocuments = computed(() => (props.managedDocuments || []).filter((document) => !['void', 'replaced'].includes(document.status)));
 const summary = computed(() => {
-  const count = documents.value.length;
+  const count = new Set([...documents.value.map((item) => item.id), ...activeManagedDocuments.value.map((item) => item.id)]).size;
   if (!count) return 'Документов нет';
   const mod100 = count % 100;
   const mod10 = count % 10;
@@ -47,11 +42,9 @@ const summary = computed(() => {
       : mod10 >= 2 && mod10 <= 4
         ? 'документа'
         : 'документов';
-  return `${count} ${noun}${hasContract.value ? '' : ' · договор не создан'}`;
+  const draftCount = activeManagedDocuments.value.filter((item) => item.status === 'draft').length;
+  return `${count} ${noun}${draftCount ? ` · ${draftCount} черновик` : ''}`;
 });
-const hasError = computed(() => (
-  isCompanyOrder.value && !props.order.customer_contract_id && !hasClosingBaseDocument.value
-));
 const customerPhoneDigits = computed(() => String(props.order.customer?.phone || '').replace(/\D/g, ''));
 const whatsappUrl = computed(() => {
   const name = props.order.customer?.name || '';
@@ -62,16 +55,14 @@ const whatsappUrl = computed(() => {
 const viberUrl = computed(() => `viber://chat?number=%2B${customerPhoneDigits.value}`);
 
 const openSend = async () => {
-  activeProvider.value = 'google';
-  googleProviderMounted.value = true;
+  activeProvider.value = 'native';
   await nextTick();
-  panelRef.value?.openSend();
+  nativeRef.value?.openSend();
 };
 const openCreate = async () => {
-  activeProvider.value = 'google';
-  googleProviderMounted.value = true;
+  activeProvider.value = 'native';
   await nextTick();
-  panelRef.value?.openCreate();
+  nativeRef.value?.openCreate();
 };
 
 const selectProvider = (provider: 'native' | 'google') => {
@@ -91,7 +82,7 @@ defineExpose({ openSend, openCreate, openNative });
     title="Документы"
     :summary="summary"
     tone="amber"
-    :has-error="hasError"
+    :has-error="false"
   >
     <div v-if="order.status === 'negotiation' && order.customer?.type === 'individual'" class="mb-6">
       <div class="flex flex-wrap gap-2">
@@ -125,7 +116,9 @@ defineExpose({ openSend, openCreate, openNative });
 
     <div v-show="activeProvider === 'native'">
       <NativeDocumentsWorkspace
+        ref="nativeRef"
         :order="order"
+        :workflow-type="workflowType"
         :active-proposal-id="activeProposalId"
         :before-generate="beforeGenerate"
         @refresh="emit('refresh')"
@@ -135,7 +128,6 @@ defineExpose({ openSend, openCreate, openNative });
 
     <div v-if="googleProviderMounted" v-show="activeProvider === 'google'">
       <OrderDocumentsPanel
-        ref="panelRef"
         :order="order"
         :active-proposal-id="activeProposalId"
         :product-lines="productLines"
