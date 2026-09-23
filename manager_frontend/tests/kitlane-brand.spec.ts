@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { defineComponent, nextTick } from 'vue';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import KitlanePartnerIdentity from '../src/components/kitlane/KitlanePartnerIdentity.vue';
@@ -9,8 +9,11 @@ import { useKitlaneIdentity } from '../src/composables/useKitlaneIdentity';
 import { clearManagerSession, managerSession } from '../src/services/manager-session';
 import { managerStorefrontSelection as selection } from '../src/services/manager-storefront-selection';
 
+const brandApi = vi.hoisted(() => vi.fn());
+vi.mock('../src/features/settings/storefront-settings-api', () => ({ storefrontSettingsApi: { brand: brandApi } }));
+
 const storefront = (slug: string, name: string) => ({ slug, display_name: name, city: 'Город', default_locale: 'ru-BY', currency: 'BYN', is_default: false, is_current: false });
-afterEach(() => { clearManagerSession(); document.title = ''; });
+afterEach(() => { clearManagerSession(); brandApi.mockReset(); document.title = ''; });
 
 describe('KitLane brand presentation', () => {
   it('uses a neutral workspace before the company context is known', () => {
@@ -71,6 +74,7 @@ describe('KitLane brand presentation', () => {
 
 describe('authorized brand and document title', () => {
   it('follows only the current allowed storefront and clears during switching and logout', async () => {
+    brandApi.mockRejectedValue(new Error('offline'));
     const Host = defineComponent({ setup: useKitlaneIdentity, template: '<span>{{ name }}</span>' });
     const wrapper = mount(Host);
     expect(document.title).toBe('KitLane');
@@ -81,6 +85,9 @@ describe('authorized brand and document title', () => {
     managerSession.isAuthenticated.value = true;
     await nextTick();
     expect(document.title).toBe('Демо Север · KitLane');
+    managerSession.recoveryRequired.value = true;
+    expect(document.title).toBe('KitLane');
+    managerSession.recoveryRequired.value = false;
     selection.switching.value = true;
     expect(document.title).toBe('KitLane');
     selection.selectedSlug.value = 'south'; selection.switching.value = false;
@@ -93,6 +100,30 @@ describe('authorized brand and document title', () => {
     await nextTick();
     expect(wrapper.text()).toBe('');
     expect(document.title).toBe('KitLane');
+    wrapper.unmount();
+  });
+
+  it('loads a scoped brand and drops a late response from the previous storefront', async () => {
+    let resolveNorth!: (value: { display_name: string; logo_url: string; compact_logo_url: null }) => void;
+    brandApi.mockImplementationOnce(() => new Promise(resolve => { resolveNorth = resolve; }));
+    brandApi.mockResolvedValueOnce({ display_name: 'Юг сайт', logo_url: '/media/south.svg', compact_logo_url: null });
+    selection.storefronts.value = [storefront('north', 'Север'), storefront('south', 'Юг')];
+    selection.selectedSlug.value = 'north';
+    const Host = defineComponent({ setup: useKitlaneIdentity, template: '<span>{{ name }}|{{ logoUrl }}</span>' });
+    managerSession.isAuthenticated.value = true;
+    const wrapper = mount(Host);
+    selection.switching.value = true;
+    expect(wrapper.text()).not.toContain('/media/');
+    selection.selectedSlug.value = 'south';
+    selection.switching.value = false;
+    await flushPromises();
+    expect(wrapper.text()).toContain('Юг сайт|/media/south.svg');
+    resolveNorth({ display_name: 'Север сайт', logo_url: '/media/north.svg', compact_logo_url: null });
+    await flushPromises();
+    expect(wrapper.text()).toContain('Юг сайт|/media/south.svg');
+    clearManagerSession();
+    await nextTick();
+    expect(wrapper.text()).not.toContain('/media/');
     wrapper.unmount();
   });
 });

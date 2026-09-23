@@ -3,9 +3,9 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ServiceDirectionSetting } from './ServiceDirectionSetting';
-import type { StorefrontSiteSettings } from './StorefrontSiteSettings';
+import type { StorefrontSiteSettingsResponse } from './StorefrontSiteSettingsResponse';
 export type StorefrontSettingsResponse = {
-    site: StorefrontSiteSettings;
+    site: StorefrontSiteSettingsResponse;
     services: Array<ServiceDirectionSetting>;
     version: number;
     updated_at?: (string | null);

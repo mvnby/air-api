@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ get: vi.fn(), save: vi.fn(), preview: vi.fn(), clone: vi.fn() }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), save: vi.fn(), preview: vi.fn(), clone: vi.fn(), uploadLogo: vi.fn() }));
 vi.mock('../src/client', () => ({
   OpenAPI: {},
   ManagerDocumentSystemService: { listManagerDocumentLegalEntities: vi.fn().mockResolvedValue({ items: [] }) },
@@ -9,12 +9,12 @@ vi.mock('../src/client', () => ({
 vi.mock('../src/features/documents/settings/DocumentLegalEntitiesPanel.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('../src/features/settings/storefront-settings-api', () => ({
   StorefrontSettingsApiError: class StorefrontSettingsApiError extends Error { status: number; constructor(message: string, status: number) { super(message); this.status = status; } },
-  storefrontSettingsApi: { get: mocks.get, save: mocks.save, previewTemplate: mocks.preview, cloneTemplate: mocks.clone },
+  storefrontSettingsApi: { get: mocks.get, save: mocks.save, previewTemplate: mocks.preview, cloneTemplate: mocks.clone, uploadLogo: mocks.uploadLogo },
 }));
 import SettingsView from '../src/views/SettingsView.vue';
 
 const settings = {
-  site: { display_name: 'Partner', city: 'Минск', phone: '', email: '', address: '', work_hours: '', support_telegram_url: '' },
+  site: { display_name: 'Partner', city: 'Минск', phone: '', email: '', address: '', work_hours: '', support_telegram_url: '', logo_asset_id: null, compact_logo_asset_id: null, logo_url: null, compact_logo_url: null },
   services: [
     { key: 'installation', title: 'Монтаж', description: 'Аккуратно', enabled: true },
     { key: 'repair', title: 'Ремонт', description: 'Быстро', enabled: false },
@@ -49,5 +49,21 @@ describe('storefront settings', () => {
     await wrapper.findAll('button').find(button => button.text() === 'Сохранить')!.trigger('click');
     await flushPromises();
     expect(wrapper.text()).toContain('изменились у другого пользователя');
+  });
+
+  it('uploads a storefront logo and asks for publication through Save', async () => {
+    mocks.get.mockResolvedValue(settings);
+    mocks.uploadLogo.mockResolvedValue({ id: 42, url: '/media/library/original/logo.svg' });
+    mocks.save.mockResolvedValue(settings);
+    const wrapper = mount(SettingsView, { global: { stubs: { DocumentLegalEntitiesPanel: true } } });
+    await flushPromises();
+    await wrapper.findAll('button').find(button => button.text() === 'Сайт')!.trigger('click');
+    const input = wrapper.get('input[type="file"]');
+    Object.defineProperty(input.element, 'files', { configurable: true, value: [new File(['logo'], 'logo.svg', { type: 'image/svg+xml' })] });
+    await input.trigger('change');
+    await flushPromises();
+    expect(wrapper.text()).toContain('Сохраните настройки');
+    await wrapper.findAll('button').find(button => button.text() === 'Сохранить')!.trigger('click');
+    expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ site: expect.objectContaining({ logo_asset_id: 42 }) }));
   });
 });

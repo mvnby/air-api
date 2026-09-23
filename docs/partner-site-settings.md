@@ -10,6 +10,18 @@ not configure an inbox or notification delivery.
 
 - Settings belong to one trusted tenant/storefront pair. The request body cannot
   select another tenant. Updates use a version and emit an audit event.
+- The site's `display_name`, full `logo_asset_id` and optional
+  `compact_logo_asset_id` in `storefront_settings` are the canonical brand for
+  that storefront. Manager owners upload images through
+  `POST /api/manager/storefront-settings/logo`, which uses the existing media
+  library processing/storage path and scopes the resulting asset to the current
+  tenant/storefront. Settings updates reject assets from another scope.
+  `GET /api/manager/storefront-settings/brand` gives authorized owners and
+  managers the same name and resolved URLs used by the public
+  `GET /api/v1/storefront-settings`. The public site's trusted runtime should
+  consume `site.display_name`, `site.logo_url` and
+  `site.compact_logo_url` from that response and render SVG only through `img`.
+  A missing or failed image falls back to the name and initials.
 - Partner defaults contain no canonical phone/email or enabled services.
   Canonical defaults retain existing public contacts and five enabled directions.
 - Installation, pre-installation, dismantling, maintenance and repair can be

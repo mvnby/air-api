@@ -35,6 +35,8 @@ from models import (
     Service,
 )
 from services.service_catalog_scope import canonical_service_catalog_clause
+from models.tenancy import TenantScope
+from models.storefront_settings import StorefrontSettings
 from services.general_media_storage_service import get_general_media_storage
 from services.catalog_media_policy import CatalogMediaKind, CatalogMediaPolicy
 from services.media_library_read_service import MediaLibraryReadService
@@ -62,6 +64,7 @@ ALLOWED_KINDS = {
     "brand",
     "feature",
     "misc",
+    "storefront_logo",
 }
 
 
@@ -116,6 +119,7 @@ class MediaLibraryService:
         kind: str,
         tags: list[str] | None,
         created_by: str | None,
+        tenant_scope: TenantScope | None = None,
     ) -> dict:
         assets: list[MediaAsset] = []
         for filename, content in files:
@@ -131,6 +135,8 @@ class MediaLibraryService:
                 field="media_asset.url",
             )
             asset = MediaAsset(
+                tenant_id=tenant_scope.tenant_id if tenant_scope else None,
+                storefront_id=tenant_scope.storefront_id if tenant_scope else None,
                 title=MediaLibraryService._title_from_filename(filename) or "Без названия",
                 kind=MediaLibraryService._normalize_kind(kind),
                 tags=MediaLibraryService._normalize_tags(tags),
@@ -317,14 +323,23 @@ class MediaLibraryService:
         if not asset:
             raise LookupError("Media asset not found")
 
+        normalized_kind = MediaLibraryService._normalize_kind(kind) if kind is not None else None
+        if kind is not None:
+            if normalized_kind != asset.kind and asset.kind == "storefront_logo":
+                published_logo = await session.scalar(select(StorefrontSettings.storefront_id).where(
+                    (StorefrontSettings.logo_asset_id == asset_id)
+                    | (StorefrontSettings.compact_logo_asset_id == asset_id)
+                ).limit(1))
+                if published_logo is not None:
+                    raise ValueError("Published storefront logo kind cannot be changed. Remove it from storefront settings first.")
         if title is not None:
             asset.title = title.strip()
         if alt_text is not None:
             asset.alt_text = alt_text.strip() or None
         if description is not None:
             asset.description = description.strip() or None
-        if kind is not None:
-            asset.kind = MediaLibraryService._normalize_kind(kind)
+        if normalized_kind is not None:
+            asset.kind = normalized_kind
         if tags is not None:
             asset.tags = MediaLibraryService._normalize_tags(tags)
         asset.updated_at = datetime.now()
@@ -419,6 +434,13 @@ class MediaLibraryService:
         asset = await session.get(MediaAsset, asset_id)
         if not asset:
             raise LookupError("Media asset not found")
+
+        published_logo = await session.scalar(select(StorefrontSettings.storefront_id).where(
+            (StorefrontSettings.logo_asset_id == asset_id)
+            | (StorefrontSettings.compact_logo_asset_id == asset_id)
+        ).limit(1))
+        if published_logo is not None:
+            raise ValueError("Media asset is a published storefront logo. Remove it from storefront settings first.")
 
         usage_count = await MediaLibraryService._usage_count(session, asset.url)
         if usage_count > 0 and not force:
@@ -829,7 +851,12 @@ class MediaLibraryService:
     @staticmethod
     async def _usage_count(session: AsyncSession, url: str) -> int:
         counts = await MediaLibraryReadService.usage_counts_for_urls(session, [url])
-        return counts.get(url, 0)
+        brand_uses = (await session.execute(select(func.count()).select_from(StorefrontSettings).join(
+            MediaAsset,
+            (StorefrontSettings.logo_asset_id == MediaAsset.id)
+            | (StorefrontSettings.compact_logo_asset_id == MediaAsset.id),
+        ).where(MediaAsset.url == url))).scalar_one()
+        return counts.get(url, 0) + brand_uses
 
     @staticmethod
     async def _collect_existing_media_references(session: AsyncSession) -> list[ExistingMediaReference]:

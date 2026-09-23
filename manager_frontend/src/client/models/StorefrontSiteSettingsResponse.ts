@@ -2,7 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type StorefrontSiteSettings = {
+export type StorefrontSiteSettingsResponse = {
     display_name: string;
     city?: string;
     phone?: string;
@@ -12,5 +12,7 @@ export type StorefrontSiteSettings = {
     support_telegram_url?: string;
     logo_asset_id?: (number | null);
     compact_logo_asset_id?: (number | null);
+    logo_url?: (string | null);
+    compact_logo_url?: (string | null);
 };
 

@@ -71,7 +71,7 @@ const AnalyticsConnectionsView = defineAsyncComponent(() => import('./views/Anal
 const props = defineProps<{ reloadPage?: () => void }>();
 const { isAuthenticated, auth, recoveryRequired } = managerSession;
 const demoReadOnly = useDemoReadOnly();
-const { name: partnerName, contextKey: partnerContextKey } = useKitlaneIdentity();
+const { name: partnerName, logoUrl: partnerLogoUrl, compactLogoUrl: partnerCompactLogoUrl, contextKey: partnerContextKey } = useKitlaneIdentity();
 const showLoginModal = ref(false);
 const loginUsername = ref('');
 const loginPassword = ref('');
@@ -485,7 +485,7 @@ watch(currentPath, () => {
     data-testid="manager-root"
     class="manager-root min-h-screen flex"
   >
-    <KitlaneShell :name="partnerName" :context-key="partnerContextKey" v-model:collapsed="isDesktopNavCollapsed" v-model:mobile-open="isMobileNavOpen" :theme="theme" @toggle-theme="toggleTheme" @home="navigate('/manager')">
+    <KitlaneShell :name="partnerName" :logo-url="partnerLogoUrl" :compact-logo-url="partnerCompactLogoUrl" :context-key="partnerContextKey" v-model:collapsed="isDesktopNavCollapsed" v-model:mobile-open="isMobileNavOpen" :theme="theme" @toggle-theme="toggleTheme" @home="navigate('/manager')">
       <template #navigation>
         <KitlaneNavigation :items="visibleCoreNavItems" :sections="visibleNavSections" :collapsed="isDesktopNavCollapsed" :leads-count="leadsCount" :expanded="expandedNavSections" :is-nav-item-active="isNavItemActive" :is-nav-section-active="isNavSectionActive" @navigate="navigate" @toggle-section="toggleNavSection" />
       </template>
