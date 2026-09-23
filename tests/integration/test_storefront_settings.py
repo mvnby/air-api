@@ -142,7 +142,8 @@ async def test_logo_upload_uses_scoped_media_pipeline_and_owner_access(async_cli
 
     async def stored(_content, *, variant_type):
         assert variant_type == "original"
-        return StoredLibraryImage(url="/media/library/original/test-logo.svg", path="media/library/original/test-logo.svg",
+        url = f"/media/library/original/{'a' * 64}.svg"
+        return StoredLibraryImage(url=url, path=url.lstrip("/"),
                                   content_hash="a" * 64, width=100, height=50, size_bytes=20, mime_type="image/svg+xml")
 
     monkeypatch.setattr(MediaLibraryService, "_store_image", stored)
