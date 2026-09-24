@@ -32,42 +32,56 @@ def _cent(value: object) -> Decimal:
 
 def _preflight_estimates(connection: sa.Connection) -> None:
     blockers: list[str] = []
-    rows = connection.execution_options(stream_results=True).execute(sa.text("""
-        SELECT e.id, e.subtotal, e.discount_amount, e.total,
-               COALESCE(SUM(i.line_total), 0) AS items_total
-        FROM service_estimate e
-        LEFT JOIN service_estimate_item i ON i.estimate_id = e.id
-        GROUP BY e.id, e.subtotal, e.discount_amount, e.total
-    """))
-    for row in rows:
-        try:
-            subtotal = _cent(row.subtotal)
-            discount = _cent(row.discount_amount)
-            total = _cent(row.total)
-            item_sum = _cent(row.items_total)
-            if min(subtotal, discount, total) < 0 or discount > subtotal:
-                raise ValueError("negative or excessive discount")
-            if subtotal - discount != total or item_sum != subtotal:
-                raise ValueError("snapshot totals do not reconcile")
-        except ValueError as exc:
-            blockers.append(f"estimate {row.id}: {exc}")
-            if len(blockers) >= 10:
-                break
-    rows.close()
-
-    if not blockers:
-        rows = connection.execution_options(stream_results=True).execute(
-            sa.text("SELECT id, line_total FROM service_estimate_item")
-        )
+    last_id = 0
+    while len(blockers) < 10:
+        # Finish each query before ALTER TABLE; a streaming cursor keeps its
+        # source table in use for the rest of the migration transaction.
+        rows = connection.execute(sa.text("""
+            SELECT e.id, e.subtotal, e.discount_amount, e.total,
+                   COALESCE(SUM(i.line_total), 0) AS items_total
+            FROM service_estimate e
+            LEFT JOIN service_estimate_item i ON i.estimate_id = e.id
+            WHERE e.id > :last_id
+            GROUP BY e.id, e.subtotal, e.discount_amount, e.total
+            ORDER BY e.id
+            LIMIT 500
+        """), {"last_id": last_id}).all()
+        if not rows:
+            break
         for row in rows:
             try:
-                if _cent(row.line_total) < 0:
-                    raise ValueError("negative line total")
+                subtotal = _cent(row.subtotal)
+                discount = _cent(row.discount_amount)
+                total = _cent(row.total)
+                item_sum = _cent(row.items_total)
+                if min(subtotal, discount, total) < 0 or discount > subtotal:
+                    raise ValueError("negative or excessive discount")
+                if subtotal - discount != total or item_sum != subtotal:
+                    raise ValueError("snapshot totals do not reconcile")
             except ValueError as exc:
-                blockers.append(f"estimate item {row.id}: {exc}")
+                blockers.append(f"estimate {row.id}: {exc}")
                 if len(blockers) >= 10:
                     break
-        rows.close()
+        last_id = rows[-1].id
+
+    if not blockers:
+        last_id = 0
+        while len(blockers) < 10:
+            rows = connection.execute(sa.text("""
+                SELECT id, line_total FROM service_estimate_item
+                WHERE id > :last_id ORDER BY id LIMIT 500
+            """), {"last_id": last_id}).all()
+            if not rows:
+                break
+            for row in rows:
+                try:
+                    if _cent(row.line_total) < 0:
+                        raise ValueError("negative line total")
+                except ValueError as exc:
+                    blockers.append(f"estimate item {row.id}: {exc}")
+                    if len(blockers) >= 10:
+                        break
+            last_id = rows[-1].id
     if blockers:
         raise RuntimeError(
             "Estimate money preflight blocked schema expansion; review the saved snapshots "

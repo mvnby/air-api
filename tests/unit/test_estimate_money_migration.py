@@ -67,3 +67,29 @@ def test_expansion_keeps_old_integer_service_price():
 
         assert connection.execute(text("SELECT price FROM order_service_link")).scalar_one() == 200
         assert str(inspect(connection).get_columns("order_service_link")[1]["type"]).startswith("NUMERIC")
+
+
+def test_preflight_checks_snapshots_beyond_first_page():
+    engine = create_engine("sqlite://")
+    with engine.begin() as connection:
+        connection.execute(text(
+            "CREATE TABLE service_estimate (id INTEGER PRIMARY KEY, subtotal FLOAT, "
+            "discount_amount FLOAT, total FLOAT)"
+        ))
+        connection.execute(text(
+            "CREATE TABLE service_estimate_item (id INTEGER PRIMARY KEY, estimate_id INTEGER, line_total FLOAT)"
+        ))
+        connection.execute(text("""
+            WITH RECURSIVE ids(id) AS (
+                SELECT 1 UNION ALL SELECT id + 1 FROM ids WHERE id < 501
+            )
+            INSERT INTO service_estimate SELECT id, 100.4, 0, 100.4 FROM ids
+        """))
+        connection.execute(text(
+            "INSERT INTO service_estimate_item "
+            "SELECT id, id, CASE WHEN id = 501 THEN 99.4 ELSE 100.4 END "
+            "FROM service_estimate"
+        ))
+
+        with pytest.raises(RuntimeError, match="estimate 501: snapshot totals"):
+            module._preflight_estimates(connection)
