@@ -20,6 +20,7 @@ import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -75,6 +76,13 @@ class RuntimeTarget:
 class RemoteOutput:
     status: int
     stdout: str
+
+
+class RemotePhase(Enum):
+    RUNTIME_TARGET = "runtime_target"
+    RUNTIME_CAPABILITY = "runtime_capability"
+    PLAN_CLI = "plan_cli"
+    EXECUTE_CLI = "execute_cli"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -280,9 +288,13 @@ def _run_remote(
     context: PinnedSshContext,
     command: str,
     *,
+    phase: RemotePhase,
     stdin: str | None = None,
     accepted_statuses: frozenset[int] = frozenset({0}),
 ) -> RemoteOutput:
+    # Diagnostic labels must come from reviewed code, never remote output or inputs.
+    if not isinstance(phase, RemotePhase):
+        raise WorkflowError("remote diagnostic phase is not reviewed")
     helper_digest = _deploy_lock_helper_digest()
     locked_command = shlex.join(
         [
@@ -297,12 +309,19 @@ def _run_remote(
             command,
         ]
     )
-    result = _subprocess_runner(
-        [*ssh_args(node, context), locked_command], stdin
-    )
+    try:
+        result = _subprocess_runner(
+            [*ssh_args(node, context), locked_command], stdin
+        )
+    except OSError:
+        raise WorkflowError(
+            f"phase={phase.value} reason_code=remote_invocation_failed "
+            f"node={node.alias} remote_status=unavailable"
+        ) from None
     if result.returncode not in accepted_statuses:
         raise WorkflowError(
-            f"reviewed operation failed on {node.alias} with status {result.returncode}"
+            f"phase={phase.value} reason_code=remote_command_failed "
+            f"node={node.alias} remote_status={result.returncode}"
         )
     return RemoteOutput(status=result.returncode, stdout=result.stdout.strip())
 
@@ -391,6 +410,7 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
                 primary,
                 context,
                 _runtime_target_command(primary),
+                phase=RemotePhase.RUNTIME_TARGET,
             ).stdout
         )
 
@@ -398,6 +418,7 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
             primary,
             context,
             _runtime_capability_command(primary, runtime=runtime),
+            phase=RemotePhase.RUNTIME_CAPABILITY,
         )
 
         plan_output = _run_remote(
@@ -415,6 +436,7 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
                 role=args.role,
                 reset_password=args.reset_password,
             ),
+            phase=RemotePhase.PLAN_CLI,
             accepted_statuses=frozenset({0, 2}),
         )
         plan = _load_result(plan_output.stdout, expected_mode="plan")
@@ -462,6 +484,7 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
                     role=args.role,
                     reset_password=args.reset_password,
                 ),
+                phase=RemotePhase.EXECUTE_CLI,
                 stdin=execution_payload,
             )
             result = _load_result(execute_output.stdout, expected_mode="execute")
