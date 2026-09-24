@@ -39,6 +39,23 @@ afterEach(() => {
 });
 
 describe('useOrderCommercialEditor', () => {
+  it('preserves cents from estimate import through save and reload', () => {
+    const editor = createEditor();
+    editor.appendEstimateLines([
+      { service_id: null, title: 'Работа 1', quantity: 1, price: 100.4, cost: 0 },
+      { service_id: null, title: 'Работа 2', quantity: 1, price: 100.4, cost: 0 },
+    ]);
+    expect(editor.total.value).toBe(200.8);
+    expect(editor.buildLinesPayload(17).services.map((line) => line.price)).toEqual([100.4, 100.4]);
+
+    editor.loadLines([], [
+      { id: 1, proposal_id: 17, service_id: null, service_title: 'Работа 1', quantity: 1, price: 100.4, cost: 0, line_total: 100.4 },
+      { id: 2, proposal_id: 17, service_id: null, service_title: 'Работа 2', quantity: 1, price: 100.4, cost: 0, line_total: 100.4 },
+    ] as any);
+    expect(editor.buildLinesPayload(17).services.map((line) => line.price)).toEqual([100.4, 100.4]);
+    expect(editor.validateLines()).toBe('');
+  });
+
   it('owns line validation and normalizes the proposal command payload', () => {
     const editor = createEditor();
     editor.productLines.value = [{

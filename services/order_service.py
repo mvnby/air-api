@@ -1,5 +1,6 @@
 import logging
 import json
+from decimal import Decimal
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +12,7 @@ from sqlalchemy.orm.attributes import NO_VALUE, flag_modified
 from crud.order import OrderDAO
 from crud.product import ProductDAO
 from models import Order, OrderProductLink, OrderProposal, OrderServiceLink, Customer, CustomerType, OrderStageStatus, OrderStatus, PaymentCurrency, Product, LeadSource, Service, ServiceTariff, OrderInstaller, OrderWorkStage, Payment
+from services.service_estimate_money import money, writable_service_money
 from models.common import ClosingResult
 from services.product_supply_metrics_service import ProductSupplyMetricsService
 from services.product_area import area_from_specs
@@ -684,15 +686,10 @@ class OrderService:
 
     @staticmethod
     def _proposal_line_totals(product_links: List[OrderProductLink], service_links: List[OrderServiceLink]) -> tuple[float, float, float]:
-        total_amount = float(
-            sum((link.price or 0) * (link.quantity or 0) for link in product_links)
-            + sum((link.price or 0) * (link.quantity or 0) for link in service_links)
-        )
-        total_cost = float(
-            sum((link.cost or 0) * (link.quantity or 0) for link in product_links)
-            + sum((link.cost or 0) * (link.quantity or 0) for link in service_links)
-        )
-        return total_amount, total_cost, total_amount - total_cost
+        links = [*product_links, *service_links]
+        amount = sum((money(link.price or 0) * (link.quantity or 0) for link in links), Decimal("0.00"))
+        cost = sum((money(link.cost or 0) * (link.quantity or 0) for link in links), Decimal("0.00"))
+        return float(amount), float(cost), float(amount - cost)
 
     @staticmethod
     def _selected_proposal(order: Order) -> Optional[OrderProposal]:
@@ -1458,7 +1455,7 @@ class OrderService:
                 proposal_id=proposal.id,
                 service_id=inst_svc.get("service_id"), # Now supported
                 title=inst_svc["title"],
-                price=inst_svc["price"],
+                price=writable_service_money(inst_svc["price"]),
                 quantity=inst_svc["quantity"]
             )
             session.add(service_link)
@@ -1528,7 +1525,7 @@ class OrderService:
                 proposal_id=proposal.id,
                 service_id=s["service_id"],
                 quantity=s["quantity"],
-                price=s["price"]
+                price=writable_service_money(s["price"])
             )
             session.add(link)
             
@@ -1757,7 +1754,7 @@ class OrderService:
                 service_id=service_id,  # Can be None for custom services
                 title=serv.get("title"),  # Custom editable title
                 quantity=int(serv["quantity"]),
-                price=int(serv["price"])
+                price=writable_service_money(serv["price"])
             )
             session.add(link)
         

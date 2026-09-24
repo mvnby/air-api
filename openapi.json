@@ -50781,13 +50781,13 @@
             "title": "Quantity"
           },
           "price": {
-            "type": "integer",
+            "type": "number",
             "title": "Price"
           },
           "cost": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "number"
               },
               {
                 "type": "null"
@@ -52112,11 +52112,11 @@
             "title": "Quantity"
           },
           "price": {
-            "type": "integer",
+            "type": "number",
             "title": "Price"
           },
           "cost": {
-            "type": "integer",
+            "type": "number",
             "title": "Cost",
             "default": 0
           }
@@ -59948,13 +59948,13 @@
             "title": "Quantity"
           },
           "price": {
-            "type": "integer",
+            "type": "number",
             "title": "Price"
           },
           "cost": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "number"
               },
               {
                 "type": "null"
@@ -59963,7 +59963,7 @@
             "title": "Cost"
           },
           "line_total": {
-            "type": "integer",
+            "type": "number",
             "title": "Line Total"
           }
         },

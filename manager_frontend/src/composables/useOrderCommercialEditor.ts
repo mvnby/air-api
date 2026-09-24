@@ -170,15 +170,15 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
   } = useServiceDescriptionMode();
 
   const total = computed(() => {
-    const products = productLines.value.reduce((sum, line) => sum + line.price * line.quantity, 0);
-    const services = serviceLines.value.reduce((sum, line) => sum + line.price * line.quantity, 0);
-    return products + services;
+    const products = productLines.value.reduce((sum, line) => sum + Math.round(line.price * 100) * line.quantity, 0);
+    const services = serviceLines.value.reduce((sum, line) => sum + Math.round(line.price * 100) * line.quantity, 0);
+    return (products + services) / 100;
   });
 
   const margin = computed(() => {
-    const productCost = productLines.value.reduce((sum, line) => sum + line.cost * line.quantity, 0);
-    const serviceCost = serviceLines.value.reduce((sum, line) => sum + line.cost * line.quantity, 0);
-    return Math.round(total.value - productCost - serviceCost);
+    const productCost = productLines.value.reduce((sum, line) => sum + Math.round(line.cost * 100) * line.quantity, 0);
+    const serviceCost = serviceLines.value.reduce((sum, line) => sum + Math.round(line.cost * 100) * line.quantity, 0);
+    return (Math.round(total.value * 100) - productCost - serviceCost) / 100;
   });
 
   const rememberProductOption = (option: ProductOption) => {
@@ -555,12 +555,18 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
       service_id: line.service_id ?? null,
       title: line.title,
       quantity: Math.trunc(Number(line.quantity) || 0),
-      price: Math.round(Number(line.price) || 0),
-      cost: (!line.cost && line.cost !== 0) ? null : toIntegerMoney(line.cost),
+      price: Number(line.price || 0),
+      cost: (!line.cost && line.cost !== 0) ? null : Number(line.cost),
       link_id: null,
       proposal_id: proposalId,
     })),
   });
+
+  const validServiceMoney = (value: number) => {
+    const cents = Math.round(value * 100);
+    return Number.isFinite(value) && value >= 0 && Number.isSafeInteger(cents)
+      && Math.abs(value * 100 - cents) < 1e-7;
+  };
 
   const validateLines = () => {
     if (productLines.value.some((line) => line.quantity <= 0)) return 'Количество товара должно быть больше 0';
@@ -568,7 +574,8 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
     if (productLines.value.some((line) => !line.product_id)) return 'Выберите товар из выпадающего списка';
     if (productLines.value.some((line) => (line.client_description?.length || 0) > 2_000)) return 'Описание товара для клиента не может быть длиннее 2000 символов';
     if (serviceLines.value.some((line) => line.quantity <= 0)) return 'Количество услуги должно быть больше 0';
-    if (serviceLines.value.some((line) => line.price < 0)) return 'Цена услуги не может быть отрицательной';
+    if (serviceLines.value.some((line) => !validServiceMoney(line.price))) return 'Цена услуги должна быть указана с точностью до копейки';
+    if (serviceLines.value.some((line) => !validServiceMoney(line.cost))) return 'Себестоимость услуги должна быть указана с точностью до копейки';
     if (serviceLines.value.some((line) => !line.title?.trim())) return 'Для услуги укажите название';
     return '';
   };

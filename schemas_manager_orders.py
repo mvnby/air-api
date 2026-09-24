@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field, computed_field, field_validator
 
 from models import PaymentCurrency
+from services.service_estimate_money import exact_money
 from schemas_common import Meta
 from schemas_manager_installers import ManagerInstallerResponse
 
@@ -165,9 +166,9 @@ class OrderServiceLineResponse(BaseModel):
     service_title: str
     service_category: Optional[str] = None
     quantity: int
-    price: int
-    cost: Optional[int] = None
-    line_total: int
+    price: float
+    cost: Optional[float] = None
+    line_total: float
 
 
 class ManagerOrderListItemResponse(BaseModel):
@@ -514,8 +515,15 @@ class ManagerOrderServiceLinePayload(BaseModel):
     service_id: Optional[int] = None
     title: str
     quantity: int
-    price: int
-    cost: Optional[int] = None
+    price: float
+    cost: Optional[float] = None
+
+    @field_validator("price", "cost")
+    @classmethod
+    def validate_service_money(cls, value: Optional[float]) -> Optional[float]:
+        if value is not None:
+            exact_money(value)
+        return value
 
 
 class ManagerOrderUpdatePayload(BaseModel):

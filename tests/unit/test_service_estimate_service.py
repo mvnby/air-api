@@ -99,7 +99,10 @@ async def test_calculate_install_estimate_with_rules(db):
 
 
 @pytest.mark.asyncio
-async def test_create_and_get_install_estimate_snapshot(db):
+async def test_create_and_get_install_estimate_snapshot(db, monkeypatch):
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "EXACT_SERVICE_MONEY_WRITES_ENABLED", True)
     tariff = ServiceTariff(
         service_kind="installation",
         selector_label="Монтаж настенного 07-09",

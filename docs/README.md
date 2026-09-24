@@ -43,6 +43,7 @@
 | Задача | Процедура |
 | --- | --- |
 | Релиз API, HA, Patroni, PITR | [Деплой](deployment.md), [HA](api-ha-runbook.md), [quorum](postgres-quorum-runbook.md) |
+| Денежная граница сметы и заказа | [Preflight и порядок включения копеек](service-estimate-money-rollout.md) |
 | Мониторинг и инфраструктурная безопасность | [VPS monitoring](api-vps-monitoring.md), [security](infrastructure-security-runbook.md) |
 | Выдача доступа tenant-менеджеру | [Provisioning](tenant-manager-provisioning.md) |
 | Read-only демо tenant | [Reviewed fixture и проверка](tenant-demo-setup.md) |

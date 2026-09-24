@@ -1,6 +1,7 @@
 """Business logic for service estimates based on directional service tariffs."""
 
 import re
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException, status
@@ -29,12 +30,13 @@ from schemas import (
 from services.tariffs_service import TariffsService
 from services.cooling_capacity import BTU_TO_KW_MAP
 from services.service_catalog_scope import service_catalog_write_tenant_id
+from services.service_estimate_money import allocate_discount, decimal_value, money, snapshot_money, writable_service_money
 
 
 class ServiceEstimateService:
     @staticmethod
     def _round_money(value: float) -> float:
-        return round(float(value), 2)
+        return float(money(value))
 
     @staticmethod
     def _format_number(value: Any) -> str:
@@ -149,16 +151,16 @@ class ServiceEstimateService:
         )
 
     @staticmethod
-    def _rule_inputs_map(payload: ManagerInstallEstimateCalculatePayload) -> Dict[int, float]:
-        result: Dict[int, float] = {}
+    def _rule_inputs_map(payload: ManagerInstallEstimateCalculatePayload) -> Dict[int, Decimal]:
+        result: Dict[int, Decimal] = {}
         for item in payload.rule_inputs:
-            result[int(item.rule_id)] = float(item.qty or 0)
+            result[int(item.rule_id)] = decimal_value(item.qty)
         return result
 
     @staticmethod
     def _build_base_line(tariff: ServiceTariff, quantity: int, sort_order: int) -> ManagerEstimateLineResponse:
-        qty = float(quantity)
-        unit_price = float(tariff.base_price or 0)
+        qty = Decimal(quantity)
+        unit_price = decimal_value(tariff.base_price)
         return ManagerEstimateLineResponse(
             source_type="base",
             source_id=int(tariff.id),
@@ -168,9 +170,9 @@ class ServiceEstimateService:
             name=tariff.effective_short_name or "Базовая услуга",
             short_name=tariff.effective_short_name or "Базовая услуга",
             full_description=tariff.effective_full_description or None,
-            qty=qty,
+            qty=float(qty),
             unit="компл.",
-            unit_price=ServiceEstimateService._round_money(unit_price),
+            unit_price=float(unit_price),
             line_total=ServiceEstimateService._round_money(qty * unit_price),
             sort_order=sort_order,
         )
@@ -190,25 +192,25 @@ class ServiceEstimateService:
         tariff: ServiceTariff,
         payload: ManagerInstallEstimateCalculatePayload,
         quantity: int,
-        rule_input_qty: Optional[float],
+        rule_input_qty: Optional[Decimal],
         sort_order: int,
     ) -> Optional[ManagerEstimateLineResponse]:
-        route_length = float(payload.route_length_m or 0.0)
-        included_route = float(tariff.included_route_meters or 0.0)
-        extra_route = max(route_length - included_route, 0.0)
+        route_length = decimal_value(payload.route_length_m)
+        included_route = decimal_value(tariff.included_route_meters)
+        extra_route = max(route_length - included_route, Decimal("0"))
         extra_holes = int(payload.extra_holes_count or 0)
-        unit_price = float(rule.unit_price or 0.0)
+        unit_price = decimal_value(rule.unit_price)
 
-        qty = 0.0
+        qty = Decimal("0")
         if rule.rule_type == ManagerTariffRuleType.per_meter_over_included.value:
-            qty = extra_route * float(quantity)
+            qty = extra_route * quantity
         elif rule.rule_type == ManagerTariffRuleType.per_hole_manual.value:
-            qty = float(extra_holes) * float(quantity)
+            qty = Decimal(extra_holes) * quantity
         elif rule.rule_type == ManagerTariffRuleType.per_unit_manual.value:
             base_qty = rule_input_qty if rule_input_qty is not None else ServiceEstimateService._rule_default_qty(rule)
-            qty = float(base_qty) * float(quantity)
+            qty = decimal_value(base_qty) * quantity
         elif rule.rule_type == ManagerTariffRuleType.fixed_once.value:
-            qty = float(rule_input_qty if rule_input_qty is not None else ServiceEstimateService._rule_default_qty(rule))
+            qty = decimal_value(rule_input_qty if rule_input_qty is not None else ServiceEstimateService._rule_default_qty(rule))
         else:
             return None
 
@@ -219,9 +221,9 @@ class ServiceEstimateService:
         name = ServiceEstimateService._render_line_template(
             rule.line_template,
             name=rule.name,
-            qty=qty,
+            qty=float(qty),
             unit=rule.unit,
-            unit_price=unit_price,
+            unit_price=float(unit_price),
             route_length_m=route_length,
             included_route_meters=included_route,
             extra_route_meters=extra_route,
@@ -237,9 +239,9 @@ class ServiceEstimateService:
             name=name,
             short_name=name,
             full_description=name,
-            qty=ServiceEstimateService._round_money(qty),
+            qty=qty,
             unit=rule.unit,
-            unit_price=ServiceEstimateService._round_money(unit_price),
+            unit_price=unit_price,
             line_total=ServiceEstimateService._round_money(line_total),
             sort_order=sort_order,
         )
@@ -286,9 +288,11 @@ class ServiceEstimateService:
             session, payload, tenant_scope
         )
         lines = await ServiceEstimateService._build_lines(payload, tariff)
-        subtotal = ServiceEstimateService._round_money(sum(float(line.line_total or 0.0) for line in lines))
-        discount_amount = ServiceEstimateService._round_money(min(float(payload.discount_amount or 0.0), subtotal))
-        total = ServiceEstimateService._round_money(max(subtotal - discount_amount, 0.0))
+        subtotal_money = sum((money(line.line_total) for line in lines), Decimal("0.00"))
+        discount_money = min(money(payload.discount_amount), subtotal_money)
+        subtotal = float(subtotal_money)
+        discount_amount = float(discount_money)
+        total = float(subtotal_money - discount_money)
         rule_lines = [line for line in lines if line.source_type == "rule"]
 
         return ManagerInstallEstimateResponse(
@@ -393,9 +397,9 @@ class ServiceEstimateService:
             comment=payload.comment,
             service_kind=calculation.tariff.service_kind.value,
             currency=calculation.currency,
-            subtotal=calculation.subtotal,
-            discount_amount=calculation.discount_amount,
-            total=calculation.total,
+            subtotal=money(calculation.subtotal),
+            discount_amount=money(calculation.discount_amount),
+            total=money(calculation.total),
             calculation_payload=payload.model_dump(mode="json"),
             status=(payload.status or "draft").strip() or "draft",
             created_by=(created_by or "").strip() or None,
@@ -411,7 +415,7 @@ class ServiceEstimateService:
                 qty=line.qty,
                 unit=line.unit,
                 unit_price=line.unit_price,
-                line_total=line.line_total,
+                line_total=money(line.line_total),
                 sort_order=line.sort_order,
             )
             for line in calculation.lines
@@ -522,6 +526,7 @@ class ServiceEstimateService:
     def _map_item_to_detailed_service_line(
         item: ServiceEstimateItem,
         description_mode: ManagerServiceDescriptionMode,
+        net_total: Decimal,
     ) -> ManagerOrderServiceLinePayload:
         qty_label = ServiceEstimateService._format_number(item.qty)
         unit_label = (item.unit or "").strip()
@@ -534,7 +539,7 @@ class ServiceEstimateService:
             service_id=item.service_id,
             title=title,
             quantity=1,
-            price=max(0, int(round(float(item.line_total or 0.0)))),
+            price=net_total,
             cost=None,
         )
 
@@ -556,6 +561,28 @@ class ServiceEstimateService:
             )
 
         sorted_items = sorted(list(estimate.items or []), key=lambda item: item.sort_order)
+        try:
+            gross = [snapshot_money(item.line_total) for item in sorted_items]
+            subtotal = snapshot_money(estimate.subtotal)
+            discount = snapshot_money(estimate.discount_amount)
+            total = snapshot_money(estimate.total)
+            if sum(gross, Decimal("0.00")) != subtotal or subtotal - discount != total:
+                raise ValueError("Saved estimate totals do not reconcile")
+            net = allocate_discount(gross, discount)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Сохранённая смета #{estimate_id} содержит несовместимые суммы: {exc}",
+            ) from exc
+        exported = [total] if mode == ManagerServiceEstimateOrderLinesMode.collapsed else net
+        try:
+            for amount in exported:
+                writable_service_money(amount)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(exc),
+            ) from exc
         if mode == ManagerServiceEstimateOrderLinesMode.collapsed:
             if estimate.tariff_id:
                 collapsed_title = ServiceEstimateService._build_collapsed_title_from_new_model(
@@ -571,7 +598,7 @@ class ServiceEstimateService:
                     service_id=None,
                     title=collapsed_title,
                     quantity=1,
-                    price=max(0, int(round(float(estimate.total or 0.0)))),
+                    price=total,
                     cost=None,
                 )
             ]
@@ -584,8 +611,8 @@ class ServiceEstimateService:
             )
 
         services = [
-            ServiceEstimateService._map_item_to_detailed_service_line(item, description_mode)
-            for item in sorted_items
+            ServiceEstimateService._map_item_to_detailed_service_line(item, description_mode, net_total)
+            for item, net_total in zip(sorted_items, net)
         ]
         return ManagerServiceEstimateOrderLinesResponse(
             estimate_id=int(estimate.id),

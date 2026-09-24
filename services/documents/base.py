@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
+from decimal import Decimal, ROUND_HALF_UP
 import re
 from typing import Dict, Any, List, Optional
 
@@ -62,11 +63,12 @@ class BaseDocumentStrategy(ABC):
 
 
     @staticmethod
-    def _amount_in_words(amount: float) -> str:
+    def _amount_in_words(amount: float | Decimal) -> str:
         try:
             # num2words с to='currency' делит на 100, поэтому используем обычный режим
-            rubles = int(amount)
-            kopecks = int((amount - rubles) * 100)
+            exact = Decimal(str(amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            rubles = int(exact)
+            kopecks = int((exact - rubles) * 100)
             
             # Генерируем текст для рублей
             rubles_text = num2words(rubles, lang='ru')

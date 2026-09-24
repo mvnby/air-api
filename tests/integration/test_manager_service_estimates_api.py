@@ -1,7 +1,9 @@
+from decimal import Decimal
+
 import pytest
 
 from core.config import settings
-from models import Customer, ServiceTariff, ServiceTariffRule
+from models import Customer, Order, OrderStatus, ServiceEstimate, ServiceEstimateItem, ServiceTariff, ServiceTariffRule
 
 
 async def _auth_headers(async_client):
@@ -15,7 +17,8 @@ async def _auth_headers(async_client):
 
 
 @pytest.mark.asyncio
-async def test_manager_service_estimates_calculate_and_snapshot_flow(async_client, db):
+async def test_manager_service_estimates_calculate_and_snapshot_flow(async_client, db, monkeypatch):
+    monkeypatch.setattr(settings, "EXACT_SERVICE_MONEY_WRITES_ENABLED", True)
     headers = await _auth_headers(async_client)
 
     customer = Customer(tenant_id=1, name="ООО Тест", phone="+375291112233")
@@ -131,6 +134,7 @@ async def test_manager_service_estimates_calculate_and_snapshot_flow(async_clien
     assert detailed_data["description_mode"] == "short"
     assert len(detailed_data["services"]) == 4
     assert detailed_data["services"][0]["title"] == "Монтаж настенного до 3.5 кВт"
+    assert sum(Decimal(str(line["price"])) for line in detailed_data["services"]) == Decimal("800.00")
 
     order_lines_full_resp = await async_client.get(
         f"/api/manager/service-estimates/{created['id']}/order-lines?mode=detailed&description_mode=full",
@@ -151,6 +155,7 @@ async def test_manager_service_estimates_calculate_and_snapshot_flow(async_clien
     assert collapsed_data["description_mode"] == "full"
     assert len(collapsed_data["services"]) == 1
     assert collapsed_data["services"][0]["price"] == 800
+    assert sum(Decimal(str(line["price"])) for line in detailed_data["services"]) == Decimal(str(collapsed_data["services"][0]["price"]))
 
     list_resp = await async_client.get(
         "/api/manager/service-estimates?page=1&limit=20",
@@ -191,3 +196,65 @@ async def test_manager_service_estimates_requires_auth(async_client):
         json={"tariff_id": 1, "route_length_m": 3, "quantity": 1},
     )
     assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("amounts", "discount", "expected"),
+    [
+        ((Decimal("600.00"), Decimal("230.00")), Decimal("30.00"), [578.31, 221.69]),
+        ((Decimal("100.40"), Decimal("100.40")), Decimal("0.00"), [100.4, 100.4]),
+    ],
+)
+async def test_estimate_money_survives_manager_order_save_and_repeat(
+    async_client, db, monkeypatch, amounts, discount, expected,
+):
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "EXACT_SERVICE_MONEY_WRITES_ENABLED", True)
+    customer = Customer(tenant_id=1, name="Cent estimate", phone="+375291112234")
+    db.add(customer)
+    await db.flush()
+    estimate = ServiceEstimate(
+        tenant_id=1, customer_id=customer.id, title="Две работы",
+        subtotal=sum(amounts), discount_amount=discount,
+        total=sum(amounts) - discount,
+    )
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, status=OrderStatus.NEGOTIATION)
+    db.add_all([estimate, order])
+    await db.flush()
+    db.add_all([
+        ServiceEstimateItem(estimate_id=estimate.id, name=f"Работа {number}", short_name=f"Работа {number}",
+                            source_type="rule", qty=1, unit="шт", unit_price=float(amount),
+                            line_total=amount, sort_order=number)
+        for number, amount in enumerate(amounts, start=1)
+    ])
+    await db.commit()
+    headers = await _auth_headers(async_client)
+
+    lines_resp = await async_client.get(
+        f"/api/manager/service-estimates/{estimate.id}/order-lines?mode=detailed", headers=headers,
+    )
+    assert lines_resp.status_code == 200, lines_resp.text
+    lines = lines_resp.json()["services"]
+    assert [line["price"] for line in lines] == expected
+    collapsed = await async_client.get(
+        f"/api/manager/service-estimates/{estimate.id}/order-lines?mode=collapsed", headers=headers,
+    )
+    assert collapsed.status_code == 200, collapsed.text
+    assert Decimal(str(collapsed.json()["services"][0]["price"])) == sum(
+        (Decimal(str(line["price"])) for line in lines), Decimal("0")
+    )
+
+    for _ in range(2):
+        saved = await async_client.patch(
+            f"/api/manager/orders/{order.id}", json={"services": lines}, headers=headers,
+        )
+        assert saved.status_code == 200, saved.text
+        assert saved.json()["total_amount"] == float(estimate.total)
+        assert [line["price"] for line in saved.json()["service_lines"]] == expected
+        lines = [
+            {"service_id": line["service_id"], "title": line["service_title"],
+             "quantity": line["quantity"], "price": line["price"], "cost": line["cost"]}
+            for line in saved.json()["service_lines"]
+        ]
