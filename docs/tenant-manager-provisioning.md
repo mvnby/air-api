@@ -87,6 +87,18 @@ The stable `result.plan_digest` is the only value copied into the execute form.
 A blocked plan still uploads this sanitized artifact for diagnosis, while the
 workflow remains visibly failed.
 
+If a remote command fails before a validated result is available, the Actions
+log reports only a reviewed `phase`, fixed `reason_code`, node and remote exit
+status. The phases are `runtime_target` (active container discovery),
+`runtime_capability` (CLI support checks), `plan_cli` and `execute_cli`.
+`remote_command_failed` means the SSH-wrapped command returned an unaccepted
+status; it does not identify whether the deployment lock, runtime preconditions
+or CLI failed. `remote_invocation_failed` means the local SSH invocation raised
+an OS error, with `remote_status=unavailable`. Raw remote output, commands and
+exception text are never added to these diagnostics. Such failures remain
+blocked and do not create an operation-result artifact; a structured blocked
+plan still uploads its sanitized result as described above.
+
 The `execute` operation requires all of the following:
 
 - the same exact target fields;

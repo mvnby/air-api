@@ -297,6 +297,7 @@ def test_blocked_plan_status_is_accepted_only_for_parseable_plan(monkeypatch):
         node,
         context,
         "fixed command",
+        phase=workflow.RemotePhase.PLAN_CLI,
         accepted_statuses=frozenset({0, 2}),
     )
     result = workflow._load_result(output.stdout, expected_mode="plan")
@@ -307,6 +308,113 @@ def test_blocked_plan_status_is_accepted_only_for_parseable_plan(monkeypatch):
     )
     assert result["ready"] is False
     assert str(workflow.REMOTE_DEPLOY_LOCK_HELPER) in captured_command[-1]
+
+
+@pytest.mark.parametrize(
+    ("operation", "phase", "failed_call"),
+    [
+        ("plan", "runtime_target", 0),
+        ("plan", "runtime_capability", 1),
+        ("plan", "plan_cli", 2),
+        ("execute", "runtime_target", 0),
+        ("execute", "runtime_capability", 1),
+        ("execute", "plan_cli", 2),
+        ("execute", "execute_cli", 3),
+    ],
+)
+@pytest.mark.parametrize("failure", [1, 255, "invocation"])
+def test_remote_failure_reports_only_safe_phase_and_code_and_stops(
+    tmp_path: Path, monkeypatch, capsys, operation, phase, failed_call, failure
+):
+    args = _arguments(tmp_path, operation=operation)
+    args.display_name = "command-argument-marker"
+    plan = json.loads(_plan_payload())
+    plan["target"]["display_name"] = args.display_name
+    successful_outputs = [_runtime_identity(), "", json.dumps(plan)]
+    calls = []
+    markers = [
+        "stdout-password-marker",
+        "stderr-sql-parameter-marker",
+        "exception-command-marker",
+        "stdin-password-marker",
+        "environment-secret-marker",
+        "fresh-plan-token",
+        args.display_name,
+    ]
+
+    def runner(command, stdin):
+        index = len(calls)
+        calls.append((command, stdin))
+        if index == failed_call:
+            if failure == "invocation":
+                raise OSError(markers[2])
+            return subprocess.CompletedProcess(command, failure, markers[0], markers[1])
+        return subprocess.CompletedProcess(command, 0, successful_outputs[index], "")
+
+    monkeypatch.setattr(
+        workflow, "build_parser", lambda: SimpleNamespace(parse_args=lambda: args)
+    )
+    monkeypatch.setattr(
+        workflow, "create_context",
+        lambda *args: SimpleNamespace(config_file=Path("/tmp/reviewed-ssh-config")),
+    )
+    monkeypatch.setattr(workflow, "validate_effective_config", lambda *args: None)
+    monkeypatch.setattr(workflow, "discover_cluster_topology", lambda **kwargs: _topology())
+    monkeypatch.setattr(workflow, "_read_password", lambda: markers[3])
+    monkeypatch.setenv("TENANT_MANAGER_ONE_TIME_PASSWORD", markers[4])
+    monkeypatch.setattr(workflow, "_subprocess_runner", runner)
+
+    with pytest.raises(SystemExit) as exc:
+        workflow.main()
+
+    assert exc.value.code == 2
+    captured = capsys.readouterr()
+    reason = (
+        "remote_invocation_failed" if failure == "invocation" else "remote_command_failed"
+    )
+    status = "unavailable" if failure == "invocation" else failure
+    assert captured.out == ""
+    assert captured.err == (
+        "tenant_manager_workflow status=blocked "
+        f"error=phase={phase} reason_code={reason} "
+        f"node={_topology().primary.alias} remote_status={status}\n"
+    )
+    assert all(marker not in captured.err for marker in markers)
+    assert len(calls) == failed_call + 1
+    assert not args.result_file.exists()
+    assert not args.result_file.with_suffix(".json.tmp").exists()
+    if phase == "execute_cli":
+        assert json.loads(calls[-1][1]) == {
+            "plan_token": "fresh-plan-token", "password": markers[3]
+        }
+    else:
+        assert all(stdin is None for _, stdin in calls)
+
+
+def test_remote_failure_rejects_unreviewed_diagnostic_phase(monkeypatch):
+    def unexpected_call(*args):
+        pytest.fail("unreviewed diagnostic label must fail before invoking SSH")
+
+    monkeypatch.setattr(workflow, "_subprocess_runner", unexpected_call)
+    with pytest.raises(workflow.WorkflowError) as exc:
+        workflow._run_remote(
+            PATRONI_NODES[0], object(), "unused", phase="unreviewed-secret-marker"
+        )
+    assert str(exc.value) == "remote diagnostic phase is not reviewed"
+
+
+def test_remote_execute_does_not_accept_blocked_exit_status(monkeypatch):
+    monkeypatch.setattr(
+        workflow, "_subprocess_runner",
+        lambda command, stdin: subprocess.CompletedProcess(command, 2, "", ""),
+    )
+    with pytest.raises(workflow.WorkflowError, match="remote_status=2"):
+        workflow._run_remote(
+            PATRONI_NODES[0],
+            SimpleNamespace(config_file=Path("/tmp/reviewed-ssh-config")),
+            "fixed command",
+            phase=workflow.RemotePhase.EXECUTE_CLI,
+        )
 
 
 def test_result_schema_drift_and_nested_secret_material_fail_closed():
