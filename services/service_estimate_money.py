@@ -27,7 +27,7 @@ def exact_money(value: object) -> Decimal:
 
 
 def writable_service_money(value: object) -> Decimal:
-    """Fence fractional writes until all API nodes can read decimal service prices."""
+    """Validate cents and honor an explicit pause on fractional writes."""
     from core.config import settings
 
     result = exact_money(value)

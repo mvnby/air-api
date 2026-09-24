@@ -6,7 +6,8 @@ unconstrained PostgreSQL `NUMERIC`. It does not narrow the former integer range,
 change product prices, backfill saved estimates or rewrite documents. Quantity
 and tariff unit-price columns keep their existing precision and behavior.
 
-For the schema-expansion release, first deploy [the integer/NUMERIC reader compatibility change](https://github.com/mvnby/air-api/pull/1035)
+For the schema-expansion release, first deploy
+[the integer/NUMERIC reader compatibility change](https://github.com/mvnby/air-api/pull/1035)
 and verify its image revision on **both** API nodes. An older API process can
 receive `Decimal` values from the new `NUMERIC` columns even when every saved
 price is a whole ruble; disabling fractional writes alone does not protect it.
