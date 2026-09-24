@@ -64,6 +64,17 @@ async def test_status_codes_hide_upstream_body(monkeypatch, status, code):
 
 
 @pytest.mark.asyncio
+async def test_documented_channel_and_balance_codes_are_classified_without_body(monkeypatch):
+    monkeypatch.setattr(provider.httpx, "AsyncClient", _Client)
+    for upstream, expected in (("get_channel_failed", "channel_unavailable"), ("insufficient_balance", "balance_unavailable"), ("model_not_found", "model_unavailable")):
+        _Client.response = _response(400, json.dumps({"error": {"code": upstream, "message": "private-document"}}).encode())
+        with pytest.raises(provider.ZaprosuError) as error:
+            await provider.list_models("private-key")
+        assert error.value.code == expected
+        assert "private-document" not in str(error.value)
+
+
+@pytest.mark.asyncio
 async def test_malformed_and_oversized_responses(monkeypatch):
     monkeypatch.setattr(provider.httpx, "AsyncClient", _Client)
     _Client.response = _response(200, b"not-json")

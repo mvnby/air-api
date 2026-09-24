@@ -31,13 +31,19 @@ class Completion:
     completion_tokens: int | None
 
 
-def _error_for_status(status: int) -> ZaprosuError:
+def _error_for_status(status: int, upstream_code: str | None = None) -> ZaprosuError:
     if status in (401, 403):
         return ZaprosuError("authentication_rejected", status=status)
     if status == 429:
         return ZaprosuError("rate_limited", status=status, retryable=True)
     if status == 402:
         return ZaprosuError("balance_unavailable", status=status)
+    if upstream_code in {"insufficient_balance", "insufficient_quota"}:
+        return ZaprosuError("balance_unavailable", status=status)
+    if upstream_code == "get_channel_failed":
+        return ZaprosuError("channel_unavailable", status=status)
+    if upstream_code in {"model_not_found", "invalid_model"}:
+        return ZaprosuError("model_unavailable", status=status)
     if status >= 500:
         return ZaprosuError("upstream_unavailable", status=status, retryable=True)
     return ZaprosuError("model_or_channel_rejected", status=status)
@@ -62,7 +68,16 @@ async def _request(method: str, path: str, token: str, payload: dict | None = No
                         if 300 <= response.status_code < 400:
                             raise ZaprosuError("redirect_rejected", status=response.status_code)
                         if response.status_code >= 400:
-                            raise _error_for_status(response.status_code)
+                            error_chunks, error_size = [], 0
+                            async for chunk in response.aiter_raw():
+                                error_size += len(chunk)
+                                if error_size > 8192:
+                                    break
+                                error_chunks.append(chunk)
+                            raise _error_for_status(
+                                response.status_code,
+                                _provider_error_code(b"".join(error_chunks)),
+                            )
                         if response.headers.get("content-encoding", "identity").lower() != "identity":
                             raise ZaprosuError("invalid_response")
                         declared = response.headers.get("content-length")
@@ -90,7 +105,20 @@ async def _request(method: str, path: str, token: str, payload: dict | None = No
         raise ZaprosuError("invalid_response") from None
     if not isinstance(data, dict):
         raise ZaprosuError("invalid_response")
+    if data.get("error"):
+        raise _error_for_status(400, _provider_error_code(b"".join(chunks)))
     return data
+
+
+def _provider_error_code(body: bytes) -> str | None:
+    try:
+        data = json.loads(body)
+    except (UnicodeError, ValueError):
+        return None
+    if not isinstance(data, dict) or not isinstance(data.get("error"), dict):
+        return None
+    code = data["error"].get("code")
+    return code if isinstance(code, str) else None
 
 
 async def list_models(token: str) -> list[str]:
