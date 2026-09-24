@@ -282,6 +282,11 @@ GET_FX_RATE = "get_fx_rate"
 SUGGEST_ADDRESS = "suggest_address"
 UPDATE_MANAGER_SETTING = "update_manager_setting"
 CREATE_MANAGER_SETTING = "create_manager_setting"
+GET_PLATFORM_AI_CONNECTION = "get_platform_ai_connection"
+PUT_PLATFORM_AI_CONNECTION = "put_platform_ai_connection"
+DELETE_PLATFORM_AI_CONNECTION = "delete_platform_ai_connection"
+GET_PLATFORM_AI_MODELS = "get_platform_ai_models"
+TEST_PLATFORM_AI_INFERENCE = "test_platform_ai_inference"
 GET_MANAGER_GOOGLE_AUTH_STATUS = "get_manager_google_auth_status"
 GET_MANAGER_GOOGLE_AUTH_URL = "get_manager_google_auth_url"
 GET_MANAGER_DOCUMENT_DRIVE_STATUS = "get_manager_document_drive_status"
@@ -682,6 +687,11 @@ ALL_MANAGER_OPERATION_IDS = (
     PATCH_MANAGER_STAFF,
     LIST_MANAGER_SETTINGS,
     CREATE_MANAGER_SETTING,
+    GET_PLATFORM_AI_CONNECTION,
+    PUT_PLATFORM_AI_CONNECTION,
+    DELETE_PLATFORM_AI_CONNECTION,
+    GET_PLATFORM_AI_MODELS,
+    TEST_PLATFORM_AI_INFERENCE,
     GET_FX_RATE,
     SUGGEST_ADDRESS,
     UPDATE_MANAGER_SETTING,

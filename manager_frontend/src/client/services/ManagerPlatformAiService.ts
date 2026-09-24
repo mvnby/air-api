@@ -15,7 +15,7 @@ export class ManagerPlatformAiService {
      * @returns ConnectionStatus Successful Response
      * @throws ApiError
      */
-    public static getPlatformAiApiManagerPlatformAiGet(): CancelablePromise<ConnectionStatus> {
+    public static getPlatformAiConnection(): CancelablePromise<ConnectionStatus> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/manager/platform-ai',
@@ -27,7 +27,7 @@ export class ManagerPlatformAiService {
      * @returns ConnectionStatus Successful Response
      * @throws ApiError
      */
-    public static putPlatformAiApiManagerPlatformAiPut(
+    public static putPlatformAiConnection(
         requestBody: ConnectionUpdate,
     ): CancelablePromise<ConnectionStatus> {
         return __request(OpenAPI, {
@@ -45,7 +45,7 @@ export class ManagerPlatformAiService {
      * @returns ConnectionStatus Successful Response
      * @throws ApiError
      */
-    public static deletePlatformAiApiManagerPlatformAiDelete(): CancelablePromise<ConnectionStatus> {
+    public static deletePlatformAiConnection(): CancelablePromise<ConnectionStatus> {
         return __request(OpenAPI, {
             method: 'DELETE',
             url: '/api/manager/platform-ai',
@@ -56,7 +56,7 @@ export class ManagerPlatformAiService {
      * @returns ModelList Successful Response
      * @throws ApiError
      */
-    public static getPlatformAiModelsApiManagerPlatformAiModelsGet(): CancelablePromise<ModelList> {
+    public static getPlatformAiModels(): CancelablePromise<ModelList> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/manager/platform-ai/models',
@@ -67,7 +67,7 @@ export class ManagerPlatformAiService {
      * @returns InferenceTest Successful Response
      * @throws ApiError
      */
-    public static testPlatformAiApiManagerPlatformAiTestPost(): CancelablePromise<InferenceTest> {
+    public static testPlatformAiInference(): CancelablePromise<InferenceTest> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/manager/platform-ai/test',

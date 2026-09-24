@@ -5,11 +5,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn(), remove: vi.fn(), models: vi.fn(), test: vi.fn() }));
 vi.mock('../src/client', () => ({
   ManagerPlatformAiService: {
-    getPlatformAiApiManagerPlatformAiGet: mocks.get,
-    putPlatformAiApiManagerPlatformAiPut: mocks.put,
-    deletePlatformAiApiManagerPlatformAiDelete: mocks.remove,
-    getPlatformAiModelsApiManagerPlatformAiModelsGet: mocks.models,
-    testPlatformAiApiManagerPlatformAiTestPost: mocks.test,
+    getPlatformAiConnection: mocks.get,
+    putPlatformAiConnection: mocks.put,
+    deletePlatformAiConnection: mocks.remove,
+    getPlatformAiModels: mocks.models,
+    testPlatformAiInference: mocks.test,
   },
 }));
 

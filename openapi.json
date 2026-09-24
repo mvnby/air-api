@@ -20884,7 +20884,7 @@
           "manager/platform-ai"
         ],
         "summary": "Get Platform Ai",
-        "operationId": "get_platform_ai_api_manager_platform_ai_get",
+        "operationId": "get_platform_ai_connection",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -20908,7 +20908,7 @@
           "manager/platform-ai"
         ],
         "summary": "Put Platform Ai",
-        "operationId": "put_platform_ai_api_manager_platform_ai_put",
+        "operationId": "put_platform_ai_connection",
         "requestBody": {
           "content": {
             "application/json": {
@@ -20952,7 +20952,7 @@
           "manager/platform-ai"
         ],
         "summary": "Delete Platform Ai",
-        "operationId": "delete_platform_ai_api_manager_platform_ai_delete",
+        "operationId": "delete_platform_ai_connection",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -20978,7 +20978,7 @@
           "manager/platform-ai"
         ],
         "summary": "Get Platform Ai Models",
-        "operationId": "get_platform_ai_models_api_manager_platform_ai_models_get",
+        "operationId": "get_platform_ai_models",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -21004,7 +21004,7 @@
           "manager/platform-ai"
         ],
         "summary": "Test Platform Ai",
-        "operationId": "test_platform_ai_api_manager_platform_ai_test_post",
+        "operationId": "test_platform_ai_inference",
         "responses": {
           "200": {
             "description": "Successful Response",

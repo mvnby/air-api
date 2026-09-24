@@ -16,7 +16,7 @@ const error = ref('');
 const load = async () => {
   busy.value = true; error.value = '';
   try {
-    status.value = await ManagerPlatformAiService.getPlatformAiApiManagerPlatformAiGet() as Status;
+    status.value = await ManagerPlatformAiService.getPlatformAiConnection() as Status;
     model.value = status.value.selected_model || '';
   } catch { error.value = 'Не удалось загрузить подключение.'; }
   finally { busy.value = false; }
@@ -25,7 +25,7 @@ const load = async () => {
 const save = async () => {
   busy.value = true; error.value = ''; message.value = '';
   try {
-    status.value = await ManagerPlatformAiService.putPlatformAiApiManagerPlatformAiPut({
+    status.value = await ManagerPlatformAiService.putPlatformAiConnection({
       key: key.value || null, selected_model: model.value || null,
     }) as Status;
     key.value = '';
@@ -37,7 +37,7 @@ const save = async () => {
 const toggle = async () => {
   busy.value = true; error.value = ''; message.value = '';
   try {
-    status.value = await ManagerPlatformAiService.putPlatformAiApiManagerPlatformAiPut({ enabled: !status.value.enabled }) as Status;
+    status.value = await ManagerPlatformAiService.putPlatformAiConnection({ enabled: !status.value.enabled }) as Status;
     message.value = status.value.enabled ? 'Подключение включено.' : 'Подключение отключено.';
   } catch { error.value = 'Для включения сохраните ключ и выберите модель.'; }
   finally { busy.value = false; }
@@ -46,7 +46,7 @@ const toggle = async () => {
 const discover = async () => {
   busy.value = true; error.value = ''; message.value = '';
   try {
-    const response = await ManagerPlatformAiService.getPlatformAiModelsApiManagerPlatformAiModelsGet() as { items: string[] };
+    const response = await ManagerPlatformAiService.getPlatformAiModels() as { items: string[] };
     models.value = response.items;
     message.value = `Каталог доступен: ${models.value.length} моделей. Поддержка текстового протокола проверяется отдельным запросом.`;
   } catch { error.value = 'Каталог недоступен. Проверьте ключ, баланс и соединение.'; }
@@ -56,7 +56,7 @@ const discover = async () => {
 const testInference = async () => {
   busy.value = true; error.value = ''; message.value = '';
   try {
-    const response = await ManagerPlatformAiService.testPlatformAiApiManagerPlatformAiTestPost() as { ok: boolean; model: string };
+    const response = await ManagerPlatformAiService.testPlatformAiInference() as { ok: boolean; model: string };
     message.value = response.ok ? `Текстовый запрос выполнен: ${response.model}.` : 'Модель вернула пустой ответ.';
   } catch { error.value = 'Текстовый запрос не выполнен. Возможно, модель не поддерживает Chat Completions или недоступна.'; }
   finally { busy.value = false; }
@@ -66,7 +66,7 @@ const remove = async () => {
   if (!window.confirm('Удалить ключ ZAPRO.SU и отключить подключение?')) return;
   busy.value = true; error.value = ''; message.value = '';
   try {
-    status.value = await ManagerPlatformAiService.deletePlatformAiApiManagerPlatformAiDelete() as Status;
+    status.value = await ManagerPlatformAiService.deletePlatformAiConnection() as Status;
     key.value = ''; model.value = ''; models.value = [];
     message.value = 'Ключ удалён.';
   } catch { error.value = 'Не удалось удалить подключение.'; }
