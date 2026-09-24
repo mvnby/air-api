@@ -48,9 +48,6 @@ def _snapshot(amounts: list[str], discount: str = "0") -> SimpleNamespace:
 async def test_collapsed_and_detailed_saved_estimate_are_equal(
     monkeypatch, amounts, discount, expected,
 ):
-    from core.config import settings
-
-    monkeypatch.setattr(settings, "EXACT_SERVICE_MONEY_WRITES_ENABLED", True)
     snapshot = _snapshot(amounts, discount)
 
     async def get_snapshot(*_args):
@@ -100,7 +97,7 @@ async def test_fractional_import_waits_for_both_api_nodes(monkeypatch):
     assert "обеих API-нод" in error.value.detail
 
 
-def test_discount_allocation_and_cent_validation(monkeypatch):
+def test_discount_allocation_and_cent_validation():
     assert allocate_discount([Decimal("0.00"), Decimal("1.00")], Decimal("0.00")) == [Decimal("0.00"), Decimal("1.00")]
     with pytest.raises(ValueError):
         allocate_discount([Decimal("1.00")], Decimal("1.01"))
@@ -109,14 +106,23 @@ def test_discount_allocation_and_cent_validation(monkeypatch):
     with pytest.raises(ValidationError):
         ManagerOrderServiceLinePayload(title="Монтаж", quantity=1, price=1.001)
 
-    from core.config import settings
+    assert writable_service_money("1.23") == Decimal("1.23")
+
+
+def test_default_money_write_setting_and_explicit_false_override(monkeypatch):
+    from core.config import Settings, settings
+
+    monkeypatch.delenv("EXACT_SERVICE_MONEY_WRITES_ENABLED", raising=False)
+    assert Settings(_env_file=None).EXACT_SERVICE_MONEY_WRITES_ENABLED is True
+    monkeypatch.setenv("EXACT_SERVICE_MONEY_WRITES_ENABLED", "false")
+    assert Settings(_env_file=None).EXACT_SERVICE_MONEY_WRITES_ENABLED is False
 
     monkeypatch.setattr(settings, "EXACT_SERVICE_MONEY_WRITES_ENABLED", False)
     with pytest.raises(ValueError, match="обеих API-нод"):
         writable_service_money("1.23")
     assert writable_service_money("1.00") == Decimal("1.00")
-    monkeypatch.setattr(settings, "EXACT_SERVICE_MONEY_WRITES_ENABLED", True)
-    assert writable_service_money("1.23") == Decimal("1.23")
+    with pytest.raises(ValueError, match="at most two decimals"):
+        writable_service_money("1.234")
 
 
 def test_order_selected_proposal_total_keeps_service_cents():
