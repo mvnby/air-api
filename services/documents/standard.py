@@ -1,5 +1,6 @@
 import re
 from datetime import datetime
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, List, Optional
 from sqlmodel import select
 from services.google_service import get_google_service
@@ -486,7 +487,8 @@ class B2CDocumentStrategy(GoogleDocStrategy):
 
     @staticmethod
     def _money(value: Any) -> str:
-        return f"{float(value or 0):.2f}".replace(".", ",")
+        exact = Decimal(str(value or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        return f"{exact:.2f}".replace(".", ",")
 
     @staticmethod
     def _quantity(value: Any) -> str:
@@ -506,18 +508,10 @@ class B2CDocumentStrategy(GoogleDocStrategy):
         item = getattr(link, "product", None) or getattr(link, "service", None)
         return str(getattr(item, "title", "") or fallback).strip() or fallback
 
-    @staticmethod
-    def _line_total(link: Any) -> float:
-        return float(getattr(link, "price", 0) or 0) * float(getattr(link, "quantity", 0) or 0)
-
     @classmethod
     def _join_titles(cls, links: list[Any], fallback: str) -> str:
         titles = [cls._line_title(link, fallback) for link in links]
         return "\n".join(titles)
-
-    @classmethod
-    def _sum_amount(cls, links: list[Any]) -> float:
-        return sum(cls._line_total(link) for link in links)
 
     @classmethod
     def _sum_quantity(cls, links: list[Any]) -> str:
@@ -704,7 +698,8 @@ class GeneralDocStrategy(GoogleDocStrategy):
             counter += 1
 
         if table_rows:
-            total_row = ["Всего:", "", "", "", "", f"{self.order.total_amount:.2f}"]
+            exact_total = self._sum_amount(self.order.product_links) + self._sum_amount(self.order.service_links)
+            total_row = ["Всего:", "", "", "", "", f"{exact_total:.2f}"]
             table_rows.append(total_row)
             
         return table_rows

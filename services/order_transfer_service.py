@@ -45,6 +45,7 @@ from schemas import (
 from services.order_product_transfer_service import OrderProductTransferService
 from services.order_transfer_service_resolver import OrderTransferServiceResolver
 from services.order_service import OrderService
+from services.service_estimate_money import writable_service_money
 from services.customer_party import signing_mode_for_customer_type
 from services.tenant_entity_access_service import TenantEntityAccessService
 from services.tenant_scope_service import (
@@ -136,8 +137,8 @@ class OrderTransferService:
             service=OrderTransferService._service_ref(link),
             title=link.title or (link.service.title if link.service else f"Услуга #{link.service_id}"),
             quantity=int(link.quantity or 1),
-            price=int(link.price or 0),
-            cost=int(link.cost or 0),
+            price=float(link.price or 0),
+            cost=float(link.cost or 0),
         )
 
     @staticmethod
@@ -629,8 +630,8 @@ class OrderTransferService:
                             service_id=service.id if service else None,
                             title=service_line.title,
                             quantity=int(service_line.quantity or 1),
-                            price=int(service_line.price or 0),
-                            cost=int(service_line.cost or 0),
+                            price=writable_service_money(service_line.price),
+                            cost=writable_service_money(service_line.cost),
                         )
                     )
 

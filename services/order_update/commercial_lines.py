@@ -12,6 +12,7 @@ from services.order_proposal_lifecycle import (
 )
 from services.order_service import OrderService
 from services.service_catalog_scope import service_catalog_scope_clause
+from services.service_estimate_money import writable_service_money
 from services.order_update.context import OrderUpdateContext
 
 
@@ -173,6 +174,9 @@ async def _replace_service_lines(
             raise ValueError("Service cost cannot be negative")
         if not line.title:
             raise ValueError("Service title is required")
+        writable_service_money(line.price)
+        if line.cost is not None:
+            writable_service_money(line.cost)
 
     service_ids = {
         int(line.service_id)
@@ -210,9 +214,9 @@ async def _replace_service_lines(
                 service_id=line.service_id,
                 title=line.title,
                 quantity=line.quantity,
-                price=line.price,
+                price=writable_service_money(line.price),
                 cost=(
-                    line.cost
+                    writable_service_money(line.cost)
                     if line.cost is not None
                     else cost_defaults.get(int(line.service_id), 0)
                     if line.service_id is not None

@@ -1,9 +1,10 @@
 """Tenant-owned service dictionaries, tariffs and saved estimate snapshots."""
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import Column, Index, JSON, Text, UniqueConstraint, text
+from sqlalchemy import Column, Index, JSON, Numeric, Text, UniqueConstraint, text
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -196,9 +197,9 @@ class ServiceEstimate(SQLModel, table=True):
     comment: Optional[str] = Field(default=None)
     service_kind: str = Field(default="installation", index=True)
     currency: str = Field(default="BYN")
-    subtotal: float = Field(default=0.0)
-    discount_amount: float = Field(default=0.0)
-    total: float = Field(default=0.0)
+    subtotal: Decimal = Field(default=Decimal("0.00"), sa_column=Column(Numeric(), nullable=False))
+    discount_amount: Decimal = Field(default=Decimal("0.00"), sa_column=Column(Numeric(), nullable=False))
+    total: Decimal = Field(default=Decimal("0.00"), sa_column=Column(Numeric(), nullable=False))
     calculation_payload: Optional[Dict[str, Any]] = Field(
         default=None, sa_column=Column(JSON)
     )
@@ -237,6 +238,6 @@ class ServiceEstimateItem(SQLModel, table=True):
     qty: float = Field(default=1.0)
     unit: str = Field(default="шт")
     unit_price: float = Field(default=0.0)
-    line_total: float = Field(default=0.0)
+    line_total: Decimal = Field(default=Decimal("0.00"), sa_column=Column(Numeric(), nullable=False))
     sort_order: int = Field(default=0)
     estimate: ServiceEstimate = Relationship(back_populates="items")

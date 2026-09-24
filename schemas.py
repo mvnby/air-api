@@ -3323,6 +3323,9 @@ class ManagerInstallEstimateCalculatePayload(BaseModel):
     def validate_discount_amount(cls, value: float) -> float:
         if value < 0:
             raise ValueError("discount_amount must be >= 0")
+        from services.service_estimate_money import exact_money
+
+        exact_money(value)
         return value
 
 

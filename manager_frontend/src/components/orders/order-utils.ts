@@ -195,7 +195,11 @@ export function getOrderExecutionLabel(order: ManagerOrderListItemResponse): str
 }
 
 export function formatMoney(value: number): string {
-    return `${Math.round(value).toLocaleString('ru-RU')} BYN`;
+    const amount = Number(value);
+    return `${amount.toLocaleString('ru-RU', {
+        minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+        maximumFractionDigits: 2,
+    })} BYN`;
 }
 
 export function formatDate(value?: string | null): string {

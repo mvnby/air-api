@@ -1599,7 +1599,9 @@ async def test_manager_proposal_lifecycle_validates_and_protects_sent_revision(a
 
 
 @pytest.mark.asyncio
-async def test_manager_order_export_preview_and_import_creates_new_order(async_client, db):
+@pytest.mark.parametrize("service_price", [250, 250.4])
+async def test_manager_order_export_preview_and_import_creates_new_order(async_client, db, monkeypatch, service_price):
+    monkeypatch.setattr(settings, "EXACT_SERVICE_MONEY_WRITES_ENABLED", True)
     customer = Customer(tenant_id=1, name="Transfer Customer", phone="+375291234000", type=CustomerType.individual)
     product = Product(title="Transfer Product", slug="transfer-product", price=1800, specs={"area_m2": 25})
     service = Service(title="Transfer Service", slug="transfer-service", base_price=250)
@@ -1634,7 +1636,7 @@ async def test_manager_order_export_preview_and_import_creates_new_order(async_c
         f"/api/manager/orders/{order.id}",
         json={
             "products": [{"product_id": product.id, "quantity": 2, "price": 1700, "cost": 1100}],
-            "services": [{"service_id": service.id, "title": service.title, "quantity": 1, "price": 250, "cost": 100}],
+            "services": [{"service_id": service.id, "title": service.title, "quantity": 1, "price": service_price, "cost": 100}],
         },
         headers=headers,
     )
@@ -1662,6 +1664,7 @@ async def test_manager_order_export_preview_and_import_creates_new_order(async_c
     assert package["orders"][0]["source_id"] == order.id
     assert package["orders"][0]["payments"][0]["amount"] == 500
     assert package["orders"][0]["status"] == "execution"
+    assert package["orders"][0]["proposals"][0]["service_lines"][0]["price"] == service_price
     assert package["orders"][0]["auto_close_on_payment"] is True
     assert package["orders"][0]["execution_status"] == "work_done"
     assert package["orders"][0]["execution_status_changed_at"] is not None
@@ -1701,7 +1704,8 @@ async def test_manager_order_export_preview_and_import_creates_new_order(async_c
     assert detail["auto_close_on_payment"] is True
     assert detail["execution_status"] == "work_done"
     assert detail["execution_status_changed_at"] is not None
-    assert detail["total_amount"] == 3650
+    assert detail["service_lines"][0]["price"] == service_price
+    assert detail["total_amount"] == 3400 + service_price
 
 
 @pytest.mark.asyncio

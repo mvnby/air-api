@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
+from decimal import Decimal, ROUND_HALF_UP
 import re
 from typing import Dict, Any, List, Optional
 
@@ -60,13 +61,24 @@ class BaseDocumentStrategy(ABC):
         result = await self.session.execute(query)
         self.order = result.unique().scalar_one_or_none()
 
+    @staticmethod
+    def _line_total(link: Any) -> Decimal:
+        return Decimal(str(getattr(link, "price", 0) or 0)) * Decimal(
+            str(getattr(link, "quantity", 0) or 0)
+        )
+
+    @classmethod
+    def _sum_amount(cls, links: List[Any]) -> Decimal:
+        return sum((cls._line_total(link) for link in links), Decimal("0"))
+
 
     @staticmethod
-    def _amount_in_words(amount: float) -> str:
+    def _amount_in_words(amount: float | Decimal) -> str:
         try:
             # num2words с to='currency' делит на 100, поэтому используем обычный режим
-            rubles = int(amount)
-            kopecks = int((amount - rubles) * 100)
+            exact = Decimal(str(amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            rubles = int(exact)
+            kopecks = int((exact - rubles) * 100)
             
             # Генерируем текст для рублей
             rubles_text = num2words(rubles, lang='ru')

@@ -12,6 +12,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Integer,
+    Numeric,
     JSON,
     String,
     Text,
@@ -160,8 +161,8 @@ class OrderServiceLink(SQLModel, table=True):
 
     title: Optional[str] = Field(default=None)
 
-    price: int = Field(default=0)
-    cost: int = Field(default=0)
+    price: Decimal = Field(default=Decimal("0.00"), sa_column=Column(Numeric(), nullable=False))
+    cost: Decimal = Field(default=Decimal("0.00"), sa_column=Column(Numeric(), nullable=False))
 
     order: "Order" = Relationship(back_populates="service_links")
     proposal: Optional[OrderProposal] = Relationship(back_populates="service_links")

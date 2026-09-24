@@ -36,6 +36,8 @@ def _redact_settings_validation_error(error: ValidationError) -> ValidationError
 
 
 class Settings(BaseSettings):
+    # Enable only after the expand migration and every API node runs cent-aware code.
+    EXACT_SERVICE_MONEY_WRITES_ENABLED: bool = False
     # Bot Settings
     BOT_TOKEN: str = ""
     BOT_ACCESS_BACKEND: str = "database"

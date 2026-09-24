@@ -3,10 +3,11 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from models import PaymentCurrency
 from schemas_manager_orders import OrderProductLogisticsComponent
+from services.service_estimate_money import exact_money
 
 
 class ManagerOrderTransferCustomer(BaseModel):
@@ -66,8 +67,14 @@ class ManagerOrderTransferServiceLine(BaseModel):
     service: Optional[ManagerOrderTransferServiceRef] = None
     title: str
     quantity: int
-    price: int
-    cost: int = 0
+    price: float
+    cost: float = 0
+
+    @field_validator("price", "cost")
+    @classmethod
+    def validate_service_money(cls, value: float) -> float:
+        exact_money(value)
+        return value
 
 
 class ManagerOrderTransferProposal(BaseModel):

@@ -1,4 +1,5 @@
 import pytest
+from decimal import Decimal
 
 from models import (
     Customer,
@@ -16,7 +17,8 @@ from services.document_service import DocumentService
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("doc_type", ["contract", "invoice"])
-async def test_contract_and_invoice_only_render_selected_proposal_lines(db, monkeypatch, doc_type):
+@pytest.mark.parametrize("service_price", [Decimal("100.00"), Decimal("100.40")])
+async def test_contract_and_invoice_only_render_selected_proposal_lines(db, monkeypatch, doc_type, service_price):
     customer = Customer(
         tenant_id=1,
         name="Proposal document customer",
@@ -46,7 +48,7 @@ async def test_contract_and_invoice_only_render_selected_proposal_lines(db, monk
         storefront_id=1,
         customer_id=customer.id,
         status=OrderStatus.NEGOTIATION,
-        total_amount=1100,
+        total_amount=1000 + float(service_price),
         total_cost=760,
         margin=340,
     )
@@ -85,7 +87,7 @@ async def test_contract_and_invoice_only_render_selected_proposal_lines(db, monk
                 service_id=installation.id,
                 title=installation.title,
                 quantity=1,
-                price=100,
+                price=service_price,
                 cost=60,
             ),
             OrderProductLink(
@@ -137,8 +139,8 @@ async def test_contract_and_invoice_only_render_selected_proposal_lines(db, monk
     assert captured_tables == [
         [
             ["1", f"{cheap_product.title}\nИнвертор; площадь: 35 м²", "шт.", "1", "1000.00", "1000.00"],
-            ["2", installation.title, "шт.", "1", "100.00", "100.00"],
-            ["Всего:", "", "", "", "", "1100.00"],
+            ["2", installation.title, "шт.", "1", f"{service_price:.2f}", f"{service_price:.2f}"],
+            ["Всего:", "", "", "", "", f"{Decimal('1000') + service_price:.2f}"],
         ]
     ]
     assert expensive_product.title not in str(captured_tables)
