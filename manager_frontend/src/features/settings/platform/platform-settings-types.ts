@@ -1,5 +1,5 @@
 export type DocumentRoleType = 'seller_buyer' | 'executor_customer' | 'contractor_customer' | 'seller_payer' | 'executor_payer';
-export type SettingsTab = 'general' | 'documentTemplates' | 'repairComplaints' | 'emailLeads' | 'botSelection';
+export type SettingsTab = 'general' | 'documentTemplates' | 'repairComplaints' | 'emailLeads' | 'botSelection' | 'aiConnection';
 export type ManagedDocumentType = 'contract' | 'act' | 'invoice' | 'retail_receipt' | 'service_act' | 'maintenance_service_act' | 'warranty_certificate' | 'defect_act';
 export type DocumentTemplateFileOption = {
     id: string;

@@ -20878,6 +20878,152 @@
         }
       }
     },
+    "/api/manager/platform-ai": {
+      "get": {
+        "tags": [
+          "manager/platform-ai"
+        ],
+        "summary": "Get Platform Ai",
+        "operationId": "get_platform_ai_connection",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionStatus"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "manager/platform-ai"
+        ],
+        "summary": "Put Platform Ai",
+        "operationId": "put_platform_ai_connection",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectionUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "manager/platform-ai"
+        ],
+        "summary": "Delete Platform Ai",
+        "operationId": "delete_platform_ai_connection",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionStatus"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/platform-ai/models": {
+      "get": {
+        "tags": [
+          "manager/platform-ai"
+        ],
+        "summary": "Get Platform Ai Models",
+        "operationId": "get_platform_ai_models",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelList"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/platform-ai/test": {
+      "post": {
+        "tags": [
+          "manager/platform-ai"
+        ],
+        "summary": "Test Platform Ai",
+        "operationId": "test_platform_ai_inference",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InferenceTest"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/storefront-settings/brand": {
       "get": {
         "tags": [
@@ -32879,6 +33025,78 @@
         ],
         "title": "ConditionPresetPayload"
       },
+      "ConnectionStatus": {
+        "properties": {
+          "configured": {
+            "type": "boolean",
+            "title": "Configured"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "selected_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Model"
+          }
+        },
+        "type": "object",
+        "required": [
+          "configured",
+          "enabled",
+          "selected_model"
+        ],
+        "title": "ConnectionStatus"
+      },
+      "ConnectionUpdate": {
+        "properties": {
+          "key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "selected_model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 160
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Model"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ConnectionUpdate"
+      },
       "ConsumerDocumentTermsPayload": {
         "properties": {
           "equipment_brand": {
@@ -37396,6 +37614,48 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "InferenceTest": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "prompt_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Tokens"
+          },
+          "completion_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completion Tokens"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok",
+          "model",
+          "prompt_tokens",
+          "completion_tokens"
+        ],
+        "title": "InferenceTest"
       },
       "InstallationEstimateLeadResponse": {
         "properties": {
@@ -58286,6 +58546,22 @@
           "pages"
         ],
         "title": "Meta"
+      },
+      "ModelList": {
+        "properties": {
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ModelList"
       },
       "NativeDocumentTemplateCreatePayload": {
         "properties": {

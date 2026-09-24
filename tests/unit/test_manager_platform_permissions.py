@@ -41,6 +41,7 @@ from routers import (
     manager_installation_discounts,
     manager_installation_rates,
     manager_orders,
+    manager_platform_ai,
     manager_product_collections,
     manager_repair_complaints,
     manager_service_estimates,
@@ -193,6 +194,7 @@ ADDITIONAL_TENANT_OPERATION_IDS = SERVICE_ESTIMATE_TENANT_OPERATION_IDS | frozen
 )
 INFRASTRUCTURE_ROUTERS = (
     manager_settings.router,
+    manager_platform_ai.router,
     manager_backups.router,
     manager_google_auth.router,
 )

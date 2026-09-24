@@ -11,7 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from core.config import settings
-from models import AnalyticsConnection, DocumentDriveConnection
+from models import AnalyticsConnection, DocumentDriveConnection, PlatformAIConnection
+from services.platform_ai_connection_service import PlatformAICredentialCipher
+from services.zaprosu_provider_service import ZaprosuError
 from services.analytics_connection_contracts import (
     YANDEX_METRIKA,
     AnalyticsConnectionError,
@@ -33,19 +35,19 @@ _MAX_ROWS = 10_000
 
 @dataclass(frozen=True, slots=True)
 class _RotationRecord:
-    domain: Literal["analytics", "document_drive"]
-    row: AnalyticsConnection | DocumentDriveConnection
+    domain: Literal["analytics", "document_drive", "platform_ai"]
+    row: AnalyticsConnection | DocumentDriveConnection | PlatformAIConnection
     source: Literal["active", "retained", "legacy", "unreadable"]
-    credentials: dict[str, Any] | None
+    credentials: dict[str, Any] | str | None
     needs_rewrap: bool
 
     def sanitized(self) -> dict[str, Any]:
         value: dict[str, Any] = {
             "domain": self.domain,
             "id": int(self.row.id or 0),
-            "tenant_id": int(self.row.tenant_id),
-            "provider": str(self.row.provider),
-            "status": str(self.row.status),
+            "tenant_id": int(self.row.tenant_id) if not isinstance(self.row, PlatformAIConnection) else None,
+            "provider": str(self.row.provider) if not isinstance(self.row, PlatformAIConnection) else "zaprosu",
+            "status": str(self.row.status) if not isinstance(self.row, PlatformAIConnection) else ("active" if self.row.enabled else "disabled"),
             "source": self.source,
             "needs_rewrap": self.needs_rewrap,
             "ciphertext_sha256": hashlib.sha256(
@@ -131,18 +133,34 @@ class IntegrationCredentialRotationService:
     ) -> list[_RotationRecord]:
         analytics_query = select(AnalyticsConnection).order_by(AnalyticsConnection.id)
         drive_query = select(DocumentDriveConnection).order_by(DocumentDriveConnection.id)
+        ai_query = select(PlatformAIConnection).order_by(PlatformAIConnection.id)
         if for_update:
             analytics_query = analytics_query.with_for_update()
             drive_query = drive_query.with_for_update()
+            ai_query = ai_query.with_for_update()
         analytics_rows = (await session.execute(analytics_query)).scalars().all()
         drive_rows = (await session.execute(drive_query)).scalars().all()
-        if len(analytics_rows) + len(drive_rows) > _MAX_ROWS:
+        ai_rows = (await session.execute(ai_query)).scalars().all()
+        if len(analytics_rows) + len(drive_rows) + len(ai_rows) > _MAX_ROWS:
             raise IntegrationCredentialRotationBlockedError(
                 "Credential row limit exceeded"
             )
         records = [cls._analytics_record(row) for row in analytics_rows]
         records.extend(cls._drive_record(row) for row in drive_rows)
+        records.extend(cls._ai_record(row) for row in ai_rows)
         return records
+
+    @staticmethod
+    def _ai_record(row: PlatformAIConnection) -> _RotationRecord:
+        try:
+            key, decrypted = PlatformAICredentialCipher.decrypt_with_source(row.encrypted_credentials)
+        except ZaprosuError:
+            return _RotationRecord("platform_ai", row, "unreadable", None, False)
+        fingerprint_matches = (
+            decrypted.source == "active"
+            and hmac.compare_digest(row.credentials_fingerprint, PlatformAICredentialCipher.fingerprint(key))
+        )
+        return _RotationRecord("platform_ai", row, decrypted.source, key, not fingerprint_matches)
 
     @staticmethod
     def _analytics_record(row: AnalyticsConnection) -> _RotationRecord:
@@ -278,6 +296,12 @@ class IntegrationCredentialRotationService:
                     credentials,
                 )
             )
+            return
+        if isinstance(record.row, PlatformAIConnection):
+            if not isinstance(credentials, str):
+                raise IntegrationCredentialRotationBlockedError("Credential row cannot be rewrapped")
+            record.row.encrypted_credentials = PlatformAICredentialCipher.encrypt(credentials)
+            record.row.credentials_fingerprint = PlatformAICredentialCipher.fingerprint(credentials)
             return
         record.row.encrypted_credentials = DocumentDriveCredentialCipher.encrypt(
             credentials,
