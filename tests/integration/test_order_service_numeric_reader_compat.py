@@ -1,9 +1,9 @@
-"""The deployed reader must survive the later INTEGER -> NUMERIC schema expansion."""
+"""Readers must survive the INTEGER -> NUMERIC rolling schema expansion."""
 
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import Column, Integer, MetaData, Table, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -22,19 +22,31 @@ from services.order_projection_service import OrderProjectionService
 from services.order_transfer_service import OrderTransferService
 
 
+# Keep an integer-typed projection to model the already-deployed PR #1035
+# reader even after this PR changes OrderServiceLink's ORM columns to Numeric.
+legacy_service_money = Table(
+    "order_service_link",
+    MetaData(),
+    Column("id", Integer, primary_key=True),
+    Column("price", Integer),
+    Column("cost", Integer),
+)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("numeric_schema", [False, True], ids=["current-integer", "future-numeric"])
 async def test_order_reader_survives_service_money_schema_expansion(db_engine, numeric_schema):
-    # PostgreSQL DDL is transactional. One connection sees the future schema;
+    # The new ORM metadata creates NUMERIC columns. One connection sees the old
+    # INTEGER schema in the other parameter; PostgreSQL DDL is transactional, so
     # rolling back leaves this worker's normal test schema untouched.
     async with db_engine.connect() as connection:
         transaction = await connection.begin()
         try:
-            if numeric_schema:
+            if not numeric_schema:
                 await connection.execute(text("""
                     ALTER TABLE order_service_link
-                    ALTER COLUMN price TYPE NUMERIC USING price::numeric,
-                    ALTER COLUMN cost TYPE NUMERIC USING cost::numeric
+                    ALTER COLUMN price TYPE INTEGER USING price::integer,
+                    ALTER COLUMN cost TYPE INTEGER USING cost::integer
                 """))
 
             async with AsyncSession(
@@ -78,8 +90,16 @@ async def test_order_reader_survives_service_money_schema_expansion(db_engine, n
                 )
                 loaded = result.scalar_one()
                 line = loaded.service_links[0]
-                assert isinstance(line.price, Decimal if numeric_schema else int)
-                assert isinstance(line.cost, Decimal if numeric_schema else int)
+                legacy_row = (
+                    await connection.execute(
+                        select(legacy_service_money.c.price, legacy_service_money.c.cost)
+                        .where(legacy_service_money.c.id == line.id)
+                    )
+                ).one()
+                assert isinstance(legacy_row.price, Decimal if numeric_schema else int)
+                assert isinstance(legacy_row.cost, Decimal if numeric_schema else int)
+                line.price = legacy_row.price
+                line.cost = legacy_row.cost
 
                 loaded.calculate_totals()
                 assert loaded.total_amount == 200.0
