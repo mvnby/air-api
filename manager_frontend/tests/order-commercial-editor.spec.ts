@@ -56,6 +56,21 @@ describe('useOrderCommercialEditor', () => {
     expect(editor.validateLines()).toBe('');
   });
 
+  it('saves cleared service cost as absent while keeping zero explicit', () => {
+    const editor = createEditor();
+    editor.serviceLines.value = [{ service_id: 7, title: 'Монтаж', quantity: 1, price: 100.4, cost: 50 }];
+
+    for (const clearedCost of ['', null, undefined]) {
+      editor.serviceLines.value[0]!.cost = clearedCost as any; // v-model.number emits '' when cleared.
+      expect(editor.validateLines()).toBe('');
+      expect(editor.buildLinesPayload(17).services[0]?.cost).toBeNull();
+    }
+
+    editor.serviceLines.value[0]!.cost = 0;
+    expect(editor.validateLines()).toBe('');
+    expect(editor.buildLinesPayload(17).services[0]?.cost).toBe(0);
+  });
+
   it('owns line validation and normalizes the proposal command payload', () => {
     const editor = createEditor();
     editor.productLines.value = [{

@@ -177,7 +177,7 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
 
   const margin = computed(() => {
     const productCost = productLines.value.reduce((sum, line) => sum + Math.round(line.cost * 100) * line.quantity, 0);
-    const serviceCost = serviceLines.value.reduce((sum, line) => sum + Math.round(line.cost * 100) * line.quantity, 0);
+    const serviceCost = serviceLines.value.reduce((sum, line) => sum + Math.round(Number(line.cost || 0) * 100) * line.quantity, 0);
     return (Math.round(total.value * 100) - productCost - serviceCost) / 100;
   });
 
@@ -568,6 +568,9 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
       && Math.abs(value * 100 - cents) < 1e-7;
   };
 
+  const validOptionalServiceMoney = (value: unknown) => value == null || value === ''
+    || (typeof value === 'number' && validServiceMoney(value));
+
   const validateLines = () => {
     if (productLines.value.some((line) => line.quantity <= 0)) return 'Количество товара должно быть больше 0';
     if (productLines.value.some((line) => line.price < 0)) return 'Цена товара не может быть отрицательной';
@@ -575,7 +578,7 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
     if (productLines.value.some((line) => (line.client_description?.length || 0) > 2_000)) return 'Описание товара для клиента не может быть длиннее 2000 символов';
     if (serviceLines.value.some((line) => line.quantity <= 0)) return 'Количество услуги должно быть больше 0';
     if (serviceLines.value.some((line) => !validServiceMoney(line.price))) return 'Цена услуги должна быть указана с точностью до копейки';
-    if (serviceLines.value.some((line) => !validServiceMoney(line.cost))) return 'Себестоимость услуги должна быть указана с точностью до копейки';
+    if (serviceLines.value.some((line) => !validOptionalServiceMoney(line.cost))) return 'Себестоимость услуги должна быть указана с точностью до копейки';
     if (serviceLines.value.some((line) => !line.title?.trim())) return 'Для услуги укажите название';
     return '';
   };
