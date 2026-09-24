@@ -40,6 +40,7 @@ from .analytics_connection import AnalyticsConnection
 from .order_workspace_usage import OrderWorkspaceUsageDaily
 from .catalog_workspace_usage import CatalogWorkspaceUsageDaily
 from .document_drive_connection import DocumentDriveConnection
+from .platform_ai_connection import PlatformAIConnection
 from .legacy_owner_auth import LegacyOwnerAuthState
 from .cart import Cart, CartItem
 from .catalog_import import CatalogImportJob

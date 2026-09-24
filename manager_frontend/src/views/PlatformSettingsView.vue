@@ -4,6 +4,7 @@ import PlatformDocumentTemplatesPanel from '../features/settings/platform/panels
 import PlatformEmailLeadsPanel from '../features/settings/platform/panels/PlatformEmailLeadsPanel.vue';
 import PlatformGeneralPanel from '../features/settings/platform/panels/PlatformGeneralPanel.vue';
 import PlatformRepairComplaintsPanel from '../features/settings/platform/panels/PlatformRepairComplaintsPanel.vue';
+import PlatformAIConnectionPanel from '../features/settings/platform/panels/PlatformAIConnectionPanel.vue';
 import { providePlatformSettingsContext } from '../features/settings/platform/platform-settings-context';
 import { usePlatformSettings } from '../features/settings/platform/usePlatformSettings';
 const controller = usePlatformSettings();
@@ -63,6 +64,15 @@ const { activeSettingsTab, goToBackups, loadSettings, loading, showCreateForm, t
             <button
                 type="button"
                 class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+                :class="activeSettingsTab === 'aiConnection' ? 'bg-brand-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800'"
+                @click="activeSettingsTab = 'aiConnection'"
+            >
+                <span class="material-icons-round text-[18px]">hub</span>
+                AI-подключение
+            </button>
+            <button
+                type="button"
+                class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
                 :class="activeSettingsTab === 'general' ? 'bg-brand-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800'"
                 @click="activeSettingsTab = 'general'"
             >
@@ -114,6 +124,7 @@ const { activeSettingsTab, goToBackups, loadSettings, loading, showCreateForm, t
         <PlatformRepairComplaintsPanel />
         <PlatformEmailLeadsPanel />
         <PlatformBotSelectionPanel />
+        <PlatformAIConnectionPanel />
     </div>
 </template>
 
