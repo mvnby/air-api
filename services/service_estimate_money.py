@@ -33,7 +33,7 @@ def writable_service_money(value: object) -> Decimal:
     result = exact_money(value)
     if result != result.to_integral_value() and not settings.EXACT_SERVICE_MONEY_WRITES_ENABLED:
         raise ValueError(
-            "Запись копеек услуг ожидает обновления обеих API-нод; сохранение не выполнено"
+            "Запись копеек услуг временно отключена; сохранение не выполнено"
         )
     return result
 

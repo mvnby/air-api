@@ -81,7 +81,7 @@ async def test_inconsistent_legacy_snapshot_blocks_import(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_fractional_import_waits_for_both_api_nodes(monkeypatch):
+async def test_fractional_import_blocked_by_explicit_false(monkeypatch):
     from core.config import settings
 
     monkeypatch.setattr(settings, "EXACT_SERVICE_MONEY_WRITES_ENABLED", False)
@@ -94,7 +94,7 @@ async def test_fractional_import_waits_for_both_api_nodes(monkeypatch):
     with pytest.raises(HTTPException) as error:
         await ServiceEstimateService.get_estimate_order_lines(None, 42)
     assert error.value.status_code == 409
-    assert "обеих API-нод" in error.value.detail
+    assert "временно отключена" in error.value.detail
 
 
 def test_discount_allocation_and_cent_validation():
@@ -118,7 +118,7 @@ def test_default_money_write_setting_and_explicit_false_override(monkeypatch):
     assert Settings(_env_file=None).EXACT_SERVICE_MONEY_WRITES_ENABLED is False
 
     monkeypatch.setattr(settings, "EXACT_SERVICE_MONEY_WRITES_ENABLED", False)
-    with pytest.raises(ValueError, match="обеих API-нод"):
+    with pytest.raises(ValueError, match="временно отключена"):
         writable_service_money("1.23")
     assert writable_service_money("1.00") == Decimal("1.00")
     with pytest.raises(ValueError, match="at most two decimals"):
