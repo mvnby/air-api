@@ -18,6 +18,9 @@ from modules.documents.infrastructure.external_edit_provider import (
     DOCX_CONTENT_TYPE,
     ExternalEditProvider,
 )
+from modules.documents.infrastructure.renderers.docx_form_fields import (
+    flatten_legacy_form_fields,
+)
 from modules.documents.infrastructure.template_source_storage import TemplateSourceStorage
 
 from .artifact_helpers import artifact_row, stored_artifact
@@ -301,6 +304,7 @@ class ManagedDocumentExternalEditSessionService:
                 placeholder_schema=version.placeholder_schema or {},
                 required_placeholder_counts=required_counts,
             )
+            content = flatten_legacy_form_fields(content)
         except Exception as exc:
             await record_external_edit_error(session, edit_session)
             raise ManagedDocumentConflictError(

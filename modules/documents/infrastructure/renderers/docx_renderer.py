@@ -25,6 +25,7 @@ from .contracts import (
 )
 from .docx_party_roles import replace_party_role_words
 from .docx_conditions import DocxConditionProcessor, iter_section_story_areas
+from .docx_form_fields import flatten_legacy_form_fields
 
 
 _PLACEHOLDER_PATTERN = re.compile(r"{{\s*([a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*)\s*}}")
@@ -228,7 +229,7 @@ class NativeDocxRenderer:
                 )
             raise TemplateValidationError(validation)
 
-        document = Document(BytesIO(template.source))
+        document = Document(BytesIO(flatten_legacy_form_fields(template.source)))
         DocxConditionProcessor().render(document, context.conditions)
         if context.document_role_type is not None:
             for paragraph, _, _ in self._iter_paragraphs(document):

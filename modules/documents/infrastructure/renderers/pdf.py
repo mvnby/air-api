@@ -86,6 +86,7 @@ class GotenbergPdfConverter:
                         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     )
                 },
+                data={"exportFormFields": "false"},
                 timeout=self.timeout_seconds,
             )
             response.raise_for_status()

@@ -467,7 +467,7 @@ defineExpose({
               <button v-if="document.status === 'draft'" class="native-action" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id) || Boolean(workspace.issueBlockedReason.value)" @click="workspace.previewDraft(document)">
                 <span class="material-icons-round text-[17px]">visibility</span>Предпросмотр
               </button>
-              <button v-for="artifact in document.artifacts" :key="artifact.id" class="native-action" type="button" @click="workspace.downloadArtifact(artifact.id)">
+              <button v-for="artifact in document.artifacts" :key="artifact.id" class="native-action" type="button" @click="workspace.downloadArtifact(artifact.id, artifact.filename)">
                 <span class="material-icons-round text-[17px]">download</span>{{ artifactName(artifact.kind) }}
               </button>
               <GoogleDocumentEditorActions
