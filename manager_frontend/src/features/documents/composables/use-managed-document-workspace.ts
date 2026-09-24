@@ -2,6 +2,7 @@ import { computed, ref, watch } from 'vue';
 import type { DocumentRoleType } from '../model/document-types';
 import {
   ManagerDocumentSystemService,
+  OpenAPI,
   type DocumentLegalEntityItem,
   type DocumentPdfRuntimeStatus,
   type ManagedDocumentItem,
@@ -583,24 +584,45 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     replacesDocumentId.value = document.id;
   };
 
-  const downloadArtifact = async (artifactId: string) => {
-    const popup = window.open('about:blank', '_blank');
-    if (popup) popup.opener = null;
+  const downloadArtifact = async (artifactId: string, filename: string) => {
+    let objectUrl: string | null = null;
     try {
       const access = await ManagerDocumentSystemService.getManagerDocumentArtifactAccess(artifactId);
       const downloadUrl = new URL(access.url, window.location.origin).toString();
-      if (popup) {
-        popup.location.replace(downloadUrl);
+      const parsedUrl = new URL(downloadUrl);
+      const isManagerDownload = parsedUrl.origin === window.location.origin
+        && parsedUrl.pathname.startsWith('/api/manager/document-system/artifacts/')
+        && parsedUrl.pathname.endsWith('/download');
+      if (isManagerDownload) {
+        const apiPath = `${parsedUrl.pathname}${parsedUrl.search}`;
+        const token = typeof OpenAPI.TOKEN === 'function'
+          ? await OpenAPI.TOKEN({ method: 'GET', url: apiPath })
+          : OpenAPI.TOKEN;
+        const response = await fetch(downloadUrl, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          credentials: OpenAPI.WITH_CREDENTIALS ? OpenAPI.CREDENTIALS : 'same-origin',
+        });
+        if (!response.ok) throw new Error(`Ошибка скачивания файла (${response.status})`);
+        objectUrl = URL.createObjectURL(await response.blob());
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
       } else {
         const link = document.createElement('a');
         link.href = downloadUrl;
+        link.download = filename;
         link.rel = 'noopener noreferrer';
-        link.target = '_blank';
+        document.body.appendChild(link);
         link.click();
+        link.remove();
       }
     } catch (error) {
-      popup?.close();
-      input.notify(`Не удалось открыть файл: ${getApiErrorMessage(error)}`, 'error');
+      input.notify(`Не удалось скачать файл: ${getApiErrorMessage(error)}`, 'error');
+    } finally {
+      if (objectUrl) window.setTimeout(() => URL.revokeObjectURL(objectUrl!), 60_000);
     }
   };
 
