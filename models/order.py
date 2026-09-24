@@ -1,5 +1,6 @@
 from datetime import date as DateValue
 from datetime import datetime
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import (
@@ -579,17 +580,21 @@ class Order(SQLModel, table=True):
             product_links = list(self.product_links)
             service_links = list(self.service_links)
 
-        p_sum = sum([item.price * item.quantity for item in product_links])
-        s_sum = sum([item.price * item.quantity for item in service_links])
+        def cents(value: object) -> Decimal:
+            return Decimal(str(value if value is not None else 0)).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
 
-        p_cost = sum([item.cost * item.quantity for item in product_links])
-        s_cost = sum([item.cost * item.quantity for item in service_links])
+        p_sum = sum((cents(item.price) * item.quantity for item in product_links), Decimal("0"))
+        s_sum = sum((cents(item.price) * item.quantity for item in service_links), Decimal("0"))
+        p_cost = sum((cents(item.cost) * item.quantity for item in product_links), Decimal("0"))
+        s_cost = sum((cents(item.cost) * item.quantity for item in service_links), Decimal("0"))
+        i_cost = sum((Decimal(str(inst.agreed_pay or 0)) for inst in self.installers), Decimal("0"))
 
-        i_cost = sum([inst.agreed_pay for inst in self.installers])
-
-        self.total_amount = p_sum + s_sum
-        self.total_cost = p_cost + s_cost + i_cost
-        self.margin = self.total_amount - self.total_cost
+        # Cached order totals remain FLOAT until the later money migration.
+        self.total_amount = float(p_sum + s_sum)
+        self.total_cost = float(p_cost + s_cost + i_cost)
+        self.margin = float(p_sum + s_sum - p_cost - s_cost - i_cost)
 
         # Infer rate for currency logic if a fixed price is set.
         rate = 1.0

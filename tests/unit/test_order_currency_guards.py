@@ -1,8 +1,9 @@
 import pytest
+from decimal import Decimal
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from models import Order, OrderProductLink, Payment, PaymentCurrency
+from models import Order, OrderInstaller, OrderProductLink, OrderServiceLink, Payment, PaymentCurrency
 from routers import manager_settings
 from schemas import PaymentCreatePayload
 from services.fx_rate_service import FxRateService
@@ -28,6 +29,29 @@ def test_order_calculate_totals_handles_mixed_currency_payments():
     assert order.total_payments == pytest.approx(640)
     assert order.target_currency_payments == pytest.approx(200)
     assert order.balance_due == pytest.approx(2560)
+
+
+def test_order_calculate_totals_accepts_numeric_service_values_with_float_expenses():
+    order = Order(target_currency=PaymentCurrency.USD, target_currency_amount=100)
+    order.proposals = []
+    order.product_links = [OrderProductLink(quantity=1, price=200, cost=0)]
+    order.service_links = [
+        OrderServiceLink(quantity=2, price=Decimal("100.40"), cost=Decimal("50.10"))
+    ]
+    order.installers = [OrderInstaller(agreed_pay=25.5)]
+    order.payments = [
+        Payment(amount=40.08, currency=PaymentCurrency.BYN),
+        Payment(amount=10, currency=PaymentCurrency.USD),
+    ]
+
+    order.calculate_totals()
+
+    assert order.total_amount == pytest.approx(400.8)
+    assert order.total_cost == pytest.approx(125.7)
+    assert order.margin == pytest.approx(275.1)
+    assert order.total_payments == pytest.approx(80.16)
+    assert order.target_currency_payments == pytest.approx(20)
+    assert order.balance_due == pytest.approx(320.64)
 
 
 def test_normalize_payment_currency_accepts_upper_and_lowercase():

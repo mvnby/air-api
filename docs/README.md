@@ -20,6 +20,7 @@
 | Гарантия оборудования и её публичное представление | [Политики гарантии](warranty-policies.md), [публичный контракт](public-product-warranty.md) |
 | Оборудование и обслуживание | [Обслуживание](equipment-maintenance.md), [продажа с монтажом в два этапа](b2c-two-stage-installation.md) |
 | Единая смета монтажа и уход от legacy-прайса | [Целевой контракт #955](installation-estimate-contract.md) |
+| Совместимость читателей денег услуг при поэтапном релизе | [Порядок выпуска](order-service-money-reader-compatibility.md) |
 | Карточка заказа и автосохранение | [Рабочая область заказа](order-workspace-usability.md), [автосохранение](manager-order-autosave.md), [декомпозиция](order-domain-refactor.md) |
 | Клиенты, канбан/таблица заказов и входящие | [Аудит и доработка рабочих страниц](manager-working-pages-usability.md) |
 | Генерация документов и шаблоны | [Архитектура](document-module-architecture.md), [DOCX-шаблоны](native-document-template-bundles.md), [плейсхолдеры](document-placeholders.md) |
