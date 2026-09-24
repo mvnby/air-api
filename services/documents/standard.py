@@ -508,20 +508,10 @@ class B2CDocumentStrategy(GoogleDocStrategy):
         item = getattr(link, "product", None) or getattr(link, "service", None)
         return str(getattr(item, "title", "") or fallback).strip() or fallback
 
-    @staticmethod
-    def _line_total(link: Any) -> Decimal:
-        return Decimal(str(getattr(link, "price", 0) or 0)) * Decimal(
-            str(getattr(link, "quantity", 0) or 0)
-        )
-
     @classmethod
     def _join_titles(cls, links: list[Any], fallback: str) -> str:
         titles = [cls._line_title(link, fallback) for link in links]
         return "\n".join(titles)
-
-    @classmethod
-    def _sum_amount(cls, links: list[Any]) -> Decimal:
-        return sum((cls._line_total(link) for link in links), Decimal("0"))
 
     @classmethod
     def _sum_quantity(cls, links: list[Any]) -> str:

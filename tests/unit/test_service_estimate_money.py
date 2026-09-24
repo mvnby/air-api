@@ -14,6 +14,7 @@ from schemas_manager_orders import ManagerOrderServiceLinePayload
 from services.service_estimate_money import allocate_discount, exact_money, writable_service_money
 from services.service_estimate_service import ServiceEstimateService
 from services.documents.base import BaseDocumentStrategy
+from services.documents.standard import GeneralDocStrategy
 
 
 def _snapshot(amounts: list[str], discount: str = "0") -> SimpleNamespace:
@@ -155,3 +156,16 @@ def test_fractional_route_rounds_only_after_quantity_times_price():
 
 def test_document_amount_in_words_keeps_kopecks():
     assert BaseDocumentStrategy._amount_in_words(100.29) == "Сто рублей, двадцать девять копеек"
+
+
+def test_general_document_footer_sums_frozen_line_cents():
+    strategy = GeneralDocStrategy(None, 1)
+    strategy.order = SimpleNamespace(
+        product_links=[],
+        service_links=[SimpleNamespace(title="Монтаж", price=Decimal("100.40"), quantity=2)],
+    )
+
+    rows = strategy._prepare_table_data()
+
+    assert rows[0][-1] == "200.80"
+    assert rows[-1][-1] == "200.80"

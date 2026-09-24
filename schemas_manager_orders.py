@@ -4,7 +4,7 @@ from datetime import date, datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, computed_field, field_validator
+from pydantic import BaseModel, Field, ValidationInfo, computed_field, field_validator
 
 from models import PaymentCurrency
 from services.service_estimate_money import exact_money
@@ -520,8 +520,10 @@ class ManagerOrderServiceLinePayload(BaseModel):
 
     @field_validator("price", "cost")
     @classmethod
-    def validate_service_money(cls, value: Optional[float]) -> Optional[float]:
+    def validate_service_money(cls, value: Optional[float], info: ValidationInfo) -> Optional[float]:
         if value is not None:
+            if value < 0:
+                raise ValueError(f"Service {info.field_name} cannot be negative")
             exact_money(value)
         return value
 

@@ -61,6 +61,16 @@ class BaseDocumentStrategy(ABC):
         result = await self.session.execute(query)
         self.order = result.unique().scalar_one_or_none()
 
+    @staticmethod
+    def _line_total(link: Any) -> Decimal:
+        return Decimal(str(getattr(link, "price", 0) or 0)) * Decimal(
+            str(getattr(link, "quantity", 0) or 0)
+        )
+
+    @classmethod
+    def _sum_amount(cls, links: List[Any]) -> Decimal:
+        return sum((cls._line_total(link) for link in links), Decimal("0"))
+
 
     @staticmethod
     def _amount_in_words(amount: float | Decimal) -> str:
