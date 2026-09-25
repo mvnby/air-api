@@ -246,6 +246,11 @@ class InstallationPriceBookService:
                  match.capacity_min_kw is None and match.capacity_max_kw is None)
             ):
                 raise cls._bad("incomplete_fixed_matcher", f"{code}: required pipe pair or cooling capacity bounds missing")
+            if entry["mode"] in {"fixed", "from"} and match.product_kind == "complete_split_system" and match.indoor_type in {"wall", "console"} and (
+                match.match_strategy == "type_only" or
+                (match.match_strategy == "capacity_only" and match.capacity_max_kw is None)
+            ):
+                raise cls._bad("unbounded_capacity_matcher", f"{code}: fixed wall/console capacity matcher needs a reviewed upper bound")
             if entry["mode"] in {"fixed", "from"} and exact_money(entry["base_price"]) <= 0:
                 raise cls._bad("missing_base_price", f"{code}: exact/lower-bound price must be positive")
             rule_codes = {rule["code"] for rule in entry["rules"]}

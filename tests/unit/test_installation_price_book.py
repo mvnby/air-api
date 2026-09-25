@@ -303,7 +303,8 @@ def _new_entry(*, kind: str = "complete_split_system", work: str = "standard",
         rules.append(_new_rule("route.extra_m", "50.00", "per_meter_over_included"))
     return {"tariff_id": 77, "code": f"installation.{kind}.{work}",
             "match": InstallationMatcher(product_kind=kind, indoor_type=indoor_type,
-                work_kind=work, match_strategy="type_only").model_dump(mode="json"),
+                work_kind=work, match_strategy="type_only" if kind == "multi_split_system" else "capacity_only",
+                capacity_max_kw=None if kind == "multi_split_system" else "4.2").model_dump(mode="json"),
             "mode": "fixed", "base_price": base, "short_name": "Монтаж",
             "description": "Монтаж", "included_route_m": route if work == "standard" else "0",
             "included_holes": {"shared_pass_through": "1"} if work == "standard" else {},
@@ -342,6 +343,11 @@ def test_single_split_rejects_multisplit_count_and_shared_hole_cannot_double_all
     assert error.value.detail["code"] == "mixed_hole_allowances"
     entry["included_holes"] = {"shared_pass_through": "2"}
     BookService._validate_entries([entry])
+    entry["match"] = InstallationMatcher(indoor_type="wall", match_strategy="capacity_only",
+        capacity_min_kw="8.0").model_dump(mode="json")
+    with pytest.raises(HTTPException) as error:
+        BookService._validate_entries([entry])
+    assert error.value.detail["code"] == "unbounded_capacity_matcher"
 
 
 @pytest.mark.asyncio
@@ -391,7 +397,7 @@ async def test_prelaid_has_no_phantom_route_or_hole_and_new_route_quotes(monkeyp
     monkeypatch.setattr(BookService, "latest", latest)
     monkeypatch.setattr(BookService, "_profile", profile)
     installation = {"key": "one", "work_kind": "prelaid_route",
-        "typed_profile": {"product_kind": "complete_split_system", "indoor_type": "wall", "confirmed": True},
+        "typed_profile": {"product_kind": "complete_split_system", "indoor_type": "wall", "capacity_cooling_kw": "2.5", "confirmed": True},
         "route_length_m": 0, "holes_by_type": {"through_thin": 1}}
     result = await BookService.preview(None, scope, InstallationPreviewPayload.model_validate(
         {"installations": [installation]}), persist=False)
@@ -416,7 +422,7 @@ async def test_site_access_needs_scoped_manager_actual_before_fixed(monkeypatch)
     monkeypatch.setattr(BookService, "latest", latest)
     monkeypatch.setattr(BookService, "_profile", profile)
     source = {"installations": [{"key": "one", "typed_profile": {
-        "product_kind": "complete_split_system", "indoor_type": "wall", "confirmed": True},
+        "product_kind": "complete_split_system", "indoor_type": "wall", "capacity_cooling_kw": "2.5", "confirmed": True},
         "route_length_m": 3, "holes_by_type": {}}],
         "site_extras": [{"code": "access.scaffold"}]}
     provisional = await BookService.preview(None, scope, InstallationPreviewPayload.model_validate(source), persist=False)
