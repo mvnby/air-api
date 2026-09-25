@@ -410,7 +410,7 @@ class InstallationEstimateConfirmationService:
                         included_work = [
                             f"{item.label.lower()} {InstallationPriceBookService._quantity_text(item.actual)} "
                             f"{item.unit} (включено {InstallationPriceBookService._quantity_text(item.included)} {item.unit})"
-                            for item in summary.measured if item.extra == 0
+                            for item in summary.measured if item.actual > 0 and item.extra == 0
                         ]
                         if included_work:
                             label += "; " + ", ".join(included_work)

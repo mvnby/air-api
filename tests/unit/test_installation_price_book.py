@@ -375,13 +375,51 @@ async def test_multisplit_is_one_system_with_shared_hole_and_explicit_pump(monke
     route = next(part for part in result.components if part.code == "route.extra_m")
     assert (route.included, route.quantity, route.gross) == (Decimal(6), Decimal(2), Decimal(100))
     assert [part.code for part in result.components if part.code.startswith("hole.")] == ["hole.through_thin.extra"]
-    assert "2 внутренних блоков" in result.customer_text
+    assert "2 внутренних блока" in result.customer_text
     bad = payload.model_dump(mode="json")
     bad["installations"][0]["extras"].append({"code": "pump.install"})
     entry["rules"].append(_new_rule("pump.install", "100.00", "per_unit_manual", optional=True))
     with pytest.raises(HTTPException) as error:
         await BookService.preview(None, scope, InstallationPreviewPayload.model_validate(bad), persist=False)
     assert error.value.detail["code"] == "invalid_extra_combination"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("units,noun", [(2, "блока"), (3, "блока"), (12, "блоков"), (20, "блоков")])
+async def test_customer_document_lines_omit_unperformed_work_and_keep_pump_package(monkeypatch, units, noun):
+    from models import InstallationEstimateRevision
+    from services.installation_estimate_confirmation_service import InstallationEstimateConfirmationService as Confirm
+
+    entry = _new_entry(kind="multi_split_system", indoor_type=None,
+                       work="prelaid_route", base="300.00", route="0")
+    book = InstallationPriceBook(id=8, tenant_id=12, revision=2, fingerprint="x", entries=[entry])
+    async def latest(*_args):
+        return book
+    async def profile(_session, _scope, target):
+        return target.typed_profile, {}
+    monkeypatch.setattr(BookService, "latest", latest)
+    monkeypatch.setattr(BookService, "_profile", profile)
+    result = await BookService.preview(None, TenantScope(tenant_id=12, storefront_id=34),
+        InstallationPreviewPayload.model_validate({"installations": [{
+            "key": "one", "display_label": "№1", "work_kind": "prelaid_route",
+            "typed_profile": {"product_kind": "multi_split_system", "indoor_unit_count": units,
+                              "composition_note": "Настенные внутренние блоки", "confirmed": True},
+            "route_length_m": 0,
+            "holes_by_type": {"through_thin": 0, "through_thick": 0, "through_over_80": 0},
+            "extras": [{"code": "pump.package"}],
+        }]}), persist=False)
+    assert f"{units} внутренних {noun} на готовую трассу" in result.customer_text
+    assert "дренажный насос с поставкой и монтажом" in result.customer_text
+    saved = InstallationEstimateRevision(estimate_id=1, revision=1, price_book_id=8,
+        price_book_revision=2, total=result.total, snapshot={"result": result.model_dump(mode="json")})
+    for mode in ("collapsed", "detailed"):
+        lines, total = Confirm._projection(saved, mode)
+        assert total == Decimal(300 * units + 280)
+        assert sum((amount for _, amount in lines), Decimal(0)) == total
+        titles = " ".join(title.lower() for title, _ in lines)
+        assert "through_" not in titles
+        assert "новая трасса" not in titles
+        assert "проходы" not in titles
 
 
 @pytest.mark.asyncio

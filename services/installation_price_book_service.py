@@ -50,7 +50,7 @@ class InstallationPriceBookService:
     _EXTRA_LABELS = {
         "pump.supply": "Поставка насоса",
         "pump.install": "Монтаж насоса",
-        "pump.package": "Насос с установкой",
+        "pump.package": "Дренажный насос с поставкой и монтажом",
         "access.scaffold": "Леса",
         "access.lift": "Вышка (не менее 4 часов)",
         "chase.extra_m": "Штробление",
@@ -192,12 +192,16 @@ class InstallationPriceBookService:
             return "Проходы через стену до 20 см"
         if code == "hole.through_thick":
             return "Проходы через стену свыше 20 до 80 см"
+        if code == "hole.through_over_80":
+            return "Проходы через стену свыше 80 см"
         return f"Отверстия типа {code.removeprefix('hole.')}"
 
     @classmethod
     def _summary_text(cls, summary: InstallationWorkSummary) -> str:
         parts = [summary.work_label]
         for measured in summary.measured:
+            if measured.actual == 0:
+                continue
             actual = cls._quantity_text(measured.actual)
             included = cls._quantity_text(measured.included)
             detail = f"{measured.label.lower()} {actual} {measured.unit} (включено {included} {measured.unit}"
@@ -613,7 +617,8 @@ class InstallationPriceBookService:
             units = result.profile.indoor_unit_count if matcher.product_kind == "multi_split_system" else 1
             work_label = cls._work_label(entry)
             if matcher.product_kind == "multi_split_system":
-                work_label += f": {units} внутренних блоков"
+                noun = "блока" if 2 <= units % 10 <= 4 and not 12 <= units % 100 <= 14 else "блоков"
+                work_label += f": {units} внутренних {noun}"
             if matcher.work_kind == "prelaid_route":
                 work_label += " на готовую трассу"
             tariff = ServiceTariff(id=entry["tariff_id"], selector_label=work_label,
