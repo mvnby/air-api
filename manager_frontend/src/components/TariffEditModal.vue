@@ -206,7 +206,7 @@ const submit = async () => {
     return;
   }
   if (formData.value.service_kind === 'installation' && (indoorType.value || productKind.value === 'multi_split_system')) {
-    if ((!pipeLiquid.value.trim() && pipeGas.value.trim()) || (pipeLiquid.value.trim() && !pipeGas.value.trim())) {
+    if (matchStrategy.value === 'strict' && ((!pipeLiquid.value.trim() && pipeGas.value.trim()) || (pipeLiquid.value.trim() && !pipeGas.value.trim()))) {
       error.value = 'Укажите обе трубы пары или оставьте обе пустыми'; return;
     }
     if (!Number.isInteger(includedDiamondHoles.value) || includedDiamondHoles.value < 0) {
@@ -386,11 +386,12 @@ const submit = async () => {
               <div class="text-sm font-semibold text-gray-900 dark:text-white">Подбор канонического монтажа</div>
               <p class="text-xs text-gray-500 dark:text-slate-400">Выбор типа добавляет тариф в черновик книги. Сохранение не публикует цены. Старые тарифы без типа остаются как есть.</p>
               <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <label class="block text-sm">Система
-                  <select v-model="productKind" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900" :disabled="loading">
-                    <option value="complete_split_system">Сплит-система</option><option value="multi_split_system">Мультисплит-система</option>
-                  </select>
-                </label>
+                <div class="text-sm">Система
+                  <div class="mt-1 flex gap-2">
+                    <button type="button" class="rounded-lg border px-3 py-2" :class="productKind === 'complete_split_system' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="loading" @click="productKind = 'complete_split_system'">Сплит</button>
+                    <button type="button" class="rounded-lg border px-3 py-2" :class="productKind === 'multi_split_system' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="loading" @click="productKind = 'multi_split_system'">Мультисплит</button>
+                  </div>
+                </div>
                 <label v-if="productKind !== 'multi_split_system'" class="block text-sm">Тип внутреннего блока
                   <select v-model="indoorType" aria-label="Тип внутреннего блока" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900" :disabled="loading">
                     <option value="">Не включать в книгу</option>
@@ -405,8 +406,8 @@ const submit = async () => {
               </div>
               <template v-if="indoorType || productKind === 'multi_split_system'">
                 <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <label class="text-sm">Вид работ<select v-model="workKind" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900"><option value="standard">Обычный монтаж</option><option value="prelaid_route">На готовую трассу</option></select></label>
-                  <label class="text-sm">Условия подбора<select v-model="matchStrategy" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900"><option value="strict">Мощность и трубы</option><option value="capacity_only">Только мощность</option><option value="type_only">Только тип системы</option></select></label>
+                  <div class="text-sm">Вид работ<div class="mt-1 flex gap-2"><button type="button" class="rounded-lg border px-3 py-2" :class="workKind === 'standard' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="loading" @click="workKind = 'standard'">Обычный</button><button type="button" class="rounded-lg border px-3 py-2" :class="workKind === 'prelaid_route' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="loading" @click="workKind = 'prelaid_route'">Готовая трасса</button></div></div>
+                  <label class="text-sm">Условия подбора<select v-model="matchStrategy" aria-label="Условия подбора" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900"><option value="strict">Мощность и трубы</option><option value="capacity_only">Только мощность</option><option value="type_only">Только тип системы</option></select></label>
                 </div>
                 <div v-if="tariff?.installation_code" class="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
                   <span>{{ existingInstallationCode ? 'Условия опубликованного подбора менять нельзя. Если условия изменились, создайте новый подбор.' : 'При сохранении для новых условий будет создан новый внутренний код.' }}</span>
@@ -427,7 +428,7 @@ const submit = async () => {
                   <label class="text-sm">Вес от, кг<input v-model.number="weightMin" aria-label="Вес от, кг" type="number" min="0" step="0.01" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900" :disabled="!weightSource" /></label>
                   <label class="text-sm">Вес до, кг<input v-model.number="weightMax" aria-label="Вес до, кг" type="number" min="0" step="0.01" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900" :disabled="!weightSource" /></label>
                 </div>
-                <label v-if="workKind === 'standard'" class="block text-sm">Включено алмазных отверстий (старые тарифы)<input v-model.number="includedDiamondHoles" aria-label="Включено алмазных отверстий" type="number" min="0" step="1" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900" /></label>
+                <label v-if="workKind === 'standard' && 'diamond' in existingHoles" class="block text-sm">Включено алмазных отверстий (старые тарифы)<input v-model.number="includedDiamondHoles" aria-label="Включено алмазных отверстий" type="number" min="0" step="1" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900" /></label>
                 <label v-if="workKind === 'standard'" class="block text-sm">Общий лимит проходов до 80 см<input v-model.number="includedSharedHoles" type="number" min="0" max="100" step="1" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900" /></label>
                 <p class="text-xs text-gray-500 dark:text-slate-400">Границы мощности указывают включённые значения отдельно. Для готовой трассы новые метры и отверстия не включены; добавочные работы требуют отдельных правил.</p>
               </template>

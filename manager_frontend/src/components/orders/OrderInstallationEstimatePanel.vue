@@ -63,6 +63,9 @@ const scaffoldActual = ref<number | null>(null);
 const scaffoldScope = ref('');
 const liftActual = ref<number | null>(null);
 const liftScope = ref('');
+const accessApprovalPending = computed(() =>
+  (scaffold.value && (scaffoldActual.value == null || scaffoldScope.value.trim().length < 8)) ||
+  (lift.value && (liftActual.value == null || liftScope.value.trim().length < 8)));
 const mode = ref<Mode>('collapsed');
 const intent = ref<StoredIntent | null>(null);
 const consent = ref(false);
@@ -256,7 +259,9 @@ const payload = (): InstallationPreviewPayload => {
       }
       const typedProfile = Object.fromEntries(Object.entries(manualProfile.value)
         .filter(([field, value]) => value !== '' && value !== null && value !== undefined &&
-          (manualProfile.value.product_kind !== 'multi_split_system' || !['indoor_type', 'capacity_cooling_kw', 'pipe_liquid', 'pipe_gas'].includes(field)))) as TypedInstallationProfile_Input;
+          (manualProfile.value.product_kind !== 'multi_split_system' || !['indoor_type', 'capacity_cooling_kw', 'pipe_liquid', 'pipe_gas',
+            'weight_indoor', 'weight_outdoor', 'weight_indoor_package', 'weight_outdoor_package'].includes(field)) &&
+          (manualProfile.value.product_kind === 'multi_split_system' || !['indoor_unit_count', 'composition_note'].includes(field)))) as TypedInstallationProfile_Input;
       return { ...base, typed_profile: typedProfile };
     }
     const slot = slots.value.find((candidate) => candidate.key === key);
@@ -420,13 +425,15 @@ const startNew = () => {
         <label v-if="manualProfile.product_kind !== 'multi_split_system'" class="space-y-1">Тип внутреннего блока<select v-model="manualProfile.indoor_type" class="field-input" :disabled="busy || Boolean(confirmed)"><option :value="undefined">Выберите</option><option value="wall">Настенный</option><option value="cassette">Кассетный</option><option value="duct">Канальный</option><option value="floor_ceiling">Напольно-потолочный</option><option value="column">Колонный</option><option value="console">Консольный</option></select></label>
         <label v-if="manualProfile.product_kind === 'multi_split_system'" class="space-y-1">Внутренних блоков в системе<input v-model.number="manualProfile.indoor_unit_count" type="number" min="2" max="20" step="1" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
         <label v-if="manualProfile.product_kind === 'multi_split_system'" class="space-y-1 sm:col-span-2">Проверенный состав системы<textarea v-model="manualProfile.composition_note" class="field-input" rows="2" placeholder="Например, два внутренних блока и один наружный блок" :disabled="busy || Boolean(confirmed)" /></label>
-        <label class="space-y-1">Холодопроизводительность, кВт<input v-model.number="manualProfile.capacity_cooling_kw" type="number" min="0.001" step="0.001" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
-        <label class="space-y-1">Жидкостная труба<input v-model="manualProfile.pipe_liquid" class="field-input" placeholder="Например 1/4&quot;" :disabled="busy || Boolean(confirmed)" /></label>
-        <label class="space-y-1">Газовая труба<input v-model="manualProfile.pipe_gas" class="field-input" placeholder="Например 3/8&quot;" :disabled="busy || Boolean(confirmed)" /></label>
-        <label class="space-y-1">Вес внутреннего блока, кг<input v-model.number="manualProfile.weight_indoor" type="number" min="0.01" step="0.01" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
-        <label class="space-y-1">Вес наружного блока, кг<input v-model.number="manualProfile.weight_outdoor" type="number" min="0.01" step="0.01" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
-        <label class="space-y-1">Вес упаковки внутреннего блока, кг<input v-model.number="manualProfile.weight_indoor_package" type="number" min="0.01" step="0.01" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
-        <label class="space-y-1">Вес упаковки наружного блока, кг<input v-model.number="manualProfile.weight_outdoor_package" type="number" min="0.01" step="0.01" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
+        <template v-if="manualProfile.product_kind !== 'multi_split_system'">
+          <label class="space-y-1">Холодопроизводительность, кВт<input v-model.number="manualProfile.capacity_cooling_kw" type="number" min="0.001" step="0.001" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
+          <label class="space-y-1">Жидкостная труба<input v-model="manualProfile.pipe_liquid" class="field-input" placeholder="Например 1/4&quot;" :disabled="busy || Boolean(confirmed)" /></label>
+          <label class="space-y-1">Газовая труба<input v-model="manualProfile.pipe_gas" class="field-input" placeholder="Например 3/8&quot;" :disabled="busy || Boolean(confirmed)" /></label>
+          <label class="space-y-1">Вес внутреннего блока, кг<input v-model.number="manualProfile.weight_indoor" type="number" min="0.01" step="0.01" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
+          <label class="space-y-1">Вес наружного блока, кг<input v-model.number="manualProfile.weight_outdoor" type="number" min="0.01" step="0.01" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
+          <label class="space-y-1">Вес упаковки внутреннего блока, кг<input v-model.number="manualProfile.weight_indoor_package" type="number" min="0.01" step="0.01" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
+          <label class="space-y-1">Вес упаковки наружного блока, кг<input v-model.number="manualProfile.weight_outdoor_package" type="number" min="0.01" step="0.01" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
+        </template>
         <label class="flex items-center gap-2 sm:col-span-2"><input v-model="manualProfile.confirmed" type="checkbox" :disabled="busy || Boolean(confirmed)" />Параметры оборудования проверены; установка выполняется без продажи товара в этом предложении</label>
       </div>
       <div v-for="(key, index) in activeKeys" :key="key" class="space-y-2 border-t border-slate-200 pt-3">
@@ -442,7 +449,7 @@ const startNew = () => {
         <label class="flex items-center gap-2"><input v-model="workFor(key).pumpPackage" type="checkbox" :disabled="busy || Boolean(confirmed)" />Насос с установкой</label>
       </div>
       <div class="flex flex-wrap gap-4 border-t border-slate-200 pt-3"><label class="flex items-center gap-2"><input v-model="scaffold" type="checkbox" :disabled="busy || Boolean(confirmed)" />Леса на объекте</label><label class="flex items-center gap-2"><input v-model="lift" type="checkbox" :disabled="busy || Boolean(confirmed)" />Вышка на объекте</label></div>
-      <div v-if="scaffold || lift" class="grid gap-2 sm:grid-cols-2"><p class="sm:col-span-2 text-amber-800">Цены доступа пока ориентировочные. Для точной сметы укажите согласованные сумму и состав работ.</p><template v-if="scaffold"><label class="space-y-1">Леса: согласованная сумма, BYN<input data-testid="scaffold-actual" v-model.number="scaffoldActual" type="number" min="0" step="0.01" class="field-input" :disabled="busy || Boolean(confirmed)" /></label><label class="space-y-1">Леса: согласованный состав<input data-testid="scaffold-scope" v-model="scaffoldScope" class="field-input" :disabled="busy || Boolean(confirmed)" /></label></template><template v-if="lift"><label class="space-y-1">Вышка: согласованная сумма, BYN<input v-model.number="liftActual" type="number" min="0" step="0.01" class="field-input" :disabled="busy || Boolean(confirmed)" /></label><label class="space-y-1">Вышка: согласованный состав и время<input v-model="liftScope" class="field-input" :disabled="busy || Boolean(confirmed)" /></label></template></div>
+      <div v-if="scaffold || lift" class="grid gap-2 sm:grid-cols-2"><p v-if="accessApprovalPending" class="sm:col-span-2 text-amber-800">Цены доступа пока ориентировочные. Для точной сметы укажите согласованные сумму и состав работ.</p><template v-if="scaffold"><label class="space-y-1">Леса: согласованная сумма, BYN<input data-testid="scaffold-actual" v-model.number="scaffoldActual" type="number" min="0" step="0.01" class="field-input" :disabled="busy || Boolean(confirmed)" /></label><label class="space-y-1">Леса: согласованный состав<input data-testid="scaffold-scope" v-model="scaffoldScope" class="field-input" :disabled="busy || Boolean(confirmed)" /></label></template><template v-if="lift"><label class="space-y-1">Вышка: согласованная сумма, BYN<input v-model.number="liftActual" type="number" min="0" step="0.01" class="field-input" :disabled="busy || Boolean(confirmed)" /></label><label class="space-y-1">Вышка: согласованный состав и время<input v-model="liftScope" class="field-input" :disabled="busy || Boolean(confirmed)" /></label></template></div>
       <button type="button" data-testid="installation-preview" class="btn-mini" :disabled="busy || Boolean(confirmed)" @click="calculate">{{ busy ? 'Проверяем…' : 'Рассчитать по книге' }}</button>
       <div v-if="preview" class="space-y-3 border-t border-slate-200 pt-3">
         <p class="font-semibold">{{ preview.status === 'fixed' ? 'Точная цена' : preview.status === 'from' ? 'Цена от' : preview.status === 'provisional' ? 'Ориентировочная сумма' : 'Цена недоступна' }}<span v-if="preview.total"> · {{ formatMoney(Number(preview.total)) }}</span></p>

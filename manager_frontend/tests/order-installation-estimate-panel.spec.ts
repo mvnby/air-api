@@ -120,6 +120,15 @@ describe('OrderInstallationEstimatePanel', () => {
       extras: [{ code: 'pump.package', quantity: 1 }],
     });
     expect(input.installations[0].typed_profile.indoor_type).toBeUndefined();
+    await wrapper.findAll('select')[0].setValue('complete_split_system');
+    await wrapper.findAll('select')[1].setValue('wall');
+    await wrapper.find('input[min="0.001"]').setValue('2.5');
+    await wrapper.get('[data-testid="installation-preview"]').trigger('click');
+    await flushPromises();
+    const single = service.previewManagerInstallationEstimate.mock.calls[1][1].installations[0].typed_profile;
+    expect(single.product_kind).toBe('complete_split_system');
+    expect(single.indoor_unit_count).toBeUndefined();
+    expect(single.composition_note).toBeUndefined();
   });
 
   it('keeps access provisional until an actual amount and scope are entered', async () => {

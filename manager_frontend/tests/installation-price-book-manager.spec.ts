@@ -74,6 +74,17 @@ describe('canonical installation book manager', () => {
     expect(mocks.publish).not.toHaveBeenCalled();
   });
 
+  it('drops hidden pipe fields after changing to capacity-only matching', async () => {
+    const wrapper = mount(TariffEditModal, { props: { modelValue: true, tariff }, ...mountOptions });
+    await wrapper.find('[aria-label="Газовая труба"]').setValue('');
+    await wrapper.find('[aria-label="Условия подбора"]').setValue('capacity_only');
+    await save(wrapper);
+    expect(mocks.updateTariff).toHaveBeenCalledWith(10, expect.objectContaining({
+      installation_match: expect.objectContaining({ match_strategy: 'capacity_only',
+        pipe_liquid: null, pipe_gas: null }),
+    }));
+  });
+
   it('retains legacy tariff outside the book unless a type is selected', async () => {
     const legacy = { ...tariff, installation_code: null, installation_match: null };
     const wrapper = mount(TariffEditModal, { props: { modelValue: true, tariff: legacy }, ...mountOptions });
