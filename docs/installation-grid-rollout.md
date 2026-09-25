@@ -1,5 +1,11 @@
 # Installation grid: reviewed draft reset and publication
 
+The initial owner-approved grid was published on September 25, 2026 for the
+canonical company, Polotsk, and Test1. See the [dated release record](installation-grid-release-2026-09-25.md).
+This runbook describes the guarded procedure; the signed initial plan has
+already been applied and must not be reused. A correction needs a fresh plan
+and a new immutable book revision.
+
 The owner-approved September 25 grid is defined once in
 `services/installation_grid_seed.py`. This procedure replaces **active
 installation drafts** for the canonical tenant and every explicitly listed
