@@ -38270,6 +38270,11 @@
               }
             ],
             "title": "Included"
+          },
+          "is_provisional": {
+            "type": "boolean",
+            "title": "Is Provisional",
+            "default": false
           }
         },
         "type": "object",
@@ -38381,6 +38386,15 @@
                 "type": "null"
               }
             ]
+          },
+          "work_kind": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "prelaid_route"
+            ],
+            "title": "Work Kind",
+            "default": "standard"
           },
           "key": {
             "type": "string",
@@ -38574,21 +38588,50 @@
         "properties": {
           "product_kind": {
             "type": "string",
-            "const": "complete_split_system",
+            "enum": [
+              "complete_split_system",
+              "multi_split_system"
+            ],
             "title": "Product Kind",
             "default": "complete_split_system"
           },
           "indoor_type": {
-            "type": "string",
-            "enum": [
-              "wall",
-              "cassette",
-              "duct",
-              "floor_ceiling",
-              "column",
-              "console"
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "wall",
+                  "cassette",
+                  "duct",
+                  "floor_ceiling",
+                  "column",
+                  "console"
+                ]
+              },
+              {
+                "type": "null"
+              }
             ],
             "title": "Indoor Type"
+          },
+          "work_kind": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "prelaid_route"
+            ],
+            "title": "Work Kind",
+            "default": "standard"
+          },
+          "match_strategy": {
+            "type": "string",
+            "enum": [
+              "strict",
+              "capacity_only",
+              "type_only"
+            ],
+            "title": "Match Strategy",
+            "default": "strict"
           },
           "capacity_min_kw": {
             "anyOf": [
@@ -38623,6 +38666,16 @@
               }
             ],
             "title": "Capacity Max Kw"
+          },
+          "capacity_min_inclusive": {
+            "type": "boolean",
+            "title": "Capacity Min Inclusive",
+            "default": true
+          },
+          "capacity_max_inclusive": {
+            "type": "boolean",
+            "title": "Capacity Max Inclusive",
+            "default": true
           },
           "pipe_liquid": {
             "anyOf": [
@@ -38699,30 +38752,56 @@
           }
         },
         "type": "object",
-        "required": [
-          "indoor_type"
-        ],
         "title": "InstallationMatcher"
       },
       "InstallationMatcher-Output": {
         "properties": {
           "product_kind": {
             "type": "string",
-            "const": "complete_split_system",
+            "enum": [
+              "complete_split_system",
+              "multi_split_system"
+            ],
             "title": "Product Kind",
             "default": "complete_split_system"
           },
           "indoor_type": {
-            "type": "string",
-            "enum": [
-              "wall",
-              "cassette",
-              "duct",
-              "floor_ceiling",
-              "column",
-              "console"
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "wall",
+                  "cassette",
+                  "duct",
+                  "floor_ceiling",
+                  "column",
+                  "console"
+                ]
+              },
+              {
+                "type": "null"
+              }
             ],
             "title": "Indoor Type"
+          },
+          "work_kind": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "prelaid_route"
+            ],
+            "title": "Work Kind",
+            "default": "standard"
+          },
+          "match_strategy": {
+            "type": "string",
+            "enum": [
+              "strict",
+              "capacity_only",
+              "type_only"
+            ],
+            "title": "Match Strategy",
+            "default": "strict"
           },
           "capacity_min_kw": {
             "anyOf": [
@@ -38747,6 +38826,16 @@
               }
             ],
             "title": "Capacity Max Kw"
+          },
+          "capacity_min_inclusive": {
+            "type": "boolean",
+            "title": "Capacity Min Inclusive",
+            "default": true
+          },
+          "capacity_max_inclusive": {
+            "type": "boolean",
+            "title": "Capacity Max Inclusive",
+            "default": true
           },
           "pipe_liquid": {
             "anyOf": [
@@ -38813,9 +38902,6 @@
           }
         },
         "type": "object",
-        "required": [
-          "indoor_type"
-        ],
         "title": "InstallationMatcher"
       },
       "InstallationMeasuredWork": {
@@ -38927,6 +39013,13 @@
             "type": "array",
             "title": "Site Extras"
           },
+          "approved_site_access": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationSiteApproval"
+            },
+            "type": "array",
+            "title": "Approved Site Access"
+          },
           "expected_revision": {
             "anyOf": [
               {
@@ -38953,6 +39046,7 @@
             "enum": [
               "fixed",
               "from",
+              "provisional",
               "quote",
               "unavailable"
             ],
@@ -39175,6 +39269,15 @@
                 "type": "null"
               }
             ]
+          },
+          "work_kind": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "prelaid_route"
+            ],
+            "title": "Work Kind",
+            "default": "standard"
           }
         },
         "type": "object",
@@ -39187,6 +39290,7 @@
             "enum": [
               "fixed",
               "from",
+              "provisional",
               "quote",
               "unavailable"
             ],
@@ -39341,6 +39445,17 @@
             "type": "string",
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Quantity"
+          },
+          "scope_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Note"
           }
         },
         "type": "object",
@@ -39351,6 +39466,45 @@
           "quantity"
         ],
         "title": "InstallationSelectedWork"
+      },
+      "InstallationSiteApproval": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "access.scaffold",
+              "access.lift"
+            ],
+            "title": "Code"
+          },
+          "actual_total": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1000000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$"
+              }
+            ],
+            "title": "Actual Total"
+          },
+          "scope_note": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 8,
+            "title": "Scope Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "actual_total",
+          "scope_note"
+        ],
+        "title": "InstallationSiteApproval"
       },
       "InstallationWorkSummary": {
         "properties": {
@@ -49394,6 +49548,7 @@
             "enum": [
               "fixed",
               "from",
+              "provisional",
               "quote",
               "unavailable"
             ],
@@ -72675,6 +72830,32 @@
             ],
             "title": "Capacity Cooling Kw"
           },
+          "indoor_unit_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 20.0,
+                "minimum": 2.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indoor Unit Count"
+          },
+          "composition_note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500,
+                "minLength": 8
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Composition Note"
+          },
           "pipe_liquid": {
             "anyOf": [
               {
@@ -72813,6 +72994,32 @@
               }
             ],
             "title": "Capacity Cooling Kw"
+          },
+          "indoor_unit_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 20.0,
+                "minimum": 2.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indoor Unit Count"
+          },
+          "composition_note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500,
+                "minLength": 8
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Composition Note"
           },
           "pipe_liquid": {
             "anyOf": [

@@ -130,6 +130,10 @@ class PublicInstallationCheckoutService:
                 snapshots=snapshots, preview=fresh,
             ) from exc
 
+        if preview_input.approved_site_access:
+            raise cls._reject("site_access_approval_manager_only", 422)
+        if any(item.work_kind != "standard" for item in preview_input.installations):
+            raise cls._reject("prelaid_checkout_unsupported", 422)
         if any(item.product_id is None for item in preview_input.installations):
             raise cls._reject("service_only_checkout_unsupported", 422)
         quantities = Counter(item.product_id for item in preview_input.installations)

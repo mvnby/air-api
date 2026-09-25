@@ -7,5 +7,6 @@ export type InstallationSelectedWork = {
     label: string;
     unit: string;
     quantity: string;
+    scope_note?: (string | null);
 };
 

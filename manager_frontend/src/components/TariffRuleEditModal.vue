@@ -32,8 +32,11 @@ const favoriteRulesError = ref('');
 const canonicalComponents = [
   { code: 'route.extra_m', label: 'Трасса сверх включённой', ruleType: 'per_meter_over_included', unit: 'м', optional: false },
   { code: 'hole.diamond.extra', label: 'Алмазное отверстие сверх включённого', ruleType: 'per_hole_manual', unit: 'шт', optional: false },
+  { code: 'hole.through_thin.extra', label: 'Дополнительный проход стены до 20 см', ruleType: 'per_hole_manual', unit: 'шт', optional: false },
+  { code: 'hole.through_thick.extra', label: 'Дополнительный проход стены свыше 20 до 80 см', ruleType: 'per_hole_manual', unit: 'шт', optional: false },
   { code: 'pump.supply', label: 'Поставка насоса', ruleType: 'per_unit_manual', unit: 'шт', optional: true },
   { code: 'pump.install', label: 'Монтаж насоса', ruleType: 'per_unit_manual', unit: 'шт', optional: true },
+  { code: 'pump.package', label: 'Насос с установкой', ruleType: 'per_unit_manual', unit: 'шт', optional: true },
   { code: 'chase.extra_m', label: 'Штробление', ruleType: 'per_unit_manual', unit: 'м', optional: true },
   { code: 'access.scaffold', label: 'Леса на объект', ruleType: 'fixed_once', unit: 'шт', optional: true },
   { code: 'access.lift', label: 'Вышка на объект', ruleType: 'fixed_once', unit: 'шт', optional: true },

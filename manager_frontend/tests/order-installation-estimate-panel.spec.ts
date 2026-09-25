@@ -39,6 +39,8 @@ const prepare = async (wrapper: ReturnType<typeof mountPanel>) => {
   await wrapper.get('[data-testid="installation-product"]').setValue(true);
   await wrapper.get('[data-testid="installation-route"]').setValue('6');
   await wrapper.get('[data-testid="installation-holes"]').setValue('1');
+  await wrapper.get('[data-testid="installation-thick-holes"]').setValue('0');
+  await wrapper.get('[data-testid="installation-over80-holes"]').setValue('0');
 };
 
 beforeEach(() => {
@@ -59,7 +61,7 @@ describe('OrderInstallationEstimatePanel', () => {
     await flushPromises();
     const payload = service.previewManagerInstallationEstimate.mock.calls[0][1];
     expect(payload.installations).toMatchObject([{ product_id: 44, display_label: '№1', route_length_m: 6,
-      holes_by_type: { diamond: 1 } }]);
+      holes_by_type: { through_thin: 1, through_thick: 0, through_over_80: 0 } }]);
     expect(wrapper.text()).toContain('Установка №1: монтаж.');
     expect(wrapper.text()).toContain('530,25');
     expect(wrapper.get('[data-testid="installation-confirm"]').attributes('disabled')).toBeDefined();
@@ -91,6 +93,57 @@ describe('OrderInstallationEstimatePanel', () => {
     expect(wrapper.find('[data-testid="installation-confirm"]').exists()).toBe(false);
   });
 
+  it('sends one confirmed multi system with shared work inputs', async () => {
+    const wrapper = mountPanel();
+    await wrapper.get('[data-testid="installation-open"]').trigger('click');
+    await flushPromises();
+    await wrapper.findAll('button').find((button) => button.text() === 'Без товара')?.trigger('click');
+    await wrapper.findAll('select')[0].setValue('multi_split_system');
+    const count = wrapper.findAll('input[type="number"]').find((input) => input.attributes('min') === '2');
+    await count?.setValue('2');
+    await wrapper.find('textarea').setValue('Два внутренних блока и один наружный');
+    const verified = wrapper.findAll('input[type="checkbox"]').find((input) => input.element.parentElement?.textContent?.includes('Параметры оборудования проверены'));
+    await verified?.setValue(true);
+    await wrapper.get('[data-testid="installation-route"]').setValue('8');
+    await wrapper.get('[data-testid="installation-holes"]').setValue('1');
+    await wrapper.get('[data-testid="installation-thick-holes"]').setValue('1');
+    await wrapper.get('[data-testid="installation-over80-holes"]').setValue('0');
+    await wrapper.findAll('input[type="checkbox"]').find((input) => input.element.parentElement?.textContent?.includes('Насос с установкой'))?.setValue(true);
+    await wrapper.get('[data-testid="installation-preview"]').trigger('click');
+    await flushPromises();
+    const input = service.previewManagerInstallationEstimate.mock.calls[0][1];
+    expect(input.installations).toHaveLength(1);
+    expect(input.installations[0]).toMatchObject({
+      typed_profile: { product_kind: 'multi_split_system', indoor_unit_count: 2,
+        composition_note: 'Два внутренних блока и один наружный', confirmed: true },
+      route_length_m: 8, holes_by_type: { through_thin: 1, through_thick: 1 },
+      extras: [{ code: 'pump.package', quantity: 1 }],
+    });
+    expect(input.installations[0].typed_profile.indoor_type).toBeUndefined();
+  });
+
+  it('keeps access provisional until an actual amount and scope are entered', async () => {
+    service.previewManagerInstallationEstimate.mockResolvedValueOnce({
+      status: 'provisional', reason_code: 'site_access_requires_approval', scope_ref: 'scope',
+      total: '630.25', preview_ref: 'b'.repeat(64),
+    });
+    const wrapper = mountPanel();
+    await prepare(wrapper);
+    await wrapper.findAll('input[type="checkbox"]').find((input) => input.element.parentElement?.textContent?.includes('Леса на объекте'))?.setValue(true);
+    await wrapper.get('[data-testid="installation-preview"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('Ориентировочная сумма');
+    expect(wrapper.find('[data-testid="installation-confirm"]').exists()).toBe(false);
+    await wrapper.get('[data-testid="scaffold-actual"]').setValue('125');
+    await wrapper.get('[data-testid="scaffold-scope"]').setValue('Леса на фасаде первого этажа');
+    await wrapper.get('[data-testid="installation-preview"]').trigger('click');
+    await flushPromises();
+    const input = service.previewManagerInstallationEstimate.mock.calls[1][1];
+    expect(input.approved_site_access).toEqual([{ code: 'access.scaffold', actual_total: 125,
+      scope_note: 'Леса на фасаде первого этажа' }]);
+    expect(wrapper.find('[data-testid="installation-confirm"]').exists()).toBe(true);
+  });
+
   it('does not offer installation for a product whose price includes it', async () => {
     service.getManagerOrderDetail.mockResolvedValueOnce({ id: 8, proposals: [{
       id: 12, status: 'draft', is_archived: false,
@@ -118,6 +171,8 @@ describe('OrderInstallationEstimatePanel', () => {
     await pipes[1].setValue('3/8"');
     await wrapper.get('[data-testid="installation-route"]').setValue('3');
     await wrapper.get('[data-testid="installation-holes"]').setValue('0');
+    await wrapper.get('[data-testid="installation-thick-holes"]').setValue('0');
+    await wrapper.get('[data-testid="installation-over80-holes"]').setValue('0');
     await wrapper.get('[data-testid="installation-preview"]').trigger('click');
     await flushPromises();
     expect(service.previewManagerInstallationEstimate).not.toHaveBeenCalled();

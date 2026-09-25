@@ -7,6 +7,7 @@ import type { TypedInstallationProfile_Input } from './TypedInstallationProfile_
 export type InstallationInput = {
     product_id?: (number | null);
     typed_profile?: (TypedInstallationProfile_Input | null);
+    work_kind?: 'standard' | 'prelaid_route';
     key: string;
     display_label?: (string | null);
     route_length_m: (number | string);

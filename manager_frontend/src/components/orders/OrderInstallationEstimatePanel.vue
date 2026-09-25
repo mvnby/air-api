@@ -12,7 +12,7 @@ import { formatMoney } from './order-utils';
 
 type Mode = 'collapsed' | 'detailed';
 type Source = 'proposal' | 'manual';
-type Work = { route: number | null; diamond: number | null; pumpSupply: boolean; pumpInstall: boolean; chase: number };
+type Work = { workKind: 'standard' | 'prelaid_route'; route: number | null; thin: number | null; thick: number | null; over80: number | null; pumpPackage: boolean; chase: number };
 type Slot = { key: string; label: string; productId: number };
 type StoredIntent = {
   fingerprint: string;
@@ -31,6 +31,10 @@ type StoredDraft = {
   manualProfile: TypedInstallationProfile_Input;
   scaffold: boolean;
   lift: boolean;
+  scaffoldActual: number | null;
+  scaffoldScope: string;
+  liftActual: number | null;
+  liftScope: string;
   mode: Mode;
   intent?: StoredIntent;
 };
@@ -55,6 +59,10 @@ const manualKey = ref<string>(crypto.randomUUID());
 const manualProfile = ref<TypedInstallationProfile_Input>({ product_kind: '', confirmed: false });
 const scaffold = ref(false);
 const lift = ref(false);
+const scaffoldActual = ref<number | null>(null);
+const scaffoldScope = ref('');
+const liftActual = ref<number | null>(null);
+const liftScope = ref('');
 const mode = ref<Mode>('collapsed');
 const intent = ref<StoredIntent | null>(null);
 const consent = ref(false);
@@ -84,7 +92,7 @@ const capture = (): ActionScope => ({
 const current = (scope: ActionScope) => !disposed && scope.epoch === epoch
   && scope.key === storageKey.value && scope.orderId === props.orderId && scope.proposalId === props.proposalId;
 onScopeDispose(() => { disposed = true; epoch += 1; });
-const makeWork = (): Work => ({ route: null, diamond: null, pumpSupply: false, pumpInstall: false, chase: 0 });
+const makeWork = (): Work => ({ workKind: 'standard', route: null, thin: null, thick: null, over80: null, pumpPackage: false, chase: 0 });
 const slots = computed<Slot[]>(() => products.value
   .filter((line) => line.proposal_id === props.proposalId && line.product_id && line.quantity > 0 && line.price > 0 && !line.is_installation_included)
   .flatMap((line) => Array.from({ length: Math.min(line.quantity, 20) }, (_, index) => ({
@@ -104,6 +112,9 @@ const projectedLines = computed(() => mode.value === 'collapsed' ? preview.value
 const statusText = computed(() => {
   if (!preview.value) return '';
   if (preview.value.reason_code === 'price_book_not_published') return 'Книга цен ещё не опубликована. Опубликуйте тарифы монтажа перед расчётом.';
+  if (preview.value.reason_code === 'site_access_requires_approval') return 'Стоимость доступа ориентировочная. Укажите согласованную сумму и состав работ, затем рассчитайте заново.';
+  if (preview.value.reason_code === 'wall_over_80_requires_quote') return 'Проход стены свыше 80 см требует индивидуальной сметы.';
+  if (preview.value.reason_code === 'prelaid_new_route_requires_quote') return 'Новая трасса при монтаже на готовую трассу требует отдельной оценки.';
   if (preview.value.status === 'from') return 'Цена указана «от» и не может быть подтверждена как точная смета.';
   if (preview.value.status === 'quote') return 'Для этого состава нужна индивидуальная смета.';
   if (preview.value.status === 'unavailable') return 'По выбранному оборудованию нет доступного тарифа.';
@@ -130,6 +141,8 @@ const save = (scope?: ActionScope) => {
       source: source.value, selected: selected.value, work: work.value,
       manualKey: manualKey.value, manualProfile: manualProfile.value,
       scaffold: scaffold.value, lift: lift.value, mode: mode.value,
+      scaffoldActual: scaffoldActual.value, scaffoldScope: scaffoldScope.value,
+      liftActual: liftActual.value, liftScope: liftScope.value,
       intent: intent.value ?? undefined,
     };
     sessionStorage.setItem(scope?.key ?? storageKey.value, JSON.stringify(draft));
@@ -147,6 +160,10 @@ const restore = () => {
     manualProfile.value = draft.manualProfile || { product_kind: '', confirmed: false };
     scaffold.value = Boolean(draft.scaffold);
     lift.value = Boolean(draft.lift);
+    scaffoldActual.value = draft.scaffoldActual ?? null;
+    scaffoldScope.value = draft.scaffoldScope || '';
+    liftActual.value = draft.liftActual ?? null;
+    liftScope.value = draft.liftScope || '';
     mode.value = draft.mode === 'detailed' ? 'detailed' : 'collapsed';
     intent.value = draft.intent || null;
   } catch { /* A stale browser draft can be discarded. */ }
@@ -162,6 +179,10 @@ const reset = () => {
   manualProfile.value = { product_kind: '', confirmed: false };
   scaffold.value = false;
   lift.value = false;
+  scaffoldActual.value = null;
+  scaffoldScope.value = '';
+  liftActual.value = null;
+  liftScope.value = '';
   mode.value = 'collapsed';
   intent.value = null;
   consent.value = false;
@@ -170,11 +191,12 @@ const reset = () => {
   restore();
 };
 watch(storageKey, () => { epoch += 1; reset(); }, { immediate: true, flush: 'sync' });
-watch([source, selected, work, manualKey, manualProfile, scaffold, lift, mode, intent], () => save(), { deep: true });
-watch([source, selected, work, manualProfile, scaffold, lift], () => { consent.value = false; }, { deep: true });
+watch([source, selected, work, manualKey, manualProfile, scaffold, lift, scaffoldActual, scaffoldScope, liftActual, liftScope, mode, intent], () => save(), { deep: true });
+watch([source, selected, work, manualProfile, scaffold, lift, scaffoldActual, scaffoldScope, liftActual, liftScope], () => { consent.value = false; }, { deep: true });
 
 const workFor = (key: string): Work => {
   if (!work.value[key]) work.value[key] = makeWork();
+  else if (work.value[key].thin === undefined) work.value[key] = { ...makeWork(), ...work.value[key] };
   return work.value[key];
 };
 const toggleSlot = (key: string) => {
@@ -211,35 +233,47 @@ const payload = (): InstallationPreviewPayload => {
   if (activeKeys.value.length > 20) throw new Error('За один расчёт можно добавить не более 20 установок.');
   const installations: InstallationInput[] = activeKeys.value.map((key, index) => {
     const item = workFor(key);
-    if (item.route == null || item.diamond == null || String(item.route).trim() === '' || String(item.diamond).trim() === ''
-      || !Number.isFinite(Number(item.route)) || !Number.isInteger(Number(item.diamond))
-      || Number(item.route) < 0 || Number(item.route) > 1000 || Number(item.diamond) < 0 || Number(item.diamond) > 100) {
-      throw new Error('Для каждой установки укажите длину трассы и количество алмазных отверстий, даже если это 0.');
+    if (item.route == null || item.thin == null || item.thick == null || item.over80 == null ||
+      !Number.isFinite(Number(item.route)) || Number(item.route) < 0 || Number(item.route) > 1000 ||
+      [item.thin, item.thick, item.over80].some((value) => !Number.isInteger(Number(value)) || Number(value) < 0 || Number(value) > 100)) {
+      throw new Error('Для каждой установки укажите новую трассу и проходы стен, даже если их количество 0.');
     }
     if (!Number.isFinite(Number(item.chase)) || Number(item.chase) < 0 || Number(item.chase) > 1000) {
       throw new Error('Укажите допустимую длину штробления.');
     }
     const extras = [];
-    if (item.pumpSupply) extras.push({ code: 'pump.supply', quantity: 1 });
-    if (item.pumpInstall) extras.push({ code: 'pump.install', quantity: 1 });
+    if (item.pumpPackage) extras.push({ code: 'pump.package', quantity: 1 });
     if (Number(item.chase) > 0) extras.push({ code: 'chase.extra_m', quantity: Number(item.chase) });
-    const base = { key, display_label: `№${index + 1}`, route_length_m: Number(item.route),
-      holes_by_type: { diamond: Number(item.diamond) }, extras };
+    const base = { key, display_label: `№${index + 1}`, work_kind: item.workKind,
+      route_length_m: Number(item.route),
+      holes_by_type: { through_thin: Number(item.thin), through_thick: Number(item.thick), through_over_80: Number(item.over80) }, extras };
     if (source.value === 'manual') {
       if (!manualProfile.value.confirmed) throw new Error('Подтвердите параметры оборудования для установки без товара.');
       if (!manualProfile.value.product_kind) throw new Error('Укажите вид оборудования.');
+      if (manualProfile.value.product_kind === 'multi_split_system' &&
+          (!manualProfile.value.indoor_unit_count || !manualProfile.value.composition_note?.trim())) {
+        throw new Error('Для мультисплита подтвердите количество и состав внутренних блоков.');
+      }
       const typedProfile = Object.fromEntries(Object.entries(manualProfile.value)
-        .filter(([, value]) => value !== '' && value !== null && value !== undefined)) as TypedInstallationProfile_Input;
+        .filter(([field, value]) => value !== '' && value !== null && value !== undefined &&
+          (manualProfile.value.product_kind !== 'multi_split_system' || !['indoor_type', 'capacity_cooling_kw', 'pipe_liquid', 'pipe_gas'].includes(field)))) as TypedInstallationProfile_Input;
       return { ...base, typed_profile: typedProfile };
     }
     const slot = slots.value.find((candidate) => candidate.key === key);
     if (!slot) throw new Error('Оборудование изменилось. Обновите предложение и повторите расчёт.');
     return { ...base, product_id: slot.productId };
   });
-  return { installations, site_extras: [
+  const site_extras = [
     ...(scaffold.value ? [{ code: 'access.scaffold', quantity: 1 }] : []),
     ...(lift.value ? [{ code: 'access.lift', quantity: 1 }] : []),
-  ] };
+  ];
+  const approved_site_access = [
+    ...(scaffold.value && scaffoldActual.value != null && scaffoldScope.value.trim().length >= 8
+      ? [{ code: 'access.scaffold' as const, actual_total: scaffoldActual.value, scope_note: scaffoldScope.value.trim() }] : []),
+    ...(lift.value && liftActual.value != null && liftScope.value.trim().length >= 8
+      ? [{ code: 'access.lift' as const, actual_total: liftActual.value, scope_note: liftScope.value.trim() }] : []),
+  ];
+  return { installations, site_extras, approved_site_access };
 };
 const ensureIntent = (fingerprint: string): StoredIntent => {
   if (intent.value?.fingerprint !== fingerprint) {
@@ -382,8 +416,10 @@ const startNew = () => {
         <label v-for="slot in slots" :key="slot.key" class="flex items-center gap-2"><input data-testid="installation-product" type="checkbox" :checked="selected.includes(slot.key)" :disabled="busy || Boolean(confirmed)" @change="toggleSlot(slot.key)" />{{ slot.label }}</label>
       </div>
       <div v-else class="grid gap-2 sm:grid-cols-2">
-        <label class="space-y-1">Вид оборудования<select v-model="manualProfile.product_kind" class="field-input" :disabled="busy || Boolean(confirmed)"><option value="">Выберите</option><option value="complete_split_system">Комплект сплит-системы</option><option value="indoor_unit">Отдельный внутренний блок</option><option value="outdoor_unit">Отдельный наружный блок</option><option value="other">Другое</option></select></label>
-        <label class="space-y-1">Тип внутреннего блока<select v-model="manualProfile.indoor_type" class="field-input" :disabled="busy || Boolean(confirmed)"><option :value="undefined">Выберите</option><option value="wall">Настенный</option><option value="cassette">Кассетный</option><option value="duct">Канальный</option><option value="floor_ceiling">Напольно-потолочный</option><option value="column">Колонный</option><option value="console">Консольный</option></select></label>
+        <label class="space-y-1">Вид оборудования<select v-model="manualProfile.product_kind" class="field-input" :disabled="busy || Boolean(confirmed)"><option value="">Выберите</option><option value="complete_split_system">Комплект сплит-системы</option><option value="multi_split_system">Мультисплит-система</option><option value="indoor_unit">Отдельный внутренний блок</option><option value="outdoor_unit">Отдельный наружный блок</option><option value="other">Другое</option></select></label>
+        <label v-if="manualProfile.product_kind !== 'multi_split_system'" class="space-y-1">Тип внутреннего блока<select v-model="manualProfile.indoor_type" class="field-input" :disabled="busy || Boolean(confirmed)"><option :value="undefined">Выберите</option><option value="wall">Настенный</option><option value="cassette">Кассетный</option><option value="duct">Канальный</option><option value="floor_ceiling">Напольно-потолочный</option><option value="column">Колонный</option><option value="console">Консольный</option></select></label>
+        <label v-if="manualProfile.product_kind === 'multi_split_system'" class="space-y-1">Внутренних блоков в системе<input v-model.number="manualProfile.indoor_unit_count" type="number" min="2" max="20" step="1" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
+        <label v-if="manualProfile.product_kind === 'multi_split_system'" class="space-y-1 sm:col-span-2">Проверенный состав системы<textarea v-model="manualProfile.composition_note" class="field-input" rows="2" placeholder="Например, два внутренних блока и один наружный блок" :disabled="busy || Boolean(confirmed)" /></label>
         <label class="space-y-1">Холодопроизводительность, кВт<input v-model.number="manualProfile.capacity_cooling_kw" type="number" min="0.001" step="0.001" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
         <label class="space-y-1">Жидкостная труба<input v-model="manualProfile.pipe_liquid" class="field-input" placeholder="Например 1/4&quot;" :disabled="busy || Boolean(confirmed)" /></label>
         <label class="space-y-1">Газовая труба<input v-model="manualProfile.pipe_gas" class="field-input" placeholder="Например 3/8&quot;" :disabled="busy || Boolean(confirmed)" /></label>
@@ -395,17 +431,21 @@ const startNew = () => {
       </div>
       <div v-for="(key, index) in activeKeys" :key="key" class="space-y-2 border-t border-slate-200 pt-3">
         <p class="font-medium">Установка №{{ index + 1 }} · {{ source === 'manual' ? 'без товара' : slots.find((slot) => slot.key === key)?.label }}</p>
+        <div class="flex gap-2"><button type="button" class="btn-mini-outline" :class="workFor(key).workKind === 'standard' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || Boolean(confirmed)" @click="workFor(key).workKind = 'standard'">Обычный монтаж</button><button type="button" class="btn-mini-outline" :class="workFor(key).workKind === 'prelaid_route' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || Boolean(confirmed)" @click="workFor(key).workKind = 'prelaid_route'">На готовую трассу</button></div>
         <div class="grid gap-2 sm:grid-cols-3">
-          <label class="space-y-1">Трасса, м<input data-testid="installation-route" v-model.number="workFor(key).route" type="number" min="0" step="0.01" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
-          <label class="space-y-1">Алмазные отверстия, шт<input data-testid="installation-holes" v-model.number="workFor(key).diamond" type="number" min="0" step="1" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
+          <label class="space-y-1">{{ workFor(key).workKind === 'prelaid_route' ? 'Новая дополнительная трасса, м' : 'Вся новая трасса, м' }}<input data-testid="installation-route" v-model.number="workFor(key).route" type="number" min="0" step="0.01" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
+          <label class="space-y-1">Проходы до 20 см<input data-testid="installation-holes" v-model.number="workFor(key).thin" type="number" min="0" step="1" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
+          <label class="space-y-1">Проходы свыше 20 до 80 см<input data-testid="installation-thick-holes" v-model.number="workFor(key).thick" type="number" min="0" step="1" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
+          <label class="space-y-1">Проходы свыше 80 см (по запросу)<input data-testid="installation-over80-holes" v-model.number="workFor(key).over80" type="number" min="0" step="1" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
           <label class="space-y-1">Штробление, м<input v-model.number="workFor(key).chase" type="number" min="0" step="0.01" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
         </div>
-        <div class="flex flex-wrap gap-4"><label class="flex items-center gap-2"><input v-model="workFor(key).pumpSupply" type="checkbox" :disabled="busy || Boolean(confirmed)" />Поставка насоса</label><label class="flex items-center gap-2"><input v-model="workFor(key).pumpInstall" type="checkbox" :disabled="busy || Boolean(confirmed)" />Монтаж насоса</label></div>
+        <label class="flex items-center gap-2"><input v-model="workFor(key).pumpPackage" type="checkbox" :disabled="busy || Boolean(confirmed)" />Насос с установкой</label>
       </div>
       <div class="flex flex-wrap gap-4 border-t border-slate-200 pt-3"><label class="flex items-center gap-2"><input v-model="scaffold" type="checkbox" :disabled="busy || Boolean(confirmed)" />Леса на объекте</label><label class="flex items-center gap-2"><input v-model="lift" type="checkbox" :disabled="busy || Boolean(confirmed)" />Вышка на объекте</label></div>
+      <div v-if="scaffold || lift" class="grid gap-2 sm:grid-cols-2"><p class="sm:col-span-2 text-amber-800">Цены доступа пока ориентировочные. Для точной сметы укажите согласованные сумму и состав работ.</p><template v-if="scaffold"><label class="space-y-1">Леса: согласованная сумма, BYN<input data-testid="scaffold-actual" v-model.number="scaffoldActual" type="number" min="0" step="0.01" class="field-input" :disabled="busy || Boolean(confirmed)" /></label><label class="space-y-1">Леса: согласованный состав<input data-testid="scaffold-scope" v-model="scaffoldScope" class="field-input" :disabled="busy || Boolean(confirmed)" /></label></template><template v-if="lift"><label class="space-y-1">Вышка: согласованная сумма, BYN<input v-model.number="liftActual" type="number" min="0" step="0.01" class="field-input" :disabled="busy || Boolean(confirmed)" /></label><label class="space-y-1">Вышка: согласованный состав и время<input v-model="liftScope" class="field-input" :disabled="busy || Boolean(confirmed)" /></label></template></div>
       <button type="button" data-testid="installation-preview" class="btn-mini" :disabled="busy || Boolean(confirmed)" @click="calculate">{{ busy ? 'Проверяем…' : 'Рассчитать по книге' }}</button>
       <div v-if="preview" class="space-y-3 border-t border-slate-200 pt-3">
-        <p class="font-semibold">{{ preview.status === 'fixed' ? 'Точная цена' : preview.status === 'from' ? 'Цена от' : 'Цена недоступна' }}<span v-if="preview.total"> · {{ formatMoney(Number(preview.total)) }}</span></p>
+        <p class="font-semibold">{{ preview.status === 'fixed' ? 'Точная цена' : preview.status === 'from' ? 'Цена от' : preview.status === 'provisional' ? 'Ориентировочная сумма' : 'Цена недоступна' }}<span v-if="preview.total"> · {{ formatMoney(Number(preview.total)) }}</span></p>
         <p v-if="statusText" class="text-amber-800">{{ statusText }} <a href="/manager/tariffs" class="underline">Тарифы</a></p>
         <template v-if="preview.status === 'fixed'">
           <div class="flex gap-2"><button type="button" class="btn-mini-outline" :class="mode === 'collapsed' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || Boolean(confirmed)" @click="mode = 'collapsed'">Одной строкой</button><button type="button" class="btn-mini-outline" :class="mode === 'detailed' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || Boolean(confirmed)" @click="mode = 'detailed'">По работам</button></div>

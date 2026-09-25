@@ -189,9 +189,10 @@ async def test_preview_uses_included_overages_explicit_extras_and_one_site_lift(
         "site_extras": [{"code": "access.lift"}], "expected_revision": 2,
     })
     result = await BookService.preview(None, scope, payload, idempotency_key="installation-preview-one")
-    assert result.status == "fixed"
+    assert result.status == "provisional" and result.reason_code == "site_access_requires_approval"
     assert result.total == Decimal("1205.88")
     assert [part.code for part in result.components].count("access.lift") == 1
+    assert next(part for part in result.components if part.code == "access.lift").is_provisional
     assert "pump.supply" not in [part.code for part in result.components]
     route = next(part for part in result.components if part.code == "route.extra_m")
     assert (route.actual, route.included, route.quantity, route.gross) == (
@@ -283,3 +284,146 @@ def test_product_capacity_requires_one_numeric_value_before_compatibility():
     assert BookService._single_quantity("2.5-3.5 кВт", kind="power") is None
     assert BookService._single_quantity("~2.5 кВт", kind="power") is None
     assert BookService._single_quantity("22 кг", kind="weight") == Decimal("22")
+
+
+def _new_rule(code: str, price: str, rule_type: str, *, optional: bool = False) -> dict:
+    return {"id": abs(hash(code)) % 10000 + 1, "code": code, "rule_type": rule_type,
+            "name": code, "line_template": "{name}",
+            "unit": "м" if rule_type == "per_meter_over_included" else "шт",
+            "unit_price": price, "is_optional": optional, "sort_order": 0}
+
+
+def _new_entry(*, kind: str = "complete_split_system", work: str = "standard",
+               indoor_type: str | None = "wall", base: str = "600.00", route: str = "3") -> dict:
+    rules = [_new_rule("hole.through_thin.extra", "30.00", "per_hole_manual"),
+             _new_rule("hole.through_thick.extra", "70.00", "per_hole_manual"),
+             _new_rule("pump.package", "280.00", "per_unit_manual", optional=True),
+             _new_rule("access.scaffold", "100.00", "fixed_once", optional=True)]
+    if work == "standard":
+        rules.append(_new_rule("route.extra_m", "50.00", "per_meter_over_included"))
+    return {"tariff_id": 77, "code": f"installation.{kind}.{work}",
+            "match": InstallationMatcher(product_kind=kind, indoor_type=indoor_type,
+                work_kind=work, match_strategy="type_only").model_dump(mode="json"),
+            "mode": "fixed", "base_price": base, "short_name": "Монтаж",
+            "description": "Монтаж", "included_route_m": route if work == "standard" else "0",
+            "included_holes": {"shared_pass_through": "1"} if work == "standard" else {},
+            "rules": rules}
+
+
+def test_capacity_boundaries_are_disjoint_and_unknown_large_fails_closed():
+    matchers = [
+        InstallationMatcher(indoor_type="wall", match_strategy="capacity_only",
+            capacity_max_kw="4.2"),
+        InstallationMatcher(indoor_type="wall", match_strategy="capacity_only",
+            capacity_min_kw="4.2", capacity_min_inclusive=False,
+            capacity_max_kw="8.0", capacity_max_inclusive=False),
+        InstallationMatcher(indoor_type="wall", match_strategy="capacity_only",
+            capacity_min_kw="8.0", capacity_max_kw="10.55"),
+    ]
+    entries = [{"match": match.model_dump(mode="json")} for match in matchers]
+    assert not BookService._overlap(matchers[0], matchers[1])
+    assert not BookService._overlap(matchers[1], matchers[2])
+    for capacity, expected in [("4.2", 0), ("4.201", 1), ("7.999", 1), ("8.0", 2),
+                               ("10.55", 2), ("10.551", None)]:
+        profile = TypedInstallationProfile(product_kind="complete_split_system",
+            indoor_type="wall", capacity_cooling_kw=capacity, confirmed=True)
+        matched = [index for index, entry in enumerate(entries) if BookService._match(profile, entry)[0]]
+        assert matched == ([] if expected is None else [expected])
+
+
+def test_single_split_rejects_multisplit_count_and_shared_hole_cannot_double_allowance():
+    with pytest.raises(ValidationError):
+        TypedInstallationProfile(product_kind="complete_split_system", indoor_type="wall",
+            indoor_unit_count=2, confirmed=True)
+    entry = _new_entry()
+    entry["included_holes"]["through_thin"] = "1"
+    with pytest.raises(HTTPException) as error:
+        BookService._validate_entries([entry])
+    assert error.value.detail["code"] == "mixed_hole_allowances"
+    entry["included_holes"] = {"shared_pass_through": "2"}
+    BookService._validate_entries([entry])
+
+
+@pytest.mark.asyncio
+async def test_multisplit_is_one_system_with_shared_hole_and_explicit_pump(monkeypatch):
+    entry = _new_entry(kind="multi_split_system", indoor_type=None, base="500.00")
+    BookService._validate_entries([entry])
+    scope = TenantScope(tenant_id=12, storefront_id=34)
+    book = InstallationPriceBook(id=8, tenant_id=12, revision=2, fingerprint="x", entries=[entry])
+    async def latest(_session, _scope):
+        return book
+    async def profile(_session, _scope, target):
+        return target.typed_profile, {"indoor_unit_count": "confirmed_manual"}
+    monkeypatch.setattr(BookService, "latest", latest)
+    monkeypatch.setattr(BookService, "_profile", profile)
+    target = {"product_kind": "multi_split_system", "indoor_unit_count": 2,
+              "composition_note": "Два внутренних блока и один наружный", "confirmed": True}
+    payload = InstallationPreviewPayload.model_validate({"installations": [{
+        "key": "system", "typed_profile": target, "route_length_m": 8,
+        "holes_by_type": {"through_thin": 1, "through_thick": 1},
+        "extras": [{"code": "pump.package"}],
+    }]})
+    result = await BookService.preview(None, scope, payload, persist=False)
+    assert result.status == "fixed" and result.total == Decimal("1410.00")
+    assert next(part for part in result.components if part.code == "installation.base").quantity == 2
+    route = next(part for part in result.components if part.code == "route.extra_m")
+    assert (route.included, route.quantity, route.gross) == (Decimal(6), Decimal(2), Decimal(100))
+    assert [part.code for part in result.components if part.code.startswith("hole.")] == ["hole.through_thin.extra"]
+    assert "2 внутренних блоков" in result.customer_text
+    bad = payload.model_dump(mode="json")
+    bad["installations"][0]["extras"].append({"code": "pump.install"})
+    entry["rules"].append(_new_rule("pump.install", "100.00", "per_unit_manual", optional=True))
+    with pytest.raises(HTTPException) as error:
+        await BookService.preview(None, scope, InstallationPreviewPayload.model_validate(bad), persist=False)
+    assert error.value.detail["code"] == "invalid_extra_combination"
+
+
+@pytest.mark.asyncio
+async def test_prelaid_has_no_phantom_route_or_hole_and_new_route_quotes(monkeypatch):
+    entry = _new_entry(work="prelaid_route", base="300.00", route="0")
+    BookService._validate_entries([entry])
+    scope = TenantScope(tenant_id=12, storefront_id=34)
+    book = InstallationPriceBook(id=8, tenant_id=12, revision=2, fingerprint="x", entries=[entry])
+    async def latest(_session, _scope):
+        return book
+    async def profile(_session, _scope, target):
+        return target.typed_profile, {}
+    monkeypatch.setattr(BookService, "latest", latest)
+    monkeypatch.setattr(BookService, "_profile", profile)
+    installation = {"key": "one", "work_kind": "prelaid_route",
+        "typed_profile": {"product_kind": "complete_split_system", "indoor_type": "wall", "confirmed": True},
+        "route_length_m": 0, "holes_by_type": {"through_thin": 1}}
+    result = await BookService.preview(None, scope, InstallationPreviewPayload.model_validate(
+        {"installations": [installation]}), persist=False)
+    assert result.status == "fixed" and result.total == Decimal("330.00")
+    assert result.installations[0].measured[0].included == 0
+    installation["route_length_m"] = 1
+    quoted = await BookService.preview(None, scope, InstallationPreviewPayload.model_validate(
+        {"installations": [installation]}), persist=False)
+    assert quoted.status == "quote" and quoted.reason_code == "prelaid_new_route_requires_quote"
+
+
+@pytest.mark.asyncio
+async def test_site_access_needs_scoped_manager_actual_before_fixed(monkeypatch):
+    entry = _new_entry()
+    BookService._validate_entries([entry])
+    scope = TenantScope(tenant_id=12, storefront_id=34)
+    book = InstallationPriceBook(id=8, tenant_id=12, revision=2, fingerprint="x", entries=[entry])
+    async def latest(_session, _scope):
+        return book
+    async def profile(_session, _scope, target):
+        return target.typed_profile, {}
+    monkeypatch.setattr(BookService, "latest", latest)
+    monkeypatch.setattr(BookService, "_profile", profile)
+    source = {"installations": [{"key": "one", "typed_profile": {
+        "product_kind": "complete_split_system", "indoor_type": "wall", "confirmed": True},
+        "route_length_m": 3, "holes_by_type": {}}],
+        "site_extras": [{"code": "access.scaffold"}]}
+    provisional = await BookService.preview(None, scope, InstallationPreviewPayload.model_validate(source), persist=False)
+    assert provisional.status == "provisional" and provisional.total == Decimal("700.00")
+    assert provisional.components[-1].is_provisional
+    source["approved_site_access"] = [{"code": "access.scaffold", "actual_total": "125.00",
+        "scope_note": "Леса на фасаде первого этажа"}]
+    fixed = await BookService.preview(None, scope, InstallationPreviewPayload.model_validate(source), persist=False)
+    assert fixed.status == "fixed" and fixed.total == Decimal("725.00")
+    assert fixed.site_work[0].scope_note == "Леса на фасаде первого этажа"

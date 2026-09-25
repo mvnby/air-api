@@ -90,7 +90,7 @@ describe('canonical installation book manager', () => {
     await wrapper.find('[aria-label="Газовая труба"]').setValue('1/2"');
     await save(wrapper);
     expect(mocks.createTariff).toHaveBeenCalledWith(expect.objectContaining({
-      installation_code: expect.stringMatching(/^installation\.cassette\.[a-f0-9]{8}$/),
+      installation_code: expect.stringMatching(/^installation\.complete_split_system\.standard\.cassette\.[a-f0-9]{8}$/),
       installation_match: expect.objectContaining({ indoor_type: 'cassette', capacity_max_kw: 7 }),
     }));
     expect(mocks.publish).not.toHaveBeenCalled();

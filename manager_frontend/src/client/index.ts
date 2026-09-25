@@ -235,6 +235,7 @@ export type { InstallationPublishResponse } from './models/InstallationPublishRe
 export type { InstallationResolvePayload } from './models/InstallationResolvePayload';
 export type { InstallationResolveResponse } from './models/InstallationResolveResponse';
 export type { InstallationSelectedWork } from './models/InstallationSelectedWork';
+export type { InstallationSiteApproval } from './models/InstallationSiteApproval';
 export type { InstallationWorkSummary } from './models/InstallationWorkSummary';
 export type { LeadCreatePayload } from './models/LeadCreatePayload';
 export type { LeadListResponse } from './models/LeadListResponse';
