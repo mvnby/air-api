@@ -45,6 +45,7 @@ class PublicWriteCommandResponse(Generic[ResponseT]):
     status_code: int = 200
     resource_type: str | None = None
     resource_id: int | None = None
+    response_max_bytes: int = IDEMPOTENCY_RESPONSE_MAX_BYTES
 
 
 @dataclass(frozen=True)
@@ -77,7 +78,6 @@ class PublicWriteIdempotencyService:
         request_fingerprint: str,
         response_model: type[ResponseT],
         operation: Callable[[], Awaitable[PublicWriteCommandResponse[ResponseT]]],
-        response_max_bytes: int = IDEMPOTENCY_RESPONSE_MAX_BYTES,
     ) -> PublicWriteCommandOutcome[ResponseT]:
         normalized_command = cls._normalize_command(command_name)
         normalized_fingerprint = cls._normalize_fingerprint(request_fingerprint)
@@ -115,7 +115,7 @@ class PublicWriteIdempotencyService:
                     )
 
                 result = await operation()
-                cls._complete_receipt(claimed, result, response_max_bytes=response_max_bytes)
+                cls._complete_receipt(claimed, result)
                 session.add(claimed)
                 await session.flush()
                 return PublicWriteCommandOutcome(
@@ -138,7 +138,6 @@ class PublicWriteIdempotencyService:
     def _complete_receipt(
         receipt: PublicWriteIdempotency,
         result: PublicWriteCommandResponse[ResponseT],
-        *, response_max_bytes: int = IDEMPOTENCY_RESPONSE_MAX_BYTES,
     ) -> None:
         body = result.value.model_dump(mode="json")
         encoded = json.dumps(
@@ -147,7 +146,7 @@ class PublicWriteIdempotencyService:
             sort_keys=True,
             separators=(",", ":"),
         ).encode("utf-8")
-        if len(encoded) > response_max_bytes:
+        if len(encoded) > result.response_max_bytes:
             raise ValueError("Idempotency response exceeds durable receipt limit")
         status_code = int(result.status_code)
         if not 200 <= status_code < 300:

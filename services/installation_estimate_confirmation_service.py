@@ -449,11 +449,11 @@ class InstallationEstimateConfirmationService:
             if len(encoded) > cls.ATTACH_RESPONSE_MAX_BYTES:
                 raise cls._bad("estimate_projection_too_large", 422)
             return PublicWriteCommandResponse(value=response, status_code=200,
-                resource_type="installation_estimate", resource_id=estimate_id)
+                resource_type="installation_estimate", resource_id=estimate_id,
+                response_max_bytes=cls.ATTACH_RESPONSE_MAX_BYTES)
 
         return await PublicWriteIdempotencyService.execute(
             session, tenant_scope=scope, command_name="manager_installation_attach_v1",
             idempotency_key=idempotency_key, request_fingerprint=fingerprint,
             response_model=ManagerInstallationAttachResponse, operation=operation,
-            response_max_bytes=cls.ATTACH_RESPONSE_MAX_BYTES,
         )
