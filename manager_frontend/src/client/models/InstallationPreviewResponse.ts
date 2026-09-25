@@ -4,6 +4,8 @@
 /* eslint-disable */
 import type { InstallationAppliedDiscount } from './InstallationAppliedDiscount';
 import type { InstallationComponent } from './InstallationComponent';
+import type { InstallationSelectedWork } from './InstallationSelectedWork';
+import type { InstallationWorkSummary } from './InstallationWorkSummary';
 export type InstallationPreviewResponse = {
     status: 'fixed' | 'from' | 'quote' | 'unavailable';
     reason_code?: (string | null);
@@ -11,6 +13,9 @@ export type InstallationPreviewResponse = {
     currency?: string;
     components?: Array<InstallationComponent>;
     applied_discounts?: Array<InstallationAppliedDiscount>;
+    installations?: Array<InstallationWorkSummary>;
+    site_work?: Array<InstallationSelectedWork>;
+    customer_text?: (string | null);
     subtotal?: (string | null);
     discount?: (string | null);
     total?: (string | null);

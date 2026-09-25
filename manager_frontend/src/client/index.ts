@@ -225,12 +225,15 @@ export type { InstallationLegacyComparisonResponse } from './models/Installation
 export type { InstallationLegacyComparisonRow } from './models/InstallationLegacyComparisonRow';
 export type { InstallationMatcher_Input } from './models/InstallationMatcher_Input';
 export type { InstallationMatcher_Output } from './models/InstallationMatcher_Output';
+export type { InstallationMeasuredWork } from './models/InstallationMeasuredWork';
 export type { InstallationMetaPayload } from './models/InstallationMetaPayload';
 export type { InstallationPreviewPayload } from './models/InstallationPreviewPayload';
 export type { InstallationPreviewResponse } from './models/InstallationPreviewResponse';
 export type { InstallationPublishResponse } from './models/InstallationPublishResponse';
 export type { InstallationResolvePayload } from './models/InstallationResolvePayload';
 export type { InstallationResolveResponse } from './models/InstallationResolveResponse';
+export type { InstallationSelectedWork } from './models/InstallationSelectedWork';
+export type { InstallationWorkSummary } from './models/InstallationWorkSummary';
 export type { LeadCreatePayload } from './models/LeadCreatePayload';
 export type { LeadListResponse } from './models/LeadListResponse';
 export type { LeadLossPayload } from './models/LeadLossPayload';

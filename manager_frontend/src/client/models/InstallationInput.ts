@@ -8,8 +8,8 @@ export type InstallationInput = {
     product_id?: (number | null);
     typed_profile?: (TypedInstallationProfile_Input | null);
     key: string;
-    route_length_m?: (number | string);
-    holes_by_type?: Record<string, (number | string)>;
+    route_length_m: (number | string);
+    holes_by_type: Record<string, (number | string)>;
     extras?: Array<InstallationExtraInput>;
 };
 

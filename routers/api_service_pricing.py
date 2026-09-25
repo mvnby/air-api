@@ -23,6 +23,7 @@ from schemas_installation_price_book import (
     InstallationPreviewPayload, InstallationPreviewResponse,
 )
 from core.storefront_request_envelope import private_storefront_response_headers
+from core.public_write_idempotency import get_required_public_write_idempotency_key
 
 
 router = APIRouter(
@@ -61,6 +62,7 @@ async def resolve_public_installation_tariff(
 async def preview_public_installation_estimate(
     payload: InstallationPreviewPayload,
     response: Response,
+    idempotency_key: str = Depends(get_required_public_write_idempotency_key),
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
@@ -70,7 +72,7 @@ async def preview_public_installation_estimate(
     ):
         return InstallationPreviewResponse(status="unavailable", reason_code="service_direction_not_enabled",
                                            scope_ref=InstallationPriceBookService._scope_ref(tenant_scope))
-    return await InstallationPriceBookService.preview(session, tenant_scope, payload)
+    return await InstallationPriceBookService.preview(session, tenant_scope, payload, idempotency_key=idempotency_key)
 
 
 def _public_tariff(tariff: ServiceTariff) -> PublicServiceTariffResponse:

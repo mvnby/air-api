@@ -31,6 +31,12 @@ def test_demo_permits_pure_calculators_only_as_post(operation_id):
         enforce_demo_read_only(_request("PUT", operation_id), demo_read_only=True)
 
 
+def test_demo_rejects_installation_preview_because_it_stores_a_receipt():
+    with pytest.raises(HTTPException) as error:
+        enforce_demo_read_only(_request("POST", "preview_public_installation_estimate"), demo_read_only=True)
+    assert error.value.status_code == 403
+
+
 @pytest.mark.parametrize("operation_id", [
     "get_manager_document_drive_authorization_url", "get_manager_google_auth_url",
     "get_manager_managed_document_google_edit_session",

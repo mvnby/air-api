@@ -4275,15 +4275,26 @@
         ],
         "summary": "Preview Public Installation Estimate",
         "operationId": "preview_public_installation_estimate",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/InstallationPreviewPayload"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -38056,8 +38067,7 @@
                 "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$"
               }
             ],
-            "title": "Route Length M",
-            "default": "3"
+            "title": "Route Length M"
           },
           "holes_by_type": {
             "additionalProperties": {
@@ -38084,7 +38094,9 @@
         },
         "type": "object",
         "required": [
-          "key"
+          "key",
+          "route_length_m",
+          "holes_by_type"
         ],
         "title": "InstallationInput"
       },
@@ -38460,6 +38472,47 @@
         ],
         "title": "InstallationMatcher"
       },
+      "InstallationMeasuredWork": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "actual": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Actual"
+          },
+          "included": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Included"
+          },
+          "extra": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Extra"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "label",
+          "unit",
+          "actual",
+          "included",
+          "extra"
+        ],
+        "title": "InstallationMeasuredWork"
+      },
       "InstallationMetaPayload": {
         "properties": {
           "source": {
@@ -38593,6 +38646,31 @@
             },
             "type": "array",
             "title": "Applied Discounts"
+          },
+          "installations": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationWorkSummary"
+            },
+            "type": "array",
+            "title": "Installations"
+          },
+          "site_work": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationSelectedWork"
+            },
+            "type": "array",
+            "title": "Site Work"
+          },
+          "customer_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Text"
           },
           "subtotal": {
             "anyOf": [
@@ -38898,6 +38976,74 @@
           "scope_ref"
         ],
         "title": "InstallationResolveResponse"
+      },
+      "InstallationSelectedWork": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "quantity": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Quantity"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "label",
+          "unit",
+          "quantity"
+        ],
+        "title": "InstallationSelectedWork"
+      },
+      "InstallationWorkSummary": {
+        "properties": {
+          "installation_key": {
+            "type": "string",
+            "title": "Installation Key"
+          },
+          "tariff_code": {
+            "type": "string",
+            "title": "Tariff Code"
+          },
+          "work_label": {
+            "type": "string",
+            "title": "Work Label"
+          },
+          "measured": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationMeasuredWork"
+            },
+            "type": "array",
+            "title": "Measured"
+          },
+          "selected_extras": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationSelectedWork"
+            },
+            "type": "array",
+            "title": "Selected Extras"
+          }
+        },
+        "type": "object",
+        "required": [
+          "installation_key",
+          "tariff_code",
+          "work_label",
+          "measured",
+          "selected_extras"
+        ],
+        "title": "InstallationWorkSummary"
       },
       "LeadCreatePayload": {
         "properties": {

@@ -203,9 +203,13 @@ class InstallationPreviewSnapshot(SQLModel, table=True):
     """Private, scope-bound preview; the bearer token is stored only as a hash."""
 
     __tablename__ = "installation_preview_snapshot"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "storefront_id", "key_hash", name="uq_installation_preview_scope_key"),
+    )
 
     id: Optional[int] = Field(default=None, primary_key=True)
     token_hash: str = Field(unique=True, index=True)
+    key_hash: str = Field(index=True)
     tenant_id: int = Field(foreign_key="tenant.id", index=True)
     storefront_id: int = Field(foreign_key="storefront.id", index=True)
     price_book_id: int = Field(foreign_key="installation_price_book.id", index=True)

@@ -39,6 +39,7 @@ def upgrade() -> None:
         "installation_preview_snapshot",
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("token_hash", sa.String(), nullable=False),
+        sa.Column("key_hash", sa.String(), nullable=False),
         sa.Column("tenant_id", sa.Integer(), sa.ForeignKey("tenant.id"), nullable=False),
         sa.Column("storefront_id", sa.Integer(), sa.ForeignKey("storefront.id"), nullable=False),
         sa.Column("price_book_id", sa.Integer(), sa.ForeignKey("installation_price_book.id"), nullable=False),
@@ -46,8 +47,9 @@ def upgrade() -> None:
         sa.Column("snapshot", sa.JSON(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
+        sa.UniqueConstraint("tenant_id", "storefront_id", "key_hash", name="uq_installation_preview_scope_key"),
     )
-    for name in ("token_hash", "tenant_id", "storefront_id", "price_book_id", "expires_at"):
+    for name in ("token_hash", "key_hash", "tenant_id", "storefront_id", "price_book_id", "expires_at"):
         op.create_index(f"ix_installation_preview_snapshot_{name}", "installation_preview_snapshot", [name], unique=name == "token_hash")
 
 

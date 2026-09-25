@@ -844,16 +844,21 @@ export class ApiService {
     }
     /**
      * Preview Public Installation Estimate
+     * @param idempotencyKey
      * @param requestBody
      * @returns InstallationPreviewResponse Successful Response
      * @throws ApiError
      */
     public static previewPublicInstallationEstimate(
+        idempotencyKey: string,
         requestBody: InstallationPreviewPayload,
     ): CancelablePromise<InstallationPreviewResponse> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/service-pricing/installation/preview',
+            headers: {
+                'Idempotency-Key': idempotencyKey,
+            },
             body: requestBody,
             mediaType: 'application/json',
             errors: {

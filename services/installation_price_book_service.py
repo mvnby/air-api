@@ -5,8 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import secrets
-from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -15,7 +13,7 @@ from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models import InstallationPriceBook, InstallationPreviewSnapshot, InstallationRate, Product, ServiceTariff, ServiceTariffRule
+from models import InstallationPriceBook, InstallationRate, Product, ServiceTariff, ServiceTariffRule
 from models.tenancy import TenantScope
 from schemas import ManagerInstallEstimateCalculatePayload
 from schemas_installation_price_book import (
@@ -25,6 +23,7 @@ from schemas_installation_price_book import (
     InstallationLegacyComparisonResponse, InstallationLegacyComparisonRow,
     InstallationLegacyCandidate,
     InstallationAppliedDiscount,
+    InstallationMeasuredWork, InstallationSelectedWork, InstallationWorkSummary,
 )
 from services.installation_product_profile import _spec_value
 from services.product_collection_catalog_access import ProductCollectionCatalogAccess
@@ -35,11 +34,35 @@ from services.spec_normalizer import clean_value
 from services.product_kind_service import ProductKindService
 from services.tariffs_service import TariffsService
 from services.service_catalog_scope import service_catalog_scope_clause
+from services.installation_preview_receipt_service import InstallationPreviewReceiptService
 
 
 class InstallationPriceBookService:
     RESOLVER_VERSION = "installation-book-v1"
-    PREVIEW_TTL = timedelta(minutes=30)
+    _WORK_LABELS = {
+        "wall": "Монтаж настенного комплекта",
+        "cassette": "Монтаж кассетного комплекта",
+        "duct": "Монтаж канального комплекта",
+        "floor_ceiling": "Монтаж напольно-потолочного комплекта",
+        "column": "Монтаж колонного комплекта",
+        "console": "Монтаж консольного комплекта",
+    }
+    _EXTRA_LABELS = {
+        "pump.supply": "Поставка насоса",
+        "pump.install": "Монтаж насоса",
+        "access.scaffold": "Леса",
+        "access.lift": "Вышка",
+        "chase.extra_m": "Штробление",
+    }
+    _COMPONENT_RULES = {
+        "route.extra_m": ("per_meter_over_included", "м", False),
+        "pump.supply": ("per_unit_manual", "шт", True),
+        "pump.install": ("per_unit_manual", "шт", True),
+        "access.scaffold": ("fixed_once", "шт", True),
+        "access.lift": ("fixed_once", "шт", True),
+        "chase.extra_m": ("per_unit_manual", "м", True),
+        "discount.equipment_bundle": ("fixed_once", "шт", False),
+    }
 
     @staticmethod
     def _pipe(value: str) -> str:
@@ -122,6 +145,46 @@ class InstallationPriceBookService:
         ))
 
     @classmethod
+    def _component_signature(cls, code: str) -> tuple[str, str, bool] | None:
+        if re.fullmatch(r"hole\.[a-z][a-z0-9_]*\.extra", code):
+            return ("per_hole_manual", "шт", False)
+        return cls._COMPONENT_RULES.get(code)
+
+    @classmethod
+    def _work_label(cls, entry: dict[str, Any]) -> str:
+        indoor_type = InstallationMatcher.model_validate(entry["match"]).indoor_type
+        return cls._WORK_LABELS[indoor_type]
+
+    @staticmethod
+    def _quantity_text(value: Decimal) -> str:
+        return format(value.normalize(), "f").replace(".", ",")
+
+    @classmethod
+    def _measured_label(cls, code: str) -> str:
+        if code == "route.length_m":
+            return "Трасса"
+        if code == "hole.diamond":
+            return "Алмазные отверстия"
+        return f"Отверстия типа {code.removeprefix('hole.')}"
+
+    @classmethod
+    def _summary_text(cls, summary: InstallationWorkSummary) -> str:
+        parts = [summary.work_label]
+        for measured in summary.measured:
+            actual = cls._quantity_text(measured.actual)
+            included = cls._quantity_text(measured.included)
+            detail = f"{measured.label.lower()} {actual} {measured.unit} (включено {included} {measured.unit}"
+            if measured.extra:
+                detail += f", дополнительно {cls._quantity_text(measured.extra)} {measured.unit}"
+            parts.append(detail + ")")
+        for selected in summary.selected_extras:
+            detail = selected.label.lower()
+            if selected.quantity != 1:
+                detail += f" {cls._quantity_text(selected.quantity)} {selected.unit}"
+            parts.append(detail)
+        return f"Установка {summary.installation_key}: " + ", ".join(parts)
+
+    @classmethod
     def _overlap(cls, a: InstallationMatcher, b: InstallationMatcher) -> bool:
         if a.indoor_type != b.indoor_type or a.product_kind != b.product_kind:
             return False
@@ -162,6 +225,9 @@ class InstallationPriceBookService:
                 if entry["mode"] != "quote" and f"hole.{hole_type}.extra" not in rule_codes:
                     raise cls._bad("missing_hole_price", f"{code}: extra hole price is required")
             for rule in entry["rules"]:
+                expected = cls._component_signature(rule["code"])
+                if expected is None or (rule["rule_type"], rule["unit"], bool(rule["is_optional"])) != expected:
+                    raise cls._bad("invalid_component_rule", f"{rule['code']}: calculation type, unit, or optional mode is invalid")
                 signature = (rule["rule_type"], rule["unit"])
                 old_signature = component_signatures.setdefault(rule["code"], signature)
                 if old_signature != signature:
@@ -172,10 +238,6 @@ class InstallationPriceBookService:
                     old = site_prices.setdefault(rule["code"], rule["unit_price"])
                     if old != rule["unit_price"]:
                         raise cls._bad("site_extra_conflict", f"{rule['code']}: site prices disagree")
-                if rule["code"] == "route.extra_m" and rule["rule_type"] != "per_meter_over_included":
-                    raise cls._bad("invalid_component_rule", "route.extra_m must use per_meter_over_included")
-                if rule["code"].startswith("hole.") and rule["rule_type"] != "per_hole_manual":
-                    raise cls._bad("invalid_component_rule", "hole extra must use per_hole_manual")
             if len(rule_codes) != len(entry["rules"]):
                 raise cls._bad("duplicate_component_code", f"{code}: duplicate component code")
             # A price-book matcher is structured. Legacy category/power strings never select a price.
@@ -230,7 +292,7 @@ class InstallationPriceBookService:
                     unit_price = exact_money(rule.unit_price)
                 except ValueError as exc:
                     raise cls._bad("invalid_rule_price", f"Rule {rule.id}: {exc}") from exc
-                if component_code not in {"route.extra_m", "pump.supply", "pump.install", "access.scaffold", "access.lift", "discount.equipment_bundle", "chase.extra_m"} and not re.fullmatch(r"hole\.[a-z][a-z0-9_]*\.extra", component_code):
+                if cls._component_signature(component_code) is None:
                     raise cls._bad("unknown_component_code", f"Rule {rule.id}: unsupported component code")
                 if component_code not in {"route.extra_m", "discount.equipment_bundle"} and not component_code.startswith("hole.") and not rule.is_optional:
                     raise cls._bad("extra_default_on", f"Rule {rule.id}: extras must default off")
@@ -377,18 +439,22 @@ class InstallationPriceBookService:
         if not book:
             return InstallationResolveResponse(status="quote", reason_code="price_book_not_published", **base), None
         candidates: list[dict[str, Any]] = []
-        missing: set[str] = set()
+        missing: list[tuple[int, str]] = []
         for entry in book.entries:
             matched, reason = cls._match(profile, entry)
             if matched:
                 candidates.append(entry)
             if reason:
-                missing.add(reason)
+                missing.append((cls._specificity(InstallationMatcher.model_validate(entry["match"])), reason))
         if not candidates:
-            reason = sorted(missing)[0] if missing else "no_matching_tariff"
+            reason = sorted(missing, key=lambda item: (-item[0], item[1]))[0][1] if missing else "no_matching_tariff"
             return InstallationResolveResponse(status="quote", reason_code=reason, **base), None
         candidates.sort(key=lambda item: cls._specificity(InstallationMatcher.model_validate(item["match"])), reverse=True)
-        if len(candidates) > 1 and cls._specificity(InstallationMatcher.model_validate(candidates[0]["match"])) == cls._specificity(InstallationMatcher.model_validate(candidates[1]["match"])):
+        top_specificity = cls._specificity(InstallationMatcher.model_validate(candidates[0]["match"]))
+        relevant_missing = sorted((reason for specificity, reason in missing if specificity >= top_specificity))
+        if relevant_missing:
+            return InstallationResolveResponse(status="quote", reason_code=relevant_missing[0], **base), None
+        if len(candidates) > 1 and top_specificity == cls._specificity(InstallationMatcher.model_validate(candidates[1]["match"])):
             return InstallationResolveResponse(status="quote", reason_code="matcher_conflict", **base), None
         entry = candidates[0]
         match = InstallationMatcher.model_validate(entry["match"])
@@ -398,7 +464,8 @@ class InstallationPriceBookService:
             price_book_id=book.id, price_book_revision=book.revision,
             included={"route_m": entry["included_route_m"], "holes_by_type": entry["included_holes"]},
             available_extras=[rule["code"] for rule in entry["rules"] if rule["is_optional"]],
-            explanation=entry["description"], price_mode=entry["mode"],
+            explanation=f"{cls._work_label(entry)}; включена трасса до {cls._quantity_text(Decimal(entry['included_route_m']))} м",
+            price_mode=entry["mode"],
             base_price=Decimal(entry["base_price"]) if entry["mode"] != "quote" else None), entry
 
     @classmethod
@@ -426,7 +493,14 @@ class InstallationPriceBookService:
         return cls._component(rule["code"], line, key, actual=actual, included=included) if line else None
 
     @classmethod
-    async def preview(cls, session: AsyncSession, scope: TenantScope, payload: InstallationPreviewPayload) -> InstallationPreviewResponse:
+    async def preview(cls, session: AsyncSession, scope: TenantScope, payload: InstallationPreviewPayload,
+                      *, idempotency_key: str) -> InstallationPreviewResponse:
+        request_hash = InstallationPreviewReceiptService.input_hash(payload)
+        key_hash = InstallationPreviewReceiptService.key_hash(idempotency_key)
+        replay = await InstallationPreviewReceiptService.replay(
+            session, scope, key_hash=key_hash, request_hash=request_hash)
+        if replay is not None:
+            return replay
         book = await cls.latest(session, scope)
         base = {"scope_ref": cls._scope_ref(scope), "price_book_id": book.id if book else None,
                 "price_book_revision": book.revision if book else None}
@@ -436,6 +510,8 @@ class InstallationPriceBookService:
             return InstallationPreviewResponse(status="quote", reason_code="price_book_not_published", **base)
         components: list[InstallationComponent] = []
         applied_discounts: list[InstallationAppliedDiscount] = []
+        work_summaries: list[InstallationWorkSummary] = []
+        site_work: list[InstallationSelectedWork] = []
         resolutions: list[dict[str, Any]] = []
         matched_entries: list[dict[str, Any]] = []
         status = "fixed"
@@ -449,11 +525,14 @@ class InstallationPriceBookService:
                 status = "from"
             matched_entries.append(entry)
             resolutions.append({"key": installation.key, "resolution": result.model_dump(mode="json")})
-            tariff = ServiceTariff(id=entry["tariff_id"], selector_label=entry["short_name"],
-                                   short_name=entry["short_name"], full_description=entry["description"],
+            work_label = cls._work_label(entry)
+            tariff = ServiceTariff(id=entry["tariff_id"], selector_label=work_label,
+                                   short_name=work_label, full_description=work_label,
                                    base_price=int(Decimal(entry["base_price"])))
             line = ServiceEstimateService._build_base_line(tariff, 1, 0)
             components.append(cls._component("installation.base", line, installation.key))
+            measured = []
+            selected_extras = []
             rules = {rule["code"]: rule for rule in entry["rules"]}
             bundle_discount = rules.get("discount.equipment_bundle")
             if installation.product_id is not None and bundle_discount is not None:
@@ -461,19 +540,29 @@ class InstallationPriceBookService:
                     code="discount.equipment_bundle", installation_key=installation.key,
                     amount=Decimal(bundle_discount["unit_price"])))
             included_route = Decimal(entry["included_route_m"])
+            measured.append(InstallationMeasuredWork(
+                code="route.length_m", label="Трасса", unit="м",
+                actual=installation.route_length_m, included=included_route,
+                extra=max(installation.route_length_m - included_route, Decimal("0")),
+            ))
             if installation.route_length_m > included_route:
                 rule = rules.get("route.extra_m")
                 if rule is None:
                     return InstallationPreviewResponse(status="quote", reason_code="missing_route_price", **base)
                 part = cls._rule_component(entry, rule, installation.key, route=installation.route_length_m,
                                            actual=installation.route_length_m, included=included_route)
-                if part:
-                    components.append(part)
+                if part is None:
+                    raise cls._bad("unpriced_component", "Selected route overage produced no line")
+                components.append(part)
             for hole_type, actual in installation.holes_by_type.items():
                 if actual != actual.to_integral_value():
                     raise cls._bad("invalid_hole_quantity", "Hole counts must be whole numbers")
                 included = Decimal(entry["included_holes"].get(hole_type, "0"))
                 extra = max(actual - included, Decimal("0"))
+                measured.append(InstallationMeasuredWork(
+                    code=f"hole.{hole_type}", label=cls._measured_label(f"hole.{hole_type}"),
+                    unit="шт", actual=actual, included=included, extra=extra,
+                ))
                 if extra == 0:
                     continue
                 code = f"hole.{hole_type}.extra"
@@ -482,8 +571,9 @@ class InstallationPriceBookService:
                     return InstallationPreviewResponse(status="quote", reason_code="missing_hole_price", **base)
                 part = cls._rule_component(entry, rule, installation.key, route=installation.route_length_m,
                                            holes=int(extra), actual=actual, included=included)
-                if part:
-                    components.append(part)
+                if part is None:
+                    raise cls._bad("unpriced_component", f"{code}: selected hole overage produced no line")
+                components.append(part)
             seen_extras: set[str] = set()
             for extra in installation.extras:
                 if extra.code in seen_extras or extra.code.startswith("access."):
@@ -496,8 +586,17 @@ class InstallationPriceBookService:
                     raise cls._bad("invalid_extra_quantity", f"{extra.code}: one per installation")
                 part = cls._rule_component(entry, rule, installation.key, route=installation.route_length_m,
                                            input_qty=extra.quantity)
-                if part:
-                    components.append(part)
+                if part is None:
+                    raise cls._bad("unpriced_component", f"{extra.code}: selected extra produced no line")
+                components.append(part)
+                selected_extras.append(InstallationSelectedWork(
+                    code=extra.code, label=cls._EXTRA_LABELS[extra.code],
+                    unit=part.unit, quantity=extra.quantity,
+                ))
+            work_summaries.append(InstallationWorkSummary(
+                installation_key=installation.key, tariff_code=entry["code"],
+                work_label=work_label, measured=measured, selected_extras=selected_extras,
+            ))
         seen_site: set[str] = set()
         for extra in payload.site_extras:
             if extra.code in seen_site or not extra.code.startswith("access."):
@@ -511,8 +610,13 @@ class InstallationPriceBookService:
                 raise cls._bad("invalid_site_quantity", "Site access units must be whole")
             entry, rule = rule_entry
             part = cls._rule_component(entry, rule, None, route=Decimal("0"), input_qty=extra.quantity)
-            if part:
-                components.append(part)
+            if part is None:
+                raise cls._bad("unpriced_component", f"{extra.code}: selected site work produced no line")
+            components.append(part)
+            site_work.append(InstallationSelectedWork(
+                code=extra.code, label=cls._EXTRA_LABELS[extra.code],
+                unit=part.unit, quantity=extra.quantity,
+            ))
         subtotal = sum((item.gross for item in components), Decimal("0.00"))
         discount = sum((item.amount for item in applied_discounts), Decimal("0.00"))
         if discount > subtotal:
@@ -521,21 +625,23 @@ class InstallationPriceBookService:
         for item, net in zip(components, net_amounts):
             item.net = net
             item.discount = item.gross - net
+        text_parts = [cls._summary_text(summary) for summary in work_summaries]
+        if site_work:
+            text_parts.append("На объекте: " + ", ".join(
+                f"{item.label.lower()} {cls._quantity_text(item.quantity)} {item.unit}"
+                for item in site_work
+            ))
+        customer_text = ". ".join(text_parts) + "."
         response = InstallationPreviewResponse(status=status, components=components,
             applied_discounts=applied_discounts, subtotal=subtotal,
-            discount=discount, total=subtotal - discount, explanation="Lower-bound estimate" if status == "from" else None,
+            installations=work_summaries, site_work=site_work, customer_text=customer_text,
+            discount=discount, total=subtotal - discount,
+            explanation=("Стоимость указана как нижняя граница. " if status == "from" else "") + customer_text,
             **base)
-        token = secrets.token_urlsafe(32)
-        now = datetime.now(timezone.utc)
-        expires = now + cls.PREVIEW_TTL
         snapshot = {"resolver_version": cls.RESOLVER_VERSION, "scope": {"tenant_id": scope.tenant_id,
                     "storefront_id": scope.storefront_id}, "price_book_id": book.id, "revision": book.revision,
                     "input": payload.model_dump(mode="json"), "resolutions": resolutions,
                     "result": response.model_dump(mode="json")}
-        session.add(InstallationPreviewSnapshot(token_hash=hashlib.sha256(token.encode()).hexdigest(),
-            tenant_id=scope.tenant_id, storefront_id=scope.storefront_id, price_book_id=book.id,
-            input_hash=cls._fingerprint(snapshot["input"]), snapshot=snapshot, expires_at=expires))
-        await session.commit()
-        response.preview_ref = token
-        response.expires_at = expires
-        return response
+        return await InstallationPreviewReceiptService.store_or_replay(
+            session, scope, key_hash=key_hash, request_hash=request_hash,
+            price_book_id=book.id, snapshot=snapshot)

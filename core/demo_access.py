@@ -17,7 +17,6 @@ _READ_ONLY_POST_OPERATIONS = frozenset({
     CALCULATE_MANAGER_INSTALL_ESTIMATE,
     "calculate_public_service_tariff",
     "resolve_public_installation_tariff",
-    "preview_public_installation_estimate",
 })
 _CONNECTION_OPERATIONS = frozenset({
     GET_MANAGER_DOCUMENT_DRIVE_AUTHORIZATION_URL,

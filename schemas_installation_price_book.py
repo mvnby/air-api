@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
+import re
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -91,15 +92,16 @@ class InstallationExtraInput(BaseModel):
 
 class InstallationInput(InstallationTarget):
     key: str = Field(min_length=1, max_length=80)
-    route_length_m: Decimal = Field(default=Decimal("3"), ge=0, le=1000, decimal_places=2)
-    holes_by_type: dict[str, Decimal] = Field(default_factory=dict)
+    route_length_m: Decimal = Field(ge=0, le=1000, decimal_places=2)
+    holes_by_type: dict[str, Decimal]
     extras: list[InstallationExtraInput] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def valid_holes(self):
-        if any(not value.is_finite() or value < 0 or value > 100 or value != value.to_integral_value()
-               for value in self.holes_by_type.values()):
-            raise ValueError("holes_by_type quantities must be whole and between 0 and 100")
+        if any(re.fullmatch(r"[a-z][a-z0-9_]*", kind) is None or
+               not value.is_finite() or value < 0 or value > 100 or value != value.to_integral_value()
+               for kind, value in self.holes_by_type.items()):
+            raise ValueError("holes_by_type keys must be stable codes and quantities whole between 0 and 100")
         return self
 
 
@@ -136,6 +138,30 @@ class InstallationAppliedDiscount(BaseModel):
     amount: Decimal
 
 
+class InstallationMeasuredWork(BaseModel):
+    code: str
+    label: str
+    unit: str
+    actual: Decimal
+    included: Decimal
+    extra: Decimal
+
+
+class InstallationSelectedWork(BaseModel):
+    code: str
+    label: str
+    unit: str
+    quantity: Decimal
+
+
+class InstallationWorkSummary(BaseModel):
+    installation_key: str
+    tariff_code: str
+    work_label: str
+    measured: list[InstallationMeasuredWork]
+    selected_extras: list[InstallationSelectedWork]
+
+
 class InstallationPreviewResponse(BaseModel):
     status: ResolutionStatus
     reason_code: str | None = None
@@ -143,6 +169,9 @@ class InstallationPreviewResponse(BaseModel):
     currency: Literal["BYN"] = "BYN"
     components: list[InstallationComponent] = Field(default_factory=list)
     applied_discounts: list[InstallationAppliedDiscount] = Field(default_factory=list)
+    installations: list[InstallationWorkSummary] = Field(default_factory=list)
+    site_work: list[InstallationSelectedWork] = Field(default_factory=list)
+    customer_text: str | None = None
     subtotal: Decimal | None = None
     discount: Decimal | None = None
     total: Decimal | None = None

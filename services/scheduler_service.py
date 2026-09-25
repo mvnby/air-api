@@ -451,6 +451,7 @@ class SchedulerService:
         from services.public_write_idempotency_retention_service import (
             PublicWriteIdempotencyRetentionService,
         )
+        from services.installation_preview_retention_service import InstallationPreviewRetentionService
 
         while True:
             try:
@@ -461,9 +462,14 @@ class SchedulerService:
                             limit=1000,
                         )
                     )
+                    previews_deleted = await InstallationPreviewRetentionService.delete_expired_batch(
+                        session, limit=1000,
+                    )
                     await session.commit()
                 if deleted:
                     logger.info("Expired public write receipts deleted: %s", deleted)
+                if previews_deleted:
+                    logger.info("Expired installation previews deleted: %s", previews_deleted)
                 await asyncio.sleep(3600)
             except Exception:
                 logger.exception("Public write receipt retention loop error")
