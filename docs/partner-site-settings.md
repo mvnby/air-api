@@ -29,8 +29,15 @@ not configure an inbox or notification delivery.
   directions and foreign tariff IDs. Preview calculations do not save estimates.
 - The start template makes detached copies of service options, CRM tariffs and
   rules, and public installation rates. These remain separate pricing contracts.
+  When the canonical installation draft matches its latest approved book, the
+  same initial transaction publishes a tenant-owned book from the detached
+  installation copy. Pending canonical edits block the copy instead of
+  seeding an unapproved price.
   Copying never imports customers, orders, requisites, permissions or discounts.
   Existing partner data is never overwritten. Managers edit their tenant's prices.
+  The separately authorized [installation grid rollout](installation-grid-rollout.md)
+  is a one-time reviewed reset of installation drafts only; it retains prior
+  rows and publishes tenant-owned books. Ordinary onboarding never repeats it.
 - Canonical legacy rows retain nullable ownership during this additive migration;
   only canonical scope may read them. All new partner rows have explicit ownership.
 

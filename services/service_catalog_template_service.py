@@ -8,7 +8,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 
 from fastapi import HTTPException, status
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
@@ -16,10 +16,12 @@ from sqlmodel import select
 from core.request_context import current_request_id
 from models import (
     InstallationRate,
+    InstallationPriceBook,
     Service,
     ServiceTariff,
     ServiceTariffRule,
     Storefront,
+    Tenant,
     TenantAuditEvent,
 )
 from models.tenancy import TenantScope
@@ -30,6 +32,7 @@ from schemas_service_catalog import (
 )
 from services.command_transaction import command_transaction
 from services.service_catalog_scope import canonical_service_catalog_clause
+from services.installation_price_book_service import InstallationPriceBookService
 
 
 @dataclass(frozen=True)
@@ -54,6 +57,70 @@ class _CanonicalTemplate:
 
 class ServiceCatalogTemplateService:
     @staticmethod
+    async def lock_clone_scopes(
+        session: AsyncSession, *, tenant_scope: TenantScope,
+    ) -> Storefront:
+        """Take the same tenant -> storefront order as a grid rollout.
+
+        Partner initial setup calls this before its own setting mutation;
+        direct Manager template clone uses it too. No caller may first hold a
+        target storefront lock and then ask for the canonical tenant lock.
+        """
+        system_ids = list((await session.execute(select(Tenant.id).where(
+            Tenant.is_system.is_(True), Tenant.status == "active",
+        ))).scalars().all())
+        if len(system_ids) > 1:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                                detail="Canonical tenant is ambiguous")
+        tenant_ids = sorted({tenant_scope.tenant_id, *system_ids})
+        locked_tenants = list((await session.execute(select(Tenant).where(
+            Tenant.id.in_(tenant_ids),
+        ).order_by(Tenant.id).with_for_update(key_share=True))).scalars().all())
+        if {row.id for row in locked_tenants} != set(tenant_ids):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                                detail="Tenant not found")
+        target = next(row for row in locked_tenants if row.id == tenant_scope.tenant_id)
+        if target.is_system or target.status != "active":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                                detail="Only an active partner can clone the service template")
+        if any(row.id in system_ids and (not row.is_system or row.status != "active")
+               for row in locked_tenants):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                                detail="Canonical tenant changed; refresh the preview")
+        storefront = (await session.execute(select(Storefront).where(
+            Storefront.id == tenant_scope.storefront_id,
+            Storefront.tenant_id == tenant_scope.tenant_id,
+        ).with_for_update(key_share=True))).scalars().first()
+        if storefront is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                                detail="Storefront not found")
+        return storefront
+
+    @staticmethod
+    async def _published_canonical_scope(
+        session: AsyncSession,
+    ) -> tuple[TenantScope, InstallationPriceBook] | None:
+        systems = list((await session.execute(select(Tenant).where(
+            Tenant.is_system.is_(True), Tenant.status == "active",
+        ))).scalars().all())
+        if not systems:
+            return None
+        if len(systems) != 1:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                                detail="Canonical tenant is ambiguous")
+        system = systems[0]
+        storefronts = list((await session.execute(select(Storefront).where(
+            Storefront.tenant_id == system.id, Storefront.is_default.is_(True),
+        ))).scalars().all())
+        if len(storefronts) != 1:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                                detail="Canonical storefront is ambiguous")
+        scope = TenantScope(tenant_id=int(system.id),
+                            storefront_id=int(storefronts[0].id), is_system=True)
+        book = await InstallationPriceBookService.latest(session, scope)
+        return (scope, book) if book is not None else None
+
+    @staticmethod
     async def _load_source(
         session: AsyncSession,
         *,
@@ -69,7 +136,13 @@ class ServiceCatalogTemplateService:
         )
         tariffs_stmt = (
             select(ServiceTariff)
-            .where(canonical_service_catalog_clause(ServiceTariff))
+            .where(
+                canonical_service_catalog_clause(ServiceTariff),
+                # Historical installation drafts stay stored but are not an
+                # onboarding template after a reviewed grid publication.
+                or_(ServiceTariff.service_kind != "installation",
+                    ServiceTariff.is_active.is_(True)),
+            )
             .options(selectinload(ServiceTariff.rules))
             .order_by(ServiceTariff.id)
         )
@@ -208,11 +281,20 @@ class ServiceCatalogTemplateService:
         target_counts = await ServiceCatalogTemplateService._target_counts(
             session, tenant_scope.tenant_id
         )
+        canonical_book_source = await ServiceCatalogTemplateService._published_canonical_scope(session)
+        approved_source = True
+        if canonical_book_source is not None:
+            canonical_scope, canonical_book = canonical_book_source
+            approved_source = (
+                await InstallationPriceBookService.current_draft_fingerprint(
+                    session, canonical_scope,
+                ) == canonical_book.fingerprint
+            )
         return ManagerServiceCatalogTemplatePreviewResponse(
             source_counts=source.counts,
             source_fingerprint=fingerprint,
             target_counts=target_counts,
-            can_clone=sum(target_counts.model_dump().values()) == 0,
+            can_clone=approved_source and sum(target_counts.model_dump().values()) == 0,
         )
 
     @staticmethod
@@ -287,21 +369,9 @@ class ServiceCatalogTemplateService:
             )
 
         async with command_transaction(session):
-            storefront = (
-                await session.execute(
-                    select(Storefront)
-                    .where(
-                        Storefront.id == tenant_scope.storefront_id,
-                        Storefront.tenant_id == tenant_scope.tenant_id,
-                    )
-                    .with_for_update()
-                )
-            ).scalars().first()
-            if storefront is None:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Storefront not found",
-                )
+            await ServiceCatalogTemplateService.lock_clone_scopes(
+                session, tenant_scope=tenant_scope,
+            )
             source = await ServiceCatalogTemplateService._load_source(
                 session, lock=True
             )
@@ -311,6 +381,18 @@ class ServiceCatalogTemplateService:
                     status_code=status.HTTP_409_CONFLICT,
                     detail="Service template changed; refresh the preview",
                 )
+
+            canonical_book_source = await ServiceCatalogTemplateService._published_canonical_scope(session)
+            if canonical_book_source is not None:
+                canonical_scope, canonical_book = canonical_book_source
+                current_draft_fingerprint = await InstallationPriceBookService.current_draft_fingerprint(
+                    session, canonical_scope,
+                )
+                if current_draft_fingerprint != canonical_book.fingerprint:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Canonical installation draft differs from its published book",
+                    )
 
             target_counts = await ServiceCatalogTemplateService._target_counts(
                 session, tenant_scope.tenant_id
@@ -418,6 +500,13 @@ class ServiceCatalogTemplateService:
                         comment=source_rate.comment,
                     )
                 )
+            await session.flush()
+            published = None
+            if canonical_book_source is not None:
+                published = await InstallationPriceBookService.publish(
+                    session, tenant_scope, actor="system:service-catalog-template",
+                    commit=False,
+                )
             if actor_username:
                 session.add(
                     TenantAuditEvent(
@@ -432,6 +521,7 @@ class ServiceCatalogTemplateService:
                         change_set={
                             "source_fingerprint": fingerprint,
                             "cloned_counts": source.counts.model_dump(),
+                            "initial_price_book_revision": published.revision if published else None,
                         },
                     )
                 )
