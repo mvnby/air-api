@@ -26,6 +26,7 @@ from services.public_write_idempotency_service import (
 )
 from services.tenant_scope_service import TenantScope
 from services.storefront_settings_service import StorefrontSettingsService
+from services.public_installation_checkout_service import PublicInstallationCheckoutService
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +43,29 @@ class WebsiteOrderService:
         request_key_hash = PublicWriteIdempotencyService.key_hash(
             idempotency_key
         )
+        request_fingerprint = PublicWriteFingerprintService.for_payload(
+            payload if payload.installation_acceptance is not None else
+            payload.model_dump(mode="json", exclude={"installation_acceptance"})
+        )
 
         async def create() -> PublicWriteCommandResponse[OrderResponse]:
+            if payload.installation_acceptance is not None:
+                async def create_accepted_order(snapshots):
+                    return await WebsiteOrderService._create_order_mutation(
+                        session, payload, tenant_scope=tenant_scope,
+                        request_key_hash=request_key_hash,
+                        catalog_snapshots=snapshots, accepted_installation=True,
+                    )
+
+                response = await PublicInstallationCheckoutService.create(
+                    session, payload, tenant_scope=tenant_scope,
+                    request_key_hash=request_key_hash,
+                    request_fingerprint=request_fingerprint,
+                    create_order=create_accepted_order,
+                )
+                return PublicWriteCommandResponse(
+                    value=response, resource_type="order", resource_id=response.id,
+                )
             created_order = await WebsiteOrderService._create_order_mutation(
                 session,
                 payload,
@@ -67,7 +89,7 @@ class WebsiteOrderService:
             tenant_scope=tenant_scope,
             command_name="public_order_checkout_v1",
             idempotency_key=idempotency_key,
-            request_fingerprint=PublicWriteFingerprintService.for_payload(payload),
+            request_fingerprint=request_fingerprint,
             response_model=OrderResponse,
             operation=create,
         )
@@ -80,6 +102,8 @@ class WebsiteOrderService:
         *,
         tenant_scope: TenantScope,
         request_key_hash: str,
+        catalog_snapshots: dict[int, OrderProductCatalogSnapshot] | None = None,
+        accepted_installation: bool = False,
     ) -> Order:
         logger.info(
             "PUBLIC_CHECKOUT_RECEIVED item_count=%s installation_item_count=%s",
@@ -91,8 +115,8 @@ class WebsiteOrderService:
             for item in payload.items
             if item.product_id is not None
         }
-        storefront_snapshots: dict[int, OrderProductCatalogSnapshot] = {}
-        if product_ids:
+        storefront_snapshots: dict[int, OrderProductCatalogSnapshot] = catalog_snapshots or {}
+        if product_ids and catalog_snapshots is None:
             storefront_snapshots = (
                 await PublicCatalogVisibilityService.get_checkout_snapshots(
                     session,
@@ -117,11 +141,13 @@ class WebsiteOrderService:
                 "Монтаж недоступен для этой витрины",
                 code="installation_not_available",
             )
-        items = await InstallationPricingService.price_public_items(
-            session,
-            payload.items,
-            catalog_snapshots=storefront_snapshots,
-            tenant_scope=tenant_scope,
+        items = (
+            [item.model_dump() for item in payload.items]
+            if accepted_installation else
+            await InstallationPricingService.price_public_items(
+                session, payload.items, catalog_snapshots=storefront_snapshots,
+                tenant_scope=tenant_scope,
+            )
         )
         pricing_snapshots = [
             {
@@ -174,11 +200,9 @@ class WebsiteOrderService:
             tenant_scope=tenant_scope,
             commit=False,
         )
-        await TenantWebsiteEventService.enqueue_checkout(
-            session,
-            order=order,
-            request=payload,
-            tenant_scope=tenant_scope,
-            request_key_hash=request_key_hash,
-        )
+        if not accepted_installation:
+            await TenantWebsiteEventService.enqueue_checkout(
+                session, order=order, request=payload,
+                tenant_scope=tenant_scope, request_key_hash=request_key_hash,
+            )
         return order

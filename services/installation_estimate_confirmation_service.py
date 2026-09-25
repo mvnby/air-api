@@ -102,6 +102,82 @@ class InstallationEstimateConfirmationService:
         return row
 
     @classmethod
+    async def validated_fixed_preview(
+        cls, session: AsyncSession, scope: TenantScope, preview_ref: str,
+    ) -> tuple[InstallationPreviewSnapshot, InstallationPreviewPayload, InstallationPreviewResponse]:
+        """Validate a quoted revision inside the caller-owned write transaction."""
+        row = await cls._preview_row(session, scope, preview_ref)
+        result = InstallationPreviewResponse.model_validate(row.snapshot["result"])
+        if result.status != "fixed" or result.total is None:
+            raise cls._bad("preview_not_fixed")
+        if result.price_book_id != row.price_book_id or result.price_book_revision is None:
+            raise cls._bad("invalid_preview_snapshot")
+        input_payload = InstallationPreviewPayload.model_validate(row.snapshot["input"])
+        latest = await InstallationPriceBookService.latest(session, scope)
+        if latest is None or latest.id != row.price_book_id:
+            raise InstallationPriceChanged(input_payload, latest.revision if latest else None)
+        fresh = await InstallationPriceBookService.preview(session, scope, input_payload, persist=False)
+        if fresh.model_dump(mode="json", exclude={"preview_ref", "expires_at"}) != \
+           result.model_dump(mode="json", exclude={"preview_ref", "expires_at"}):
+            raise InstallationPriceChanged(input_payload, latest.revision)
+        stored_resolutions = {item["key"]: item["resolution"]
+                              for item in row.snapshot.get("resolutions", [])}
+        for installation in input_payload.installations:
+            resolved, _ = await InstallationPriceBookService.resolve(
+                session, scope, installation, book=latest,
+            )
+            stored_resolution = stored_resolutions.get(installation.key) or {}
+            if resolved.model_dump(mode="json").get("profile") != stored_resolution.get("profile"):
+                raise InstallationPriceChanged(input_payload, latest.revision)
+        return row, input_payload, result
+
+    @classmethod
+    async def persist_revision(
+        cls, session: AsyncSession, scope: TenantScope, *, row: InstallationPreviewSnapshot,
+        result: InstallationPreviewResponse, order_id: int, proposal_id: int,
+        key_hash: str, request_hash: str, actor: str,
+        verified_service_only_keys: list[str],
+    ) -> tuple[InstallationEstimate, InstallationEstimateRevision]:
+        """Persist exact accepted bytes; membership/equipment checks remain with caller."""
+        estimate = InstallationEstimate(
+            tenant_id=scope.tenant_id, storefront_id=scope.storefront_id,
+            order_id=order_id, proposal_id=proposal_id,
+            confirmation_key_hash=key_hash, confirmation_request_hash=request_hash,
+            preview_token_hash=row.token_hash, created_by=actor,
+        )
+        session.add(estimate)
+        await session.flush()
+        snapshot = copy.deepcopy(row.snapshot)
+        snapshot["confirmation"] = {
+            "order_id": order_id, "proposal_id": proposal_id,
+            "verified_service_only_keys": sorted(verified_service_only_keys),
+            "actor": actor, "confirmed_at": datetime.now(timezone.utc).isoformat(),
+        }
+        revision = InstallationEstimateRevision(
+            estimate_id=int(estimate.id), revision=1, price_book_id=row.price_book_id,
+            price_book_revision=result.price_book_revision,
+            total=exact_money(result.total), snapshot=snapshot,
+        )
+        cls._projection(revision, "collapsed")
+        cls._projection(revision, "detailed")
+        session.add(revision)
+        await session.flush()
+        return estimate, revision
+
+    @classmethod
+    def new_revision_lines(
+        cls, *, order_id: int, proposal_id: int,
+        saved: InstallationEstimateRevision, mode: str,
+    ) -> list[OrderServiceLink]:
+        lines, _ = cls._projection(saved, mode)
+        return [OrderServiceLink(
+            order_id=order_id, proposal_id=proposal_id,
+            installation_estimate_revision_id=int(saved.id),
+            installation_line_index=index, installation_projection_mode=mode,
+            service_id=None, quantity=1, title=title, price=amount, cost=Decimal("0.00"),
+        ) for index, (title, amount) in enumerate(lines)]
+
+    @classmethod
     def _verify_equipment(
         cls, order: Order, proposal_id: int, input_payload: InstallationPreviewPayload,
         verified_service_only_keys: list[str],
@@ -233,13 +309,8 @@ class InstallationEstimateConfirmationService:
 
             proposal = cls._proposal(order, payload.proposal_id)
             cls._editable(proposal)
-            row = await cls._preview_row(session, scope, payload.preview_ref)
-            result = InstallationPreviewResponse.model_validate(row.snapshot["result"])
-            if result.status != "fixed" or result.total is None:
-                raise cls._bad("preview_not_fixed")
-            if result.price_book_id != row.price_book_id or result.price_book_revision is None:
-                raise cls._bad("invalid_preview_snapshot")
-            input_payload = InstallationPreviewPayload.model_validate(row.snapshot["input"])
+            row, input_payload, result = await cls.validated_fixed_preview(
+                session, scope, payload.preview_ref)
             cls._verify_equipment(order, payload.proposal_id, input_payload, payload.verified_service_only_keys)
             try:
                 await cls.validate_attached_claims(
@@ -247,40 +318,12 @@ class InstallationEstimateConfirmationService:
                 )
             except ValueError as exc:
                 raise cls._bad("installation_already_attached") from exc
-            latest = await InstallationPriceBookService.latest(session, scope)
-            if latest is None or latest.id != row.price_book_id:
-                raise InstallationPriceChanged(input_payload, latest.revision if latest else None)
-            fresh = await InstallationPriceBookService.preview(
-                session, scope, input_payload, persist=False,
+            estimate, revision = await cls.persist_revision(
+                session, scope, row=row, result=result, order_id=payload.order_id,
+                proposal_id=payload.proposal_id, key_hash=key_hash,
+                request_hash=fingerprint, actor=actor,
+                verified_service_only_keys=payload.verified_service_only_keys,
             )
-            if fresh.status != "fixed" or fresh.total != result.total or fresh.components != result.components \
-               or fresh.installations != result.installations or fresh.site_work != result.site_work:
-                raise InstallationPriceChanged(input_payload, latest.revision)
-
-            estimate = InstallationEstimate(
-                tenant_id=scope.tenant_id, storefront_id=scope.storefront_id,
-                order_id=payload.order_id, proposal_id=payload.proposal_id,
-                confirmation_key_hash=key_hash, confirmation_request_hash=fingerprint,
-                preview_token_hash=preview_token_hash,
-                created_by=actor,
-            )
-            session.add(estimate)
-            await session.flush()
-            snapshot = copy.deepcopy(row.snapshot)
-            snapshot["confirmation"] = {
-                "order_id": payload.order_id, "proposal_id": payload.proposal_id,
-                "verified_service_only_keys": sorted(payload.verified_service_only_keys),
-                "actor": actor, "confirmed_at": datetime.now(timezone.utc).isoformat(),
-            }
-            revision = InstallationEstimateRevision(
-                estimate_id=int(estimate.id), revision=1, price_book_id=row.price_book_id,
-                price_book_revision=result.price_book_revision,
-                total=exact_money(result.total), snapshot=snapshot,
-            )
-            cls._projection(revision, "collapsed")
-            cls._projection(revision, "detailed")
-            session.add(revision)
-            await session.flush()
             return PublicWriteCommandResponse(
                 value=cls._confirm_response(estimate, revision), status_code=201,
                 resource_type="installation_estimate", resource_id=estimate.id,
@@ -434,12 +477,8 @@ class InstallationEstimateConfirmationService:
                     await cls.validate_attached_claims(session, order_id, proposal_id, incoming=original_input)
                 except ValueError as exc:
                     raise cls._bad("installation_already_attached") from exc
-                persisted = [OrderServiceLink(
-                    order_id=order_id, proposal_id=proposal_id,
-                    installation_estimate_revision_id=int(saved.id),
-                    installation_line_index=index, installation_projection_mode=payload.mode,
-                    service_id=None, quantity=1, title=title, price=amount, cost=Decimal("0.00"),
-                ) for index, (title, amount) in enumerate(lines)]
+                persisted = cls.new_revision_lines(
+                    order_id=order_id, proposal_id=proposal_id, saved=saved, mode=payload.mode)
                 session.add_all(persisted)
                 await session.flush()
                 await OrderService._refresh_order_financials(session, order)

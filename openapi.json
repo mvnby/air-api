@@ -3068,6 +3068,9 @@
                     },
                     {
                       "$ref": "#/components/schemas/PublicWriteIdempotencyErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PublicOrderPriceChangedResponse"
                     }
                   ],
                   "title": "Response 409 Create Order"
@@ -27347,6 +27350,82 @@
   },
   "components": {
     "schemas": {
+      "AcceptedProductLine-Input": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Product Id"
+          },
+          "quantity": {
+            "type": "integer",
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Quantity"
+          },
+          "unit_price": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$"
+              }
+            ],
+            "title": "Unit Price"
+          },
+          "currency": {
+            "type": "string",
+            "const": "BYN",
+            "title": "Currency"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "product_id",
+          "quantity",
+          "unit_price",
+          "currency"
+        ],
+        "title": "AcceptedProductLine"
+      },
+      "AcceptedProductLine-Output": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Product Id"
+          },
+          "quantity": {
+            "type": "integer",
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Quantity"
+          },
+          "unit_price": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$",
+            "title": "Unit Price"
+          },
+          "currency": {
+            "type": "string",
+            "const": "BYN",
+            "title": "Currency"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "product_id",
+          "quantity",
+          "unit_price",
+          "currency"
+        ],
+        "title": "AcceptedProductLine"
+      },
       "ActTermsPayload": {
         "properties": {
           "result_text": {
@@ -61700,6 +61779,16 @@
               }
             ],
             "title": "Comment"
+          },
+          "installation_acceptance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicInstallationAcceptance"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -67013,6 +67102,109 @@
           "sort_order"
         ],
         "title": "PublicFeaturedSeriesResponse"
+      },
+      "PublicInstallationAcceptance": {
+        "properties": {
+          "preview_ref": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Preview Ref"
+          },
+          "expected_product_lines": {
+            "items": {
+              "$ref": "#/components/schemas/AcceptedProductLine-Input"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Expected Product Lines"
+          },
+          "expected_order_total": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$"
+              }
+            ],
+            "title": "Expected Order Total"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "preview_ref",
+          "expected_product_lines",
+          "expected_order_total"
+        ],
+        "title": "PublicInstallationAcceptance"
+      },
+      "PublicOrderPriceChangedDetail": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "price_changed",
+            "title": "Code",
+            "default": "price_changed"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "new_consent_required": {
+            "type": "boolean",
+            "title": "New Consent Required",
+            "default": true
+          },
+          "current_product_lines": {
+            "items": {
+              "$ref": "#/components/schemas/AcceptedProductLine-Output"
+            },
+            "type": "array",
+            "title": "Current Product Lines"
+          },
+          "current_installation_preview": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Current Installation Preview"
+          },
+          "current_order_total": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Order Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reason",
+          "current_product_lines",
+          "current_installation_preview"
+        ],
+        "title": "PublicOrderPriceChangedDetail"
+      },
+      "PublicOrderPriceChangedResponse": {
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/PublicOrderPriceChangedDetail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "PublicOrderPriceChangedResponse"
       },
       "PublicOrderPricingErrorDetail": {
         "properties": {

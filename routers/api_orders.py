@@ -1,9 +1,12 @@
 """Public order endpoints split from the main API router."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
+from core.storefront_request_envelope import private_storefront_response_headers
 from core.public_write_idempotency import get_public_write_idempotency_key
 from core.tenant_scope import (
     get_public_tenant_scope,
@@ -15,6 +18,7 @@ from schemas import (
     PublicOrderPricingErrorResponse,
 )
 from schemas_public_checkout import (
+    PublicOrderPriceChangedResponse,
     PublicWriteIdempotencyErrorResponse,
     PublicWriteRequestErrorResponse,
 )
@@ -60,6 +64,7 @@ _IDEMPOTENCY_UNAVAILABLE_RESPONSE = {
             "model": (
                 PublicOrderPricingErrorResponse
                 | PublicWriteIdempotencyErrorResponse
+                | PublicOrderPriceChangedResponse
             ),
             "description": (
                 "Installation pricing conflict or Idempotency-Key reused with "
@@ -75,6 +80,9 @@ _IDEMPOTENCY_UNAVAILABLE_RESPONSE = {
 )
 async def create_order(
     payload: OrderPayload,
+    request: Request,
+    response: Response,
+    submitted_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
     idempotency_key: str = Depends(get_public_write_idempotency_key),
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
@@ -83,6 +91,13 @@ async def create_order(
     Create a new order from website.
     Accepts customer information and cart items.
     """
+    key_headers = [value for name, value in request.scope.get("headers", ())
+                   if name.lower() == b"idempotency-key"]
+    if payload.installation_acceptance is not None and (submitted_key is None or len(key_headers) != 1):
+        raise HTTPException(status_code=400, detail="Idempotency-Key is required for installation acceptance",
+                            headers=private_storefront_response_headers())
+    if payload.installation_acceptance is not None:
+        response.headers.update(private_storefront_response_headers())
     try:
         return await WebsiteOrderService.create_order(
             session,
