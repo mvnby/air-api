@@ -92,6 +92,17 @@ async def test_public_checkout_persists_one_exact_revision_and_replays_after_rec
             assert changed.value.detail["reason"] == "product_price_changed"
             assert await session.scalar(select(func.count(Order.id))) == 0
             assert await session.scalar(select(func.count()).select_from(IntegrationOutboxEvent)) == 0
+            product.price = 0
+            session.add(product)
+            await session.commit()
+            with pytest.raises(HTTPException) as unpaid:
+                await WebsiteOrderService.create_order(
+                    session, payload, tenant_scope=scope,
+                    idempotency_key="checkout-unpaid-one-key",
+                )
+            assert unpaid.value.status_code == 422
+            assert unpaid.value.detail["code"] == "equipment_not_paid"
+            assert await session.scalar(select(func.count(Order.id))) == 0
             product.price = 2000
             session.add(product)
             await session.commit()

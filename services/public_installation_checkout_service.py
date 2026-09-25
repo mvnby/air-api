@@ -137,6 +137,8 @@ class PublicInstallationCheckoutService:
         if any(quantities[product_id] > cart_quantities.get(product_id, 0)
                for product_id in quantities):
             raise cls._reject("equipment_not_in_cart", 422)
+        if any(snapshots[int(product_id)].unit_price <= 0 for product_id in quantities):
+            raise cls._reject("equipment_not_paid", 422)
         if any(component.code == "pump.supply" for component in accepted.components):
             resolutions = {item["key"]: item["resolution"]
                            for item in row.snapshot.get("resolutions", [])}
