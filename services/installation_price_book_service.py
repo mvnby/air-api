@@ -26,7 +26,7 @@ from schemas_installation_price_book import (
     InstallationLegacyCandidate,
     InstallationAppliedDiscount,
 )
-from services.installation_product_profile import _positive_float, _spec_value
+from services.installation_product_profile import _spec_value
 from services.product_collection_catalog_access import ProductCollectionCatalogAccess
 from services.service_estimate_money import allocate_discount, exact_money, money
 from services.service_estimate_service import ServiceEstimateService
@@ -47,6 +47,20 @@ class InstallationPriceBookService:
         if "/" in value and '"' not in value:
             value += '"'
         return str(clean_value("pipe_liquid", value))
+
+    @staticmethod
+    def _single_quantity(value: object, *, kind: str) -> Decimal | None:
+        if value is None or isinstance(value, bool):
+            return None
+        raw = str(value).strip().lower().replace(",", ".")
+        unit = r"(?:квт|kw)" if kind == "power" else r"(?:кг|kg)"
+        match = re.fullmatch(rf"(\d+(?:\.\d+)?)\s*{unit}?", raw)
+        if match is None:
+            return None
+        number = Decimal(match.group(1))
+        if not number.is_finite() or number <= 0 or number > (1000 if kind == "power" else 10000):
+            return None
+        return number
 
     @classmethod
     async def legacy_comparison(cls, session: AsyncSession, scope: TenantScope, *, offset: int, limit: int) -> InstallationLegacyComparisonResponse:
@@ -268,8 +282,8 @@ class InstallationPriceBookService:
             InstallationPriceBook.tenant_id == scope.tenant_id).order_by(InstallationPriceBook.revision.desc()).limit(1)
         )).scalars().first()
 
-    @staticmethod
-    async def _profile(session: AsyncSession, scope: TenantScope, target: InstallationTarget) -> tuple[TypedInstallationProfile | None, dict[str, str]]:
+    @classmethod
+    async def _profile(cls, session: AsyncSession, scope: TenantScope, target: InstallationTarget) -> tuple[TypedInstallationProfile | None, dict[str, str]]:
         if target.typed_profile is not None:
             return target.typed_profile, {key: "confirmed_manual" for key in target.typed_profile.model_fields_set}
         visible = await ProductCollectionCatalogAccess.visible_by_ids(session, tenant_scope=scope, product_ids=[target.product_id])
@@ -287,10 +301,11 @@ class InstallationPriceBookService:
             indoor_type = None
         if indoor_type is None:
             indoor_type = system_indoor_type if not raw_type else None
-        capacity = _positive_float(_spec_value(specs, "capacity_cooling_kw"))
+        raw_capacity = _spec_value(specs, "capacity_cooling_kw")
+        capacity = cls._single_quantity(raw_capacity, kind="power")
         sources = {"product_kind": "product.product_kind", "indoor_type": "product.specs.indoor_type" if raw_type else "product.specs.type"}
-        if capacity is None:
-            capacity = _positive_float(product.power_cooling)
+        if raw_capacity is None:
+            capacity = cls._single_quantity(product.power_cooling, kind="power")
             sources["capacity_cooling_kw"] = "product.power_cooling_compatibility"
         else:
             sources["capacity_cooling_kw"] = "product.specs.capacity_cooling_kw"
@@ -303,7 +318,7 @@ class InstallationPriceBookService:
         for key in ("pipe_liquid", "pipe_gas", "weight_indoor", "weight_outdoor", "weight_indoor_package", "weight_outdoor_package"):
             raw = _spec_value(specs, key)
             if raw is not None:
-                values[key] = _positive_float(raw) if key.startswith("weight_") else str(raw).strip()
+                values[key] = cls._single_quantity(raw, kind="weight") if key.startswith("weight_") else str(raw).strip()
                 sources[key] = f"product.specs.{key}"
         return TypedInstallationProfile.model_validate(values), sources
 

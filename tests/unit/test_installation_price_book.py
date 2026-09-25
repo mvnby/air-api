@@ -188,3 +188,11 @@ async def test_quote_tariff_never_exposes_zero_as_a_price(monkeypatch):
         "installations": [{"key": "one", "typed_profile": target}]
     }))
     assert preview.status == "quote" and preview.total is None and preview.preview_ref is None
+
+
+def test_product_capacity_requires_one_numeric_value_before_compatibility():
+    assert BookService._single_quantity("2,5 кВт", kind="power") == Decimal("2.5")
+    assert BookService._single_quantity(2.5, kind="power") == Decimal("2.5")
+    assert BookService._single_quantity("2.5-3.5 кВт", kind="power") is None
+    assert BookService._single_quantity("~2.5 кВт", kind="power") is None
+    assert BookService._single_quantity("22 кг", kind="weight") == Decimal("22")
