@@ -7,12 +7,13 @@ import type { OrderWorkflowType } from './order-workspace';
 import { orderedServiceKinds, preferredServiceKind, serviceCategories } from './service-catalog-order';
 import { formatMoney } from './order-utils';
 
-const props = defineProps<{ workflow: OrderWorkflowType; customerId?: number | null }>();
+const props = defineProps<{ workflow: OrderWorkflowType; customerId?: number | null; canOpenInstallationEstimate?: boolean }>();
 const emit = defineEmits<{
   choose: [tariff: ManagerQuickTariffResponse];
   custom: [];
   createdEstimate: [payload: { id: number; lines: ManagerOrderServiceLinePayload[] }];
   close: [];
+  openInstallationEstimate: [];
 }>();
 
 const tariffs = ref<ManagerTariffResponse[]>([]);
@@ -29,10 +30,14 @@ const extraHoles = ref(0);
 const discount = ref(0);
 const ruleInputs = ref<Record<number, number>>({});
 const calculation = ref<ManagerInstallEstimateResponse | null>(null);
+const publishedRevision = ref<number | null | undefined>(undefined);
+const bookStateLoading = ref(true);
+const bookStateError = ref('');
 const kinds = computed(() => orderedServiceKinds(props.workflow));
 const categories = computed(() => serviceCategories(tariffs.value, kind.value));
 const visibleTariffs = computed(() => tariffs.value.filter((tariff) => (
   tariff.service_kind === kind.value
+  && (tariff.service_kind !== 'installation' || publishedRevision.value === null)
   && (!category.value || tariff.category.trim() === category.value)
   && (!query.value.trim() || [tariff.short_name, tariff.full_description, tariff.category, tariff.power_range]
     .some((value) => String(value || '').toLocaleLowerCase('ru').includes(query.value.trim().toLocaleLowerCase('ru'))))
@@ -59,7 +64,29 @@ const load = async () => {
   }
 };
 
-const choose = (tariff: ManagerTariffResponse) => {
+const loadBookState = async () => {
+  bookStateLoading.value = true;
+  bookStateError.value = '';
+  try {
+    const response = await api.listManagerInstallationRates();
+    publishedRevision.value = response.published_price_book_revision ?? null;
+    if (publishedRevision.value !== null) {
+      selectedTariff.value = null;
+      calculation.value = null;
+    }
+  } catch (cause) {
+    publishedRevision.value = undefined;
+    bookStateError.value = getApiErrorMessage(cause);
+  } finally {
+    bookStateLoading.value = false;
+  }
+};
+
+const choose = async (tariff: ManagerTariffResponse) => {
+  if (tariff.service_kind === 'installation') {
+    await loadBookState();
+    if (publishedRevision.value !== null) return;
+  }
   emit('choose', {
     tariff_id: tariff.id,
     service_kind: tariff.service_kind,
@@ -73,7 +100,11 @@ const choose = (tariff: ManagerTariffResponse) => {
   });
 };
 
-const startEstimate = (tariff: ManagerTariffResponse) => {
+const startEstimate = async (tariff: ManagerTariffResponse) => {
+  if (tariff.service_kind === 'installation') {
+    await loadBookState();
+    if (publishedRevision.value !== null) return;
+  }
   selectedTariff.value = tariff;
   routeLength.value = tariff.included_route_meters;
   quantity.value = 1;
@@ -128,7 +159,7 @@ const saveAndAdd = async () => {
   }
 };
 
-onMounted(load);
+onMounted(() => { void Promise.all([load(), loadBookState()]); });
 </script>
 
 <template>
@@ -139,6 +170,13 @@ onMounted(load);
     </div>
     <p class="mt-1 text-xs text-slate-500">Выберите тариф для услуги или соберите смету с дополнительными работами.</p>
     <p v-if="error" class="mt-2 text-xs text-red-700" role="alert">{{ error }}</p>
+    <p v-if="bookStateError" class="mt-2 text-xs text-amber-800" role="alert">Не удалось проверить книгу цен монтажа: {{ bookStateError }} <button type="button" class="font-semibold underline" @click="loadBookState">Повторить</button></p>
+    <div v-if="publishedRevision !== null && kind === 'installation'" class="mt-3 rounded-lg border border-brand-200 bg-white p-3 text-sm text-slate-700" role="status">
+      <p v-if="publishedRevision !== undefined">Монтаж рассчитывается по опубликованной книге цен в предложении заказа.</p>
+      <p v-else>{{ bookStateLoading ? 'Проверяем книгу цен монтажа…' : 'Пока книга цен не проверена, монтажные тарифы недоступны для быстрого добавления.' }}</p>
+      <button v-if="publishedRevision !== undefined && canOpenInstallationEstimate" type="button" class="btn-mini mt-2" @click="emit('openInstallationEstimate')">Открыть расчёт монтажа</button>
+      <p v-else-if="publishedRevision !== undefined" class="mt-1 text-xs">Сохраните заказ и выберите черновик предложения для расчёта.</p>
+    </div>
     <template v-if="selectedTariff">
       <div class="mt-3 flex items-start justify-between gap-3">
         <div><p class="text-sm font-semibold">{{ selectedTariff.short_name }}</p><p class="text-xs text-slate-500">{{ selectedTariff.category }}</p></div>

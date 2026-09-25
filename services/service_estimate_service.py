@@ -31,6 +31,7 @@ from services.tariffs_service import TariffsService
 from services.cooling_capacity import BTU_TO_KW_MAP
 from services.service_catalog_scope import service_catalog_write_tenant_id
 from services.service_estimate_money import allocate_discount, decimal_value, money, snapshot_money, writable_service_money
+from services.legacy_installation_estimate_policy import LegacyInstallationEstimatePolicy
 
 
 class ServiceEstimateService:
@@ -287,6 +288,9 @@ class ServiceEstimateService:
         tariff = await ServiceEstimateService._resolve_tariff(
             session, payload, tenant_scope
         )
+        await LegacyInstallationEstimatePolicy.require_available(
+            session, tenant_scope, tariff,
+        )
         lines = await ServiceEstimateService._build_lines(payload, tariff)
         subtotal_money = sum((money(line.line_total) for line in lines), Decimal("0.00"))
         discount_money = min(money(payload.discount_amount), subtotal_money)
@@ -366,6 +370,12 @@ class ServiceEstimateService:
         created_by: Optional[str],
         tenant_scope: TenantScope | None = None,
     ) -> ManagerServiceEstimateResponse:
+        tariff = await ServiceEstimateService._resolve_tariff(
+            session, payload, tenant_scope,
+        )
+        await LegacyInstallationEstimatePolicy.require_available(
+            session, tenant_scope, tariff, serialize_write=True,
+        )
         if payload.customer_id is not None:
             customer_stmt = select(Customer).where(
                 Customer.id == payload.customer_id

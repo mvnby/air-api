@@ -4228,6 +4228,29 @@
         }
       }
     },
+    "/api/v1/service-pricing/installation/config": {
+      "get": {
+        "tags": [
+          "api",
+          "api/service-pricing"
+        ],
+        "summary": "Get Public Installation Pricing Config",
+        "description": "Tell the storefront which pricing contract is currently authoritative.",
+        "operationId": "get_public_installation_pricing_config",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallationPricingConfigResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/service-pricing/installation/resolve": {
       "post": {
         "tags": [
@@ -39211,6 +39234,81 @@
           "scope_ref"
         ],
         "title": "InstallationPreviewResponse"
+      },
+      "InstallationPricingCapabilities": {
+        "properties": {
+          "legacy_rate_checkout": {
+            "type": "boolean",
+            "title": "Legacy Rate Checkout"
+          },
+          "standard_product_acceptance": {
+            "type": "boolean",
+            "title": "Standard Product Acceptance"
+          },
+          "manual_service_only_preview": {
+            "type": "boolean",
+            "title": "Manual Service Only Preview"
+          },
+          "multisplit_preview_only": {
+            "type": "boolean",
+            "title": "Multisplit Preview Only"
+          },
+          "prelaid_preview_only": {
+            "type": "boolean",
+            "title": "Prelaid Preview Only"
+          }
+        },
+        "type": "object",
+        "required": [
+          "legacy_rate_checkout",
+          "standard_product_acceptance",
+          "manual_service_only_preview",
+          "multisplit_preview_only",
+          "prelaid_preview_only"
+        ],
+        "title": "InstallationPricingCapabilities"
+      },
+      "InstallationPricingConfigResponse": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "legacy",
+              "price_book"
+            ],
+            "title": "Source"
+          },
+          "price_book_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Book Revision"
+          },
+          "scope_ref": {
+            "type": "string",
+            "title": "Scope Ref"
+          },
+          "service_enabled": {
+            "type": "boolean",
+            "title": "Service Enabled"
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/InstallationPricingCapabilities"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "scope_ref",
+          "service_enabled",
+          "capabilities"
+        ],
+        "title": "InstallationPricingConfigResponse"
       },
       "InstallationPublishResponse": {
         "properties": {

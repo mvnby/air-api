@@ -42,6 +42,11 @@ async def test_website_checkout_creates_negotiation_order(monkeypatch, tenant_sc
 
     session.commit = commit
 
+    async def execute(_statement):
+        return None
+
+    session.execute = execute
+
     async def fake_create_from_website(**kwargs):
         captured_kwargs.update(kwargs)
         return SimpleNamespace(

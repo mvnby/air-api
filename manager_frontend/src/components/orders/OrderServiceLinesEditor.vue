@@ -20,6 +20,7 @@ const props = defineProps<{
   formatServiceKind: (kind?: string | null) => string;
   workflow: OrderWorkflowType;
   customerId?: number | null;
+  canOpenInstallationEstimate?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -36,6 +37,7 @@ const emit = defineEmits<{
   importEstimate: [];
   loadEstimates: [];
   rememberDescriptionMode: [mode: ServiceDescriptionMode];
+  openInstallationEstimate: [];
 }>();
 
 const lines = defineModel<ServiceLine[]>('lines', { required: true });
@@ -154,10 +156,12 @@ const updatePreferredMode = (mode: ServiceDescriptionMode) => {
       v-if="showCatalog"
       :workflow="workflow"
       :customer-id="customerId"
+      :can-open-installation-estimate="canOpenInstallationEstimate"
       @choose="chooseTariff"
       @custom="addCustom"
       @created-estimate="createEstimate"
       @close="showCatalog = false"
+      @open-installation-estimate="showCatalog = false; emit('openInstallationEstimate')"
     />
     <div v-if="showEstimateImport" class="mt-3 grid gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3">
       <div class="grid gap-2 md:grid-cols-3">
