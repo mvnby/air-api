@@ -8,11 +8,14 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import func, select
 
 from crud.public_write_idempotency import PublicWriteIdempotencyDAO
-from models import InstallationPriceBook, InstallationRate, Order, Product, ServiceTariff, ServiceTariffRule
+from crud.service_estimate import ServiceEstimateDAO
+from models import InstallationPriceBook, InstallationRate, Order, Product, ServiceEstimate, ServiceTariff, ServiceTariffRule
 from models.tenancy import TenantScope
+from schemas import ManagerInstallEstimateSavePayload
 from schemas_public_checkout import OrderPayload
 from services.installation_price_book_service import InstallationPriceBookService as Book
 from services.installation_pricing_service import InstallationPricingError
+from services.service_estimate_service import ServiceEstimateService
 from services.website_order_service import WebsiteOrderService
 
 
@@ -194,3 +197,63 @@ async def test_legacy_checkout_holds_publication_lock_until_order_commits(db_eng
     async with factory() as verify:
         assert await verify.scalar(select(func.count(Order.id))) == 1
         assert await verify.scalar(select(func.count(InstallationPriceBook.id))) == 1
+
+
+@pytest.mark.asyncio
+async def test_legacy_estimate_save_holds_first_publication_until_commit(db_engine, monkeypatch):
+    assert db_engine.dialect.name == "postgresql"
+    factory = sessionmaker(bind=db_engine, class_=AsyncSession, expire_on_commit=False)
+    scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True,
+                        is_canonical_storefront=True)
+    async with factory() as setup:
+        await _seed_legacy_and_draft(setup)
+        tariff_id = int(await setup.scalar(select(ServiceTariff.id)))
+    payload = ManagerInstallEstimateSavePayload(tariff_id=tariff_id)
+
+    estimate_ready_before_commit = asyncio.Event()
+    release_estimate = asyncio.Event()
+    publication_started = asyncio.Event()
+    publisher_has_lock = asyncio.Event()
+    original_create = ServiceEstimateDAO.create
+    original_build = Book.build_entries_from_drafts.__func__
+
+    async def pause_create(session, estimate, items):
+        estimate_ready_before_commit.set()
+        await release_estimate.wait()
+        return await original_create(session, estimate, items)
+
+    async def watch_publisher(cls, session, current_scope):
+        if session.info.get("publisher_race"):
+            publisher_has_lock.set()
+        return await original_build(cls, session, current_scope)
+
+    monkeypatch.setattr(ServiceEstimateDAO, "create", staticmethod(pause_create))
+    monkeypatch.setattr(Book, "build_entries_from_drafts", classmethod(watch_publisher))
+
+    async def save_estimate():
+        async with factory() as session:
+            return await ServiceEstimateService.create_install_estimate(
+                session, payload, created_by="manager", tenant_scope=scope,
+            )
+
+    async def publish():
+        async with factory() as session:
+            session.info["publisher_race"] = True
+            publication_started.set()
+            return await Book.publish(session, scope, actor="race-publisher")
+
+    saving = asyncio.create_task(save_estimate())
+    try:
+        await asyncio.wait_for(estimate_ready_before_commit.wait(), timeout=3)
+        publication = asyncio.create_task(publish())
+        await asyncio.wait_for(publication_started.wait(), timeout=3)
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(publisher_has_lock.wait(), timeout=0.3)
+    finally:
+        release_estimate.set()
+
+    saved = await asyncio.wait_for(saving, timeout=5)
+    published = await asyncio.wait_for(publication, timeout=5)
+    assert saved.id is not None and published.revision == 1
+    async with factory() as verify:
+        assert await verify.scalar(select(func.count(ServiceEstimate.id))) == 1

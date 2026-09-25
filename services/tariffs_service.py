@@ -153,10 +153,14 @@ class TariffsService:
         limit: int = 10,
         tenant_scope: TenantScope | None = None,
     ) -> List[ManagerQuickTariffResponse]:
+        from services.legacy_installation_estimate_policy import LegacyInstallationEstimatePolicy
+
         stmt = select(ServiceTariff).where(  # noqa: E712
             TariffsService._scope_clause(tenant_scope),
             ServiceTariff.is_active == True,
         )
+        if tenant_scope is not None and await LegacyInstallationEstimatePolicy.book_is_published(session, tenant_scope):
+            stmt = stmt.where(ServiceTariff.service_kind != "installation")
         if service_kind is not None:
             kind_value = service_kind.value if hasattr(service_kind, "value") else str(service_kind)
             stmt = stmt.where(ServiceTariff.service_kind == kind_value)

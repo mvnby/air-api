@@ -5,6 +5,7 @@ import { orderedServiceKinds, serviceCategories } from '../src/components/orders
 
 const apiMocks = vi.hoisted(() => ({
   listManagerTariffsByKind: vi.fn(),
+  listManagerInstallationRates: vi.fn(),
   calculateManagerInstallEstimate: vi.fn(),
   createManagerServiceEstimate: vi.fn(),
   getManagerServiceEstimateOrderLines: vi.fn(),
@@ -33,6 +34,7 @@ const tariff = {
 beforeEach(() => {
   vi.clearAllMocks();
   apiMocks.listManagerTariffsByKind.mockResolvedValue({ items: [tariff] });
+  apiMocks.listManagerInstallationRates.mockResolvedValue({ published_price_book_revision: null, items: [] });
   apiMocks.calculateManagerInstallEstimate.mockResolvedValue({ total: 410, currency: 'BYN', lines: [{ name: 'Монтаж', line_total: 300 }], rule_lines: [] });
   apiMocks.createManagerServiceEstimate.mockResolvedValue({ id: 84 });
   apiMocks.getManagerServiceEstimateOrderLines.mockResolvedValue({ services: [{ title: 'Монтаж', quantity: 1, price: 410, service_id: 9 }] });
@@ -51,6 +53,7 @@ describe('OrderServiceCatalogPicker', () => {
     expect(wrapper.text()).toContain('Монтаж настенного блока');
     expect(wrapper.text()).toContain('Настенные');
     await wrapper.findAll('button').find((button) => button.text() === 'Добавить')!.trigger('click');
+    await flushPromises();
     expect(wrapper.emitted('choose')?.[0]?.[0]).toMatchObject({ tariff_id: 21, price: 300 });
     wrapper.unmount();
   });
@@ -59,6 +62,7 @@ describe('OrderServiceCatalogPicker', () => {
     const wrapper = mount(OrderServiceCatalogPicker, { props: { workflow: 'sales_installation', customerId: 12 } });
     await flushPromises();
     await wrapper.findAll('button').find((button) => button.text() === 'Собрать смету')!.trigger('click');
+    await flushPromises();
     const inputs = wrapper.findAll('input[type="number"]');
     await inputs[0]!.setValue(5);
     await inputs[3]!.setValue(1);
@@ -73,6 +77,18 @@ describe('OrderServiceCatalogPicker', () => {
     await flushPromises();
     expect(apiMocks.createManagerServiceEstimate).toHaveBeenCalledWith(expect.objectContaining({ customer_id: 12 }));
     expect(wrapper.emitted('createdEstimate')?.[0]?.[0]).toMatchObject({ id: 84, lines: [{ title: 'Монтаж', price: 410 }] });
+    wrapper.unmount();
+  });
+
+  it('hides typed installation quick-add and opens the order price-book panel after publication', async () => {
+    apiMocks.listManagerInstallationRates.mockResolvedValue({ published_price_book_revision: 2, items: [] });
+    const wrapper = mount(OrderServiceCatalogPicker, { props: { workflow: 'sales_installation', canOpenInstallationEstimate: true } });
+    await flushPromises();
+    expect(wrapper.text()).toContain('Монтаж рассчитывается по опубликованной книге цен');
+    expect(wrapper.findAll('button').some((button) => button.text() === 'Добавить')).toBe(false);
+    expect(wrapper.findAll('button').some((button) => button.text() === 'Собрать смету')).toBe(false);
+    await wrapper.findAll('button').find((button) => button.text() === 'Открыть расчёт монтажа')!.trigger('click');
+    expect(wrapper.emitted('openInstallationEstimate')).toEqual([[]]);
     wrapper.unmount();
   });
 });

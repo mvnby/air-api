@@ -14,6 +14,9 @@ import CustomerSearchSelect from '../components/customers/CustomerSearchSelect.v
 import type { ManagerCatalogCustomerItemResponse } from '../client';
 
 const tariffs = ref<ManagerTariffResponse[]>([]);
+const publishedRevision = ref<number | null | undefined>(undefined);
+const bookStateLoading = ref(true);
+const bookStateError = ref('');
 const loadingTariffs = ref(false);
 const error = ref('');
 const toast = ref('');
@@ -54,6 +57,9 @@ const deletingEstimateId = ref<number | null>(null);
 
 const selectedTariff = computed(
   () => tariffs.value.find((item) => item.id === estimateForm.value.tariff_id) ?? null
+);
+const legacyFormAvailable = computed(() =>
+  selectedServiceKind.value !== 'installation' || publishedRevision.value === null
 );
 const selectedRules = computed(() => selectedTariff.value?.rules || []);
 const totalPages = computed(() => Math.max(1, Math.ceil(listTotal.value / listLimit.value)));
@@ -162,8 +168,25 @@ const loadTariffs = async () => {
   }
 };
 
+const loadBookState = async () => {
+  bookStateLoading.value = true;
+  bookStateError.value = '';
+  try {
+    const response = await api.listManagerInstallationRates();
+    publishedRevision.value = response.published_price_book_revision ?? null;
+    if (publishedRevision.value !== null && selectedServiceKind.value === 'installation') invalidateCalculation();
+  } catch (cause) {
+    publishedRevision.value = undefined;
+    bookStateError.value = getApiErrorMessage(cause);
+  } finally {
+    bookStateLoading.value = false;
+  }
+};
+
 watch(selectedServiceKind, async () => {
   invalidateCalculation();
+  estimateForm.value.tariff_id = null;
+  tariffs.value = [];
   await loadTariffs();
 });
 
@@ -225,6 +248,7 @@ const buildPayload = () => ({
 });
 
 const calculateEstimate = async () => {
+  if (!legacyFormAvailable.value) return;
   if (!estimateForm.value.tariff_id) {
     error.value = 'Выберите тариф для расчета сметы.';
     return;
@@ -240,7 +264,10 @@ const calculateEstimate = async () => {
   } catch (e) {
     if (revision !== calculationRevision) return;
     calculation.value = null;
-    error.value = getApiErrorMessage(e);
+    if ((e as { body?: { detail?: { code?: string } } })?.body?.detail?.code === 'book_preview_required') {
+      error.value = 'Монтаж теперь рассчитывается по книге цен в предложении заказа.';
+      await loadBookState();
+    } else error.value = getApiErrorMessage(e);
   } finally {
     if (revision === calculationRevision) calculating.value = false;
   }
@@ -258,6 +285,7 @@ const openEstimate = async (estimateId: number) => {
 };
 
 const saveEstimate = async () => {
+  if (!legacyFormAvailable.value) return;
   if (saving.value) return;
   if (!calculation.value) {
     await calculateEstimate();
@@ -277,7 +305,10 @@ const saveEstimate = async () => {
     await loadEstimates(1);
     await openEstimate(response.id);
   } catch (e) {
-    error.value = getApiErrorMessage(e);
+    if ((e as { body?: { detail?: { code?: string } } })?.body?.detail?.code === 'book_preview_required') {
+      error.value = 'Монтаж теперь рассчитывается по книге цен в предложении заказа.';
+      await loadBookState();
+    } else error.value = getApiErrorMessage(e);
   } finally {
     saving.value = false;
   }
@@ -321,7 +352,7 @@ const resetForm = () => {
 };
 
 onMounted(async () => {
-  await Promise.all([loadTariffs(), loadEstimates(1)]);
+  await Promise.all([loadTariffs(), loadEstimates(1), loadBookState()]);
 });
 </script>
 
@@ -359,6 +390,7 @@ onMounted(async () => {
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Параметры расчета</h2>
           <button
+            v-if="legacyFormAvailable"
             class="text-xs font-medium text-gray-500 hover:text-gray-800 dark:text-slate-400 dark:hover:text-slate-200"
             @click="resetForm"
           >
@@ -381,7 +413,7 @@ onMounted(async () => {
               </select>
             </label>
 
-            <label class="block">
+            <label v-if="legacyFormAvailable" class="block">
               <span class="mb-1 block text-sm text-gray-600 dark:text-slate-300">Тариф</span>
               <select
                 v-model.number="estimateForm.tariff_id"
@@ -396,6 +428,7 @@ onMounted(async () => {
             </label>
           </div>
 
+          <div v-if="legacyFormAvailable" class="space-y-4">
           <p v-if="selectedTariff" class="text-xs text-gray-500 dark:text-slate-400">
             {{ selectedTariff.full_description || selectedTariff.short_name || selectedTariff.selector_label }}
           </p>
@@ -488,6 +521,16 @@ onMounted(async () => {
             <span class="material-icons-round text-[18px]">calculate</span>
             {{ calculating ? 'Расчет...' : 'Рассчитать смету' }}
           </button>
+          </div>
+          <div v-else class="rounded-xl border border-brand-200 bg-brand-50 p-4 text-sm text-slate-800" role="status">
+            <p v-if="publishedRevision !== undefined">Монтаж теперь рассчитывается по опубликованной книге цен в предложении заказа. Старые сметы ниже остаются доступными для просмотра.</p>
+            <p v-else>{{ bookStateLoading ? 'Проверяем книгу цен монтажа…' : 'Не удалось проверить книгу цен монтажа. Старый расчёт временно недоступен.' }}</p>
+            <p v-if="bookStateError" class="mt-2 text-xs text-red-700">{{ bookStateError }}</p>
+            <div class="mt-3 flex flex-wrap gap-3">
+              <a v-if="publishedRevision !== undefined" href="/manager/orders" class="btn-mini">Открыть заказы для расчёта монтажа</a>
+              <button v-else-if="!bookStateLoading" type="button" class="text-xs font-semibold text-brand-700 underline" @click="loadBookState">Повторить проверку</button>
+            </div>
+          </div>
         </div>
       </section>
 
