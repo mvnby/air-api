@@ -96,6 +96,10 @@ async def test_detached_service_template_clone_is_idempotent_and_tenant_isolated
         category="Wall",
         power_range="12",
         base_price=500,
+        installation_code="installation.wall.legacy_template",
+        installation_match={"indoor_type": "wall", "capacity_max_kw": "4", "pipe_liquid": '1/4"', "pipe_gas": '3/8"'},
+        installation_price_mode="from",
+        included_holes_by_type={"diamond": 1},
         included_route_meters=3,
         is_active=True,
     )
@@ -114,6 +118,7 @@ async def test_detached_service_template_clone_is_idempotent_and_tenant_isolated
         rule_type="per_unit_manual",
         name="Виброопоры",
         unit_price=80,
+        component_code="pump.install",
         service_id=int(source_service.id),
         is_active=True,
     )
@@ -157,7 +162,11 @@ async def test_detached_service_template_clone_is_idempotent_and_tenant_isolated
     assert foreign_tariffs == []
     target_tariff = target_tariffs[0]
     assert target_tariff.source_tariff_id == source_tariff.id
+    assert target_tariff.installation_code == source_tariff.installation_code
+    assert target_tariff.installation_match == source_tariff.installation_match
+    assert target_tariff.included_holes_by_type == {"diamond": 1}
     assert target_tariff.rules[0].source_rule_id == source_rule.id
+    assert target_tariff.rules[0].component_code == "pump.install"
 
     target_service = (
         await db.execute(

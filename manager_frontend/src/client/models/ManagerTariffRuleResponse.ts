@@ -11,6 +11,7 @@ export type ManagerTariffRuleResponse = {
     line_template: string;
     unit: string;
     unit_price: number;
+    component_code?: (string | null);
     is_optional: boolean;
     is_favorite?: boolean;
     is_active: boolean;

@@ -1,6 +1,6 @@
 """Public, read-only tenant service tariff and calculation endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
@@ -17,6 +17,13 @@ from schemas_service_catalog import (
 from services.service_estimate_service import ServiceEstimateService
 from services.storefront_settings_service import StorefrontSettingsService
 from services.tariffs_service import TariffsService
+from services.installation_price_book_service import InstallationPriceBookService
+from schemas_installation_price_book import (
+    InstallationResolvePayload, InstallationResolveResponse,
+    InstallationPreviewPayload, InstallationPreviewResponse,
+)
+from core.storefront_request_envelope import private_storefront_response_headers
+from core.public_write_idempotency import get_required_public_write_idempotency_key
 
 
 router = APIRouter(
@@ -24,6 +31,48 @@ router = APIRouter(
     tags=["api/service-pricing"],
     dependencies=[Depends(verify_public_storefront_request)],
 )
+
+
+@router.post(
+    "/installation/resolve",
+    response_model=InstallationResolveResponse,
+    operation_id="resolve_public_installation_tariff",
+)
+async def resolve_public_installation_tariff(
+    payload: InstallationResolvePayload,
+    response: Response,
+    session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_public_tenant_scope),
+):
+    response.headers.update(private_storefront_response_headers())
+    if not await StorefrontSettingsService.is_service_enabled(
+        session, tenant_scope=tenant_scope, service_kind="installation"
+    ):
+        return InstallationResolveResponse(status="unavailable", reason_code="service_direction_not_enabled",
+                                           scope_ref=InstallationPriceBookService._scope_ref(tenant_scope))
+    result, _ = await InstallationPriceBookService.resolve(session, tenant_scope, payload)
+    return result
+
+
+@router.post(
+    "/installation/preview",
+    response_model=InstallationPreviewResponse,
+    operation_id="preview_public_installation_estimate",
+)
+async def preview_public_installation_estimate(
+    payload: InstallationPreviewPayload,
+    response: Response,
+    idempotency_key: str = Depends(get_required_public_write_idempotency_key),
+    session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_public_tenant_scope),
+):
+    response.headers.update(private_storefront_response_headers())
+    if not await StorefrontSettingsService.is_service_enabled(
+        session, tenant_scope=tenant_scope, service_kind="installation"
+    ):
+        return InstallationPreviewResponse(status="unavailable", reason_code="service_direction_not_enabled",
+                                           scope_ref=InstallationPriceBookService._scope_ref(tenant_scope))
+    return await InstallationPriceBookService.preview(session, tenant_scope, payload, idempotency_key=idempotency_key)
 
 
 def _public_tariff(tariff: ServiceTariff) -> PublicServiceTariffResponse:

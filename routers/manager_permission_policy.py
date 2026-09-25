@@ -198,6 +198,8 @@ TENANT_SERVICE_OPERATION_IDS = frozenset(
         operation_ids.GET_MANAGER_SERVICE_ESTIMATE_ORDER_LINES,
         operation_ids.UPDATE_MANAGER_INSTALLATION_RATE,
         operation_ids.CREATE_MANAGER_TARIFF,
+        operation_ids.PUBLISH_MANAGER_INSTALLATION_PRICE_BOOK,
+        operation_ids.LIST_MANAGER_INSTALLATION_LEGACY_COMPARISON,
         operation_ids.UPDATE_MANAGER_TARIFF,
         operation_ids.DELETE_MANAGER_TARIFF,
         operation_ids.CREATE_MANAGER_TARIFF_RULE,

@@ -451,20 +451,30 @@ class SchedulerService:
         from services.public_write_idempotency_retention_service import (
             PublicWriteIdempotencyRetentionService,
         )
+        from services.installation_preview_retention_service import InstallationPreviewRetentionService
 
+        batch_limit = 1000
         while True:
             try:
                 async with async_session_maker() as session:
                     deleted = (
                         await PublicWriteIdempotencyRetentionService.delete_expired_batch(
                             session,
-                            limit=1000,
+                            limit=batch_limit,
                         )
+                    )
+                    previews_deleted = await InstallationPreviewRetentionService.delete_expired_batch(
+                        session, limit=batch_limit,
                     )
                     await session.commit()
                 if deleted:
                     logger.info("Expired public write receipts deleted: %s", deleted)
-                await asyncio.sleep(3600)
+                if previews_deleted:
+                    logger.info("Expired installation previews deleted: %s", previews_deleted)
+                # A full batch means more expired rows may remain. Commit each
+                # bounded batch, yield to other work, and catch up before the
+                # next hourly check.
+                await asyncio.sleep(1 if max(deleted, previews_deleted) >= batch_limit else 3600)
             except Exception:
                 logger.exception("Public write receipt retention loop error")
                 await asyncio.sleep(300)

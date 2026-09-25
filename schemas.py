@@ -40,6 +40,7 @@ from schemas_installation_estimate import (
     InstallationEstimateLeadPayload,
     InstallationEstimateLeadResponse,
 )
+from schemas_installation_price_book import InstallationMatcher, PriceMode
 from schemas_catalog import CatalogRevisionResponse
 from schemas_common import Meta
 from schemas_manager_installers import (
@@ -3051,6 +3052,7 @@ class ManagerTariffRuleResponse(BaseModel):
     line_template: str
     unit: str
     unit_price: float
+    component_code: Optional[str] = None
     is_optional: bool
     is_favorite: bool = False
     is_active: bool
@@ -3064,6 +3066,7 @@ class ManagerTariffRuleCreatePayload(BaseModel):
     line_template: str = "{name}"
     unit: str = "шт"
     unit_price: float = 0.0
+    component_code: Optional[str] = None
     is_optional: bool = False
     is_favorite: bool = False
     is_active: bool = True
@@ -3084,6 +3087,7 @@ class ManagerTariffRuleUpdatePayload(BaseModel):
     line_template: Optional[str] = None
     unit: Optional[str] = None
     unit_price: Optional[float] = None
+    component_code: Optional[str] = None
     is_optional: Optional[bool] = None
     is_favorite: Optional[bool] = None
     is_active: Optional[bool] = None
@@ -3115,6 +3119,10 @@ class ManagerTariffResponse(BaseModel):
     category: str
     power_range: str
     base_price: int
+    installation_code: Optional[str] = None
+    installation_match: Optional[InstallationMatcher] = None
+    installation_price_mode: PriceMode = "fixed"
+    included_holes_by_type: Dict[str, float] = Field(default_factory=dict)
     included_route_meters: float
     is_active: bool
     sort_order: int
@@ -3132,6 +3140,10 @@ class ManagerTariffCreatePayload(BaseModel):
     category: str = ""
     power_range: str = ""
     base_price: int = 0
+    installation_code: Optional[str] = None
+    installation_match: Optional[InstallationMatcher] = None
+    installation_price_mode: PriceMode = "fixed"
+    included_holes_by_type: Dict[str, float] = Field(default_factory=dict)
     included_route_meters: float = 3.0
     is_active: bool = True
     sort_order: int = 0
@@ -3158,6 +3170,10 @@ class ManagerTariffUpdatePayload(BaseModel):
     category: Optional[str] = None
     power_range: Optional[str] = None
     base_price: Optional[int] = None
+    installation_code: Optional[str] = None
+    installation_match: Optional[InstallationMatcher] = None
+    installation_price_mode: Optional[PriceMode] = None
+    included_holes_by_type: Optional[Dict[str, float]] = None
     included_route_meters: Optional[float] = None
     is_active: Optional[bool] = None
     sort_order: Optional[int] = None

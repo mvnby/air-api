@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from copy import deepcopy
 from dataclasses import dataclass
 
 from fastapi import HTTPException, status
@@ -115,6 +116,10 @@ class ServiceCatalogTemplateService:
                     "power_range": row.power_range,
                     "base_price": row.base_price,
                     "included_route_meters": float(row.included_route_meters or 0),
+                    "installation_code": row.installation_code,
+                    "installation_match": row.installation_match,
+                    "installation_price_mode": row.installation_price_mode,
+                    "included_holes_by_type": row.included_holes_by_type,
                     "is_active": row.is_active,
                     "sort_order": row.sort_order,
                     "comment": row.comment,
@@ -126,6 +131,7 @@ class ServiceCatalogTemplateService:
                             "line_template": rule.line_template,
                             "unit": rule.unit,
                             "unit_price": float(rule.unit_price or 0),
+                            "component_code": rule.component_code,
                             "is_optional": rule.is_optional,
                             "is_favorite": rule.is_favorite,
                             "is_active": rule.is_active,
@@ -357,6 +363,10 @@ class ServiceCatalogTemplateService:
                     category=source_tariff.category,
                     power_range=source_tariff.power_range,
                     base_price=source_tariff.base_price,
+                    installation_code=source_tariff.installation_code,
+                    installation_match=deepcopy(source_tariff.installation_match),
+                    installation_price_mode=source_tariff.installation_price_mode,
+                    included_holes_by_type=deepcopy(source_tariff.included_holes_by_type),
                     included_route_meters=source_tariff.included_route_meters,
                     is_active=source_tariff.is_active,
                     sort_order=source_tariff.sort_order,
@@ -385,6 +395,7 @@ class ServiceCatalogTemplateService:
                             line_template=source_rule.line_template,
                             unit=source_rule.unit,
                             unit_price=source_rule.unit_price,
+                            component_code=source_rule.component_code,
                             is_optional=source_rule.is_optional,
                             is_favorite=source_rule.is_favorite,
                             is_active=source_rule.is_active,

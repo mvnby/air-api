@@ -6,6 +6,8 @@ from core.security import get_current_manager_tenant_scope, get_current_username
 from models.tenancy import TenantScope
 from routers.manager_operation_ids import (
     CREATE_MANAGER_TARIFF,
+    PUBLISH_MANAGER_INSTALLATION_PRICE_BOOK,
+    LIST_MANAGER_INSTALLATION_LEGACY_COMPARISON,
     CREATE_MANAGER_TARIFF_RULE,
     DELETE_MANAGER_TARIFF,
     DELETE_MANAGER_TARIFF_RULE,
@@ -31,6 +33,8 @@ from schemas import (
     ManagerTariffRuleUpdatePayload,
 )
 from services.tariffs_service import TariffsService
+from services.installation_price_book_service import InstallationPriceBookService
+from schemas_installation_price_book import InstallationPublishResponse, InstallationLegacyComparisonResponse
 
 router = APIRouter(
     prefix="/api/manager/tariffs",
@@ -38,6 +42,33 @@ router = APIRouter(
     dependencies=[Depends(get_current_username)],
     route_class=ManagerPermissionRoute,
 )
+
+
+@router.post(
+    "/price-book/publish",
+    response_model=InstallationPublishResponse,
+    operation_id=PUBLISH_MANAGER_INSTALLATION_PRICE_BOOK,
+)
+async def publish_manager_installation_price_book(
+    session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
+    username: str = Depends(get_current_username),
+):
+    return await InstallationPriceBookService.publish(session, tenant_scope, actor=username)
+
+
+@router.get(
+    "/price-book/legacy-comparison",
+    response_model=InstallationLegacyComparisonResponse,
+    operation_id=LIST_MANAGER_INSTALLATION_LEGACY_COMPARISON,
+)
+async def list_manager_installation_legacy_comparison(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=100),
+    session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
+):
+    return await InstallationPriceBookService.legacy_comparison(session, tenant_scope, offset=offset, limit=limit)
 
 
 @router.get("", response_model=ManagerTariffListResponse, operation_id=LIST_MANAGER_TARIFFS)

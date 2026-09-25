@@ -2,6 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { InstallationLegacyComparisonResponse } from '../models/InstallationLegacyComparisonResponse';
+import type { InstallationPublishResponse } from '../models/InstallationPublishResponse';
 import type { ManagerActionMessageResponse } from '../models/ManagerActionMessageResponse';
 import type { ManagerQuickTariffListResponse } from '../models/ManagerQuickTariffListResponse';
 import type { ManagerTariffCreatePayload } from '../models/ManagerTariffCreatePayload';
@@ -17,6 +19,40 @@ import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class ManagerTariffsService {
+    /**
+     * Publish Manager Installation Price Book
+     * @returns InstallationPublishResponse Successful Response
+     * @throws ApiError
+     */
+    public static publishManagerInstallationPriceBook(): CancelablePromise<InstallationPublishResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/tariffs/price-book/publish',
+        });
+    }
+    /**
+     * List Manager Installation Legacy Comparison
+     * @param offset
+     * @param limit
+     * @returns InstallationLegacyComparisonResponse Successful Response
+     * @throws ApiError
+     */
+    public static listManagerInstallationLegacyComparison(
+        offset?: number,
+        limit: number = 100,
+    ): CancelablePromise<InstallationLegacyComparisonResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/tariffs/price-book/legacy-comparison',
+            query: {
+                'offset': offset,
+                'limit': limit,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
     /**
      * List Manager Tariffs
      * @param serviceKind
