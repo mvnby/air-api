@@ -114,4 +114,18 @@ describe('public installation rates manager UX', () => {
     expect(wrapper.text()).toContain('Форм-фактор, диапазон мощности и режим расчёта здесь защищены');
     expect(wrapper.find('input[value="Duct"]').exists()).toBe(false);
   });
+
+  it('directs a published book to the single editor instead of showing obsolete rates', async () => {
+    mocks.listRates.mockResolvedValue({ items: [], published_price_book_revision: 3 });
+    const wrapper = mount(InstallationRatesView, {
+      global: { stubs: { teleport: true } },
+    });
+    await flushPromises();
+    expect(wrapper.text()).toContain('Монтаж переведён на единую сетку цен');
+    expect(wrapper.find('a[href="/manager/tariffs"]').exists()).toBe(true);
+    expect(wrapper.findAll('button[title="Изменить цену"]')).toHaveLength(0);
+    expect(wrapper.text()).not.toContain('Публичные монтажные тарифы не найдены');
+    expect(wrapper.text()).not.toContain('Точное совпадение');
+    expect(mocks.updateRate).not.toHaveBeenCalled();
+  });
 });

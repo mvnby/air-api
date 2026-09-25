@@ -12,6 +12,7 @@ const error = ref('');
 const toast = ref('');
 const editingRate = ref<ManagerInstallationRateResponse | null>(null);
 const showEditModal = ref(false);
+const publishedRevision = ref<number | null>(null);
 
 const automaticRates = computed(() => rates.value.filter((rate) => rate.selection_status === 'automatic_fixed'));
 const quotedRates = computed(() => rates.value.filter((rate) => (
@@ -31,7 +32,12 @@ const loadRates = async () => {
   error.value = '';
   try {
     const response = await api.listManagerInstallationRates();
+    publishedRevision.value = response.published_price_book_revision ?? null;
     rates.value = response.items || [];
+    if (publishedRevision.value !== null) {
+      showEditModal.value = false;
+      editingRate.value = null;
+    }
   } catch (e) {
     error.value = getApiErrorMessage(e);
     rates.value = [];
@@ -41,6 +47,7 @@ const loadRates = async () => {
 };
 
 const openEdit = (rate: ManagerInstallationRateResponse) => {
+  if (publishedRevision.value !== null || loading.value || error.value) return;
   editingRate.value = rate;
   showEditModal.value = true;
 };
@@ -72,7 +79,7 @@ onMounted(loadRates);
           Публичный монтаж
         </h1>
         <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">
-          Цены, которые видит покупатель, и правила выбора тарифа при оформлении заказа
+          {{ publishedRevision !== null ? 'Единые цены монтажа для сайта и смет' : 'Цены, которые видит покупатель, и правила выбора тарифа при оформлении заказа' }}
         </p>
       </div>
       <a
@@ -84,7 +91,7 @@ onMounted(loadRates);
       </a>
     </div>
 
-    <div class="mb-6 rounded-xl border border-brand-200 bg-brand-50 p-4 dark:border-brand-500/30 dark:bg-brand-500/10">
+    <div v-if="publishedRevision === null" class="mb-6 rounded-xl border border-brand-200 bg-brand-50 p-4 dark:border-brand-500/30 dark:bg-brand-500/10">
       <div class="mb-3 text-sm font-semibold text-brand-950 dark:text-brand-100">Как выбирается монтаж</div>
       <div class="grid gap-2 text-sm sm:grid-cols-[1fr_auto_1fr_auto_1fr] sm:items-center">
         <div class="rounded-lg bg-white px-3 py-2 text-gray-800 shadow-sm dark:bg-slate-800 dark:text-slate-100">
@@ -113,6 +120,11 @@ onMounted(loadRates);
 
     <div v-if="loading" class="flex justify-center py-24">
       <div class="h-9 w-9 animate-spin rounded-full border-4 border-gray-200 border-t-brand-500 dark:border-slate-700"></div>
+    </div>
+
+    <div v-else-if="publishedRevision !== null" role="status" class="rounded-xl border border-brand-200 bg-brand-50 p-5 text-gray-800 dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-slate-100">
+      <p class="font-semibold">Монтаж переведён на единую сетку цен</p>
+      <p class="mt-2 text-sm">Откройте «Тарифы смет», чтобы изменить стоимость, включённые работы или дополнительные опции. Старые тарифы здесь больше не редактируются.</p>
     </div>
 
     <template v-else>
