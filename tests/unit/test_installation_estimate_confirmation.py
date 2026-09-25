@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+import json
 
 import pytest
 from fastapi import HTTPException
@@ -202,6 +203,82 @@ async def test_attached_product_claims_use_total_quantity_across_revisions(tmp_p
             await session.commit()
             with pytest.raises(ValueError, match="exceeds the target proposal quantity"):
                 await Confirm.validate_attached_claims(session, order_id, proposal_id)
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_maximum_detailed_attachment_replays_with_uuid_installation_keys(tmp_path, monkeypatch):
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'large-attach.db'}")
+    async with engine.begin() as connection:
+        await connection.run_sync(SQLModel.metadata.create_all)
+    factory = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+    scope = TenantScope(tenant_id=501, storefront_id=502)
+    try:
+        async with factory() as session:
+            session.add(Tenant(id=501, slug="large-attach", display_name="Large Attach"))
+            session.add(Storefront(id=502, tenant_id=501, slug="main", display_name="Main",
+                                   status="active", is_default=True))
+            entry = _entry()
+            entry["rules"].extend([
+                {"id": 3, "code": "pump.supply", "rule_type": "per_unit_manual",
+                 "name": "Насос", "line_template": "{name}", "unit": "шт",
+                 "unit_price": "20.00", "is_optional": True, "sort_order": 3},
+                {"id": 4, "code": "pump.install", "rule_type": "per_unit_manual",
+                 "name": "Монтаж насоса", "line_template": "{name}", "unit": "шт",
+                 "unit_price": "15.00", "is_optional": True, "sort_order": 4},
+                {"id": 5, "code": "chase.extra_m", "rule_type": "per_unit_manual",
+                 "name": "Штробление", "line_template": "{name}", "unit": "м",
+                 "unit_price": "5.00", "is_optional": True, "sort_order": 5},
+            ])
+            session.add(InstallationPriceBook(tenant_id=501, revision=1,
+                                              fingerprint="large-attach-book", entries=[entry]))
+            order = Order(tenant_id=501, storefront_id=502, status=OrderStatus.NEGOTIATION)
+            session.add(order)
+            await session.flush()
+            proposal = OrderProposal(order_id=order.id, is_selected=True)
+            session.add(proposal)
+            await session.commit()
+            order_id, proposal_id = int(order.id), int(proposal.id)
+            profile = _payload().installations[0].typed_profile.model_dump(mode="json")
+            keys = [f"00000000-0000-4000-8000-{index:012d}" for index in range(20)]
+            payload = InstallationPreviewPayload.model_validate({"installations": [
+                {"key": key, "typed_profile": profile, "route_length_m": "6",
+                 "holes_by_type": {"diamond": 2}, "extras": [
+                     {"code": "pump.supply", "quantity": 1},
+                     {"code": "pump.install", "quantity": 1},
+                     {"code": "chase.extra_m", "quantity": 3},
+                 ]} for key in keys], "expected_revision": 1})
+            preview = await Book.preview(session, scope, payload, idempotency_key="large-attach-preview")
+            assert len(preview.components) == 120
+            confirmed = await Confirm.confirm(session, scope, ManagerInstallationConfirmPayload(
+                preview_ref=preview.preview_ref, order_id=order_id, proposal_id=proposal_id,
+                verified_service_only_keys=keys,
+            ), idempotency_key="large-attach-confirm", actor="manager")
+            monkeypatch.setattr(Confirm, "ATTACH_RESPONSE_MAX_BYTES", 100)
+            with pytest.raises(HTTPException) as oversized:
+                await Confirm.attach(session, scope, order_id=order_id,
+                    proposal_id=proposal_id, estimate_id=confirmed.value.estimate_id,
+                    payload=ManagerInstallationAttachPayload(revision=1, mode="detailed"),
+                    idempotency_key="large-attach-too-large")
+            assert oversized.value.status_code == 422
+            assert oversized.value.detail["code"] == "estimate_projection_too_large"
+            assert await session.scalar(select(func.count(OrderServiceLink.id))) == 0
+            monkeypatch.setattr(Confirm, "ATTACH_RESPONSE_MAX_BYTES", 256 * 1024)
+            attachment = await Confirm.attach(session, scope, order_id=order_id,
+                proposal_id=proposal_id, estimate_id=confirmed.value.estimate_id,
+                payload=ManagerInstallationAttachPayload(revision=1, mode="detailed"),
+                idempotency_key="large-attach-command")
+            assert len(attachment.value.lines) == 120
+            encoded = json.dumps(attachment.value.model_dump(mode="json"), ensure_ascii=False,
+                                 sort_keys=True, separators=(",", ":")).encode("utf-8")
+            assert len(encoded) > 16 * 1024
+            repeated = await Confirm.attach(session, scope, order_id=order_id,
+                proposal_id=proposal_id, estimate_id=confirmed.value.estimate_id,
+                payload=ManagerInstallationAttachPayload(revision=1, mode="detailed"),
+                idempotency_key="large-attach-command")
+            assert repeated.replayed and repeated.value == attachment.value
+            assert await session.scalar(select(func.count(OrderServiceLink.id))) == 120
     finally:
         await engine.dispose()
 

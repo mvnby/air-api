@@ -253,7 +253,7 @@ class InstallationPriceBookService:
     async def publish(cls, session: AsyncSession, scope: TenantScope, *, actor: str) -> InstallationPublishResponse:
         # Lock the tenant row to serialize publication by independent workers.
         from models import Tenant
-        await session.execute(select(Tenant).where(Tenant.id == scope.tenant_id).with_for_update())
+        await session.execute(select(Tenant).where(Tenant.id == scope.tenant_id).with_for_update(key_share=True))
         tariffs = await TariffsService.get_all_tariffs(session, include_inactive=False, tenant_scope=scope)
         entries: list[dict[str, Any]] = []
         for tariff in tariffs:

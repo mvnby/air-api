@@ -12,8 +12,8 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.public_write_key import (
-    IDEMPOTENCY_KEY_MAX_LENGTH,
-    IDEMPOTENCY_KEY_MIN_LENGTH,
+    IDEMPOTENCY_KEY_MAX_LENGTH as IDEMPOTENCY_KEY_MAX_LENGTH,
+    IDEMPOTENCY_KEY_MIN_LENGTH as IDEMPOTENCY_KEY_MIN_LENGTH,
     normalize_public_write_idempotency_key,
     public_write_idempotency_key_sha256,
 )
@@ -77,6 +77,7 @@ class PublicWriteIdempotencyService:
         request_fingerprint: str,
         response_model: type[ResponseT],
         operation: Callable[[], Awaitable[PublicWriteCommandResponse[ResponseT]]],
+        response_max_bytes: int = IDEMPOTENCY_RESPONSE_MAX_BYTES,
     ) -> PublicWriteCommandOutcome[ResponseT]:
         normalized_command = cls._normalize_command(command_name)
         normalized_fingerprint = cls._normalize_fingerprint(request_fingerprint)
@@ -114,7 +115,7 @@ class PublicWriteIdempotencyService:
                     )
 
                 result = await operation()
-                cls._complete_receipt(claimed, result)
+                cls._complete_receipt(claimed, result, response_max_bytes=response_max_bytes)
                 session.add(claimed)
                 await session.flush()
                 return PublicWriteCommandOutcome(
@@ -137,6 +138,7 @@ class PublicWriteIdempotencyService:
     def _complete_receipt(
         receipt: PublicWriteIdempotency,
         result: PublicWriteCommandResponse[ResponseT],
+        *, response_max_bytes: int = IDEMPOTENCY_RESPONSE_MAX_BYTES,
     ) -> None:
         body = result.value.model_dump(mode="json")
         encoded = json.dumps(
@@ -145,7 +147,7 @@ class PublicWriteIdempotencyService:
             sort_keys=True,
             separators=(",", ":"),
         ).encode("utf-8")
-        if len(encoded) > IDEMPOTENCY_RESPONSE_MAX_BYTES:
+        if len(encoded) > response_max_bytes:
             raise ValueError("Idempotency response exceeds durable receipt limit")
         status_code = int(result.status_code)
         if not 200 <= status_code < 300:

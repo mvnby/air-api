@@ -10,6 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import func, select
 
 from core.config import settings
+from crud.public_write_idempotency import PublicWriteIdempotencyDAO
 from models import (
     InstallationEstimate, InstallationEstimateRevision, InstallationPriceBook,
     InstallationPreviewSnapshot, Order, OrderProposal, OrderServiceLink, OrderStatus,
@@ -245,6 +246,54 @@ async def test_concurrent_manager_confirm_and_attach_create_one_revision_and_lin
         assert await verify.scalar(select(func.count(InstallationEstimateRevision.id))) == 1
         assert await verify.scalar(select(func.count(OrderServiceLink.id)).where(
             OrderServiceLink.proposal_id == proposal_id)) == 1
+
+
+@pytest.mark.asyncio
+async def test_distinct_confirm_keys_same_tenant_do_not_deadlock_after_receipt_claim(db_engine, monkeypatch):
+    """Both receipt inserts hold FK KEY SHARE before the tenant serialization lock."""
+    assert db_engine.dialect.name == "postgresql"
+    factory = sessionmaker(bind=db_engine, class_=AsyncSession, expire_on_commit=False)
+    scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True, is_canonical_storefront=True)
+    async with factory() as setup:
+        setup.add(InstallationPriceBook(tenant_id=1, revision=1,
+                                        fingerprint="distinct-confirm-book", entries=[_entry()]))
+        orders = [Order(tenant_id=1, storefront_id=1, status=OrderStatus.NEGOTIATION)
+                  for _ in range(2)]
+        setup.add_all(orders)
+        await setup.flush()
+        proposals = [OrderProposal(order_id=order.id, is_selected=True) for order in orders]
+        setup.add_all(proposals)
+        await setup.commit()
+        targets = [(int(order.id), int(proposal.id)) for order, proposal in zip(orders, proposals)]
+        previews = [await Book.preview(setup, scope,
+                    InstallationPreviewPayload.model_validate(_preview_body()),
+                    idempotency_key=f"distinct-confirm-preview-{index}")
+                    for index in range(2)]
+
+    barrier = asyncio.Barrier(2)
+    original_claim = PublicWriteIdempotencyDAO.claim
+
+    async def claim_then_barrier(session, **kwargs):
+        receipt = await original_claim(session, **kwargs)
+        if kwargs["command_name"] == "manager_installation_confirm_v1":
+            assert receipt is not None
+            await asyncio.wait_for(barrier.wait(), timeout=10)
+        return receipt
+
+    monkeypatch.setattr(PublicWriteIdempotencyDAO, "claim", staticmethod(claim_then_barrier))
+
+    async def confirm_one(index):
+        async with factory() as session:
+            order_id, proposal_id = targets[index]
+            return await Confirm.confirm(session, scope, ManagerInstallationConfirmPayload(
+                preview_ref=previews[index].preview_ref, order_id=order_id,
+                proposal_id=proposal_id, verified_service_only_keys=["one"],
+            ), idempotency_key=f"distinct-confirm-command-{index}", actor="manager")
+
+    results = await asyncio.wait_for(asyncio.gather(confirm_one(0), confirm_one(1)), timeout=15)
+    assert results[0].value.estimate_id != results[1].value.estimate_id
+    async with factory() as verify:
+        assert await verify.scalar(select(func.count(InstallationEstimate.id))) == 2
 
 
 @pytest.mark.asyncio

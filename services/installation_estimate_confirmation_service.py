@@ -44,6 +44,8 @@ class InstallationPriceChanged(Exception):
 
 
 class InstallationEstimateConfirmationService:
+    ATTACH_RESPONSE_MAX_BYTES = 256 * 1024
+
     @staticmethod
     def _bad(code: str, status_code: int = 409) -> HTTPException:
         return HTTPException(status_code=status_code, detail={"code": code})
@@ -188,7 +190,7 @@ class InstallationEstimateConfirmationService:
             # price-book revision. Keep it through this command's commit so an
             # accepted preview cannot cross a concurrent publication boundary.
             await session.execute(
-                select(Tenant).where(Tenant.id == scope.tenant_id).with_for_update()
+                select(Tenant).where(Tenant.id == scope.tenant_id).with_for_update(key_share=True)
             )
             previous = (await session.execute(select(InstallationEstimate).where(
                 InstallationEstimate.tenant_id == scope.tenant_id,
@@ -442,6 +444,10 @@ class InstallationEstimateConfirmationService:
                 lines=[ManagerInstallationAttachedLine(link_id=int(link.id), title=link.title,
                                                        price=exact_money(link.price)) for link in persisted],
             )
+            encoded = json.dumps(response.model_dump(mode="json"), ensure_ascii=False,
+                                 sort_keys=True, separators=(",", ":")).encode("utf-8")
+            if len(encoded) > cls.ATTACH_RESPONSE_MAX_BYTES:
+                raise cls._bad("estimate_projection_too_large", 422)
             return PublicWriteCommandResponse(value=response, status_code=200,
                 resource_type="installation_estimate", resource_id=estimate_id)
 
@@ -449,4 +455,5 @@ class InstallationEstimateConfirmationService:
             session, tenant_scope=scope, command_name="manager_installation_attach_v1",
             idempotency_key=idempotency_key, request_fingerprint=fingerprint,
             response_model=ManagerInstallationAttachResponse, operation=operation,
+            response_max_bytes=cls.ATTACH_RESPONSE_MAX_BYTES,
         )
