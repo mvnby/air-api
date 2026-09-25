@@ -549,6 +549,14 @@ export const api = {
         return await ManagerTariffsService.listManagerTariffs(serviceKind ?? null, includeInactive);
     },
 
+    async listManagerInstallationLegacyComparison(offset = 0) {
+        return await ManagerTariffsService.listManagerInstallationLegacyComparison(offset, 100);
+    },
+
+    async publishManagerInstallationPriceBook() {
+        return await ManagerTariffsService.publishManagerInstallationPriceBook();
+    },
+
     async listManagerQuickTariffs(q = '', serviceKind?: ManagerTariffServiceKind | null, limit = 10): Promise<ManagerQuickTariffListResponse> {
         return await ManagerTariffsService.listManagerQuickTariffs(q, serviceKind ?? null, limit);
     },

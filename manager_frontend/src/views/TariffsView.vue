@@ -5,6 +5,7 @@ import type {
   ManagerTariffResponse,
   ManagerTariffRuleResponse,
   ManagerTariffServiceKind,
+  InstallationLegacyComparisonResponse,
 } from '../client';
 import { getApiErrorMessage } from '../utils/api-errors';
 import TariffEditModal from '../components/TariffEditModal.vue';
@@ -15,6 +16,55 @@ const tariffs = ref<ManagerTariffResponse[]>([]);
 const loading = ref(false);
 const error = ref('');
 const toast = ref('');
+const comparison = ref<InstallationLegacyComparisonResponse | null>(null);
+const comparisonOffset = ref(0);
+const comparisonLoading = ref(false);
+const comparisonError = ref('');
+const publishing = ref(false);
+const publishError = ref('');
+const publishErrors: Record<string, string> = {
+  empty_price_book: 'Нет активных тарифов с типизированным подбором.',
+  incomplete_fixed_matcher: 'Для фиксированной цены или цены «от» укажите границу мощности и обе трубы пары.',
+  missing_base_price: 'Для фиксированной цены или цены «от» нужна положительная базовая цена.',
+  missing_route_price: 'Добавьте правило «Трасса сверх включённой» с ценой.',
+  missing_hole_price: 'Для включённых отверстий добавьте цену отверстия сверх включённого.',
+  missing_component_code: 'У активного правила не указан смысл компонента.',
+  matcher_conflict: 'Два тарифа пересекаются по условиям подбора с одинаковой точностью.',
+  duplicate_component_code: 'В одном тарифе два правила с одинаковым смыслом.',
+  site_extra_conflict: 'Цена общих работ на объекте различается между тарифами.',
+  invalid_component_rule: 'Тип расчёта или единица правила не совпадает с выбранным компонентом.',
+  tariff_code_reused: 'Условия уже опубликованного тарифа изменены. Откройте тариф и создайте для нового подбора новый код.',
+  component_code_reused: 'Смысл опубликованного компонента нельзя менять. Выберите другой компонент.',
+  duplicate_tariff_code: 'Два активных тарифа имеют один код установки.',
+  packed_weight_requires_transport_rule: 'Для подбора монтажа используйте вес блока без упаковки.',
+};
+const loadComparison = async () => {
+  comparisonLoading.value = true;
+  comparisonError.value = '';
+  try { comparison.value = await api.listManagerInstallationLegacyComparison(comparisonOffset.value); }
+  catch (e) { comparisonError.value = getApiErrorMessage(e); comparison.value = null; }
+  finally { comparisonLoading.value = false; }
+};
+const publish = async () => {
+  if (!await confirmDialog({ title: 'Опубликовать книгу монтажа?', description: 'Активные тарифы с типизированным подбором станут новой неизменяемой ревизией. Старые публичные расценки не копируются и не меняются.', confirmText: 'Опубликовать' })) return;
+  publishing.value = true;
+  publishError.value = '';
+  try {
+    const result = await api.publishManagerInstallationPriceBook();
+    setToast(`Опубликована ревизия ${result.revision}`);
+    await loadComparison();
+  } catch (e) {
+    const detail = (e as { body?: { detail?: { code?: string } } })?.body?.detail;
+    publishError.value = (e as { status?: number })?.status === 403
+      ? 'Нет прав на публикацию книги монтажа.'
+      : `${detail?.code && publishErrors[detail.code] ? `${publishErrors[detail.code]} ` : ''}${getApiErrorMessage(e)}`;
+  } finally { publishing.value = false; }
+};
+const comparisonStatus = (status: string) => status === 'unmapped_review_required'
+  ? 'Нет кандидатов — требуется сопоставление'
+  : status === 'price_equal_review_required'
+    ? 'Цена совпадает, соответствие требует проверки'
+    : 'Цена отличается, соответствие требует проверки';
 
 const kindFilter = ref<ManagerTariffServiceKind>('installation');
 const includeInactive = ref(true);
@@ -40,6 +90,7 @@ const serviceKindOptions: Array<{ value: ManagerTariffServiceKind; label: string
 
 const serviceKindLabel = (kind: ManagerTariffServiceKind | string) =>
   serviceKindOptions.find((item) => item.value === kind)?.label ?? String(kind || 'Услуга');
+const indoorTypesLabel = (kind: string) => ({ wall: 'настенный', cassette: 'кассетный', duct: 'канальный', floor_ceiling: 'напольно-потолочный', column: 'колонный', console: 'консольный' }[kind] ?? kind);
 const tariffShortName = (tariff: ManagerTariffResponse) => tariff.short_name || tariff.selector_label;
 const tariffFullDescription = (tariff: ManagerTariffResponse) => tariff.full_description || tariffShortName(tariff);
 
@@ -127,7 +178,7 @@ const handleRuleSuccess = async () => {
   await loadTariffs();
 };
 
-onMounted(loadTariffs);
+onMounted(() => { void loadTariffs(); void loadComparison(); });
 </script>
 
 <template>
@@ -178,24 +229,19 @@ onMounted(loadTariffs);
       </div>
     </div>
 
-    <div class="mb-6 flex flex-col gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-blue-950 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-100 sm:flex-row sm:items-center sm:justify-between">
+    <div v-if="kindFilter === 'installation'" class="mb-6 flex flex-col gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-blue-950 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-100 sm:flex-row sm:items-center sm:justify-between">
       <div class="flex items-start gap-3">
         <span class="material-icons-round mt-0.5 text-blue-600 dark:text-blue-300">info</span>
         <div>
-          <div class="text-sm font-semibold">Эти тарифы используются только во внутренних сметах</div>
+          <div class="text-sm font-semibold">Книга монтажа: {{ comparison?.price_book_revision ? `ревизия ${comparison.price_book_revision} опубликована` : 'ещё не опубликована' }}</div>
           <div class="mt-0.5 text-xs text-blue-800/80 dark:text-blue-200/80">
-            Цена монтажа на сайте и правило подбора по типу кондиционера настраиваются отдельно.
+            Типизированные тарифы и правила сначала сохраняются как черновик. Публикация проверяет полноту и пересечения; старые публичные цены остаются отдельно.
           </div>
         </div>
       </div>
-      <a
-        href="/manager/installation-rates"
-        class="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-500"
-      >
-        Публичный монтаж
-        <span class="material-icons-round text-base">arrow_forward</span>
-      </a>
+      <button type="button" :disabled="publishing || comparisonLoading" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50" @click="publish">{{ publishing ? 'Публикуем…' : 'Опубликовать книгу' }}</button>
     </div>
+    <div v-if="publishError" role="alert" class="mb-6 rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">{{ publishError }}</div>
 
     <div
       v-if="error"
@@ -231,7 +277,7 @@ onMounted(loadTariffs);
                 <button class="text-left" @click="selectedTariffId = tariff.id">
                   <div class="text-sm font-semibold text-gray-900 dark:text-slate-100">{{ tariffShortName(tariff) }}</div>
                   <div class="text-xs text-gray-500 dark:text-slate-400">
-                    {{ serviceKindLabel(tariff.service_kind) }} · {{ tariff.category || '—' }} · {{ tariff.power_range || 'all' }} · sort {{ tariff.sort_order }}
+                    {{ serviceKindLabel(tariff.service_kind) }} · {{ tariff.service_kind === 'installation' ? (tariff.installation_match ? `Книга: ${indoorTypesLabel(tariff.installation_match.indoor_type)}` : 'Вне книги') : (tariff.category || '—') }} · {{ tariff.power_range || 'все мощности' }}
                   </div>
                 </button>
               </td>
@@ -312,7 +358,7 @@ onMounted(loadTariffs);
                 <div>
                   <div class="text-sm font-semibold text-gray-900 dark:text-slate-100">{{ rule.name }}</div>
                   <div class="text-xs text-gray-500 dark:text-slate-400">
-                    {{ rule.rule_type }} · {{ rule.unit_price }} BYN/{{ rule.unit }} · sort {{ rule.sort_order }}
+                    {{ rule.component_code || 'Без смысла компонента' }} · {{ rule.unit_price }} BYN/{{ rule.unit }}
                   </div>
                   <div class="text-xs text-gray-500 dark:text-slate-400 mt-1">{{ rule.line_template }}</div>
                 </div>
@@ -327,16 +373,16 @@ onMounted(loadTariffs);
               </div>
               <div class="mt-1 flex gap-2 text-[11px]">
                 <span class="px-2 py-0.5 rounded bg-white dark:bg-slate-700 border border-gray-200 dark:border-slate-600">
-                  {{ rule.is_optional ? 'optional' : 'required' }}
+                  {{ rule.is_optional ? 'По выбору' : 'Обязательно' }}
                 </span>
                 <span
                   v-if="rule.is_favorite"
                   class="px-2 py-0.5 rounded bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200 border border-amber-200 dark:border-amber-500/30"
                 >
-                  favorite
+                  Избранное
                 </span>
                 <span class="px-2 py-0.5 rounded bg-white dark:bg-slate-700 border border-gray-200 dark:border-slate-600">
-                  {{ rule.is_active ? 'active' : 'inactive' }}
+                  {{ rule.is_active ? 'Активно' : 'Выключено' }}
                 </span>
               </div>
             </div>
@@ -344,6 +390,28 @@ onMounted(loadTariffs);
         </div>
       </section>
     </div>
+
+    <section v-if="kindFilter === 'installation'" class="mt-6 rounded-xl border border-gray-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+      <h2 class="text-base font-semibold">Сверка со старыми публичными расценками</h2>
+      <p class="mt-1 text-xs text-gray-500">Кандидаты найдены только по категории внутреннего блока. Даже одинаковая цена не доказывает точное соответствие. Сверка ничего не переносит в книгу.</p>
+      <div v-if="comparisonLoading" class="mt-3 text-sm">Загружаем сравнение…</div>
+      <div v-else-if="comparisonError" role="alert" class="mt-3 text-sm text-red-600">{{ comparisonError }}</div>
+      <div v-else-if="!comparison?.items.length" class="mt-3 text-sm text-gray-500">На этой странице старых расценок нет.</div>
+      <div v-else class="mt-3 overflow-x-auto">
+        <table class="w-full text-left text-sm"><thead><tr><th class="py-2">Старая расценка</th><th>Кандидаты книги</th><th>Проверка</th></tr></thead>
+          <tbody><tr v-for="row in comparison.items" :key="row.legacy_rate_id" class="border-t border-gray-200 dark:border-slate-700">
+            <td class="py-2">{{ row.legacy_category }} · {{ row.legacy_power_range }} · {{ row.legacy_base_price }} BYN</td>
+            <td>{{ row.candidates?.map(candidate => candidate.tariff_code).join(', ') || '—' }}</td>
+            <td>{{ comparisonStatus(row.status) }}</td>
+          </tr></tbody>
+        </table>
+      </div>
+      <div class="mt-3 flex items-center gap-3 text-sm">
+        <button type="button" :disabled="comparisonOffset === 0 || comparisonLoading" @click="comparisonOffset -= 100; loadComparison()">Назад</button>
+        <span>Записи {{ comparisonOffset + 1 }}–{{ comparisonOffset + (comparison?.items.length ?? 0) }}</span>
+        <button type="button" :disabled="comparisonLoading || (comparison?.items.length ?? 0) < 100" @click="comparisonOffset += 100; loadComparison()">Далее</button>
+      </div>
+    </section>
 
     <TariffEditModal
       v-model="showTariffModal"

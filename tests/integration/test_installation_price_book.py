@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import func, select
 
-from models import InstallationPriceBook, InstallationPreviewSnapshot, ServiceTariff, ServiceTariffRule, Storefront, Tenant
+from models import InstallationPriceBook, InstallationPreviewSnapshot, InstallationRate, ServiceTariff, ServiceTariffRule, Storefront, Tenant
 from models.tenancy import TenantScope
 from schemas_installation_price_book import InstallationPreviewPayload, InstallationResolvePayload
 from services.installation_price_book_service import InstallationPriceBookService as BookService
@@ -45,6 +45,28 @@ async def _draft(db, scope, *, price):
     ])
     await db.commit()
     return tariff
+
+
+@pytest.mark.asyncio
+async def test_legacy_comparison_uses_current_draft_before_publication(db):
+    scope = await _scope(db, "installation-comparison-draft")
+    tariff = await _draft(db, scope, price=500)
+    db.add(InstallationRate(tenant_id=scope.tenant_id, category="Wall", power_range="07-12",
+                            base_price=500, extra_pipe_price=10))
+    await db.commit()
+
+    report = await BookService.legacy_comparison(db, scope, offset=0, limit=100)
+    assert report.price_book_revision is None
+    assert len(report.items) == 1
+    assert report.items[0].status == "price_diff_review_required"  # Draft route price is 10.25.
+    assert report.items[0].candidates[0].tariff_code == tariff.installation_code
+
+    tariff.base_price = 600
+    db.add(tariff)
+    await db.commit()
+    revised = await BookService.legacy_comparison(db, scope, offset=0, limit=100)
+    assert revised.items[0].candidates[0].base_price == Decimal("600")
+    assert revised.price_book_revision is None
 
 
 @pytest.mark.asyncio
