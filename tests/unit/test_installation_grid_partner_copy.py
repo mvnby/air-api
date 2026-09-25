@@ -69,10 +69,14 @@ async def test_initial_partner_copy_publishes_only_current_approved_source():
             assert preview.source_counts.tariffs == 1  # inactive historical draft excluded
             assert preview.source_counts.services == 1  # repair survives, legacy option does not
             assert preview.source_counts.installation_rates == 0
+            partner_before_copy = partner.updated_at
             await ServiceCatalogTemplateService.clone(
                 session, tenant_scope=target,
                 expected_fingerprint=preview.source_fingerprint,
             )
+            await session.refresh(partner)
+            assert (partner.updated_at.replace(tzinfo=None) >
+                    partner_before_copy.replace(tzinfo=None))
             copied = (await session.execute(select(ServiceTariff).where(
                 ServiceTariff.tenant_id == partner.id))).scalar_one()
             assert copied.installation_code == spec.code

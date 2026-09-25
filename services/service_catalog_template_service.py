@@ -8,7 +8,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
@@ -24,7 +24,7 @@ from models import (
     Tenant,
     TenantAuditEvent,
 )
-from models.tenancy import TenantScope
+from models.tenancy import TenantScope, utc_now
 from schemas_service_catalog import (
     ManagerServiceCatalogCloneResponse,
     ManagerServiceCatalogTemplatePreviewResponse,
@@ -434,6 +434,15 @@ class ServiceCatalogTemplateService:
                         "data; existing rows were not overwritten"
                     ),
                 )
+
+            # Publication and the reviewed grid reset both lock this tenant.
+            # Change its row version before inserting a partner book so a
+            # serializable reset whose snapshot predates this clone cannot
+            # resume after the lock wait and publish revision 1 again.
+            await session.execute(
+                update(Tenant).where(Tenant.id == tenant_scope.tenant_id)
+                .values(updated_at=utc_now())
+            )
 
             service_map: dict[int, int] = {}
             for source_service in source.services:
