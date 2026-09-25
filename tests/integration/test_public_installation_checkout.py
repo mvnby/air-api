@@ -60,7 +60,8 @@ async def _seed(session: AsyncSession):
 
 
 async def _preview(session: AsyncSession, product_id: int, *, key: str,
-                   with_pump: bool = False, count: int = 1):
+                   with_pump: bool = False, count: int = 1,
+                   site_extras: list[dict] | None = None):
     installations = [{"key": "ac-one", "display_label": "№1", "product_id": product_id,
                       "route_length_m": "6", "holes_by_type": {"diamond": 2},
                       "extras": ([{"code": "pump.supply"}, {"code": "pump.install"}]
@@ -73,7 +74,7 @@ async def _preview(session: AsyncSession, product_id: int, *, key: str,
         session, TenantScope(tenant_id=1, storefront_id=1, is_system=True,
                              is_canonical_storefront=True),
         InstallationPreviewPayload.model_validate({
-            "installations": installations, "site_extras": [{"code": "access.lift"}],
+            "installations": installations, "site_extras": site_extras or [],
         }), idempotency_key=key,
     )
 
@@ -106,8 +107,8 @@ async def test_public_checkout_attaches_exact_preview_and_bounded_event(async_cl
                              with_pump=True, count=count)
     assert preview.status == "fixed"
     if count == 2:
-        assert preview.total == Decimal("1280.73")
-    assert [part.code for part in preview.components].count("access.lift") == 1
+        assert preview.total == Decimal("1180.73")
+    assert not any(part.code == "access.lift" for part in preview.components)
     body = _order_payload(product_id, preview, quantity=count)
     response = await async_client.post("/api/v1/orders", json=body,
                                        headers={"Idempotency-Key": f"public-{count}-ac-checkout"})
@@ -121,7 +122,6 @@ async def test_public_checkout_attaches_exact_preview_and_bounded_event(async_cl
     assert attached[0].installation_estimate_revision_id is not None
     assert Decimal(str(attached[0].price)) == preview.total
     assert len(attached[0].title) > 180
-    assert "вышка" in attached[0].title.lower()
     assert "поставка насоса" in attached[0].title.lower()
     assert order.product_links[0].is_installation_included is False
     assert order.product_links[0].installation_price == 0
@@ -152,6 +152,27 @@ async def test_public_checkout_attaches_exact_preview_and_bounded_event(async_cl
     assert refused.status_code == 409
     assert refused.json()["detail"]["code"] == "preview_already_used"
     assert await db.scalar(select(func.count(PublicInstallationPreviewClaim.id))) == 1
+
+
+@pytest.mark.asyncio
+async def test_public_checkout_rejects_provisional_site_access_without_order(async_client, db):
+    product_id = await _seed(db)
+    preview = await _preview(
+        db, product_id, key="public-site-access-provisional",
+        site_extras=[{"code": "access.lift"}],
+    )
+    assert preview.status == "provisional"
+    assert preview.reason_code == "site_access_requires_approval"
+    assert [part.code for part in preview.components].count("access.lift") == 1
+
+    refused = await async_client.post(
+        "/api/v1/orders", json=_order_payload(product_id, preview),
+        headers={"Idempotency-Key": "public-site-access-submit"},
+    )
+    assert refused.status_code == 409
+    assert refused.json()["detail"]["code"] == "preview_not_fixed"
+    assert await db.scalar(select(func.count(Order.id))) == 0
+    assert await db.scalar(select(func.count(PublicInstallationPreviewClaim.id))) == 0
 
 
 @pytest.mark.asyncio
