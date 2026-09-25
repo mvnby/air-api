@@ -48,6 +48,11 @@ Production server intentionally runs from Docker images only (no git checkout in
      immediately after the run; see [tenant manager provisioning](tenant-manager-provisioning.md).
    - Tenant demo fixture plan (read-only default):
      `python3 scripts/setup_tenant_demo.py plan --tenant-id 35 --storefront-id 36`
+   - Installation grid reset (read-only discovery default):
+     `python3 scripts/manage_installation_grid_rollout.py plan`. Review the exact
+     all-tenant price and coverage report, deployed web/legacy/Manager guards,
+     then use only a fresh signed plan's emitted command on the primary; see
+     [installation grid rollout](installation-grid-rollout.md).
    - Tenant demo execution is primary-only and manual-only. Require an empty
      target CRM and two positive-price allowed offers, review the exact expiring
      plan, and run only its emitted command under the production deploy lock;

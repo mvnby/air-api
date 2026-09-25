@@ -3,8 +3,9 @@
 import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
-from models import LeadSource, Order, OrderStatus
+from models import LeadSource, Order, OrderStatus, Tenant
 from schemas import OrderPayload, OrderResponse
 from services.communications.tenant_website_event_service import (
     TenantWebsiteEventService,
@@ -65,6 +66,14 @@ class WebsiteOrderService:
                 )
                 return PublicWriteCommandResponse(
                     value=response, resource_type="order", resource_id=response.id,
+                )
+            if any(item.with_installation for item in payload.items):
+                # Publication takes the same tenant lock before replacing the
+                # authoritative book. Hold it through legacy pricing and order
+                # creation so a first publication cannot race this checkout.
+                await session.execute(
+                    select(Tenant).where(Tenant.id == tenant_scope.tenant_id)
+                    .with_for_update(key_share=True)
                 )
             created_order = await WebsiteOrderService._create_order_mutation(
                 session,

@@ -258,3 +258,19 @@ class InstallationLegacyComparisonRow(BaseModel):
 class InstallationLegacyComparisonResponse(BaseModel):
     price_book_revision: int | None = None
     items: list[InstallationLegacyComparisonRow]
+
+
+class InstallationPricingCapabilities(BaseModel):
+    legacy_rate_checkout: bool
+    standard_product_acceptance: bool
+    manual_service_only_preview: bool
+    multisplit_preview_only: bool
+    prelaid_preview_only: bool
+
+
+class InstallationPricingConfigResponse(BaseModel):
+    source: Literal["legacy", "price_book"]
+    price_book_revision: int | None = None
+    scope_ref: str
+    service_enabled: bool
+    capabilities: InstallationPricingCapabilities

@@ -4,6 +4,7 @@ import ServiceEstimatesView from '../src/views/ServiceEstimatesView.vue';
 
 const apiMock = vi.hoisted(() => ({
   listManagerTariffsByKind: vi.fn(),
+  listManagerInstallationRates: vi.fn(),
   listManagerServiceEstimates: vi.fn(),
   calculateManagerInstallEstimate: vi.fn(),
   createManagerServiceEstimate: vi.fn(),
@@ -23,6 +24,7 @@ const calculation = {
 beforeEach(() => {
   vi.clearAllMocks();
   apiMock.listManagerTariffsByKind.mockResolvedValue({ items: [tariff] });
+  apiMock.listManagerInstallationRates.mockResolvedValue({ published_price_book_revision: null, items: [] });
   apiMock.listManagerServiceEstimates.mockResolvedValue({ page: 1, limit: 20, total: 1, items: [{ id: 3, title: 'Смета', comment: null, tariff, total: 300, currency: 'BYN', status: 'approved', created_at: '2026-09-23T10:00:00Z', lines: [] }] });
   apiMock.calculateManagerInstallEstimate.mockResolvedValue(calculation);
   apiMock.createManagerServiceEstimate.mockResolvedValue({ id: 4 });
@@ -38,6 +40,17 @@ const mountView = async () => {
 };
 
 describe('ServiceEstimatesView', () => {
+  it('keeps history but directs new installation estimates to the order after publication', async () => {
+    apiMock.listManagerInstallationRates.mockResolvedValue({ published_price_book_revision: 1, items: [] });
+    const wrapper = await mountView();
+    expect(wrapper.text()).toContain('Согласована');
+    expect(wrapper.text()).toContain('Монтаж теперь рассчитывается по опубликованной книге цен');
+    expect(wrapper.get('a[href="/manager/orders"]').text()).toContain('Открыть заказы');
+    expect(wrapper.findAll('button').some((button) => button.text().includes('Рассчитать смету'))).toBe(false);
+    expect(apiMock.calculateManagerInstallEstimate).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
   it('uses Russian status labels and saves a calculation without a customer', async () => {
     const wrapper = await mountView();
     expect(wrapper.text()).toContain('Согласована');

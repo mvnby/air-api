@@ -12,6 +12,7 @@ import type { FiltersConfigResponse } from '../models/FiltersConfigResponse';
 import type { InstallationEstimateLeadResponse } from '../models/InstallationEstimateLeadResponse';
 import type { InstallationPreviewPayload } from '../models/InstallationPreviewPayload';
 import type { InstallationPreviewResponse } from '../models/InstallationPreviewResponse';
+import type { InstallationPricingConfigResponse } from '../models/InstallationPricingConfigResponse';
 import type { InstallationResolvePayload } from '../models/InstallationResolvePayload';
 import type { InstallationResolveResponse } from '../models/InstallationResolveResponse';
 import type { ManagerInstallEstimateResponse } from '../models/ManagerInstallEstimateResponse';
@@ -821,6 +822,18 @@ export class ApiService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/storefront-settings',
+        });
+    }
+    /**
+     * Get Public Installation Pricing Config
+     * Tell the storefront which pricing contract is currently authoritative.
+     * @returns InstallationPricingConfigResponse Successful Response
+     * @throws ApiError
+     */
+    public static getPublicInstallationPricingConfig(): CancelablePromise<InstallationPricingConfigResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/service-pricing/installation/config',
         });
     }
     /**

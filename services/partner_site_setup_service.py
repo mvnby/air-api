@@ -55,8 +55,6 @@ class PartnerSiteSetupService:
             Storefront, Storefront.tenant_id == Tenant.id,
         ).where(Tenant.slug == manifest.tenant_slug,
                 Storefront.slug == manifest.storefront_slug)
-        if lock:
-            statement = statement.with_for_update()
         pair = (await session.execute(statement)).first()
         if pair is None:
             raise StorefrontOnboardingBlockedError("Bootstrap the exact partner first")
@@ -64,13 +62,30 @@ class PartnerSiteSetupService:
         if tenant.is_system or tenant.status != "active" or storefront.status == "disabled":
             raise StorefrontOnboardingBlockedError("Only an enabled non-system partner is supported")
         scope = TenantScope(tenant_id=tenant.id, storefront_id=storefront.id)
+        if lock:
+            await ServiceCatalogTemplateService.lock_clone_scopes(
+                session, tenant_scope=scope,
+            )
+            # Re-read after acquiring locks so slug/status checks are based on
+            # the locked state, not on a pre-lock discovery row.
+            tenant, storefront = (await session.execute(
+                statement.execution_options(populate_existing=True)
+            )).first() or (None, None)
+            if (tenant is None or tenant.id != scope.tenant_id or
+                    storefront.id != scope.storefront_id or tenant.status != "active" or
+                    storefront.status == "disabled"):
+                raise StorefrontOnboardingBlockedError("Partner scope changed; review a fresh plan")
         current = await StorefrontSettingsService.get_settings(session, tenant_scope=scope)
         template = await ServiceCatalogTemplateService.preview(session, tenant_scope=scope)
         blockers = []
         if current.version != 0:
             blockers.append("Settings already initialized; use Manager to edit")
         if not template.can_clone:
-            blockers.append("Partner already has service data; no overwrite is permitted")
+            blockers.append(
+                "Partner already has service data; no overwrite is permitted"
+                if sum(template.target_counts.model_dump().values()) > 0
+                else "Canonical installation draft differs from its published book"
+            )
         report = {
             "operation": "partner_site_initial_setup_v1",
             "tenant_id": tenant.id,

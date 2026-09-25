@@ -117,4 +117,5 @@ async def create_order(
         raise HTTPException(
             status_code=409,
             detail={"code": exc.code, "message": str(exc)},
+            headers=private_storefront_response_headers(),
         ) from exc

@@ -231,6 +231,7 @@ const show = async () => {
   } catch (failure) { if (current(scope)) error.value = readableError(failure); }
   finally { if (current(scope)) busy.value = false; }
 };
+defineExpose({ openPanel: async () => { if (!open.value) await show(); } });
 const payload = (): InstallationPreviewPayload => {
   if (!activeKeys.value.length) throw new Error('Выберите оборудование или укажите параметры установки без товара.');
   if (activeKeys.value.length > 20) throw new Error('За один расчёт можно добавить не более 20 установок.');

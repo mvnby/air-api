@@ -32,6 +32,7 @@ const props = defineProps<{
 const emit = defineEmits<{ catalog: []; documents: [] }>();
 const expanded = defineModel<boolean>('expanded', { required: true });
 const toolbarRef = ref<InstanceType<typeof OrderProposalToolbar> | null>(null);
+const installationPanelRef = ref<InstanceType<typeof OrderInstallationEstimatePanel> | null>(null);
 const commercial = reactive(props.commercial);
 const proposal = reactive(props.proposal);
 const hasAttachedInstallation = computed(() => commercial.serviceLines.some((line) => Boolean(line.installation_estimate_revision_id)));
@@ -123,6 +124,7 @@ defineExpose({
           :format-service-kind="formatServiceKind"
           :workflow="workflow"
           :customer-id="customerId"
+          :can-open-installation-estimate="Boolean(orderId && proposal.activeProposal?.id && (workflow === 'sales_installation' || workflow === 'service_work'))"
           @focus="commercial.onServiceTitleFocus"
           @input="commercial.onServiceTitleInput"
           @blur="commercial.onServiceTitleBlur"
@@ -136,10 +138,12 @@ defineExpose({
           @import-estimate="commercial.applyEstimateToServices"
           @load-estimates="commercial.loadEstimateOptions"
           @remember-description-mode="commercial.setDefaultServiceDescriptionMode"
+          @open-installation-estimate="installationPanelRef?.openPanel()"
         />
         <p v-if="hasAttachedInstallation" class="mt-2 text-xs text-slate-500">Строки монтажа по книге зафиксированы. Для замены используйте новый пустой черновик предложения.</p>
         <OrderInstallationEstimatePanel
           v-if="orderId && proposal.activeProposal?.id && (workflow === 'sales_installation' || workflow === 'service_work')"
+          ref="installationPanelRef"
           :order-id="orderId"
           :proposal-id="proposal.activeProposal.id"
           :before-action="beforeInstallationAction"
