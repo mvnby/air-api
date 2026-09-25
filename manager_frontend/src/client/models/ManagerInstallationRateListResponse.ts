@@ -5,5 +5,6 @@
 import type { ManagerInstallationRateResponse } from './ManagerInstallationRateResponse';
 export type ManagerInstallationRateListResponse = {
     items: Array<ManagerInstallationRateResponse>;
+    published_price_book_revision?: (number | null);
 };
 

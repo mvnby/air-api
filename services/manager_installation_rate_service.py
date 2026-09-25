@@ -6,9 +6,10 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models import InstallationRate
-from models.tenancy import TenantScope
+from models import InstallationPriceBook, InstallationRate
+from models.tenancy import Tenant, TenantScope
 from schemas_manager_installation_rates import (
+    ManagerInstallationRateListResponse,
     ManagerInstallationRateResponse,
     ManagerInstallationRateSelectionStatus,
     ManagerInstallationRateUpdatePayload,
@@ -35,6 +36,27 @@ class ManagerInstallationRateService:
         ),
     }
     _RESOLVABLE_CATEGORIES = frozenset({"wall", "duct", "cassette", "ceiling"})
+
+    @staticmethod
+    async def _published_revision(
+        session: AsyncSession, tenant_id: int
+    ) -> int | None:
+        return (await session.execute(
+            select(InstallationPriceBook.revision)
+            .where(InstallationPriceBook.tenant_id == tenant_id)
+            .order_by(InstallationPriceBook.revision.desc())
+            .limit(1)
+        )).scalars().first()
+
+    @classmethod
+    async def list_response(
+        cls, session: AsyncSession, tenant_scope: TenantScope
+    ) -> ManagerInstallationRateListResponse:
+        revision = await cls._published_revision(session, tenant_scope.tenant_id)
+        return ManagerInstallationRateListResponse(
+            items=[] if revision is not None else await cls.list_rates(session, tenant_scope),
+            published_price_book_revision=revision,
+        )
 
     @staticmethod
     def _normalized_category(value: str) -> str:
@@ -185,6 +207,24 @@ class ManagerInstallationRateService:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Installation rate not found",
+            )
+
+        # Serialize against book publication using the same FK-compatible lock.
+        # A page opened before publication must not keep editing the retired source.
+        tenant_query = select(Tenant).where(
+            Tenant.id == tenant_scope.tenant_id
+            if tenant_scope is not None else Tenant.is_system.is_(True)
+        )
+        tenant = (await session.execute(
+            tenant_query.with_for_update(key_share=True)
+        )).scalars().first()
+        if tenant is not None and await cls._published_revision(session, int(tenant.id)) is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "installation_rates_retired",
+                    "message": "Цены монтажа теперь редактируются в разделе «Тарифы смет».",
+                },
             )
 
         for field, value in payload.model_dump(exclude_unset=True).items():
