@@ -135,7 +135,7 @@ async def test_public_checkout_attaches_exact_preview_and_bounded_event(async_cl
     ))).scalars().one()
     event_line = event.payload["service_lines"][0]
     assert len(event_line["title"]) <= 180
-    assert str(count) in event_line["title"]
+    assert event_line["title"].startswith("Монтаж по принятой смете;")
     assert str(order_id) in event_line["title"]
     assert Decimal(event_line["unit_price"]) == preview.total
     assert event_line["title"] != attached[0].title

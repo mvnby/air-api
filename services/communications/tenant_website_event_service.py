@@ -47,12 +47,8 @@ class TenantWebsiteEventService:
             and request.installation_acceptance is not None
             and link.installation_estimate_revision_id is not None
         ):
-            installation_count = sum(
-                line.quantity
-                for line in request.installation_acceptance.expected_product_lines
-            )
             return (
-                f"Монтаж {installation_count} кондиционеров по принятой смете; "
+                "Монтаж по принятой смете; "
                 f"полный состав работ в заказе №{order_id}"
             )
         return title
