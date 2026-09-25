@@ -224,10 +224,10 @@ class InstallationPriceBookService:
                     raise cls._bad("invalid_discount_rule", f"Rule {rule.id}: bundle discount must be automatic fixed_once")
                 rules.append({"id": rule.id, "code": component_code, "rule_type": rule.rule_type,
                               "name": rule.name, "line_template": rule.line_template, "unit": rule.unit,
-                              "unit_price": str(unit_price), "is_optional": bool(rule.is_optional),
+                              "unit_price": str(money(unit_price)), "is_optional": bool(rule.is_optional),
                               "sort_order": rule.sort_order})
             entries.append({"tariff_id": tariff.id, "code": code, "match": match.model_dump(mode="json"),
-                            "mode": tariff.installation_price_mode, "base_price": str(base_price),
+                            "mode": tariff.installation_price_mode, "base_price": str(money(base_price)),
                             "short_name": tariff.effective_short_name, "description": tariff.effective_full_description,
                             "included_route_m": str(included_route), "included_holes": included_holes, "rules": rules})
         cls._validate_entries(entries)
