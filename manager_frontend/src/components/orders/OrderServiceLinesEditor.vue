@@ -84,18 +84,18 @@ const updatePreferredMode = (mode: ServiceDescriptionMode) => {
     <p v-if="servicesError" class="mb-2 text-xs text-red-300">{{ servicesError }}</p>
     <div class="space-y-2">
       <div v-for="(line, index) in lines" :key="`service-${index}`" class="relative rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
-        <button v-if="editingIndex === index" type="button" data-order-usage="order_service_remove" class="absolute -right-2 -top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border border-red-200 bg-red-50 text-lg font-bold text-red-600 shadow-sm transition-colors hover:bg-red-100" :aria-label="`Удалить услугу #${index + 1}`" title="Удалить услугу" @click="emit('remove', index)">
+        <button v-if="editingIndex === index && !line.installation_estimate_revision_id" type="button" data-order-usage="order_service_remove" class="absolute -right-2 -top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border border-red-200 bg-red-50 text-lg font-bold text-red-600 shadow-sm transition-colors hover:bg-red-100" :aria-label="`Удалить услугу #${index + 1}`" title="Удалить услугу" @click="emit('remove', index)">
           ×
         </button>
-        <div v-if="editingIndex !== index" class="flex min-w-0 items-start gap-3">
+        <div v-if="editingIndex !== index || line.installation_estimate_revision_id" class="flex min-w-0 items-start gap-3">
           <div class="min-w-0 flex-1">
             <p class="break-words text-sm font-semibold leading-snug text-slate-900 dark:text-slate-100">{{ line.title || 'Новая услуга' }}</p>
             <div class="mt-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-              <span>{{ line.quantity }} × {{ formatMoney(line.price) }}</span>
+              <span>{{ line.quantity }} × {{ formatMoney(line.price) }} <span v-if="line.installation_estimate_revision_id" class="ml-1 text-emerald-700">По книге · зафиксировано</span></span>
               <span class="font-semibold text-slate-800 dark:text-slate-200">{{ formatMoney(lineTotal(line)) }}</span>
             </div>
           </div>
-          <button type="button" data-order-usage="order_service_edit" class="btn-mini-outline h-9 w-9 shrink-0 justify-center p-0" :aria-label="`Редактировать услугу #${index + 1}`" title="Редактировать" @click="editingIndex = index">
+          <button v-if="!line.installation_estimate_revision_id" type="button" data-order-usage="order_service_edit" class="btn-mini-outline h-9 w-9 shrink-0 justify-center p-0" :aria-label="`Редактировать услугу #${index + 1}`" title="Редактировать" @click="editingIndex = index">
             <span class="material-icons-round text-[17px]">edit</span>
           </button>
         </div>

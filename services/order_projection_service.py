@@ -195,6 +195,8 @@ class OrderProjectionService:
             "price": link.price,
             "cost": None if demo_read_only else link.cost,
             "line_total": line_total,
+            "installation_estimate_revision_id": link.installation_estimate_revision_id,
+            "installation_projection_mode": link.installation_projection_mode,
         }
 
     @staticmethod

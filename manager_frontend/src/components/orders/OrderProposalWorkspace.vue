@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import type { useOrderCommercialEditor } from '../../composables/useOrderCommercialEditor';
 import type { useOrderProposalLifecycle } from '../../composables/useOrderProposalLifecycle';
 import OrderDrawerSection from './OrderDrawerSection.vue';
 import OrderProductLinesEditor from './OrderProductLinesEditor.vue';
+import OrderInstallationEstimatePanel from './OrderInstallationEstimatePanel.vue';
 import OrderProposalToolbar from './OrderProposalToolbar.vue';
 import OrderServiceLinesEditor from './OrderServiceLinesEditor.vue';
 import type { OrderWorkflowType } from './order-workspace';
@@ -21,6 +22,11 @@ const props = defineProps<{
   formatServiceKind: (kind?: string | null) => string;
   workflow: OrderWorkflowType;
   customerId?: number | null;
+  orderId: number | null;
+  beforeInstallationAction: () => Promise<boolean>;
+  beginInstallationAttach: (orderId: number, proposalId: number, scopeKey: string, token: string) => Promise<boolean>;
+  afterInstallationAttach: (orderId: number, proposalId: number, scopeKey: string, token: string) => Promise<boolean>;
+  endInstallationAttach: (token: string) => void;
 }>();
 
 const emit = defineEmits<{ catalog: []; documents: [] }>();
@@ -28,6 +34,7 @@ const expanded = defineModel<boolean>('expanded', { required: true });
 const toolbarRef = ref<InstanceType<typeof OrderProposalToolbar> | null>(null);
 const commercial = reactive(props.commercial);
 const proposal = reactive(props.proposal);
+const hasAttachedInstallation = computed(() => commercial.serviceLines.some((line) => Boolean(line.installation_estimate_revision_id)));
 
 defineExpose({
   addProduct: () => commercial.addProductLine(),
@@ -62,10 +69,12 @@ defineExpose({
       />
 
       <div v-if="proposal.activeProposalLocked" class="mb-3 flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
-        <span>Эта редакция уже {{ proposal.activeProposalStatus === 'approved' ? 'принята клиентом' : 'отправлена' }}. Чтобы изменить состав или стоимость, создайте копию либо верните её в черновик.</span>
+        <span v-if="hasAttachedInstallation">Эта редакция уже {{ proposal.activeProposalStatus === 'approved' ? 'принята клиентом' : 'отправлена' }}. Для замены монтажа создайте новый пустой черновик предложения.</span>
+        <span v-else>Эта редакция уже {{ proposal.activeProposalStatus === 'approved' ? 'принята клиентом' : 'отправлена' }}. Чтобы изменить состав или стоимость, создайте копию либо верните её в черновик.</span>
         <div class="flex shrink-0 gap-2">
-          <button type="button" class="btn-mini-outline h-8 px-2 text-xs" @click="proposal.duplicateProposal">Создать копию</button>
-          <button type="button" class="btn-mini-outline h-8 px-2 text-xs" @click="proposal.changeActiveProposalStatus('draft')">В черновик</button>
+          <button v-if="hasAttachedInstallation" type="button" class="btn-mini-outline h-8 px-2 text-xs" @click="proposal.createProposal">Новый черновик</button>
+          <template v-else><button type="button" class="btn-mini-outline h-8 px-2 text-xs" @click="proposal.duplicateProposal">Создать копию</button>
+          <button type="button" class="btn-mini-outline h-8 px-2 text-xs" @click="proposal.changeActiveProposalStatus('draft')">В черновик</button></template>
         </div>
       </div>
 
@@ -127,6 +136,16 @@ defineExpose({
           @import-estimate="commercial.applyEstimateToServices"
           @load-estimates="commercial.loadEstimateOptions"
           @remember-description-mode="commercial.setDefaultServiceDescriptionMode"
+        />
+        <p v-if="hasAttachedInstallation" class="mt-2 text-xs text-slate-500">Строки монтажа по книге зафиксированы. Для замены используйте новый пустой черновик предложения.</p>
+        <OrderInstallationEstimatePanel
+          v-if="orderId && proposal.activeProposal?.id && (workflow === 'sales_installation' || workflow === 'service_work')"
+          :order-id="orderId"
+          :proposal-id="proposal.activeProposal.id"
+          :before-action="beforeInstallationAction"
+          :begin-attach="beginInstallationAttach"
+          :after-attach="afterInstallationAttach"
+          :end-attach="endInstallationAttach"
         />
       </fieldset>
       <button v-if="commercial.total > 0" type="button" class="btn-mini-outline mt-5 w-full justify-center" data-testid="proposal-to-documents" @click="emit('documents')">Перейти к документам →</button>

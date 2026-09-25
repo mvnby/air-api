@@ -323,6 +323,12 @@ class InstallationEstimateConfirmationService:
         cls, saved: InstallationEstimateRevision, mode: str,
     ) -> tuple[list[tuple[str, Decimal]], Decimal]:
         result = InstallationPreviewResponse.model_validate(saved.snapshot["result"])
+        return cls.project_preview(result, mode, expected_total=saved.total)
+
+    @classmethod
+    def project_preview(
+        cls, result: InstallationPreviewResponse, mode: str, *, expected_total: Decimal | None = None,
+    ) -> tuple[list[tuple[str, Decimal]], Decimal]:
         if result.status != "fixed" or result.total is None or result.subtotal is None or result.discount is None:
             raise cls._bad("invalid_estimate_snapshot")
         try:
@@ -335,7 +341,7 @@ class InstallationEstimateConfirmationService:
             if sum(gross, Decimal("0.00")) != subtotal or subtotal - discount != total \
                or sum(net, Decimal("0.00")) != total or sum(reductions, Decimal("0.00")) != discount \
                or any(item_gross != item_net + item_discount for item_gross, item_net, item_discount
-                      in zip(gross, net, reductions)) or total != exact_money(saved.total):
+                      in zip(gross, net, reductions)) or (expected_total is not None and total != exact_money(expected_total)):
                 raise ValueError("Totals do not reconcile")
             if mode == "collapsed":
                 if not result.customer_text:
@@ -375,7 +381,7 @@ class InstallationEstimateConfirmationService:
                                       for item in summary.selected_extras
                                       if item.code == component.code), None)
                     if label:
-                        label = f"Установка {component.installation_key}: {label}"
+                        label = f"Установка {summary.display_label or component.installation_key}: {label}"
                 if not label:
                     raise ValueError("Component has no factual label")
                 writable_service_money(amount)

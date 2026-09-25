@@ -193,7 +193,7 @@ class InstallationPriceBookService:
             if selected.quantity != 1:
                 detail += f" {cls._quantity_text(selected.quantity)} {selected.unit}"
             parts.append(detail)
-        return f"Установка {summary.installation_key}: " + ", ".join(parts)
+        return f"Установка {summary.display_label or summary.installation_key}: " + ", ".join(parts)
 
     @classmethod
     def _overlap(cls, a: InstallationMatcher, b: InstallationMatcher) -> bool:
@@ -610,7 +610,8 @@ class InstallationPriceBookService:
                     unit=part.unit, quantity=extra.quantity,
                 ))
             work_summaries.append(InstallationWorkSummary(
-                installation_key=installation.key, tariff_code=entry["code"],
+                installation_key=installation.key, display_label=installation.display_label,
+                tariff_code=entry["code"],
                 work_label=work_label, measured=measured, selected_extras=selected_extras,
             ))
         seen_site: set[str] = set()

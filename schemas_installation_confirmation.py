@@ -58,3 +58,13 @@ class ManagerInstallationPriceChanged(BaseModel):
     current_revision: int | None = None
     fresh_preview: InstallationPreviewResponse
     new_consent_required: bool = True
+
+
+class ManagerInstallationPreviewLine(BaseModel):
+    title: str
+    price: Decimal
+
+
+class ManagerInstallationPreviewResponse(InstallationPreviewResponse):
+    collapsed_lines: list[ManagerInstallationPreviewLine] = Field(default_factory=list)
+    detailed_lines: list[ManagerInstallationPreviewLine] = Field(default_factory=list)

@@ -3,12 +3,12 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { InstallationPreviewPayload } from '../models/InstallationPreviewPayload';
-import type { InstallationPreviewResponse } from '../models/InstallationPreviewResponse';
 import type { ManagerInstallationAttachPayload } from '../models/ManagerInstallationAttachPayload';
 import type { ManagerInstallationAttachResponse } from '../models/ManagerInstallationAttachResponse';
 import type { ManagerInstallationConfirmPayload } from '../models/ManagerInstallationConfirmPayload';
 import type { ManagerInstallationConfirmResponse } from '../models/ManagerInstallationConfirmResponse';
 import type { ManagerInstallationEstimateRevisionResponse } from '../models/ManagerInstallationEstimateRevisionResponse';
+import type { ManagerInstallationPreviewResponse } from '../models/ManagerInstallationPreviewResponse';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -17,13 +17,13 @@ export class ManagerInstallationEstimatesService {
      * Preview Manager Installation Estimate
      * @param idempotencyKey
      * @param requestBody
-     * @returns InstallationPreviewResponse Successful Response
+     * @returns ManagerInstallationPreviewResponse Successful Response
      * @throws ApiError
      */
     public static previewManagerInstallationEstimate(
         idempotencyKey: string,
         requestBody: InstallationPreviewPayload,
-    ): CancelablePromise<InstallationPreviewResponse> {
+    ): CancelablePromise<ManagerInstallationPreviewResponse> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/manager/installation-estimates/preview',

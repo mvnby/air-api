@@ -18,6 +18,7 @@ from schemas_installation_confirmation import (
     ManagerInstallationAttachPayload, ManagerInstallationAttachResponse,
     ManagerInstallationConfirmPayload, ManagerInstallationConfirmResponse,
     ManagerInstallationEstimateRevisionResponse,
+    ManagerInstallationPreviewResponse,
 )
 from schemas_installation_price_book import InstallationPreviewPayload, InstallationPreviewResponse
 from services.installation_estimate_confirmation_service import (
@@ -37,6 +38,15 @@ router = APIRouter(
 )
 
 
+def _manager_preview(result: InstallationPreviewResponse) -> ManagerInstallationPreviewResponse:
+    lines = {}
+    if result.status == "fixed":
+        for mode in ("collapsed", "detailed"):
+            projected, _ = InstallationEstimateConfirmationService.project_preview(result, mode)
+            lines[f"{mode}_lines"] = [{"title": title, "price": price} for title, price in projected]
+    return ManagerInstallationPreviewResponse(**result.model_dump(), **lines)
+
+
 def _idempotency_error(exc: Exception) -> HTTPException:
     if isinstance(exc, PublicWriteIdempotencyConflict):
         return HTTPException(status_code=409, detail={"code": "idempotency_key_reused"})
@@ -44,7 +54,7 @@ def _idempotency_error(exc: Exception) -> HTTPException:
                          headers={"Retry-After": "1"})
 
 
-@router.post("/preview", response_model=InstallationPreviewResponse,
+@router.post("/preview", response_model=ManagerInstallationPreviewResponse,
              operation_id=PREVIEW_MANAGER_INSTALLATION_ESTIMATE)
 async def preview_manager_installation_estimate(
     payload: InstallationPreviewPayload,
@@ -52,9 +62,10 @@ async def preview_manager_installation_estimate(
     session: AsyncSession = Depends(get_session),
     scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
-    return await InstallationPriceBookService.preview(
+    result = await InstallationPriceBookService.preview(
         session, scope, payload, idempotency_key=idempotency_key,
     )
+    return _manager_preview(result)
 
 
 @router.post("/confirm", response_model=ManagerInstallationConfirmResponse,
@@ -78,7 +89,7 @@ async def confirm_manager_installation_estimate(
         )
         raise HTTPException(status_code=409, detail={
             "code": "price_changed", "current_revision": exc.current_revision,
-            "fresh_preview": fresh.model_dump(mode="json"), "new_consent_required": True,
+            "fresh_preview": _manager_preview(fresh).model_dump(mode="json"), "new_consent_required": True,
         }) from exc
     except (PublicWriteIdempotencyConflict, PublicWriteIdempotencyUnavailable) as exc:
         raise _idempotency_error(exc) from exc
