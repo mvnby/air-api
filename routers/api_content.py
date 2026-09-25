@@ -1,6 +1,6 @@
 """Public content/service/config endpoints split from the main API router."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
@@ -17,6 +17,8 @@ from schemas import (
 from services.article_service import ArticleService
 from services.content_api_service import ContentApiService
 from services.installation_service import InstallationService
+from services.installation_price_book_service import InstallationPriceBookService
+from core.storefront_request_envelope import private_storefront_response_headers
 from services.public_series_page_service import PublicSeriesPageService
 from services.storefront_settings_service import StorefrontSettingsService
 
@@ -43,13 +45,18 @@ async def get_article(slug: str, session: AsyncSession = Depends(get_session)):
 
 @router.get("/v1/content/services", response_model=List[ServiceResponse])
 async def get_services(
+    response: Response,
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
     """Get list of all available services."""
-    return await ContentApiService.get_active_services(
+    response.headers.update(private_storefront_response_headers())
+    services = await ContentApiService.get_active_services(
         session, tenant_scope=tenant_scope
     )
+    if await InstallationPriceBookService.latest(session, tenant_scope):
+        return [service for service in services if service["category"] not in {"installation", "installation_option"}]
+    return services
 
 
 @router.get("/v1/content/brands", response_model=List[PublicBrandResponse], operation_id="get_public_brands")
@@ -113,11 +120,17 @@ async def get_public_brand_series(
 
 @router.get("/v1/services/options", response_model=List[ServiceResponse])
 async def get_service_options(
+    response: Response,
     category: str = "installation_option",
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
     """Get rich installation options."""
+    response.headers.update(private_storefront_response_headers())
+    if category in {"installation", "installation_option"} and await InstallationPriceBookService.latest(session, tenant_scope):
+        raise HTTPException(status_code=409,
+            detail={"code": "book_preview_required", "message": "Use the published installation price book preview"},
+            headers=private_storefront_response_headers())
     return await ContentApiService.get_service_options(
         session,
         category=category,
@@ -137,6 +150,10 @@ async def get_installation_rates(
         service_kind="installation",
     ):
         return []
+    if await InstallationPriceBookService.latest(session, tenant_scope):
+        raise HTTPException(status_code=409,
+            detail={"code": "book_preview_required", "message": "Use the published installation price book preview"},
+            headers=private_storefront_response_headers())
     return await InstallationService.get_all(session, tenant_scope)
 
 

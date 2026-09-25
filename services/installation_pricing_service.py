@@ -246,6 +246,13 @@ class InstallationPricingService:
         tenant_scope: TenantScope | None = None,
     ) -> list[dict[str, Any]]:
         has_installation = any(item.with_installation for item in items)
+        if has_installation and tenant_scope is not None:
+            from services.installation_price_book_service import InstallationPriceBookService
+            if await InstallationPriceBookService.latest(session, tenant_scope):
+                raise InstallationPricingError(
+                    "Монтаж требует расчёта и подтверждения по опубликованной книге цен",
+                    code="book_preview_required",
+                )
         product_ids = {
             int(item.product_id) for item in items if item.product_id is not None
         }

@@ -21,6 +21,7 @@ from services.installation_price_book_service import InstallationPriceBookServic
 from schemas_installation_price_book import (
     InstallationResolvePayload, InstallationResolveResponse,
     InstallationPreviewPayload, InstallationPreviewResponse,
+    InstallationPricingCapabilities, InstallationPricingConfigResponse,
 )
 from core.storefront_request_envelope import private_storefront_response_headers
 from core.public_write_idempotency import get_required_public_write_idempotency_key
@@ -31,6 +32,46 @@ router = APIRouter(
     tags=["api/service-pricing"],
     dependencies=[Depends(verify_public_storefront_request)],
 )
+
+
+def _book_preview_required() -> HTTPException:
+    return HTTPException(
+        status_code=409,
+        detail={"code": "book_preview_required", "message": "Use the published installation price book preview"},
+        headers=private_storefront_response_headers(),
+    )
+
+
+@router.get(
+    "/installation/config",
+    response_model=InstallationPricingConfigResponse,
+    operation_id="get_public_installation_pricing_config",
+)
+async def get_public_installation_pricing_config(
+    response: Response,
+    session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_public_tenant_scope),
+):
+    """Tell the storefront which pricing contract is currently authoritative."""
+    response.headers.update(private_storefront_response_headers())
+    book = await InstallationPriceBookService.latest(session, tenant_scope)
+    enabled = await StorefrontSettingsService.is_service_enabled(
+        session, tenant_scope=tenant_scope, service_kind="installation"
+    )
+    has_book = book is not None
+    return InstallationPricingConfigResponse(
+        source="price_book" if has_book else "legacy",
+        price_book_revision=book.revision if book else None,
+        scope_ref=InstallationPriceBookService._scope_ref(tenant_scope),
+        service_enabled=enabled,
+        capabilities=InstallationPricingCapabilities(
+            legacy_rate_checkout=enabled and not has_book,
+            standard_product_acceptance=enabled and has_book and tenant_scope.is_canonical_storefront is True,
+            manual_service_only_preview=enabled and has_book,
+            multisplit_preview_only=enabled and has_book,
+            prelaid_preview_only=enabled and has_book,
+        ),
+    )
 
 
 @router.post(
@@ -130,6 +171,8 @@ async def list_public_service_tariffs(
         tenant_scope=tenant_scope,
         service_kind=service_kind.value,
     )
+    if service_kind == ManagerTariffServiceKind.installation and await InstallationPriceBookService.latest(session, tenant_scope):
+        raise _book_preview_required()
     tariffs = await TariffsService.get_all_tariffs(
         session,
         service_kind=service_kind,
@@ -162,6 +205,8 @@ async def calculate_public_service_tariff(
         tenant_scope=tenant_scope,
         service_kind=tariff.service_kind,
     )
+    if tariff.service_kind == ManagerTariffServiceKind.installation.value and await InstallationPriceBookService.latest(session, tenant_scope):
+        raise _book_preview_required()
     manager_payload = ManagerInstallEstimateCalculatePayload(
         **payload.model_dump(),
         discount_amount=0,

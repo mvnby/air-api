@@ -231,6 +231,8 @@ export type { InstallationMeasuredWork } from './models/InstallationMeasuredWork
 export type { InstallationMetaPayload } from './models/InstallationMetaPayload';
 export type { InstallationPreviewPayload } from './models/InstallationPreviewPayload';
 export type { InstallationPreviewResponse } from './models/InstallationPreviewResponse';
+export type { InstallationPricingCapabilities } from './models/InstallationPricingCapabilities';
+export type { InstallationPricingConfigResponse } from './models/InstallationPricingConfigResponse';
 export type { InstallationPublishResponse } from './models/InstallationPublishResponse';
 export type { InstallationResolvePayload } from './models/InstallationResolvePayload';
 export type { InstallationResolveResponse } from './models/InstallationResolveResponse';

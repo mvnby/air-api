@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { InstallationPreviewPayload } from '../models/InstallationPreviewPayload';
 import type { InstallationPreviewResponse } from '../models/InstallationPreviewResponse';
+import type { InstallationPricingConfigResponse } from '../models/InstallationPricingConfigResponse';
 import type { InstallationResolvePayload } from '../models/InstallationResolvePayload';
 import type { InstallationResolveResponse } from '../models/InstallationResolveResponse';
 import type { ManagerInstallEstimateResponse } from '../models/ManagerInstallEstimateResponse';
@@ -14,6 +15,18 @@ import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class ApiServicePricingService {
+    /**
+     * Get Public Installation Pricing Config
+     * Tell the storefront which pricing contract is currently authoritative.
+     * @returns InstallationPricingConfigResponse Successful Response
+     * @throws ApiError
+     */
+    public static getPublicInstallationPricingConfig(): CancelablePromise<InstallationPricingConfigResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/service-pricing/installation/config',
+        });
+    }
     /**
      * Resolve Public Installation Tariff
      * @param requestBody
