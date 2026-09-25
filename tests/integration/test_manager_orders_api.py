@@ -1600,8 +1600,7 @@ async def test_manager_proposal_lifecycle_validates_and_protects_sent_revision(a
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("service_price", [250, 250.4])
-async def test_manager_order_export_preview_and_import_creates_new_order(async_client, db, monkeypatch, service_price):
-    monkeypatch.setattr(settings, "EXACT_SERVICE_MONEY_WRITES_ENABLED", True)
+async def test_manager_order_export_preview_and_import_creates_new_order(async_client, db, service_price):
     customer = Customer(tenant_id=1, name="Transfer Customer", phone="+375291234000", type=CustomerType.individual)
     product = Product(title="Transfer Product", slug="transfer-product", price=1800, specs={"area_m2": 25})
     service = Service(title="Transfer Service", slug="transfer-service", base_price=250)

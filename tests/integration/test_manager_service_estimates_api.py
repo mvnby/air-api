@@ -17,8 +17,7 @@ async def _auth_headers(async_client):
 
 
 @pytest.mark.asyncio
-async def test_manager_service_estimates_calculate_and_snapshot_flow(async_client, db, monkeypatch):
-    monkeypatch.setattr(settings, "EXACT_SERVICE_MONEY_WRITES_ENABLED", True)
+async def test_manager_service_estimates_calculate_and_snapshot_flow(async_client, db):
     headers = await _auth_headers(async_client)
 
     customer = Customer(tenant_id=1, name="ООО Тест", phone="+375291112233")
@@ -207,11 +206,8 @@ async def test_manager_service_estimates_requires_auth(async_client):
     ],
 )
 async def test_estimate_money_survives_manager_order_save_and_repeat(
-    async_client, db, monkeypatch, amounts, discount, expected,
+    async_client, db, amounts, discount, expected,
 ):
-    from core.config import settings
-
-    monkeypatch.setattr(settings, "EXACT_SERVICE_MONEY_WRITES_ENABLED", True)
     customer = Customer(tenant_id=1, name="Cent estimate", phone="+375291112234")
     db.add(customer)
     await db.flush()

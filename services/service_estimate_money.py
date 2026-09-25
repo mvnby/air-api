@@ -27,13 +27,13 @@ def exact_money(value: object) -> Decimal:
 
 
 def writable_service_money(value: object) -> Decimal:
-    """Fence fractional writes until all API nodes can read decimal service prices."""
+    """Validate cents and honor an explicit pause on fractional writes."""
     from core.config import settings
 
     result = exact_money(value)
     if result != result.to_integral_value() and not settings.EXACT_SERVICE_MONEY_WRITES_ENABLED:
         raise ValueError(
-            "Запись копеек услуг ожидает обновления обеих API-нод; сохранение не выполнено"
+            "Запись копеек услуг временно отключена; сохранение не выполнено"
         )
     return result
 
