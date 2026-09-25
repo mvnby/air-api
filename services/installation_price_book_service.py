@@ -253,7 +253,7 @@ class InstallationPriceBookService:
     async def publish(cls, session: AsyncSession, scope: TenantScope, *, actor: str) -> InstallationPublishResponse:
         # Lock the tenant row to serialize publication by independent workers.
         from models import Tenant
-        await session.execute(select(Tenant).where(Tenant.id == scope.tenant_id).with_for_update())
+        await session.execute(select(Tenant).where(Tenant.id == scope.tenant_id).with_for_update(key_share=True))
         tariffs = await TariffsService.get_all_tariffs(session, include_inactive=False, tenant_scope=scope)
         entries: list[dict[str, Any]] = []
         for tariff in tariffs:
@@ -494,13 +494,18 @@ class InstallationPriceBookService:
 
     @classmethod
     async def preview(cls, session: AsyncSession, scope: TenantScope, payload: InstallationPreviewPayload,
-                      *, idempotency_key: str) -> InstallationPreviewResponse:
-        request_hash = InstallationPreviewReceiptService.input_hash(payload)
-        key_hash = InstallationPreviewReceiptService.key_hash(idempotency_key)
-        replay = await InstallationPreviewReceiptService.replay(
-            session, scope, key_hash=key_hash, request_hash=request_hash)
-        if replay is not None:
-            return replay
+                      *, idempotency_key: str | None = None, persist: bool = True) -> InstallationPreviewResponse:
+        request_hash = None
+        key_hash = None
+        if persist:
+            if idempotency_key is None:
+                raise ValueError("A persistent preview requires an idempotency key")
+            request_hash = InstallationPreviewReceiptService.input_hash(payload)
+            key_hash = InstallationPreviewReceiptService.key_hash(idempotency_key)
+            replay = await InstallationPreviewReceiptService.replay(
+                session, scope, key_hash=key_hash, request_hash=request_hash)
+            if replay is not None:
+                return replay
         book = await cls.latest(session, scope)
         base = {"scope_ref": cls._scope_ref(scope), "price_book_id": book.id if book else None,
                 "price_book_revision": book.revision if book else None}
@@ -638,6 +643,8 @@ class InstallationPriceBookService:
             discount=discount, total=subtotal - discount,
             explanation=("Стоимость указана как нижняя граница. " if status == "from" else "") + customer_text,
             **base)
+        if not persist:
+            return response
         snapshot = {"resolver_version": cls.RESOLVER_VERSION, "scope": {"tenant_id": scope.tenant_id,
                     "storefront_id": scope.storefront_id}, "price_book_id": book.id, "revision": book.revision,
                     "input": payload.model_dump(mode="json"), "resolutions": resolutions,

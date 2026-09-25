@@ -151,12 +151,21 @@ class OrderProductLink(SQLModel, table=True):
 
 class OrderServiceLink(SQLModel, table=True):
     __tablename__ = "order_service_link"
+    __table_args__ = (
+        UniqueConstraint("proposal_id", "installation_estimate_revision_id", "installation_line_index",
+                         name="uq_order_service_installation_revision_line"),
+    )
     id: Optional[int] = Field(default=None, primary_key=True)
     order_id: Optional[int] = Field(default=None, foreign_key="order.id")
     proposal_id: Optional[int] = Field(
         default=None, foreign_key="order_proposal.id", index=True
     )
     service_id: Optional[int] = Field(default=None, foreign_key="service.id")
+    installation_estimate_revision_id: Optional[int] = Field(
+        default=None, foreign_key="installation_estimate_revision.id", index=True
+    )
+    installation_line_index: Optional[int] = Field(default=None)
+    installation_projection_mode: Optional[str] = Field(default=None)
     quantity: int = Field(default=1)
 
     title: Optional[str] = Field(default=None)

@@ -12,8 +12,8 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.public_write_key import (
-    IDEMPOTENCY_KEY_MAX_LENGTH,
-    IDEMPOTENCY_KEY_MIN_LENGTH,
+    IDEMPOTENCY_KEY_MAX_LENGTH as IDEMPOTENCY_KEY_MAX_LENGTH,
+    IDEMPOTENCY_KEY_MIN_LENGTH as IDEMPOTENCY_KEY_MIN_LENGTH,
     normalize_public_write_idempotency_key,
     public_write_idempotency_key_sha256,
 )
@@ -45,6 +45,7 @@ class PublicWriteCommandResponse(Generic[ResponseT]):
     status_code: int = 200
     resource_type: str | None = None
     resource_id: int | None = None
+    response_max_bytes: int = IDEMPOTENCY_RESPONSE_MAX_BYTES
 
 
 @dataclass(frozen=True)
@@ -145,7 +146,7 @@ class PublicWriteIdempotencyService:
             sort_keys=True,
             separators=(",", ":"),
         ).encode("utf-8")
-        if len(encoded) > IDEMPOTENCY_RESPONSE_MAX_BYTES:
+        if len(encoded) > result.response_max_bytes:
             raise ValueError("Idempotency response exceeds durable receipt limit")
         status_code = int(result.status_code)
         if not 200 <= status_code < 300:
