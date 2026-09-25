@@ -1,6 +1,7 @@
 import { mount, flushPromises } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import OrderInstallationEstimatePanel from '../src/components/orders/OrderInstallationEstimatePanel.vue';
+import { managerSession } from '../src/services/manager-session';
 
 const service = vi.hoisted(() => ({
   getManagerOrderDetail: vi.fn(),
@@ -27,7 +28,9 @@ const fixed = { status: 'fixed', scope_ref: 'scope', preview_ref: 'a'.repeat(64)
 
 const mountPanel = () => mount(OrderInstallationEstimatePanel, {
   props: { orderId: 8, proposalId: 12,
-    beforeAction: vi.fn().mockResolvedValue(true), afterAttach: vi.fn().mockResolvedValue(undefined) },
+    beforeAction: vi.fn().mockResolvedValue(true),
+    beginAttach: vi.fn().mockResolvedValue(true), afterAttach: vi.fn().mockResolvedValue(true),
+    endAttach: vi.fn() },
 });
 
 const prepare = async (wrapper: ReturnType<typeof mountPanel>) => {
@@ -41,6 +44,7 @@ const prepare = async (wrapper: ReturnType<typeof mountPanel>) => {
 beforeEach(() => {
   sessionStorage.clear();
   vi.clearAllMocks();
+  managerSession.auth.value = null;
   service.getManagerOrderDetail.mockResolvedValue(order);
   service.previewManagerInstallationEstimate.mockResolvedValue(fixed);
   service.confirmManagerInstallationEstimate.mockResolvedValue({ estimate_id: 31, revision: 1, total: '530.25' });
@@ -137,5 +141,123 @@ describe('OrderInstallationEstimatePanel', () => {
     await wrapper.get('[data-testid="installation-preview"]').trigger('click');
     await flushPromises();
     expect(service.previewManagerInstallationEstimate.mock.calls[1][0]).not.toBe(service.previewManagerInstallationEstimate.mock.calls[0][0]);
+  });
+
+  it('ignores an attach response after switching proposals and retains the old retry key', async () => {
+    const wrapper = mountPanel();
+    await prepare(wrapper);
+    await wrapper.get('[data-testid="installation-preview"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="installation-consent"]').setValue(true);
+    await wrapper.get('[data-testid="installation-confirm"]').trigger('click');
+    await flushPromises();
+    let finish!: (value: unknown) => void;
+    service.attachManagerInstallationEstimate.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    await wrapper.get('[data-testid="installation-attach"]').trigger('click');
+    await flushPromises();
+    const oldKey = service.attachManagerInstallationEstimate.mock.calls[0][3];
+    await wrapper.setProps({ proposalId: 13 });
+    await flushPromises();
+    await wrapper.setProps({ proposalId: 12 });
+    await flushPromises();
+    await wrapper.get('[data-testid="installation-open"]').trigger('click');
+    await flushPromises();
+    finish({ lines: [{ title: 'Old proposal', price: '530.25' }], total: '530.25' });
+    await flushPromises();
+    expect(wrapper.props('afterAttach')).not.toHaveBeenCalled();
+    expect(wrapper.text()).not.toContain('Смета прикреплена');
+    expect(wrapper.get('[data-testid="installation-attach"]').text()).toContain('Повторить');
+    await wrapper.get('[data-testid="installation-attach"]').trigger('click');
+    await flushPromises();
+    expect(service.attachManagerInstallationEstimate.mock.calls[1][3]).toBe(oldKey);
+  });
+
+  it('ignores an order load and preview completed for another proposal', async () => {
+    let finishLoad!: (value: unknown) => void;
+    service.getManagerOrderDetail.mockImplementationOnce(() => new Promise((resolve) => { finishLoad = resolve; }));
+    const wrapper = mountPanel();
+    await wrapper.get('[data-testid="installation-open"]').trigger('click');
+    await flushPromises();
+    await wrapper.setProps({ proposalId: 13 });
+    finishLoad(order);
+    await flushPromises();
+    expect(wrapper.find('[data-testid="installation-product"]').exists()).toBe(false);
+    await wrapper.setProps({ proposalId: 12 });
+    await prepare(wrapper);
+    let finishPreview!: (value: unknown) => void;
+    service.previewManagerInstallationEstimate.mockImplementationOnce(() => new Promise((resolve) => { finishPreview = resolve; }));
+    await wrapper.get('[data-testid="installation-preview"]').trigger('click');
+    await flushPromises();
+    await wrapper.setProps({ proposalId: 13 });
+    finishPreview(fixed);
+    await flushPromises();
+    expect(wrapper.text()).not.toContain('530,25');
+    expect(wrapper.find('[data-testid="installation-confirm"]').exists()).toBe(false);
+  });
+
+  it('ignores a confirmation completed after the account changes', async () => {
+    managerSession.auth.value = { tenant_id: 1, staff_user_id: 9, username: 'first' } as any;
+    const wrapper = mountPanel();
+    await prepare(wrapper);
+    await wrapper.get('[data-testid="installation-preview"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="installation-consent"]').setValue(true);
+    let finish!: (value: unknown) => void;
+    service.confirmManagerInstallationEstimate.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    await wrapper.get('[data-testid="installation-confirm"]').trigger('click');
+    await flushPromises();
+    managerSession.auth.value = { tenant_id: 2, staff_user_id: 9, username: 'second' } as any;
+    await flushPromises();
+    finish({ estimate_id: 31, revision: 1, total: '530.25' });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="installation-attach"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Цена подтверждена');
+    wrapper.unmount();
+    managerSession.auth.value = null;
+  });
+
+  it('keeps the same attach key after an uncertain response and allows a new calculation after a definite rejection', async () => {
+    const wrapper = mountPanel();
+    await prepare(wrapper);
+    await wrapper.get('[data-testid="installation-preview"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="installation-consent"]').setValue(true);
+    await wrapper.get('[data-testid="installation-confirm"]').trigger('click');
+    await flushPromises();
+    service.attachManagerInstallationEstimate.mockRejectedValueOnce(new Error('Connection lost'));
+    await wrapper.get('[data-testid="installation-attach"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="installation-start-new"]').attributes('disabled')).toBeDefined();
+    const key = service.attachManagerInstallationEstimate.mock.calls[0][3];
+    service.attachManagerInstallationEstimate.mockRejectedValueOnce({ body: { detail: { code: 'equipment_not_in_proposal' } } });
+    await wrapper.get('[data-testid="installation-attach"]').trigger('click');
+    await flushPromises();
+    expect(service.attachManagerInstallationEstimate.mock.calls[1][3]).toBe(key);
+    expect(wrapper.get('[data-testid="installation-start-new"]').attributes('disabled')).toBeUndefined();
+    await wrapper.get('[data-testid="installation-start-new"]').trigger('click');
+    expect(wrapper.find('[data-testid="installation-attach"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="installation-route"]').attributes('disabled')).toBeUndefined();
+  });
+
+  it('offers a new calculation when a restored confirmation no longer has eligible equipment', async () => {
+    const wrapper = mountPanel();
+    await prepare(wrapper);
+    await wrapper.get('[data-testid="installation-preview"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="installation-consent"]').setValue(true);
+    await wrapper.get('[data-testid="installation-confirm"]').trigger('click');
+    await flushPromises();
+    await wrapper.setProps({ proposalId: 13 });
+    service.getManagerOrderDetail.mockResolvedValueOnce({ id: 8, proposals: [{
+      id: 12, status: 'draft', is_archived: false,
+      product_lines: [{ ...product, is_installation_included: true }],
+    }] });
+    await wrapper.setProps({ proposalId: 12 });
+    await wrapper.get('[data-testid="installation-open"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="installation-confirm"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="installation-start-new"]').exists()).toBe(true);
+    await wrapper.get('[data-testid="installation-start-new"]').trigger('click');
+    expect(wrapper.get('[data-testid="installation-preview"]').attributes('disabled')).toBeUndefined();
   });
 });

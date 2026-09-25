@@ -62,7 +62,9 @@ describe('OrderProposalWorkspace', () => {
         workflow: 'sales_installation',
         orderId: null,
         beforeInstallationAction: vi.fn().mockResolvedValue(true),
-        afterInstallationAttach: vi.fn().mockResolvedValue(undefined),
+        beginInstallationAttach: vi.fn().mockResolvedValue(true),
+        afterInstallationAttach: vi.fn().mockResolvedValue(true),
+        endInstallationAttach: vi.fn(),
       },
       global: {
         stubs: {

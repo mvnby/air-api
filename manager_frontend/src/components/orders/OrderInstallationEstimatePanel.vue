@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, onScopeDispose, ref, watch } from 'vue';
 import {
   ManagerInstallationEstimatesService, ManagerOrdersService,
   type InstallationInput, type InstallationPreviewPayload,
@@ -21,6 +21,7 @@ type StoredIntent = {
   attachKey: string;
   preview?: ManagerInstallationPreviewResponse;
   confirmed?: ManagerInstallationConfirmResponse;
+  attachRetryRequired?: boolean;
 };
 type StoredDraft = {
   source: Source;
@@ -38,7 +39,9 @@ const props = defineProps<{
   orderId: number;
   proposalId: number;
   beforeAction: () => Promise<boolean>;
-  afterAttach: () => Promise<void>;
+  beginAttach: (orderId: number, proposalId: number, scopeKey: string, token: string) => Promise<boolean>;
+  afterAttach: (orderId: number, proposalId: number, scopeKey: string, token: string) => Promise<boolean>;
+  endAttach: (token: string) => void;
 }>();
 const open = ref(false);
 const busy = ref(false);
@@ -61,6 +64,26 @@ const storageKey = computed(() => {
   const identity = auth ? `${auth.tenant_id}:${auth.staff_user_id || auth.username}` : 'anonymous';
   return `manager.installation-order:${identity}:${props.orderId}:${props.proposalId}`;
 });
+type ActionScope = {
+  key: string;
+  epoch: number;
+  orderId: number;
+  proposalId: number;
+  beforeAction: () => Promise<boolean>;
+  beginAttach: (orderId: number, proposalId: number, scopeKey: string, token: string) => Promise<boolean>;
+  afterAttach: (orderId: number, proposalId: number, scopeKey: string, token: string) => Promise<boolean>;
+  endAttach: (token: string) => void;
+};
+let epoch = 0;
+let disposed = false;
+const capture = (): ActionScope => ({
+  key: storageKey.value, epoch, orderId: props.orderId, proposalId: props.proposalId,
+  beforeAction: props.beforeAction, beginAttach: props.beginAttach,
+  afterAttach: props.afterAttach, endAttach: props.endAttach,
+});
+const current = (scope: ActionScope) => !disposed && scope.epoch === epoch
+  && scope.key === storageKey.value && scope.orderId === props.orderId && scope.proposalId === props.proposalId;
+onScopeDispose(() => { disposed = true; epoch += 1; });
 const makeWork = (): Work => ({ route: null, diamond: null, pumpSupply: false, pumpInstall: false, chase: 0 });
 const slots = computed<Slot[]>(() => products.value
   .filter((line) => line.proposal_id === props.proposalId && line.product_id && line.quantity > 0 && line.price > 0 && !line.is_installation_included)
@@ -76,6 +99,7 @@ const preview = computed(() => {
   catch { return null; }
 });
 const confirmed = computed(() => intent.value?.confirmed ?? null);
+const attachRetryRequired = computed(() => Boolean(intent.value?.attachRetryRequired));
 const projectedLines = computed(() => mode.value === 'collapsed' ? preview.value?.collapsed_lines : preview.value?.detailed_lines);
 const statusText = computed(() => {
   if (!preview.value) return '';
@@ -99,7 +123,8 @@ const readableError = (failure: unknown): string => {
   return (detail?.code && messages[detail.code]) || getApiErrorMessage(failure);
 };
 
-const save = () => {
+const save = (scope?: ActionScope) => {
+  if (scope && !current(scope)) return;
   try {
     const draft: StoredDraft = {
       source: source.value, selected: selected.value, work: work.value,
@@ -107,7 +132,7 @@ const save = () => {
       scaffold: scaffold.value, lift: lift.value, mode: mode.value,
       intent: intent.value ?? undefined,
     };
-    sessionStorage.setItem(storageKey.value, JSON.stringify(draft));
+    sessionStorage.setItem(scope?.key ?? storageKey.value, JSON.stringify(draft));
   } catch { /* Restricted storage must not block the estimate. */ }
 };
 const restore = () => {
@@ -127,6 +152,7 @@ const restore = () => {
   } catch { /* A stale browser draft can be discarded. */ }
 };
 const reset = () => {
+  busy.value = false;
   open.value = false;
   products.value = [];
   source.value = 'proposal';
@@ -143,8 +169,8 @@ const reset = () => {
   notice.value = '';
   restore();
 };
-watch(storageKey, reset, { immediate: true });
-watch([source, selected, work, manualKey, manualProfile, scaffold, lift, mode, intent], save, { deep: true });
+watch(storageKey, () => { epoch += 1; reset(); }, { immediate: true, flush: 'sync' });
+watch([source, selected, work, manualKey, manualProfile, scaffold, lift, mode, intent], () => save(), { deep: true });
 watch([source, selected, work, manualProfile, scaffold, lift], () => { consent.value = false; }, { deep: true });
 
 const workFor = (key: string): Work => {
@@ -156,23 +182,29 @@ const toggleSlot = (key: string) => {
     ? selected.value.filter((item) => item !== key)
     : [...selected.value, key];
 };
-const loadProducts = async () => {
-  const order = await ManagerOrdersService.getManagerOrderDetail(props.orderId);
-  const proposal = (order.proposals || []).find((item) => item.id === props.proposalId && !item.is_archived);
+const loadProducts = async (scope: ActionScope): Promise<boolean> => {
+  const order = await ManagerOrdersService.getManagerOrderDetail(scope.orderId);
+  if (!current(scope)) return false;
+  const proposal = (order.proposals || []).find((item) => item.id === scope.proposalId && !item.is_archived);
   if (!proposal || proposal.status !== 'draft') throw new Error('Выберите активный черновик предложения.');
   products.value = proposal.product_lines || [];
   selected.value = selected.value.filter((key) => slots.value.some((slot) => slot.key === key));
+  return true;
 };
 const show = async () => {
+  if (busy.value) return;
   if (open.value) { open.value = false; return; }
+  const scope = capture();
   busy.value = true;
   error.value = '';
   try {
-    if (!await props.beforeAction()) throw new Error('Сначала сохраните изменения заказа.');
-    await loadProducts();
+    const saved = await scope.beforeAction();
+    if (!current(scope)) return;
+    if (!saved) throw new Error('Сначала сохраните изменения заказа.');
+    if (!await loadProducts(scope) || !current(scope)) return;
     open.value = true;
-  } catch (failure) { error.value = readableError(failure); }
-  finally { busy.value = false; }
+  } catch (failure) { if (current(scope)) error.value = readableError(failure); }
+  finally { if (current(scope)) busy.value = false; }
 };
 const payload = (): InstallationPreviewPayload => {
   if (!activeKeys.value.length) throw new Error('Выберите оборудование или укажите параметры установки без товара.');
@@ -217,73 +249,120 @@ const ensureIntent = (fingerprint: string): StoredIntent => {
 };
 const calculate = async () => {
   if (busy.value) return;
+  const scope = capture();
   busy.value = true;
   error.value = '';
   notice.value = '';
   consent.value = false;
   try {
-    if (!await props.beforeAction()) throw new Error('Сначала сохраните изменения заказа.');
-    await loadProducts();
+    const saved = await scope.beforeAction();
+    if (!current(scope)) return;
+    if (!saved) throw new Error('Сначала сохраните изменения заказа.');
+    if (!await loadProducts(scope) || !current(scope)) return;
     const input = payload();
     const fingerprint = JSON.stringify(input);
     if (intent.value?.fingerprint === fingerprint && intent.value.preview) intent.value = null;
     const attempt = ensureIntent(fingerprint);
-    save();
+    save(scope);
     // One key per immutable payload; a retry or page reload reuses that key.
-    attempt.preview = await ManagerInstallationEstimatesService.previewManagerInstallationEstimate(attempt.previewKey, input);
+    const result = await ManagerInstallationEstimatesService.previewManagerInstallationEstimate(attempt.previewKey, input);
+    if (!current(scope) || intent.value !== attempt) return;
+    attempt.preview = result;
     attempt.confirmed = undefined;
-    save();
-  } catch (failure) { error.value = readableError(failure); }
-  finally { busy.value = false; }
+    save(scope);
+  } catch (failure) { if (current(scope)) error.value = readableError(failure); }
+  finally { if (current(scope)) busy.value = false; }
 };
 const confirm = async () => {
   if (busy.value || !preview.value?.preview_ref || !consent.value || !intent.value) return;
+  const scope = capture();
   busy.value = true;
   error.value = '';
   try {
-    if (!await props.beforeAction()) throw new Error('Сначала сохраните изменения заказа.');
-    await loadProducts();
+    const saved = await scope.beforeAction();
+    if (!current(scope)) return;
+    if (!saved) throw new Error('Сначала сохраните изменения заказа.');
+    if (!await loadProducts(scope) || !current(scope)) return;
     const input = payload();
-    if (JSON.stringify(input) !== intent.value.fingerprint) throw new Error('Состав изменился. Рассчитайте смету заново.');
-    intent.value.confirmed = await ManagerInstallationEstimatesService.confirmManagerInstallationEstimate(intent.value.confirmKey, {
-      preview_ref: preview.value.preview_ref,
-      order_id: props.orderId, proposal_id: props.proposalId,
+    const attempt = intent.value;
+    const previewRef = preview.value?.preview_ref;
+    if (!attempt || !previewRef || JSON.stringify(input) !== attempt.fingerprint) throw new Error('Состав изменился. Рассчитайте смету заново.');
+    const result = await ManagerInstallationEstimatesService.confirmManagerInstallationEstimate(attempt.confirmKey, {
+      preview_ref: previewRef,
+      order_id: scope.orderId, proposal_id: scope.proposalId,
       verified_service_only_keys: source.value === 'manual' ? [manualKey.value] : [],
     });
+    if (!current(scope) || intent.value !== attempt) return;
+    attempt.confirmed = result;
     consent.value = false;
-    save();
+    save(scope);
   } catch (failure) {
+    if (!current(scope)) return;
     const detail = (failure as { body?: { detail?: { code?: string; fresh_preview?: ManagerInstallationPreviewResponse } } })?.body?.detail;
     if (detail?.code === 'price_changed') {
       intent.value = null;
       error.value = 'Книга цен изменилась. Проверьте новый расчёт и подтвердите его заново.';
       // The fresh result is informational; a new preview creates a new attempt.
-      notice.value = detail.fresh_preview?.total ? `Новая сумма: ${formatMoney(Number(detail.fresh_preview.total))} BYN.` : '';
-      save();
+      notice.value = detail.fresh_preview?.total ? `Новая сумма: ${formatMoney(Number(detail.fresh_preview.total))}.` : '';
+      save(scope);
     } else {
       if (detail?.code === 'preview_expired' || detail?.code === 'preview_not_found') intent.value = null;
       error.value = readableError(failure);
     }
-  } finally { busy.value = false; }
+  } finally { if (current(scope)) busy.value = false; }
 };
 const attach = async () => {
   if (busy.value || !confirmed.value || !intent.value) return;
+  const scope = capture();
+  const attempt = intent.value;
+  const accepted = confirmed.value;
+  const projection = mode.value;
+  const token = crypto.randomUUID();
   busy.value = true;
   error.value = '';
+  notice.value = '';
   try {
-    if (!await props.beforeAction()) throw new Error('Сначала сохраните изменения заказа.');
+    const ready = await scope.beginAttach(scope.orderId, scope.proposalId, scope.key, token);
+    if (!current(scope) || intent.value !== attempt) return;
+    if (!ready) throw new Error('Сначала сохраните изменения заказа.');
+    attempt.attachRetryRequired = true;
+    save(scope);
     const result = await ManagerInstallationEstimatesService.attachManagerInstallationEstimate(
-      confirmed.value.estimate_id, props.orderId, props.proposalId, intent.value.attachKey,
-      { revision: confirmed.value.revision, mode: mode.value },
+      accepted.estimate_id, scope.orderId, scope.proposalId, attempt.attachKey,
+      { revision: accepted.revision, mode: projection },
     );
-    await props.afterAttach();
-    sessionStorage.removeItem(storageKey.value);
+    if (!current(scope) || intent.value !== attempt) return;
+    const refreshed = await scope.afterAttach(scope.orderId, scope.proposalId, scope.key, token);
+    if (!current(scope) || intent.value !== attempt) return;
+    if (!refreshed) throw new Error('Не удалось обновить заказ. Повторите прикрепление с тем же ключом.');
+    sessionStorage.removeItem(scope.key);
     reset();
     await nextTick();
-    sessionStorage.removeItem(storageKey.value);
-    notice.value = `Смета прикреплена к предложению: ${result.lines.length} строк, ${formatMoney(Number(result.total))} BYN.`;
-  } catch (failure) { error.value = readableError(failure); }
-  finally { busy.value = false; }
+    if (!current(scope)) return;
+    sessionStorage.removeItem(scope.key);
+    notice.value = `Смета прикреплена к предложению: ${result.lines.length} строк, ${formatMoney(Number(result.total))}.`;
+  } catch (failure) {
+    if (!current(scope)) return;
+    const code = (failure as { body?: { detail?: { code?: string } } })?.body?.detail?.code;
+    if (['equipment_not_in_proposal', 'installation_already_attached', 'proposal_not_editable'].includes(code || '')) {
+      attempt.attachRetryRequired = false;
+      save(scope);
+    }
+    error.value = readableError(failure);
+    if (attempt.attachRetryRequired) notice.value = 'Если ответ не дошёл, повторите прикрепление: будет использован тот же ключ.';
+  } finally {
+    scope.endAttach(token);
+    if (current(scope)) busy.value = false;
+  }
+};
+const startNew = () => {
+  if (busy.value || attachRetryRequired.value) return;
+  intent.value = null;
+  consent.value = false;
+  mode.value = 'collapsed';
+  error.value = '';
+  notice.value = 'Измените параметры и рассчитайте новую смету. Уже прикреплённые строки сохранятся.';
+  save();
 };
 </script>
 
@@ -326,16 +405,20 @@ const attach = async () => {
       <div class="flex flex-wrap gap-4 border-t border-slate-200 pt-3"><label class="flex items-center gap-2"><input v-model="scaffold" type="checkbox" :disabled="busy || Boolean(confirmed)" />Леса на объекте</label><label class="flex items-center gap-2"><input v-model="lift" type="checkbox" :disabled="busy || Boolean(confirmed)" />Вышка на объекте</label></div>
       <button type="button" data-testid="installation-preview" class="btn-mini" :disabled="busy || Boolean(confirmed)" @click="calculate">{{ busy ? 'Проверяем…' : 'Рассчитать по книге' }}</button>
       <div v-if="preview" class="space-y-3 border-t border-slate-200 pt-3">
-        <p class="font-semibold">{{ preview.status === 'fixed' ? 'Точная цена' : preview.status === 'from' ? 'Цена от' : 'Цена недоступна' }}<span v-if="preview.total"> · {{ formatMoney(Number(preview.total)) }} BYN</span></p>
+        <p class="font-semibold">{{ preview.status === 'fixed' ? 'Точная цена' : preview.status === 'from' ? 'Цена от' : 'Цена недоступна' }}<span v-if="preview.total"> · {{ formatMoney(Number(preview.total)) }}</span></p>
         <p v-if="statusText" class="text-amber-800">{{ statusText }} <a href="/manager/tariffs" class="underline">Тарифы</a></p>
         <template v-if="preview.status === 'fixed'">
           <div class="flex gap-2"><button type="button" class="btn-mini-outline" :class="mode === 'collapsed' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || Boolean(confirmed)" @click="mode = 'collapsed'">Одной строкой</button><button type="button" class="btn-mini-outline" :class="mode === 'detailed' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || Boolean(confirmed)" @click="mode = 'detailed'">По работам</button></div>
-          <div class="space-y-2"><div v-for="(line, index) in projectedLines" :key="index" class="flex justify-between gap-4 border-b border-slate-200 pb-2"><span>{{ line.title }}</span><strong class="shrink-0">{{ formatMoney(Number(line.price)) }} BYN</strong></div></div>
-          <p class="font-semibold">Итого: {{ formatMoney(Number(preview.total)) }} BYN</p>
+          <div class="space-y-2"><div v-for="(line, index) in projectedLines" :key="index" class="flex flex-col gap-1 border-b border-slate-200 pb-2 sm:flex-row sm:justify-between sm:gap-4"><span class="min-w-0 break-words">{{ line.title }}</span><strong class="shrink-0">{{ formatMoney(Number(line.price)) }}</strong></div></div>
+          <p class="font-semibold">Итого: {{ formatMoney(Number(preview.total)) }}</p>
           <label v-if="!confirmed" class="flex items-start gap-2"><input data-testid="installation-consent" v-model="consent" type="checkbox" :disabled="busy" />Подтверждаю состав работ и цену по этой редакции книги</label>
           <button v-if="!confirmed" type="button" data-testid="installation-confirm" class="btn-mini" :disabled="busy || !consent" @click="confirm">Подтвердить цену</button>
-          <div v-else class="space-y-2"><p class="text-emerald-800">Цена подтверждена. Прикрепите {{ mode === 'collapsed' ? 'одну строку' : 'строки работ' }} к текущему предложению.</p><button type="button" data-testid="installation-attach" class="btn-mini" :disabled="busy" @click="attach">Прикрепить к предложению</button></div>
+          <p v-else class="text-emerald-800">Цена подтверждена. Прикрепите {{ mode === 'collapsed' ? 'одну строку' : 'строки работ' }} к текущему предложению.</p>
         </template>
+      </div>
+      <div v-if="confirmed" class="flex flex-wrap gap-2 border-t border-slate-200 pt-3">
+        <button type="button" data-testid="installation-attach" class="btn-mini" :disabled="busy" @click="attach">{{ attachRetryRequired ? 'Повторить прикрепление' : 'Прикрепить к предложению' }}</button>
+        <button type="button" data-testid="installation-start-new" class="btn-mini-outline" :disabled="busy || attachRetryRequired" @click="startNew">Новый расчёт</button>
       </div>
       <p v-if="error" role="alert" class="text-red-700">{{ error }}</p>
       <p v-if="notice" role="status" class="text-amber-800">{{ notice }}</p>

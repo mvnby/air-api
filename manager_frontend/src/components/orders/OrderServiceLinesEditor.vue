@@ -87,7 +87,7 @@ const updatePreferredMode = (mode: ServiceDescriptionMode) => {
         <button v-if="editingIndex === index && !line.installation_estimate_revision_id" type="button" data-order-usage="order_service_remove" class="absolute -right-2 -top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border border-red-200 bg-red-50 text-lg font-bold text-red-600 shadow-sm transition-colors hover:bg-red-100" :aria-label="`Удалить услугу #${index + 1}`" title="Удалить услугу" @click="emit('remove', index)">
           ×
         </button>
-        <div v-if="editingIndex !== index" class="flex min-w-0 items-start gap-3">
+        <div v-if="editingIndex !== index || line.installation_estimate_revision_id" class="flex min-w-0 items-start gap-3">
           <div class="min-w-0 flex-1">
             <p class="break-words text-sm font-semibold leading-snug text-slate-900 dark:text-slate-100">{{ line.title || 'Новая услуга' }}</p>
             <div class="mt-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">

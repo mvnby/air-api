@@ -24,7 +24,9 @@ const props = defineProps<{
   customerId?: number | null;
   orderId: number | null;
   beforeInstallationAction: () => Promise<boolean>;
-  afterInstallationAttach: () => Promise<void>;
+  beginInstallationAttach: (orderId: number, proposalId: number, scopeKey: string, token: string) => Promise<boolean>;
+  afterInstallationAttach: (orderId: number, proposalId: number, scopeKey: string, token: string) => Promise<boolean>;
+  endInstallationAttach: (token: string) => void;
 }>();
 
 const emit = defineEmits<{ catalog: []; documents: [] }>();
@@ -141,7 +143,9 @@ defineExpose({
           :order-id="orderId"
           :proposal-id="proposal.activeProposal.id"
           :before-action="beforeInstallationAction"
+          :begin-attach="beginInstallationAttach"
           :after-attach="afterInstallationAttach"
+          :end-attach="endInstallationAttach"
         />
       </fieldset>
       <button v-if="commercial.total > 0" type="button" class="btn-mini-outline mt-5 w-full justify-center" data-testid="proposal-to-documents" @click="emit('documents')">Перейти к документам →</button>

@@ -197,6 +197,80 @@ describe('order drawer autosave integration', () => {
     expect(header().props('dirty')).toBe(false);
   });
 
+  it('preserves edits made during attachment and saves them with the immutable line before refresh', async () => {
+    await mountDrawer();
+    const attached = { id: 88, proposal_id: 25, service_id: null, service_title: 'Монтаж по книге',
+      quantity: 1, price: 530.25, cost: 0, line_total: 530.25,
+      installation_estimate_revision_id: 21, installation_projection_mode: 'collapsed' };
+    vi.spyOn(ManagerOrdersService, 'getManagerOrderDetail').mockImplementation(async () => {
+      const order = structuredClone(stored);
+      order.proposals![0]!.service_lines = [
+        ...(stored.proposals?.[0]?.service_lines || []).filter((line) => line.id !== 88).map((line, index) => ({
+          id: line.id || line.link_id || 100 + index, proposal_id: 25,
+          service_id: line.service_id || null, service_title: line.service_title || line.title || 'Услуга',
+          quantity: line.quantity, price: line.price, cost: line.cost || 0,
+          line_total: line.quantity * line.price,
+        } as any)),
+        attached,
+      ];
+      return order;
+    });
+    const workspace = wrapper.findComponent(OrderProposalWorkspace);
+    const begin = workspace.props('beginInstallationAttach');
+    const after = workspace.props('afterInstallationAttach');
+    const end = workspace.props('endInstallationAttach');
+    const scopeKey = 'manager.installation-order:anonymous:395:25';
+    const token = 'attach-test-token';
+    expect(await begin(395, 25, scopeKey, token)).toBe(true);
+    expect(wrapper.get('aside').attributes('inert')).toBeDefined();
+    customer().vm.$emit('update:comment', 'Новая заметка во время прикрепления');
+    const commercial = workspace.props('commercial');
+    commercial.serviceLines.value.push({ service_id: null, title: 'Дополнительная работа', quantity: 1, price: 40, cost: 0 });
+    await nextTick();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(ManagerOrdersService.patchManagerOrder).not.toHaveBeenCalled();
+    expect(await after(395, 25, scopeKey, token)).toBe(true);
+    end(token);
+    await flushPromises();
+    expect(ManagerOrdersService.patchManagerOrder).toHaveBeenCalledWith(395, expect.objectContaining({
+      comment: 'Новая заметка во время прикрепления',
+      services: expect.arrayContaining([
+        expect.objectContaining({ title: 'Дополнительная работа' }),
+        expect.objectContaining({ link_id: 88, title: 'Монтаж по книге', price: 530.25 }),
+      ]),
+    }));
+    expect(wrapper.get('aside').attributes('inert')).toBeUndefined();
+  });
+
+  it('drains an in-flight autosave before attachment starts and rejects a stale refresh', async () => {
+    let finish: () => void = () => {};
+    vi.mocked(ManagerOrdersService.patchManagerOrder).mockImplementationOnce((_id, payload) => {
+      const first = commit(payload);
+      return new Promise((resolve) => { finish = () => resolve(first); }) as any;
+    });
+    await mountDrawer();
+    customer().vm.$emit('update:comment', 'Первое изменение');
+    await nextTick();
+    await vi.advanceTimersByTimeAsync(750);
+    const workspace = wrapper.findComponent(OrderProposalWorkspace);
+    const scopeKey = 'manager.installation-order:anonymous:395:25';
+    const token = 'pending-save-token';
+    const start = workspace.props('beginInstallationAttach')(395, 25, scopeKey, token);
+    await nextTick();
+    expect(wrapper.get('aside').attributes('inert')).toBeDefined();
+    customer().vm.$emit('update:comment', 'Второе изменение');
+    await nextTick();
+    finish();
+    expect(await start).toBe(true);
+    expect(stored.comment).toBe('Второе изменение');
+    expect(ManagerOrdersService.patchManagerOrder).toHaveBeenCalledTimes(2);
+    const changed = { ...stored, id: 396 } as ManagerOrderDetailResponse;
+    await wrapper.setProps({ order: changed });
+    expect(await workspace.props('afterInstallationAttach')(395, 25, scopeKey, token)).toBe(false);
+    workspace.props('endInstallationAttach')(token);
+    expect(wrapper.get('aside').attributes('inert')).toBeUndefined();
+  });
+
   it('keeps manual mode dirty, prevents document creation, and still supports Save', async () => {
     await mountDrawer();
     header().vm.$emit('toggle-autosave');

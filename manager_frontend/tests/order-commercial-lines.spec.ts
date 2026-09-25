@@ -169,7 +169,7 @@ describe('OrderProductLinesEditor', () => {
 });
 
 describe('OrderServiceLinesEditor', () => {
-  it('shows attached installation lines without edit or remove actions', () => {
+  it('shows attached installation lines without edit or remove actions', async () => {
     const wrapper = mount(OrderServiceLinesEditor, {
       props: {
         lines: [{ ...serviceLine, link_id: 88, installation_estimate_revision_id: 21,
@@ -186,6 +186,9 @@ describe('OrderServiceLinesEditor', () => {
     expect(wrapper.find('[data-order-usage="order_service_edit"]').exists()).toBe(false);
     expect(wrapper.find('[data-order-usage="order_service_remove"]').exists()).toBe(false);
     expect(wrapper.get('[data-testid="add-service-line"]').exists()).toBe(true);
+    await wrapper.setProps({ editingIndex: 0 });
+    expect(wrapper.find('textarea').exists()).toBe(false);
+    expect(wrapper.find('[data-order-usage="order_service_remove"]').exists()).toBe(false);
   });
 
   it('delegates tariff selection and estimate import while keeping draft models controlled', async () => {

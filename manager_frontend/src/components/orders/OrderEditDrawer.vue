@@ -21,7 +21,6 @@ import type { ServiceAttachmentEquipmentOption } from '../service-attachments/ty
 import type {
   ManagerOrderDetailResponse,
 } from '../../client';
-import { ManagerOrdersService } from '../../client';
 import {
   buildOrderWorkspaceViewModel,
 } from './order-workspace';
@@ -38,6 +37,7 @@ import { useDrawerFocusTrap } from '../../composables/useDrawerFocusTrap';
 import { useOrderWorkspaceUsage } from '../../composables/useOrderWorkspaceUsage';
 import { useOrderWorkspaceUsageControls } from '../../composables/useOrderWorkspaceUsageControls';
 import { useOrderCatalogNavigation } from '../../composables/useOrderCatalogNavigation';
+import { useOrderInstallationAttachment } from '../../composables/useOrderInstallationAttachment';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -212,9 +212,22 @@ const {
   currentFormSnapshot: () => buildCurrentFormSnapshot(proposalStatus.value),
 });
 
+const {
+  busy: installationAttaching,
+  autosavePaused: installationAutosavePaused,
+  begin: beginInstallationAttach,
+  after: refreshAfterInstallationAttach,
+  end: endInstallationAttach,
+} = useOrderInstallationAttachment({
+  order: computed(() => props.order), open: computed(() => props.modelValue), proposalId: activeProposalId,
+  serviceLines, dirty: hasUnsavedChanges,
+  flush: () => orderSaving.flush(), clearDraft,
+  onUpdated: (updated) => emit('updated', updated),
+});
+
 const orderSaving = useOrderDrawerSaving({
   order: computed(() => props.order),
-  ready: computed(() => props.modelValue && !initializing.value && Boolean(props.order)),
+  ready: computed(() => props.modelValue && !initializing.value && !installationAutosavePaused.value && Boolean(props.order)),
   activeProposalId,
   activeProposalLocked,
   productLines,
@@ -445,13 +458,6 @@ const handleWorkspaceNextAction = async () => {
 };
 
 const handleSave = () => orderSaving.flush();
-const refreshAfterInstallationAttach = async () => {
-  if (!props.order?.id) return;
-  const fresh = await ManagerOrdersService.getManagerOrderDetail(props.order.id);
-  clearDraft();
-  await initForm(fresh);
-  emit('updated', fresh);
-};
 const getFieldError = (field: string): string => localServerErrors.value[field] || props.serverErrors?.[field] || '';
 const displayFormError = computed(() => localFormError.value || props.formError || '');
 const discardUnsavedChanges = async () => {
@@ -476,7 +482,7 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
       </div>
     </Transition>
     <div class="flex-1 bg-black/60" aria-hidden="true" @click="closeDrawer" />
-    <aside ref="drawerScrollContainer" tabindex="-1" role="dialog" aria-modal="true" aria-label="Рабочая область заказа" class="relative h-full w-full min-w-0 overflow-y-auto bg-white text-gray-900 shadow-2xl outline-none dark:bg-slate-950 dark:text-slate-100 md:my-4 md:h-[calc(100%-2rem)] md:w-[calc(100%-2rem)] md:rounded-2xl xl:max-w-[1680px] xl:border xl:border-gray-200 dark:xl:border-slate-700" @keydown="trapFocus" @keydown.esc.stop="closeDrawer" @click="trackUsageControl" @change="trackUsageControl">
+    <aside ref="drawerScrollContainer" tabindex="-1" role="dialog" aria-modal="true" aria-label="Рабочая область заказа" :inert="installationAttaching ? true : undefined" :aria-busy="installationAttaching" class="relative h-full w-full min-w-0 overflow-y-auto bg-white text-gray-900 shadow-2xl outline-none dark:bg-slate-950 dark:text-slate-100 md:my-4 md:h-[calc(100%-2rem)] md:w-[calc(100%-2rem)] md:rounded-2xl xl:max-w-[1680px] xl:border xl:border-gray-200 dark:xl:border-slate-700" @keydown="trapFocus" @keydown.esc.stop="closeDrawer" @click="trackUsageControl" @change="trackUsageControl">
       <OrderWorkspaceHeader
         :order-id="order?.id"
         :title="displayOrderTitle"
@@ -523,7 +529,7 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
           <p v-if="displayFormError" class="mt-4 rounded-xl border border-red-500/40 bg-red-50 px-3 py-2 text-sm text-red-700">
             {{ displayFormError }}
           </p>
-          <fieldset :disabled="proposalActionLoading" class="min-w-0">
+          <fieldset :disabled="proposalActionLoading || installationAttaching" class="min-w-0">
             <section v-show="activeWorkspaceSection === 'proposal'" class="min-w-0" data-order-usage="workspace-proposal-panel">
               <OrderManagerLabels v-model="managerLabels" />
               <OrderProposalWorkspace
@@ -540,7 +546,9 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
                 :customer-id="order?.customer?.id"
                 :order-id="order?.id ?? null"
                 :before-installation-action="orderSaving.flush"
+                :begin-installation-attach="beginInstallationAttach"
                 :after-installation-attach="refreshAfterInstallationAttach"
+                :end-installation-attach="endInstallationAttach"
                 :catalog-available="catalogNavigation.available.value"
                 :catalog-opening="catalogNavigation.opening.value"
                 :catalog-needs-save="hasUnsavedChanges"
@@ -629,6 +637,9 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
         <OrderWorkspaceContext class="order-first lg:order-none" :customer-name="customerDisplayName" :address="compactObjectAddress" :total="totalPreview" :paid="totalPaymentsPreview" :balance="balanceDuePreview" @object="openWorkspaceTarget('object')" @payments="openWorkspaceTarget('payments')" />
       </div>
     </aside>
+    <div v-if="installationAttaching" role="status" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 px-4 text-center text-sm font-semibold text-slate-900">
+      <span class="rounded-xl bg-white px-5 py-3 shadow-lg">Прикрепляем монтаж к предложению…</span>
+    </div>
 
   </div>
 </template>
