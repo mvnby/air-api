@@ -29,6 +29,26 @@ const lineTemplateInput = ref<HTMLInputElement | null>(null);
 const favoriteRules = ref<ManagerTariffRuleResponse[]>([]);
 const favoriteRulesLoading = ref(false);
 const favoriteRulesError = ref('');
+const canonicalComponents = [
+  { code: 'route.extra_m', label: 'Трасса сверх включённой', ruleType: 'per_meter_over_included', unit: 'м', optional: false },
+  { code: 'hole.diamond.extra', label: 'Алмазное отверстие сверх включённого', ruleType: 'per_hole_manual', unit: 'шт', optional: false },
+  { code: 'pump.supply', label: 'Поставка насоса', ruleType: 'per_unit_manual', unit: 'шт', optional: true },
+  { code: 'pump.install', label: 'Монтаж насоса', ruleType: 'per_unit_manual', unit: 'шт', optional: true },
+  { code: 'chase.extra_m', label: 'Штробление', ruleType: 'per_unit_manual', unit: 'м', optional: true },
+  { code: 'access.scaffold', label: 'Леса на объект', ruleType: 'fixed_once', unit: 'шт', optional: true },
+  { code: 'access.lift', label: 'Вышка на объект', ruleType: 'fixed_once', unit: 'шт', optional: true },
+] as const;
+const isInstallation = computed(() => serviceKind.value === 'installation');
+const selectedComponent = computed(() => canonicalComponents.find((item) => item.code === formData.value.component_code));
+const applyComponent = () => {
+  const component = selectedComponent.value;
+  if (!component) return;
+  formData.value.rule_type = component.ruleType;
+  formData.value.unit = component.unit;
+  formData.value.is_optional = component.optional;
+  if (!formData.value.name) formData.value.name = component.label;
+  if (!formData.value.line_template || formData.value.line_template === '{name}') formData.value.line_template = '{name}';
+};
 
 type RuleTypeOption = {
   value: ManagerTariffRuleType;
@@ -137,6 +157,7 @@ const selectedRuleTypeOption = computed(
 );
 
 const formData = ref<ManagerTariffRuleCreatePayload>({
+  component_code: null,
   rule_type: 'per_unit_manual',
   name: '',
   line_template: '{name}',
@@ -167,6 +188,7 @@ const loadFavoriteRules = async () => {
 const resetForm = () => {
   if (props.rule) {
     formData.value = {
+      component_code: props.rule.component_code ?? null,
       rule_type: props.rule.rule_type,
       name: props.rule.name,
       line_template: props.rule.line_template,
@@ -180,6 +202,7 @@ const resetForm = () => {
     };
   } else {
     formData.value = {
+      component_code: null,
       rule_type: defaultRuleType.value,
       name: '',
       line_template: '{name}',
@@ -271,6 +294,7 @@ const setDefaultsByType = (type: ManagerTariffRuleType) => {
 };
 
 const applyFavoriteRule = (rule: ManagerTariffRuleResponse) => {
+  formData.value.component_code = rule.component_code ?? null;
   formData.value.rule_type = rule.rule_type;
   formData.value.name = rule.name;
   formData.value.line_template = rule.line_template;
@@ -280,6 +304,7 @@ const applyFavoriteRule = (rule: ManagerTariffRuleResponse) => {
   formData.value.is_favorite = false;
   formData.value.is_active = true;
   formData.value.service_id = rule.service_id ?? null;
+  if (isInstallation.value) applyComponent();
   setHint(`Добавлено из избранного: ${rule.name}`);
 };
 
@@ -348,7 +373,15 @@ const insertPlaceholder = async (token: string) => {
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <label class="block">
+              <label v-if="isInstallation" class="block">
+                <span class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Смысл компонента</span>
+                <select v-model="formData.component_code" aria-label="Смысл компонента" class="w-full bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg px-3 py-2 text-gray-900 dark:text-slate-200" :disabled="loading" @change="applyComponent">
+                  <option :value="null">Не задан — только черновик</option>
+                  <option v-for="component in canonicalComponents" :key="component.code" :value="component.code">{{ component.label }}</option>
+                  <option v-if="formData.component_code && !selectedComponent" :value="formData.component_code">Существующий: {{ formData.component_code }}</option>
+                </select>
+              </label>
+              <label v-if="!selectedComponent" class="block">
                 <span class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Тип правила</span>
                 <select
                   v-model="formData.rule_type"
@@ -408,7 +441,7 @@ const insertPlaceholder = async (token: string) => {
               </div>
             </div>
 
-            <div class="rounded-lg border border-sky-200 dark:border-sky-500/40 bg-sky-50 dark:bg-sky-900/20 px-3 py-2">
+            <div v-if="!selectedComponent" class="rounded-lg border border-sky-200 dark:border-sky-500/40 bg-sky-50 dark:bg-sky-900/20 px-3 py-2">
               <div class="text-xs font-semibold text-sky-700 dark:text-sky-300">
                 Как работает: {{ selectedRuleTypeOption?.label }}
               </div>
@@ -472,7 +505,7 @@ const insertPlaceholder = async (token: string) => {
             </label>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <label class="block">
+              <label v-if="!selectedComponent" class="block">
                 <span class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Ед. измерения</span>
                 <input
                   v-model="formData.unit"
@@ -506,7 +539,7 @@ const insertPlaceholder = async (token: string) => {
             </label>
 
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <label class="inline-flex items-center gap-2">
+              <label v-if="!selectedComponent" class="inline-flex items-center gap-2">
                 <input v-model="formData.is_optional" type="checkbox" class="h-4 w-4" :disabled="loading" />
                 <span class="text-sm text-gray-700 dark:text-slate-300">Опциональное</span>
               </label>

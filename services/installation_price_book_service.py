@@ -15,7 +15,7 @@ from sqlmodel import select
 
 from models import InstallationPriceBook, InstallationRate, Product, ServiceTariff, ServiceTariffRule
 from models.tenancy import TenantScope
-from schemas import ManagerInstallEstimateCalculatePayload
+from schemas import ManagerInstallEstimateCalculatePayload, ManagerTariffServiceKind
 from schemas_installation_price_book import (
     InstallationComponent, InstallationMatcher, InstallationPreviewPayload,
     InstallationPreviewResponse, InstallationPublishResponse, InstallationResolveResponse,
@@ -87,8 +87,26 @@ class InstallationPriceBookService:
 
     @classmethod
     async def legacy_comparison(cls, session: AsyncSession, scope: TenantScope, *, offset: int, limit: int) -> InstallationLegacyComparisonResponse:
-        """Read-only candidate report. Similarity never copies or publishes prices."""
+        """Compare legacy rates with current typed drafts, without copying or publishing prices."""
         book = await cls.latest(session, scope)
+        drafts = await TariffsService.get_all_tariffs(
+            session, service_kind=ManagerTariffServiceKind.installation, include_inactive=False, tenant_scope=scope,
+        )
+        candidates: list[InstallationLegacyCandidate] = []
+        for tariff in drafts:
+            if not tariff.installation_match or not tariff.installation_code:
+                continue
+            try:
+                matcher = InstallationMatcher.model_validate(tariff.installation_match)
+            except ValidationError:
+                continue  # Publication reports the invalid draft with its precise error.
+            route_rule = next((rule for rule in tariff.rules if rule.is_active and rule.component_code == "route.extra_m"), None)
+            candidates.append(InstallationLegacyCandidate(
+                tariff_code=tariff.installation_code, matcher=matcher,
+                mode=tariff.installation_price_mode,
+                base_price=Decimal(str(tariff.base_price)),
+                route_extra_price=Decimal(str(route_rule.unit_price)) if route_rule else None,
+            ))
         rates = (await session.execute(select(InstallationRate).where(
             service_catalog_scope_clause(InstallationRate, scope)
         ).order_by(InstallationRate.id).offset(offset).limit(limit))).scalars().all()
@@ -97,23 +115,16 @@ class InstallationPriceBookService:
         items: list[InstallationLegacyComparisonRow] = []
         for rate in rates:
             indoor_type = category_map.get((rate.category or "").strip().lower().replace("-", "_"))
-            candidates = [entry for entry in (book.entries if book else [])
-                          if indoor_type and entry["match"]["indoor_type"] == indoor_type]
-            def route_price(entry: dict[str, Any]) -> Decimal | None:
-                return next((Decimal(rule["unit_price"]) for rule in entry["rules"]
-                             if rule["code"] == "route.extra_m"), None)
-            same_price = [entry for entry in candidates
-                          if Decimal(entry["base_price"]) == Decimal(rate.base_price)
-                          and route_price(entry) == Decimal(rate.extra_pipe_price)]
+            possible = [candidate for candidate in candidates if indoor_type and candidate.matcher.indoor_type == indoor_type]
+            same_price = [candidate for candidate in possible
+                          if candidate.base_price == Decimal(rate.base_price)
+                          and candidate.route_extra_price == Decimal(rate.extra_pipe_price)]
             status = ("price_equal_review_required" if same_price else
-                      "price_diff_review_required" if candidates else "unmapped_review_required")
+                      "price_diff_review_required" if possible else "unmapped_review_required")
             items.append(InstallationLegacyComparisonRow(
                 legacy_rate_id=rate.id, legacy_category=rate.category, legacy_power_range=rate.power_range,
                 legacy_base_price=Decimal(rate.base_price), legacy_route_extra_price=Decimal(rate.extra_pipe_price),
-                candidates=[InstallationLegacyCandidate(tariff_code=entry["code"],
-                    matcher=InstallationMatcher.model_validate(entry["match"]), mode=entry["mode"],
-                    base_price=Decimal(entry["base_price"]), route_extra_price=route_price(entry))
-                    for entry in candidates], status=status,
+                candidates=possible, status=status,
             ))
         return InstallationLegacyComparisonResponse(price_book_revision=book.revision if book else None, items=items)
 
@@ -227,17 +238,17 @@ class InstallationPriceBookService:
             for rule in entry["rules"]:
                 expected = cls._component_signature(rule["code"])
                 if expected is None or (rule["rule_type"], rule["unit"], bool(rule["is_optional"])) != expected:
-                    raise cls._bad("invalid_component_rule", f"{rule['code']}: calculation type, unit, or optional mode is invalid")
+                    raise cls._bad("invalid_component_rule", f"{code}: {rule['code']} calculation type, unit, or optional mode is invalid")
                 signature = (rule["rule_type"], rule["unit"])
                 old_signature = component_signatures.setdefault(rule["code"], signature)
                 if old_signature != signature:
-                    raise cls._bad("component_code_conflict", f"{rule['code']}: unit or calculation type differs")
+                    raise cls._bad("component_code_conflict", f"{code}: {rule['code']} unit or calculation type differs")
                 if rule["code"] == "discount.equipment_bundle" and Decimal(rule["unit_price"]) > Decimal(entry["base_price"]):
                     raise cls._bad("excessive_discount", f"{code}: bundle discount exceeds base price")
                 if rule["code"].startswith("access."):
                     old = site_prices.setdefault(rule["code"], rule["unit_price"])
                     if old != rule["unit_price"]:
-                        raise cls._bad("site_extra_conflict", f"{rule['code']}: site prices disagree")
+                        raise cls._bad("site_extra_conflict", f"{code}: {rule['code']} site prices disagree")
             if len(rule_codes) != len(entry["rules"]):
                 raise cls._bad("duplicate_component_code", f"{code}: duplicate component code")
             # A price-book matcher is structured. Legacy category/power strings never select a price.
@@ -329,7 +340,7 @@ class InstallationPriceBookService:
                 for rule in entry["rules"]:
                     older = previous_component_signatures.get(rule["code"])
                     if older and older != (rule["rule_type"], rule["unit"]):
-                        raise cls._bad("component_code_reused", f"{rule['code']}: unit or calculation type changed")
+                        raise cls._bad("component_code_reused", f"{entry['code']}: {rule['code']} unit or calculation type changed")
         book = InstallationPriceBook(tenant_id=scope.tenant_id, revision=(current.revision + 1 if current else 1),
                                      fingerprint=fingerprint, entries=entries, published_by=actor)
         session.add(book)

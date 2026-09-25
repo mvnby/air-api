@@ -6,6 +6,7 @@ import type {
   ManagerTariffResponse,
   ManagerTariffServiceKind,
   ManagerTariffUpdatePayload,
+  InstallationMatcher_Input,
 } from '../client';
 import { getApiErrorMessage } from '../utils/api-errors';
 
@@ -22,6 +23,46 @@ const emit = defineEmits<{
 
 const loading = ref(false);
 const error = ref('');
+type IndoorType = InstallationMatcher_Input['indoor_type'];
+const indoorTypes: Array<{ value: IndoorType; label: string }> = [
+  { value: 'wall', label: 'Настенный' }, { value: 'cassette', label: 'Кассетный' },
+  { value: 'duct', label: 'Канальный' }, { value: 'floor_ceiling', label: 'Напольно-потолочный' },
+  { value: 'column', label: 'Колонный' }, { value: 'console', label: 'Консольный' },
+];
+const indoorType = ref<IndoorType | ''>('');
+const capacityMin = ref<number | null>(null);
+const capacityMax = ref<number | null>(null);
+const pipeLiquid = ref('');
+const pipeGas = ref('');
+const weightSource = ref<InstallationMatcher_Input['weight_source']>(null);
+const weightMin = ref<number | null>(null);
+const weightMax = ref<number | null>(null);
+const includedDiamondHoles = ref(0);
+const priceMode = ref<'fixed' | 'from' | 'quote'>('fixed');
+const existingInstallationCode = ref<string | null>(null);
+const existingHoles = ref<Record<string, number>>({});
+const numberOrNull = (value: number | null): number | null => value === null || value === undefined || String(value).trim() === '' ? null : Number(value);
+const installationFields = (): Pick<ManagerTariffCreatePayload, 'installation_code' | 'installation_match' | 'installation_price_mode' | 'included_holes_by_type'> => {
+  if (formData.value.service_kind !== 'installation' || !indoorType.value) {
+    return { installation_code: null, installation_match: null, installation_price_mode: 'fixed', included_holes_by_type: {} };
+  }
+  const code = existingInstallationCode.value || `installation.${indoorType.value}.${crypto.randomUUID().slice(0, 8)}`;
+  const holes = { ...existingHoles.value };
+  if (includedDiamondHoles.value > 0 || 'diamond' in holes) holes.diamond = includedDiamondHoles.value;
+  return {
+    installation_code: code,
+    installation_match: {
+      product_kind: 'complete_split_system', indoor_type: indoorType.value,
+      capacity_min_kw: numberOrNull(capacityMin.value), capacity_max_kw: numberOrNull(capacityMax.value),
+      pipe_liquid: pipeLiquid.value.trim() || null, pipe_gas: pipeGas.value.trim() || null,
+      weight_source: weightSource.value || null,
+      weight_min_kg: weightSource.value ? numberOrNull(weightMin.value) : null,
+      weight_max_kg: weightSource.value ? numberOrNull(weightMax.value) : null,
+    },
+    installation_price_mode: priceMode.value,
+    included_holes_by_type: holes,
+  };
+};
 
 const serviceKindOptions: Array<{ value: ManagerTariffServiceKind; label: string }> = [
   { value: 'installation', label: 'Монтаж' },
@@ -63,6 +104,19 @@ const formData = ref<ManagerTariffCreatePayload>({
 });
 
 const resetForm = () => {
+  const matcher = props.tariff?.installation_match;
+  indoorType.value = matcher?.indoor_type ?? '';
+  capacityMin.value = matcher?.capacity_min_kw == null ? null : Number(matcher.capacity_min_kw);
+  capacityMax.value = matcher?.capacity_max_kw == null ? null : Number(matcher.capacity_max_kw);
+  pipeLiquid.value = matcher?.pipe_liquid ?? '';
+  pipeGas.value = matcher?.pipe_gas ?? '';
+  weightSource.value = matcher?.weight_source ?? null;
+  weightMin.value = matcher?.weight_min_kg == null ? null : Number(matcher.weight_min_kg);
+  weightMax.value = matcher?.weight_max_kg == null ? null : Number(matcher.weight_max_kg);
+  existingHoles.value = { ...(props.tariff?.included_holes_by_type ?? {}) };
+  includedDiamondHoles.value = existingHoles.value.diamond ?? 0;
+  priceMode.value = props.tariff?.installation_price_mode ?? 'fixed';
+  existingInstallationCode.value = props.tariff?.installation_code ?? null;
   if (props.tariff) {
     formData.value = {
       service_kind: props.tariff.service_kind,
@@ -109,7 +163,8 @@ watch(
     if (val) {
       resetForm();
     }
-  }
+  },
+  { immediate: true }
 );
 
 const close = () => {
@@ -121,12 +176,21 @@ const submit = async () => {
     error.value = 'Короткое название обязательно';
     return;
   }
+  if (formData.value.service_kind === 'installation' && indoorType.value) {
+    if ((!pipeLiquid.value.trim() && pipeGas.value.trim()) || (pipeLiquid.value.trim() && !pipeGas.value.trim())) {
+      error.value = 'Укажите обе трубы пары или оставьте обе пустыми'; return;
+    }
+    if (!Number.isInteger(includedDiamondHoles.value) || includedDiamondHoles.value < 0) {
+      error.value = 'Количество включённых отверстий должно быть целым неотрицательным'; return;
+    }
+  }
   loading.value = true;
   error.value = '';
   try {
     const normalizedIncludedRoute = ROUTE_AWARE_SERVICE_KINDS.has(formData.value.service_kind as ManagerTariffServiceKind)
       ? formData.value.included_route_meters
       : 0;
+    const canonicalFields = installationFields();
     if (props.tariff?.id) {
       const updatePayload: ManagerTariffUpdatePayload = {
         service_kind: formData.value.service_kind as ManagerTariffServiceKind,
@@ -139,12 +203,14 @@ const submit = async () => {
         is_active: formData.value.is_active,
         sort_order: formData.value.sort_order,
         comment: formData.value.comment,
+        ...canonicalFields,
       };
       await api.updateManagerTariff(props.tariff.id, updatePayload);
     } else {
       await api.createManagerTariff({
         ...formData.value,
         included_route_meters: normalizedIncludedRoute,
+        ...canonicalFields,
       });
     }
     emit('success');
@@ -279,6 +345,43 @@ const submit = async () => {
                   :disabled="loading"
                 />
               </label>
+            </div>
+
+            <div v-if="formData.service_kind === 'installation'" class="space-y-3 border-t border-gray-200 pt-4 dark:border-slate-700">
+              <div class="text-sm font-semibold text-gray-900 dark:text-white">Подбор канонического монтажа</div>
+              <p class="text-xs text-gray-500 dark:text-slate-400">Выбор типа добавляет тариф в черновик книги. Сохранение не публикует цены. Старые тарифы без типа остаются как есть.</p>
+              <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <label class="block text-sm">Тип внутреннего блока
+                  <select v-model="indoorType" aria-label="Тип внутреннего блока" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900" :disabled="loading">
+                    <option value="">Не включать в книгу</option>
+                    <option v-for="option in indoorTypes" :key="option.value" :value="option.value">{{ option.label }}</option>
+                  </select>
+                </label>
+                <label v-if="indoorType" class="block text-sm">Режим цены
+                  <select v-model="priceMode" aria-label="Режим цены" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900" :disabled="loading">
+                    <option value="fixed">Фиксированная</option><option value="from">От указанной суммы</option><option value="quote">По запросу</option>
+                  </select>
+                </label>
+              </div>
+              <template v-if="indoorType">
+                <div v-if="tariff?.installation_code" class="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
+                  <span>{{ existingInstallationCode ? 'Условия опубликованного подбора менять нельзя. Если условия изменились, создайте новый подбор.' : 'При сохранении для новых условий будет создан новый внутренний код.' }}</span>
+                  <button v-if="existingInstallationCode" type="button" class="font-medium text-brand-700 dark:text-brand-300" @click="existingInstallationCode = null">Новые условия подбора</button>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                  <label class="text-sm">Мощность от, кВт<input v-model.number="capacityMin" aria-label="Мощность от, кВт" type="number" min="0" step="0.001" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900" /></label>
+                  <label class="text-sm">Мощность до, кВт<input v-model.number="capacityMax" aria-label="Мощность до, кВт" type="number" min="0" step="0.001" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900" /></label>
+                  <label class="text-sm">Жидкостная труба<input v-model="pipeLiquid" aria-label="Жидкостная труба" placeholder="1/4&quot;" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900" /></label>
+                  <label class="text-sm">Газовая труба<input v-model="pipeGas" aria-label="Газовая труба" placeholder="3/8&quot;" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900" /></label>
+                </div>
+                <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <label class="text-sm">Источник веса<select v-model="weightSource" aria-label="Источник веса" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900"><option :value="null">Не учитывать</option><option value="weight_indoor">Внутренний блок</option><option value="weight_outdoor">Наружный блок</option></select></label>
+                  <label class="text-sm">Вес от, кг<input v-model.number="weightMin" aria-label="Вес от, кг" type="number" min="0" step="0.01" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900" :disabled="!weightSource" /></label>
+                  <label class="text-sm">Вес до, кг<input v-model.number="weightMax" aria-label="Вес до, кг" type="number" min="0" step="0.01" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900" :disabled="!weightSource" /></label>
+                </div>
+                <label class="block text-sm">Включено алмазных отверстий<input v-model.number="includedDiamondHoles" aria-label="Включено алмазных отверстий" type="number" min="0" step="1" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900" /></label>
+                <p class="text-xs text-gray-500 dark:text-slate-400">Для фиксированной цены и цены «от» при публикации нужны мощность, пара труб, цена базы и цена дополнительной трассы. Для включённых отверстий нужна цена превышения.</p>
+              </template>
             </div>
 
             <label class="block">
