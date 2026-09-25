@@ -40,6 +40,24 @@ class TenantWebsiteEventService:
     MAX_ATTEMPTS = 8
 
     @staticmethod
+    def _checkout_service_title(link: OrderServiceLink, request: OrderPayload, order_id: int) -> str:
+        title = link.title or "Услуга"
+        if (
+            len(title) > 180
+            and request.installation_acceptance is not None
+            and link.installation_estimate_revision_id is not None
+        ):
+            installation_count = sum(
+                line.quantity
+                for line in request.installation_acceptance.expected_product_lines
+            )
+            return (
+                f"Монтаж {installation_count} кондиционеров по принятой смете; "
+                f"полный состав работ в заказе №{order_id}"
+            )
+        return title
+
+    @staticmethod
     def _assert_order_scope(order: Order, tenant_scope: TenantScope) -> int:
         order_id = int(order.id or 0)
         if (
@@ -134,7 +152,7 @@ class TenantWebsiteEventService:
             service_lines=[
                 PublicOrderServiceLineSnapshotV1(
                     service_id=link.service_id,
-                    title=link.title or "Услуга",
+                    title=cls._checkout_service_title(link, request, order_id),
                     quantity=link.quantity,
                     unit_price=link.price,
                 )

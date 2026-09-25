@@ -13,6 +13,7 @@ from sqlmodel import func, select
 
 from models import (
     InstallationEstimateRevision, InstallationPriceBook, InstallationPreviewSnapshot,
+    IntegrationOutboxEvent,
     Order, OrderServiceLink, Product, PublicInstallationPreviewClaim, Tenant,
 )
 from models.tenancy import TenantScope
@@ -59,14 +60,15 @@ async def _seed(session: AsyncSession):
 
 
 async def _preview(session: AsyncSession, product_id: int, *, key: str,
-                   with_pump: bool = False, two: bool = False):
+                   with_pump: bool = False, count: int = 1):
     installations = [{"key": "ac-one", "display_label": "№1", "product_id": product_id,
                       "route_length_m": "6", "holes_by_type": {"diamond": 2},
                       "extras": ([{"code": "pump.supply"}, {"code": "pump.install"}]
                                  if with_pump else [{"code": "pump.install"}])}]
-    if two:
-        installations.append({"key": "ac-two", "display_label": "№2", "product_id": product_id,
-                              "route_length_m": "3", "holes_by_type": {"diamond": 1}})
+    for index in range(2, count + 1):
+        installations.append({"key": f"ac-{index}", "display_label": f"№{index}",
+                              "product_id": product_id, "route_length_m": "3",
+                              "holes_by_type": {"diamond": 1}})
     return await Book.preview(
         session, TenantScope(tenant_id=1, storefront_id=1, is_system=True,
                              is_canonical_storefront=True),
@@ -97,15 +99,18 @@ def _order_payload(product_id: int, preview, *, quantity: int = 1,
 
 
 @pytest.mark.asyncio
-async def test_public_checkout_attaches_exact_two_ac_preview_and_shared_site_work(async_client, db):
+@pytest.mark.parametrize("count", [2, 20])
+async def test_public_checkout_attaches_exact_preview_and_bounded_event(async_client, db, count):
     product_id = await _seed(db)
-    preview = await _preview(db, product_id, key="public-two-ac-preview", with_pump=True, two=True)
+    preview = await _preview(db, product_id, key=f"public-{count}-ac-preview",
+                             with_pump=True, count=count)
     assert preview.status == "fixed"
-    assert preview.total == Decimal("1280.73")
+    if count == 2:
+        assert preview.total == Decimal("1280.73")
     assert [part.code for part in preview.components].count("access.lift") == 1
-    body = _order_payload(product_id, preview, quantity=2)
+    body = _order_payload(product_id, preview, quantity=count)
     response = await async_client.post("/api/v1/orders", json=body,
-                                       headers={"Idempotency-Key": "public-two-ac-checkout"})
+                                       headers={"Idempotency-Key": f"public-{count}-ac-checkout"})
     assert response.status_code == 200, response.text
     order_id = response.json()["id"]
     order = await db.get(Order, order_id)
@@ -115,24 +120,35 @@ async def test_public_checkout_attaches_exact_two_ac_preview_and_shared_site_wor
     assert len(attached) == 1
     assert attached[0].installation_estimate_revision_id is not None
     assert Decimal(str(attached[0].price)) == preview.total
+    assert len(attached[0].title) > 180
     assert "вышка" in attached[0].title.lower()
     assert "поставка насоса" in attached[0].title.lower()
     assert order.product_links[0].is_installation_included is False
     assert order.product_links[0].installation_price == 0
-    assert Decimal(str(order.total_amount)) == Decimal("5280.73")
+    assert Decimal(str(order.total_amount)) == Decimal("2000.00") * count + preview.total
     revision = await db.get(InstallationEstimateRevision, attached[0].installation_estimate_revision_id)
     assert Decimal(str(revision.total)) == preview.total
     assert revision.snapshot["confirmation"]["actor"] == "public_checkout"
+    event = (await db.execute(select(IntegrationOutboxEvent).where(
+        IntegrationOutboxEvent.aggregate_type == "order",
+        IntegrationOutboxEvent.aggregate_id == str(order_id),
+    ))).scalars().one()
+    event_line = event.payload["service_lines"][0]
+    assert len(event_line["title"]) <= 180
+    assert str(count) in event_line["title"]
+    assert str(order_id) in event_line["title"]
+    assert Decimal(event_line["unit_price"]) == preview.total
+    assert event_line["title"] != attached[0].title
     repeated = await async_client.post("/api/v1/orders", json=body,
-                                       headers={"Idempotency-Key": "public-two-ac-checkout"})
+                                       headers={"Idempotency-Key": f"public-{count}-ac-checkout"})
     assert repeated.json() == response.json()
     changed_body = {**body, "comment": "different buyer intent"}
     changed_key = await async_client.post("/api/v1/orders", json=changed_body,
-                                          headers={"Idempotency-Key": "public-two-ac-checkout"})
+                                          headers={"Idempotency-Key": f"public-{count}-ac-checkout"})
     assert changed_key.status_code == 409
     assert await db.scalar(select(func.count(Order.id))) == 1
     refused = await async_client.post("/api/v1/orders", json=body,
-                                      headers={"Idempotency-Key": "public-two-ac-other-key"})
+                                      headers={"Idempotency-Key": f"public-{count}-ac-other-key"})
     assert refused.status_code == 409
     assert refused.json()["detail"]["code"] == "preview_already_used"
     assert await db.scalar(select(func.count(PublicInstallationPreviewClaim.id))) == 1
@@ -190,10 +206,10 @@ async def test_distinct_public_checkout_keys_and_concurrent_publication_serializ
         preview = await _preview(setup, product_id, key="public-race-preview")
     payload = OrderPayload.model_validate(_order_payload(product_id, preview))
 
-    async def checkout(key):
+    async def checkout(key, submission=payload):
         async with factory() as session:
             return await WebsiteOrderService.create_order(
-                session, payload, tenant_scope=scope, idempotency_key=key,
+                session, submission, tenant_scope=scope, idempotency_key=key,
             )
 
     outcomes = await asyncio.wait_for(asyncio.gather(
@@ -214,6 +230,7 @@ async def test_distinct_public_checkout_keys_and_concurrent_publication_serializ
 
     async with factory() as setup:
         new_preview = await _preview(setup, product_id, key="public-publish-race-preview")
+    new_payload = OrderPayload.model_validate(_order_payload(product_id, new_preview))
     entered = asyncio.Event()
     release = asyncio.Event()
     original = PublicInstallationCheckoutService.create
@@ -226,7 +243,7 @@ async def test_distinct_public_checkout_keys_and_concurrent_publication_serializ
     monkeypatch.setattr(PublicInstallationCheckoutService, "create", pause_after_receipt)
     async with factory() as publication:
         await publication.execute(select(Tenant).where(Tenant.id == 1).with_for_update(key_share=True))
-        pending = asyncio.create_task(checkout("public-race-after-publish"))
+        pending = asyncio.create_task(checkout("public-race-after-publish", new_payload))
         await asyncio.wait_for(entered.wait(), timeout=5)
         publication.add(InstallationPriceBook(tenant_id=1, revision=2,
                                               fingerprint="public-checkout-book-two",
