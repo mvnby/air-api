@@ -93,7 +93,8 @@ def main() -> int:
     parser.add_argument("--backend-image-digest", help="Reviewed immutable backend image digest")
     parser.add_argument("--web-v2-commit", help="Reviewed deployed web v2 commit SHA")
     parser.add_argument("--web-v2-proof", help="URL of web v2 runtime smoke evidence")
-    parser.add_argument("--manager-editor-proof", help="URL showing legacy rate editor is guarded")
+    parser.add_argument("--manager-editor-proof",
+                        help="URL covering retired rate editor, old Manager estimate writes, and order quick picker")
     parser.add_argument("--legacy-list-proof",
                         help="URL showing installation rates and options/content lists are guarded")
     parser.add_argument("--legacy-calculate-proof", help="URL showing legacy calculator fails closed")

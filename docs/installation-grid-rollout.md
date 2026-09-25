@@ -66,8 +66,13 @@ deployed revisions:
   access rules. Require an installation-only fail-closed guard and record its
   evidence URL; other service directions retain their existing calculator.
 - The Manager `/installation-rates` editor is read-only or clearly retired
-  after publication. Record the verification URL. The typed tariff editor is
-  the draft source for later tenant-specific edits.
+  after publication. The old `/api/manager/service-estimates/calculate` and
+  `/api/manager/service-estimates` write paths, plus the order's quick service
+  picker, cannot calculate or add installation from base prices without the
+  shared-hole, multi-unit, and provisional rules. Historical estimate reads
+  and existing order lines remain available. Cover all of these Manager guards
+  with the same `--manager-editor-proof` evidence URL. The typed tariff editor
+  remains the draft source for later tenant-specific edits.
 - Review the exact active partner list and demo flags. Include each active
   partner with `--expected-partner`; no implicit share-all or partial subset.
   Add `--include-demo-reset` only if the report shows a demo tenant that the

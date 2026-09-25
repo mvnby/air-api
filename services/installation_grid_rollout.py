@@ -257,7 +257,7 @@ class InstallationGridRolloutService:
         if not _review_evidence_url(web_v2_proof):
             blockers.append("verified_web_v2_runtime_proof_url_required")
         if not _review_evidence_url(manager_editor_proof):
-            blockers.append("legacy_manager_rate_editor_guard_proof_url_required")
+            blockers.append("legacy_manager_installation_writes_guard_proof_url_required")
         if not _review_evidence_url(legacy_list_proof):
             blockers.append("legacy_public_installation_lists_guard_proof_url_required")
         if not _review_evidence_url(legacy_calculate_proof):
@@ -398,7 +398,11 @@ class InstallationGridRolloutService:
                                        "/api/v1/content/services; installation prices must be guarded after web v2",
                 "legacy_public_calculation": "InstallationPricingService; must reject obsolete with_installation input after web v2",
                 "legacy_public_tariff_calculation": "/api/v1/service-pricing/calculate; must not present typed installation drafts as exact multi/shared-hole prices",
-                "legacy_manager_editor": "/manager/installation-rates; must be read-only or clearly retired",
+                "legacy_manager_editor": (
+                    "/manager/installation-rates and /api/manager/service-estimates "
+                    "calculate/create plus order quick picker; installation writes must be "
+                    "guarded after book publication, historical reads retained"
+                ),
                 "unchanged": "non-installation tariffs, immutable quotes/orders/documents",
             },
         }

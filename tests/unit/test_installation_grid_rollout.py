@@ -75,6 +75,7 @@ async def test_plan_reports_exact_old_new_prices_and_never_writes(grid_db):
     assert report["blockers"] == []
     assert report["discovered_active_partner_slugs"] == ["test1"]
     assert len(report["desired_installation_drafts"]) == 20
+    assert "order quick picker" in report["read_path_inventory"]["legacy_manager_editor"]
     partner = next(row for row in report["scopes"] if row["tenant_slug"] == "test1")
     assert partner["demo_read_only"] is True
     assert partner["old_to_new"][0]["old_base_price"] == 515
