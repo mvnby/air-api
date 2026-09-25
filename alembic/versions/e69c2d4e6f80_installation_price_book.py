@@ -46,10 +46,9 @@ def upgrade() -> None:
         sa.Column("snapshot", sa.JSON(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
-        sa.UniqueConstraint("token_hash"),
     )
     for name in ("token_hash", "tenant_id", "storefront_id", "price_book_id", "expires_at"):
-        op.create_index(f"ix_installation_preview_snapshot_{name}", "installation_preview_snapshot", [name])
+        op.create_index(f"ix_installation_preview_snapshot_{name}", "installation_preview_snapshot", [name], unique=name == "token_hash")
 
 
 def downgrade() -> None:
