@@ -10,11 +10,12 @@ from typing import Any
 
 from fastapi import HTTPException
 from pydantic import ValidationError
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from models import InstallationPriceBook, InstallationRate, Product, ServiceTariff, ServiceTariffRule
-from models.tenancy import TenantScope
+from models.tenancy import TenantScope, utc_now
 from schemas import ManagerInstallEstimateCalculatePayload, ManagerTariffServiceKind
 from schemas_installation_price_book import (
     InstallationComponent, InstallationMatcher, InstallationPreviewPayload,
@@ -392,6 +393,13 @@ class InstallationPriceBookService:
                     older = previous_component_signatures.get(rule["code"])
                     if older and older != (rule["rule_type"], rule["unit"]):
                         raise cls._bad("component_code_reused", f"{entry['code']}: {rule['code']} unit or calculation type changed")
+        # A row lock alone does not refresh a SERIALIZABLE reader's snapshot.
+        # Bump the tenant version for every new book so a reviewed grid reset
+        # that waited on this lock aborts instead of reusing a stale revision.
+        await session.execute(
+            update(Tenant).where(Tenant.id == scope.tenant_id)
+            .values(updated_at=utc_now())
+        )
         book = InstallationPriceBook(tenant_id=scope.tenant_id, revision=(current.revision + 1 if current else 1),
                                      fingerprint=fingerprint, entries=entries, published_by=actor)
         session.add(book)

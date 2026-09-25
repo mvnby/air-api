@@ -22,6 +22,21 @@ from services.partner_site_setup_service import (
 from services.storefront_onboarding_state import StorefrontOnboardingBlockedError
 
 
+def _proofs(partner_slug: str) -> dict:
+    return dict(
+        expected_partner_slugs=(partner_slug,),
+        backend_release_commit="b" * 40,
+        backend_image_digest="sha256:" + "c" * 64,
+        web_v2_commit="a" * 40,
+        web_v2_proof="https://github.com/mvnby/mvn-web/actions/runs/1",
+        manager_editor_proof="https://github.com/mvnby/air-api/actions/runs/2",
+        legacy_list_proof="https://github.com/mvnby/air-api/actions/runs/5",
+        legacy_calculate_proof="https://github.com/mvnby/air-api/actions/runs/3",
+        legacy_tariff_calculate_proof="https://github.com/mvnby/air-api/actions/runs/4",
+        include_demo_reset=False,
+    )
+
+
 @pytest.mark.asyncio
 async def test_partner_initialization_then_grid_apply_serializes_without_deadlock(
     db_engine,
@@ -53,18 +68,7 @@ async def test_partner_initialization_then_grid_apply_serializes_without_deadloc
         tenant_slug="grid-lock-partner", storefront_slug="main",
         site={"display_name": "Partner"}, enabled_services=["installation"],
     )
-    proofs = dict(
-        expected_partner_slugs=("grid-lock-partner",),
-        backend_release_commit="b" * 40,
-        backend_image_digest="sha256:" + "c" * 64,
-        web_v2_commit="a" * 40,
-        web_v2_proof="https://github.com/mvnby/mvn-web/actions/runs/1",
-        manager_editor_proof="https://github.com/mvnby/air-api/actions/runs/2",
-        legacy_list_proof="https://github.com/mvnby/air-api/actions/runs/5",
-        legacy_calculate_proof="https://github.com/mvnby/air-api/actions/runs/3",
-        legacy_tariff_calculate_proof="https://github.com/mvnby/air-api/actions/runs/4",
-        include_demo_reset=False,
-    )
+    proofs = _proofs("grid-lock-partner")
     async with factory() as review:
         partner_plan, _ = await PartnerSiteSetupService.plan(review, manifest)
         assert partner_plan["blockers"] == []
@@ -129,3 +133,124 @@ async def test_partner_initialization_then_grid_apply_serializes_without_deadloc
             InstallationPriceBook.tenant_id == partner.id,
         ))).scalars().all())
         assert len(partner_books) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("first", ["publisher", "reset"])
+async def test_direct_publication_and_grid_reset_keep_one_next_revision(
+    db_engine, first,
+):
+    assert db_engine.dialect.name == "postgresql"
+    factory = sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
+    spec = canonical_installation_grid()[0]
+    async with factory() as seed:
+        async with seed.begin():
+            system = (await seed.execute(select(Tenant).where(
+                Tenant.is_system.is_(True)))).scalar_one()
+            partner = Tenant(slug="grid-publish-partner", display_name="Grid publish partner")
+            seed.add(partner)
+            await seed.flush()
+            partner_storefront = Storefront(
+                tenant_id=partner.id, slug="main", display_name="Partner",
+                status="active", is_default=True,
+            )
+            source = ServiceTariff(**spec.fields())
+            partner_draft = ServiceTariff(tenant_id=partner.id, **spec.fields())
+            seed.add_all([partner_storefront, source, partner_draft])
+            await seed.flush()
+            for tariff in (source, partner_draft):
+                seed.add_all(ServiceTariffRule(
+                    tariff_id=tariff.id, sort_order=index * 10, **rule.fields(),
+                ) for index, rule in enumerate(spec.rules))
+            await seed.flush()
+            partner_scope = TenantScope(
+                tenant_id=partner.id, storefront_id=partner_storefront.id,
+            )
+            await InstallationPriceBookService.publish(
+                seed, TenantScope(tenant_id=system.id, storefront_id=1,
+                                  is_system=True),
+                actor="test:canonical-source", commit=False,
+            )
+            await InstallationPriceBookService.publish(
+                seed, partner_scope, actor="test:partner-source", commit=False,
+            )
+    # A Manager has edited the partner draft but has not yet published it.
+    async with factory() as change:
+        async with change.begin():
+            draft = await change.get(ServiceTariff, partner_draft.id)
+            draft.base_price = 650
+
+    proofs = _proofs("grid-publish-partner")
+    async with factory() as review:
+        report, _ = await InstallationGridRolloutService.plan(review, **proofs)
+        assert report["blockers"] == []
+        token = InstallationGridPlanToken.issue(plan_digest=report["plan_digest"])
+
+    locked = asyncio.Event()
+    release = asyncio.Event()
+
+    async def publish_partner():
+        async with factory() as session:
+            async with session.begin():
+                await session.execute(text("SET LOCAL lock_timeout = '4s'"))
+                if first == "publisher":
+                    await session.execute(select(Tenant).where(
+                        Tenant.id == partner.id,
+                    ).with_for_update(key_share=True))
+                    locked.set()
+                    await release.wait()
+                return await InstallationPriceBookService.publish(
+                    session, partner_scope, actor="test:manager-publish", commit=False,
+                )
+
+    async def reset_grid():
+        async with factory() as session:
+            async with session.begin():
+                await session.execute(text("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"))
+                await session.execute(text("SET LOCAL lock_timeout = '4s'"))
+                if first == "reset":
+                    await session.execute(select(Tenant).where(
+                        Tenant.id.in_([system.id, partner.id]),
+                    ).order_by(Tenant.id).with_for_update(key_share=True))
+                    locked.set()
+                    await release.wait()
+                return await InstallationGridRolloutService.apply(
+                    session, **proofs, plan_token=token,
+                )
+
+    if first == "publisher":
+        first_task = asyncio.create_task(publish_partner())
+        await asyncio.wait_for(locked.wait(), timeout=5)
+        second_task = asyncio.create_task(reset_grid())
+    else:
+        first_task = asyncio.create_task(reset_grid())
+        await asyncio.wait_for(locked.wait(), timeout=5)
+        second_task = asyncio.create_task(publish_partner())
+    await asyncio.sleep(0.1)
+    release.set()
+
+    if first == "publisher":
+        assert (await asyncio.wait_for(first_task, timeout=20)).revision == 2
+        try:
+            await asyncio.wait_for(second_task, timeout=20)
+        except StorefrontOnboardingBlockedError:
+            pass
+        except DBAPIError as exc:
+            assert getattr(exc.orig, "sqlstate", None) == "40001"
+        else:
+            raise AssertionError("Reset applied a stale plan after direct publication")
+    else:
+        assert (await asyncio.wait_for(first_task, timeout=20))["status"] == "applied"
+        assert (await asyncio.wait_for(second_task, timeout=20)).revision == 2
+
+    async with factory() as verify:
+        books = list((await verify.execute(select(InstallationPriceBook).where(
+            InstallationPriceBook.tenant_id == partner.id,
+        ).order_by(InstallationPriceBook.revision))).scalars().all())
+        assert [book.revision for book in books] == [1, 2]
+        active = list((await verify.execute(select(ServiceTariff).where(
+            ServiceTariff.tenant_id == partner.id,
+            ServiceTariff.service_kind == "installation",
+            ServiceTariff.is_active.is_(True),
+        ))).scalars().all())
+        assert len(active) == (1 if first == "publisher" else 20)

@@ -55,12 +55,22 @@ async def test_initial_partner_copy_publishes_only_current_approved_source():
                 system_storefront = (await session.execute(select(Storefront).where(
                     Storefront.tenant_id == system.id,
                 ))).scalar_one()
-                await InstallationPriceBookService.publish(
-                    session, TenantScope(tenant_id=system.id,
-                                         storefront_id=system_storefront.id,
-                                         is_system=True),
+                canonical_scope = TenantScope(tenant_id=system.id,
+                                              storefront_id=system_storefront.id,
+                                              is_system=True)
+                first_book = await InstallationPriceBookService.publish(
+                    session, canonical_scope,
                     actor="test:approved-source", commit=False,
                 )
+                await session.refresh(system)
+                first_published_at = system.updated_at
+                repeated = await InstallationPriceBookService.publish(
+                    session, canonical_scope, actor="test:approved-source",
+                    commit=False,
+                )
+                await session.refresh(system)
+                assert repeated.revision == first_book.revision
+                assert system.updated_at == first_published_at
             target_storefront = (await session.execute(select(Storefront).where(
                 Storefront.tenant_id == partner.id))).scalar_one()
             target = TenantScope(tenant_id=partner.id, storefront_id=target_storefront.id)
