@@ -49736,6 +49736,17 @@
             },
             "type": "array",
             "title": "Items"
+          },
+          "published_price_book_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published Price Book Revision"
           }
         },
         "type": "object",
