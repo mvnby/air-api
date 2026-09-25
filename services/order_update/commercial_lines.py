@@ -62,9 +62,19 @@ async def apply_commercial_lines(context: OrderUpdateContext) -> None:
             "Return it to draft or create a copy"
         )
 
-    if "products" in context.fields_set and context.payload.products is not None:
+    replaces_products = "products" in context.fields_set and context.payload.products is not None
+    replaces_services = "services" in context.fields_set and context.payload.services is not None
+    if (replaces_products or replaces_services) and any(
+        link.proposal_id == target_proposal_id and link.installation_estimate_revision_id is not None
+        for link in context.order.service_links
+    ):
+        raise ValueError(
+            "Attached installation estimate lines are immutable. Create a new estimate revision or proposal"
+        )
+
+    if replaces_products:
         await _replace_product_lines(context, target_proposal_id)
-    if "services" in context.fields_set and context.payload.services is not None:
+    if replaces_services:
         await _replace_service_lines(context, target_proposal_id)
 
     await context.session.flush()

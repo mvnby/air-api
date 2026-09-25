@@ -22698,6 +22698,260 @@
         }
       }
     },
+    "/api/manager/installation-estimates/preview": {
+      "post": {
+        "tags": [
+          "manager/installation-estimates"
+        ],
+        "summary": "Preview Manager Installation Estimate",
+        "operationId": "preview_manager_installation_estimate",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstallationPreviewPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallationPreviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/installation-estimates/confirm": {
+      "post": {
+        "tags": [
+          "manager/installation-estimates"
+        ],
+        "summary": "Confirm Manager Installation Estimate",
+        "operationId": "confirm_manager_installation_estimate",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerInstallationConfirmPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerInstallationConfirmResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/installation-estimates/{estimate_id}/revisions/{revision}": {
+      "get": {
+        "tags": [
+          "manager/installation-estimates"
+        ],
+        "summary": "Get Manager Installation Estimate Revision",
+        "operationId": "get_manager_installation_estimate_revision",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "estimate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Estimate Id"
+            }
+          },
+          {
+            "name": "revision",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Revision"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerInstallationEstimateRevisionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/installation-estimates/{estimate_id}/orders/{order_id}/proposals/{proposal_id}/attach": {
+      "post": {
+        "tags": [
+          "manager/installation-estimates"
+        ],
+        "summary": "Attach Manager Installation Estimate",
+        "operationId": "attach_manager_installation_estimate",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "estimate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Estimate Id"
+            }
+          },
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "proposal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Proposal Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerInstallationAttachPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerInstallationAttachResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/orders/{order_id}/attachments": {
       "get": {
         "tags": [
@@ -48548,6 +48802,194 @@
         ],
         "title": "ManagerInstallEstimateSavePayload"
       },
+      "ManagerInstallationAttachPayload": {
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "collapsed",
+              "detailed"
+            ],
+            "title": "Mode",
+            "default": "collapsed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "revision"
+        ],
+        "title": "ManagerInstallationAttachPayload"
+      },
+      "ManagerInstallationAttachResponse": {
+        "properties": {
+          "estimate_id": {
+            "type": "integer",
+            "title": "Estimate Id"
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision"
+          },
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "proposal_id": {
+            "type": "integer",
+            "title": "Proposal Id"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "collapsed",
+              "detailed"
+            ],
+            "title": "Mode"
+          },
+          "total": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Total"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerInstallationAttachedLine"
+            },
+            "type": "array",
+            "title": "Lines"
+          }
+        },
+        "type": "object",
+        "required": [
+          "estimate_id",
+          "revision",
+          "order_id",
+          "proposal_id",
+          "mode",
+          "total",
+          "lines"
+        ],
+        "title": "ManagerInstallationAttachResponse"
+      },
+      "ManagerInstallationAttachedLine": {
+        "properties": {
+          "link_id": {
+            "type": "integer",
+            "title": "Link Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "price": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Price"
+          }
+        },
+        "type": "object",
+        "required": [
+          "link_id",
+          "title",
+          "price"
+        ],
+        "title": "ManagerInstallationAttachedLine"
+      },
+      "ManagerInstallationConfirmPayload": {
+        "properties": {
+          "preview_ref": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Preview Ref"
+          },
+          "order_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Order Id"
+          },
+          "proposal_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Proposal Id"
+          },
+          "verified_service_only_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Verified Service Only Keys"
+          }
+        },
+        "type": "object",
+        "required": [
+          "preview_ref",
+          "order_id",
+          "proposal_id"
+        ],
+        "title": "ManagerInstallationConfirmPayload"
+      },
+      "ManagerInstallationConfirmResponse": {
+        "properties": {
+          "estimate_id": {
+            "type": "integer",
+            "title": "Estimate Id"
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision"
+          },
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "proposal_id": {
+            "type": "integer",
+            "title": "Proposal Id"
+          },
+          "price_book_id": {
+            "type": "integer",
+            "title": "Price Book Id"
+          },
+          "price_book_revision": {
+            "type": "integer",
+            "title": "Price Book Revision"
+          },
+          "total": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Total"
+          },
+          "customer_text": {
+            "type": "string",
+            "title": "Customer Text"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "estimate_id",
+          "revision",
+          "order_id",
+          "proposal_id",
+          "price_book_id",
+          "price_book_revision",
+          "total",
+          "customer_text",
+          "created_at"
+        ],
+        "title": "ManagerInstallationConfirmResponse"
+      },
       "ManagerInstallationDiscountPolicyResponse": {
         "properties": {
           "is_enabled": {
@@ -48761,6 +49203,67 @@
           "blocked_missing_cost"
         ],
         "title": "ManagerInstallationDiscountStatus"
+      },
+      "ManagerInstallationEstimateRevisionResponse": {
+        "properties": {
+          "estimate_id": {
+            "type": "integer",
+            "title": "Estimate Id"
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision"
+          },
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "proposal_id": {
+            "type": "integer",
+            "title": "Proposal Id"
+          },
+          "price_book_id": {
+            "type": "integer",
+            "title": "Price Book Id"
+          },
+          "price_book_revision": {
+            "type": "integer",
+            "title": "Price Book Revision"
+          },
+          "total": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Total"
+          },
+          "customer_text": {
+            "type": "string",
+            "title": "Customer Text"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "snapshot": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Snapshot"
+          }
+        },
+        "type": "object",
+        "required": [
+          "estimate_id",
+          "revision",
+          "order_id",
+          "proposal_id",
+          "price_book_id",
+          "price_book_revision",
+          "total",
+          "customer_text",
+          "created_at",
+          "snapshot"
+        ],
+        "title": "ManagerInstallationEstimateRevisionResponse"
       },
       "ManagerInstallationRateListResponse": {
         "properties": {

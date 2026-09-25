@@ -113,6 +113,7 @@ from .order import (
     Service,
 )
 from .service_catalog import InstallationPriceBook, InstallationPreviewSnapshot
+from .installation_estimate import InstallationEstimate, InstallationEstimateRevision
 from .product import (
     Favorite,
     ImportMediaCache,
@@ -233,6 +234,8 @@ __all__ = [
     "ServiceTariffRule",
     "InstallationPriceBook",
     "InstallationPreviewSnapshot",
+    "InstallationEstimate",
+    "InstallationEstimateRevision",
     "OrderServiceLink",
     "OrderStageStatus",
     "OrderStatus",

@@ -343,6 +343,11 @@ export type { ManagerFeatureSeriesMigrationPreviewResponse } from './models/Mana
 export type { ManagerFeatureSuggestionsApplyPayload } from './models/ManagerFeatureSuggestionsApplyPayload';
 export type { ManagerGoogleAuthStatusResponse } from './models/ManagerGoogleAuthStatusResponse';
 export type { ManagerGoogleAuthUrlResponse } from './models/ManagerGoogleAuthUrlResponse';
+export type { ManagerInstallationAttachedLine } from './models/ManagerInstallationAttachedLine';
+export type { ManagerInstallationAttachPayload } from './models/ManagerInstallationAttachPayload';
+export type { ManagerInstallationAttachResponse } from './models/ManagerInstallationAttachResponse';
+export type { ManagerInstallationConfirmPayload } from './models/ManagerInstallationConfirmPayload';
+export type { ManagerInstallationConfirmResponse } from './models/ManagerInstallationConfirmResponse';
 export type { ManagerInstallationDiscountPolicyResponse } from './models/ManagerInstallationDiscountPolicyResponse';
 export type { ManagerInstallationDiscountPolicyUpdatePayload } from './models/ManagerInstallationDiscountPolicyUpdatePayload';
 export type { ManagerInstallationDiscountProductResponse } from './models/ManagerInstallationDiscountProductResponse';
@@ -350,6 +355,7 @@ export type { ManagerInstallationDiscountProductSearchResponse } from './models/
 export type { ManagerInstallationDiscountRuleListResponse } from './models/ManagerInstallationDiscountRuleListResponse';
 export type { ManagerInstallationDiscountRuleUpdatePayload } from './models/ManagerInstallationDiscountRuleUpdatePayload';
 export type { ManagerInstallationDiscountStatus } from './models/ManagerInstallationDiscountStatus';
+export type { ManagerInstallationEstimateRevisionResponse } from './models/ManagerInstallationEstimateRevisionResponse';
 export type { ManagerInstallationRateListResponse } from './models/ManagerInstallationRateListResponse';
 export type { ManagerInstallationRateResponse } from './models/ManagerInstallationRateResponse';
 export type { ManagerInstallationRateSelectionStatus } from './models/ManagerInstallationRateSelectionStatus';
@@ -747,6 +753,7 @@ export { ManagerEquipmentLinksService } from './services/ManagerEquipmentLinksSe
 export { ManagerFeaturesService } from './services/ManagerFeaturesService';
 export { ManagerGoogleAuthService } from './services/ManagerGoogleAuthService';
 export { ManagerInstallationDiscountsService } from './services/ManagerInstallationDiscountsService';
+export { ManagerInstallationEstimatesService } from './services/ManagerInstallationEstimatesService';
 export { ManagerInstallationRatesService } from './services/ManagerInstallationRatesService';
 export { ManagerInstallersService } from './services/ManagerInstallersService';
 export { ManagerLeadsService } from './services/ManagerLeadsService';

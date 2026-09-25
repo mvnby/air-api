@@ -144,6 +144,9 @@ class OrderProposalCommandService:
                             quantity=link.quantity,
                             price=link.price,
                             cost=link.cost,
+                            installation_estimate_revision_id=link.installation_estimate_revision_id,
+                            installation_line_index=link.installation_line_index,
+                            installation_projection_mode=link.installation_projection_mode,
                         )
                     )
             await session.flush()
