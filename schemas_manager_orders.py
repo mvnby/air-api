@@ -169,6 +169,8 @@ class OrderServiceLineResponse(BaseModel):
     price: float
     cost: Optional[float] = None
     line_total: float
+    installation_estimate_revision_id: Optional[int] = None
+    installation_projection_mode: Optional[str] = None
 
 
 class ManagerOrderListItemResponse(BaseModel):

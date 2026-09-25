@@ -15,7 +15,8 @@ from models import (
 )
 from models.tenancy import TenantScope
 from schemas_installation_confirmation import ManagerInstallationAttachPayload, ManagerInstallationConfirmPayload
-from schemas_installation_price_book import InstallationPreviewPayload
+from schemas_installation_price_book import InstallationPreviewPayload, InstallationPreviewResponse
+from routers.manager_installation_estimates import _manager_preview
 from schemas import ManagerOrderUpdatePayload, OrderProposalCreatePayload
 from services.installation_estimate_confirmation_service import InstallationEstimateConfirmationService as Confirm
 from services.installation_price_book_service import InstallationPriceBookService as Book
@@ -101,6 +102,9 @@ def test_collapsed_and_detailed_projection_reconcile_discount_cent():
     assert [price for _, price in detailed] == [Decimal("499.99"), Decimal("10.25")]
     assert sum((price for _, price in detailed), Decimal("0")) == total
     assert "фактически 4 м" in detailed[1][0]
+    manager_preview = _manager_preview(InstallationPreviewResponse.model_validate(snapshot["result"]))
+    assert [(line.title, line.price) for line in manager_preview.collapsed_lines] == collapsed
+    assert [(line.title, line.price) for line in manager_preview.detailed_lines] == detailed
 
 
 def test_detailed_projection_keeps_included_work_and_selected_quantities():

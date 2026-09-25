@@ -92,6 +92,7 @@ class InstallationExtraInput(BaseModel):
 
 class InstallationInput(InstallationTarget):
     key: str = Field(min_length=1, max_length=80)
+    display_label: str | None = Field(default=None, min_length=1, max_length=100)
     route_length_m: Decimal = Field(ge=0, le=1000, decimal_places=2)
     holes_by_type: dict[str, Decimal]
     extras: list[InstallationExtraInput] = Field(default_factory=list)
@@ -156,6 +157,7 @@ class InstallationSelectedWork(BaseModel):
 
 class InstallationWorkSummary(BaseModel):
     installation_key: str
+    display_label: str | None = None
     tariff_code: str
     work_label: str
     measured: list[InstallationMeasuredWork]

@@ -44,7 +44,7 @@ def _entry(*, base_price="500.00", mode="fixed"):
 
 
 def _preview_body(revision=1):
-    return {"installations": [{"key": "one", "typed_profile": {
+    return {"installations": [{"key": "one", "display_label": "№1", "typed_profile": {
         "product_kind": "complete_split_system", "indoor_type": "wall",
         "capacity_cooling_kw": "2.5", "pipe_liquid": '1/4"', "pipe_gas": '3/8"',
         "confirmed": True}, "route_length_m": "6", "holes_by_type": {"diamond": 2}}],
@@ -77,6 +77,13 @@ async def test_manager_confirm_stale_reprices_then_attach_exact_revision(async_c
         headers={**headers, "Idempotency-Key": "manager-preview-first"})
     assert first_preview.status_code == 200, first_preview.text
     assert first_preview.json()["total"] == "580.75"
+    assert "Установка №1" in first_preview.json()["customer_text"]
+    assert "Установка one" not in first_preview.json()["customer_text"]
+    assert first_preview.json()["collapsed_lines"] == [{
+        "title": first_preview.json()["customer_text"], "price": "580.75",
+    }]
+    assert sum((Decimal(line["price"]) for line in first_preview.json()["detailed_lines"]), Decimal("0")) == Decimal("580.75")
+    assert all("Установка one" not in line["title"] for line in first_preview.json()["detailed_lines"])
 
     second_book = InstallationPriceBook(tenant_id=1, revision=2, fingerprint="confirm-book-two",
                                         entries=[_entry(base_price="550.00")])
@@ -92,6 +99,7 @@ async def test_manager_confirm_stale_reprices_then_attach_exact_revision(async_c
     assert stale.json()["detail"]["new_consent_required"] is True
     fresh = stale.json()["detail"]["fresh_preview"]
     assert fresh["total"] == "630.75" and fresh["preview_ref"]
+    assert fresh["collapsed_lines"][0]["price"] == "630.75"
 
     confirmation["preview_ref"] = fresh["preview_ref"]
     confirmed = await async_client.post(f"{prefix}/confirm", json=confirmation,
@@ -118,6 +126,8 @@ async def test_manager_confirm_stale_reprices_then_attach_exact_revision(async_c
     assert attached.json()["total"] == "630.75"
     assert len(attached.json()["lines"]) == 1
     assert "трасса 6" in attached.json()["lines"][0]["title"].lower()
+    assert [(line["title"], line["price"]) for line in attached.json()["lines"]] == [
+        (line["title"], line["price"]) for line in fresh["collapsed_lines"]]
     repeated_attach = await async_client.post(attach_url, json={"revision": 1},
         headers={**headers, "Idempotency-Key": "manager-attach-selected-again"})
     assert repeated_attach.status_code == 200 and repeated_attach.json() == attached.json()
@@ -153,6 +163,8 @@ async def test_manager_confirm_stale_reprices_then_attach_exact_revision(async_c
     assert alt_attached.status_code == 200, alt_attached.text
     assert len(alt_attached.json()["lines"]) == 3
     assert sum((Decimal(line["price"]) for line in alt_attached.json()["lines"]), Decimal("0")) == Decimal("630.75")
+    assert [(line["title"], line["price"]) for line in alt_attached.json()["lines"]] == [
+        (line["title"], line["price"]) for line in alternative_preview.json()["detailed_lines"]]
     await db.refresh(order)
     assert Decimal(str(order.total_amount)) == Decimal("630.75")
     assert selected.is_selected and not alternative.is_selected

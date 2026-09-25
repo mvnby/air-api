@@ -356,6 +356,8 @@ export type { ManagerInstallationDiscountRuleListResponse } from './models/Manag
 export type { ManagerInstallationDiscountRuleUpdatePayload } from './models/ManagerInstallationDiscountRuleUpdatePayload';
 export type { ManagerInstallationDiscountStatus } from './models/ManagerInstallationDiscountStatus';
 export type { ManagerInstallationEstimateRevisionResponse } from './models/ManagerInstallationEstimateRevisionResponse';
+export type { ManagerInstallationPreviewLine } from './models/ManagerInstallationPreviewLine';
+export type { ManagerInstallationPreviewResponse } from './models/ManagerInstallationPreviewResponse';
 export type { ManagerInstallationRateListResponse } from './models/ManagerInstallationRateListResponse';
 export type { ManagerInstallationRateResponse } from './models/ManagerInstallationRateResponse';
 export type { ManagerInstallationRateSelectionStatus } from './models/ManagerInstallationRateSelectionStatus';

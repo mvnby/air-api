@@ -60,6 +60,9 @@ describe('OrderProposalWorkspace', () => {
         showProductLines: true,
         formatServiceKind: (kind?: string | null) => kind || '',
         workflow: 'sales_installation',
+        orderId: null,
+        beforeInstallationAction: vi.fn().mockResolvedValue(true),
+        afterInstallationAttach: vi.fn().mockResolvedValue(undefined),
       },
       global: {
         stubs: {
@@ -79,5 +82,13 @@ describe('OrderProposalWorkspace', () => {
 
     expect(duplicateProposal).toHaveBeenCalledOnce();
     expect(changeActiveProposalStatus).toHaveBeenCalledWith('draft');
+
+    commercial.serviceLines.value = [{ title: 'Монтаж', quantity: 1, price: 500, cost: 0,
+      installation_estimate_revision_id: 21 }];
+    await wrapper.vm.$nextTick();
+    expect(wrapper.text()).toContain('новый пустой черновик');
+    expect(wrapper.text()).not.toContain('Создать копию');
+    await wrapper.findAll('button').find((button) => button.text().includes('Новый черновик'))?.trigger('click');
+    expect(proposal.createProposal).toHaveBeenCalledOnce();
   });
 });

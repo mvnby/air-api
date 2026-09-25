@@ -132,6 +132,8 @@ const mapProductLineFromResponse = (line: OrderProductLineResponse): ProductLine
 
 const mapServiceLineFromResponse = (line: OrderServiceLineResponse): ServiceLine => ({
   link_id: line.id,
+  installation_estimate_revision_id: line.installation_estimate_revision_id,
+  installation_projection_mode: line.installation_projection_mode,
   service_id: line.service_id,
   title: line.service_title,
   quantity: Math.max(1, Number(line.quantity || 1)),

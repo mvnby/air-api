@@ -112,6 +112,9 @@ export const useOrderDrawerPersistence = ({
       }
       if (Array.isArray(payload.serviceLines)) {
         serviceLines.value = payload.serviceLines.map((line) => ({
+          link_id: Number(line.link_id || 0) || null,
+          installation_estimate_revision_id: Number(line.installation_estimate_revision_id || 0) || null,
+          installation_projection_mode: line.installation_projection_mode || null,
           service_id: line.service_id ?? null,
           title: String(line.title || ''),
           quantity: Number(line.quantity || 1),

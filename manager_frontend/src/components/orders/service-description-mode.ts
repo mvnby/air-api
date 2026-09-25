@@ -5,6 +5,8 @@ export type ServiceDescriptionMode = 'short' | 'full';
 
 export type ServiceDescriptionLine = {
   link_id?: number | null;
+  installation_estimate_revision_id?: number | null;
+  installation_projection_mode?: string | null;
   service_id?: number | null;
   title: string;
   quantity: number;

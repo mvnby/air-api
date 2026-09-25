@@ -6,6 +6,7 @@ import type { InstallationMeasuredWork } from './InstallationMeasuredWork';
 import type { InstallationSelectedWork } from './InstallationSelectedWork';
 export type InstallationWorkSummary = {
     installation_key: string;
+    display_label?: (string | null);
     tariff_code: string;
     work_label: string;
     measured: Array<InstallationMeasuredWork>;

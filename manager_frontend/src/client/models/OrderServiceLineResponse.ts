@@ -12,5 +12,7 @@ export type OrderServiceLineResponse = {
     price: number;
     cost?: (number | null);
     line_total: number;
+    installation_estimate_revision_id?: (number | null);
+    installation_projection_mode?: (string | null);
 };
 

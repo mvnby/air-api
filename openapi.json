@@ -22737,7 +22737,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InstallationPreviewResponse"
+                  "$ref": "#/components/schemas/ManagerInstallationPreviewResponse"
                 }
               }
             }
@@ -38309,6 +38309,19 @@
             "minLength": 1,
             "title": "Key"
           },
+          "display_label": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Label"
+          },
           "route_length_m": {
             "anyOf": [
               {
@@ -39265,6 +39278,17 @@
           "installation_key": {
             "type": "string",
             "title": "Installation Key"
+          },
+          "display_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Label"
           },
           "tariff_code": {
             "type": "string",
@@ -49264,6 +49288,211 @@
           "snapshot"
         ],
         "title": "ManagerInstallationEstimateRevisionResponse"
+      },
+      "ManagerInstallationPreviewLine": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "price": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Price"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "price"
+        ],
+        "title": "ManagerInstallationPreviewLine"
+      },
+      "ManagerInstallationPreviewResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "fixed",
+              "from",
+              "quote",
+              "unavailable"
+            ],
+            "title": "Status"
+          },
+          "reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Code"
+          },
+          "scope_ref": {
+            "type": "string",
+            "title": "Scope Ref"
+          },
+          "currency": {
+            "type": "string",
+            "const": "BYN",
+            "title": "Currency",
+            "default": "BYN"
+          },
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationComponent"
+            },
+            "type": "array",
+            "title": "Components"
+          },
+          "applied_discounts": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationAppliedDiscount"
+            },
+            "type": "array",
+            "title": "Applied Discounts"
+          },
+          "installations": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationWorkSummary"
+            },
+            "type": "array",
+            "title": "Installations"
+          },
+          "site_work": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationSelectedWork"
+            },
+            "type": "array",
+            "title": "Site Work"
+          },
+          "customer_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Text"
+          },
+          "subtotal": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subtotal"
+          },
+          "discount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discount"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
+          },
+          "price_book_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Book Id"
+          },
+          "price_book_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Book Revision"
+          },
+          "preview_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Ref"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "explanation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Explanation"
+          },
+          "collapsed_lines": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerInstallationPreviewLine"
+            },
+            "type": "array",
+            "title": "Collapsed Lines"
+          },
+          "detailed_lines": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerInstallationPreviewLine"
+            },
+            "type": "array",
+            "title": "Detailed Lines"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "scope_ref"
+        ],
+        "title": "ManagerInstallationPreviewResponse"
       },
       "ManagerInstallationRateListResponse": {
         "properties": {
@@ -61921,6 +62150,28 @@
           "line_total": {
             "type": "number",
             "title": "Line Total"
+          },
+          "installation_estimate_revision_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installation Estimate Revision Id"
+          },
+          "installation_projection_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installation Projection Mode"
           }
         },
         "type": "object",

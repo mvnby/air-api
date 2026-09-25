@@ -21,6 +21,7 @@ import type { ServiceAttachmentEquipmentOption } from '../service-attachments/ty
 import type {
   ManagerOrderDetailResponse,
 } from '../../client';
+import { ManagerOrdersService } from '../../client';
 import {
   buildOrderWorkspaceViewModel,
 } from './order-workspace';
@@ -444,6 +445,13 @@ const handleWorkspaceNextAction = async () => {
 };
 
 const handleSave = () => orderSaving.flush();
+const refreshAfterInstallationAttach = async () => {
+  if (!props.order?.id) return;
+  const fresh = await ManagerOrdersService.getManagerOrderDetail(props.order.id);
+  clearDraft();
+  await initForm(fresh);
+  emit('updated', fresh);
+};
 const getFieldError = (field: string): string => localServerErrors.value[field] || props.serverErrors?.[field] || '';
 const displayFormError = computed(() => localFormError.value || props.formError || '');
 const discardUnsavedChanges = async () => {
@@ -530,6 +538,9 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
                 :format-service-kind="formatServiceKind"
                 :workflow="workflowType"
                 :customer-id="order?.customer?.id"
+                :order-id="order?.id ?? null"
+                :before-installation-action="orderSaving.flush"
+                :after-installation-attach="refreshAfterInstallationAttach"
                 :catalog-available="catalogNavigation.available.value"
                 :catalog-opening="catalogNavigation.opening.value"
                 :catalog-needs-save="hasUnsavedChanges"
