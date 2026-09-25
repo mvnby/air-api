@@ -104,9 +104,11 @@ Do not hand-edit its arguments or reuse a token after data or code changes.
 
 ## Apply and verification
 
-The command re-reads and locks tenant/storefront, draft/rule, legacy rate,
-option, and latest book rows in a serializable transaction. It compares a
-fresh full-state digest and the exact expected partner set with the signed
+The command runs in a serializable transaction. It locks active tenant rows,
+their default storefronts, and installation draft/rule rows in a stable order;
+legacy rates, options, latest books and service settings are read into the
+fresh full-state digest without row locks. It compares that digest and the
+exact expected partner set with the signed
 plan. Any change or blocker aborts before mutation. In the one transaction it
 marks old installation drafts inactive, inserts the approved canonical grid,
 inserts detached partner copies with source links, publishes a new immutable
