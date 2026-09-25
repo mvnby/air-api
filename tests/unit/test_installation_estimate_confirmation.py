@@ -10,15 +10,16 @@ from sqlmodel import SQLModel, func, select
 from models import (
     InstallationEstimate, InstallationEstimateRevision, InstallationPriceBook,
     InstallationPreviewSnapshot, Order, OrderProductLink, OrderProposal, OrderServiceLink, OrderStatus,
-    Storefront, Tenant,
+    Product, Storefront, Tenant,
 )
 from models.tenancy import TenantScope
 from schemas_installation_confirmation import ManagerInstallationAttachPayload, ManagerInstallationConfirmPayload
 from schemas_installation_price_book import InstallationPreviewPayload
-from schemas import ManagerOrderUpdatePayload
+from schemas import ManagerOrderUpdatePayload, OrderProposalCreatePayload
 from services.installation_estimate_confirmation_service import InstallationEstimateConfirmationService as Confirm
 from services.installation_price_book_service import InstallationPriceBookService as Book
 from services.order_update.command import OrderUpdateCommandService
+from services.order_proposal_command_service import OrderProposalCommandService
 
 
 def _entry(mode="fixed", price="500.00"):
@@ -101,6 +102,110 @@ def test_collapsed_and_detailed_projection_reconcile_discount_cent():
     assert "фактически 4 м" in detailed[1][0]
 
 
+def test_detailed_projection_keeps_included_work_and_selected_quantities():
+    snapshot = {"result": {
+        "status": "fixed", "scope_ref": "scope", "subtotal": "585.00",
+        "discount": "0.00", "total": "585.00", "customer_text": "Монтаж с работами на объекте.",
+        "installations": [{"installation_key": "one", "tariff_code": "installation.wall",
+            "work_label": "Монтаж", "measured": [
+                {"code": "route.length_m", "label": "Трасса", "unit": "м",
+                 "actual": "2", "included": "3", "extra": "0"},
+                {"code": "hole.diamond", "label": "Алмазные отверстия", "unit": "шт",
+                 "actual": "1", "included": "1", "extra": "0"}],
+            "selected_extras": [{"code": "chase.extra_m", "label": "Штробление",
+                                 "unit": "м", "quantity": "3"}]}],
+        "site_work": [{"code": "access.lift", "label": "Вышка", "unit": "шт", "quantity": "2"}],
+        "components": [
+            {"code": "installation.base", "installation_key": "one", "unit": "шт",
+             "quantity": "1", "unit_price": "500.00", "gross": "500.00",
+             "discount": "0.00", "net": "500.00", "description": "Монтаж"},
+            {"code": "chase.extra_m", "installation_key": "one", "unit": "м",
+             "quantity": "3", "unit_price": "15.00", "gross": "45.00",
+             "discount": "0.00", "net": "45.00", "description": "Штробление"},
+            {"code": "access.lift", "installation_key": None, "unit": "шт",
+             "quantity": "2", "unit_price": "20.00", "gross": "40.00",
+             "discount": "0.00", "net": "40.00", "description": "Вышка"},
+        ],
+    }}
+    saved = InstallationEstimateRevision(estimate_id=1, revision=1, price_book_id=1,
+        price_book_revision=1, total=Decimal("585.00"), snapshot=snapshot)
+    detailed, total = Confirm._projection(saved, "detailed")
+    assert total == Decimal("585.00")
+    assert "трасса 2 м (включено 3 м)" in detailed[0][0]
+    assert "алмазные отверстия 1 шт (включено 1 шт)" in detailed[0][0]
+    assert "Штробление: 3 м" in detailed[1][0]
+    assert "Вышка: 2 шт" in detailed[2][0]
+
+
+@pytest.mark.asyncio
+async def test_attached_product_claims_use_total_quantity_across_revisions(tmp_path):
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'claims.db'}")
+    async with engine.begin() as connection:
+        await connection.run_sync(SQLModel.metadata.create_all)
+    factory = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+    try:
+        async with factory() as session:
+            session.add(Tenant(id=401, slug="claims", display_name="Claims"))
+            session.add(Storefront(id=402, tenant_id=401, slug="main", display_name="Main",
+                                   status="active", is_default=True))
+            product = Product(title="Equipment", slug="claim-equipment", price=1000)
+            order = Order(tenant_id=401, storefront_id=402, status=OrderStatus.NEGOTIATION)
+            session.add_all([product, order])
+            await session.flush()
+            proposal = OrderProposal(order_id=order.id, is_selected=True)
+            session.add(proposal)
+            await session.flush()
+            equipment = OrderProductLink(order_id=order.id, proposal_id=proposal.id,
+                                         product_id=product.id, quantity=1, price=1000)
+            session.add(equipment)
+            await session.flush()
+            estimate = InstallationEstimate(
+                tenant_id=401, storefront_id=402, order_id=order.id, proposal_id=proposal.id,
+                confirmation_key_hash="claim-key", confirmation_request_hash="claim-request",
+                preview_token_hash="claim-preview",
+            )
+            session.add(estimate)
+            await session.flush()
+            revision = InstallationEstimateRevision(
+                estimate_id=estimate.id, revision=1, price_book_id=1,
+                price_book_revision=1, total=Decimal("500"),
+                snapshot={"input": {"installations": [{"key": "equipment-one",
+                    "product_id": product.id, "route_length_m": "3", "holes_by_type": {}}]}},
+            )
+            session.add(revision)
+            await session.flush()
+            session.add(OrderServiceLink(order_id=order.id, proposal_id=proposal.id,
+                installation_estimate_revision_id=revision.id, installation_line_index=0,
+                installation_projection_mode="collapsed", title="Installation", price=500))
+            await session.commit()
+            order_id, proposal_id, equipment_id = int(order.id), int(proposal.id), int(equipment.id)
+            incoming = InstallationPreviewPayload.model_validate({"installations": [{
+                "key": "equipment-two", "product_id": product.id,
+                "route_length_m": "3", "holes_by_type": {},
+            }]})
+            with pytest.raises(ValueError, match="exceeds the target proposal quantity"):
+                await Confirm.validate_attached_claims(session, order_id, proposal_id, incoming=incoming)
+            equipment.quantity = 2
+            session.add(equipment)
+            await session.commit()
+            await Confirm.validate_attached_claims(session, order_id, proposal_id, incoming=incoming)
+            with pytest.raises(ValueError, match="exceeds the target proposal quantity"):
+                await OrderUpdateCommandService.update_order_for_manager(
+                    session, order_id, ManagerOrderUpdatePayload(products=[]),
+                    tenant_scope=TenantScope(tenant_id=401, storefront_id=402),
+                )
+            assert await session.scalar(select(OrderProductLink.quantity).where(
+                OrderProductLink.id == equipment_id,
+            )) == 2
+            equipment.quantity = 0
+            session.add(equipment)
+            await session.commit()
+            with pytest.raises(ValueError, match="exceeds the target proposal quantity"):
+                await Confirm.validate_attached_claims(session, order_id, proposal_id)
+    finally:
+        await engine.dispose()
+
+
 @pytest.mark.asyncio
 async def test_confirmed_revision_survives_preview_expiry_and_attach_is_exact(tmp_path):
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'confirmed.db'}")
@@ -123,11 +228,12 @@ async def test_confirmed_revision_survives_preview_expiry_and_attach_is_exact(tm
             session.add(proposal)
             await session.commit()
             order_id = int(order.id)
+            proposal_id = int(proposal.id)
 
             preview = await Book.preview(session, scope, _payload(), idempotency_key="manager-preview-key-one")
             assert preview.status == "fixed" and preview.total == Decimal("580.75")
             confirm_payload = ManagerInstallationConfirmPayload(
-                preview_ref=preview.preview_ref, order_id=order.id, proposal_id=proposal.id,
+                preview_ref=preview.preview_ref, order_id=order_id, proposal_id=proposal_id,
                 verified_service_only_keys=["one"],
             )
             confirmed = await Confirm.confirm(session, scope, confirm_payload,
@@ -139,33 +245,135 @@ async def test_confirmed_revision_survives_preview_expiry_and_attach_is_exact(tm
             assert retry.replayed and retry.value == confirmed.value
             assert await session.scalar(select(func.count(InstallationEstimate.id))) == 1
 
-            attached = await Confirm.attach(session, scope, order_id=order.id, proposal_id=proposal.id,
+            duplicate_preview = await Book.preview(
+                session, scope, _payload(), idempotency_key="manager-preview-key-two",
+            )
+            duplicate_confirmation = await Confirm.confirm(session, scope,
+                ManagerInstallationConfirmPayload(
+                    preview_ref=duplicate_preview.preview_ref, order_id=order_id,
+                    proposal_id=proposal_id, verified_service_only_keys=["one"],
+                ), idempotency_key="manager-confirm-key-two", actor="manager")
+
+            attached = await Confirm.attach(session, scope, order_id=order_id, proposal_id=proposal_id,
                 estimate_id=confirmed.value.estimate_id,
                 payload=ManagerInstallationAttachPayload(revision=1), idempotency_key="manager-attach-key-one")
             assert attached.value.total == Decimal("580.75")
             assert len(attached.value.lines) == 1
             assert attached.value.lines[0].price == Decimal("580.75")
-            repeated = await Confirm.attach(session, scope, order_id=order.id, proposal_id=proposal.id,
+            repeated = await Confirm.attach(session, scope, order_id=order_id, proposal_id=proposal_id,
                 estimate_id=confirmed.value.estimate_id,
                 payload=ManagerInstallationAttachPayload(revision=1), idempotency_key="manager-attach-key-two")
             assert repeated.value == attached.value
             assert await session.scalar(select(func.count(OrderServiceLink.id))) == 1
             await session.refresh(order)
             assert Decimal(str(order.total_amount)) == Decimal("580.75")
-            for replacement in ({"products": []}, {"services": []}):
-                with pytest.raises(ValueError, match="Attached installation estimate lines are immutable"):
-                        await OrderUpdateCommandService.update_order_for_manager(
-                        session, order_id, ManagerOrderUpdatePayload(**replacement), tenant_scope=scope,
-                    )
+            attached_line = attached.value.lines[0]
+            unchanged = {"link_id": attached_line.link_id, "title": attached_line.title,
+                         "quantity": 1, "price": float(attached_line.price), "cost": 0}
+            await OrderUpdateCommandService.update_order_for_manager(
+                session, order_id, ManagerOrderUpdatePayload(products=[], services=[unchanged]),
+                tenant_scope=scope,
+            )
+            await OrderUpdateCommandService.update_order_for_manager(
+                session, order_id, ManagerOrderUpdatePayload(services=[unchanged, {
+                    "title": "Независимая услуга", "quantity": 1, "price": 25, "cost": 0,
+                }]), tenant_scope=scope,
+            )
+            saved_lines = list((await session.execute(select(OrderServiceLink).where(
+                OrderServiceLink.proposal_id == proposal_id,
+            ))).scalars())
+            assert len(saved_lines) == 2
+            assert next(line for line in saved_lines if line.installation_estimate_revision_id).id == attached_line.link_id
+            unrelated_id = next(line.id for line in saved_lines if line.installation_estimate_revision_id is None)
+            await OrderUpdateCommandService.update_order_for_manager(
+                session, order_id, ManagerOrderUpdatePayload(services=[unchanged, {
+                    "link_id": unrelated_id, "title": "Независимая услуга", "quantity": 2,
+                    "price": 30, "cost": 0,
+                }]), tenant_scope=scope,
+            )
+            assert await session.scalar(select(func.count(OrderServiceLink.id))) == 2
+            assert await session.scalar(select(OrderServiceLink.quantity).where(
+                OrderServiceLink.id == unrelated_id,
+            )) == 2
+            with pytest.raises(ValueError, match="Attached installation estimate lines are immutable"):
+                await OrderUpdateCommandService.update_order_for_manager(
+                    session, order_id, ManagerOrderUpdatePayload(services=[{
+                        **unchanged, "price": 1,
+                    }]), tenant_scope=scope,
+                )
 
-            snapshot = (await session.execute(select(InstallationPreviewSnapshot))).scalar_one()
-            snapshot.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
-            session.add(snapshot)
+            with pytest.raises(HTTPException) as duplicate:
+                await Confirm.attach(session, scope, order_id=order_id, proposal_id=proposal_id,
+                    estimate_id=duplicate_confirmation.value.estimate_id,
+                    payload=ManagerInstallationAttachPayload(revision=1),
+                    idempotency_key="manager-attach-key-three")
+            assert duplicate.value.detail["code"] == "installation_already_attached"
+            assert await session.scalar(select(func.count(OrderServiceLink.id))) == 2
+            new_ref = await Book.preview(
+                session, scope, _payload(), idempotency_key="manager-preview-key-three",
+            )
+            with pytest.raises(HTTPException) as duplicate_confirmation_error:
+                await Confirm.confirm(session, scope,
+                    ManagerInstallationConfirmPayload(
+                        preview_ref=new_ref.preview_ref, order_id=order_id,
+                        proposal_id=proposal_id, verified_service_only_keys=["one"],
+                    ), idempotency_key="manager-confirm-key-three", actor="manager")
+            assert duplicate_confirmation_error.value.detail["code"] == "installation_already_attached"
+
+            independent_payload = _payload().model_copy(deep=True)
+            independent_payload.installations[0].key = "two"
+            independent_preview = await Book.preview(
+                session, scope, independent_payload, idempotency_key="manager-preview-independent",
+            )
+            independent_confirmation = await Confirm.confirm(session, scope,
+                ManagerInstallationConfirmPayload(
+                    preview_ref=independent_preview.preview_ref, order_id=order_id,
+                    proposal_id=proposal_id, verified_service_only_keys=["two"],
+                ), idempotency_key="manager-confirm-independent", actor="manager")
+            independent_attachment = await Confirm.attach(session, scope, order_id=order_id,
+                proposal_id=proposal_id, estimate_id=independent_confirmation.value.estimate_id,
+                payload=ManagerInstallationAttachPayload(revision=1),
+                idempotency_key="manager-attach-independent")
+            assert independent_attachment.value.total == Decimal("580.75")
+            assert await session.scalar(select(func.count(OrderServiceLink.id))) == 3
+
+            cloned = await OrderProposalCommandService.create_order_proposal(
+                session, order_id, OrderProposalCreatePayload(
+                    name="Independent draft", duplicate_from_proposal_id=proposal_id,
+                ), tenant_scope=scope,
+            )
+            clone_id = next(item["id"] for item in cloned["proposals"]
+                            if item["name"] == "Independent draft")
+            clone_links = list((await session.execute(select(OrderServiceLink).where(
+                OrderServiceLink.proposal_id == clone_id,
+            ))).scalars())
+            clone_attached = [link for link in clone_links if link.installation_estimate_revision_id]
+            assert len(clone_attached) == 2
+            clone_payload = [{"link_id": link.id, "title": link.title, "quantity": link.quantity,
+                              "price": float(link.price), "cost": float(link.cost)} for link in clone_links]
+            clone_payload.append({"title": "Отдельная работа", "quantity": 1, "price": 10, "cost": 0})
+            await OrderUpdateCommandService.update_order_for_manager(
+                session, order_id, ManagerOrderUpdatePayload(
+                    line_proposal_id=clone_id, services=clone_payload,
+                ), tenant_scope=scope,
+            )
+            assert set(link.id for link in clone_attached) == set((await session.execute(
+                select(OrderServiceLink.id).where(
+                    OrderServiceLink.proposal_id == clone_id,
+                    OrderServiceLink.installation_estimate_revision_id.is_not(None),
+                ))).scalars())
+
+            snapshots = (await session.execute(select(InstallationPreviewSnapshot))).scalars().all()
+            for snapshot in snapshots:
+                snapshot.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+                session.add(snapshot)
             await session.commit()
             retained = await Confirm.get_revision(session, scope, confirmed.value.estimate_id, 1)
             assert retained.snapshot["result"]["total"] == "580.75"
             assert retained.snapshot["confirmation"]["actor"] == "manager"
-            assert (await session.execute(select(InstallationEstimateRevision))).scalar_one().total == Decimal("580.75")
+            assert (await session.execute(select(InstallationEstimateRevision).where(
+                InstallationEstimateRevision.estimate_id == confirmed.value.estimate_id,
+            ))).scalar_one().total == Decimal("580.75")
             with pytest.raises(HTTPException) as foreign:
                 await Confirm.get_revision(session, TenantScope(tenant_id=301, storefront_id=999),
                                            confirmed.value.estimate_id, 1)

@@ -13,12 +13,14 @@ from core.config import settings
 from models import (
     InstallationEstimate, InstallationEstimateRevision, InstallationPriceBook,
     InstallationPreviewSnapshot, Order, OrderProposal, OrderServiceLink, OrderStatus,
+    ServiceTariff, ServiceTariffRule,
 )
 from models.tenancy import TenantScope
 from schemas_installation_confirmation import ManagerInstallationAttachPayload, ManagerInstallationConfirmPayload
 from schemas_installation_price_book import InstallationPreviewPayload
 from services.installation_estimate_confirmation_service import InstallationEstimateConfirmationService as Confirm
 from services.installation_price_book_service import InstallationPriceBookService as Book
+from services.tariffs_service import TariffsService
 
 
 def _entry(*, base_price="500.00", mode="fixed"):
@@ -243,3 +245,121 @@ async def test_concurrent_manager_confirm_and_attach_create_one_revision_and_lin
         assert await verify.scalar(select(func.count(InstallationEstimateRevision.id))) == 1
         assert await verify.scalar(select(func.count(OrderServiceLink.id)).where(
             OrderServiceLink.proposal_id == proposal_id)) == 1
+
+
+@pytest.mark.asyncio
+async def test_confirm_holds_publication_lock_until_accepted_revision_commits(db_engine, monkeypatch):
+    """A price publication cannot commit between confirm's final reprice and commit."""
+    assert db_engine.dialect.name == "postgresql"
+    factory = sessionmaker(bind=db_engine, class_=AsyncSession, expire_on_commit=False)
+    scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True, is_canonical_storefront=True)
+    async with factory() as setup:
+        tariff = ServiceTariff(
+            tenant_id=scope.tenant_id, service_kind="installation",
+            selector_label="Монтаж", short_name="Монтаж",
+            installation_code="installation.wall.2_4", installation_price_mode="fixed",
+            installation_match={"indoor_type": "wall", "capacity_min_kw": "2", "capacity_max_kw": "4",
+                                "pipe_liquid": '1/4"', "pipe_gas": '3/8"'},
+            base_price=500, included_route_meters=3, included_holes_by_type={"diamond": 1},
+        )
+        order = Order(tenant_id=scope.tenant_id, storefront_id=scope.storefront_id,
+                      status=OrderStatus.NEGOTIATION)
+        setup.add_all([tariff, order])
+        await setup.flush()
+        proposal = OrderProposal(order_id=order.id, is_selected=True)
+        setup.add_all([
+            proposal,
+            ServiceTariffRule(tariff_id=tariff.id, rule_type="per_meter_over_included",
+                              component_code="route.extra_m", name="Трасса", unit="м", unit_price=10.25),
+            ServiceTariffRule(tariff_id=tariff.id, rule_type="per_hole_manual",
+                              component_code="hole.diamond.extra", name="Отверстие", unit_price=50),
+        ])
+        await setup.commit()
+        first_book = await Book.publish(setup, scope, actor="publisher-one")
+        preview = await Book.preview(
+            setup, scope, InstallationPreviewPayload.model_validate(_preview_body()),
+            idempotency_key="confirm-publication-race-preview",
+        )
+        tariff.base_price = 550
+        setup.add(tariff)
+        await setup.commit()
+        confirm_payload = ManagerInstallationConfirmPayload(
+            preview_ref=preview.preview_ref, order_id=order.id, proposal_id=proposal.id,
+            verified_service_only_keys=["one"],
+        )
+
+    confirm_repriced = asyncio.Event()
+    release_confirm = asyncio.Event()
+    publisher_started = asyncio.Event()
+    publisher_inside_tenant_lock = asyncio.Event()
+    release_publisher = asyncio.Event()
+    start_together = asyncio.Barrier(2)
+    original_preview = Book.preview.__func__
+    original_tariffs = TariffsService.get_all_tariffs
+
+    async def pause_confirm_after_reprice(cls, session, current_scope, payload, *, idempotency_key=None, persist=True):
+        response = await original_preview(
+            cls, session, current_scope, payload,
+            idempotency_key=idempotency_key, persist=persist,
+        )
+        if session.info.get("hold_confirm_after_reprice"):
+            confirm_repriced.set()
+            await release_confirm.wait()
+        return response
+
+    async def pause_publisher_after_tenant_lock(session, *args, **kwargs):
+        tariffs = await original_tariffs(session, *args, **kwargs)
+        if session.info.get("hold_publisher_after_tenant_lock"):
+            publisher_inside_tenant_lock.set()
+            await release_publisher.wait()
+        return tariffs
+
+    monkeypatch.setattr(Book, "preview", classmethod(pause_confirm_after_reprice))
+    monkeypatch.setattr(TariffsService, "get_all_tariffs", staticmethod(pause_publisher_after_tenant_lock))
+
+    async def confirm_once():
+        async with factory() as session:
+            session.info["hold_confirm_after_reprice"] = True
+            await start_together.wait()
+            return await Confirm.confirm(
+                session, scope, confirm_payload,
+                idempotency_key="confirm-publication-race-confirm", actor="manager",
+            )
+
+    async def publish_once():
+        async with factory() as session:
+            session.info["hold_publisher_after_tenant_lock"] = True
+            await start_together.wait()
+            await confirm_repriced.wait()
+            publisher_started.set()
+            published = await Book.publish(session, scope, actor="publisher-two")
+            await session.commit()
+            return published
+
+    confirmation = asyncio.create_task(confirm_once())
+    publication = asyncio.create_task(publish_once())
+    await asyncio.wait_for(confirm_repriced.wait(), timeout=3)
+    await asyncio.wait_for(publisher_started.wait(), timeout=3)
+    publication_reached_after_confirm_reprice = False
+    try:
+        await asyncio.wait_for(publisher_inside_tenant_lock.wait(), timeout=1)
+        publication_reached_after_confirm_reprice = True
+    except TimeoutError:
+        pass
+    finally:
+        release_confirm.set()
+
+    confirmed = await asyncio.wait_for(confirmation, timeout=3)
+    await asyncio.wait_for(publisher_inside_tenant_lock.wait(), timeout=3)
+    release_publisher.set()
+    published = await asyncio.wait_for(publication, timeout=3)
+
+    assert not publication_reached_after_confirm_reprice
+    assert confirmed.value.price_book_id == first_book.price_book_id
+    assert confirmed.value.price_book_revision == first_book.revision
+    assert published.revision == first_book.revision + 1
+    async with factory() as verification:
+        accepted = await verification.scalar(select(InstallationEstimateRevision).where(
+            InstallationEstimateRevision.price_book_id == first_book.price_book_id,
+        ))
+        assert accepted is not None

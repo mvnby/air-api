@@ -4,6 +4,7 @@ import type { ManagerQuickTariffResponse } from '../../client';
 export type ServiceDescriptionMode = 'short' | 'full';
 
 export type ServiceDescriptionLine = {
+  link_id?: number | null;
   service_id?: number | null;
   title: string;
   quantity: number;

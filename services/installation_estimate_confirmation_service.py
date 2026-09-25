@@ -16,7 +16,7 @@ from sqlmodel import select
 
 from models import (
     InstallationEstimate, InstallationEstimateRevision, InstallationPreviewSnapshot,
-    Order, OrderProposal, OrderServiceLink,
+    Order, OrderProductLink, OrderProposal, OrderServiceLink, Tenant,
 )
 from models.tenancy import TenantScope
 from schemas_installation_confirmation import (
@@ -120,6 +120,49 @@ class InstallationEstimateConfirmationService:
             raise cls._bad("equipment_not_in_proposal", 422)
 
     @classmethod
+    async def validate_attached_claims(
+        cls, session: AsyncSession, order_id: int, proposal_id: int,
+        *, incoming: InstallationPreviewPayload | None = None,
+    ) -> None:
+        """Keep installation identities and sold equipment capacity unique per proposal."""
+        revision_ids = list((await session.execute(select(
+            OrderServiceLink.installation_estimate_revision_id,
+        ).where(
+            OrderServiceLink.order_id == order_id,
+            OrderServiceLink.proposal_id == proposal_id,
+            OrderServiceLink.installation_estimate_revision_id.is_not(None),
+        ).distinct())).scalars())
+        snapshots = list((await session.execute(select(InstallationEstimateRevision).where(
+            InstallationEstimateRevision.id.in_(revision_ids),
+        ))).scalars()) if revision_ids else []
+        payloads = [InstallationPreviewPayload.model_validate(saved.snapshot["input"])
+                    for saved in snapshots]
+        if incoming is not None:
+            payloads.append(incoming)
+        seen_keys: set[str] = set()
+        needed: Counter[int] = Counter()
+        for payload in payloads:
+            for item in payload.installations:
+                if item.key in seen_keys:
+                    raise ValueError("Installation identity is already attached to this proposal")
+                seen_keys.add(item.key)
+                if item.product_id is not None:
+                    needed[int(item.product_id)] += 1
+        if not needed:
+            return
+        available: Counter[int] = Counter()
+        links = (await session.execute(select(OrderProductLink).where(
+            OrderProductLink.order_id == order_id,
+            OrderProductLink.proposal_id == proposal_id,
+        ))).scalars()
+        for link in links:
+            if link.product_id is not None and link.quantity > 0 and Decimal(str(link.price)) > 0 \
+               and not link.is_installation_included:
+                available[int(link.product_id)] += int(link.quantity)
+        if any(available[product_id] < count for product_id, count in needed.items()):
+            raise ValueError("Attached installation equipment exceeds the target proposal quantity")
+
+    @classmethod
     def _confirm_response(
         cls, estimate: InstallationEstimate, revision: InstallationEstimateRevision,
     ) -> ManagerInstallationConfirmResponse:
@@ -141,6 +184,12 @@ class InstallationEstimateConfirmationService:
         key_hash = PublicWriteIdempotencyService.key_hash(idempotency_key)
 
         async def operation() -> PublicWriteCommandResponse[ManagerInstallationConfirmResponse]:
+            # Publication takes this lock before deriving and committing a new
+            # price-book revision. Keep it through this command's commit so an
+            # accepted preview cannot cross a concurrent publication boundary.
+            await session.execute(
+                select(Tenant).where(Tenant.id == scope.tenant_id).with_for_update()
+            )
             previous = (await session.execute(select(InstallationEstimate).where(
                 InstallationEstimate.tenant_id == scope.tenant_id,
                 InstallationEstimate.storefront_id == scope.storefront_id,
@@ -190,6 +239,12 @@ class InstallationEstimateConfirmationService:
                 raise cls._bad("invalid_preview_snapshot")
             input_payload = InstallationPreviewPayload.model_validate(row.snapshot["input"])
             cls._verify_equipment(order, payload.proposal_id, input_payload, payload.verified_service_only_keys)
+            try:
+                await cls.validate_attached_claims(
+                    session, payload.order_id, payload.proposal_id, incoming=input_payload,
+                )
+            except ValueError as exc:
+                raise cls._bad("installation_already_attached") from exc
             latest = await InstallationPriceBookService.latest(session, scope)
             if latest is None or latest.id != row.price_book_id:
                 raise InstallationPriceChanged(input_payload, latest.revision if latest else None)
@@ -286,17 +341,26 @@ class InstallationEstimateConfirmationService:
                 writable_service_money(total)
                 return [(result.customer_text, total)], total
             summaries = {item.installation_key: item for item in result.installations}
-            site_labels = {item.code: item.label for item in result.site_work}
+            site_work = {item.code: item for item in result.site_work}
             detailed: list[tuple[str, Decimal]] = []
             for component, amount in zip(result.components, net):
                 if component.installation_key is None:
-                    label = site_labels.get(component.code)
+                    selected = site_work.get(component.code)
+                    label = (f"{selected.label}: {InstallationPriceBookService._quantity_text(selected.quantity)} "
+                             f"{selected.unit}") if selected else None
                 else:
                     summary = summaries.get(component.installation_key)
                     if summary is None:
                         raise ValueError("Installation summary is missing")
                     if component.code == "installation.base":
                         label = summary.work_label
+                        included_work = [
+                            f"{item.label.lower()} {InstallationPriceBookService._quantity_text(item.actual)} "
+                            f"{item.unit} (включено {InstallationPriceBookService._quantity_text(item.included)} {item.unit})"
+                            for item in summary.measured if item.extra == 0
+                        ]
+                        if included_work:
+                            label += "; " + ", ".join(included_work)
                     elif component.code == "route.extra_m":
                         label = next((f"Дополнительная трасса {item.extra} м: фактически {item.actual} м, включено {item.included} м"
                                       for item in summary.measured if item.code == "route.length_m"), None)
@@ -305,7 +369,8 @@ class InstallationEstimateConfirmationService:
                         label = next((f"{item.label}: дополнительно {item.extra} шт, фактически {item.actual} шт, включено {item.included} шт"
                                       for item in summary.measured if item.code == hole_code), None)
                     else:
-                        label = next((item.label for item in summary.selected_extras
+                        label = next((f"{item.label}: {InstallationPriceBookService._quantity_text(item.quantity)} {item.unit}"
+                                      for item in summary.selected_extras
                                       if item.code == component.code), None)
                     if label:
                         label = f"Установка {component.installation_key}: {label}"
@@ -357,6 +422,10 @@ class InstallationEstimateConfirmationService:
                 persisted = existing
             else:
                 cls._editable(proposal)
+                try:
+                    await cls.validate_attached_claims(session, order_id, proposal_id, incoming=original_input)
+                except ValueError as exc:
+                    raise cls._bad("installation_already_attached") from exc
                 persisted = [OrderServiceLink(
                     order_id=order_id, proposal_id=proposal_id,
                     installation_estimate_revision_id=int(saved.id),

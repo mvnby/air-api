@@ -131,6 +131,7 @@ const mapProductLineFromResponse = (line: OrderProductLineResponse): ProductLine
 });
 
 const mapServiceLineFromResponse = (line: OrderServiceLineResponse): ServiceLine => ({
+  link_id: line.id,
   service_id: line.service_id,
   title: line.service_title,
   quantity: Math.max(1, Number(line.quantity || 1)),
@@ -552,12 +553,12 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
       proposal_id: proposalId,
     })),
     services: serviceLines.value.map((line) => ({
+      link_id: line.link_id ?? null,
       service_id: line.service_id ?? null,
       title: line.title,
       quantity: Math.trunc(Number(line.quantity) || 0),
       price: Number(line.price || 0),
       cost: (!line.cost && line.cost !== 0) ? null : Number(line.cost),
-      link_id: null,
       proposal_id: proposalId,
     })),
   });
@@ -598,6 +599,7 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
       logistics_components: line.logistics_components || null,
     })),
     services: serviceLines.value.map((line) => ({
+      link_id: line.link_id ?? null,
       service_id: line.service_id ?? null,
       title: String(line.title || '').trim(),
       quantity: Number(line.quantity || 0),

@@ -4,6 +4,7 @@ from sqlalchemy import delete
 from sqlmodel import select
 
 from models import OrderServiceLink, Product, Service
+from services.installation_estimate_confirmation_service import InstallationEstimateConfirmationService
 from services.order_product_line_service import OrderProductLineService
 from services.order_proposal_lifecycle import (
     PROPOSAL_STATUS_APPROVED,
@@ -12,7 +13,7 @@ from services.order_proposal_lifecycle import (
 )
 from services.order_service import OrderService
 from services.service_catalog_scope import service_catalog_scope_clause
-from services.service_estimate_money import writable_service_money
+from services.service_estimate_money import exact_money, writable_service_money
 from services.order_update.context import OrderUpdateContext
 
 
@@ -64,16 +65,11 @@ async def apply_commercial_lines(context: OrderUpdateContext) -> None:
 
     replaces_products = "products" in context.fields_set and context.payload.products is not None
     replaces_services = "services" in context.fields_set and context.payload.services is not None
-    if (replaces_products or replaces_services) and any(
-        link.proposal_id == target_proposal_id and link.installation_estimate_revision_id is not None
-        for link in context.order.service_links
-    ):
-        raise ValueError(
-            "Attached installation estimate lines are immutable. Create a new estimate revision or proposal"
-        )
-
     if replaces_products:
         await _replace_product_lines(context, target_proposal_id)
+        await InstallationEstimateConfirmationService.validate_attached_claims(
+            context.session, context.order_id, target_proposal_id,
+        )
     if replaces_services:
         await _replace_service_lines(context, target_proposal_id)
 
@@ -210,27 +206,42 @@ async def _replace_service_lines(
         service_lines,
         tenant_scope=context.tenant_scope,
     )
-    await context.session.execute(
-        delete(OrderServiceLink).where(
-            OrderServiceLink.order_id == context.order_id,
-            OrderServiceLink.proposal_id == proposal_id,
-        )
-    )
+    existing = list((await context.session.execute(select(OrderServiceLink).where(
+        OrderServiceLink.order_id == context.order_id,
+        OrderServiceLink.proposal_id == proposal_id,
+    ))).scalars())
+    by_id = {int(link.id): link for link in existing}
+    incoming_ids = [int(line.link_id) for line in service_lines if line.link_id is not None]
+    if len(incoming_ids) != len(set(incoming_ids)) or any(link_id not in by_id for link_id in incoming_ids):
+        raise ValueError("Service line does not belong to the target proposal")
+    incoming_by_id = {int(line.link_id): line for line in service_lines if line.link_id is not None}
+    for link in existing:
+        if link.installation_estimate_revision_id is None:
+            continue
+        incoming = incoming_by_id.get(int(link.id))
+        if incoming is None or incoming.service_id != link.service_id or incoming.title != link.title \
+           or incoming.quantity != link.quantity or exact_money(incoming.price) != exact_money(link.price) \
+           or exact_money(incoming.cost if incoming.cost is not None else 0) != exact_money(link.cost):
+            raise ValueError("Attached installation estimate lines are immutable")
+    removed = [int(link.id) for link in existing
+               if link.id not in incoming_by_id and link.installation_estimate_revision_id is None]
+    if removed:
+        await context.session.execute(delete(OrderServiceLink).where(OrderServiceLink.id.in_(removed)))
     for line in service_lines:
-        context.session.add(
-            OrderServiceLink(
-                order_id=context.order_id,
-                proposal_id=proposal_id,
-                service_id=line.service_id,
-                title=line.title,
-                quantity=line.quantity,
-                price=writable_service_money(line.price),
-                cost=(
-                    writable_service_money(line.cost)
-                    if line.cost is not None
-                    else cost_defaults.get(int(line.service_id), 0)
-                    if line.service_id is not None
-                    else 0
-                ),
-            )
+        if line.link_id is not None and by_id[int(line.link_id)].installation_estimate_revision_id is not None:
+            continue
+        link = by_id[int(line.link_id)] if line.link_id is not None else OrderServiceLink(
+            order_id=context.order_id, proposal_id=proposal_id,
         )
+        link.service_id = line.service_id
+        link.title = line.title
+        link.quantity = line.quantity
+        link.price = writable_service_money(line.price)
+        link.cost = (
+            writable_service_money(line.cost)
+            if line.cost is not None
+            else cost_defaults.get(int(line.service_id), 0)
+            if line.service_id is not None
+            else 0
+        )
+        context.session.add(link)
