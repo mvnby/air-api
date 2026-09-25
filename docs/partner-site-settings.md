@@ -27,12 +27,16 @@ not configure an inbox or notification delivery.
 - Installation, pre-installation, dismantling, maintenance and repair can be
   switched independently. Public tariff reads and calculations reject disabled
   directions and foreign tariff IDs. Preview calculations do not save estimates.
-- The start template makes detached copies of service options, CRM tariffs and
-  rules, and public installation rates. These remain separate pricing contracts.
-  When the canonical installation draft matches its latest approved book, the
-  same initial transaction publishes a tenant-owned book from the detached
-  installation copy. Pending canonical edits block the copy instead of
-  seeding an unapproved price.
+- The start template makes detached copies of active canonical services, CRM
+  tariffs and rules. Before a canonical installation book exists, it also
+  copies legacy public installation rates and options for compatibility. Once
+  the book exists, new partners receive no legacy installation rates or
+  installation services/options; non-installation services remain available.
+  A tariff rule that still points to an excluded service blocks the copy for
+  correction. When the canonical installation draft matches its latest approved
+  book, the same initial transaction publishes a tenant-owned book from the
+  detached installation copy. Pending canonical edits block the copy instead
+  of seeding an unapproved price.
   Copying never imports customers, orders, requisites, permissions or discounts.
   Existing partner data is never overwritten. Managers edit their tenant's prices.
   The separately authorized [installation grid rollout](installation-grid-rollout.md)

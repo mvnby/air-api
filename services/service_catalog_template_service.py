@@ -126,6 +126,9 @@ class ServiceCatalogTemplateService:
         *,
         lock: bool = False,
     ) -> _CanonicalTemplate:
+        published_installation_book = (
+            await ServiceCatalogTemplateService._published_canonical_scope(session)
+        ) is not None
         services_stmt = (
             select(Service)
             .where(
@@ -156,9 +159,25 @@ class ServiceCatalogTemplateService:
             tariffs_stmt = tariffs_stmt.with_for_update()
             rates_stmt = rates_stmt.with_for_update()
 
-        services = list((await session.execute(services_stmt)).scalars().all())
+        all_services = list((await session.execute(services_stmt)).scalars().all())
+        retired_service_ids = {
+            row.id for row in all_services
+            if published_installation_book and row.category in {
+                "installation", "installation_option",
+            }
+        }
+        services = [row for row in all_services if row.id not in retired_service_ids]
         tariffs = list((await session.execute(tariffs_stmt)).scalars().unique().all())
-        rates = list((await session.execute(rates_stmt)).scalars().all())
+        if retired_service_ids and any(
+            rule.service_id in retired_service_ids
+            for tariff in tariffs for rule in tariff.rules
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Canonical tariff rule references a retired installation service",
+            )
+        rates = ([] if published_installation_book else
+                 list((await session.execute(rates_stmt)).scalars().all()))
         return _CanonicalTemplate(services=services, tariffs=tariffs, rates=rates)
 
     @staticmethod

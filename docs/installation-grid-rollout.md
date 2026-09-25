@@ -14,6 +14,10 @@ active canonical installation drafts and publishes a new tenant-owned initial
 book in the same transaction. It refuses to clone if the canonical draft has
 unpublished edits relative to the latest approved book. Existing partners are
 never synchronized on ordinary edits or onboarding calls.
+Legacy installation rates and installation service/option rows are excluded
+from that new-partner copy once the book exists; non-installation catalog rows
+remain in the template. A canonical tariff rule referencing an excluded
+service blocks onboarding until the reference is corrected.
 
 Read [production data operations](production-data-operations.md) and
 [deployment](deployment.md) first. Use the exact immutable app image on the
