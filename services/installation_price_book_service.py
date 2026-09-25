@@ -50,14 +50,16 @@ class InstallationPriceBookService:
     _EXTRA_LABELS = {
         "pump.supply": "Поставка насоса",
         "pump.install": "Монтаж насоса",
+        "pump.package": "Дренажный насос с поставкой и монтажом",
         "access.scaffold": "Леса",
-        "access.lift": "Вышка",
+        "access.lift": "Вышка (не менее 4 часов)",
         "chase.extra_m": "Штробление",
     }
     _COMPONENT_RULES = {
         "route.extra_m": ("per_meter_over_included", "м", False),
         "pump.supply": ("per_unit_manual", "шт", True),
         "pump.install": ("per_unit_manual", "шт", True),
+        "pump.package": ("per_unit_manual", "шт", True),
         "access.scaffold": ("fixed_once", "шт", True),
         "access.lift": ("fixed_once", "шт", True),
         "chase.extra_m": ("per_unit_manual", "м", True),
@@ -145,8 +147,16 @@ class InstallationPriceBookService:
         return HTTPException(status_code=422, detail={"code": code, "message": message})
 
     @staticmethod
-    def _range_overlap(a_min: Decimal | None, a_max: Decimal | None, b_min: Decimal | None, b_max: Decimal | None) -> bool:
-        return (a_max is None or b_min is None or b_min <= a_max) and (b_max is None or a_min is None or a_min <= b_max)
+    def _range_overlap(a_min: Decimal | None, a_max: Decimal | None, b_min: Decimal | None, b_max: Decimal | None,
+                       *, a_min_inclusive: bool = True, a_max_inclusive: bool = True,
+                       b_min_inclusive: bool = True, b_max_inclusive: bool = True) -> bool:
+        if a_max is not None and b_min is not None and (a_max < b_min or
+                (a_max == b_min and not (a_max_inclusive and b_min_inclusive))):
+            return False
+        if b_max is not None and a_min is not None and (b_max < a_min or
+                (b_max == a_min and not (b_max_inclusive and a_min_inclusive))):
+            return False
+        return True
 
     @staticmethod
     def _specificity(match: InstallationMatcher) -> int:
@@ -163,8 +173,10 @@ class InstallationPriceBookService:
 
     @classmethod
     def _work_label(cls, entry: dict[str, Any]) -> str:
-        indoor_type = InstallationMatcher.model_validate(entry["match"]).indoor_type
-        return cls._WORK_LABELS[indoor_type]
+        matcher = InstallationMatcher.model_validate(entry["match"])
+        if matcher.product_kind == "multi_split_system":
+            return "Монтаж мультисплит-системы"
+        return cls._WORK_LABELS[matcher.indoor_type]
 
     @staticmethod
     def _quantity_text(value: Decimal) -> str:
@@ -176,12 +188,20 @@ class InstallationPriceBookService:
             return "Трасса"
         if code == "hole.diamond":
             return "Алмазные отверстия"
+        if code == "hole.through_thin":
+            return "Проходы через стену до 20 см"
+        if code == "hole.through_thick":
+            return "Проходы через стену свыше 20 до 80 см"
+        if code == "hole.through_over_80":
+            return "Проходы через стену свыше 80 см"
         return f"Отверстия типа {code.removeprefix('hole.')}"
 
     @classmethod
     def _summary_text(cls, summary: InstallationWorkSummary) -> str:
         parts = [summary.work_label]
         for measured in summary.measured:
+            if measured.actual == 0:
+                continue
             actual = cls._quantity_text(measured.actual)
             included = cls._quantity_text(measured.included)
             detail = f"{measured.label.lower()} {actual} {measured.unit} (включено {included} {measured.unit}"
@@ -197,11 +217,13 @@ class InstallationPriceBookService:
 
     @classmethod
     def _overlap(cls, a: InstallationMatcher, b: InstallationMatcher) -> bool:
-        if a.indoor_type != b.indoor_type or a.product_kind != b.product_kind:
+        if a.indoor_type != b.indoor_type or a.product_kind != b.product_kind or a.work_kind != b.work_kind:
             return False
         if a.pipe_liquid and b.pipe_liquid and (cls._pipe(a.pipe_liquid), cls._pipe(a.pipe_gas)) != (cls._pipe(b.pipe_liquid), cls._pipe(b.pipe_gas)):
             return False
-        if not cls._range_overlap(a.capacity_min_kw, a.capacity_max_kw, b.capacity_min_kw, b.capacity_max_kw):
+        if not cls._range_overlap(a.capacity_min_kw, a.capacity_max_kw, b.capacity_min_kw, b.capacity_max_kw,
+                a_min_inclusive=a.capacity_min_inclusive, a_max_inclusive=a.capacity_max_inclusive,
+                b_min_inclusive=b.capacity_min_inclusive, b_max_inclusive=b.capacity_max_inclusive):
             return False
         if a.weight_source and b.weight_source and a.weight_source == b.weight_source:
             return cls._range_overlap(a.weight_min_kg, a.weight_max_kg, b.weight_min_kg, b.weight_max_kg)
@@ -223,16 +245,34 @@ class InstallationPriceBookService:
             if match.weight_source in {"weight_indoor_package", "weight_outdoor_package"}:
                 raise cls._bad("packed_weight_requires_transport_rule", f"{code}: packaged weight is reserved for transport")
             if entry["mode"] in {"fixed", "from"} and (
-                match.pipe_liquid is None or
-                (match.capacity_min_kw is None and match.capacity_max_kw is None)
+                (match.match_strategy == "strict" and match.pipe_liquid is None) or
+                (match.match_strategy == "capacity_only" and
+                 match.capacity_min_kw is None and match.capacity_max_kw is None)
             ):
-                raise cls._bad("incomplete_fixed_matcher", f"{code}: pipe pair and cooling capacity bounds are required")
+                raise cls._bad("incomplete_fixed_matcher", f"{code}: required pipe pair or cooling capacity bounds missing")
+            if entry["mode"] in {"fixed", "from"} and match.product_kind == "complete_split_system" and match.indoor_type in {"wall", "console"} and (
+                match.match_strategy == "type_only" or
+                (match.match_strategy == "capacity_only" and match.capacity_max_kw is None)
+            ):
+                raise cls._bad("unbounded_capacity_matcher", f"{code}: fixed wall/console capacity matcher needs a reviewed upper bound")
             if entry["mode"] in {"fixed", "from"} and exact_money(entry["base_price"]) <= 0:
                 raise cls._bad("missing_base_price", f"{code}: exact/lower-bound price must be positive")
             rule_codes = {rule["code"] for rule in entry["rules"]}
-            if entry["mode"] in {"fixed", "from"} and "route.extra_m" not in rule_codes:
+            if entry["mode"] in {"fixed", "from"} and match.work_kind == "standard" and "route.extra_m" not in rule_codes:
                 raise cls._bad("missing_route_price", f"{code}: route.extra_m is required")
+            if match.work_kind == "prelaid_route" and (Decimal(entry["included_route_m"]) != 0 or
+                    "route.extra_m" in rule_codes or entry["included_holes"]):
+                raise cls._bad("invalid_prelaid_inclusions", f"{code}: prelaid work has no new included route or hole")
             for hole_type in entry["included_holes"]:
+                if hole_type == "shared_pass_through":
+                    allowance = Decimal(entry["included_holes"][hole_type])
+                    if allowance < 0 or allowance > 100:
+                        raise cls._bad("invalid_shared_hole", f"{code}: shared pass-through allowance is invalid")
+                    if {"through_thin", "through_thick"} & entry["included_holes"].keys():
+                        raise cls._bad("mixed_hole_allowances", f"{code}: shared and per-type pass-through allowances cannot be combined")
+                    if not {"hole.through_thin.extra", "hole.through_thick.extra"} <= rule_codes:
+                        raise cls._bad("missing_hole_price", f"{code}: both pass-through prices are required")
+                    continue
                 if entry["mode"] != "quote" and f"hole.{hole_type}.extra" not in rule_codes:
                     raise cls._bad("missing_hole_price", f"{code}: extra hole price is required")
             for rule in entry["rules"]:
@@ -252,7 +292,7 @@ class InstallationPriceBookService:
             if len(rule_codes) != len(entry["rules"]):
                 raise cls._bad("duplicate_component_code", f"{code}: duplicate component code")
             # A price-book matcher is structured. Legacy category/power strings never select a price.
-            assert match.indoor_type
+            assert match.indoor_type or match.product_kind == "multi_split_system"
         for index, first in enumerate(entries):
             for second in entries[index + 1:]:
                 a = InstallationMatcher.model_validate(first["match"])
@@ -261,10 +301,8 @@ class InstallationPriceBookService:
                     raise cls._bad("matcher_conflict", f"{first['code']} overlaps {second['code']} at equal specificity")
 
     @classmethod
-    async def publish(cls, session: AsyncSession, scope: TenantScope, *, actor: str) -> InstallationPublishResponse:
-        # Lock the tenant row to serialize publication by independent workers.
-        from models import Tenant
-        await session.execute(select(Tenant).where(Tenant.id == scope.tenant_id).with_for_update(key_share=True))
+    async def build_entries_from_drafts(cls, session: AsyncSession, scope: TenantScope) -> list[dict[str, Any]]:
+        """Validate active typed drafts without publishing or mutating them."""
         tariffs = await TariffsService.get_all_tariffs(session, include_inactive=False, tenant_scope=scope)
         entries: list[dict[str, Any]] = []
         for tariff in tariffs:
@@ -319,6 +357,19 @@ class InstallationPriceBookService:
                             "included_route_m": str(included_route), "included_holes": included_holes, "rules": rules})
         cls._validate_entries(entries)
         entries.sort(key=lambda item: item["code"])
+        return entries
+
+    @classmethod
+    async def current_draft_fingerprint(cls, session: AsyncSession, scope: TenantScope) -> str:
+        return cls._fingerprint(await cls.build_entries_from_drafts(session, scope))
+
+    @classmethod
+    async def publish(cls, session: AsyncSession, scope: TenantScope, *, actor: str,
+                      commit: bool = True) -> InstallationPublishResponse:
+        # Lock the tenant row to serialize publication by independent workers.
+        from models import Tenant
+        await session.execute(select(Tenant).where(Tenant.id == scope.tenant_id).with_for_update(key_share=True))
+        entries = await cls.build_entries_from_drafts(session, scope)
         fingerprint = cls._fingerprint(entries)
         current = await cls.latest(session, scope)
         if current and current.fingerprint == fingerprint:
@@ -344,8 +395,11 @@ class InstallationPriceBookService:
         book = InstallationPriceBook(tenant_id=scope.tenant_id, revision=(current.revision + 1 if current else 1),
                                      fingerprint=fingerprint, entries=entries, published_by=actor)
         session.add(book)
-        await session.commit()
-        await session.refresh(book)
+        if commit:
+            await session.commit()
+            await session.refresh(book)
+        else:
+            await session.flush()
         return InstallationPublishResponse(price_book_id=book.id, revision=book.revision,
                                            fingerprint=fingerprint, tariff_count=len(entries), published_at=book.published_at)
 
@@ -386,7 +440,8 @@ class InstallationPriceBookService:
         derived_kind = ProductKindService.derive_from_specs(specs)
         if derived_kind in {"indoor_unit", "outdoor_unit", "panel", "accessory", "consumable", "other"}:
             product_kind = derived_kind
-        values: dict[str, Any] = {"product_kind": product_kind, "indoor_type": indoor_type,
+        values: dict[str, Any] = {"product_kind": product_kind,
+                                  "indoor_type": None if product_kind == "multi_split_system" else indoor_type,
                                   "capacity_cooling_kw": capacity, "confirmed": True}
         for key in ("pipe_liquid", "pipe_gas", "weight_indoor", "weight_outdoor", "weight_indoor_package", "weight_outdoor_package"):
             raw = _spec_value(specs, key)
@@ -396,9 +451,11 @@ class InstallationPriceBookService:
         return TypedInstallationProfile.model_validate(values), sources
 
     @classmethod
-    def _match(cls, profile: TypedInstallationProfile, entry: dict[str, Any]) -> tuple[bool, str | None]:
+    def _match(cls, profile: TypedInstallationProfile, entry: dict[str, Any], work_kind: str = "standard") -> tuple[bool, str | None]:
         match = InstallationMatcher.model_validate(entry["match"])
-        if profile.indoor_type != match.indoor_type:
+        if profile.product_kind != match.product_kind or match.work_kind != work_kind:
+            return False, None
+        if match.indoor_type is not None and profile.indoor_type != match.indoor_type:
             return False, None
         if match.pipe_liquid is not None:
             if not profile.pipe_liquid or not profile.pipe_gas:
@@ -415,9 +472,11 @@ class InstallationPriceBookService:
             capacity = profile.capacity_cooling_kw
             if capacity is None:
                 return False, "missing_cooling_capacity"
-            if match.capacity_min_kw is not None and capacity < match.capacity_min_kw:
+            if match.capacity_min_kw is not None and (capacity < match.capacity_min_kw or
+                    (capacity == match.capacity_min_kw and not match.capacity_min_inclusive)):
                 return False, None
-            if match.capacity_max_kw is not None and capacity > match.capacity_max_kw:
+            if match.capacity_max_kw is not None and (capacity > match.capacity_max_kw or
+                    (capacity == match.capacity_max_kw and not match.capacity_max_inclusive)):
                 return False, None
         if match.weight_source is not None:
             weight = getattr(profile, match.weight_source)
@@ -439,20 +498,25 @@ class InstallationPriceBookService:
                 "price_book_id": book.id if book else None, "price_book_revision": book.revision if book else None}
         if profile is None:
             return InstallationResolveResponse(status="unavailable", reason_code="product_not_visible", **base), None
-        if profile.product_kind != "complete_split_system":
+        if profile.product_kind not in {"complete_split_system", "multi_split_system"}:
             if profile.product_kind in {"indoor_unit", "outdoor_unit", "panel", "accessory", "consumable"}:
                 return InstallationResolveResponse(status="unavailable", reason_code="ineligible_product_kind", **base), None
             return InstallationResolveResponse(status="quote", reason_code="incomplete_equipment", **base), None
         if not profile.confirmed:
             return InstallationResolveResponse(status="quote", reason_code="unconfirmed_profile", **base), None
-        if profile.indoor_type is None:
+        if profile.product_kind == "multi_split_system":
+            if target.product_id is not None:
+                return InstallationResolveResponse(status="quote", reason_code="multisplit_requires_manager_composition", **base), None
+            if profile.indoor_unit_count is None or not profile.composition_note:
+                return InstallationResolveResponse(status="quote", reason_code="missing_confirmed_multisplit_composition", **base), None
+        elif profile.indoor_type is None:
             return InstallationResolveResponse(status="quote", reason_code="missing_equipment_type", **base), None
         if not book:
             return InstallationResolveResponse(status="quote", reason_code="price_book_not_published", **base), None
         candidates: list[dict[str, Any]] = []
         missing: list[tuple[int, str]] = []
         for entry in book.entries:
-            matched, reason = cls._match(profile, entry)
+            matched, reason = cls._match(profile, entry, target.work_kind)
             if matched:
                 candidates.append(entry)
             if reason:
@@ -469,15 +533,18 @@ class InstallationPriceBookService:
             return InstallationResolveResponse(status="quote", reason_code="matcher_conflict", **base), None
         entry = candidates[0]
         match = InstallationMatcher.model_validate(entry["match"])
-        matched_by = ["product_kind", "indoor_type"] + [name for name in ("capacity_min_kw", "capacity_max_kw", "pipe_liquid", "weight_source") if getattr(match, name) is not None]
+        matched_by = ["product_kind", "work_kind"] + (["indoor_type"] if match.indoor_type else []) + [name for name in ("capacity_min_kw", "capacity_max_kw", "pipe_liquid", "weight_source") if getattr(match, name) is not None]
+        units = profile.indoor_unit_count if match.product_kind == "multi_split_system" else 1
+        included_route = Decimal(entry["included_route_m"]) * units
         return InstallationResolveResponse(status=entry["mode"], profile=profile, profile_sources=sources,
             matched_by=matched_by, tariff_code=entry["code"], scope_ref=scope_ref,
             price_book_id=book.id, price_book_revision=book.revision,
-            included={"route_m": entry["included_route_m"], "holes_by_type": entry["included_holes"]},
+            included={"route_m": str(included_route), "holes_by_type": entry["included_holes"]},
             available_extras=[rule["code"] for rule in entry["rules"] if rule["is_optional"]],
-            explanation=f"{cls._work_label(entry)}; включена трасса до {cls._quantity_text(Decimal(entry['included_route_m']))} м",
+            explanation=(f"{cls._work_label(entry)}; включена трасса до {cls._quantity_text(included_route)} м" if match.work_kind == "standard"
+                         else f"{cls._work_label(entry)} на готовую трассу; новая трасса не включена"),
             price_mode=entry["mode"],
-            base_price=Decimal(entry["base_price"]) if entry["mode"] != "quote" else None), entry
+            base_price=Decimal(entry["base_price"]) * units if entry["mode"] != "quote" else None), entry
 
     @classmethod
     def _component(cls, code: str, line: Any, key: str | None, *, actual: Decimal | None = None,
@@ -493,7 +560,8 @@ class InstallationPriceBookService:
                         actual: Decimal | None = None, included: Decimal | None = None) -> InstallationComponent | None:
         tariff = ServiceTariff(id=entry["tariff_id"], selector_label=entry["short_name"],
                                base_price=int(Decimal(entry["base_price"])),
-                               included_route_meters=float(Decimal(entry["included_route_m"])))
+                               included_route_meters=float(included if rule["code"] == "route.extra_m" and included is not None
+                                                           else Decimal(entry["included_route_m"])))
         source_rule = ServiceTariffRule(id=rule["id"], tariff_id=entry["tariff_id"],
             rule_type=rule["rule_type"], name=rule["name"], line_template=rule["line_template"],
             unit=rule["unit"], unit_price=float(Decimal(rule["unit_price"])), is_optional=rule["is_optional"])
@@ -539,13 +607,24 @@ class InstallationPriceBookService:
                 return InstallationPreviewResponse(status="quote", reason_code="manual_quote_tariff", **base)
             if entry["mode"] == "from":
                 status = "from"
+            matcher = InstallationMatcher.model_validate(entry["match"])
+            if matcher.work_kind == "prelaid_route" and installation.route_length_m > 0:
+                return InstallationPreviewResponse(status="quote", reason_code="prelaid_new_route_requires_quote", **base)
+            if installation.holes_by_type.get("through_over_80", Decimal("0")) > 0:
+                return InstallationPreviewResponse(status="quote", reason_code="wall_over_80_requires_quote", **base)
             matched_entries.append(entry)
             resolutions.append({"key": installation.key, "resolution": result.model_dump(mode="json")})
+            units = result.profile.indoor_unit_count if matcher.product_kind == "multi_split_system" else 1
             work_label = cls._work_label(entry)
+            if matcher.product_kind == "multi_split_system":
+                noun = "блока" if 2 <= units % 10 <= 4 and not 12 <= units % 100 <= 14 else "блоков"
+                work_label += f": {units} внутренних {noun}"
+            if matcher.work_kind == "prelaid_route":
+                work_label += " на готовую трассу"
             tariff = ServiceTariff(id=entry["tariff_id"], selector_label=work_label,
                                    short_name=work_label, full_description=work_label,
                                    base_price=int(Decimal(entry["base_price"])))
-            line = ServiceEstimateService._build_base_line(tariff, 1, 0)
+            line = ServiceEstimateService._build_base_line(tariff, units, 0)
             components.append(cls._component("installation.base", line, installation.key))
             measured = []
             selected_extras = []
@@ -555,9 +634,9 @@ class InstallationPriceBookService:
                 applied_discounts.append(InstallationAppliedDiscount(
                     code="discount.equipment_bundle", installation_key=installation.key,
                     amount=Decimal(bundle_discount["unit_price"])))
-            included_route = Decimal(entry["included_route_m"])
+            included_route = Decimal(entry["included_route_m"]) * units
             measured.append(InstallationMeasuredWork(
-                code="route.length_m", label="Трасса", unit="м",
+                code="route.length_m", label=("Новая трасса" if matcher.work_kind == "prelaid_route" else "Трасса"), unit="м",
                 actual=installation.route_length_m, included=included_route,
                 extra=max(installation.route_length_m - included_route, Decimal("0")),
             ))
@@ -570,10 +649,17 @@ class InstallationPriceBookService:
                 if part is None:
                     raise cls._bad("unpriced_component", "Selected route overage produced no line")
                 components.append(part)
-            for hole_type, actual in installation.holes_by_type.items():
+            shared_remaining = Decimal(entry["included_holes"].get("shared_pass_through", "0"))
+            holes_ordered = sorted(installation.holes_by_type.items(),
+                key=lambda pair: (-(Decimal(rules.get(f"hole.{pair[0]}.extra", {}).get("unit_price", "0"))), pair[0]))
+            for hole_type, actual in holes_ordered:
                 if actual != actual.to_integral_value():
                     raise cls._bad("invalid_hole_quantity", "Hole counts must be whole numbers")
                 included = Decimal(entry["included_holes"].get(hole_type, "0"))
+                if hole_type in {"through_thin", "through_thick"} and shared_remaining > 0:
+                    use = min(actual, shared_remaining)
+                    included += use
+                    shared_remaining -= use
                 extra = max(actual - included, Decimal("0"))
                 measured.append(InstallationMeasuredWork(
                     code=f"hole.{hole_type}", label=cls._measured_label(f"hole.{hole_type}"),
@@ -595,10 +681,12 @@ class InstallationPriceBookService:
                 if extra.code in seen_extras or extra.code.startswith("access."):
                     raise cls._bad("invalid_extra", "Duplicate or site-only extra")
                 seen_extras.add(extra.code)
+                if "pump.package" in seen_extras and {"pump.supply", "pump.install"} & seen_extras:
+                    raise cls._bad("invalid_extra_combination", "Pump package cannot be combined with legacy pump parts")
                 rule = rules.get(extra.code)
                 if rule is None or not rule["is_optional"] or extra.code in {"route.extra_m"} or extra.code.startswith("hole."):
                     raise cls._bad("unknown_extra", extra.code)
-                if extra.code in {"pump.supply", "pump.install"} and extra.quantity != 1:
+                if extra.code in {"pump.supply", "pump.install", "pump.package"} and extra.quantity != 1:
                     raise cls._bad("invalid_extra_quantity", f"{extra.code}: one per installation")
                 part = cls._rule_component(entry, rule, installation.key, route=installation.route_length_m,
                                            input_qty=extra.quantity)
@@ -614,6 +702,7 @@ class InstallationPriceBookService:
                 tariff_code=entry["code"],
                 work_label=work_label, measured=measured, selected_extras=selected_extras,
             ))
+        approved_site = {item.code: item for item in payload.approved_site_access}
         seen_site: set[str] = set()
         for extra in payload.site_extras:
             if extra.code in seen_site or not extra.code.startswith("access."):
@@ -623,16 +712,27 @@ class InstallationPriceBookService:
                                if rule["code"] == extra.code and rule["is_optional"]), None)
             if rule_entry is None:
                 raise cls._bad("unknown_site_extra", extra.code)
-            if extra.quantity != extra.quantity.to_integral_value():
-                raise cls._bad("invalid_site_quantity", "Site access units must be whole")
+            if extra.quantity != 1:
+                raise cls._bad("invalid_site_quantity", "Site access is selected once per site")
             entry, rule = rule_entry
             part = cls._rule_component(entry, rule, None, route=Decimal("0"), input_qty=extra.quantity)
             if part is None:
                 raise cls._bad("unpriced_component", f"{extra.code}: selected site work produced no line")
+            approval = approved_site.get(extra.code)
+            if approval is None:
+                part.is_provisional = True
+                status = "provisional"
+            else:
+                approved_amount = exact_money(approval.actual_total)
+                part.unit_price = money(approved_amount / extra.quantity)
+                part.gross = approved_amount
+                part.net = approved_amount
+                part.description += f"; согласовано: {approval.scope_note}"
             components.append(part)
             site_work.append(InstallationSelectedWork(
                 code=extra.code, label=cls._EXTRA_LABELS[extra.code],
                 unit=part.unit, quantity=extra.quantity,
+                scope_note=approval.scope_note if approval else None,
             ))
         subtotal = sum((item.gross for item in components), Decimal("0.00"))
         discount = sum((item.amount for item in applied_discounts), Decimal("0.00"))
@@ -645,11 +745,16 @@ class InstallationPriceBookService:
         text_parts = [cls._summary_text(summary) for summary in work_summaries]
         if site_work:
             text_parts.append("На объекте: " + ", ".join(
-                f"{item.label.lower()} {cls._quantity_text(item.quantity)} {item.unit}"
+                f"{item.label.lower()} {cls._quantity_text(item.quantity)} {item.unit}" +
+                (f" (согласовано: {item.scope_note})" if item.scope_note else "")
                 for item in site_work
             ))
         customer_text = ". ".join(text_parts) + "."
-        response = InstallationPreviewResponse(status=status, components=components,
+        if status == "provisional":
+            customer_text += " Стоимость доступа к месту работ ориентировочная; состав и окончательная сумма требуют согласования менеджером."
+        response = InstallationPreviewResponse(status=status,
+            reason_code="site_access_requires_approval" if status == "provisional" else None,
+            components=components,
             applied_discounts=applied_discounts, subtotal=subtotal,
             installations=work_summaries, site_work=site_work, customer_text=customer_text,
             discount=discount, total=subtotal - discount,

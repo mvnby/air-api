@@ -23,41 +23,58 @@ const emit = defineEmits<{
 
 const loading = ref(false);
 const error = ref('');
-type IndoorType = InstallationMatcher_Input['indoor_type'];
+type IndoorType = NonNullable<InstallationMatcher_Input['indoor_type']>;
 const indoorTypes: Array<{ value: IndoorType; label: string }> = [
   { value: 'wall', label: 'Настенный' }, { value: 'cassette', label: 'Кассетный' },
   { value: 'duct', label: 'Канальный' }, { value: 'floor_ceiling', label: 'Напольно-потолочный' },
   { value: 'column', label: 'Колонный' }, { value: 'console', label: 'Консольный' },
 ];
 const indoorType = ref<IndoorType | ''>('');
+const productKind = ref<'complete_split_system' | 'multi_split_system'>('complete_split_system');
+const workKind = ref<'standard' | 'prelaid_route'>('standard');
+const matchStrategy = ref<'strict' | 'capacity_only' | 'type_only'>('strict');
 const capacityMin = ref<number | null>(null);
 const capacityMax = ref<number | null>(null);
+const capacityMinInclusive = ref(true);
+const capacityMaxInclusive = ref(true);
 const pipeLiquid = ref('');
 const pipeGas = ref('');
 const weightSource = ref<InstallationMatcher_Input['weight_source']>(null);
 const weightMin = ref<number | null>(null);
 const weightMax = ref<number | null>(null);
 const includedDiamondHoles = ref(0);
+const includedSharedHoles = ref(0);
 const priceMode = ref<'fixed' | 'from' | 'quote'>('fixed');
 const existingInstallationCode = ref<string | null>(null);
 const existingHoles = ref<Record<string, number>>({});
 const numberOrNull = (value: number | null): number | null => value === null || value === undefined || String(value).trim() === '' ? null : Number(value);
 const installationFields = (): Pick<ManagerTariffCreatePayload, 'installation_code' | 'installation_match' | 'installation_price_mode' | 'included_holes_by_type'> => {
-  if (formData.value.service_kind !== 'installation' || !indoorType.value) {
+  if (formData.value.service_kind !== 'installation' || (productKind.value !== 'multi_split_system' && !indoorType.value)) {
     return { installation_code: null, installation_match: null, installation_price_mode: 'fixed', included_holes_by_type: {} };
   }
-  const code = existingInstallationCode.value || `installation.${indoorType.value}.${crypto.randomUUID().slice(0, 8)}`;
+  const code = existingInstallationCode.value || `installation.${productKind.value}.${workKind.value}.${indoorType.value || 'mixed'}.${crypto.randomUUID().slice(0, 8)}`;
   const holes = { ...existingHoles.value };
-  if (includedDiamondHoles.value > 0 || 'diamond' in holes) holes.diamond = includedDiamondHoles.value;
+  if (workKind.value === 'prelaid_route') {
+    delete holes.diamond;
+    delete holes.shared_pass_through;
+  } else {
+    if (includedDiamondHoles.value > 0 || 'diamond' in holes) holes.diamond = includedDiamondHoles.value;
+    if (includedSharedHoles.value > 0) holes.shared_pass_through = includedSharedHoles.value;
+    else delete holes.shared_pass_through;
+  }
   return {
     installation_code: code,
     installation_match: {
-      product_kind: 'complete_split_system', indoor_type: indoorType.value,
-      capacity_min_kw: numberOrNull(capacityMin.value), capacity_max_kw: numberOrNull(capacityMax.value),
-      pipe_liquid: pipeLiquid.value.trim() || null, pipe_gas: pipeGas.value.trim() || null,
-      weight_source: weightSource.value || null,
-      weight_min_kg: weightSource.value ? numberOrNull(weightMin.value) : null,
-      weight_max_kg: weightSource.value ? numberOrNull(weightMax.value) : null,
+      product_kind: productKind.value, indoor_type: productKind.value === 'multi_split_system' ? null : indoorType.value as IndoorType,
+      work_kind: workKind.value, match_strategy: matchStrategy.value,
+      capacity_min_kw: matchStrategy.value === 'type_only' ? null : numberOrNull(capacityMin.value),
+      capacity_max_kw: matchStrategy.value === 'type_only' ? null : numberOrNull(capacityMax.value),
+      capacity_min_inclusive: capacityMinInclusive.value, capacity_max_inclusive: capacityMaxInclusive.value,
+      pipe_liquid: matchStrategy.value === 'strict' ? pipeLiquid.value.trim() || null : null,
+      pipe_gas: matchStrategy.value === 'strict' ? pipeGas.value.trim() || null : null,
+      weight_source: matchStrategy.value === 'strict' ? weightSource.value || null : null,
+      weight_min_kg: matchStrategy.value === 'strict' && weightSource.value ? numberOrNull(weightMin.value) : null,
+      weight_max_kg: matchStrategy.value === 'strict' && weightSource.value ? numberOrNull(weightMax.value) : null,
     },
     installation_price_mode: priceMode.value,
     included_holes_by_type: holes,
@@ -105,9 +122,14 @@ const formData = ref<ManagerTariffCreatePayload>({
 
 const resetForm = () => {
   const matcher = props.tariff?.installation_match;
+  productKind.value = matcher?.product_kind === 'multi_split_system' ? 'multi_split_system' : 'complete_split_system';
+  workKind.value = matcher?.work_kind === 'prelaid_route' ? 'prelaid_route' : 'standard';
+  matchStrategy.value = matcher?.match_strategy === 'capacity_only' || matcher?.match_strategy === 'type_only' ? matcher.match_strategy : 'strict';
   indoorType.value = matcher?.indoor_type ?? '';
   capacityMin.value = matcher?.capacity_min_kw == null ? null : Number(matcher.capacity_min_kw);
   capacityMax.value = matcher?.capacity_max_kw == null ? null : Number(matcher.capacity_max_kw);
+  capacityMinInclusive.value = matcher?.capacity_min_inclusive ?? true;
+  capacityMaxInclusive.value = matcher?.capacity_max_inclusive ?? true;
   pipeLiquid.value = matcher?.pipe_liquid ?? '';
   pipeGas.value = matcher?.pipe_gas ?? '';
   weightSource.value = matcher?.weight_source ?? null;
@@ -115,6 +137,7 @@ const resetForm = () => {
   weightMax.value = matcher?.weight_max_kg == null ? null : Number(matcher.weight_max_kg);
   existingHoles.value = { ...(props.tariff?.included_holes_by_type ?? {}) };
   includedDiamondHoles.value = existingHoles.value.diamond ?? 0;
+  includedSharedHoles.value = existingHoles.value.shared_pass_through ?? 0;
   priceMode.value = props.tariff?.installation_price_mode ?? 'fixed';
   existingInstallationCode.value = props.tariff?.installation_code ?? null;
   if (props.tariff) {
@@ -166,6 +189,12 @@ watch(
   },
   { immediate: true }
 );
+watch(productKind, (value) => {
+  if (value === 'multi_split_system') {
+    indoorType.value = '';
+    matchStrategy.value = 'type_only';
+  }
+});
 
 const close = () => {
   if (!loading.value) emit('update:modelValue', false);
@@ -176,18 +205,24 @@ const submit = async () => {
     error.value = 'Короткое название обязательно';
     return;
   }
-  if (formData.value.service_kind === 'installation' && indoorType.value) {
-    if ((!pipeLiquid.value.trim() && pipeGas.value.trim()) || (pipeLiquid.value.trim() && !pipeGas.value.trim())) {
+  if (formData.value.service_kind === 'installation' && (indoorType.value || productKind.value === 'multi_split_system')) {
+    if (matchStrategy.value === 'strict' && ((!pipeLiquid.value.trim() && pipeGas.value.trim()) || (pipeLiquid.value.trim() && !pipeGas.value.trim()))) {
       error.value = 'Укажите обе трубы пары или оставьте обе пустыми'; return;
     }
     if (!Number.isInteger(includedDiamondHoles.value) || includedDiamondHoles.value < 0) {
       error.value = 'Количество включённых отверстий должно быть целым неотрицательным'; return;
     }
+    if (!Number.isInteger(includedSharedHoles.value) || includedSharedHoles.value < 0 || includedSharedHoles.value > 100) {
+      error.value = 'Общий лимит отверстий должен быть целым числом от 0 до 100'; return;
+    }
+    if (includedSharedHoles.value > 0 && (existingHoles.value.through_thin || existingHoles.value.through_thick)) {
+      error.value = 'Общий лимит нельзя сочетать с отдельными лимитами тонких и толстых проходов'; return;
+    }
   }
   loading.value = true;
   error.value = '';
   try {
-    const normalizedIncludedRoute = ROUTE_AWARE_SERVICE_KINDS.has(formData.value.service_kind as ManagerTariffServiceKind)
+    const normalizedIncludedRoute = formData.value.service_kind === 'installation' && workKind.value === 'prelaid_route' ? 0 : ROUTE_AWARE_SERVICE_KINDS.has(formData.value.service_kind as ManagerTariffServiceKind)
       ? formData.value.included_route_meters
       : 0;
     const canonicalFields = installationFields();
@@ -335,7 +370,7 @@ const submit = async () => {
                 />
               </label>
               <label v-if="isRouteAwareServiceKind" class="block">
-                <span class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Включено трассы, м</span>
+                <span class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">{{ productKind === 'multi_split_system' ? 'Включено трассы на внутренний блок, м' : 'Включено трассы, м' }}</span>
                 <input
                   v-model.number="formData.included_route_meters"
                   type="number"
@@ -351,36 +386,51 @@ const submit = async () => {
               <div class="text-sm font-semibold text-gray-900 dark:text-white">Подбор канонического монтажа</div>
               <p class="text-xs text-gray-500 dark:text-slate-400">Выбор типа добавляет тариф в черновик книги. Сохранение не публикует цены. Старые тарифы без типа остаются как есть.</p>
               <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <label class="block text-sm">Тип внутреннего блока
+                <div class="text-sm">Система
+                  <div class="mt-1 flex gap-2">
+                    <button type="button" class="rounded-lg border px-3 py-2" :class="productKind === 'complete_split_system' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="loading" @click="productKind = 'complete_split_system'">Сплит</button>
+                    <button type="button" class="rounded-lg border px-3 py-2" :class="productKind === 'multi_split_system' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="loading" @click="productKind = 'multi_split_system'">Мультисплит</button>
+                  </div>
+                </div>
+                <label v-if="productKind !== 'multi_split_system'" class="block text-sm">Тип внутреннего блока
                   <select v-model="indoorType" aria-label="Тип внутреннего блока" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900" :disabled="loading">
                     <option value="">Не включать в книгу</option>
                     <option v-for="option in indoorTypes" :key="option.value" :value="option.value">{{ option.label }}</option>
                   </select>
                 </label>
-                <label v-if="indoorType" class="block text-sm">Режим цены
+                <label v-if="indoorType || productKind === 'multi_split_system'" class="block text-sm">Режим цены
                   <select v-model="priceMode" aria-label="Режим цены" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900" :disabled="loading">
                     <option value="fixed">Фиксированная</option><option value="from">От указанной суммы</option><option value="quote">По запросу</option>
                   </select>
                 </label>
               </div>
-              <template v-if="indoorType">
+              <template v-if="indoorType || productKind === 'multi_split_system'">
+                <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <div class="text-sm">Вид работ<div class="mt-1 flex gap-2"><button type="button" class="rounded-lg border px-3 py-2" :class="workKind === 'standard' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="loading" @click="workKind = 'standard'">Обычный</button><button type="button" class="rounded-lg border px-3 py-2" :class="workKind === 'prelaid_route' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="loading" @click="workKind = 'prelaid_route'">Готовая трасса</button></div></div>
+                  <label class="text-sm">Условия подбора<select v-model="matchStrategy" aria-label="Условия подбора" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900"><option value="strict">Мощность и трубы</option><option value="capacity_only">Только мощность</option><option value="type_only">Только тип системы</option></select></label>
+                </div>
                 <div v-if="tariff?.installation_code" class="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
                   <span>{{ existingInstallationCode ? 'Условия опубликованного подбора менять нельзя. Если условия изменились, создайте новый подбор.' : 'При сохранении для новых условий будет создан новый внутренний код.' }}</span>
                   <button v-if="existingInstallationCode" type="button" class="font-medium text-brand-700 dark:text-brand-300" @click="existingInstallationCode = null">Новые условия подбора</button>
                 </div>
-                <div class="grid grid-cols-2 gap-3">
+                <div v-if="matchStrategy !== 'type_only'" class="grid grid-cols-2 gap-3">
                   <label class="text-sm">Мощность от, кВт<input v-model.number="capacityMin" aria-label="Мощность от, кВт" type="number" min="0" step="0.001" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900" /></label>
                   <label class="text-sm">Мощность до, кВт<input v-model.number="capacityMax" aria-label="Мощность до, кВт" type="number" min="0" step="0.001" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900" /></label>
+                  <label class="flex items-center gap-2 text-sm"><input v-model="capacityMinInclusive" type="checkbox" />Нижняя граница включена</label>
+                  <label class="flex items-center gap-2 text-sm"><input v-model="capacityMaxInclusive" type="checkbox" />Верхняя граница включена</label>
+                </div>
+                <div v-if="matchStrategy === 'strict'" class="grid grid-cols-2 gap-3">
                   <label class="text-sm">Жидкостная труба<input v-model="pipeLiquid" aria-label="Жидкостная труба" placeholder="1/4&quot;" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900" /></label>
                   <label class="text-sm">Газовая труба<input v-model="pipeGas" aria-label="Газовая труба" placeholder="3/8&quot;" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900" /></label>
                 </div>
-                <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div v-if="matchStrategy === 'strict'" class="grid grid-cols-1 gap-3 md:grid-cols-3">
                   <label class="text-sm">Источник веса<select v-model="weightSource" aria-label="Источник веса" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900"><option :value="null">Не учитывать</option><option value="weight_indoor">Внутренний блок</option><option value="weight_outdoor">Наружный блок</option></select></label>
                   <label class="text-sm">Вес от, кг<input v-model.number="weightMin" aria-label="Вес от, кг" type="number" min="0" step="0.01" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900" :disabled="!weightSource" /></label>
                   <label class="text-sm">Вес до, кг<input v-model.number="weightMax" aria-label="Вес до, кг" type="number" min="0" step="0.01" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900" :disabled="!weightSource" /></label>
                 </div>
-                <label class="block text-sm">Включено алмазных отверстий<input v-model.number="includedDiamondHoles" aria-label="Включено алмазных отверстий" type="number" min="0" step="1" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900" /></label>
-                <p class="text-xs text-gray-500 dark:text-slate-400">Для фиксированной цены и цены «от» при публикации нужны мощность, пара труб, цена базы и цена дополнительной трассы. Для включённых отверстий нужна цена превышения.</p>
+                <label v-if="workKind === 'standard' && 'diamond' in existingHoles" class="block text-sm">Включено алмазных отверстий (старые тарифы)<input v-model.number="includedDiamondHoles" aria-label="Включено алмазных отверстий" type="number" min="0" step="1" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900" /></label>
+                <label v-if="workKind === 'standard'" class="block text-sm">Общий лимит проходов до 80 см<input v-model.number="includedSharedHoles" type="number" min="0" max="100" step="1" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900" /></label>
+                <p class="text-xs text-gray-500 dark:text-slate-400">Границы мощности указывают включённые значения отдельно. Для готовой трассы новые метры и отверстия не включены; добавочные работы требуют отдельных правил.</p>
               </template>
             </div>
 

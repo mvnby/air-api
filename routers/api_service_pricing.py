@@ -67,6 +67,8 @@ async def preview_public_installation_estimate(
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
     response.headers.update(private_storefront_response_headers())
+    if payload.approved_site_access:
+        raise HTTPException(status_code=422, detail={"code": "site_access_approval_manager_only"})
     if not await StorefrontSettingsService.is_service_enabled(
         session, tenant_scope=tenant_scope, service_kind="installation"
     ):
