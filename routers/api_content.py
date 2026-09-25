@@ -18,6 +18,7 @@ from services.article_service import ArticleService
 from services.content_api_service import ContentApiService
 from services.installation_service import InstallationService
 from services.installation_price_book_service import InstallationPriceBookService
+from services.public_installation_pricing_bridge_service import PublicInstallationPricingBridgeService
 from core.storefront_request_envelope import private_storefront_response_headers
 from services.public_series_page_service import PublicSeriesPageService
 from services.storefront_settings_service import StorefrontSettingsService
@@ -51,12 +52,9 @@ async def get_services(
 ):
     """Get list of all available services."""
     response.headers.update(private_storefront_response_headers())
-    services = await ContentApiService.get_active_services(
-        session, tenant_scope=tenant_scope
+    return await PublicInstallationPricingBridgeService.visible_content_services(
+        session, tenant_scope,
     )
-    if await InstallationPriceBookService.latest(session, tenant_scope):
-        return [service for service in services if service["category"] not in {"installation", "installation_option"}]
-    return services
 
 
 @router.get("/v1/content/brands", response_model=List[PublicBrandResponse], operation_id="get_public_brands")
@@ -127,7 +125,9 @@ async def get_service_options(
 ):
     """Get rich installation options."""
     response.headers.update(private_storefront_response_headers())
-    if category in {"installation", "installation_option"} and await InstallationPriceBookService.latest(session, tenant_scope):
+    if not await PublicInstallationPricingBridgeService.legacy_option_category_available(
+        session, tenant_scope, category,
+    ):
         raise HTTPException(status_code=409,
             detail={"code": "book_preview_required", "message": "Use the published installation price book preview"},
             headers=private_storefront_response_headers())

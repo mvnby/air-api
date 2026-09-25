@@ -3,12 +3,16 @@
 from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException, Response
+from fastapi import FastAPI, HTTPException, Request, Response
+from httpx import ASGITransport, AsyncClient
 
+from core.database import get_session
+from core.tenant_scope import get_public_tenant_scope
 from models.tenancy import TenantScope
 from models import ServiceTariff
-from routers import api_content, api_service_pricing
+from routers import api_content, api_orders, api_service_pricing
 from schemas import ManagerTariffServiceKind
+from schemas_public_checkout import OrderPayload
 from schemas_service_catalog import PublicServiceEstimateCalculatePayload
 from services.content_api_service import ContentApiService
 from services.installation_price_book_service import InstallationPriceBookService
@@ -17,6 +21,7 @@ from services.installation_service import InstallationService
 from services.service_estimate_service import ServiceEstimateService
 from services.storefront_settings_service import StorefrontSettingsService
 from services.tariffs_service import TariffsService
+from services.website_order_service import WebsiteOrderService
 
 
 @pytest.fixture
@@ -66,6 +71,31 @@ async def test_config_exposes_scope_bound_source_and_only_supported_checkout(boo
 
 
 @pytest.mark.asyncio
+async def test_config_route_is_scoped_no_store_and_tariff_list_requires_kind(book_stubs):
+    app = FastAPI()
+    app.include_router(api_service_pricing.router, prefix="/api")
+
+    async def session():
+        yield object()
+
+    async def scope():
+        return TenantScope(tenant_id=1, storefront_id=2,
+                           is_canonical_storefront=True)
+
+    app.dependency_overrides[get_session] = session
+    app.dependency_overrides[get_public_tenant_scope] = scope
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/v1/service-pricing/installation/config")
+        unfiltered = await client.get("/api/v1/service-pricing/tariffs")
+    assert response.status_code == 200
+    assert response.json()["source"] == "price_book"
+    assert response.json()["capabilities"]["standard_product_acceptance"] is True
+    assert response.headers["cache-control"] == "private, no-store"
+    assert response.headers["cdn-cache-control"] == "no-store"
+    assert unfiltered.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_legacy_rate_list_and_checkout_require_book_preview(book_stubs, monkeypatch):
     scope = TenantScope(tenant_id=1, storefront_id=2, is_canonical_storefront=True)
     with pytest.raises(HTTPException) as rates:
@@ -83,6 +113,28 @@ async def test_legacy_rate_list_and_checkout_require_book_preview(book_stubs, mo
     monkeypatch.setattr(InstallationService, "get_all", old_rates)
     book_stubs["book"] = None
     assert await api_content.get_installation_rates(None, scope) == ["legacy-rate"]
+
+
+@pytest.mark.asyncio
+async def test_legacy_checkout_conflict_is_private_no_store(monkeypatch):
+    async def reject(*_args, **_kwargs):
+        raise InstallationPricingError("Published book required", code="book_preview_required")
+
+    monkeypatch.setattr(WebsiteOrderService, "create_order", reject)
+    payload = OrderPayload.model_validate({
+        "customer": {"name": "Buyer", "phone": "+375291112233"},
+        "items": [{"product_id": 1, "with_installation": True}],
+    })
+    request = Request({"type": "http", "headers": []})
+    with pytest.raises(HTTPException) as conflict:
+        await api_orders.create_order(
+            payload, request, Response(), submitted_key=None,
+            idempotency_key="bridge-conflict-key", session=None,
+            tenant_scope=TenantScope(tenant_id=1, storefront_id=1),
+        )
+    assert conflict.value.status_code == 409
+    assert conflict.value.detail["code"] == "book_preview_required"
+    assert conflict.value.headers["Cache-Control"] == "private, no-store"
 
 
 @pytest.mark.asyncio

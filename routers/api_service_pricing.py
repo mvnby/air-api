@@ -21,8 +21,9 @@ from services.installation_price_book_service import InstallationPriceBookServic
 from schemas_installation_price_book import (
     InstallationResolvePayload, InstallationResolveResponse,
     InstallationPreviewPayload, InstallationPreviewResponse,
-    InstallationPricingCapabilities, InstallationPricingConfigResponse,
+    InstallationPricingConfigResponse,
 )
+from services.public_installation_pricing_bridge_service import PublicInstallationPricingBridgeService
 from core.storefront_request_envelope import private_storefront_response_headers
 from core.public_write_idempotency import get_required_public_write_idempotency_key
 
@@ -54,24 +55,7 @@ async def get_public_installation_pricing_config(
 ):
     """Tell the storefront which pricing contract is currently authoritative."""
     response.headers.update(private_storefront_response_headers())
-    book = await InstallationPriceBookService.latest(session, tenant_scope)
-    enabled = await StorefrontSettingsService.is_service_enabled(
-        session, tenant_scope=tenant_scope, service_kind="installation"
-    )
-    has_book = book is not None
-    return InstallationPricingConfigResponse(
-        source="price_book" if has_book else "legacy",
-        price_book_revision=book.revision if book else None,
-        scope_ref=InstallationPriceBookService._scope_ref(tenant_scope),
-        service_enabled=enabled,
-        capabilities=InstallationPricingCapabilities(
-            legacy_rate_checkout=enabled and not has_book,
-            standard_product_acceptance=enabled and has_book and tenant_scope.is_canonical_storefront is True,
-            manual_service_only_preview=enabled and has_book,
-            multisplit_preview_only=enabled and has_book,
-            prelaid_preview_only=enabled and has_book,
-        ),
-    )
+    return await PublicInstallationPricingBridgeService.config(session, tenant_scope)
 
 
 @router.post(
