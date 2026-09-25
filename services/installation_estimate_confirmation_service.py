@@ -398,6 +398,8 @@ class InstallationEstimateConfirmationService:
                 if component.installation_key is None:
                     selected = site_work.get(component.code)
                     label = (f"{selected.label}: {InstallationPriceBookService._quantity_text(selected.quantity)} "
+                             f"{selected.unit}; согласовано: {selected.scope_note}" if selected.scope_note else
+                             f"{selected.label}: {InstallationPriceBookService._quantity_text(selected.quantity)} "
                              f"{selected.unit}") if selected else None
                 else:
                     summary = summaries.get(component.installation_key)
@@ -408,7 +410,7 @@ class InstallationEstimateConfirmationService:
                         included_work = [
                             f"{item.label.lower()} {InstallationPriceBookService._quantity_text(item.actual)} "
                             f"{item.unit} (включено {InstallationPriceBookService._quantity_text(item.included)} {item.unit})"
-                            for item in summary.measured if item.extra == 0
+                            for item in summary.measured if item.actual > 0 and item.extra == 0
                         ]
                         if included_work:
                             label += "; " + ", ".join(included_work)

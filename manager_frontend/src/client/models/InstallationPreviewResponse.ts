@@ -7,7 +7,7 @@ import type { InstallationComponent } from './InstallationComponent';
 import type { InstallationSelectedWork } from './InstallationSelectedWork';
 import type { InstallationWorkSummary } from './InstallationWorkSummary';
 export type InstallationPreviewResponse = {
-    status: 'fixed' | 'from' | 'quote' | 'unavailable';
+    status: 'fixed' | 'from' | 'provisional' | 'quote' | 'unavailable';
     reason_code?: (string | null);
     scope_ref: string;
     currency?: string;

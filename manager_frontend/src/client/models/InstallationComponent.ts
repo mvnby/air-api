@@ -14,5 +14,6 @@ export type InstallationComponent = {
     description: string;
     actual?: (string | null);
     included?: (string | null);
+    is_provisional?: boolean;
 };
 

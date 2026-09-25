@@ -36,11 +36,7 @@ async def list_manager_installation_rates(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
-    return ManagerInstallationRateListResponse(
-        items=await ManagerInstallationRateService.list_rates(
-            session, tenant_scope
-        )
-    )
+    return await ManagerInstallationRateService.list_response(session, tenant_scope)
 
 
 @router.put(

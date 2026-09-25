@@ -159,7 +159,7 @@ const matcherSummary = (candidate: InstallationLegacyCandidate) => {
     : match.weight_source === 'weight_outdoor' ? 'наружного блока' : 'блока в упаковке';
   const weight = match.weight_source
     ? ` · вес ${weightKind} ${match.weight_min_kg ?? '0'}–${match.weight_max_kg ?? '∞'} кг` : '';
-  return `${indoorTypesLabel(match.indoor_type)} · ${capacity} · ${pipes}${weight}`;
+  return `${match.product_kind === 'multi_split_system' ? 'Мультисплит' : indoorTypesLabel(match.indoor_type || '')} · ${capacity} · ${pipes}${weight}`;
 };
 const candidatePrice = (candidate: InstallationLegacyCandidate) =>
   `${candidate.mode === 'quote' ? 'По запросу · черновая база' : candidate.mode === 'from' ? 'База от' : 'База'} ${money(candidate.base_price)} BYN · доп. трасса ${candidate.route_extra_price == null ? 'не задана' : `${money(candidate.route_extra_price)} BYN/м`}`;
@@ -384,7 +384,7 @@ onMounted(() => { void loadTariffs(); void loadComparison(); });
                 <button class="text-left" @click="selectedTariffId = tariff.id">
                   <div class="text-sm font-semibold text-gray-900 dark:text-slate-100">{{ tariffShortName(tariff) }}</div>
                   <div class="text-xs text-gray-500 dark:text-slate-400">
-                    {{ serviceKindLabel(tariff.service_kind) }} · {{ tariff.service_kind === 'installation' ? (tariff.installation_match ? `Книга: ${indoorTypesLabel(tariff.installation_match.indoor_type)}` : 'Вне книги') : (tariff.category || '—') }} · {{ tariff.power_range || 'все мощности' }}
+                    {{ serviceKindLabel(tariff.service_kind) }} · {{ tariff.service_kind === 'installation' ? (tariff.installation_match ? `Книга: ${tariff.installation_match.product_kind === 'multi_split_system' ? 'Мультисплит' : indoorTypesLabel(tariff.installation_match.indoor_type || '')}` : 'Вне книги') : (tariff.category || '—') }} · {{ tariff.power_range || 'все мощности' }}
                   </div>
                 </button>
               </td>

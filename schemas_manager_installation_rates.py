@@ -35,6 +35,7 @@ class ManagerInstallationRateResponse(BaseModel):
 
 class ManagerInstallationRateListResponse(BaseModel):
     items: list[ManagerInstallationRateResponse]
+    published_price_book_revision: int | None = None
 
 
 class ManagerInstallationRateUpdatePayload(BaseModel):

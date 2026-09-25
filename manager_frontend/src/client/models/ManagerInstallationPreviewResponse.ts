@@ -8,7 +8,7 @@ import type { InstallationSelectedWork } from './InstallationSelectedWork';
 import type { InstallationWorkSummary } from './InstallationWorkSummary';
 import type { ManagerInstallationPreviewLine } from './ManagerInstallationPreviewLine';
 export type ManagerInstallationPreviewResponse = {
-    status: 'fixed' | 'from' | 'quote' | 'unavailable';
+    status: 'fixed' | 'from' | 'provisional' | 'quote' | 'unavailable';
     reason_code?: (string | null);
     scope_ref: string;
     currency?: string;

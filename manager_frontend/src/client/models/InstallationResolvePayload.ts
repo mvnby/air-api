@@ -6,5 +6,6 @@ import type { TypedInstallationProfile_Input } from './TypedInstallationProfile_
 export type InstallationResolvePayload = {
     product_id?: (number | null);
     typed_profile?: (TypedInstallationProfile_Input | null);
+    work_kind?: 'standard' | 'prelaid_route';
 };
 

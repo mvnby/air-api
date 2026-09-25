@@ -4,7 +4,7 @@
 /* eslint-disable */
 import type { TypedInstallationProfile_Output } from './TypedInstallationProfile_Output';
 export type InstallationResolveResponse = {
-    status: 'fixed' | 'from' | 'quote' | 'unavailable';
+    status: 'fixed' | 'from' | 'provisional' | 'quote' | 'unavailable';
     reason_code?: (string | null);
     profile?: (TypedInstallationProfile_Output | null);
     profile_sources?: Record<string, string>;
