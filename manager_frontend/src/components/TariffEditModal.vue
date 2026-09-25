@@ -365,8 +365,8 @@ const submit = async () => {
               </div>
               <template v-if="indoorType">
                 <div v-if="tariff?.installation_code" class="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
-                  <span>Код подбора: {{ existingInstallationCode || 'будет создан при сохранении' }}. Условия опубликованного кода менять нельзя.</span>
-                  <button v-if="existingInstallationCode" type="button" class="font-medium text-brand-700 dark:text-brand-300" @click="existingInstallationCode = null">Новый код для нового подбора</button>
+                  <span>{{ existingInstallationCode ? 'Условия опубликованного подбора менять нельзя. Если условия изменились, создайте новый подбор.' : 'При сохранении для новых условий будет создан новый внутренний код.' }}</span>
+                  <button v-if="existingInstallationCode" type="button" class="font-medium text-brand-700 dark:text-brand-300" @click="existingInstallationCode = null">Новые условия подбора</button>
                 </div>
                 <div class="grid grid-cols-2 gap-3">
                   <label class="text-sm">Мощность от, кВт<input v-model.number="capacityMin" aria-label="Мощность от, кВт" type="number" min="0" step="0.001" class="mt-1 w-full rounded-lg border p-2 dark:bg-slate-900" /></label>

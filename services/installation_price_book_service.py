@@ -238,17 +238,17 @@ class InstallationPriceBookService:
             for rule in entry["rules"]:
                 expected = cls._component_signature(rule["code"])
                 if expected is None or (rule["rule_type"], rule["unit"], bool(rule["is_optional"])) != expected:
-                    raise cls._bad("invalid_component_rule", f"{rule['code']}: calculation type, unit, or optional mode is invalid")
+                    raise cls._bad("invalid_component_rule", f"{code}: {rule['code']} calculation type, unit, or optional mode is invalid")
                 signature = (rule["rule_type"], rule["unit"])
                 old_signature = component_signatures.setdefault(rule["code"], signature)
                 if old_signature != signature:
-                    raise cls._bad("component_code_conflict", f"{rule['code']}: unit or calculation type differs")
+                    raise cls._bad("component_code_conflict", f"{code}: {rule['code']} unit or calculation type differs")
                 if rule["code"] == "discount.equipment_bundle" and Decimal(rule["unit_price"]) > Decimal(entry["base_price"]):
                     raise cls._bad("excessive_discount", f"{code}: bundle discount exceeds base price")
                 if rule["code"].startswith("access."):
                     old = site_prices.setdefault(rule["code"], rule["unit_price"])
                     if old != rule["unit_price"]:
-                        raise cls._bad("site_extra_conflict", f"{rule['code']}: site prices disagree")
+                        raise cls._bad("site_extra_conflict", f"{code}: {rule['code']} site prices disagree")
             if len(rule_codes) != len(entry["rules"]):
                 raise cls._bad("duplicate_component_code", f"{code}: duplicate component code")
             # A price-book matcher is structured. Legacy category/power strings never select a price.
@@ -340,7 +340,7 @@ class InstallationPriceBookService:
                 for rule in entry["rules"]:
                     older = previous_component_signatures.get(rule["code"])
                     if older and older != (rule["rule_type"], rule["unit"]):
-                        raise cls._bad("component_code_reused", f"{rule['code']}: unit or calculation type changed")
+                        raise cls._bad("component_code_reused", f"{entry['code']}: {rule['code']} unit or calculation type changed")
         book = InstallationPriceBook(tenant_id=scope.tenant_id, revision=(current.revision + 1 if current else 1),
                                      fingerprint=fingerprint, entries=entries, published_by=actor)
         session.add(book)

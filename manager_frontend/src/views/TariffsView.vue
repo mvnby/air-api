@@ -5,6 +5,8 @@ import type {
   ManagerTariffResponse,
   ManagerTariffRuleResponse,
   ManagerTariffServiceKind,
+  InstallationLegacyCandidate,
+  InstallationLegacyComparisonRow,
   InstallationLegacyComparisonResponse,
 } from '../client';
 import { getApiErrorMessage } from '../utils/api-errors';
@@ -20,10 +22,20 @@ const comparison = ref<InstallationLegacyComparisonResponse | null>(null);
 const comparisonOffset = ref(0);
 const comparisonLoading = ref(false);
 const comparisonError = ref('');
+const draftRefreshLoading = ref(false);
+let comparisonRequestId = 0;
+let tariffRequestId = 0;
+let draftRefreshId = 0;
 const publishing = ref(false);
 const publishError = ref('');
 const publishErrors: Record<string, string> = {
   empty_price_book: 'Нет активных тарифов с типизированным подбором.',
+  invalid_matcher: 'Проверьте границы мощности, пару труб и условия веса.',
+  missing_tariff_code: 'Для подбора монтажа нужен новый внутренний код. Откройте и сохраните тариф.',
+  invalid_price_mode: 'Выберите режим цены: фиксированная, «от» или по запросу.',
+  invalid_base_price: 'Проверьте базовую цену тарифа.',
+  invalid_included_route: 'Включённая длина трассы должна быть неотрицательной.',
+  invalid_included_holes: 'Количество включённых отверстий должно быть целым неотрицательным.',
   incomplete_fixed_matcher: 'Для фиксированной цены или цены «от» укажите границу мощности и обе трубы пары.',
   missing_base_price: 'Для фиксированной цены или цены «от» нужна положительная базовая цена.',
   missing_route_price: 'Добавьте правило «Трасса сверх включённой» с ценой.',
@@ -33,20 +45,60 @@ const publishErrors: Record<string, string> = {
   duplicate_component_code: 'В одном тарифе два правила с одинаковым смыслом.',
   site_extra_conflict: 'Цена общих работ на объекте различается между тарифами.',
   invalid_component_rule: 'Тип расчёта или единица правила не совпадает с выбранным компонентом.',
-  tariff_code_reused: 'Условия уже опубликованного тарифа изменены. Откройте тариф и создайте для нового подбора новый код.',
+  component_code_conflict: 'Один компонент имеет разные единицы или способы расчёта в тарифах.',
+  unknown_component_code: 'Выберите поддерживаемый смысл компонента для правила.',
+  invalid_rule_price: 'Проверьте цену правила.',
+  extra_default_on: 'Дополнительная работа должна быть выключена по умолчанию.',
+  invalid_discount_rule: 'Проверьте способ расчёта скидки комплекта.',
+  excessive_discount: 'Скидка комплекта превышает базовую цену.',
+  tariff_code_reused: 'Условия уже опубликованного тарифа изменены. Откройте тариф и выберите «Новые условия подбора».',
   component_code_reused: 'Смысл опубликованного компонента нельзя менять. Выберите другой компонент.',
   duplicate_tariff_code: 'Два активных тарифа имеют один код установки.',
   packed_weight_requires_transport_rule: 'Для подбора монтажа используйте вес блока без упаковки.',
 };
+const invalidateComparison = () => {
+  comparisonRequestId += 1;
+  comparison.value = null;
+  comparisonLoading.value = false;
+  comparisonError.value = '';
+};
 const loadComparison = async () => {
+  const requestId = ++comparisonRequestId;
+  const offset = comparisonOffset.value;
   comparisonLoading.value = true;
   comparisonError.value = '';
-  try { comparison.value = await api.listManagerInstallationLegacyComparison(comparisonOffset.value); }
-  catch (e) { comparisonError.value = getApiErrorMessage(e); comparison.value = null; }
-  finally { comparisonLoading.value = false; }
+  comparison.value = null;
+  try {
+    const response = await api.listManagerInstallationLegacyComparison(offset);
+    if (requestId === comparisonRequestId) comparison.value = response;
+  } catch (e) {
+    if (requestId === comparisonRequestId) comparisonError.value = getApiErrorMessage(e);
+  } finally {
+    if (requestId === comparisonRequestId) comparisonLoading.value = false;
+  }
+};
+const comparisonStatus = computed(() => {
+  if (comparisonLoading.value || draftRefreshLoading.value) return 'проверяем статус публикации…';
+  if (comparisonError.value || !comparison.value) return 'статус публикации недоступен';
+  return comparison.value.price_book_revision
+    ? `ревизия ${comparison.value.price_book_revision} опубликована`
+    : 'ещё не опубликована';
+});
+const comparisonReady = computed(() => !comparisonLoading.value && !draftRefreshLoading.value && !comparisonError.value && comparison.value !== null);
+const publicationTarget = (message: string): string => {
+  const tariffIds = [...message.matchAll(/Tariff (\d+)/g)].map((match) => Number(match[1]));
+  const ruleIds = [...message.matchAll(/Rule (\d+)/g)].map((match) => Number(match[1]));
+  const names = tariffs.value.filter((tariff) =>
+    tariffIds.includes(tariff.id) ||
+    (tariff.installation_code && message.includes(tariff.installation_code)) ||
+    tariff.rules?.some((rule) => ruleIds.includes(rule.id))
+  ).map((tariff) => tariffShortName(tariff));
+  return names.length ? ` Проверьте ${names.length === 1 ? 'тариф' : 'тарифы'}: ${names.join(', ')}.` : '';
 };
 const publish = async () => {
+  if (publishing.value || !comparisonReady.value || loading.value || error.value) return;
   if (!await confirmDialog({ title: 'Опубликовать книгу монтажа?', description: 'Активные тарифы с типизированным подбором станут новой неизменяемой ревизией. Старые публичные расценки не копируются и не меняются.', confirmText: 'Опубликовать' })) return;
+  if (!comparisonReady.value || kindFilter.value !== 'installation' || loading.value || error.value) return;
   publishing.value = true;
   publishError.value = '';
   try {
@@ -54,17 +106,14 @@ const publish = async () => {
     setToast(`Опубликована ревизия ${result.revision}`);
     await loadComparison();
   } catch (e) {
-    const detail = (e as { body?: { detail?: { code?: string } } })?.body?.detail;
+    const detail = (e as { body?: { detail?: { code?: string; message?: string } } })?.body?.detail;
     publishError.value = (e as { status?: number })?.status === 403
       ? 'Нет прав на публикацию книги монтажа.'
-      : `${detail?.code && publishErrors[detail.code] ? `${publishErrors[detail.code]} ` : ''}${getApiErrorMessage(e)}`;
+      : detail?.code && publishErrors[detail.code]
+        ? `${publishErrors[detail.code]}${publicationTarget(detail.message ?? '')}`
+        : `Не удалось опубликовать книгу: ${getApiErrorMessage(e)}`;
   } finally { publishing.value = false; }
 };
-const comparisonStatus = (status: string) => status === 'unmapped_review_required'
-  ? 'Нет кандидатов — требуется сопоставление'
-  : status === 'price_equal_review_required'
-    ? 'Цена совпадает, соответствие требует проверки'
-    : 'Цена отличается, соответствие требует проверки';
 
 const kindFilter = ref<ManagerTariffServiceKind>('installation');
 const includeInactive = ref(true);
@@ -93,6 +142,36 @@ const serviceKindLabel = (kind: ManagerTariffServiceKind | string) =>
 const indoorTypesLabel = (kind: string) => ({ wall: 'настенный', cassette: 'кассетный', duct: 'канальный', floor_ceiling: 'напольно-потолочный', column: 'колонный', console: 'консольный' }[kind] ?? kind);
 const tariffShortName = (tariff: ManagerTariffResponse) => tariff.short_name || tariff.selector_label;
 const tariffFullDescription = (tariff: ManagerTariffResponse) => tariff.full_description || tariffShortName(tariff);
+const candidateName = (candidate: InstallationLegacyCandidate) => {
+  const tariff = tariffs.value.find((item) => item.installation_code === candidate.tariff_code);
+  return tariff ? tariffShortName(tariff) : 'Тариф черновика';
+};
+const money = (value: number | string) => Number(value).toLocaleString('ru-RU', { maximumFractionDigits: 2 });
+const matcherSummary = (candidate: InstallationLegacyCandidate) => {
+  const match = candidate.matcher;
+  const capacity = match.capacity_min_kw != null && match.capacity_max_kw != null
+    ? `${match.capacity_min_kw}–${match.capacity_max_kw} кВт`
+    : match.capacity_min_kw != null ? `от ${match.capacity_min_kw} кВт`
+      : match.capacity_max_kw != null ? `до ${match.capacity_max_kw} кВт` : 'мощность не задана';
+  const pipes = match.pipe_liquid && match.pipe_gas
+    ? `трубы ${match.pipe_liquid} + ${match.pipe_gas}` : 'пара труб не задана';
+  const weightKind = match.weight_source === 'weight_indoor' ? 'внутреннего блока'
+    : match.weight_source === 'weight_outdoor' ? 'наружного блока' : 'блока в упаковке';
+  const weight = match.weight_source
+    ? ` · вес ${weightKind} ${match.weight_min_kg ?? '0'}–${match.weight_max_kg ?? '∞'} кг` : '';
+  return `${indoorTypesLabel(match.indoor_type)} · ${capacity} · ${pipes}${weight}`;
+};
+const candidatePrice = (candidate: InstallationLegacyCandidate) =>
+  `${candidate.mode === 'quote' ? 'По запросу · черновая база' : candidate.mode === 'from' ? 'База от' : 'База'} ${money(candidate.base_price)} BYN · доп. трасса ${candidate.route_extra_price == null ? 'не задана' : `${money(candidate.route_extra_price)} BYN/м`}`;
+const candidatePriceReview = (row: InstallationLegacyComparisonRow, candidate: InstallationLegacyCandidate) => {
+  if (candidate.mode === 'quote') return 'Цена по запросу: числовое сравнение не применяется';
+  if (candidate.mode === 'from') return 'Цена «от» — нижняя граница, не точное совпадение';
+  const differences = [
+    Number(row.legacy_base_price) !== Number(candidate.base_price) ? 'база' : null,
+    candidate.route_extra_price == null || Number(row.legacy_route_extra_price) !== Number(candidate.route_extra_price) ? 'доп. трасса' : null,
+  ].filter(Boolean);
+  return differences.length ? `Различаются: ${differences.join(', ')}` : 'База и доп. трасса совпадают; подбор проверить';
+};
 
 const ROUTE_AWARE_SERVICE_KINDS = new Set<ManagerTariffServiceKind>(['installation', 'pre_install']);
 const shouldShowRouteColumn = computed(() => ROUTE_AWARE_SERVICE_KINDS.has(kindFilter.value));
@@ -105,10 +184,14 @@ const setToast = (message: string) => {
 };
 
 const loadTariffs = async () => {
+  const requestId = ++tariffRequestId;
+  const kind = kindFilter.value;
+  const inactive = includeInactive.value;
   loading.value = true;
   error.value = '';
   try {
-    const response = await api.listManagerTariffsByKind(kindFilter.value, includeInactive.value);
+    const response = await api.listManagerTariffsByKind(kind, inactive);
+    if (requestId !== tariffRequestId) return;
     tariffs.value = response.items || [];
     if (!selectedTariffId.value && tariffs.value.length) {
       selectedTariffId.value = tariffs.value[0]!.id;
@@ -116,12 +199,34 @@ const loadTariffs = async () => {
       selectedTariffId.value = tariffs.value[0]?.id ?? null;
     }
   } catch (e) {
+    if (requestId !== tariffRequestId) return;
     error.value = getApiErrorMessage(e);
     tariffs.value = [];
     selectedTariffId.value = null;
   } finally {
-    loading.value = false;
+    if (requestId === tariffRequestId) loading.value = false;
   }
+};
+const refreshAfterDraftChange = async () => {
+  const requestId = ++draftRefreshId;
+  draftRefreshLoading.value = true;
+  publishError.value = '';
+  try {
+    await Promise.all([loadTariffs(), kindFilter.value === 'installation' ? loadComparison() : Promise.resolve()]);
+  } finally {
+    if (requestId === draftRefreshId) draftRefreshLoading.value = false;
+  }
+};
+const handleKindChange = () => {
+  comparisonOffset.value = 0;
+  if (kindFilter.value === 'installation') void loadComparison();
+  else invalidateComparison();
+  void loadTariffs();
+};
+const changeComparisonPage = (delta: number) => {
+  if (comparisonLoading.value) return;
+  comparisonOffset.value = Math.max(0, comparisonOffset.value + delta);
+  void loadComparison();
 };
 
 const openAddTariff = () => {
@@ -139,7 +244,7 @@ const confirmDeleteTariff = async (tariff: ManagerTariffResponse) => {
   try {
     await api.deleteManagerTariff(tariff.id);
     setToast('Тариф удален');
-    await loadTariffs();
+    await refreshAfterDraftChange();
   } catch (e) {
     error.value = getApiErrorMessage(e);
   }
@@ -162,7 +267,7 @@ const confirmDeleteRule = async (tariffId: number, rule: ManagerTariffRuleRespon
   try {
     await api.deleteManagerTariffRule(tariffId, rule.id);
     setToast('Правило удалено');
-    await loadTariffs();
+    await refreshAfterDraftChange();
   } catch (e) {
     error.value = getApiErrorMessage(e);
   }
@@ -170,12 +275,12 @@ const confirmDeleteRule = async (tariffId: number, rule: ManagerTariffRuleRespon
 
 const handleTariffSuccess = async () => {
   setToast('Тариф сохранен');
-  await loadTariffs();
+  await refreshAfterDraftChange();
 };
 
 const handleRuleSuccess = async () => {
   setToast('Правило сохранено');
-  await loadTariffs();
+  await refreshAfterDraftChange();
 };
 
 onMounted(() => { void loadTariffs(); void loadComparison(); });
@@ -209,7 +314,7 @@ onMounted(() => { void loadTariffs(); void loadComparison(); });
         <select
           v-model="kindFilter"
           class="rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
-          @change="loadTariffs"
+          @change="handleKindChange"
         >
           <option v-for="option in serviceKindOptions" :key="option.value" :value="option.value">
             {{ option.label }}
@@ -233,13 +338,13 @@ onMounted(() => { void loadTariffs(); void loadComparison(); });
       <div class="flex items-start gap-3">
         <span class="material-icons-round mt-0.5 text-blue-600 dark:text-blue-300">info</span>
         <div>
-          <div class="text-sm font-semibold">Книга монтажа: {{ comparison?.price_book_revision ? `ревизия ${comparison.price_book_revision} опубликована` : 'ещё не опубликована' }}</div>
+          <div class="text-sm font-semibold">Книга монтажа: {{ comparisonStatus }}</div>
           <div class="mt-0.5 text-xs text-blue-800/80 dark:text-blue-200/80">
             Типизированные тарифы и правила сначала сохраняются как черновик. Публикация проверяет полноту и пересечения; старые публичные цены остаются отдельно.
           </div>
         </div>
       </div>
-      <button type="button" :disabled="publishing || comparisonLoading" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50" @click="publish">{{ publishing ? 'Публикуем…' : 'Опубликовать книгу' }}</button>
+      <button type="button" :disabled="publishing || !comparisonReady || loading || !!error" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50" @click="publish">{{ publishing ? 'Публикуем…' : 'Опубликовать книгу' }}</button>
     </div>
     <div v-if="publishError" role="alert" class="mb-6 rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">{{ publishError }}</div>
 
@@ -251,12 +356,14 @@ onMounted(() => { void loadTariffs(); void loadComparison(); });
     </div>
 
     <div class="grid grid-cols-1 xl:grid-cols-5 gap-6">
-      <section class="xl:col-span-3 bg-white dark:bg-[#1e293b] rounded-xl shadow-sm border border-gray-200 dark:border-slate-700/60 overflow-hidden">
+      <section class="xl:col-span-3 bg-white dark:bg-[#1e293b] rounded-xl shadow-sm border border-gray-200 dark:border-slate-700/60 overflow-x-auto">
         <div v-if="loading" class="flex justify-center py-20">
           <div class="w-8 h-8 rounded-full border-4 border-gray-200 dark:border-slate-700 border-t-brand-500 animate-spin"></div>
         </div>
 
-        <table v-else class="min-w-full divide-y divide-gray-200 dark:divide-slate-700/50">
+        <p v-else class="px-4 pt-3 text-xs text-gray-500 dark:text-slate-400 md:hidden">Прокрутите таблицу вправо, чтобы открыть действия с тарифом.</p>
+
+        <table v-if="!loading" class="min-w-[650px] divide-y divide-gray-200 dark:divide-slate-700/50 xl:min-w-full">
           <thead class="bg-gray-50 dark:bg-slate-800/80">
             <tr>
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase">Тариф</th>
@@ -363,10 +470,10 @@ onMounted(() => { void loadTariffs(); void loadComparison(); });
                   <div class="text-xs text-gray-500 dark:text-slate-400 mt-1">{{ rule.line_template }}</div>
                 </div>
                 <div class="flex gap-1">
-                  <button class="p-1.5 rounded border border-gray-300 hover:bg-gray-100" @click="openEditRule(selectedTariff.id, rule)">
+                  <button class="p-1.5 rounded border border-gray-300 hover:bg-gray-100" title="Редактировать правило" @click="openEditRule(selectedTariff.id, rule)">
                     <span class="material-icons-round text-[15px]">edit</span>
                   </button>
-                  <button class="p-1.5 rounded border border-red-300 text-red-600 hover:bg-red-50" @click="confirmDeleteRule(selectedTariff.id, rule)">
+                  <button class="p-1.5 rounded border border-red-300 text-red-600 hover:bg-red-50" title="Удалить правило" @click="confirmDeleteRule(selectedTariff.id, rule)">
                     <span class="material-icons-round text-[15px]">delete</span>
                   </button>
                 </div>
@@ -393,23 +500,36 @@ onMounted(() => { void loadTariffs(); void loadComparison(); });
 
     <section v-if="kindFilter === 'installation'" class="mt-6 rounded-xl border border-gray-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
       <h2 class="text-base font-semibold">Сверка со старыми публичными расценками</h2>
-      <p class="mt-1 text-xs text-gray-500">Кандидаты найдены только по категории внутреннего блока. Даже одинаковая цена не доказывает точное соответствие. Сверка ничего не переносит в книгу.</p>
-      <div v-if="comparisonLoading" class="mt-3 text-sm">Загружаем сравнение…</div>
+      <p class="mt-1 text-xs text-gray-500">Кандидаты черновика найдены только по категории внутреннего блока. Даже одинаковые цены не доказывают соответствие по мощности и трубам. Сверка ничего не переносит в книгу.</p>
+      <div v-if="comparisonLoading || draftRefreshLoading" class="mt-3 text-sm">Загружаем сравнение…</div>
       <div v-else-if="comparisonError" role="alert" class="mt-3 text-sm text-red-600">{{ comparisonError }}</div>
       <div v-else-if="!comparison?.items.length" class="mt-3 text-sm text-gray-500">На этой странице старых расценок нет.</div>
-      <div v-else class="mt-3 overflow-x-auto">
-        <table class="w-full text-left text-sm"><thead><tr><th class="py-2">Старая расценка</th><th>Кандидаты книги</th><th>Проверка</th></tr></thead>
-          <tbody><tr v-for="row in comparison.items" :key="row.legacy_rate_id" class="border-t border-gray-200 dark:border-slate-700">
-            <td class="py-2">{{ row.legacy_category }} · {{ row.legacy_power_range }} · {{ row.legacy_base_price }} BYN</td>
-            <td>{{ row.candidates?.map(candidate => candidate.tariff_code).join(', ') || '—' }}</td>
-            <td>{{ comparisonStatus(row.status) }}</td>
-          </tr></tbody>
-        </table>
+      <div v-else class="mt-3 space-y-3">
+        <div v-for="row in comparison.items" :key="row.legacy_rate_id" class="grid gap-3 rounded-lg border border-gray-200 p-3 text-sm dark:border-slate-700 md:grid-cols-[14rem_minmax(0,1fr)]">
+          <div>
+            <div class="text-xs font-semibold uppercase text-gray-500 dark:text-slate-400">Старая расценка</div>
+            <div class="mt-1 font-medium">{{ row.legacy_category }} · {{ row.legacy_power_range }}</div>
+            <div class="mt-1">База {{ money(row.legacy_base_price) }} BYN</div>
+            <div>Доп. трасса {{ money(row.legacy_route_extra_price) }} BYN/м</div>
+          </div>
+          <div>
+            <div class="text-xs font-semibold uppercase text-gray-500 dark:text-slate-400">Кандидаты черновика — только по категории</div>
+            <div v-if="!row.candidates?.length" class="mt-1 font-medium text-amber-700 dark:text-amber-300">Нет кандидатов — требуется сопоставление</div>
+            <div v-else class="mt-2 space-y-2">
+              <div v-for="candidate in row.candidates" :key="candidate.tariff_code" class="rounded-lg bg-gray-50 p-2 dark:bg-slate-900/50">
+                <div class="font-medium" :title="candidate.tariff_code">{{ candidateName(candidate) }} <span class="ml-1 text-xs font-normal text-blue-700 dark:text-blue-300">Черновик</span></div>
+                <div class="mt-1">{{ candidatePrice(candidate) }}</div>
+                <div class="text-xs text-gray-600 dark:text-slate-300">{{ matcherSummary(candidate) }}</div>
+                <div class="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300">{{ candidatePriceReview(row, candidate) }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="mt-3 flex items-center gap-3 text-sm">
-        <button type="button" :disabled="comparisonOffset === 0 || comparisonLoading" @click="comparisonOffset -= 100; loadComparison()">Назад</button>
-        <span>Записи {{ comparisonOffset + 1 }}–{{ comparisonOffset + (comparison?.items.length ?? 0) }}</span>
-        <button type="button" :disabled="comparisonLoading || (comparison?.items.length ?? 0) < 100" @click="comparisonOffset += 100; loadComparison()">Далее</button>
+        <button type="button" class="rounded-lg border border-gray-200 px-2 py-1 disabled:opacity-40 dark:border-slate-600" :disabled="comparisonOffset === 0 || !comparisonReady" @click="changeComparisonPage(-100)">Назад</button>
+        <span>Записи {{ comparison?.items.length ? comparisonOffset + 1 : 0 }}–{{ comparisonOffset + (comparison?.items.length ?? 0) }}</span>
+        <button type="button" class="rounded-lg border border-gray-200 px-2 py-1 disabled:opacity-40 dark:border-slate-600" :disabled="!comparisonReady || (comparison?.items.length ?? 0) < 100" @click="changeComparisonPage(100)">Далее</button>
       </div>
     </section>
 
