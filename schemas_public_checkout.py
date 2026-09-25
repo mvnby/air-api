@@ -5,6 +5,8 @@ without adding more unrelated responsibilities to ``schemas.py``.
 """
 
 from datetime import datetime
+from decimal import Decimal
+import re
 from typing import Annotated, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -26,6 +28,12 @@ PublicInstallationOptionSlug = Annotated[
         pattern=r"^[a-z0-9]+(?:[-_][a-z0-9]+)*$",
     ),
 ]
+
+
+def _accepted_money_text(value: object) -> str:
+    if not isinstance(value, str) or re.fullmatch(r"(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,2})?", value) is None:
+        raise ValueError("accepted money must be a non-negative decimal string with cents")
+    return value
 
 
 class InstallationMetaPayload(BaseModel):
@@ -119,12 +127,63 @@ class CustomerPayload(BaseModel):
         return validate_optional_bic(value)
 
 
+class AcceptedProductLine(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: int = Field(gt=0, strict=True)
+    quantity: int = Field(ge=1, le=20, strict=True)
+    unit_price: Decimal = Field(ge=0, decimal_places=2)
+    currency: Literal["BYN"]
+
+    @field_validator("unit_price", mode="before")
+    @classmethod
+    def money_text(cls, value: object) -> str:
+        return _accepted_money_text(value)
+
+
+class PublicInstallationAcceptance(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    preview_ref: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$")
+    expected_product_lines: List[AcceptedProductLine] = Field(min_length=1, max_length=20)
+    expected_order_total: Decimal = Field(ge=0, decimal_places=2)
+
+    @field_validator("expected_order_total", mode="before")
+    @classmethod
+    def money_text(cls, value: object) -> str:
+        return _accepted_money_text(value)
+
+
 class OrderPayload(BaseModel):
     model_config = ConfigDict(extra="forbid", validate_default=True)
 
     customer: CustomerPayload
     items: List[CartItemPayload] = Field(min_length=1, max_length=20)
     comment: Optional[str] = Field(default=None, max_length=2000)
+    installation_acceptance: Optional[PublicInstallationAcceptance] = None
+
+    @model_validator(mode="after")
+    def validate_installation_acceptance(self):
+        if self.installation_acceptance is None:
+            return self
+        ids = [item.product_id for item in self.items]
+        expected = self.installation_acceptance.expected_product_lines
+        expected_ids = [line.product_id for line in expected]
+        if None in ids or len(ids) != len(set(ids)) or len(expected_ids) != len(set(expected_ids)):
+            raise ValueError("installation acceptance requires distinct product-backed cart lines")
+        if set(ids) != set(expected_ids) or any(
+            item.quantity != next(line.quantity for line in expected if line.product_id == item.product_id)
+            for item in self.items
+        ):
+            raise ValueError("accepted product lines must match the complete cart")
+        if any(
+            item.with_installation or item.installation_rate_id is not None
+            or item.installation_price != 0 or item.installation_meta is not None
+            or item.installation_options
+            for item in self.items
+        ):
+            raise ValueError("legacy installation fields cannot accompany installation acceptance")
+        return self
 
 
 class OrderResponse(BaseModel):
@@ -141,6 +200,19 @@ class PublicOrderPricingErrorDetail(BaseModel):
 
 class PublicOrderPricingErrorResponse(BaseModel):
     detail: PublicOrderPricingErrorDetail
+
+
+class PublicOrderPriceChangedDetail(BaseModel):
+    code: Literal["price_changed"] = "price_changed"
+    reason: str
+    new_consent_required: bool = True
+    current_product_lines: List[AcceptedProductLine]
+    current_installation_preview: dict
+    current_order_total: Decimal | None = None
+
+
+class PublicOrderPriceChangedResponse(BaseModel):
+    detail: PublicOrderPriceChangedDetail
 
 
 class PublicWriteIdempotencyErrorResponse(BaseModel):

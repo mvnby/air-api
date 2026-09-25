@@ -41,4 +41,5 @@ def test_public_write_openapi_declares_gateway_and_command_errors_exactly():
     } == {
         "#/components/schemas/PublicOrderPricingErrorResponse",
         "#/components/schemas/PublicWriteIdempotencyErrorResponse",
+        "#/components/schemas/PublicOrderPriceChangedResponse",
     }

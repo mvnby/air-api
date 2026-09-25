@@ -52,3 +52,29 @@ class InstallationEstimateRevision(SQLModel, table=True):
     total: Decimal = Field(sa_column=Column(Numeric(14, 2), nullable=False))
     snapshot: dict[str, Any] = Field(sa_column=Column(JSON, nullable=False))
     created_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class PublicInstallationPreviewClaim(SQLModel, table=True):
+    """Permanent one-checkout claim, independent of expiring retry receipts."""
+
+    __tablename__ = "public_installation_preview_claim"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "storefront_id", "preview_token_hash",
+                         name="uq_public_installation_claim_scope_preview"),
+        UniqueConstraint("tenant_id", "storefront_id", "checkout_key_hash",
+                         name="uq_public_installation_claim_scope_key"),
+        ForeignKeyConstraint(
+            ["storefront_id", "tenant_id"], ["storefront.id", "storefront.tenant_id"],
+            name="fk_public_installation_claim_storefront_tenant",
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    tenant_id: int = Field(foreign_key="tenant.id", index=True)
+    storefront_id: int = Field(index=True)
+    preview_token_hash: str
+    checkout_key_hash: str
+    request_hash: str
+    order_id: int | None = Field(default=None, foreign_key="order.id")
+    response_body: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
+    created_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False))

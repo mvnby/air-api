@@ -178,6 +178,7 @@ async def test_public_checkout_maps_authoritative_pricing_error_to_documented_co
     } == {
         "#/components/schemas/PublicOrderPricingErrorResponse",
         "#/components/schemas/PublicWriteIdempotencyErrorResponse",
+        "#/components/schemas/PublicOrderPriceChangedResponse",
     }
 
 
@@ -217,5 +218,57 @@ async def test_public_checkout_rejects_oversized_customer_and_comment(checkout_a
             },
         )
 
+    assert response.status_code == 422
+    create_order.assert_not_awaited()
+
+
+def _accepted_payload() -> dict:
+    payload = _payload_with_item({"product_id": 7, "quantity": 1})
+    payload["installation_acceptance"] = {
+        "preview_ref": "a" * 64,
+        "expected_product_lines": [{"product_id": 7, "quantity": 1,
+                                    "unit_price": "2000.00", "currency": "BYN"}],
+        "expected_order_total": "2500.00",
+    }
+    return payload
+
+
+@pytest.mark.asyncio
+async def test_public_installation_acceptance_requires_explicit_submission_key(checkout_app):
+    app, create_order = checkout_app
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/api/v1/orders", json=_accepted_payload())
+    assert response.status_code == 400
+    create_order.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_public_installation_acceptance_rejects_duplicate_submission_headers(checkout_app):
+    app, create_order = checkout_app
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/api/v1/orders", json=_accepted_payload(),
+                                     headers=[("Idempotency-Key", "first-key"),
+                                              ("Idempotency-Key", "second-key")])
+    assert response.status_code == 400
+    create_order.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", [
+    lambda body: body["items"][0].update(with_installation=True),
+    lambda body: body["items"].append({"product_id": 7, "quantity": 1}),
+    lambda body: body["installation_acceptance"]["expected_product_lines"].append(
+        {"product_id": 8, "quantity": 1, "unit_price": "10.00", "currency": "BYN"}),
+    lambda body: body["installation_acceptance"]["expected_product_lines"][0].update(quantity=2),
+    lambda body: body["installation_acceptance"]["expected_product_lines"][0].update(unit_price=2000.00),
+    lambda body: body["installation_acceptance"].update(expected_order_total=2500.00),
+])
+async def test_public_installation_acceptance_rejects_mixed_or_ambiguous_cart(checkout_app, change):
+    app, create_order = checkout_app
+    payload = _accepted_payload()
+    change(payload)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/api/v1/orders", json=payload,
+                                     headers={"Idempotency-Key": "accepted-cart-test-key"})
     assert response.status_code == 422
     create_order.assert_not_awaited()
