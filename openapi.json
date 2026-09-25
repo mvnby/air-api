@@ -4225,6 +4225,90 @@
         }
       }
     },
+    "/api/v1/service-pricing/installation/resolve": {
+      "post": {
+        "tags": [
+          "api",
+          "api/service-pricing"
+        ],
+        "summary": "Resolve Public Installation Tariff",
+        "operationId": "resolve_public_installation_tariff",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstallationResolvePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallationResolveResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/service-pricing/installation/preview": {
+      "post": {
+        "tags": [
+          "api",
+          "api/service-pricing"
+        ],
+        "summary": "Preview Public Installation Estimate",
+        "operationId": "preview_public_installation_estimate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstallationPreviewPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallationPreviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/service-pricing/tariffs": {
       "get": {
         "tags": [
@@ -21601,6 +21685,93 @@
         }
       }
     },
+    "/api/manager/tariffs/price-book/publish": {
+      "post": {
+        "tags": [
+          "manager/tariffs"
+        ],
+        "summary": "Publish Manager Installation Price Book",
+        "operationId": "publish_manager_installation_price_book",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallationPublishResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/tariffs/price-book/legacy-comparison": {
+      "get": {
+        "tags": [
+          "manager/tariffs"
+        ],
+        "summary": "List Manager Installation Legacy Comparison",
+        "operationId": "list_manager_installation_legacy_comparison",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallationLegacyComparisonResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/tariffs": {
       "get": {
         "tags": [
@@ -37657,6 +37828,118 @@
         ],
         "title": "InferenceTest"
       },
+      "InstallationAppliedDiscount": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "installation_key": {
+            "type": "string",
+            "title": "Installation Key"
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Amount"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "installation_key",
+          "amount"
+        ],
+        "title": "InstallationAppliedDiscount"
+      },
+      "InstallationComponent": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "installation_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installation Key"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "quantity": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Quantity"
+          },
+          "unit_price": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Unit Price"
+          },
+          "gross": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Gross"
+          },
+          "discount": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Discount",
+            "default": "0.00"
+          },
+          "net": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Net"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "actual": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual"
+          },
+          "included": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Included"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "unit",
+          "quantity",
+          "unit_price",
+          "gross",
+          "net",
+          "description"
+        ],
+        "title": "InstallationComponent"
+      },
       "InstallationEstimateLeadResponse": {
         "properties": {
           "lead_id": {
@@ -37701,6 +37984,481 @@
           "attachment_count"
         ],
         "title": "InstallationEstimateLeadResponse"
+      },
+      "InstallationExtraInput": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Code"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1000.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$"
+              }
+            ],
+            "title": "Quantity",
+            "default": "1"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "title": "InstallationExtraInput"
+      },
+      "InstallationInput": {
+        "properties": {
+          "product_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          },
+          "typed_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TypedInstallationProfile-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "key": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Key"
+          },
+          "route_length_m": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$"
+              }
+            ],
+            "title": "Route Length M",
+            "default": "3"
+          },
+          "holes_by_type": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+                }
+              ]
+            },
+            "type": "object",
+            "title": "Holes By Type"
+          },
+          "extras": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationExtraInput"
+            },
+            "type": "array",
+            "title": "Extras"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key"
+        ],
+        "title": "InstallationInput"
+      },
+      "InstallationLegacyCandidate": {
+        "properties": {
+          "tariff_code": {
+            "type": "string",
+            "title": "Tariff Code"
+          },
+          "matcher": {
+            "$ref": "#/components/schemas/InstallationMatcher-Output"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "fixed",
+              "from",
+              "quote"
+            ],
+            "title": "Mode"
+          },
+          "base_price": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Base Price"
+          },
+          "route_extra_price": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route Extra Price"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tariff_code",
+          "matcher",
+          "mode",
+          "base_price"
+        ],
+        "title": "InstallationLegacyCandidate"
+      },
+      "InstallationLegacyComparisonResponse": {
+        "properties": {
+          "price_book_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Book Revision"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationLegacyComparisonRow"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "InstallationLegacyComparisonResponse"
+      },
+      "InstallationLegacyComparisonRow": {
+        "properties": {
+          "legacy_rate_id": {
+            "type": "integer",
+            "title": "Legacy Rate Id"
+          },
+          "legacy_category": {
+            "type": "string",
+            "title": "Legacy Category"
+          },
+          "legacy_power_range": {
+            "type": "string",
+            "title": "Legacy Power Range"
+          },
+          "legacy_base_price": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Legacy Base Price"
+          },
+          "legacy_route_extra_price": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Legacy Route Extra Price"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationLegacyCandidate"
+            },
+            "type": "array",
+            "title": "Candidates"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "price_equal_review_required",
+              "price_diff_review_required",
+              "unmapped_review_required"
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "legacy_rate_id",
+          "legacy_category",
+          "legacy_power_range",
+          "legacy_base_price",
+          "legacy_route_extra_price",
+          "status"
+        ],
+        "title": "InstallationLegacyComparisonRow"
+      },
+      "InstallationMatcher-Input": {
+        "properties": {
+          "product_kind": {
+            "type": "string",
+            "const": "complete_split_system",
+            "title": "Product Kind",
+            "default": "complete_split_system"
+          },
+          "indoor_type": {
+            "type": "string",
+            "enum": [
+              "wall",
+              "cassette",
+              "duct",
+              "floor_ceiling",
+              "column",
+              "console"
+            ],
+            "title": "Indoor Type"
+          },
+          "capacity_min_kw": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,3}0*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capacity Min Kw"
+          },
+          "capacity_max_kw": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1000.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,3}0*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capacity Max Kw"
+          },
+          "pipe_liquid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pipe Liquid"
+          },
+          "pipe_gas": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pipe Gas"
+          },
+          "weight_source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "weight_indoor",
+                  "weight_outdoor",
+                  "weight_indoor_package",
+                  "weight_outdoor_package"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Source"
+          },
+          "weight_min_kg": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 10000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Min Kg"
+          },
+          "weight_max_kg": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 10000.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Max Kg"
+          }
+        },
+        "type": "object",
+        "required": [
+          "indoor_type"
+        ],
+        "title": "InstallationMatcher"
+      },
+      "InstallationMatcher-Output": {
+        "properties": {
+          "product_kind": {
+            "type": "string",
+            "const": "complete_split_system",
+            "title": "Product Kind",
+            "default": "complete_split_system"
+          },
+          "indoor_type": {
+            "type": "string",
+            "enum": [
+              "wall",
+              "cassette",
+              "duct",
+              "floor_ceiling",
+              "column",
+              "console"
+            ],
+            "title": "Indoor Type"
+          },
+          "capacity_min_kw": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,3}0*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capacity Min Kw"
+          },
+          "capacity_max_kw": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,3}0*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capacity Max Kw"
+          },
+          "pipe_liquid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pipe Liquid"
+          },
+          "pipe_gas": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pipe Gas"
+          },
+          "weight_source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "weight_indoor",
+                  "weight_outdoor",
+                  "weight_indoor_package",
+                  "weight_outdoor_package"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Source"
+          },
+          "weight_min_kg": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Min Kg"
+          },
+          "weight_max_kg": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Max Kg"
+          }
+        },
+        "type": "object",
+        "required": [
+          "indoor_type"
+        ],
+        "title": "InstallationMatcher"
       },
       "InstallationMetaPayload": {
         "properties": {
@@ -37751,6 +38509,395 @@
         "additionalProperties": false,
         "type": "object",
         "title": "InstallationMetaPayload"
+      },
+      "InstallationPreviewPayload": {
+        "properties": {
+          "installations": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationInput"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Installations"
+          },
+          "site_extras": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationExtraInput"
+            },
+            "type": "array",
+            "title": "Site Extras"
+          },
+          "expected_revision": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Revision"
+          }
+        },
+        "type": "object",
+        "required": [
+          "installations"
+        ],
+        "title": "InstallationPreviewPayload"
+      },
+      "InstallationPreviewResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "fixed",
+              "from",
+              "quote",
+              "unavailable"
+            ],
+            "title": "Status"
+          },
+          "reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Code"
+          },
+          "scope_ref": {
+            "type": "string",
+            "title": "Scope Ref"
+          },
+          "currency": {
+            "type": "string",
+            "const": "BYN",
+            "title": "Currency",
+            "default": "BYN"
+          },
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationComponent"
+            },
+            "type": "array",
+            "title": "Components"
+          },
+          "applied_discounts": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationAppliedDiscount"
+            },
+            "type": "array",
+            "title": "Applied Discounts"
+          },
+          "subtotal": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subtotal"
+          },
+          "discount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discount"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
+          },
+          "price_book_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Book Id"
+          },
+          "price_book_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Book Revision"
+          },
+          "preview_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Ref"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "explanation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Explanation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "scope_ref"
+        ],
+        "title": "InstallationPreviewResponse"
+      },
+      "InstallationPublishResponse": {
+        "properties": {
+          "price_book_id": {
+            "type": "integer",
+            "title": "Price Book Id"
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision"
+          },
+          "fingerprint": {
+            "type": "string",
+            "title": "Fingerprint"
+          },
+          "tariff_count": {
+            "type": "integer",
+            "title": "Tariff Count"
+          },
+          "published_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Published At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "price_book_id",
+          "revision",
+          "fingerprint",
+          "tariff_count",
+          "published_at"
+        ],
+        "title": "InstallationPublishResponse"
+      },
+      "InstallationResolvePayload": {
+        "properties": {
+          "product_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          },
+          "typed_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TypedInstallationProfile-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "InstallationResolvePayload"
+      },
+      "InstallationResolveResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "fixed",
+              "from",
+              "quote",
+              "unavailable"
+            ],
+            "title": "Status"
+          },
+          "reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Code"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TypedInstallationProfile-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "profile_sources": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Profile Sources"
+          },
+          "matched_by": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Matched By"
+          },
+          "tariff_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tariff Code"
+          },
+          "scope_ref": {
+            "type": "string",
+            "title": "Scope Ref"
+          },
+          "price_book_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Book Id"
+          },
+          "price_book_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Book Revision"
+          },
+          "included": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Included"
+          },
+          "available_extras": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Available Extras"
+          },
+          "explanation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Explanation"
+          },
+          "price_mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "fixed",
+                  "from",
+                  "quote"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Mode"
+          },
+          "base_price": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Price"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "scope_ref"
+        ],
+        "title": "InstallationResolveResponse"
       },
       "LeadCreatePayload": {
         "properties": {
@@ -56447,6 +57594,44 @@
             "title": "Base Price",
             "default": 0
           },
+          "installation_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installation Code"
+          },
+          "installation_match": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InstallationMatcher-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "installation_price_mode": {
+            "type": "string",
+            "enum": [
+              "fixed",
+              "from",
+              "quote"
+            ],
+            "title": "Installation Price Mode",
+            "default": "fixed"
+          },
+          "included_holes_by_type": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Included Holes By Type"
+          },
           "included_route_meters": {
             "type": "number",
             "title": "Included Route Meters",
@@ -56547,6 +57732,44 @@
             "type": "integer",
             "title": "Base Price"
           },
+          "installation_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installation Code"
+          },
+          "installation_match": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InstallationMatcher-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "installation_price_mode": {
+            "type": "string",
+            "enum": [
+              "fixed",
+              "from",
+              "quote"
+            ],
+            "title": "Installation Price Mode",
+            "default": "fixed"
+          },
+          "included_holes_by_type": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Included Holes By Type"
+          },
           "included_route_meters": {
             "type": "number",
             "title": "Included Route Meters"
@@ -56616,6 +57839,17 @@
             "type": "number",
             "title": "Unit Price",
             "default": 0.0
+          },
+          "component_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Component Code"
           },
           "is_optional": {
             "type": "boolean",
@@ -56700,6 +57934,17 @@
           "unit_price": {
             "type": "number",
             "title": "Unit Price"
+          },
+          "component_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Component Code"
           },
           "is_optional": {
             "type": "boolean",
@@ -56810,6 +58055,17 @@
               }
             ],
             "title": "Unit Price"
+          },
+          "component_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Component Code"
           },
           "is_optional": {
             "anyOf": [
@@ -56947,6 +58203,57 @@
               }
             ],
             "title": "Base Price"
+          },
+          "installation_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installation Code"
+          },
+          "installation_match": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InstallationMatcher-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "installation_price_mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "fixed",
+                  "from",
+                  "quote"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installation Price Mode"
+          },
+          "included_holes_by_type": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Included Holes By Type"
           },
           "included_route_meters": {
             "anyOf": [
@@ -70233,6 +71540,269 @@
         "type": "object",
         "title": "TransportTermsPayload",
         "description": "Optional transport facts for printable TN-2/TTN-1 forms."
+      },
+      "TypedInstallationProfile-Input": {
+        "properties": {
+          "product_kind": {
+            "type": "string",
+            "title": "Product Kind"
+          },
+          "indoor_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "wall",
+                  "cassette",
+                  "duct",
+                  "floor_ceiling",
+                  "column",
+                  "console"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indoor Type"
+          },
+          "capacity_cooling_kw": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1000.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,3}0*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capacity Cooling Kw"
+          },
+          "pipe_liquid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pipe Liquid"
+          },
+          "pipe_gas": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pipe Gas"
+          },
+          "weight_indoor": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 10000.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Indoor"
+          },
+          "weight_outdoor": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 10000.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Outdoor"
+          },
+          "weight_indoor_package": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 10000.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Indoor Package"
+          },
+          "weight_outdoor_package": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 10000.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Outdoor Package"
+          },
+          "confirmed": {
+            "type": "boolean",
+            "title": "Confirmed",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_kind"
+        ],
+        "title": "TypedInstallationProfile"
+      },
+      "TypedInstallationProfile-Output": {
+        "properties": {
+          "product_kind": {
+            "type": "string",
+            "title": "Product Kind"
+          },
+          "indoor_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "wall",
+                  "cassette",
+                  "duct",
+                  "floor_ceiling",
+                  "column",
+                  "console"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indoor Type"
+          },
+          "capacity_cooling_kw": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,3}0*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capacity Cooling Kw"
+          },
+          "pipe_liquid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pipe Liquid"
+          },
+          "pipe_gas": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pipe Gas"
+          },
+          "weight_indoor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Indoor"
+          },
+          "weight_outdoor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Outdoor"
+          },
+          "weight_indoor_package": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Indoor Package"
+          },
+          "weight_outdoor_package": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Outdoor Package"
+          },
+          "confirmed": {
+            "type": "boolean",
+            "title": "Confirmed",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_kind"
+        ],
+        "title": "TypedInstallationProfile"
       },
       "ValidationError": {
         "properties": {

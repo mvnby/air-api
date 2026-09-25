@@ -10,6 +10,10 @@ import type { CatalogResponse } from '../models/CatalogResponse';
 import type { CatalogRevisionResponse } from '../models/CatalogRevisionResponse';
 import type { FiltersConfigResponse } from '../models/FiltersConfigResponse';
 import type { InstallationEstimateLeadResponse } from '../models/InstallationEstimateLeadResponse';
+import type { InstallationPreviewPayload } from '../models/InstallationPreviewPayload';
+import type { InstallationPreviewResponse } from '../models/InstallationPreviewResponse';
+import type { InstallationResolvePayload } from '../models/InstallationResolvePayload';
+import type { InstallationResolveResponse } from '../models/InstallationResolveResponse';
 import type { ManagerInstallEstimateResponse } from '../models/ManagerInstallEstimateResponse';
 import type { ManagerTariffServiceKind } from '../models/ManagerTariffServiceKind';
 import type { OrderPayload } from '../models/OrderPayload';
@@ -817,6 +821,44 @@ export class ApiService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/storefront-settings',
+        });
+    }
+    /**
+     * Resolve Public Installation Tariff
+     * @param requestBody
+     * @returns InstallationResolveResponse Successful Response
+     * @throws ApiError
+     */
+    public static resolvePublicInstallationTariff(
+        requestBody: InstallationResolvePayload,
+    ): CancelablePromise<InstallationResolveResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/service-pricing/installation/resolve',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Preview Public Installation Estimate
+     * @param requestBody
+     * @returns InstallationPreviewResponse Successful Response
+     * @throws ApiError
+     */
+    public static previewPublicInstallationEstimate(
+        requestBody: InstallationPreviewPayload,
+    ): CancelablePromise<InstallationPreviewResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/service-pricing/installation/preview',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
         });
     }
     /**

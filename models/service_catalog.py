@@ -1,10 +1,10 @@
 """Tenant-owned service dictionaries, tariffs and saved estimate snapshots."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import Column, Index, JSON, Numeric, Text, UniqueConstraint, text
+from sqlalchemy import Column, DateTime, Index, JSON, Numeric, Text, UniqueConstraint, text
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -99,6 +99,12 @@ class ServiceTariff(SQLModel, table=True):
     category: str = Field(default="", index=True)
     power_range: str = Field(default="", index=True)
     base_price: int = Field(default=0)
+    # Mutable Manager draft; only an explicit price-book publication exposes it
+    # through the installation resolver. Legacy tariffs have no matcher.
+    installation_match: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    installation_code: Optional[str] = Field(default=None, index=True)
+    installation_price_mode: str = Field(default="fixed")
+    included_holes_by_type: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
     included_route_meters: float = Field(default=3.0)
     is_active: bool = Field(default=True, index=True)
     sort_order: int = Field(default=0, index=True)
@@ -158,6 +164,7 @@ class ServiceTariffRule(SQLModel, table=True):
     line_template: str = Field(default="{name}")
     unit: str = Field(default="шт")
     unit_price: float = Field(default=0.0)
+    component_code: Optional[str] = Field(default=None, index=True)
     is_optional: bool = Field(default=False, index=True)
     is_favorite: bool = Field(default=False, index=True)
     is_active: bool = Field(default=True, index=True)
@@ -175,6 +182,37 @@ class ServiceTariffRule(SQLModel, table=True):
     )
     tariff: "ServiceTariff" = Relationship(back_populates="rules")
     service: Optional["Service"] = Relationship()
+
+
+class InstallationPriceBook(SQLModel, table=True):
+    """Immutable published copy of one tenant's installation draft."""
+
+    __tablename__ = "installation_price_book"
+    __table_args__ = (UniqueConstraint("tenant_id", "revision", name="uq_installation_book_tenant_revision"),)
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: int = Field(foreign_key="tenant.id", index=True)
+    revision: int = Field(index=True)
+    fingerprint: str = Field(index=True)
+    entries: List[Dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    published_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), nullable=False))
+    published_by: Optional[str] = None
+
+
+class InstallationPreviewSnapshot(SQLModel, table=True):
+    """Private, scope-bound preview; the bearer token is stored only as a hash."""
+
+    __tablename__ = "installation_preview_snapshot"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    token_hash: str = Field(unique=True, index=True)
+    tenant_id: int = Field(foreign_key="tenant.id", index=True)
+    storefront_id: int = Field(foreign_key="storefront.id", index=True)
+    price_book_id: int = Field(foreign_key="installation_price_book.id", index=True)
+    input_hash: str
+    snapshot: Dict[str, Any] = Field(sa_column=Column(JSON, nullable=False))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), nullable=False))
+    expires_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, index=True))
 
 
 class ServiceEstimate(SQLModel, table=True):

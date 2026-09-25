@@ -246,6 +246,10 @@ class TariffsService:
             category=(payload.category or "").strip(),
             power_range=(payload.power_range or "").strip(),
             base_price=int(payload.base_price or 0),
+            installation_code=payload.installation_code,
+            installation_match=(payload.installation_match.model_dump(mode="json") if payload.installation_match else None),
+            installation_price_mode=payload.installation_price_mode,
+            included_holes_by_type=payload.included_holes_by_type,
             included_route_meters=included_route_meters,
             is_active=bool(payload.is_active),
             sort_order=int(payload.sort_order or 0),
@@ -273,6 +277,9 @@ class TariffsService:
             next_service_kind.value if hasattr(next_service_kind, "value") else str(next_service_kind or "installation")
         )
         for key, value in update_data.items():
+            if key == "installation_match" and value is not None:
+                setattr(tariff, key, payload.installation_match.model_dump(mode="json"))
+                continue
             if key == "service_kind" and value is not None:
                 setattr(tariff, key, value.value if hasattr(value, "value") else str(value))
                 continue
@@ -404,6 +411,10 @@ class TariffsService:
             duplicate_stmt = duplicate_stmt.where(ServiceTariffRule.service_id.is_(None))
         else:
             duplicate_stmt = duplicate_stmt.where(ServiceTariffRule.service_id == service_id)
+        if payload.component_code is None:
+            duplicate_stmt = duplicate_stmt.where(ServiceTariffRule.component_code.is_(None))
+        else:
+            duplicate_stmt = duplicate_stmt.where(ServiceTariffRule.component_code == payload.component_code)
 
         existing = (await session.execute(duplicate_stmt)).scalars().first()
         if existing:
@@ -423,6 +434,7 @@ class TariffsService:
             line_template=line_template,
             unit=unit,
             unit_price=unit_price,
+            component_code=payload.component_code,
             is_optional=bool(payload.is_optional),
             is_favorite=bool(payload.is_favorite),
             is_active=bool(payload.is_active),

@@ -260,7 +260,7 @@ class ServiceEstimateService:
 
         rule_inputs = ServiceEstimateService._rule_inputs_map(payload)
         sorted_rules = sorted(
-            [rule for rule in list(tariff.rules or []) if rule.is_active],
+            [rule for rule in list(tariff.rules or []) if rule.is_active and rule.component_code != "discount.equipment_bundle"],
             key=lambda item: (item.sort_order, item.id or 0),
         )
         for rule in sorted_rules:
