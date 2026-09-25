@@ -1,7 +1,6 @@
 """Partner initialization and grid reset must not form an ABBA lock cycle."""
 
 import asyncio
-from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import text
@@ -10,10 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import select
 
-from models import InstallationPriceBook, ServiceTariff, Storefront, Tenant
+from models import InstallationPriceBook, ServiceTariff, ServiceTariffRule, Storefront, Tenant
+from models.tenancy import TenantScope
 from services.installation_grid_rollout import (
     InstallationGridPlanToken, InstallationGridRolloutService,
 )
+from services.installation_grid_seed import canonical_installation_grid
+from services.installation_price_book_service import InstallationPriceBookService
 from services.partner_site_setup_service import (
     PartnerSiteSetupManifest, PartnerSiteSetupPlanToken, PartnerSiteSetupService,
 )
@@ -22,7 +24,7 @@ from services.storefront_onboarding_state import StorefrontOnboardingBlockedErro
 
 @pytest.mark.asyncio
 async def test_partner_initialization_then_grid_apply_serializes_without_deadlock(
-    db_engine, monkeypatch,
+    db_engine,
 ):
     assert db_engine.dialect.name == "postgresql"
     factory = sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
@@ -33,45 +35,20 @@ async def test_partner_initialization_then_grid_apply_serializes_without_deadloc
         await seed.flush()
         storefront = Storefront(tenant_id=partner.id, slug="main",
                                 display_name="Partner", status="active", is_default=True)
-        seed.add_all([
-            storefront,
-            ServiceTariff(service_kind="installation", selector_label="Old source",
-                          installation_code="installation.old.gridlock",
-                          installation_match={"indoor_type": "wall"},
-                          category="Wall", power_range="07,09,12", base_price=500),
-            InstallationPriceBook(tenant_id=system.id, revision=1,
-                                  fingerprint="approved-source", entries=[]),
-        ])
+        seed.add(storefront)
+        source_spec = canonical_installation_grid()[0]
+        source = ServiceTariff(**source_spec.fields())
+        seed.add(source)
+        await seed.flush()
+        seed.add_all(ServiceTariffRule(
+            tariff_id=source.id, sort_order=index * 10, **rule.fields(),
+        ) for index, rule in enumerate(source_spec.rules))
+        await seed.flush()
+        await InstallationPriceBookService.publish(
+            seed, TenantScope(tenant_id=system.id, storefront_id=1, is_system=True),
+            actor="test:grid-lock-source", commit=False,
+        )
         await seed.commit()
-
-    async def source_fingerprint(_session, _scope):
-        return "approved-source"
-
-    async def fake_publish(session, scope, *, actor, commit):
-        assert commit is False
-        # Match the publication mutex: both partner initialization and the
-        # rollout must acquire Tenant before touching the price-book row.
-        await session.execute(select(Tenant).where(
-            Tenant.id == scope.tenant_id,
-        ).with_for_update(key_share=True))
-        book = InstallationPriceBook(tenant_id=scope.tenant_id, revision=1,
-                                     fingerprint=f"own-{scope.tenant_id}", entries=[],
-                                     published_by=actor)
-        session.add(book)
-        await session.flush()
-        return SimpleNamespace(price_book_id=book.id, revision=book.revision,
-                               fingerprint=book.fingerprint)
-
-    monkeypatch.setattr(
-        "services.service_catalog_template_service.InstallationPriceBookService.current_draft_fingerprint",
-        source_fingerprint, raising=False,
-    )
-    monkeypatch.setattr(
-        "services.service_catalog_template_service.InstallationPriceBookService.publish",
-        fake_publish,
-    )
-    monkeypatch.setattr("services.installation_grid_rollout._validate_seed_against_installed_contract",
-                        lambda: None)
     manifest = PartnerSiteSetupManifest(
         tenant_slug="grid-lock-partner", storefront_slug="main",
         site={"display_name": "Partner"}, enabled_services=["installation"],
@@ -147,4 +124,8 @@ async def test_partner_initialization_then_grid_apply_serializes_without_deadloc
             ServiceTariff.tenant_id == partner.id,
         ))).scalars().all())
         assert len(rows) == 1
-        assert rows[0].installation_code == "installation.old.gridlock"
+        assert rows[0].installation_code == source_spec.code
+        partner_books = list((await verify.execute(select(InstallationPriceBook).where(
+            InstallationPriceBook.tenant_id == partner.id,
+        ))).scalars().all())
+        assert len(partner_books) == 1

@@ -1,11 +1,17 @@
 """Approved installation grid stays exact across every tenant copy."""
 
-from services.installation_grid_rollout import _candidate_comparison
+from services.installation_grid_rollout import (
+    _candidate_comparison, _validate_seed_against_installed_contract,
+)
 from services.installation_grid_seed import canonical_installation_grid
 
 
 def _by_code():
     return {row.code: row for row in canonical_installation_grid()}
+
+
+def test_seed_passes_published_book_contract():
+    _validate_seed_against_installed_contract()
 
 
 def test_grid_has_distinct_standard_and_prelaid_prices_without_phantom_route():

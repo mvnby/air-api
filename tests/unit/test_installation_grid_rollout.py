@@ -70,9 +70,7 @@ PROOFS = dict(
 
 
 @pytest.mark.asyncio
-async def test_plan_reports_exact_old_new_prices_and_never_writes(grid_db, monkeypatch):
-    monkeypatch.setattr("services.installation_grid_rollout._validate_seed_against_installed_contract",
-                        lambda: None)
+async def test_plan_reports_exact_old_new_prices_and_never_writes(grid_db):
     report, _ = await InstallationGridRolloutService.plan(grid_db, **PROOFS)
     assert report["blockers"] == []
     assert report["discovered_active_partner_slugs"] == ["test1"]
@@ -95,27 +93,7 @@ async def test_plan_reports_exact_old_new_prices_and_never_writes(grid_db, monke
 
 
 @pytest.mark.asyncio
-async def test_stale_plan_blocks_and_fresh_plan_retains_old_rows_and_book(grid_db, monkeypatch):
-    monkeypatch.setattr("services.installation_grid_rollout._validate_seed_against_installed_contract",
-                        lambda: None)
-
-    async def publish(session, scope, *, actor, commit):
-        assert commit is False
-        previous = (await session.execute(select(InstallationPriceBook).where(
-            InstallationPriceBook.tenant_id == scope.tenant_id,
-        ).order_by(InstallationPriceBook.revision.desc()))).scalars().first()
-        book = InstallationPriceBook(
-            tenant_id=scope.tenant_id,
-            revision=previous.revision + 1 if previous else 1,
-            fingerprint=f"new-{scope.tenant_id}", entries=[], published_by=actor,
-        )
-        session.add(book)
-        await session.flush()
-        return SimpleNamespace(price_book_id=book.id, revision=book.revision,
-                               fingerprint=book.fingerprint)
-
-    monkeypatch.setattr("services.installation_grid_rollout.InstallationPriceBookService.publish",
-                        publish)
+async def test_stale_plan_blocks_and_fresh_plan_retains_old_rows_and_book(grid_db):
     report, _ = await InstallationGridRolloutService.plan(grid_db, **PROOFS)
     stale_token = InstallationGridPlanToken.issue(plan_digest=report["plan_digest"])
     await grid_db.rollback()
@@ -155,9 +133,11 @@ async def test_stale_plan_blocks_and_fresh_plan_retains_old_rows_and_book(grid_d
     books = list((await grid_db.execute(select(InstallationPriceBook).where(
         InstallationPriceBook.tenant_id == partner_tenant_id,
     ).order_by(InstallationPriceBook.revision))).scalars().all())
-    assert [(book.revision, book.fingerprint) for book in books] == [
-        (1, "historical"), (2, f"new-{partner_tenant_id}"),
-    ]
+    assert [book.revision for book in books] == [1, 2]
+    assert books[0].fingerprint == "historical"
+    assert len(books[1].entries) == 20
+    assert any(entry["code"] == "installation.wall.small.standard.v20260925"
+               and entry["base_price"] == "600.00" for entry in books[1].entries)
     audits = list((await grid_db.execute(select(TenantAuditEvent))).scalars().all())
     assert len(audits) == 2
     partner_audit = next(row for row in audits if row.tenant_id == partner_tenant_id)
@@ -167,8 +147,6 @@ async def test_stale_plan_blocks_and_fresh_plan_retains_old_rows_and_book(grid_d
 
 @pytest.mark.asyncio
 async def test_failure_during_partner_publication_rolls_back_every_scope(grid_db, monkeypatch):
-    monkeypatch.setattr("services.installation_grid_rollout._validate_seed_against_installed_contract",
-                        lambda: None)
     report, _ = await InstallationGridRolloutService.plan(grid_db, **PROOFS)
     token = InstallationGridPlanToken.issue(plan_digest=report["plan_digest"])
     await grid_db.rollback()
