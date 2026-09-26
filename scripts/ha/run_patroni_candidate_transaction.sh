@@ -130,7 +130,7 @@ PY
 if [[ -z "${DEPLOY_LOCK_FD}" ]]; then
   lock_status=0
   printf '%s\n' "${VOICE_SECRET}" \
-    | python3 "${DEPLOY_LOCK_HELPER}" exec "${DEPLOY_LOCK_FILE}" bash "$0" "$@" \
+    | python3 "${DEPLOY_LOCK_HELPER}" exec-wait "${DEPLOY_LOCK_FILE}" bash "$0" "$@" \
     || lock_status=$?
   VOICE_SECRET=""
   unset VOICE_SECRET
