@@ -235,3 +235,43 @@ async def test_public_resolve_preview_hide_disabled_direction_and_cache_privatel
     assert disabled.status_code == 200
     assert disabled.json()["status"] == "unavailable"
     assert disabled.json()["price_book_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_demo_public_preview_calculates_without_saving_receipt(async_client, db):
+    from core.tenant_scope import get_public_tenant_scope
+    from main import app
+    from models.storefront_settings import StorefrontSettings
+    from schemas_storefront_settings import default_service_directions
+
+    scope = await _scope(db, "installation-book-demo")
+    await _draft(db, scope, price=500)
+    await BookService.publish(db, scope, actor="manager")
+    services = [item.model_dump() for item in default_service_directions(enabled=False)]
+    next(item for item in services if item["key"] == "installation")["enabled"] = True
+    db.add(StorefrontSettings(tenant_id=scope.tenant_id, storefront_id=scope.storefront_id,
+                              display_name="Installation demo", services=services))
+    await db.commit()
+    demo_scope = TenantScope(tenant_id=scope.tenant_id, storefront_id=scope.storefront_id,
+                             demo_read_only=True, is_system=False, is_canonical_storefront=False)
+    app.dependency_overrides[get_public_tenant_scope] = lambda: demo_scope
+    profile = {"product_kind": "complete_split_system", "indoor_type": "wall",
+               "capacity_cooling_kw": "2.5", "pipe_liquid": '1/4"', "pipe_gas": '3/8"', "confirmed": True}
+    endpoint = "/api/v1/service-pricing/installation/preview"
+    first = await async_client.post(endpoint, headers={"Idempotency-Key": "demo-preview-one"}, json={
+        "installations": [{"key": "one", "typed_profile": profile,
+                           "route_length_m": "3", "holes_by_type": {}}]})
+    assert first.status_code == 200, first.text
+    assert first.json()["status"] == "fixed"
+    assert first.json()["total"] == "500.00"
+    assert first.json()["preview_ref"] is None
+    assert first.headers["cache-control"] == "private, no-store"
+
+    changed = await async_client.post(endpoint, headers={"Idempotency-Key": "demo-preview-one"}, json={
+        "installations": [{"key": "one", "typed_profile": profile,
+                           "route_length_m": "6", "holes_by_type": {}}]})
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["total"] == "530.75"
+    receipts = (await db.execute(select(InstallationPreviewSnapshot).where(
+        InstallationPreviewSnapshot.tenant_id == scope.tenant_id))).scalars().all()
+    assert receipts == []

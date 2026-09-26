@@ -24,17 +24,12 @@ def test_demo_rejects_unlisted_writes_including_future_operations(method):
 
 @pytest.mark.parametrize("operation_id", [
     "calculate_manager_install_estimate", "calculate_public_service_tariff",
+    "preview_public_installation_estimate",
 ])
 def test_demo_permits_pure_calculators_only_as_post(operation_id):
     enforce_demo_read_only(_request("POST", operation_id), demo_read_only=True)
     with pytest.raises(HTTPException):
         enforce_demo_read_only(_request("PUT", operation_id), demo_read_only=True)
-
-
-def test_demo_rejects_installation_preview_because_it_stores_a_receipt():
-    with pytest.raises(HTTPException) as error:
-        enforce_demo_read_only(_request("POST", "preview_public_installation_estimate"), demo_read_only=True)
-    assert error.value.status_code == 403
 
 
 @pytest.mark.parametrize("operation_id", [
@@ -75,6 +70,11 @@ async def test_public_demo_scope_keeps_calculator_but_prevents_form_submissions(
     assert scope.tenant_id == 35
     assert scope.storefront_id == 36
     assert scope.demo_read_only is True
+    preview_scope = await get_public_tenant_scope(
+        _request("POST", "preview_public_installation_estimate"),
+        verified=verified, session=None,
+    )
+    assert preview_scope.demo_read_only is True
     with pytest.raises(HTTPException) as error:
         await get_public_tenant_scope(
             _request("POST", "create_order"), verified=verified, session=None,

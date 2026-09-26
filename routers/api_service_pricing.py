@@ -99,7 +99,10 @@ async def preview_public_installation_estimate(
     ):
         return InstallationPreviewResponse(status="unavailable", reason_code="service_direction_not_enabled",
                                            scope_ref=InstallationPriceBookService._scope_ref(tenant_scope))
-    return await InstallationPriceBookService.preview(session, tenant_scope, payload, idempotency_key=idempotency_key)
+    return await InstallationPriceBookService.preview(
+        session, tenant_scope, payload,
+        idempotency_key=idempotency_key, persist=not tenant_scope.demo_read_only,
+    )
 
 
 def _public_tariff(tariff: ServiceTariff) -> PublicServiceTariffResponse:
