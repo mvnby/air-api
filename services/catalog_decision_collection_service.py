@@ -7,6 +7,7 @@ from models.tenancy import TenantScope
 from services.manager_product_collection_service import ManagerProductCollectionService
 from services.manager_product_collection_validation import ManagerProductCollectionValidation
 from services.product_collection_catalog_access import ProductCollectionCatalogAccess
+from services.catalog_decision_projection import CatalogDecisionQueryService
 
 
 class CatalogDecisionCollectionService:
@@ -38,6 +39,12 @@ class CatalogDecisionCollectionService:
             raise HTTPException(
                 status_code=404,
                 detail=f"Товары недоступны для этой витрины: {', '.join(map(str, missing))}.",
+            )
+        eligible_ids = await CatalogDecisionQueryService.eligible_system_product_ids(session, ids)
+        if len(eligible_ids) != len(ids):
+            raise HTTPException(
+                status_code=400,
+                detail="Отдельные блоки и другие товары вне подбора сплит-систем нельзя перенести в подборку.",
             )
 
         slug = await ManagerProductCollectionValidation.unique_slug(

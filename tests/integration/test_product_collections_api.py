@@ -86,6 +86,17 @@ async def test_catalog_decision_creates_draft_collection_with_items_atomically(a
     after = len((await db.execute(select(ProductCollection))).scalars().all())
     assert after == before
 
+    component = _product(title="Indoor only", slug="collection-indoor-only", product_kind="indoor_unit")
+    db.add(component)
+    await db.commit()
+    rejected_component = await async_client.post(
+        "/api/manager/catalog-decision/collections",
+        headers=headers,
+        json={"title": "Неполная система", "product_ids": [int(component.id)]},
+    )
+    assert rejected_component.status_code == 400
+    assert len((await db.execute(select(ProductCollection))).scalars().all()) == before
+
 
 @pytest.mark.asyncio
 async def test_published_collection_can_replace_existing_children(async_client, db):

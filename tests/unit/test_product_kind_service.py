@@ -34,7 +34,7 @@ def test_product_kind_derives_from_canonical_system_type():
     ) == "outdoor_unit"
 
 
-def test_product_kind_keeps_non_household_systems_out_of_complete_split_kind():
+def test_product_kind_requires_confirmed_components_for_semi_industrial_splits():
     assert ProductKindService.derive_from_specs(
         {
             "type": "мобильный",
@@ -47,7 +47,18 @@ def test_product_kind_keeps_non_household_systems_out_of_complete_split_kind():
             "type": "полупромышленный кондиционер",
             "includes_indoor_unit": True,
             "includes_outdoor_unit": True,
+            "indoor_units_count": 1,
         },
+    ) == "complete_split_system"
+    assert ProductKindService.derive_from_specs(
+        {"type": "полупромышленный кондиционер", "includes_indoor_unit": True},
+    ) == "other"
+    assert ProductKindService.derive_from_specs(
+        {"type": "полупромышленный кондиционер", "includes_indoor_unit": True, "includes_outdoor_unit": True, "indoor_units_count": 2},
+    ) == "other"
+    assert ProductKindService.resolve(
+        "other",
+        specs={"type": "полупромышленный кондиционер", "includes_indoor_unit": True, "includes_outdoor_unit": True},
     ) == "other"
 
 

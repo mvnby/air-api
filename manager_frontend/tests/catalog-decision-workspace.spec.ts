@@ -121,6 +121,29 @@ describe('order-bound equipment selection', () => {
 
 
 describe('catalog workspace usability', () => {
+  it('blocks transfer and comparison while a restored item is outside the split scope', () => {
+    const tray = mount(CatalogDecisionSelectionTray, { props: {
+      items: [{ id: 11, title: 'Complete split' }, { id: 22, title: 'Indoor component' }],
+      invalidIds: [22], validating: false, validationError: '',
+    } });
+    expect(tray.text()).toContain('Уберите отмеченные позиции');
+    expect(tray.findAll('button').filter(button => button.text().includes('Сравнить') || button.text().includes('Новый заказ') || button.text().includes('Создать подборку')).every(button => button.attributes('disabled') !== undefined)).toBe(true);
+    tray.unmount();
+  });
+
+  it('marks a restored component as unavailable without deleting its saved selection', async () => {
+    const key = catalogDecisionSelectionStorageKey(identity);
+    saveCatalogDecisionSelection([{ id: 11, title: 'Complete split' }, { id: 22, title: 'Indoor component' }], key);
+    const wrapper = await startWorkspace();
+    const tray = wrapper.findComponent(CatalogDecisionSelectionTray);
+    expect(catalogDecisionApi.list).toHaveBeenCalledWith(
+      1, 24, { isPublished: true, includeOrderable: true, productIds: [11, 22] }, 'title', 'asc',
+    );
+    expect(tray.props('invalidIds')).toEqual([22]);
+    expect(tray.props('items')).toHaveLength(2);
+    expect(loadCatalogDecisionSelection(key)).toHaveLength(2);
+  });
+
   it('restores bookmarked criteria and retains exact target context on changes', async () => {
     const wrapper = await startWorkspace('?orderId=42&proposalId=51&coolingBtuClasses=30&retailMaxByn=4000&page=2&sort=retail_price');
     expect(catalogDecisionApi.list).toHaveBeenCalledWith(2, 40, expect.objectContaining({ coolingBtuClasses: [30], retailMaxByn: 4000 }), 'retail_price', 'asc');

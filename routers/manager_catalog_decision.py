@@ -65,6 +65,8 @@ async def list_catalog_decision_products(
         raise HTTPException(status_code=422, detail="retail_min_byn cannot exceed retail_max_byn")
     if any(btu not in SUPPORTED_COOLING_BTU_CLASSES for btu in cooling_btu_classes or ()):
         raise HTTPException(status_code=422, detail="Unsupported cooling BTU class")
+    if category == "multi":
+        raise HTTPException(status_code=422, detail="Мультисплиты не входят в подбор комплектных сплит-систем")
     effective_availability = None if include_orderable else (availability or "in_stock")
     return await CatalogDecisionQueryService.list_system_products(
         session, tenant_scope=tenant_scope, page=page, limit=limit, sort=sort, direction=direction,

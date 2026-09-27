@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Literal
 
-from sqlalchemy import Float, String, and_, case, cast, exists, func, or_
+from sqlalchemy import Float, String, and_, case, cast, exists, func, not_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -100,6 +100,8 @@ class CatalogDecisionQueryService:
 
     @staticmethod
     def _validate_filters(filters: CatalogDecisionFilters) -> None:
+        if filters.category == "multi":
+            raise ValueError("Multi-split products are outside the complete split selection")
         if filters.retail_min_byn is not None and filters.retail_max_byn is not None and filters.retail_min_byn > filters.retail_max_byn:
             raise ValueError("retail_min_byn cannot exceed retail_max_byn")
         unsupported_btu_classes = set(filters.cooling_btu_classes) - SUPPORTED_COOLING_BTU_CLASSES
@@ -149,6 +151,33 @@ class CatalogDecisionQueryService:
             return func.json_extract(Product.specs, f"$.{key}")
         from sqlalchemy.dialects.postgresql import JSONB
         return func.jsonb_extract_path_text(cast(Product.specs, JSONB), key)
+
+    @classmethod
+    def _complete_split_condition(cls, session: AsyncSession):
+        """Canonical complete kind with a veto for contradictory multi data."""
+        system_type = func.lower(func.trim(cls._json_text(session, "type")))
+        indoor_count = func.trim(cls._json_text(session, "indoor_units_count"))
+        multi_category = exists(
+            select(ProductTagLink.product_id)
+            .join(Tag, Tag.id == ProductTagLink.tag_id)
+            .where(ProductTagLink.product_id == Product.id, Tag.slug == cls._CATEGORY_SLUGS["multi"])
+        )
+        return and_(
+            Product.product_kind == "complete_split_system",
+            or_(system_type.is_(None), system_type.notin_((
+                "внутренний блок", "наружный блок", "мульти-сплит-система", "мобильный",
+            ))),
+            or_(indoor_count.is_(None), indoor_count == "1"),
+            not_(multi_category),
+        )
+
+    @classmethod
+    async def eligible_system_product_ids(cls, session: AsyncSession, product_ids: list[int]) -> set[int]:
+        if not product_ids:
+            return set()
+        return set((await session.execute(
+            select(Product.id).where(Product.id.in_(product_ids), cls._complete_split_condition(session))
+        )).scalars().all())
 
     @classmethod
     def _metrics_cte(cls, *, usd_byn_rate: Decimal | None):
@@ -302,6 +331,7 @@ class CatalogDecisionQueryService:
         ).label("heating_min_c")
         indoor_form = indoor_form_factor_expr(session)
         conditions = cls._conditions(session, filters, availability=availability, retail=retail, cooling_nominal=cooling_nominal, cooling_min=cooling_min, cooling_max=cooling_max, area=area, heating_min=heating_min)
+        conditions.append(cls._complete_split_condition(session))
         base = (
             select(
                 Product, Brand.title.label("brand_title"), ProductSeries.title.label("series_title"),
@@ -374,7 +404,7 @@ class CatalogDecisionQueryService:
                 await session.execute(
                     select(Product, metrics.c.purchase_cost_byn)
                     .outerjoin(metrics, metrics.c.product_id == Product.id)
-                    .where(Product.id.in_(ids))
+                    .where(Product.id.in_(ids), cls._complete_split_condition(session))
                 )
             ).all()
         )
@@ -398,12 +428,14 @@ class CatalogDecisionQueryService:
         brands = list((await session.execute(
             select(Brand.id, Brand.title)
             .join(Product, Product.brand_id == Brand.id)
+            .where(cls._complete_split_condition(session))
             .group_by(Brand.id, Brand.title)
             .order_by(Brand.title.asc())
         )).all())
         series = list((await session.execute(
             select(ProductSeries.id, ProductSeries.title, ProductSeries.brand_id)
             .join(Product, Product.series_id == ProductSeries.id)
+            .where(cls._complete_split_condition(session))
             .group_by(ProductSeries.id, ProductSeries.title, ProductSeries.brand_id)
             .order_by(ProductSeries.brand_id.asc(), ProductSeries.title.asc())
         )).all())
