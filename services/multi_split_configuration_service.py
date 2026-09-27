@@ -46,6 +46,7 @@ def assess_compatibility(
         and source_ok
         and profile.source_version
         and profile.verified_at
+        and profile.verified_by
         and profile.allowed_indoor_product_ids
         and profile.exact_combinations
     )

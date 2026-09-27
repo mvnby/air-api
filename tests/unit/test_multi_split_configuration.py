@@ -14,6 +14,7 @@ def profile(**overrides):
         "source_version": "2026-09",
         "version": 2,
         "verified_at": datetime(2026, 9, 27),
+        "verified_by": "Catalog specialist",
         "allowed_indoor_product_ids": [11, 12],
         "exact_combinations": [{"lines": [
             {"indoor_product_id": 11, "quantity": 2},
@@ -30,6 +31,7 @@ def test_without_reviewed_source_requires_specialist():
     assert assess_compatibility(profile(verification_status="draft"), Counter({11: 2, 12: 1}), 3)[0] == "requires_specialist"
     assert assess_compatibility(profile(source_url=None), Counter({11: 2, 12: 1}), 3)[0] == "requires_specialist"
     assert assess_compatibility(profile(source_url="javascript:alert(1)"), Counter({11: 2, 12: 1}), 3)[0] == "requires_specialist"
+    assert assess_compatibility(profile(verified_by=None), Counter({11: 2, 12: 1}), 3)[0] == "requires_specialist"
     assert assess_compatibility(profile(exact_combinations=[]), Counter({11: 2, 12: 1}), 3)[0] == "requires_specialist"
 
 

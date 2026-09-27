@@ -54,6 +54,7 @@ async def test_multi_split_options_and_source_gated_preview(db, tenant_scope):
         source_url="https://manufacturer.example/models.pdf",
         source_version="2026-09",
         verified_at=datetime(2026, 9, 27),
+        verified_by="Catalog specialist",
         allowed_indoor_product_ids=[indoor.id],
         exact_combinations=[{"lines": [{"indoor_product_id": indoor.id, "quantity": 1}]}],
         max_indoor_units=2,
