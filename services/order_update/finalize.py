@@ -19,7 +19,11 @@ async def finalize_order_update(context: OrderUpdateContext) -> None:
         context.previous_workflow_type != "repair"
         and context.current_workflow_type == "repair"
     )
-    if transitioned_to_repair and "services" not in context.fields_set:
+    if (
+        transitioned_to_repair
+        and "services" not in context.fields_set
+        and "service_type" not in context.fields_set
+    ):
         await OrderService._maybe_add_default_repair_diagnostic(
             context.session,
             order,

@@ -13,6 +13,8 @@ from api_contracts.bot import (
     BotCustomerRequisitesRecognitionResponse,
     BotQuickOrderCreateResponse,
     BotQuickOrderDraft,
+    BotQuickOrderDraftSessionResponse,
+    BotQuickOrderCustomerSearchResponse,
     BotQuickOrderParseResponse,
     BotStaffContextResponse,
     BotTaskListResponse,
@@ -292,6 +294,63 @@ class BotApiGateway(
         except ValueError as exc:
             raise BotApiResponseError("MVN API returned an invalid quick-order result") from exc
 
+    async def start_quick_order_draft(
+        self, *, telegram_id: int, text: str = "", customer_id: int | None = None
+    ) -> BotQuickOrderDraftSessionResponse:
+        payload = await self._post(
+            "quick-orders/drafts",
+            json={"telegram_id": telegram_id, "text": text, "customer_id": customer_id},
+            timeout_seconds=20.0,
+        )
+        return self._validate_contract(BotQuickOrderDraftSessionResponse, payload, "quick-order draft")
+
+    async def search_quick_order_customers(
+        self, *, telegram_id: int, query: str
+    ) -> BotQuickOrderCustomerSearchResponse:
+        payload = await self._post(
+            "quick-orders/customers/search",
+            json={"telegram_id": telegram_id, "query": query},
+        )
+        return self._validate_contract(BotQuickOrderCustomerSearchResponse, payload, "customer candidates")
+
+    async def get_quick_order_draft(
+        self, *, telegram_id: int, draft_id: str
+    ) -> BotQuickOrderDraftSessionResponse:
+        payload = await self._get(
+            f"quick-orders/drafts/{draft_id}", params={"telegram_id": telegram_id}
+        )
+        return self._validate_contract(BotQuickOrderDraftSessionResponse, payload, "quick-order draft")
+
+    async def patch_quick_order_draft(
+        self, *, telegram_id: int, draft_id: str, expected_version: int,
+        text: str | None = None, changes: dict | None = None
+    ) -> BotQuickOrderDraftSessionResponse:
+        payload = await self._request(
+            "PATCH", f"quick-orders/drafts/{draft_id}",
+            json={"telegram_id": telegram_id, "expected_version": expected_version,
+                  "text": text, "changes": changes or {}}, timeout_seconds=20.0,
+        )
+        return self._validate_contract(BotQuickOrderDraftSessionResponse, payload, "quick-order draft")
+
+    async def cancel_quick_order_draft(
+        self, *, telegram_id: int, draft_id: str, expected_version: int
+    ) -> BotQuickOrderDraftSessionResponse:
+        payload = await self._post(
+            f"quick-orders/drafts/{draft_id}/cancel",
+            json={"telegram_id": telegram_id, "expected_version": expected_version},
+        )
+        return self._validate_contract(BotQuickOrderDraftSessionResponse, payload, "quick-order draft")
+
+    async def create_quick_order_from_draft(
+        self, *, telegram_id: int, draft_id: str, expected_version: int
+    ) -> BotQuickOrderCreateResponse:
+        payload = await self._post(
+            f"quick-orders/drafts/{draft_id}/create",
+            json={"telegram_id": telegram_id, "expected_version": expected_version},
+            timeout_seconds=20.0,
+        )
+        return self._validate_contract(BotQuickOrderCreateResponse, payload, "quick-order result")
+
     async def recognize_customer_requisites_text(
         self,
         *,
@@ -361,8 +420,8 @@ class BotApiGateway(
             raise ValueError("Telegram ID must be positive")
         if recognition_id <= 0:
             raise ValueError("Recognition ID must be positive")
-        if action not in {"create", "update", "cancel"}:
-            raise ValueError("Recognition action must be create, update or cancel")
+        if action not in {"create", "update", "use", "cancel"}:
+            raise ValueError("Recognition action must be create, update, use or cancel")
         payload = await self._post(
             f"customers/requisites/{recognition_id}/action",
             json={"telegram_id": telegram_id, "action": action},

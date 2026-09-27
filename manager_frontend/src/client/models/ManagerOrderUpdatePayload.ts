@@ -14,6 +14,9 @@ export type ManagerOrderUpdatePayload = {
     next_followup_date?: (string | null);
     measurement_date?: (string | null);
     installation_date?: (string | null);
+    requested_date?: (string | null);
+    contact_name?: (string | null);
+    contact_phone?: (string | null);
     comment?: (string | null);
     no_answer_at?: (string | null);
     measurement_required?: (boolean | null);

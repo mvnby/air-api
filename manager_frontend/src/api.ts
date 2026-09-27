@@ -451,6 +451,10 @@ export const api = {
         return await ManagerOrdersService.createManagerOrder(payload);
     },
 
+    async getManagerOrderScenarios() {
+        return await ManagerOrdersService.listManagerOrderScenarios();
+    },
+
     async patchManagerOrder(orderId: number, payload: ManagerOrderUpdatePayload) {
         return await ManagerOrdersService.patchManagerOrder(orderId, payload);
     },

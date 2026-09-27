@@ -11,7 +11,7 @@ export type BotCustomerRequisitesRecognitionResponse = {
     validation_flags?: Record<string, any>;
     duplicate_customer?: (BotCustomerBriefResponse | null);
     confirmed_customer_id?: (number | null);
-    confirmed_action?: ('create' | 'update' | null);
+    confirmed_action?: ('create' | 'update' | 'use' | null);
     created_at: string;
 };
 

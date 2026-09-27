@@ -17,5 +17,7 @@ export type LeadQualifyPayload = {
     delivery_address?: (string | null);
     customer_type?: (string | null);
     order_comment?: (string | null);
+    workflow_type?: (string | null);
+    service_type?: (string | null);
 };
 

@@ -10,6 +10,7 @@ from models import OrderInstaller, OrderStatus, PaymentCurrency
 from models.common import ClosingResult, EquipmentStatus
 from services.document_role_service import DocumentRoleService
 from services.order_service import OrderService
+from services.order_scenarios import resolve_scenario
 from services.order_update.context import OrderUpdateContext
 
 
@@ -37,11 +38,33 @@ async def apply_order_fields(context: OrderUpdateContext) -> None:
             order.closed_at = None
     if "title" in fields_set:
         order.title = OrderService._clean_order_title(payload.title)
-    if "workflow_type" in fields_set and payload.workflow_type is not None:
-        order.workflow_type = OrderService._normalize_workflow_type(
-            payload.workflow_type,
-            order.workflow_type,
+    if (
+        ("workflow_type" in fields_set and payload.workflow_type is not None)
+        or "service_type" in fields_set
+    ):
+        requested_workflow = (
+            payload.workflow_type if "workflow_type" in fields_set else None
         )
+        requested_service = (
+            payload.service_type if "service_type" in fields_set else None
+        )
+        if requested_workflow is not None or requested_service is not None:
+            workflow_type, service_type = resolve_scenario(
+                workflow_type=requested_workflow,
+                service_type=requested_service,
+            )
+            if workflow_type is not None:
+                order.workflow_type = workflow_type
+        else:
+            if order.workflow_type != "service_work":
+                raise ValueError("service_type can only be cleared for service_work")
+            service_type = None
+        order.technical_meta = dict(order.technical_meta or {})
+        if service_type is None:
+            order.technical_meta.pop("service_type", None)
+        else:
+            order.technical_meta["service_type"] = service_type
+        flag_modified(order, "technical_meta")
     if "repair_meta" in fields_set:
         default_status = (
             OrderService.REPAIR_DEFAULT_STATUS
@@ -68,6 +91,20 @@ async def apply_order_fields(context: OrderUpdateContext) -> None:
         order.installation_date = OrderService._normalize_naive_datetime(
             payload.installation_date
         )
+    if {"requested_date", "contact_name", "contact_phone"} & fields_set:
+        meta = dict(order.technical_meta or {})
+        for key in ("requested_date", "contact_name", "contact_phone"):
+            if key not in fields_set:
+                continue
+            value = getattr(payload, key)
+            if key == "requested_date" and value is not None:
+                meta[key] = value.isoformat()
+            elif value is not None and str(value).strip():
+                meta[key] = str(value).strip()
+            else:
+                meta.pop(key, None)
+        order.technical_meta = meta
+        flag_modified(order, "technical_meta")
     if "comment" in fields_set:
         order.comment = payload.comment
     if "is_paid" in fields_set and payload.is_paid is not None:

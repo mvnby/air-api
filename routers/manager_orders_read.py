@@ -10,21 +10,35 @@ from routers.manager_operation_ids import (
     EXPORT_MANAGER_ORDERS,
     GET_MANAGER_ORDER_DETAIL,
     GET_MANAGER_ORDERS,
+    LIST_MANAGER_ORDER_SCENARIOS,
     LIST_MANAGER_STALE_ORDER_STAGES,
 )
 from schemas import (
     ManagerOrderDetailResponse,
     ManagerOrderExportRequest,
     ManagerOrderListResponse,
+    ManagerOrderScenariosResponse,
     ManagerOrderTransferPackage,
     ManagerStaleWorkStageListResponse,
 )
 from services.order_service import OrderService
 from services.order_projection_service import OrderProjectionService
 from services.order_transfer_service import OrderTransferService
+from services.order_scenarios import SCENARIOS
 
 
 router = APIRouter(prefix="/api/manager/orders", tags=["manager-orders"])
+
+
+@router.get(
+    "/scenarios",
+    response_model=ManagerOrderScenariosResponse,
+    operation_id=LIST_MANAGER_ORDER_SCENARIOS,
+)
+async def list_manager_order_scenarios(
+    _: str = Depends(get_current_username),
+):
+    return {"items": [scenario._asdict() for scenario in SCENARIOS]}
 
 
 @router.get("", response_model=ManagerOrderListResponse, operation_id=GET_MANAGER_ORDERS)

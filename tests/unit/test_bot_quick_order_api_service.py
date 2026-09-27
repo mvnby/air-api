@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from api_contracts.bot import BotQuickOrderDraft
-from models import Customer, CustomerType, Order, StaffUser, TenantMembership
+from models import Customer, CustomerType, Order, OrderStatus, StaffUser, TenantMembership
 from services.bot_quick_order_api_service import (
     BotQuickOrderAccessDeniedError,
     BotQuickOrderApiService,
@@ -169,7 +169,8 @@ async def test_quick_order_preserves_existing_customer_party(db, tenant_scope, m
 
     result = await BotQuickOrderService.create_order_from_draft(
         db,
-        {"name": "Клиент", "phone": customer.phone, "request_text": "Нужен новый заказ"},
+        {"customer_id": customer.id, "name": "Клиент", "phone": customer.phone,
+         "service_type": "maintenance", "request_text": "Нужен новый заказ"},
         tenant_scope=tenant_scope,
     )
 
@@ -178,3 +179,68 @@ async def test_quick_order_preserves_existing_customer_party(db, tenant_scope, m
     assert order.customer_id == customer.id
     assert customer.type == customer_type
     assert customer.signing_mode == signing_mode
+
+
+@pytest.mark.asyncio
+async def test_confirmed_customer_draft_creates_scenario_order_without_mutating_customer(db, tenant_scope, monkeypatch):
+    customer = Customer(
+        tenant_id=tenant_scope.tenant_id,
+        name="ООО Пример",
+        phone="",
+        type=CustomerType.company,
+        signing_mode="statutory_body",
+        inn="123456789",
+        legal_address="Минск, юридический адрес",
+    )
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+    notify = AsyncMock()
+    monkeypatch.setattr(
+        "services.bot_quick_order_service.NotificationService.notify_admins_staff_order_created",
+        notify,
+    )
+    draft = {
+        "customer_id": int(customer.id),
+        "customer_type": "company",
+        "name": "ООО Пример",
+        "contact_name": "Сергей",
+        "contact_phone": "+375291234567",
+        "address": "Витебск, Московский 10",
+        "workflow_type": "maintenance",
+        "service_type": "maintenance",
+        "equipment_count": 3,
+        "equipment_type": "кассетные кондиционеры",
+        "equipment_summary": "3 кассетных кондиционера",
+        "target_date": "2026-09-28T00:00:00",
+        "target_date_precision": "date",
+        "request_text": "Нужно обслуживание трёх кассетников",
+    }
+
+    first = await BotQuickOrderService.create_order_from_draft(
+        db, draft, tenant_scope=tenant_scope, source_fingerprint="intent-one"
+    )
+    replay = await BotQuickOrderService.create_order_from_draft(
+        db, draft, tenant_scope=tenant_scope, source_fingerprint="intent-one"
+    )
+    await db.refresh(customer)
+    order = await db.get(Order, first["id"])
+
+    assert first["_bot_order_created"] is True
+    assert replay["id"] == first["id"]
+    assert replay["_bot_order_created"] is False
+    assert order.customer_id == customer.id
+    assert order.status == OrderStatus.NEGOTIATION
+    assert order.workflow_type == "maintenance"
+    assert order.delivery_address == "Витебск, Московский 10"
+    assert order.technical_meta["contact_name"] == "Сергей"
+    assert order.technical_meta["contact_phone"] == "+375291234567"
+    assert order.technical_meta["requested_equipment_summary"] == "3 кассетных кондиционера"
+    assert order.technical_meta["requested_date_precision"] == "date"
+    assert customer.legal_address == "Минск, юридический адрес"
+    assert notify.await_count == 1
+
+    second_intent = await BotQuickOrderService.create_order_from_draft(
+        db, draft, tenant_scope=tenant_scope, source_fingerprint="intent-two"
+    )
+    assert second_intent["id"] != first["id"]

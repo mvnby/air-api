@@ -5,6 +5,7 @@ class ShopState(StatesGroup):
     waiting_for_phone = State()
     waiting_for_search = State()
     waiting_for_quick_order = State()
+    editing_quick_order = State()
     waiting_for_selection = State()
     waiting_for_task_report = State()
     waiting_for_order_attachment_order_id = State()

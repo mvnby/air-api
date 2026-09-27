@@ -1,6 +1,7 @@
 """Authorized API orchestration for customer requisites received from Telegram."""
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import text
@@ -318,6 +319,27 @@ class BotCustomerRequisitesApiService:
             return BotCustomerRequisitesActionResult(
                 recognition=cancelled,
                 customer=None,
+                changed=True,
+            )
+
+        if action == "use":
+            customer_id = int(recognition.duplicate_customer_id or 0)
+            customer = await CustomerService.get_for_manager(
+                session=session, customer_id=customer_id, tenant_scope=tenant_scope
+            ) if customer_id else None
+            if customer is None:
+                raise BotCustomerRequisitesNotFoundError("Найденный клиент больше не доступен")
+            recognition.status = CustomerRequisitesRecognitionService.STATUS_CONFIRMED
+            recognition.confirmed_action = "use"
+            recognition.confirmed_customer_id = customer_id
+            recognition.confirmed_at = datetime.now()
+            session.add(recognition)
+            await session.commit()
+            return BotCustomerRequisitesActionResult(
+                recognition=await cls._existing_response(
+                    session, recognition, tenant_scope=tenant_scope
+                ),
+                customer=customer,
                 changed=True,
             )
 

@@ -14,6 +14,12 @@ import type { BotCustomerRequisitesRecognitionResponse } from '../models/BotCust
 import type { BotCustomerRequisitesTextRequest } from '../models/BotCustomerRequisitesTextRequest';
 import type { BotQuickOrderCreateRequest } from '../models/BotQuickOrderCreateRequest';
 import type { BotQuickOrderCreateResponse } from '../models/BotQuickOrderCreateResponse';
+import type { BotQuickOrderCustomerSearchRequest } from '../models/BotQuickOrderCustomerSearchRequest';
+import type { BotQuickOrderCustomerSearchResponse } from '../models/BotQuickOrderCustomerSearchResponse';
+import type { BotQuickOrderDraftActionRequest } from '../models/BotQuickOrderDraftActionRequest';
+import type { BotQuickOrderDraftPatchRequest } from '../models/BotQuickOrderDraftPatchRequest';
+import type { BotQuickOrderDraftSessionResponse } from '../models/BotQuickOrderDraftSessionResponse';
+import type { BotQuickOrderDraftStartRequest } from '../models/BotQuickOrderDraftStartRequest';
 import type { BotQuickOrderParseRequest } from '../models/BotQuickOrderParseRequest';
 import type { BotQuickOrderParseResponse } from '../models/BotQuickOrderParseResponse';
 import type { BotStaffContextResponse } from '../models/BotStaffContextResponse';
@@ -206,6 +212,141 @@ export class InternalBotV1Service {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/internal/bot/v1/quick-orders/parse',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Start Internal Bot Quick Order Draft
+     * @param requestBody
+     * @returns BotQuickOrderDraftSessionResponse Successful Response
+     * @throws ApiError
+     */
+    public static startInternalBotQuickOrderDraftV1(
+        requestBody: BotQuickOrderDraftStartRequest,
+    ): CancelablePromise<BotQuickOrderDraftSessionResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/internal/bot/v1/quick-orders/drafts',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Search Internal Bot Quick Order Customers
+     * @param requestBody
+     * @returns BotQuickOrderCustomerSearchResponse Successful Response
+     * @throws ApiError
+     */
+    public static searchInternalBotQuickOrderCustomersV1(
+        requestBody: BotQuickOrderCustomerSearchRequest,
+    ): CancelablePromise<BotQuickOrderCustomerSearchResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/internal/bot/v1/quick-orders/customers/search',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Internal Bot Quick Order Draft
+     * @param draftId
+     * @param telegramId
+     * @returns BotQuickOrderDraftSessionResponse Successful Response
+     * @throws ApiError
+     */
+    public static getInternalBotQuickOrderDraftV1(
+        draftId: string,
+        telegramId: number,
+    ): CancelablePromise<BotQuickOrderDraftSessionResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/internal/bot/v1/quick-orders/drafts/{draft_id}',
+            path: {
+                'draft_id': draftId,
+            },
+            query: {
+                'telegram_id': telegramId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Patch Internal Bot Quick Order Draft
+     * @param draftId
+     * @param requestBody
+     * @returns BotQuickOrderDraftSessionResponse Successful Response
+     * @throws ApiError
+     */
+    public static patchInternalBotQuickOrderDraftV1(
+        draftId: string,
+        requestBody: BotQuickOrderDraftPatchRequest,
+    ): CancelablePromise<BotQuickOrderDraftSessionResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/internal/bot/v1/quick-orders/drafts/{draft_id}',
+            path: {
+                'draft_id': draftId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Cancel Internal Bot Quick Order Draft
+     * @param draftId
+     * @param requestBody
+     * @returns BotQuickOrderDraftSessionResponse Successful Response
+     * @throws ApiError
+     */
+    public static cancelInternalBotQuickOrderDraftV1(
+        draftId: string,
+        requestBody: BotQuickOrderDraftActionRequest,
+    ): CancelablePromise<BotQuickOrderDraftSessionResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/internal/bot/v1/quick-orders/drafts/{draft_id}/cancel',
+            path: {
+                'draft_id': draftId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Internal Bot Quick Order From Draft
+     * @param draftId
+     * @param requestBody
+     * @returns BotQuickOrderCreateResponse Successful Response
+     * @throws ApiError
+     */
+    public static createInternalBotQuickOrderFromDraftV1(
+        draftId: string,
+        requestBody: BotQuickOrderDraftActionRequest,
+    ): CancelablePromise<BotQuickOrderCreateResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/internal/bot/v1/quick-orders/drafts/{draft_id}/create',
+            path: {
+                'draft_id': draftId,
+            },
             body: requestBody,
             mediaType: 'application/json',
             errors: {

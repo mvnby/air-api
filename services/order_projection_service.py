@@ -5,7 +5,7 @@ thin compatibility delegates while command extraction proceeds in later
 behavior-preserving slices.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Dict, Optional
 
 from sqlalchemy import String, and_, cast, func, not_, or_
@@ -418,6 +418,14 @@ class OrderProjectionService:
             order,
             demo_read_only=tenant_scope.demo_read_only,
         )
+        meta = order.technical_meta if isinstance(order.technical_meta, dict) else {}
+        raw_requested_date = meta.get("requested_date")
+        try:
+            data["requested_date"] = date.fromisoformat(str(raw_requested_date)[:10]) if raw_requested_date else None
+        except ValueError:
+            data["requested_date"] = None
+        data["contact_name"] = meta.get("contact_name") if isinstance(meta.get("contact_name"), str) else None
+        data["contact_phone"] = meta.get("contact_phone") if isinstance(meta.get("contact_phone"), str) else None
         from models import CustomerEquipment, EquipmentOrderLink
         from services.service_attachment_service import ServiceAttachmentService
 

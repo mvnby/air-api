@@ -10,7 +10,9 @@ def quick_order_to_dict(draft: BotQuickOrderDraft | dict) -> dict:
 
 
 def _display_target_date(draft: BotQuickOrderDraft) -> str | None:
-    return draft.target_date.strftime("%d.%m.%Y %H:%M") if draft.target_date else None
+    if not draft.target_date:
+        return None
+    return draft.target_date.strftime("%d.%m.%Y" if draft.target_date_precision == "date" else "%d.%m.%Y %H:%M")
 
 
 def _address_check_text(draft: BotQuickOrderDraft) -> str | None:
@@ -30,10 +32,13 @@ def format_quick_order_preview(draft_value: BotQuickOrderDraft | dict) -> str:
     lines = [
         "<b>Черновик заказа</b>",
         f"Клиент: {escape(draft.name or 'не указан')}",
+        f"Тип клиента: {escape({'individual': 'Физлицо', 'individual_entrepreneur': 'ИП', 'company': 'Организация'}.get(draft.customer_type or '', 'уточнить'))}",
+        f"Контакт: {escape(draft.contact_name or 'не указан')}",
         f"Телефон: {escape(draft.phone or 'не указан')}",
         f"Адрес: {escape(draft.address or 'не указан')}",
         f"Услуга: {escape(draft.service_label)}",
         f"Дата: {escape(_display_target_date(draft) or 'не указана')}",
+        f"Оборудование: {escape(draft.equipment_summary or 'не указано')}",
         "",
         f"<i>{escape(draft.request_text)}</i>",
     ]
@@ -50,12 +55,14 @@ def format_quick_order_preview_rich_html(
     rich_html = (
         "<h3>Черновик заказа</h3>"
         "<p>"
-        f"<b>Клиент:</b> {escape(draft.name or 'не указан')}<br/>"
-        f"<b>Телефон:</b> {escape(draft.phone or 'не указан')}<br/>"
+            f"<b>Клиент:</b> {escape(draft.name or 'не указан')}<br/>"
+            f"<b>Контакт:</b> {escape(draft.contact_name or 'не указан')}<br/>"
+            f"<b>Телефон:</b> {escape(draft.phone or 'не указан')}<br/>"
         f"<b>Адрес:</b> {escape(draft.address or 'не указан')}<br/>"
         f"{('<b>Проверка адреса:</b> ' + escape(address_check_text) + '<br/>') if address_check_text else ''}"
         f"<b>Услуга:</b> {escape(draft.service_label)}<br/>"
-        f"<b>Дата:</b> {escape(_display_target_date(draft) or 'не указана')}"
+            f"<b>Дата:</b> {escape(_display_target_date(draft) or 'не указана')}<br/>"
+            f"<b>Оборудование:</b> {escape(draft.equipment_summary or 'не указано')}"
         "</p>"
     )
     if draft.request_text:
