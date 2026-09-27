@@ -1,7 +1,9 @@
 import os
 import hashlib
+import fcntl
 import stat
 import subprocess
+import time
 from pathlib import Path
 
 
@@ -60,6 +62,35 @@ def test_safe_lock_migrates_proved_legacy_0644_inode_under_lock(tmp_path):
     assert result.returncode == 0, result.stderr
     assert stat.S_IMODE(lock.stat().st_mode) == 0o600
     assert lock.stat().st_nlink == 1
+
+
+def test_safe_lock_waits_for_short_pitr_contention_only_when_requested(tmp_path):
+    lock = tmp_path / "lock"
+    lock.touch(mode=0o600)
+    lock.chmod(0o600)
+    env = {
+        **os.environ,
+        "API_DEPLOY_LOCK_HELPER_SHA256": hashlib.sha256(HELPER.read_bytes()).hexdigest(),
+    }
+    with lock.open("r+") as holder:
+        fcntl.flock(holder, fcntl.LOCK_EX)
+        assert _run(lock).returncode != 0  # Existing callers remain fail-fast.
+        waiter = subprocess.Popen(
+            ["python3", str(HELPER), "exec-wait", str(lock), "/usr/bin/true"],
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env,
+        )
+        time.sleep(0.35)
+        assert waiter.poll() is None
+        fcntl.flock(holder, fcntl.LOCK_UN)
+    _, stderr = waiter.communicate(timeout=5)
+    assert waiter.returncode == 0, stderr
+
+
+def test_patroni_candidate_waits_for_a_bounded_deploy_lock():
+    candidate = (REPO_ROOT / "scripts/ha/run_patroni_candidate_transaction.sh").read_text(
+        encoding="utf-8"
+    )
+    assert '"${DEPLOY_LOCK_HELPER}" exec-wait "${DEPLOY_LOCK_FILE}"' in candidate
 
 
 def test_safe_lock_verify_rejects_forged_inherited_descriptor(tmp_path):

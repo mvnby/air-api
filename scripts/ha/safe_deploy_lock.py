@@ -9,10 +9,12 @@ import os
 import re
 import stat
 import sys
+import time
 from pathlib import Path
 
 
 LOCK_FD = 9
+DEPLOY_LOCK_WAIT_SECONDS = 30
 
 
 def _verify_self() -> None:
@@ -61,7 +63,7 @@ def _validate_open_file(path: str, descriptor: int, *, allow_legacy_mode: bool =
         raise RuntimeError("deployment lock file is unsafe")
 
 
-def _open(path: str) -> int:
+def _open(path: str, *, wait_seconds: int = 0) -> int:
     _validate_parent(path)
     flags = os.O_RDWR | os.O_CLOEXEC | os.O_NOFOLLOW
     created = False
@@ -73,7 +75,16 @@ def _open(path: str) -> int:
     if created:
         os.fchmod(descriptor, 0o600)
     _validate_open_file(path, descriptor, allow_legacy_mode=not created)
-    fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    deadline = time.monotonic() + wait_seconds
+    while True:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            break
+        except BlockingIOError:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise
+            time.sleep(min(0.25, remaining))
     if not created and stat.S_IMODE(os.fstat(descriptor).st_mode) == 0o644:
         os.fchmod(descriptor, 0o600)
     _validate_open_file(path, descriptor)
@@ -88,9 +99,9 @@ def _verify(path: str, descriptor: int) -> None:
 
 def main() -> int:
     _verify_self()
-    if len(sys.argv) < 4 or sys.argv[1] not in {"exec", "verify", "exec-with-fd"}:
+    if len(sys.argv) < 4 or sys.argv[1] not in {"exec", "exec-wait", "verify", "exec-with-fd"}:
         raise RuntimeError(
-            "usage: safe_deploy_lock.py exec|verify|exec-with-fd LOCK command..."
+            "usage: safe_deploy_lock.py exec|exec-wait|verify|exec-with-fd LOCK command..."
         )
     operation, path = sys.argv[1:3]
     if operation == "verify":
@@ -115,7 +126,7 @@ def main() -> int:
         environment_variable = "API_DEPLOY_LOCK_FD"
         command = sys.argv[3:]
 
-    descriptor = _open(path)
+    descriptor = _open(path, wait_seconds=DEPLOY_LOCK_WAIT_SECONDS if operation == "exec-wait" else 0)
     if descriptor != descriptor_target:
         os.dup2(descriptor, descriptor_target, inheritable=True)
         os.close(descriptor)
