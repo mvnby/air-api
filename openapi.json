@@ -4452,6 +4452,171 @@
         }
       }
     },
+    "/api/v1/multi-split/options": {
+      "get": {
+        "tags": [
+          "api",
+          "multi-split"
+        ],
+        "summary": "List Public Multi Split Options",
+        "operationId": "list_public_multi_split_options",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "enum": [
+                "outdoor_unit",
+                "indoor_unit"
+              ],
+              "type": "string",
+              "title": "Kind"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 40,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MultiSplitOptionsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/multi-split/preview": {
+      "post": {
+        "tags": [
+          "api",
+          "multi-split"
+        ],
+        "summary": "Preview Public Multi Split",
+        "operationId": "preview_public_multi_split",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MultiSplitPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MultiSplitPreviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/multi-split/leads": {
+      "post": {
+        "tags": [
+          "api",
+          "multi-split"
+        ],
+        "summary": "Create Public Multi Split Lead",
+        "operationId": "create_public_multi_split_lead",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MultiSplitLeadPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MultiSplitLeadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/analytics-connections": {
       "get": {
         "tags": [
@@ -8548,6 +8713,183 @@
             "OAuth2PasswordBearer": []
           }
         ]
+      }
+    },
+    "/api/manager/multi-split/options": {
+      "get": {
+        "tags": [
+          "manager multi-split"
+        ],
+        "summary": "List Manager Multi Split Options",
+        "operationId": "list_manager_multi_split_options",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "enum": [
+                "outdoor_unit",
+                "indoor_unit"
+              ],
+              "type": "string",
+              "title": "Kind"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 40,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MultiSplitOptionsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/multi-split/preview": {
+      "post": {
+        "tags": [
+          "manager multi-split"
+        ],
+        "summary": "Preview Manager Multi Split",
+        "operationId": "preview_manager_multi_split",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MultiSplitPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerMultiSplitPreviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/multi-split/orders/{order_id}/proposals": {
+      "post": {
+        "tags": [
+          "manager multi-split"
+        ],
+        "summary": "Save Manager Multi Split Proposal",
+        "operationId": "save_manager_multi_split_proposal",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerMultiSplitSavePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/manager/catalog-quality/report": {
@@ -51195,6 +51537,150 @@
         ],
         "title": "ManagerMediaUploadLocalImagesResponse"
       },
+      "ManagerMultiSplitPreviewResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "confirmed",
+              "requires_specialist",
+              "incompatible"
+            ],
+            "title": "Status"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation"
+          },
+          "composition_complete": {
+            "type": "boolean",
+            "title": "Composition Complete"
+          },
+          "equipment_total_byn": {
+            "type": "integer",
+            "title": "Equipment Total Byn"
+          },
+          "installation_total_byn": {
+            "type": "null",
+            "title": "Installation Total Byn"
+          },
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/MultiSplitComponent"
+            },
+            "type": "array",
+            "title": "Components"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "source_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Version"
+          },
+          "purchase_cost_total_byn": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purchase Cost Total Byn"
+          },
+          "margin_byn": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Margin Byn"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "explanation",
+          "composition_complete",
+          "equipment_total_byn",
+          "components"
+        ],
+        "title": "ManagerMultiSplitPreviewResponse"
+      },
+      "ManagerMultiSplitSavePayload": {
+        "properties": {
+          "outdoor_product_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Outdoor Product Id"
+          },
+          "rooms": {
+            "items": {
+              "$ref": "#/components/schemas/MultiSplitRoomInput"
+            },
+            "type": "array",
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Rooms"
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
+          },
+          "expected_status": {
+            "type": "string",
+            "enum": [
+              "confirmed",
+              "requires_specialist",
+              "incompatible"
+            ],
+            "title": "Expected Status"
+          },
+          "expected_components": {
+            "items": {
+              "$ref": "#/components/schemas/MultiSplitComponent"
+            },
+            "type": "array",
+            "minItems": 2,
+            "title": "Expected Components"
+          }
+        },
+        "type": "object",
+        "required": [
+          "outdoor_product_id",
+          "rooms",
+          "expected_status",
+          "expected_components"
+        ],
+        "title": "ManagerMultiSplitSavePayload"
+      },
       "ManagerNormalizeLegacySpecsResponse": {
         "properties": {
           "message": {
@@ -61091,6 +61577,364 @@
         ],
         "title": "ModelList"
       },
+      "MultiSplitComponent": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "product_kind": {
+            "type": "string",
+            "title": "Product Kind"
+          },
+          "quantity": {
+            "type": "integer",
+            "title": "Quantity"
+          },
+          "unit_price_byn": {
+            "type": "integer",
+            "title": "Unit Price Byn"
+          },
+          "total_price_byn": {
+            "type": "integer",
+            "title": "Total Price Byn"
+          },
+          "availability": {
+            "type": "string",
+            "title": "Availability"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "title",
+          "product_kind",
+          "quantity",
+          "unit_price_byn",
+          "total_price_byn",
+          "availability"
+        ],
+        "title": "MultiSplitComponent"
+      },
+      "MultiSplitLeadPayload": {
+        "properties": {
+          "configuration": {
+            "$ref": "#/components/schemas/MultiSplitPreviewRequest"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 7,
+            "title": "Phone"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 254
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "consent": {
+            "type": "boolean",
+            "const": true,
+            "title": "Consent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "configuration",
+          "name",
+          "phone",
+          "consent"
+        ],
+        "title": "MultiSplitLeadPayload"
+      },
+      "MultiSplitLeadResponse": {
+        "properties": {
+          "lead_id": {
+            "type": "integer",
+            "title": "Lead Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lead_id",
+          "status"
+        ],
+        "title": "MultiSplitLeadResponse"
+      },
+      "MultiSplitOption": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "product_kind": {
+            "type": "string",
+            "enum": [
+              "outdoor_unit",
+              "indoor_unit"
+            ],
+            "title": "Product Kind"
+          },
+          "price_byn": {
+            "type": "integer",
+            "title": "Price Byn"
+          },
+          "cooling_power_kw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cooling Power Kw"
+          },
+          "indoor_form_factor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indoor Form Factor"
+          },
+          "availability": {
+            "type": "string",
+            "title": "Availability"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "slug",
+          "product_kind",
+          "price_byn",
+          "availability"
+        ],
+        "title": "MultiSplitOption"
+      },
+      "MultiSplitOptionsResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MultiSplitOption"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "meta"
+        ],
+        "title": "MultiSplitOptionsResponse"
+      },
+      "MultiSplitPreviewRequest": {
+        "properties": {
+          "outdoor_product_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Outdoor Product Id"
+          },
+          "rooms": {
+            "items": {
+              "$ref": "#/components/schemas/MultiSplitRoomInput"
+            },
+            "type": "array",
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Rooms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "outdoor_product_id",
+          "rooms"
+        ],
+        "title": "MultiSplitPreviewRequest"
+      },
+      "MultiSplitPreviewResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "confirmed",
+              "requires_specialist",
+              "incompatible"
+            ],
+            "title": "Status"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation"
+          },
+          "composition_complete": {
+            "type": "boolean",
+            "title": "Composition Complete"
+          },
+          "equipment_total_byn": {
+            "type": "integer",
+            "title": "Equipment Total Byn"
+          },
+          "installation_total_byn": {
+            "type": "null",
+            "title": "Installation Total Byn"
+          },
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/MultiSplitComponent"
+            },
+            "type": "array",
+            "title": "Components"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "source_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "explanation",
+          "composition_complete",
+          "equipment_total_byn",
+          "components"
+        ],
+        "title": "MultiSplitPreviewResponse"
+      },
+      "MultiSplitRoomInput": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "indoor_product_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Indoor Product Id"
+          },
+          "area_m2": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1000.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Area M2"
+          },
+          "required_cooling_kw": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Cooling Kw"
+          },
+          "preferred_form": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "wall",
+                  "cassette",
+                  "duct",
+                  "floor_ceiling",
+                  "column",
+                  "console"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preferred Form"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "indoor_product_id"
+        ],
+        "title": "MultiSplitRoomInput"
+      },
       "NativeDocumentTemplateCreatePayload": {
         "properties": {
           "document_role_type": {
@@ -62018,6 +62862,68 @@
         ],
         "title": "OrderEmailTemplateOptionResponse"
       },
+      "OrderMultiSplitConfigurationResponse": {
+        "properties": {
+          "rooms": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Rooms"
+          },
+          "component_snapshot": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Component Snapshot"
+          },
+          "verification_status": {
+            "type": "string",
+            "title": "Verification Status"
+          },
+          "profile_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Version"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "source_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "verification_status"
+        ],
+        "title": "OrderMultiSplitConfigurationResponse"
+      },
       "OrderPayload": {
         "properties": {
           "customer": {
@@ -62349,6 +63255,16 @@
             },
             "type": "array",
             "title": "Service Lines"
+          },
+          "multi_split_configuration": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OrderMultiSplitConfigurationResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",

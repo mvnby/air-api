@@ -9,8 +9,9 @@ from typing import Any, Dict
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlmodel import select
 
-from models import Order, OrderProductLink, OrderProposal, OrderServiceLink
+from models import Order, OrderMultiSplitConfiguration, OrderProductLink, OrderProposal, OrderServiceLink
 from services.command_transaction import command_transaction
 from services.order_projection_service import OrderProjectionService
 from services.order_proposal_lifecycle import (
@@ -110,6 +111,21 @@ class OrderProposalCommandService:
             await session.flush()
 
             if source:
+                source_configuration = (await session.execute(
+                    select(OrderMultiSplitConfiguration).where(OrderMultiSplitConfiguration.proposal_id == source.id)
+                )).scalar_one_or_none()
+                if source_configuration is not None:
+                    session.add(OrderMultiSplitConfiguration(
+                        order_id=order_id,
+                        proposal_id=int(proposal.id),
+                        rooms=source_configuration.rooms,
+                        component_snapshot=source_configuration.component_snapshot,
+                        verification_status=source_configuration.verification_status,
+                        profile_id=source_configuration.profile_id,
+                        profile_version=source_configuration.profile_version,
+                        source_url=source_configuration.source_url,
+                        source_version=source_configuration.source_version,
+                    ))
                 for link in [
                     item for item in order.product_links if item.proposal_id == source.id
                 ]:

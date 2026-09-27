@@ -18,6 +18,7 @@ from models import (
     CustomerBranch,
     CustomerType,
     Order,
+    OrderMultiSplitConfiguration,
     OrderInstaller,
     OrderProductLink,
     OrderProposal,
@@ -205,6 +206,7 @@ class OrderProjectionService:
         proposal: OrderProposal,
         *,
         demo_read_only: bool = False,
+        multi_split_configuration: OrderMultiSplitConfiguration | None = None,
     ) -> Dict[str, Any]:
         product_links = [link for link in order.product_links if link.proposal_id == proposal.id]
         service_links = [link for link in order.service_links if link.proposal_id == proposal.id]
@@ -228,6 +230,17 @@ class OrderProjectionService:
                 OrderProjectionService._map_service_line(link, demo_read_only=demo_read_only)
                 for link in service_links
             ],
+            "multi_split_configuration": (
+                {
+                    "rooms": multi_split_configuration.rooms,
+                    "component_snapshot": multi_split_configuration.component_snapshot,
+                    "verification_status": multi_split_configuration.verification_status,
+                    "profile_version": multi_split_configuration.profile_version,
+                    "source_url": multi_split_configuration.source_url,
+                    "source_version": multi_split_configuration.source_version,
+                }
+                if multi_split_configuration else None
+            ),
         }
 
     @staticmethod
@@ -468,11 +481,16 @@ class OrderProjectionService:
             for link in order.service_links
             if selected_proposal_id is None or link.proposal_id == selected_proposal_id
         ]
+        multi_split_rows = (await session.execute(
+            select(OrderMultiSplitConfiguration).where(OrderMultiSplitConfiguration.order_id == order_id)
+        )).scalars().all()
+        multi_split_by_proposal = {row.proposal_id: row for row in multi_split_rows}
         data["proposals"] = [
             OrderProjectionService._map_order_proposal(
                 order,
                 proposal,
                 demo_read_only=tenant_scope.demo_read_only,
+                multi_split_configuration=multi_split_by_proposal.get(proposal.id),
             )
             for proposal in sorted(order.proposals, key=lambda proposal: (proposal.is_archived, proposal.sort_order, proposal.id or 0))
         ]

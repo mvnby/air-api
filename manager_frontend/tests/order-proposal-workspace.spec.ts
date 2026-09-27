@@ -62,6 +62,7 @@ describe('OrderProposalWorkspace', () => {
         workflow: 'sales_installation',
         orderId: null,
         beforeInstallationAction: vi.fn().mockResolvedValue(true),
+        beforeMultiSplitSave: vi.fn().mockResolvedValue(true),
         beginInstallationAttach: vi.fn().mockResolvedValue(true),
         afterInstallationAttach: vi.fn().mockResolvedValue(true),
         endInstallationAttach: vi.fn(),

@@ -68,6 +68,11 @@ from .installation_discount import (
     InstallationDiscountProductRule,
 )
 from .media import MediaAsset, MediaProcessingJob
+from .multi_split import (
+    LeadMultiSplitConfiguration,
+    MultiSplitCompatibilityProfile,
+    OrderMultiSplitConfiguration,
+)
 from .service_asset import (
     EquipmentAttachmentLink,
     EquipmentMaintenanceReminder,
@@ -215,16 +220,19 @@ __all__ = [
     "Lead",
     "LeadIntakeSource",
     "LeadLossReason",
+    "LeadMultiSplitConfiguration",
     "LeadSegmentHint",
     "LeadSource",
     "LeadStatus",
     "LegacyOwnerAuthState",
     "MediaAsset",
     "MediaProcessingJob",
+    "MultiSplitCompatibilityProfile",
     "OrderAttachmentLink",
     "Order",
     "OrderDocument",
     "OrderInstaller",
+    "OrderMultiSplitConfiguration",
     "OrderProductLink",
     "OrderProposal",
     "RepairComplaintPreset",
