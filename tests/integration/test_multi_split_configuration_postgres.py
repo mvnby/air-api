@@ -139,3 +139,25 @@ async def test_public_lead_transfer_keeps_snapshot_as_one_draft(db, tenant_scope
     assert configurations[0]["status"] == "draft"
     assert configurations[0]["product_lines"][0]["price"] == 800
     assert configurations[0]["multi_split_configuration"]["rooms"][0]["name"] == "Комната"
+
+
+@pytest.mark.asyncio
+async def test_public_lead_transfer_rejects_missing_component(db):
+    lead = Lead(tenant_id=1, storefront_id=1, name="Missing unit", phone="+375291234570", request_text="Мультисплит")
+    db.add(lead)
+    await db.flush()
+    db.add(LeadMultiSplitConfiguration(
+        lead_id=int(lead.id),
+        rooms=[{"name": "Комната", "indoor_product_id": 99999999}],
+        component_snapshot=[{
+            "product_id": 99999999, "title": "Removed unit", "product_kind": "indoor_unit",
+            "quantity": 1, "unit_price_byn": 800, "total_price_byn": 800, "availability": "out_of_stock",
+        }],
+        verification_status="requires_specialist",
+    ))
+    order = Order(tenant_id=1, storefront_id=1, status=OrderStatus.NEW_LEAD)
+    db.add(order)
+    await db.flush()
+
+    with pytest.raises(ValueError, match="отсутствует в каталоге"):
+        await MultiSplitLeadTransferService.transfer(db, lead_id=int(lead.id), order=order)

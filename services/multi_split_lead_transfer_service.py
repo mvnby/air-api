@@ -37,21 +37,22 @@ class MultiSplitLeadTransferService:
         ids = {int(item["product_id"]) for item in snapshot}
         products = (await session.execute(select(Product).where(Product.id.in_(ids)))).scalars().all()
         by_id = {int(product.id): product for product in products}
-        if set(by_id) == ids:
-            metrics = await ProductSupplyMetricsService.compute_for_products(session, products)
-            for item in snapshot:
-                product_id = int(item["product_id"])
-                raw_cost = metrics.get(product_id, {}).get("min_cost_byn")
-                session.add(OrderProductLink(
-                    order_id=int(order.id),
-                    proposal_id=int(proposal.id),
-                    product_id=product_id,
-                    quantity=int(item["quantity"]),
-                    price=int(item["unit_price_byn"]),
-                    cost=int(round(float(raw_cost))) if raw_cost is not None else 0,
-                    title_snapshot=str(item["title"]),
-                    currency_snapshot="BYN",
-                ))
+        if set(by_id) != ids:
+            raise ValueError("Компонент мультисплита из заявки отсутствует в каталоге. Проверьте состав перед созданием заказа.")
+        metrics = await ProductSupplyMetricsService.compute_for_products(session, products)
+        for item in snapshot:
+            product_id = int(item["product_id"])
+            raw_cost = metrics.get(product_id, {}).get("min_cost_byn")
+            session.add(OrderProductLink(
+                order_id=int(order.id),
+                proposal_id=int(proposal.id),
+                product_id=product_id,
+                quantity=int(item["quantity"]),
+                price=int(item["unit_price_byn"]),
+                cost=int(round(float(raw_cost))) if raw_cost is not None else 0,
+                title_snapshot=str(item["title"]),
+                currency_snapshot="BYN",
+            ))
 
         session.add(OrderMultiSplitConfiguration(
             order_id=int(order.id),
