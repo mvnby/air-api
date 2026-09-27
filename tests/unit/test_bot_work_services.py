@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel, select
@@ -156,7 +157,8 @@ def test_quick_order_fallback_does_not_treat_date_day_as_time():
     )
 
     assert draft["service_type"] == "maintenance"
-    assert draft["target_date"] == "2026-06-15T09:00:00"
+    assert draft["target_date"] == "2026-06-15T00:00:00"
+    assert draft["target_date_precision"] == "date"
 
 
 def test_quick_order_rich_preview_formats_and_escapes_fields():
@@ -195,8 +197,10 @@ async def test_quick_order_address_check_adds_preview_warning(monkeypatch):
     draft = await BotQuickOrderService.enrich_draft({"address": "Победы 15"})
     preview = BotQuickOrderService.format_draft_preview(draft)
 
-    assert draft["address_check"]["status"] == "confirmed"
-    assert "Проверка адреса: адрес найден: Беларусь, Витебск, улица Победы, 15" in preview
+    assert draft["address_check"]["status"] == "needs_review"
+    assert draft["address_check"]["suggestion"] == "Беларусь, Витебск, улица Победы, 15"
+    assert draft["address"] == "Победы 15"
+    assert "Проверка адреса: адрес найден в подсказках" in preview
 
 
 @pytest.mark.asyncio
@@ -1430,183 +1434,153 @@ async def test_product_read_curated_passes_power_range_to_dao(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_quick_order_create_uses_order_service_and_stage_for_dated_work(monkeypatch):
-    calls = {}
-
-    async def fake_create_lead(session, payload, *, tenant_scope):
-        calls["lead_payload"] = payload
-        calls["lead_tenant_scope"] = tenant_scope
-        return {"id": 7}
-
-    async def fake_qualify_lead(session, lead_id, payload, *, tenant_scope):
-        calls["qualify"] = {
-            "lead_id": lead_id,
-            "payload": payload,
-            "tenant_scope": tenant_scope,
-        }
-        return {"lead": {"id": lead_id, "status": "qualified"}, "customer_id": 5, "order_id": 42}
-
-    async def fake_update_order(session, order_id, payload, *, tenant_scope):
-        calls["update"] = {
-            "order_id": order_id,
-            "payload": payload,
-            "tenant_scope": tenant_scope,
-        }
-        return {"id": order_id, "status": "new_lead"}
-
-    async def fake_add_order_stage(session, order_id, payload, *, tenant_scope):
-        calls["stage_order_id"] = order_id
-        calls["stage_payload"] = payload
-        calls["stage_tenant_scope"] = tenant_scope
-        return {"id": order_id, "work_stages": [{"name": payload.name}]}
-
-    async def fake_notify(session, order_id, *, source_label, tenant_scope):
-        calls["notify"] = {
-            "order_id": order_id,
-            "source_label": source_label,
-            "tenant_scope": tenant_scope,
-        }
-        return 1
-
-    monkeypatch.setattr("services.bot_quick_order_service.LeadService.create_lead", fake_create_lead)
-    monkeypatch.setattr("services.bot_quick_order_service.LeadService.qualify_lead", fake_qualify_lead)
-    monkeypatch.setattr("services.bot_quick_order_service.OrderService.update_order_for_manager", fake_update_order)
+@pytest.mark.parametrize(
+    ("service_type", "workflow_type", "title"),
+    [
+        ("install_only", "service_work", "Монтаж"),
+        ("maintenance", "maintenance", "Обслуживание"),
+    ],
+)
+async def test_quick_order_existing_customer_creates_negotiation_without_calendar_stage(
+    sqlite_staff_session, monkeypatch, service_type, workflow_type, title,
+):
+    customer = Customer(tenant_id=1, name="Иван", phone="+375291234567")
+    sqlite_staff_session.add(customer)
+    await sqlite_staff_session.commit()
+    notify = AsyncMock(return_value=1)
+    add_stage = AsyncMock(side_effect=AssertionError("scenario choice must not create a work stage"))
     monkeypatch.setattr(
-        "services.bot_quick_order_service.OrderService.create_manager_order",
-        AsyncMock(side_effect=AssertionError("quick order must go through LeadService")),
+        "services.bot_quick_order_service.NotificationService.notify_admins_staff_order_created", notify,
     )
-    monkeypatch.setattr(
-        "services.bot_quick_order_service.OrderService.add_order_stage",
-        fake_add_order_stage,
-    )
-    monkeypatch.setattr(
-        "services.bot_quick_order_service.NotificationService.notify_admins_staff_order_created",
-        fake_notify,
-    )
+    monkeypatch.setattr("services.bot_quick_order_service.OrderService.add_order_stage", add_stage)
 
-    session = _NoExistingQuickOrderSession()
-    order = await BotQuickOrderService.create_order_from_draft(
-        session,
+    result = await BotQuickOrderService.create_order_from_draft(
+        sqlite_staff_session,
         {
+            "customer_id": customer.id,
             "name": "Иван",
-            "phone": "+375291234567",
+            "workflow_type": workflow_type,
+            "service_type": service_type,
             "address": "Победы 15",
-            "service_type": "install_only",
+            "contact_name": "Сергей",
             "target_date": "2026-06-15T14:00:00",
-            "request_text": "Монтаж, Иван, Победы 15",
+            "target_date_precision": "datetime",
+            "request_text": "Нужны работы на объекте",
         },
         tenant_scope=TEST_TENANT_SCOPE,
+        source_fingerprint=f"intent:{service_type}",
     )
 
-    assert order["id"] == 42
-    assert calls["lead_payload"].source == "bot"
-    assert calls["lead_payload"].segment_hint == "b2c"
-    assert calls["lead_payload"].next_followup_date.isoformat() == "2026-06-15T14:00:00"
-    assert calls["lead_tenant_scope"] == TEST_TENANT_SCOPE
-    assert calls["qualify"]["lead_id"] == 7
-    assert calls["qualify"]["payload"].delivery_address == "Победы 15"
-    assert calls["qualify"]["tenant_scope"] == TEST_TENANT_SCOPE
-    assert calls["update"]["order_id"] == 42
-    assert calls["update"]["payload"].title == "Монтаж"
-    assert calls["update"]["payload"].service_type == "install_only"
-    assert calls["update"]["tenant_scope"] == TEST_TENANT_SCOPE
-    assert calls["stage_order_id"] == 42
-    assert calls["stage_payload"].name == "Монтаж"
-    assert calls["stage_tenant_scope"] == TEST_TENANT_SCOPE
-    assert session.commit_count == 1
-    assert calls["notify"] == {
-        "order_id": 42,
-        "source_label": "Telegram-бот",
-        "tenant_scope": TEST_TENANT_SCOPE,
-    }
+    order = await sqlite_staff_session.get(Order, result["id"])
+    await sqlite_staff_session.refresh(customer)
+    assert result["_bot_order_created"] is True
+    assert order.status == OrderStatus.NEGOTIATION
+    assert (order.title, order.workflow_type) == (title, workflow_type)
+    assert order.technical_meta["service_type"] == service_type
+    assert order.technical_meta["contact_name"] == "Сергей"
+    assert order.technical_meta["requested_date"] == "2026-06-15T14:00:00"
+    assert order.technical_meta["requested_date_precision"] == "datetime"
+    assert order.installation_date is None
+    assert order.delivery_address == "Победы 15"
+    assert customer.actual_address is None
+    assert list((await sqlite_staff_session.execute(select(Lead))).scalars()) == []
+    assert list((await sqlite_staff_session.execute(select(OrderWorkStage))).scalars()) == []
+    add_stage.assert_not_awaited()
+    notify.assert_awaited_once_with(
+        sqlite_staff_session, result["id"],
+        source_label="Telegram-бот", tenant_scope=TEST_TENANT_SCOPE,
+    )
 
 
 @pytest.mark.asyncio
-async def test_quick_order_create_notifies_admins_for_maintenance_without_stage(monkeypatch):
-    calls = {}
-
-    async def fake_create_lead(session, payload, *, tenant_scope):
-        calls["lead_payload"] = payload
-        calls["lead_tenant_scope"] = tenant_scope
-        return {"id": 8}
-
-    async def fake_qualify_lead(session, lead_id, payload, *, tenant_scope):
-        calls["qualify"] = {
-            "lead_id": lead_id,
-            "payload": payload,
-            "tenant_scope": tenant_scope,
-        }
-        return {"lead": {"id": lead_id, "status": "qualified"}, "customer_id": 5, "order_id": 43}
-
-    async def fake_update_order(session, order_id, payload, *, tenant_scope):
-        calls["update"] = {
-            "order_id": order_id,
-            "payload": payload,
-            "tenant_scope": tenant_scope,
-        }
-        return {"id": order_id, "status": payload.status}
-
-    async def fake_add_order_stage(session, order_id, payload, *, tenant_scope):
-        raise AssertionError("maintenance quick orders should use order installation_date, not a work stage")
-
-    async def fake_notify(session, order_id, *, source_label, tenant_scope):
-        calls["notify"] = {
-            "order_id": order_id,
-            "source_label": source_label,
-            "tenant_scope": tenant_scope,
-        }
-        return 1
-
-    monkeypatch.setattr("services.bot_quick_order_service.LeadService.create_lead", fake_create_lead)
-    monkeypatch.setattr("services.bot_quick_order_service.LeadService.qualify_lead", fake_qualify_lead)
-    monkeypatch.setattr("services.bot_quick_order_service.OrderService.update_order_for_manager", fake_update_order)
+async def test_quick_order_existing_customer_replay_returns_same_order_and_notifies_once(
+    sqlite_staff_session, monkeypatch,
+):
+    customer = Customer(tenant_id=1, name="Иван", phone="+375291234567")
+    sqlite_staff_session.add(customer)
+    await sqlite_staff_session.commit()
+    notify = AsyncMock(return_value=1)
     monkeypatch.setattr(
-        "services.bot_quick_order_service.OrderService.create_manager_order",
-        AsyncMock(side_effect=AssertionError("quick order must go through LeadService")),
+        "services.bot_quick_order_service.NotificationService.notify_admins_staff_order_created", notify,
     )
-    monkeypatch.setattr(
-        "services.bot_quick_order_service.OrderService.add_order_stage",
-        fake_add_order_stage,
-    )
-    monkeypatch.setattr(
-        "services.bot_quick_order_service.NotificationService.notify_admins_staff_order_created",
-        fake_notify,
-    )
-
-    session = _NoExistingQuickOrderSession()
-    order = await BotQuickOrderService.create_order_from_draft(
-        session,
-        {
-            "name": "Иван",
-            "phone": "+375291234567",
-            "address": "Победы 15",
-            "service_type": "maintenance",
-            "target_date": "2026-06-15T14:00:00",
-            "request_text": "ТО, Иван, Победы 15",
-        },
-        tenant_scope=TEST_TENANT_SCOPE,
-    )
-
-    assert order["id"] == 43
-    assert calls["lead_payload"].source == "bot"
-    assert calls["lead_tenant_scope"] == TEST_TENANT_SCOPE
-    assert calls["qualify"]["payload"].delivery_address == "Победы 15"
-    assert calls["qualify"]["tenant_scope"] == TEST_TENANT_SCOPE
-    assert calls["update"]["payload"].title == "Обслуживание"
-    assert calls["update"]["payload"].service_type == "maintenance"
-    assert calls["update"]["payload"].status == "negotiation"
-    assert calls["update"]["payload"].installation_date.isoformat() == "2026-06-15T14:00:00"
-    assert calls["update"]["tenant_scope"] == TEST_TENANT_SCOPE
-    assert calls["notify"] == {
-        "order_id": 43,
-        "source_label": "Telegram-бот",
-        "tenant_scope": TEST_TENANT_SCOPE,
+    draft = {
+        "customer_id": customer.id,
+        "workflow_type": "service_work",
+        "service_type": "install_only",
+        "request_text": "Монтаж",
     }
-    assert session.commit_count == 1
+    first = await BotQuickOrderService.create_order_from_draft(
+        sqlite_staff_session, draft, tenant_scope=TEST_TENANT_SCOPE,
+        source_fingerprint="intent:one",
+    )
+    repeated = await BotQuickOrderService.create_order_from_draft(
+        sqlite_staff_session, draft, tenant_scope=TEST_TENANT_SCOPE,
+        source_fingerprint="intent:one",
+    )
+    distinct = await BotQuickOrderService.create_order_from_draft(
+        sqlite_staff_session, draft, tenant_scope=TEST_TENANT_SCOPE,
+        source_fingerprint="intent:two",
+    )
+    assert first["id"] == repeated["id"]
+    assert repeated["_bot_order_created"] is False
+    assert distinct["id"] != first["id"]
+    assert len(list((await sqlite_staff_session.execute(select(Order))).scalars())) == 2
+    assert notify.await_count == 2
 
 
 @pytest.mark.asyncio
-async def test_quick_order_create_persists_lead_funnel_and_calendar_stage(db, monkeypatch):
+async def test_quick_order_existing_customer_rolls_back_if_final_step_fails(
+    sqlite_staff_session, monkeypatch,
+):
+    from services.order_create_command_service import OrderCreateCommandService
+
+    customer = Customer(tenant_id=1, name="Иван", phone="+375291234567")
+    sqlite_staff_session.add(customer)
+    await sqlite_staff_session.commit()
+    # SQLite's driver starts a SAVEPOINT without a physical transaction unless
+    # BEGIN is issued first; root the rollback assertion in a real transaction.
+    await sqlite_staff_session.execute(text("BEGIN IMMEDIATE"))
+    original_create = OrderCreateCommandService.create_manager_order
+    attempts = 0
+
+    async def fail_after_create(session, payload, *, tenant_scope):
+        nonlocal attempts
+        created = await original_create(session, payload, tenant_scope=tenant_scope)
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("final step failed")
+        return created
+
+    notify = AsyncMock(return_value=1)
+    monkeypatch.setattr(OrderCreateCommandService, "create_manager_order", fail_after_create)
+    monkeypatch.setattr(
+        "services.bot_quick_order_service.NotificationService.notify_admins_staff_order_created", notify,
+    )
+    draft = {
+        "customer_id": customer.id,
+        "workflow_type": "maintenance",
+        "service_type": "maintenance",
+        "request_text": "Обслуживание",
+    }
+    with pytest.raises(RuntimeError, match="final step failed"):
+        await BotQuickOrderService.create_order_from_draft(
+            sqlite_staff_session, draft, tenant_scope=TEST_TENANT_SCOPE,
+            source_fingerprint="intent:atomic",
+        )
+    assert list((await sqlite_staff_session.execute(select(Order))).scalars()) == []
+    notify.assert_not_awaited()
+
+    result = await BotQuickOrderService.create_order_from_draft(
+        sqlite_staff_session, draft, tenant_scope=TEST_TENANT_SCOPE,
+        source_fingerprint="intent:atomic",
+    )
+    assert result["_bot_order_created"] is True
+    assert len(list((await sqlite_staff_session.execute(select(Order))).scalars())) == 1
+    notify.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_quick_order_create_persists_lead_funnel_without_calendar_stage(db, monkeypatch):
     notify = AsyncMock(return_value=1)
     monkeypatch.setattr(
         "services.bot_quick_order_service.NotificationService.notify_admins_staff_order_created",
@@ -1617,6 +1591,7 @@ async def test_quick_order_create_persists_lead_funnel_and_calendar_stage(db, mo
         db,
         {
             "name": "Иван",
+            "customer_type": "individual",
             "phone": "+375291234567",
             "address": "Победы 15",
             "service_type": "install_only",
@@ -1642,11 +1617,11 @@ async def test_quick_order_create_persists_lead_funnel_and_calendar_stage(db, mo
     assert persisted_order.delivery_address == "Победы 15"
     assert persisted_order.title == "Монтаж"
     assert persisted_order.technical_meta["service_type"] == "install_only"
+    assert persisted_order.workflow_type == "service_work"
+    assert persisted_order.technical_meta["requested_date"] == "2026-06-15T14:00:00"
+    assert persisted_order.installation_date is None
 
-    stage = (await db.execute(select(OrderWorkStage))).scalars().one()
-    assert stage.order_id == order["id"]
-    assert stage.name == "Монтаж"
-    assert stage.start_time.isoformat() == "2026-06-15T14:00:00"
+    assert list((await db.execute(select(OrderWorkStage))).scalars()) == []
     notify.assert_awaited_once_with(
         db,
         order["id"],
@@ -1656,33 +1631,30 @@ async def test_quick_order_create_persists_lead_funnel_and_calendar_stage(db, mo
 
 
 @pytest.mark.asyncio
-async def test_quick_order_retry_after_partial_failure_reuses_lead_and_order(db, monkeypatch):
-    from services.order_service import OrderService
+async def test_quick_order_retry_after_qualification_failure_is_atomic(db, monkeypatch):
+    from services.lead_service import LeadService
 
     notify = AsyncMock(return_value=1)
     monkeypatch.setattr(
-        "services.bot_quick_order_service.NotificationService.notify_admins_staff_order_created",
-        notify,
+        "services.bot_quick_order_service.NotificationService.notify_admins_staff_order_created", notify,
     )
-    original_add_order_stage = OrderService.add_order_stage
-    stage_attempts = 0
+    original_qualify = LeadService.qualify_lead
+    attempts = 0
 
-    async def flaky_add_order_stage(session, order_id, payload, *, tenant_scope):
-        nonlocal stage_attempts
-        stage_attempts += 1
-        if stage_attempts == 1:
-            raise RuntimeError("stage failed")
-        return await original_add_order_stage(
-            session,
-            order_id,
-            payload,
-            tenant_scope=tenant_scope,
+    async def fail_once_after_qualification(session, lead_id, payload, *, tenant_scope):
+        nonlocal attempts
+        result = await original_qualify(
+            session, lead_id, payload, tenant_scope=tenant_scope,
         )
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("qualification follow-up failed")
+        return result
 
-    monkeypatch.setattr("services.bot_quick_order_service.OrderService.add_order_stage", flaky_add_order_stage)
-
+    monkeypatch.setattr(LeadService, "qualify_lead", fail_once_after_qualification)
     draft = {
         "name": "Иван",
+        "customer_type": "individual",
         "phone": "+375291234567",
         "address": "Победы 15",
         "service_type": "install_only",
@@ -1690,41 +1662,26 @@ async def test_quick_order_retry_after_partial_failure_reuses_lead_and_order(db,
         "request_text": "Монтаж, Иван, Победы 15",
     }
 
-    with pytest.raises(RuntimeError, match="stage failed"):
+    with pytest.raises(RuntimeError, match="qualification follow-up failed"):
         await BotQuickOrderService.create_order_from_draft(
-            db,
-            draft,
-            tenant_scope=TEST_TENANT_SCOPE,
+            db, draft, tenant_scope=TEST_TENANT_SCOPE,
+            source_fingerprint="intent:atomic-new-customer",
         )
+    assert list((await db.execute(select(Lead))).scalars()) == []
+    assert list((await db.execute(select(Order))).scalars()) == []
+    assert list((await db.execute(select(OrderWorkStage))).scalars()) == []
+    notify.assert_not_awaited()
 
-    leads_after_failure = (await db.execute(select(Lead))).scalars().all()
-    orders_after_failure = (await db.execute(select(Order))).scalars().all()
-    stages_after_failure = (await db.execute(select(OrderWorkStage))).scalars().all()
-    assert len(leads_after_failure) == 1
-    assert len(orders_after_failure) == 1
-    assert leads_after_failure[0].source_fingerprint.startswith("bot_quick_order:")
-    assert leads_after_failure[0].converted_order_id == orders_after_failure[0].id
-    assert leads_after_failure[0].tenant_id == TEST_TENANT_SCOPE.tenant_id
-    assert leads_after_failure[0].storefront_id == TEST_TENANT_SCOPE.storefront_id
-    assert orders_after_failure[0].tenant_id == TEST_TENANT_SCOPE.tenant_id
-    assert orders_after_failure[0].storefront_id == TEST_TENANT_SCOPE.storefront_id
-    assert stages_after_failure == []
-
-    order = await BotQuickOrderService.create_order_from_draft(
-        db,
-        draft,
-        tenant_scope=TEST_TENANT_SCOPE,
+    result = await BotQuickOrderService.create_order_from_draft(
+        db, draft, tenant_scope=TEST_TENANT_SCOPE,
+        source_fingerprint="intent:atomic-new-customer",
     )
-
-    leads = (await db.execute(select(Lead))).scalars().all()
-    orders = (await db.execute(select(Order))).scalars().all()
-    stages = (await db.execute(select(OrderWorkStage))).scalars().all()
-    assert len(leads) == 1
-    assert len(orders) == 1
-    assert order["id"] == orders_after_failure[0].id
-    assert len(stages) == 1
-    assert stages[0].order_id == order["id"]
-    assert notify.await_count == 1
+    leads = list((await db.execute(select(Lead))).scalars())
+    orders = list((await db.execute(select(Order))).scalars())
+    assert len(leads) == len(orders) == 1
+    assert leads[0].converted_order_id == orders[0].id == result["id"]
+    assert list((await db.execute(select(OrderWorkStage))).scalars()) == []
+    notify.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -1734,7 +1691,11 @@ async def test_quick_order_create_ignores_duplicate_callback(monkeypatch):
 
     class _State:
         async def get_data(self):
-            return {"quick_order_creating": True, "quick_order_draft": {"request_text": "Тест"}}
+            return {
+                "quick_order_creating": True,
+                "quick_order_draft_id": "draft-123",
+                "quick_order_version": 2,
+            }
 
         async def update_data(self, **kwargs):
             raise AssertionError("duplicate callback should not update state")
@@ -1743,16 +1704,21 @@ async def test_quick_order_create_ignores_duplicate_callback(monkeypatch):
             raise AssertionError("duplicate callback should not clear state")
 
     callback = SimpleNamespace(
+        data="qo_create:draft-123:2",
         from_user=SimpleNamespace(id=123),
         message=SimpleNamespace(edit_text=AsyncMock(), answer=AsyncMock()),
         answer=AsyncMock(),
     )
 
     monkeypatch.setattr(work_handlers, "_access_context", fake_access_context)
-    gateway = SimpleNamespace(create_quick_order=AsyncMock())
+    gateway = SimpleNamespace(
+        get_quick_order_draft=AsyncMock(),
+        create_quick_order_from_draft=AsyncMock(),
+    )
     monkeypatch.setattr(work_handlers, "get_bot_api_gateway", lambda: gateway)
 
-    await work_handlers.quick_order_create(callback, _State())
+    await work_handlers.quick_order_action(callback, _State())
 
-    callback.answer.assert_awaited_once_with("Заказ уже создается", show_alert=False)
-    gateway.create_quick_order.assert_not_called()
+    callback.answer.assert_awaited_once_with("Заказ уже создаётся")
+    gateway.get_quick_order_draft.assert_not_awaited()
+    gateway.create_quick_order_from_draft.assert_not_awaited()

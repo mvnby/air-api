@@ -76,6 +76,7 @@ async def test_postgres_bot_order_and_customer_mutations_are_concurrently_idempo
     )
     draft = BotQuickOrderDraft(
         name="Иван",
+        customer_type="individual",
         phone="+375291111111",
         address="Победы 15",
         service_type="install_only",
@@ -132,6 +133,8 @@ async def test_postgres_bot_order_and_customer_mutations_are_concurrently_idempo
 
     assert len(leads) == 1
     assert len(orders) == 1
-    assert len(stages) == 1
+    assert stages == []
     assert len(customers) == 2
+    assert orders[0].workflow_type == "service_work"
+    assert orders[0].technical_meta["requested_date"] == "2026-07-20T14:00:00"
     assert persisted_recognition.status == "confirmed"

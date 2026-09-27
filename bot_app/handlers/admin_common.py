@@ -597,7 +597,7 @@ async def _ask_requisites_file_action(
             "file_size": normalized_size,
             "telegram_message_id": message.message_id,
             "telegram_chat_id": message.chat.id if message.chat else None,
-            "caption": (message.caption or "")[:1000],
+            "caption": (getattr(message, "caption", None) or "")[:1000],
         }
     )
     await message.answer(

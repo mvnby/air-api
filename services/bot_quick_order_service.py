@@ -206,22 +206,29 @@ class BotQuickOrderService:
             )[0]
             return BotQuickOrderService._clean_optional(first_object.strip(" ,.;"))
 
-        markers = ("ул", "улица", "пр-т", "проспект", "пер", "переулок", "победы", "московский")
         parts = [part.strip(" ,.;") for part in re.split(r"[;\n]", text) if part.strip()]
         for part in parts:
-            lowered = part.casefold()
-            if any(marker in lowered for marker in markers) and re.search(r"\d", part):
+            marker = re.search(
+                r"\b(?:ул\.?|улица|пр-т|проспект|пер\.?|переулок|победы|московский)\b",
+                part,
+                re.IGNORECASE,
+            )
+            if marker and re.search(r"\d", part[marker.start():]):
+                # Earlier comma fields may contain a phone; begin at the street.
+                street_text = part[marker.start():]
                 address_match = re.search(
                     r"(?:(?:г\.|город)\s*[^,;]+,?\s*)?(?:(?:ул\.|улица|пр-т|проспект|пер\.|переулок)\s*)?"
                     r"[^,;]+,?\s*\d+[а-яa-z]?(?:/\d+)?(?:,?\s*(?:корпус|корп\.|к\.|кв\.|квартира|офис|этаж)\s*\d+[а-яa-z]?)?",
-                    part,
+                    street_text,
                     flags=re.IGNORECASE,
                 )
                 if address_match:
-                    prefix = part[:address_match.start()]
-                    if re.fullmatch(r"\s*(?:г\.|город)?\s*[А-ЯЁІЎ][а-яёіў-]+\s*,\s*", prefix):
-                        return BotQuickOrderService._clean_optional((prefix + address_match.group(0)).strip(" ,.;"))
-                    return BotQuickOrderService._clean_optional(address_match.group(0).strip(" ,.;"))
+                    city = re.search(
+                        r"(?:^|,)\s*((?:г\.?\s*|город\s+)?[А-ЯЁІЎ][а-яёіў-]+)\s*,\s*$",
+                        part[:marker.start()],
+                    )
+                    address = (city.group(1) + ", " if city else "") + address_match.group(0)
+                    return BotQuickOrderService._clean_optional(address.strip(" ,.;"))
         return None
 
     @classmethod
@@ -649,26 +656,6 @@ class BotQuickOrderService:
             raise ValueError("Уточните имя или название клиента")
         if not normalized.get("customer_type"):
             raise ValueError("Уточните тип клиента: физлицо, ИП или организация")
-        predicates = []
-        phone_digits = normalize_phone_digits(normalized.get("phone") or "")
-        if phone_digits:
-            predicates.append(
-                func.regexp_replace(func.coalesce(Customer.phone, ""), r"\D", "", "g") == phone_digits
-            )
-        inn = normalized.get("inn")
-        if inn:
-            predicates.append(Customer.inn == inn)
-        email = (normalized.get("email") or "").strip().lower()
-        if email:
-            predicates.append(func.lower(Customer.email) == email)
-        if predicates:
-            candidate = (
-                await session.execute(select(Customer.id).where(
-                    or_(*predicates), tenant_scope_clause(Customer, tenant_scope)
-                ).limit(1))
-            ).first()
-            if candidate:
-                raise ValueError("Найден существующий клиент. Выберите его через кнопку «Клиент»")
         result = await session.execute(
             select(Lead)
             .where(
@@ -705,6 +692,26 @@ class BotQuickOrderService:
             if existing_lead:
                 lead_id = int(existing_lead.id or 0)
             else:
+                predicates = []
+                phone_digits = normalize_phone_digits(normalized.get("phone") or "")
+                if phone_digits:
+                    predicates.append(
+                        func.regexp_replace(func.coalesce(Customer.phone, ""), r"\D", "", "g") == phone_digits
+                    )
+                inn = normalized.get("inn")
+                if inn:
+                    predicates.append(Customer.inn == inn)
+                email = (normalized.get("email") or "").strip().lower()
+                if email:
+                    predicates.append(func.lower(Customer.email) == email)
+                if predicates:
+                    candidate = (
+                        await session.execute(select(Customer.id).where(
+                            or_(*predicates), tenant_scope_clause(Customer, tenant_scope)
+                        ).limit(1))
+                    ).first()
+                    if candidate:
+                        raise ValueError("Найден существующий клиент. Выберите его через кнопку «Клиент»")
                 try:
                     lead = await LeadService.create_lead(
                         session,
