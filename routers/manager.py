@@ -8,6 +8,7 @@ from routers import manager_calendar
 from routers import manager_catalog
 from routers import manager_catalog_management
 from routers import manager_catalog_decision
+from routers import manager_multi_split
 from routers import manager_catalog_quality
 from routers import manager_content_ai
 from routers import manager_crm
@@ -59,6 +60,7 @@ router.include_router(manager_features.router)
 router.include_router(manager_catalog.router)
 router.include_router(manager_catalog_management.router)
 router.include_router(manager_catalog_decision.router)
+router.include_router(manager_multi_split.router)
 router.include_router(manager_catalog_quality.router)
 router.include_router(manager_content_ai.router)
 router.include_router(manager_media.router)

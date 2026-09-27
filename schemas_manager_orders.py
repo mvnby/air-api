@@ -454,6 +454,15 @@ class ManagerStaleWorkStageListResponse(BaseModel):
     total: int
 
 
+class OrderMultiSplitConfigurationResponse(BaseModel):
+    rooms: List[Dict[str, Any]] = Field(default_factory=list)
+    component_snapshot: List[Dict[str, Any]] = Field(default_factory=list)
+    verification_status: str
+    profile_version: Optional[int] = None
+    source_url: Optional[str] = None
+    source_version: Optional[str] = None
+
+
 class OrderProposalResponse(BaseModel):
     id: int
     order_id: int
@@ -467,6 +476,7 @@ class OrderProposalResponse(BaseModel):
     margin: Optional[float] = None
     product_lines: List[OrderProductLineResponse] = Field(default_factory=list)
     service_lines: List[OrderServiceLineResponse] = Field(default_factory=list)
+    multi_split_configuration: Optional[OrderMultiSplitConfigurationResponse] = None
 
 
 class OrderProposalCreatePayload(BaseModel):

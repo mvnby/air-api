@@ -519,6 +519,10 @@ class LeadService:
         session.add(order)
         await session.flush()
 
+        from services.multi_split_lead_transfer_service import MultiSplitLeadTransferService
+
+        await MultiSplitLeadTransferService.transfer(session, lead_id=int(lead.id), order=order)
+
         lead.status = LeadStatus.qualified
         lead.converted_order_id = order.id
         lead.segment_hint = LeadService._normalize_segment_hint(
