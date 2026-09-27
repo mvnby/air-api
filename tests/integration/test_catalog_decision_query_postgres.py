@@ -3,7 +3,7 @@ from sqlalchemy import event
 from sqlmodel import select
 
 from core.config import settings
-from models import Brand, Order, Product, ProductSeries, Tag, TagGroup
+from models import Brand, Order, Product, ProductSeries, ProductTagLink, Tag, TagGroup
 from models.supplier import ProductSupplierMapping, Supplier, SupplierOffer
 from models.tenancy import TenantScope
 from services.catalog_decision_projection import (
@@ -12,6 +12,12 @@ from services.catalog_decision_projection import (
     CatalogDecisionScopeError,
 )
 from services.catalog_decision_quick_order_service import CatalogDecisionQuickOrderService
+from crud.catalog_management import CatalogManagementDAO
+from api_contracts.catalog_management import CatalogManagementFilters
+
+
+def _complete_product(**values) -> Product:
+    return Product(product_kind="complete_split_system", **values)
 
 
 async def _auth_headers(async_client):
@@ -34,14 +40,83 @@ async def _category(session, slug: str) -> Tag:
 
 
 @pytest.mark.asyncio
+async def test_complete_split_scope_applies_before_count_sort_facets_and_snapshots(db):
+    complete_brand = Brand(title="Complete brand", slug="complete-brand")
+    component_brand = Brand(title="Component brand", slug="component-brand")
+    db.add_all([complete_brand, component_brand])
+    await db.flush()
+    complete_series = ProductSeries(title="Complete series", slug="complete-series", brand_id=complete_brand.id)
+    component_series = ProductSeries(title="Component series", slug="component-series", brand_id=component_brand.id)
+    db.add_all([complete_series, component_series])
+    await db.flush()
+    products = [
+        _complete_product(title="SCOPE wall nine", slug="scope-wall-nine", price=2000, power_cooling=2.6, brand_id=complete_brand.id, series_id=complete_series.id, specs={"type": "сплит-система", "__filter_indoor_type": "wall"}),
+        _complete_product(title="SCOPE semi cassette nine", slug="scope-semi-nine", price=2500, power_cooling=2.6, brand_id=complete_brand.id, series_id=complete_series.id, specs={"type": "полупромышленный кондиционер", "__filter_indoor_type": "cassette"}),
+        Product(title="SCOPE cheap indoor nine", slug="scope-indoor-nine", price=600, product_kind="indoor_unit", power_cooling=2.6, brand_id=component_brand.id, series_id=component_series.id, specs={"type": "внутренний блок", "__filter_indoor_type": "wall"}),
+        Product(title="SCOPE outdoor nine", slug="scope-outdoor-nine", price=800, product_kind="outdoor_unit", power_cooling=2.6),
+        Product(title="SCOPE panel nine", slug="scope-panel-nine", price=100, product_kind="panel", power_cooling=2.6),
+        Product(title="SCOPE unknown nine", slug="scope-unknown-nine", price=100, product_kind="unknown", power_cooling=2.6),
+        _complete_product(title="SCOPE conflicting multi", slug="scope-multi-nine", price=100, power_cooling=2.6, specs={"type": "мульти-сплит-система", "__filter_indoor_type": "wall"}),
+    ]
+    db.add_all(products)
+    await db.flush()
+    supplier = Supplier(name="Scope supplier", code="scope-supplier", is_active=True)
+    db.add(supplier)
+    await db.flush()
+    for product, cost in ((products[0], 900), (products[1], 1100), (products[2], 200)):
+        external_id = f"SCOPE-{product.id}"
+        db.add(SupplierOffer(supplier_id=supplier.id, external_id=external_id, wholesale_value=cost, wholesale_currency="BYN", qty=1))
+        db.add(ProductSupplierMapping(product_id=product.id, supplier_id=supplier.id, external_id=external_id))
+    await db.commit()
+
+    scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
+    filters = CatalogDecisionFilters(search="SCOPE", cooling_btu_classes=(9,))
+    first = await CatalogDecisionQueryService.list_system_products(db, tenant_scope=scope, filters=filters, page=1, limit=1, sort="purchase_cost", direction="asc")
+    second = await CatalogDecisionQueryService.list_system_products(db, tenant_scope=scope, filters=filters, page=2, limit=1, sort="purchase_cost", direction="asc")
+    assert first["meta"]["total"] == second["meta"]["total"] == 2
+    assert [first["items"][0]["id"], second["items"][0]["id"]] == [products[0].id, products[1].id]
+    options = await CatalogDecisionQueryService.list_system_filter_options(db, tenant_scope=scope)
+    assert complete_brand.id in {item["id"] for item in options["brands"]}
+    assert component_brand.id not in {item["id"] for item in options["brands"]}
+    assert component_series.id not in {item["id"] for item in options["series"]}
+    snapshots = await CatalogDecisionQueryService.get_system_product_snapshots(db, tenant_scope=scope, product_ids=[int(item.id) for item in products])
+    assert set(snapshots) == {products[0].id, products[1].id}
+    management_ids = set((await db.execute(CatalogManagementDAO.selection(db, CatalogManagementFilters(search="SCOPE")))).scalars().all())
+    assert {products[0].id, products[2].id, products[3].id}.issubset(management_ids)
+
+
+@pytest.mark.asyncio
+async def test_complete_split_scope_keeps_semi_category_and_vetoes_multi_category(db):
+    group = TagGroup(title="Scope categories", slug="scope-categories", is_public=True)
+    db.add(group)
+    await db.flush()
+    semi = Tag(title="Semi", slug="cat-industrial", group_id=group.id, is_public=True)
+    multi = Tag(title="Multi", slug="cat-multi", group_id=group.id, is_public=True)
+    db.add_all([semi, multi])
+    await db.flush()
+    valid = _complete_product(title="SCOPE semi duct", slug="scope-semi-duct", price=2000, specs={"type": "полупромышленный кондиционер", "__filter_indoor_type": "duct"})
+    wrong_multi = _complete_product(title="SCOPE tagged multi", slug="scope-tagged-multi", price=2000, specs={"__filter_indoor_type": "wall"})
+    db.add_all([valid, wrong_multi])
+    await db.flush()
+    db.add_all([ProductTagLink(product_id=valid.id, tag_id=semi.id), ProductTagLink(product_id=wrong_multi.id, tag_id=multi.id)])
+    await db.commit()
+
+    result = await CatalogDecisionQueryService.list_system_products(
+        db, tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
+        filters=CatalogDecisionFilters(search="SCOPE"), page=1, limit=20, sort="title", direction="asc",
+    )
+    assert [item["id"] for item in result["items"]] == [valid.id]
+
+
+@pytest.mark.asyncio
 async def test_catalog_decision_sorts_commercial_metrics_before_pagination_and_keeps_nulls_last(db):
     supplier = Supplier(name="Decision Supplier", code="decision-supplier", is_active=True)
     db.add(supplier)
     await db.flush()
     products = [
-        Product(title="DECISION expensive cost", slug="decision-cost-high", price=1000, power_cooling=3.5, specs={"area_m2": 35, "wifi_ready": True, "__filter_indoor_type": "wall"}),
-        Product(title="DECISION cheap cost", slug="decision-cost-low", price=1000, power_cooling=3.5, specs={"area_m2": 35, "wifi_ready": "ready", "__filter_indoor_type": "cassette"}),
-        Product(title="DECISION no offer", slug="decision-no-offer", price=1000, power_cooling=3.5, specs={"area_m2": 35, "wifi_ready": False, "__filter_indoor_type": "duct"}),
+        _complete_product(title="DECISION expensive cost", slug="decision-cost-high", price=1000, power_cooling=3.5, specs={"area_m2": 35, "wifi_ready": True, "__filter_indoor_type": "wall"}),
+        _complete_product(title="DECISION cheap cost", slug="decision-cost-low", price=1000, power_cooling=3.5, specs={"area_m2": 35, "wifi_ready": "ready", "__filter_indoor_type": "cassette"}),
+        _complete_product(title="DECISION no offer", slug="decision-no-offer", price=1000, power_cooling=3.5, specs={"area_m2": 35, "wifi_ready": False, "__filter_indoor_type": "duct"}),
     ]
     db.add_all(products)
     await db.flush()
@@ -63,8 +138,8 @@ async def test_catalog_decision_sorts_commercial_metrics_before_pagination_and_k
 
 @pytest.mark.asyncio
 async def test_catalog_decision_filters_use_normalized_power_and_form_factor(db):
-    wall = Product(title="DECISION wall", slug="decision-wall", price=1000, power_cooling=3.5, specs={"area_m2": 35, "capacity_cooling_min_kw": "3.2", "capacity_cooling_max_kw": "3.8", "__filter_indoor_type": "wall"})
-    cassette = Product(title="DECISION cassette", slug="decision-cassette", price=1000, power_cooling=5.0, specs={"area_m2": 55, "capacity_cooling_min_kw": "4.5", "capacity_cooling_max_kw": "5.5", "__filter_indoor_type": "cassette"})
+    wall = _complete_product(title="DECISION wall", slug="decision-wall", price=1000, power_cooling=3.5, specs={"area_m2": 35, "capacity_cooling_min_kw": "3.2", "capacity_cooling_max_kw": "3.8", "__filter_indoor_type": "wall"})
+    cassette = _complete_product(title="DECISION cassette", slug="decision-cassette", price=1000, power_cooling=5.0, specs={"area_m2": 55, "capacity_cooling_min_kw": "4.5", "capacity_cooling_max_kw": "5.5", "__filter_indoor_type": "cassette"})
     db.add_all([wall, cassette])
     await db.commit()
     result = await CatalogDecisionQueryService.list_system_products(db, tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True), filters=CatalogDecisionFilters(search="DECISION", cooling_min_kw=3.2, cooling_max_kw=3.8, indoor_form_factor="wall", area_max=40), page=1, limit=20, sort="title", direction="asc")
@@ -73,8 +148,8 @@ async def test_catalog_decision_filters_use_normalized_power_and_form_factor(db)
 
 @pytest.mark.asyncio
 async def test_catalog_decision_finds_legacy_wall_30_and_console_with_visible_form(db):
-    wall = Product(title="DECISION legacy wall 30", slug="decision-legacy-wall-30", price=1000, power_cooling=8.8, specs={"indoor_type": "настенный", "__typed_specs": {"indoor_type": {"value": "настенный"}}})
-    console = Product(title="DECISION legacy console", slug="decision-legacy-console", price=1000, power_cooling=3.5, specs={"indoor_type": "консольный", "__typed_specs": {"indoor_type": {"value": "column"}}})
+    wall = _complete_product(title="DECISION legacy wall 30", slug="decision-legacy-wall-30", price=1000, power_cooling=8.8, specs={"indoor_type": "настенный", "__typed_specs": {"indoor_type": {"value": "настенный"}}})
+    console = _complete_product(title="DECISION legacy console", slug="decision-legacy-console", price=1000, power_cooling=3.5, specs={"indoor_type": "консольный", "__typed_specs": {"indoor_type": {"value": "column"}}})
     db.add_all([wall, console])
     await db.commit()
     scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
@@ -89,9 +164,9 @@ async def test_catalog_decision_finds_legacy_wall_30_and_console_with_visible_fo
 
 @pytest.mark.asyncio
 async def test_catalog_decision_filters_retail_before_pagination_and_count(db):
-    low = Product(title="DECISION retail A low", slug="decision-retail-low", price=100)
-    middle = Product(title="DECISION retail B middle", slug="decision-retail-middle", price=200)
-    high = Product(title="DECISION retail C high", slug="decision-retail-high", price=300)
+    low = _complete_product(title="DECISION retail A low", slug="decision-retail-low", price=100)
+    middle = _complete_product(title="DECISION retail B middle", slug="decision-retail-middle", price=200)
+    high = _complete_product(title="DECISION retail C high", slug="decision-retail-high", price=300)
     db.add_all([low, middle, high])
     await db.commit()
 
@@ -115,35 +190,35 @@ async def test_catalog_decision_filters_retail_before_pagination_and_count(db):
 
 @pytest.mark.asyncio
 async def test_catalog_decision_filters_use_nominal_cooling_power_not_modulation_or_title(db):
-    wall = Product(
+    wall = _complete_product(
         title="DECISION rated household wall",
         slug="decision-rated-household-wall",
         price=1000,
         power_cooling=7.0,
         specs={"__filter_indoor_type": "wall", "capacity_cooling_min_kw": "5.0", "capacity_cooling_max_kw": "8.0"},
     )
-    cassette = Product(
+    cassette = _complete_product(
         title="DECISION rated semi cassette",
         slug="decision-rated-semi-cassette",
         price=1000,
         power_cooling=7.0,
         specs={"__filter_indoor_type": "cassette", "capacity_cooling_min_kw": "5.0", "capacity_cooling_max_kw": "8.0"},
     )
-    undersized = Product(
+    undersized = _complete_product(
         title="DECISION rated nominal five",
         slug="decision-rated-nominal-five",
         price=1000,
         power_cooling=5.0,
         specs={"capacity_cooling_min_kw": "4.0", "capacity_cooling_max_kw": "7.0"},
     )
-    oversized = Product(
+    oversized = _complete_product(
         title="DECISION rated nominal ten",
         slug="decision-rated-nominal-ten",
         price=1000,
         power_cooling=10.0,
         specs={"capacity_cooling_min_kw": "6.0", "capacity_cooling_max_kw": "11.0"},
     )
-    title_trap = Product(
+    title_trap = _complete_product(
         title="BTU trap 12 but nominal seven",
         slug="btu-trap-12-nominal-seven",
         price=1000,
@@ -182,10 +257,10 @@ async def test_catalog_decision_filters_use_nominal_cooling_power_not_modulation
 
 @pytest.mark.asyncio
 async def test_catalog_decision_btu_30_uses_its_nominal_band_and_area_fallback(db):
-    lower = Product(title="DECISION class lower", slug="decision-class-lower", price=1000, power_cooling=8.0)
-    nominal = Product(title="DECISION class nominal", slug="decision-class-nominal", price=1000, power_cooling=8.8)
-    upper = Product(title="DECISION class upper", slug="decision-class-upper", price=1000, power_cooling=9.5)
-    fallback = Product(title="DECISION class fallback", slug="decision-class-fallback", price=1000, specs={"area_m2": 85})
+    lower = _complete_product(title="DECISION class lower", slug="decision-class-lower", price=1000, power_cooling=8.0)
+    nominal = _complete_product(title="DECISION class nominal", slug="decision-class-nominal", price=1000, power_cooling=8.8)
+    upper = _complete_product(title="DECISION class upper", slug="decision-class-upper", price=1000, power_cooling=9.5)
+    fallback = _complete_product(title="DECISION class fallback", slug="decision-class-fallback", price=1000, specs={"area_m2": 85})
     db.add_all([lower, nominal, upper, fallback])
     await db.commit()
     scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
@@ -213,7 +288,7 @@ async def test_catalog_decision_btu_30_uses_its_nominal_band_and_area_fallback(d
 
 @pytest.mark.asyncio
 async def test_catalog_decision_filters_heating_by_typed_minimum_with_legacy_fallback(db):
-    typed_wins = Product(
+    typed_wins = _complete_product(
         title="DECISION typed minimum wins",
         slug="decision-typed-minimum-wins",
         price=1000,
@@ -222,19 +297,19 @@ async def test_catalog_decision_filters_heating_by_typed_minimum_with_legacy_fal
             "__filter_min_heat": -30,
         },
     )
-    exact = Product(
+    exact = _complete_product(
         title="DECISION exact minus 25",
         slug="decision-exact-minus-25",
         price=1000,
         specs={"__typed_specs": {"temp_range_heat": {"min": -25}}},
     )
-    colder_legacy = Product(
+    colder_legacy = _complete_product(
         title="DECISION legacy minus 30",
         slug="decision-legacy-minus-30",
         price=1000,
         specs={"__filter_min_heat": -30},
     )
-    malformed = Product(
+    malformed = _complete_product(
         title="DECISION malformed heating",
         slug="decision-malformed-heating",
         price=1000,
@@ -278,7 +353,7 @@ async def test_catalog_decision_filters_heating_by_typed_minimum_with_legacy_fal
 
 @pytest.mark.asyncio
 async def test_catalog_decision_http_heating_threshold_coerces_and_validates(async_client, db):
-    eligible = Product(
+    eligible = _complete_product(
         title="DECISION HTTP heating minus 25",
         slug="decision-http-heating-minus-25",
         price=1000,
@@ -309,8 +384,8 @@ async def test_catalog_decision_http_heating_threshold_coerces_and_validates(asy
 
 @pytest.mark.asyncio
 async def test_catalog_decision_http_hydrates_exact_ids_and_validates_retail_and_btu_filters(async_client, db):
-    published = Product(title="DECISION HTTP published", slug="decision-http-published", price=200, is_published=True)
-    unpublished = Product(title="DECISION HTTP unpublished", slug="decision-http-unpublished", price=300, is_published=False)
+    published = _complete_product(title="DECISION HTTP published", slug="decision-http-published", price=200, is_published=True)
+    unpublished = _complete_product(title="DECISION HTTP unpublished", slug="decision-http-unpublished", price=300, is_published=False)
     db.add_all([published, unpublished])
     await db.commit()
     headers = await _auth_headers(async_client)
@@ -338,6 +413,10 @@ async def test_catalog_decision_http_hydrates_exact_ids_and_validates_retail_and
         "/api/manager/catalog-decision/products?cooling_btu_classes=48",
         headers=headers,
     )
+    invalid_multi = await async_client.get(
+        "/api/manager/catalog-decision/products?category=multi&include_orderable=true",
+        headers=headers,
+    )
 
     assert hydrated.status_code == 200, hydrated.text
     assert [item["id"] for item in hydrated.json()["items"]] == [published.id]
@@ -346,6 +425,7 @@ async def test_catalog_decision_http_hydrates_exact_ids_and_validates_retail_and
     assert default_availability.json()["items"] == []
     assert invalid_range.status_code == 422
     assert invalid_btu.status_code == 422
+    assert invalid_multi.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -392,7 +472,7 @@ async def test_catalog_decision_projection_has_a_bounded_query_count(db):
 @pytest.mark.asyncio
 async def test_catalog_decision_order_snapshots_are_batched(db):
     products = [
-        Product(title=f"DECISION snapshot {index}", slug=f"decision-snapshot-{index}", price=1000 + index)
+        _complete_product(title=f"DECISION snapshot {index}", slug=f"decision-snapshot-{index}", price=1000 + index)
         for index in range(8)
     ]
     db.add_all(products)
@@ -422,8 +502,8 @@ async def test_catalog_decision_order_snapshots_are_batched(db):
 @pytest.mark.asyncio
 async def test_catalog_decision_quick_order_is_anonymous_atomic_and_idempotent(db):
     products = [
-        Product(title="DECISION quick 12", slug="decision-quick-12", price=2200),
-        Product(title="DECISION quick 18", slug="decision-quick-18", price=3100),
+        _complete_product(title="DECISION quick 12", slug="decision-quick-12", price=2200),
+        _complete_product(title="DECISION quick 18", slug="decision-quick-18", price=3100),
     ]
     db.add_all(products)
     await db.commit()
@@ -461,8 +541,8 @@ async def test_catalog_decision_quick_order_is_anonymous_atomic_and_idempotent(d
 @pytest.mark.asyncio
 async def test_catalog_decision_quick_order_alternatives_create_one_proposal_per_product(db):
     products = [
-        Product(title="DECISION quick alternative 12", slug="decision-quick-alternative-12", price=2200),
-        Product(title="DECISION quick alternative 18", slug="decision-quick-alternative-18", price=3100),
+        _complete_product(title="DECISION quick alternative 12", slug="decision-quick-alternative-12", price=2200),
+        _complete_product(title="DECISION quick alternative 18", slug="decision-quick-alternative-18", price=3100),
     ]
     db.add_all(products)
     await db.commit()
@@ -487,7 +567,7 @@ async def test_catalog_decision_quick_order_alternatives_create_one_proposal_per
 
 @pytest.mark.asyncio
 async def test_catalog_decision_quick_order_rolls_back_when_any_product_is_missing(db):
-    product = Product(title="DECISION rollback", slug="decision-quick-rollback", price=1500)
+    product = _complete_product(title="DECISION rollback", slug="decision-quick-rollback", price=1500)
     db.add(product)
     await db.commit()
     before = len((await db.execute(select(Order))).scalars().all())
@@ -521,11 +601,11 @@ async def test_catalog_decision_quick_order_rejects_tenant_projection_before_cre
 @pytest.mark.asyncio
 async def test_catalog_decision_ignores_legacy_unit_suffixes_without_failing_the_page(db):
     """A malformed historical spec must become NULL, never a 500 for every manager."""
-    legacy = Product(
+    legacy = _complete_product(
         title="DECISION legacy suffix", slug="decision-legacy-suffix", price=1000,
         specs={"capacity_cooling_kw": "0.88 кВт", "capacity_cooling_min_kw": "0.88 кВт", "area_m2": "35"},
     )
-    canonical = Product(
+    canonical = _complete_product(
         title="DECISION canonical numeric", slug="decision-canonical-numeric", price=1000,
         specs={"capacity_cooling_kw": "3.5", "capacity_cooling_min_kw": "3.2", "capacity_cooling_max_kw": "3.8", "area_m2": "35"},
     )
@@ -551,8 +631,8 @@ async def test_catalog_decision_smart_search_and_multiple_btu_classes(db):
     series = ProductSeries(title="Decision Elite", slug="decision-elite", brand_id=brand.id)
     db.add(series)
     await db.flush()
-    nine = Product(title="DECISION indoor 09", slug="decision-09", price=900, brand_id=brand.id, series_id=series.id, power_cooling=2.6, specs={"area_m2": 28})
-    twelve = Product(title="DECISION indoor 12", slug="decision-12", price=1000, brand_id=brand.id, series_id=series.id, power_cooling=3.5, specs={"area_m2": 35})
+    nine = _complete_product(title="DECISION indoor 09", slug="decision-09", price=900, brand_id=brand.id, series_id=series.id, power_cooling=2.6, specs={"area_m2": 28})
+    twelve = _complete_product(title="DECISION indoor 12", slug="decision-12", price=1000, brand_id=brand.id, series_id=series.id, power_cooling=3.5, specs={"area_m2": 35})
     db.add_all([nine, twelve])
     await db.commit()
 
@@ -573,7 +653,7 @@ async def test_catalog_decision_filter_options_keep_series_owner(db):
     series = ProductSeries(title="Decision shared-name", slug="decision-shared-name", brand_id=brand.id)
     db.add(series)
     await db.flush()
-    db.add(Product(title="DECISION option product", slug="decision-option-product", price=1000, brand_id=brand.id, series_id=series.id))
+    db.add(_complete_product(title="DECISION option product", slug="decision-option-product", price=1000, brand_id=brand.id, series_id=series.id))
     await db.commit()
 
     options = await CatalogDecisionQueryService.list_system_filter_options(

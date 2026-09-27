@@ -84,7 +84,7 @@ async def test_manager_orders_list_segment_filter(async_client, db):
 
 @pytest.mark.asyncio
 async def test_catalog_decision_quick_order_api_can_attach_real_customer_later(async_client, db):
-    product = Product(title="Quick order API product", slug="quick-order-api-product", price=2400)
+    product = Product(title="Quick order API product", slug="quick-order-api-product", price=2400, product_kind="complete_split_system")
     customer = Customer(tenant_id=1, name="Known later", phone="+375291234567")
     db.add_all([product, customer])
     await db.commit()

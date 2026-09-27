@@ -35,6 +35,25 @@ standalone residential consoles remain household, explicitly designated
 semi-industrial systems retain that category, and multi-split components remain
 multi-split components.
 
+The current Manager workspace selects complete single split systems only.
+`Product.product_kind=complete_split_system` is the positive admission rule;
+contradictory multi-split/component source types and the multi-split category
+and a recorded indoor-unit count other than one are conservative vetoes. This
+rule applies before count, sort and pagination,
+to brand/series options, exact-ID comparison and price snapshots used by order
+actions. The collection action checks the same rule after its existing catalog
+access policy. The general catalog-management query reuses only the ordinary
+filter conditions and continues to show components. A direct `category=multi`
+request to this workspace is rejected with 422. Indoor form and household vs.
+semi-industrial category never prove completeness.
+
+Existing browser-stored selections retain their ID/title until checked against
+the current selection API. Missing or ineligible choices are marked and block
+new collection/order actions without editing saved orders or proposals. The
+server repeats the eligibility check for every action. See the
+[read-only equipment-kind audit](../catalog-decision-complete-split-audit.md)
+for the historical semi-industrial classification gap and release gate.
+
 Heating presets are -20, -25 and -30 Celsius. The typed outdoor heating minimum
 is authoritative, with the legacy normalized minimum as fallback; a product
 qualifies when its minimum is at or below the requested threshold. Missing or

@@ -19,7 +19,6 @@ PRODUCT_KIND_BY_SYSTEM_TYPE = {
     "наружный блок": "outdoor_unit",
     "мобильный": "other",
     "мульти-сплит-система": "other",
-    "полупромышленный кондиционер": "other",
 }
 
 
@@ -65,8 +64,13 @@ class ProductKindService:
 
         includes_indoor = _as_bool(_spec_value(values, "includes_indoor_unit"))
         includes_outdoor = _as_bool(_spec_value(values, "includes_outdoor_unit"))
+        indoor_count = str(_spec_value(values, "indoor_units_count") or "").strip()
+        if str(_spec_value(values, "type") or "").strip().lower() == "полупромышленный кондиционер":
+            # This source type alone does not prove a complete system. Explicit
+            # component flags can, while partial historical data remains other.
+            return "complete_split_system" if includes_indoor is True and includes_outdoor is True and indoor_count == "1" else "other"
         if includes_indoor is True and includes_outdoor is True:
-            return "complete_split_system"
+            return "complete_split_system" if indoor_count in {"", "1"} else "other"
         if includes_indoor is True and includes_outdoor is False:
             return "indoor_unit"
         if includes_indoor is False and includes_outdoor is True:

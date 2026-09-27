@@ -37,6 +37,10 @@ const sort = ref<CatalogDecisionSort>(initialQuery.sort);
 const direction = ref<'asc' | 'desc'>(initialQuery.direction);
 const page = ref(initialQuery.page); const pages = ref(1); const total = ref(0); const loading = ref(false); const error = ref('');
 const selected = ref<Record<number, CatalogDecisionSelectionItem>>({});
+const invalidSelectionIds = ref<number[]>([]);
+const selectionValidating = ref(false);
+const selectionCheckError = ref('');
+let selectionCheckGeneration = 0;
 const filterResetKey = ref(0);
 const filterOptionsError = ref('');
 const compareOpen = ref(false);
@@ -93,6 +97,24 @@ const toggleSelection = (item: CatalogDecisionItem) => {
   selected.value = next;
 };
 const removeSelection = (id: number) => { const next = { ...selected.value }; delete next[id]; selected.value = next; };
+const validateSelection = async () => {
+  const ids = Object.values(selected.value).map(item => item.id);
+  const generation = ++selectionCheckGeneration;
+  invalidSelectionIds.value = [];
+  selectionCheckError.value = '';
+  if (!ids.length) { selectionValidating.value = false; return; }
+  selectionValidating.value = true;
+  try {
+    const response = await catalogDecisionApi.list(1, 24, { isPublished: true, includeOrderable: true, productIds: ids }, 'title', 'asc');
+    if (disposed || generation !== selectionCheckGeneration) return;
+    const eligible = new Set((response.items ?? []).map(item => item.id));
+    invalidSelectionIds.value = ids.filter(id => !eligible.has(id));
+  } catch (err) {
+    if (!disposed && generation === selectionCheckGeneration) selectionCheckError.value = getApiErrorMessage(err) || 'Не удалось проверить выбранные модели.';
+  } finally {
+    if (!disposed && generation === selectionCheckGeneration) selectionValidating.value = false;
+  }
+};
 const openCompare = async () => {
   const ids = Object.values(selected.value).map(item => item.id);
   if (ids.length < 2 || ids.length > 4) return;
@@ -147,24 +169,26 @@ watch(selectionStorageKey, (key) => {
   closeCompare(); detailItem.value = null;
   selected.value = key ? Object.fromEntries(loadCatalogDecisionSelection(key).map(item => [item.id, item])) : {};
   initializedSelectionKey.value = key;
+  void validateSelection();
 }, { immediate: true, flush: 'sync' });
 watch(selected, (next) => {
   const key = selectionStorageKey.value;
   if (key && initializedSelectionKey.value === key) saveCatalogDecisionSelection(Object.values(next), key);
+  void validateSelection();
 }, { deep: true, flush: 'sync' });
 onMounted(() => {
   void load();
   void target.load();
   void loadFilterOptions();
 });
-onBeforeUnmount(() => { disposed = true; compareGeneration += 1; clearTimeout(searchTimer); loadGeneration += 1; });
+onBeforeUnmount(() => { disposed = true; compareGeneration += 1; selectionCheckGeneration += 1; clearTimeout(searchTimer); loadGeneration += 1; });
 </script>
 
 <template>
   <section class="min-h-full bg-gray-50 p-3 pb-80 sm:pb-56 md:p-5 md:pb-52" data-testid="catalog-decision-workspace">
     <div class="mx-auto max-w-screen-2xl space-y-3">
       <header class="flex flex-wrap items-end justify-between gap-2">
-        <div><h1 class="text-2xl font-bold text-gray-900">Подбор оборудования</h1><p class="mt-1 text-sm text-gray-500">Мощность, форма блока и обогрев — под задачу клиента.</p></div>
+        <div><h1 class="text-2xl font-bold text-gray-900">Подбор сплит-систем</h1><p class="mt-1 text-sm text-gray-500">Комплектные системы: мощность, форма блока и обогрев — под задачу клиента.</p></div>
         <p class="text-sm text-gray-500" aria-live="polite">Найдено: {{ total }}</p>
       </header>
       <div v-if="target.requested" class="rounded-xl border border-brand-200 bg-brand-50 p-3">
@@ -198,7 +222,7 @@ onBeforeUnmount(() => { disposed = true; compareGeneration += 1; clearTimeout(se
         </div>
       </div>
       <div class="flex items-center justify-between text-sm"><button class="rounded-lg border border-gray-200 px-3 py-2 disabled:opacity-40" :disabled="page <= 1 || loading" @click="go(page - 1)">Назад</button><span>Страница {{ page }} из {{ pages }}</span><button class="rounded-lg border border-gray-200 px-3 py-2 disabled:opacity-40" :disabled="page >= pages || loading" @click="go(page + 1)">Далее</button></div>
-      <CatalogDecisionSelectionTray :items="Object.values(selected)" :target-order-id="target.context.value?.orderId" :targeted="target.requested" :busy="target.saving.value" :can-attach="target.canAttach.value" @compare="openCompare" @remove="removeSelection" @clear="selected = {}; selectionError = ''" @attach-target="attachToTarget" @create-collection="collectionDialogOpen = true" @attach-order="orderDialogOpen = true" @create-order="quickOrderDialogOpen = true" />
+      <CatalogDecisionSelectionTray :items="Object.values(selected)" :invalid-ids="invalidSelectionIds" :validating="selectionValidating" :validation-error="selectionCheckError" :target-order-id="target.context.value?.orderId" :targeted="target.requested" :busy="target.saving.value" :can-attach="target.canAttach.value" @compare="openCompare" @remove="removeSelection" @clear="selected = {}; selectionError = ''" @attach-target="attachToTarget" @create-collection="collectionDialogOpen = true" @attach-order="orderDialogOpen = true" @create-order="quickOrderDialogOpen = true" />
       <CatalogDecisionCompareDialog :open="compareOpen" :items="compareItems" :loading="compareLoading" :error="compareError" @close="closeCompare" />
       <CatalogDecisionProductDetailsDialog :open="Boolean(detailItem)" :item="detailItem" @close="detailItem = null" />
       <CatalogDecisionCollectionDialog :open="collectionDialogOpen" :items="Object.values(selected)" @close="collectionDialogOpen = false" @created="collectionCreated" />
