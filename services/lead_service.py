@@ -30,6 +30,8 @@ from services.customer_party import (
     signing_mode_for_customer_type,
 )
 from services.tenant_entity_access_service import TenantEntityAccessService
+from services.order_service import OrderService
+from services.order_scenarios import WORKFLOW_LABELS, resolve_scenario
 
 
 class LeadService:
@@ -40,47 +42,39 @@ class LeadService:
         return re.sub(r"\D", "", value)
 
     @staticmethod
-    def _customer_data_completeness_score(customer: Customer) -> int:
-        score = 0
-        if customer.full_legal_name:
-            score += 3
-        if customer.legal_address:
-            score += 3
-        if customer.bank_name:
-            score += 2
-        if customer.bic:
-            score += 2
-        if customer.iban:
-            score += 3
-        if customer.email:
-            score += 1
-        if customer.phone:
-            score += 1
-        if customer.actual_address:
-            score += 1
-        return score
-
-    @staticmethod
-    def _customer_match_priority_score(
-        customer: Customer,
+    def _select_unique_customer_match(
+        customers: list[Customer],
+        *,
         phone: Optional[str],
         email: Optional[str],
         inn: Optional[str],
-    ) -> int:
-        score = 0
-        normalized_email = (email or "").strip().lower()
+    ) -> Optional[Customer]:
+        """Never resolve distinct customer records by a completeness score."""
         normalized_phone = LeadService._normalize_phone_digits(phone)
-        customer_email = (customer.email or "").strip().lower()
-        customer_phone = LeadService._normalize_phone_digits(customer.phone)
+        normalized_email = (email or "").strip().lower()
+        normalized_inn = (inn or "").strip()
+        by_inn = [
+            customer for customer in customers
+            if normalized_inn and (customer.inn or "").strip() == normalized_inn
+        ]
+        by_phone = [
+            customer for customer in customers
+            if normalized_phone and LeadService._normalize_phone_digits(customer.phone) == normalized_phone
+        ]
+        by_email = [
+            customer for customer in customers
+            if normalized_email and (customer.email or "").strip().lower() == normalized_email
+        ]
 
-        if inn and customer.inn and customer.inn == inn:
-            score += 300
-        if normalized_phone and customer_phone and customer_phone == normalized_phone:
-            score += 200
-        if normalized_email and customer_email and customer_email == normalized_email:
-            score += 100
-        score += LeadService._customer_data_completeness_score(customer)
-        return score
+        candidates = {int(item.id): item for item in (*by_inn, *by_phone, *by_email)}
+        if len(by_inn) > 1 or len(candidates) > 1:
+            raise ValueError("Multiple customers match the lead identifiers; select customer_id explicitly")
+        if not candidates:
+            return None
+        chosen = next(iter(candidates.values()))
+        if normalized_inn and chosen.inn and chosen.inn.strip() != normalized_inn:
+            raise ValueError("Lead INN conflicts with the matched customer; select customer_id explicitly")
+        return chosen
 
     @staticmethod
     def _clean_optional(value: Optional[str]) -> Optional[str]:
@@ -294,6 +288,7 @@ class LeadService:
     ) -> Optional[Customer]:
         normalized_email = (email or "").strip().lower()
         normalized_phone = LeadService._normalize_phone_digits(phone)
+        normalized_inn = (inn or "").strip()
 
         predicates = []
         if normalized_phone:
@@ -301,8 +296,8 @@ class LeadService:
             predicates.append(phone_digits_expr == normalized_phone)
         if normalized_email:
             predicates.append(func.lower(Customer.email) == normalized_email)
-        if inn:
-            predicates.append(Customer.inn == inn)
+        if normalized_inn:
+            predicates.append(Customer.inn == normalized_inn)
         if not predicates:
             return None
 
@@ -312,19 +307,12 @@ class LeadService:
                 tenant_scope_clause(Customer, tenant_scope),
             )
         )
-        customers = result.scalars().all()
-        if not customers:
-            return None
-
-        customers.sort(
-            key=lambda item: (
-                LeadService._customer_match_priority_score(item, phone=phone, email=email, inn=inn),
-                item.created_at.timestamp() if item.created_at else 0,
-                int(item.id or 0),
-            ),
-            reverse=True,
+        return LeadService._select_unique_customer_match(
+            list(result.scalars().all()),
+            phone=phone,
+            email=email,
+            inn=normalized_inn,
         )
-        return customers[0]
 
     @staticmethod
     async def qualify_lead(
@@ -456,35 +444,46 @@ class LeadService:
         else:
             if customer.tenant_id is None:
                 customer.tenant_id = tenant_scope.tenant_id
-            customer.name = customer_name
-            if phone:
-                customer.phone = phone
-            if email:
-                customer.email = email
-            if inn:
-                customer.inn = inn
-            if full_legal_name:
-                customer.full_legal_name = full_legal_name
-            if legal_address:
-                customer.legal_address = legal_address
-            if iban:
-                customer.iban = iban
-            if bic:
-                customer.bic = bic
-            if bank_name:
-                customer.bank_name = bank_name
-            if payload.customer_type:
-                customer.type = customer_type
-                customer.signing_mode = signing_mode_for_customer_type(customer_type)
-            elif customer_type == CustomerType.company:
-                customer.type = CustomerType.company
-                if customer.signing_mode == "self":
-                    customer.signing_mode = "statutory_body"
+            if not selected_customer_id:
+                customer.name = customer_name
+                if phone:
+                    customer.phone = phone
+                if email:
+                    customer.email = email
+                if inn:
+                    customer.inn = inn
+                if full_legal_name:
+                    customer.full_legal_name = full_legal_name
+                if legal_address:
+                    customer.legal_address = legal_address
+                if iban:
+                    customer.iban = iban
+                if bic:
+                    customer.bic = bic
+                if bank_name:
+                    customer.bank_name = bank_name
+                if payload.customer_type:
+                    customer.type = customer_type
+                    customer.signing_mode = signing_mode_for_customer_type(customer_type)
+                elif customer_type == CustomerType.company:
+                    customer.type = CustomerType.company
+                    if customer.signing_mode == "self":
+                        customer.signing_mode = "statutory_body"
             session.add(customer)
             await session.flush()
 
+        workflow_type, service_type = resolve_scenario(
+            workflow_type=payload.workflow_type,
+            service_type=payload.service_type,
+        )
         order_comment = LeadService._clean_optional(payload.order_comment) or lead.request_text
         title_suffix = (order_comment or "").strip()
+        order_title = (
+            OrderService._build_default_order_title(service_type=service_type)
+            if service_type else WORKFLOW_LABELS.get(workflow_type)
+        )
+        if order_title is None:
+            order_title = f"Лид #{lead.id}" if not title_suffix else f"Лид #{lead.id}: {title_suffix[:96]}"
         selected_branch: Optional[CustomerBranch] = None
         if selected_customer_branch_id is not None:
             selected_branch = await session.get(CustomerBranch, int(selected_customer_branch_id))
@@ -502,13 +501,21 @@ class LeadService:
             storefront_id=lead.storefront_id,
             customer_id=customer.id,
             customer_branch_id=int(selected_branch.id) if selected_branch and selected_branch.id is not None else None,
-            status=OrderStatus.NEW_LEAD,
+            status=(
+                OrderStatus.NEGOTIATION
+                if workflow_type is not None
+                else OrderStatus.NEW_LEAD
+            ),
             lead_source=LeadService._order_source_for_lead(lead),
             comment=order_comment,
-            title=f"Лид #{lead.id}" if not title_suffix else f"Лид #{lead.id}: {title_suffix[:96]}",
+            title=order_title,
             delivery_address=order_delivery_address,
+            workflow_type=workflow_type or "sales_installation",
+            technical_meta={"service_type": service_type} if service_type else {},
             status_changed_at=datetime.now(),
         )
+        if workflow_type == "repair":
+            OrderService._ensure_repair_meta_defaults(order)
         session.add(order)
         await session.flush()
 

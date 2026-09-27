@@ -72,6 +72,7 @@ from schemas_manager_orders import (
     ManagerCustomerReconciliationPaymentItem,
     ManagerCustomerReconciliationResponse,
     ManagerOrderCreatePayload,
+    ManagerOrderScenariosResponse,
     ManagerOrderDetailResponse,
     ManagerOrderDocumentGeneratePayload,
     ManagerOrderDocumentItem,

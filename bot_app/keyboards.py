@@ -110,16 +110,33 @@ def get_search_result_keyboard(product_id: int):
     )
 
 
-def quick_order_confirm_keyboard() -> InlineKeyboardMarkup:
+def quick_order_confirm_keyboard(draft_id: str | None = None, version: int | None = None) -> InlineKeyboardMarkup:
+    suffix = f":{draft_id}:{version}" if draft_id and version is not None else ""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="Создать", callback_data="quick_order_create"),
-                InlineKeyboardButton(text="Исправить", callback_data="quick_order_retry"),
+                InlineKeyboardButton(text="Создать заказ" if suffix else "Создать", callback_data=f"qo_create{suffix}" if suffix else "quick_order_create"),
+                InlineKeyboardButton(text="Исправить", callback_data=f"qo_edit{suffix}" if suffix else "quick_order_retry"),
             ],
-            [InlineKeyboardButton(text="Отмена", callback_data="quick_order_cancel")],
+            [InlineKeyboardButton(text="Сценарий", callback_data=f"qo_scenarios{suffix}" if suffix else "quick_order_retry"),
+             InlineKeyboardButton(text="Адрес", callback_data=f"qo_address{suffix}" if suffix else "quick_order_retry"),
+             InlineKeyboardButton(text="Дата", callback_data=f"qo_date{suffix}" if suffix else "quick_order_retry")],
+            [InlineKeyboardButton(text="Клиент", callback_data=f"qo_client{suffix}" if suffix else "quick_order_retry"),
+             InlineKeyboardButton(text="Другие данные", callback_data=f"qo_other{suffix}" if suffix else "quick_order_retry")],
+            [InlineKeyboardButton(text="Отмена", callback_data=f"qo_cancel{suffix}" if suffix else "quick_order_cancel")],
         ]
     )
+
+
+def quick_order_scenario_keyboard(draft_id: str, version: int, scenarios: list) -> InlineKeyboardMarkup:
+    rows = []
+    for scenario in scenarios:
+        code = scenario.service_type or "works"
+        rows.append([InlineKeyboardButton(
+            text=scenario.label,
+            callback_data=f"qo_select:{draft_id}:{version}:{code}",
+        )])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def selection_result_keyboard() -> InlineKeyboardMarkup:

@@ -26,6 +26,7 @@ from services.tenant_scope_service import (
     tenant_scope_clause,
 )
 from services.tenant_entity_access_service import TenantEntityAccessService
+from services.order_scenarios import SERVICE_TYPE_LABELS, SERVICE_TYPE_WORKFLOWS, WORKFLOW_TYPES
 from services.service_catalog_scope import (
     canonical_service_catalog_clause,
     service_catalog_scope_clause,
@@ -36,7 +37,7 @@ logger = logging.getLogger(__name__)
 class OrderService:
     MANAGER_LABELS_META_KEY = "manager_labels"
     LEGACY_WEBSITE_TITLE_PREFIX = "Заказ с сайта от "
-    ORDER_WORKFLOW_TYPES = {"sales_installation", "service_work", "maintenance", "repair"}
+    ORDER_WORKFLOW_TYPES = WORKFLOW_TYPES
     REPAIR_META_KEY = "repair"
     REPAIR_STATUS_KEY = "repair_status"
     REPAIR_DEFAULT_STATUS = "new"
@@ -57,14 +58,7 @@ class OrderService:
     REPAIR_BOOLEAN_META_KEYS = {"repair_possible", "repair_not_viable"}
     REPAIR_TRUE_VALUES = {"1", "true", "yes", "y", "да", "д", "истина"}
     REPAIR_FALSE_VALUES = {"0", "false", "no", "n", "нет", "н", "ложь"}
-    SERVICE_TYPE_TITLE_MAP = {
-        "turnkey": "Продажа + монтаж",
-        "install_only": "Монтаж",
-        "pre_install": "Закладка трассы",
-        "maintenance": "Обслуживание",
-        "repair": "Ремонт",
-        "dismantling": "Демонтаж",
-    }
+    SERVICE_TYPE_TITLE_MAP = SERVICE_TYPE_LABELS
     LOGISTICS_COMPONENT_KINDS = {"indoor", "outdoor", "accessory", "other"}
     DEFAULT_LOGISTICS_COUNTRY = "Китай"
     NEGOTIATION_STATUSES = {
@@ -418,15 +412,7 @@ class OrderService:
 
     @staticmethod
     def _workflow_type_from_service_type(service_type: Optional[str], fallback: str = "sales_installation") -> str:
-        mapping = {
-            "turnkey": "sales_installation",
-            "install_only": "service_work",
-            "pre_install": "service_work",
-            "dismantling": "service_work",
-            "maintenance": "maintenance",
-            "repair": "repair",
-        }
-        return mapping.get(str(service_type or "").strip(), fallback)
+        return SERVICE_TYPE_WORKFLOWS.get(str(service_type or "").strip(), fallback)
 
     @staticmethod
     def _normalize_workflow_type(raw: Any, fallback: str = "sales_installation") -> str:

@@ -11,6 +11,7 @@ from api_contracts.bot import BotQuickOrderDraft
 from models import Order
 from services.bot_access_service import BotAccessService
 from services.bot_quick_order_service import BotQuickOrderService
+from services.order_scenarios import WORKFLOW_LABELS
 from services.tenant_scope_service import SystemTenantScopeResolver
 
 
@@ -85,12 +86,27 @@ class BotQuickOrderApiService:
         }:
             address_check = None
         return {
+            "customer_id": normalized.get("customer_id"),
+            "customer_type": normalized.get("customer_type"),
             "name": normalized.get("name"),
+            "contact_name": normalized.get("contact_name"),
+            "contact_phone": normalized.get("contact_phone"),
+            "contact_email": normalized.get("contact_email"),
             "phone": normalized.get("phone"),
+            "email": normalized.get("email"),
+            "inn": normalized.get("inn"),
+            "customer_branch_id": normalized.get("customer_branch_id"),
             "address": normalized.get("address"),
+            "legal_address": normalized.get("legal_address"),
+            "workflow_type": normalized.get("workflow_type"),
             "service_type": service_type,
-            "service_label": BotQuickOrderService.SERVICE_LABELS.get(service_type, "Не указана"),
+            "service_label": BotQuickOrderService.SERVICE_LABELS.get(service_type, WORKFLOW_LABELS.get(normalized.get("workflow_type"), "Не указана")),
             "target_date": normalized.get("target_date"),
+            "target_date_precision": normalized.get("target_date_precision"),
+            "equipment_summary": normalized.get("equipment_summary"),
+            "equipment_count": normalized.get("equipment_count"),
+            "equipment_type": normalized.get("equipment_type"),
+            "field_sources": normalized.get("field_sources") or {},
             "request_text": normalized.get("request_text") or "Быстрый заказ из Telegram",
             "parser": parser,
             "address_check": address_check,

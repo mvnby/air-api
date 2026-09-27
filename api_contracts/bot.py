@@ -165,12 +165,27 @@ class BotQuickOrderAddressCheck(BaseModel):
 
 
 class BotQuickOrderDraft(BaseModel):
+    customer_id: int | None = Field(default=None, ge=1)
+    customer_type: Literal["individual", "individual_entrepreneur", "company"] | None = None
     name: str | None = Field(default=None, max_length=300)
+    contact_name: str | None = Field(default=None, max_length=300)
+    contact_phone: str | None = Field(default=None, max_length=64)
+    contact_email: str | None = Field(default=None, max_length=300)
     phone: str | None = Field(default=None, max_length=64)
+    email: str | None = Field(default=None, max_length=300)
+    inn: str | None = Field(default=None, max_length=32)
+    customer_branch_id: int | None = Field(default=None, ge=1)
     address: str | None = Field(default=None, max_length=1000)
+    legal_address: str | None = Field(default=None, max_length=1000)
+    workflow_type: Literal["sales_installation", "service_work", "maintenance", "repair"] | None = None
     service_type: BotQuickOrderServiceType | None = None
     service_label: str = Field(min_length=1, max_length=100)
     target_date: datetime | None = None
+    target_date_precision: Literal["date", "datetime"] | None = None
+    equipment_summary: str | None = Field(default=None, max_length=1000)
+    equipment_count: int | None = Field(default=None, ge=1, le=10000)
+    equipment_type: str | None = Field(default=None, max_length=200)
+    field_sources: dict[str, Literal["ai", "fallback", "user", "customer"]] = Field(default_factory=dict)
     request_text: str = Field(min_length=1, max_length=12_000)
     parser: Literal["fallback", "ai"] = "fallback"
     address_check: BotQuickOrderAddressCheck | None = None
@@ -214,6 +229,57 @@ class BotQuickOrderCreateResponse(BaseModel):
     created: bool
 
 
+class BotQuickOrderDraftStartRequest(BaseModel):
+    telegram_id: int = Field(ge=1)
+    text: str = Field(default="", max_length=12_000)
+    customer_id: int | None = Field(default=None, ge=1)
+
+
+class BotQuickOrderDraftPatchRequest(BaseModel):
+    telegram_id: int = Field(ge=1)
+    expected_version: int = Field(ge=1)
+    text: str | None = Field(default=None, max_length=12_000)
+    changes: dict[str, Any] = Field(default_factory=dict)
+
+
+class BotQuickOrderDraftActionRequest(BaseModel):
+    telegram_id: int = Field(ge=1)
+    expected_version: int = Field(ge=1)
+
+
+class BotQuickOrderDraftSessionResponse(BaseModel):
+    draft_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    version: int = Field(ge=1)
+    status: Literal["active", "created", "cancelled"]
+    draft: BotQuickOrderDraft
+    order_id: int | None = None
+    expires_at: datetime
+    scenarios: list["BotQuickOrderScenarioOption"] = Field(default_factory=list)
+
+
+class BotQuickOrderScenarioOption(BaseModel):
+    label: str
+    workflow_type: Literal["sales_installation", "service_work", "maintenance", "repair"]
+    service_type: BotQuickOrderServiceType | None = None
+
+
+class BotQuickOrderCustomerSearchRequest(BaseModel):
+    telegram_id: int = Field(ge=1)
+    query: str = Field(min_length=3, max_length=100)
+
+
+class BotQuickOrderCustomerCandidate(BaseModel):
+    id: int = Field(ge=1)
+    name: str
+    customer_type: Literal["individual", "individual_entrepreneur", "company"]
+    phone: str | None = None
+    inn: str | None = None
+
+
+class BotQuickOrderCustomerSearchResponse(BaseModel):
+    items: list[BotQuickOrderCustomerCandidate] = Field(default_factory=list)
+
+
 class BotCustomerBriefResponse(BaseModel):
     id: int = Field(ge=1)
     name: str
@@ -230,7 +296,7 @@ class BotCustomerRequisitesRecognitionResponse(BaseModel):
     validation_flags: dict[str, Any] = Field(default_factory=dict)
     duplicate_customer: BotCustomerBriefResponse | None = None
     confirmed_customer_id: int | None = None
-    confirmed_action: Literal["create", "update"] | None = None
+    confirmed_action: Literal["create", "update", "use"] | None = None
     created_at: datetime
 
 
@@ -251,7 +317,7 @@ class BotCustomerRequisitesTextRequest(BaseModel):
 
 class BotCustomerRequisitesActionRequest(BaseModel):
     telegram_id: int = Field(ge=1)
-    action: Literal["create", "update", "cancel"]
+    action: Literal["create", "update", "use", "cancel"]
 
 
 class BotCustomerRequisitesActionResponse(BaseModel):

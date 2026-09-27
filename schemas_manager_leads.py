@@ -135,6 +135,8 @@ class LeadQualifyPayload(BaseModel):
     delivery_address: Optional[str] = None
     customer_type: Optional[str] = None
     order_comment: Optional[str] = None
+    workflow_type: Optional[str] = None
+    service_type: Optional[str] = None
 
     @field_validator("customer_type")
     @classmethod

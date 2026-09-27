@@ -310,6 +310,8 @@ watch(
     :has-error="Boolean(addressError || commentError)"
   >
     <div class="grid gap-3 md:grid-cols-2">
+      <p class="text-sm text-slate-600 dark:text-slate-300">Контакт: {{ [order.contact_name, order.contact_phone].filter(Boolean).join(' · ') || 'Уточнить позже' }}</p>
+      <p class="text-sm text-slate-600 dark:text-slate-300">Пожелание по дате: {{ order.requested_date || 'Уточнить позже' }}</p>
       <AddressSuggestInput v-model="deliveryAddress" class="md:col-span-2" label="Адрес объекта / доставки" placeholder="Введите адрес..." :error="addressError" />
       <label class="field-label md:col-span-2">
         Комментарий

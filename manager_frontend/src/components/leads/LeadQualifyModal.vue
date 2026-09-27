@@ -10,6 +10,9 @@ import OrderAttachmentsPanel from '../service-attachments/OrderAttachmentsPanel.
 import LeadBusinessRequisites from './LeadBusinessRequisites.vue';
 import LeadCustomerTypeChooser, { type LeadCustomerType } from './LeadCustomerTypeChooser.vue';
 import { notify } from '../../services/ui-feedback';
+import { getApiErrorMessage } from '../../utils/api-errors';
+import OrderScenarioSelector, { type OrderScenarioOption } from '../orders/OrderScenarioSelector.vue';
+import type { ManagerCatalogCustomerItemResponse } from '../../client';
 
 const props = defineProps<{
   lead: LeadsInboxItemResponse;
@@ -21,7 +24,6 @@ const emit = defineEmits<{
 }>();
 
 type CustomerTypeChoice = '' | LeadCustomerType;
-type ServiceTypeChoice = '' | 'turnkey' | 'install_only' | 'pre_install' | 'maintenance' | 'repair' | 'dismantling';
 type OptionalSectionKey = 'contacts' | 'company' | 'branch' | 'extra';
 
 const isCustomerType = (value: unknown): value is Exclude<CustomerTypeChoice, ''> =>
@@ -30,21 +32,6 @@ const isCustomerType = (value: unknown): value is Exclude<CustomerTypeChoice, ''
 const isBusinessCustomerType = (value: CustomerTypeChoice) => (
   value === 'individual_entrepreneur' || value === 'company'
 );
-
-const normalizeServiceType = (value: unknown): ServiceTypeChoice => {
-  const raw = String(value || '').trim();
-  if (
-    raw === 'turnkey'
-    || raw === 'install_only'
-    || raw === 'pre_install'
-    || raw === 'maintenance'
-    || raw === 'repair'
-    || raw === 'dismantling'
-  ) {
-    return raw;
-  }
-  return '';
-};
 
 const cleanText = (value: unknown) => {
   const cleaned = String(value ?? '').trim();
@@ -57,7 +44,8 @@ const attemptedSubmit = ref(false);
 const initialCustomerType = isCustomerType(props.lead.customer_type) ? props.lead.customer_type : '';
 const customerType = ref<CustomerTypeChoice>(initialCustomerType);
 const customerTypeChosenByManager = ref(false);
-const serviceType = ref<ServiceTypeChoice>(normalizeServiceType(props.lead.service_type));
+const scenarioOptions = ref<OrderScenarioOption[]>([]);
+const scenario = ref<OrderScenarioOption | null>(null);
 
 const customerName = ref(props.lead.customer_name || props.lead.customer_full_legal_name || '');
 const customerPhone = ref(props.lead.phone || '');
@@ -87,6 +75,7 @@ const optionalSections = ref<Record<OptionalSectionKey, boolean>>({
 });
 
 const existingCustomerId = ref<number | null>(null);
+const customerCandidates = ref<ManagerCatalogCustomerItemResponse[]>([]);
 const customerBranches = ref<ManagerCustomerBranchItemResponse[]>([]);
 const selectedBranchId = ref<number | null>(null);
 const branchesLoading = ref(false);
@@ -104,17 +93,17 @@ let branchesRequestId = 0;
 const selectedBranch = computed(() => customerBranches.value.find((branch) => branch.id === selectedBranchId.value) || null);
 
 const missingCustomerType = computed(() => !customerType.value);
-const missingServiceType = computed(() => !serviceType.value);
-const canSubmit = computed(() => !isLoading.value && !missingCustomerType.value && !missingServiceType.value);
+const missingServiceType = computed(() => !scenario.value);
+const selectedCustomer = computed(() => customerCandidates.value.find((item) => item.id === existingCustomerId.value) || null);
+const customerTypeConflict = computed(() => Boolean(
+  selectedCustomer.value && customerType.value && selectedCustomer.value.type !== customerType.value,
+));
+const canSubmit = computed(() => !isLoading.value && !missingCustomerType.value && !missingServiceType.value && !customerTypeConflict.value);
 
-const serviceOptions: Array<{ value: ServiceTypeChoice; label: string; hint: string; icon: string }> = [
-  { value: 'turnkey', label: 'Покупка + монтаж', hint: 'нужно подобрать и установить', icon: 'shopping_cart' },
-  { value: 'install_only', label: 'Монтаж', hint: 'оборудование уже есть', icon: 'construction' },
-  { value: 'pre_install', label: 'Закладка трассы', hint: 'этап ремонта', icon: 'route' },
-  { value: 'maintenance', label: 'Обслуживание', hint: 'ТО, чистка, сервис', icon: 'ac_unit' },
-  { value: 'repair', label: 'Ремонт', hint: 'диагностика и восстановление', icon: 'build_circle' },
-  { value: 'dismantling', label: 'Демонтаж', hint: 'снять или перенести', icon: 'move_down' },
-];
+api.getManagerOrderScenarios().then((response) => {
+  scenarioOptions.value = response.items;
+  scenario.value = response.items.find((item: OrderScenarioOption) => item.service_type === props.lead.service_type) || null;
+}).catch(() => notify('Не удалось загрузить сценарии заказов', 'error'));
 
 const selectCustomerType = (value: Exclude<CustomerTypeChoice, ''>) => {
   customerType.value = value;
@@ -154,6 +143,9 @@ const loadBranches = async (customerId: number) => {
 
 const searchCustomer = async () => {
   const requestId = ++customerSearchRequestId;
+  existingCustomerId.value = null;
+  foundCustomerName.value = '';
+  resetBranches();
   const query = isBusinessCustomerType(customerType.value)
     ? companyInn.value
     : (unmaskedPhone.value || customerPhone.value);
@@ -161,26 +153,18 @@ const searchCustomer = async () => {
     searchStatus.value = 'idle';
     existingCustomerId.value = null;
     foundCustomerName.value = '';
+    customerCandidates.value = [];
     resetBranches();
     return;
   }
 
   try {
     searchStatus.value = 'searching';
-    const res = await api.getManagerCustomers(1, 1, query);
+    const res = await api.getManagerCustomers(1, 10, query);
     if (requestId !== customerSearchRequestId) return;
-    const match = res.items?.[0];
-    if (match) {
-      existingCustomerId.value = match.id;
-      foundCustomerName.value = match.name || match.full_legal_name || 'Неизвестно';
+    customerCandidates.value = res.items || [];
+    if (customerCandidates.value.length) {
       searchStatus.value = 'found';
-      const matchType = isCustomerType(match.type) ? match.type : '';
-      if (matchType && !customerTypeChosenByManager.value) customerType.value = matchType;
-      if (!customerName.value) customerName.value = match.name || match.full_legal_name || '';
-      if (!customerEmail.value) customerEmail.value = match.email || '';
-      if (!companyInn.value) companyInn.value = match.inn || '';
-      if (!companyFullLegalName.value) companyFullLegalName.value = match.full_legal_name || '';
-      await loadBranches(match.id);
       return;
     }
     existingCustomerId.value = null;
@@ -193,11 +177,35 @@ const searchCustomer = async () => {
     searchStatus.value = 'idle';
     existingCustomerId.value = null;
     foundCustomerName.value = '';
+    customerCandidates.value = [];
     resetBranches();
   }
 };
 
+const selectCustomerCandidate = async (match: ManagerCatalogCustomerItemResponse) => {
+  existingCustomerId.value = match.id;
+  foundCustomerName.value = match.name || match.full_legal_name || 'Неизвестно';
+  const matchType = isCustomerType(match.type) ? match.type : '';
+  if (matchType && !customerTypeChosenByManager.value) customerType.value = matchType;
+  if (!customerName.value) customerName.value = match.name || match.full_legal_name || '';
+  if (!customerEmail.value) customerEmail.value = match.email || '';
+  if (!companyInn.value) companyInn.value = match.inn || '';
+  if (!companyFullLegalName.value) companyFullLegalName.value = match.full_legal_name || '';
+  await loadBranches(match.id);
+};
+
+const useSelectedCustomerType = () => {
+  const match = selectedCustomer.value;
+  if (match && isCustomerType(match.type)) {
+    customerType.value = match.type;
+    customerTypeChosenByManager.value = false;
+  }
+};
+
 const onSearchInput = () => {
+  existingCustomerId.value = null;
+  foundCustomerName.value = '';
+  resetBranches();
   if (searchTimeout.value) clearTimeout(searchTimeout.value);
   searchTimeout.value = window.setTimeout(searchCustomer, 500);
 };
@@ -281,12 +289,14 @@ const sectionSummary = (key: OptionalSectionKey) => {
 const buildPayload = (): ManagerOrderUpdatePayload => {
   const payload: ManagerOrderUpdatePayload = {
     status: 'negotiation',
-    customer_type: customerType.value || undefined,
-    service_type: serviceType.value || undefined,
+    workflow_type: scenario.value?.workflow_type,
+    service_type: scenario.value?.service_type ?? null,
   };
 
   if (existingCustomerId.value) {
     payload.customer_id = existingCustomerId.value;
+  } else {
+    payload.customer_type = customerType.value || undefined;
   }
   if (selectedBranchId.value !== null) {
     payload.customer_branch_id = selectedBranchId.value;
@@ -298,15 +308,15 @@ const buildPayload = (): ManagerOrderUpdatePayload => {
   const name = cleanText(isBusinessCustomerType(customerType.value)
     ? (companyName.value || companyFullLegalName.value || customerName.value)
     : customerName.value);
-  if (name) payload.customer_name = name;
+  if (name && !existingCustomerId.value) payload.customer_name = name;
 
   const phone = cleanText(unmaskedPhone.value || customerPhone.value);
-  if (phone) payload.customer_phone = phone;
+  if (phone && !existingCustomerId.value) payload.customer_phone = phone;
 
   const email = cleanText(customerEmail.value);
-  if (email) payload.customer_email = email;
+  if (email && !existingCustomerId.value) payload.customer_email = email;
 
-  if (isBusinessCustomerType(customerType.value)) {
+  if (isBusinessCustomerType(customerType.value) && !existingCustomerId.value) {
     const inn = cleanText(companyInn.value);
     const fullLegalName = cleanText(companyFullLegalName.value || companyName.value);
     const legalAddress = cleanText(companyLegalAddress.value);
@@ -344,7 +354,7 @@ const submitQualify = async () => {
     emit('success', props.lead.id);
   } catch (e) {
     console.error(e);
-    notify('Ошибка при сохранении данных', 'error');
+    notify(getApiErrorMessage(e), 'error');
   } finally {
     isLoading.value = false;
   }
@@ -440,35 +450,16 @@ const submitQualify = async () => {
               </h3>
               <span v-if="attemptedSubmit && missingServiceType" class="text-xs font-semibold text-red-500">Выберите задачу</span>
             </div>
-            <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <button
-                v-for="option in serviceOptions"
-                :key="option.value"
-                type="button"
-                class="flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all"
-                :class="serviceType === option.value
-                  ? 'border-brand-500 bg-brand-50 text-brand-800 shadow-sm dark:border-brand-400 dark:bg-brand-500/10 dark:text-brand-200'
-                  : attemptedSubmit && missingServiceType
-                    ? 'border-red-300 bg-red-50 text-slate-700 dark:border-red-500/50 dark:bg-red-500/10 dark:text-slate-200'
-                    : 'border-slate-200 bg-white text-slate-700 hover:border-brand-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'"
-                @click="serviceType = option.value"
-              >
-                <span class="material-icons-round text-[20px]">{{ option.icon }}</span>
-                <span class="min-w-0">
-                  <span class="block text-sm font-bold">{{ option.label }}</span>
-                  <span class="block text-xs opacity-70">{{ option.hint }}</span>
-                </span>
-              </button>
-            </div>
+            <OrderScenarioSelector v-model="scenario" :options="scenarioOptions" :disabled="isLoading" />
           </div>
         </section>
 
-        <div v-if="searchStatus === 'found'" class="flex items-start gap-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-800 dark:border-brand-800 dark:bg-brand-900/30 dark:text-brand-300">
+        <div v-if="searchStatus === 'found'" class="rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-800 dark:border-brand-800 dark:bg-brand-900/30 dark:text-brand-300">
           <span class="material-icons-round mt-0.5 text-brand-500">info</span>
           <div>
-            <strong>Найдена карточка клиента: {{ foundCustomerName }}</strong><br>
-            Сделка будет привязана к этому профилю.
+            <strong>{{ existingCustomerId ? `Выбран клиент: ${foundCustomerName}` : 'Возможные клиенты — выберите карточку или оставьте нового' }}</strong>
             <a
+              v-if="existingCustomerId"
               :href="'/manager/customers/profile?customerId=' + existingCustomerId"
               target="_blank"
               class="ml-2 font-semibold underline hover:text-brand-600 dark:hover:text-brand-200"
@@ -476,6 +467,26 @@ const submitQualify = async () => {
             >
               Профиль
             </a>
+            <p v-if="existingCustomerId" class="mt-1 text-xs">Данные входящего запроса останутся в заказе; карточка клиента не изменится.</p>
+            <p v-if="customerTypeConflict" class="mt-2 rounded-lg bg-amber-100 p-2 text-xs text-amber-900">
+              Тип найденной карточки отличается от выбранного. Проверьте клиента или
+              <button type="button" class="font-semibold underline" @click="useSelectedCustomerType">используйте тип карточки</button>.
+            </p>
+          </div>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button
+              v-for="candidate in customerCandidates"
+              :key="candidate.id"
+              type="button"
+              class="rounded-lg border px-3 py-2 text-left text-xs"
+              :class="existingCustomerId === candidate.id ? 'border-brand-500 bg-brand-100 dark:bg-brand-900' : 'border-brand-200 bg-white dark:bg-slate-800'"
+              @click="selectCustomerCandidate(candidate)"
+            >
+              {{ candidate.full_legal_name || candidate.name || `Клиент #${candidate.id}` }}
+              <span v-if="candidate.inn" class="block opacity-70">УНП {{ candidate.inn }}</span>
+              <span v-else-if="candidate.phone" class="block opacity-70">{{ candidate.phone }}</span>
+            </button>
+            <button type="button" class="rounded-lg border border-brand-200 px-3 py-2 text-xs" @click="existingCustomerId = null; foundCustomerName = ''; resetBranches()">Новый клиент</button>
           </div>
         </div>
 

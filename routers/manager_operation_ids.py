@@ -148,6 +148,7 @@ GET_MANAGER_LEADS_COUNTER = "get_manager_leads_counter"
 GET_MANAGER_LEADS_INBOX = "get_manager_leads_inbox"
 
 GET_MANAGER_ORDERS = "get_manager_orders"
+LIST_MANAGER_ORDER_SCENARIOS = "list_manager_order_scenarios"
 CREATE_MANAGER_ORDER = "create_manager_order"
 EXPORT_MANAGER_ORDERS = "export_manager_orders"
 PREVIEW_IMPORT_MANAGER_ORDERS = "preview_import_manager_orders"
@@ -594,6 +595,7 @@ ALL_MANAGER_OPERATION_IDS = (
     GET_MANAGER_LEADS_COUNTER,
     GET_MANAGER_LEADS_INBOX,
     GET_MANAGER_ORDERS,
+    LIST_MANAGER_ORDER_SCENARIOS,
     CREATE_MANAGER_ORDER,
     EXPORT_MANAGER_ORDERS,
     PREVIEW_IMPORT_MANAGER_ORDERS,

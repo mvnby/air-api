@@ -99,6 +99,8 @@ def _preview_keyboard(data: dict) -> InlineKeyboardMarkup:
         buttons.append([InlineKeyboardButton(text="Создать клиента", callback_data=f"ocr_create_{recognition_id}")])
         if duplicate:
             buttons.append([InlineKeyboardButton(text="Обновить существующего", callback_data=f"ocr_update_{recognition_id}")])
+    if duplicate:
+        buttons.append([InlineKeyboardButton(text="Использовать найденного", callback_data=f"ocr_use_{recognition_id}")])
     buttons.append([InlineKeyboardButton(text="Отменить", callback_data=f"ocr_cancel_{recognition_id}")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -509,6 +511,7 @@ async def _run_requisites_recognition(
         return
 
     await progress_message.edit_text(_preview_text(data), reply_markup=_preview_keyboard(data), parse_mode="HTML")
+    return data
 
 
 async def _run_requisites_text_recognition(
@@ -533,6 +536,7 @@ async def _run_requisites_text_recognition(
         return
 
     await progress_message.edit_text(_preview_text(data), reply_markup=_preview_keyboard(data), parse_mode="HTML")
+    return data
 
 
 async def _handle_requisites_file(
@@ -593,6 +597,7 @@ async def _ask_requisites_file_action(
             "file_size": normalized_size,
             "telegram_message_id": message.message_id,
             "telegram_chat_id": message.chat.id if message.chat else None,
+            "caption": (getattr(message, "caption", None) or "")[:1000],
         }
     )
     await message.answer(

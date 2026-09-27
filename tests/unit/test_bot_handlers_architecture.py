@@ -147,8 +147,9 @@ def test_bot_task_presenter_does_not_import_backend_runtime_layers():
 def test_bot_quick_order_paths_use_api_instead_of_backend_service():
     source = Path("bot_app/handlers/work.py").read_text(encoding="utf-8")
     assert "BotQuickOrderService" not in source
-    assert "get_bot_api_gateway().parse_quick_order" in source
-    assert "get_bot_api_gateway().create_quick_order" in source
+    assert "get_bot_api_gateway().start_quick_order_draft" in source
+    assert "get_bot_api_gateway().patch_quick_order_draft" in source
+    assert "gateway.create_quick_order_from_draft" in source
 
 
 def test_bot_customer_requisites_paths_use_api_instead_of_backend_service():

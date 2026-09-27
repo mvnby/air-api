@@ -12,6 +12,7 @@ import type { ManagerOrderImportCommitResponse } from '../models/ManagerOrderImp
 import type { ManagerOrderImportPreviewRequest } from '../models/ManagerOrderImportPreviewRequest';
 import type { ManagerOrderImportPreviewResponse } from '../models/ManagerOrderImportPreviewResponse';
 import type { ManagerOrderListResponse } from '../models/ManagerOrderListResponse';
+import type { ManagerOrderScenariosResponse } from '../models/ManagerOrderScenariosResponse';
 import type { ManagerOrderTransferPackage_Output } from '../models/ManagerOrderTransferPackage_Output';
 import type { ManagerOrderUpdatePayload } from '../models/ManagerOrderUpdatePayload';
 import type { ManagerStaleWorkStageItem } from '../models/ManagerStaleWorkStageItem';
@@ -26,6 +27,17 @@ import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class ManagerOrdersService {
+    /**
+     * List Manager Order Scenarios
+     * @returns ManagerOrderScenariosResponse Successful Response
+     * @throws ApiError
+     */
+    public static listManagerOrderScenarios(): CancelablePromise<ManagerOrderScenariosResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/orders/scenarios',
+        });
+    }
     /**
      * Get Manager Orders
      * @param segment

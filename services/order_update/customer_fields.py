@@ -35,7 +35,6 @@ CRITICAL_CUSTOMER_FIELDS = {
 
 QUALIFICATION_META_FIELDS = {
     "object_type": "object_type",
-    "service_type": "service_type",
     "equipment_class": "equipment_class",
     "marketing_source": "marketing_source",
     "no_answer_at": "no_answer_at",
@@ -252,11 +251,6 @@ def _apply_qualification_meta(context: OrderUpdateContext) -> None:
         if value is None:
             continue
         new_meta[QUALIFICATION_META_FIELDS[field_name]] = value
-        if field_name == "service_type" and "workflow_type" not in context.fields_set:
-            context.order.workflow_type = OrderService._workflow_type_from_service_type(
-                value,
-                context.order.workflow_type,
-            )
     context.order.technical_meta = new_meta
     flag_modified(context.order, "technical_meta")
 

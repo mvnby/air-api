@@ -47,6 +47,38 @@ async def _auth_headers(async_client):
 
 
 @pytest.mark.asyncio
+async def test_manager_scenario_catalog_and_create_without_comment(async_client, db):
+    customer = Customer(tenant_id=1, name="Клиент обслуживания", phone="")
+    db.add(customer)
+    await db.commit()
+    headers = await _auth_headers(async_client)
+    options_response = await async_client.get("/api/manager/orders/scenarios", headers=headers)
+    assert options_response.status_code == 200, options_response.text
+    options = options_response.json()["items"]
+    assert {option["service_type"] for option in options} >= {
+        "turnkey", "install_only", "maintenance", "repair", None,
+    }
+    assert any(
+        option["workflow_type"] == "service_work" and option["service_type"] is None
+        for option in options
+    )
+
+    response = await async_client.post(
+        "/api/manager/orders",
+        headers=headers,
+        json={
+            "source": "manager", "customer_id": customer.id,
+            "workflow_type": "maintenance", "service_type": "maintenance",
+        },
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert (data["status"], data["workflow_type"], data["title"]) == (
+        "negotiation", "maintenance", "Обслуживание",
+    )
+
+
+@pytest.mark.asyncio
 async def test_manager_orders_list_segment_filter(async_client, db):
     c1 = Customer(tenant_id=1, name="B2C", phone="+375291111111", type=CustomerType.individual)
     c2 = Customer(tenant_id=1, name="B2B", phone="+375292222222", type=CustomerType.individual, inn="123456789")

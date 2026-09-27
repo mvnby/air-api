@@ -3,6 +3,7 @@
 from datetime import date, datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
+from uuid import UUID
 
 from pydantic import BaseModel, Field, ValidationInfo, computed_field, field_validator
 
@@ -495,6 +496,9 @@ class OrderProposalListResponse(BaseModel):
 
 
 class ManagerOrderDetailResponse(ManagerOrderListItemResponse):
+    contact_name: Optional[str] = None
+    contact_phone: Optional[str] = None
+    requested_date: Optional[date] = None
     attachment_count: int = 0
     linked_equipment_count: int = 0
     product_lines: List[OrderProductLineResponse] = Field(default_factory=list)
@@ -549,6 +553,9 @@ class ManagerOrderUpdatePayload(BaseModel):
     next_followup_date: Optional[datetime] = None
     measurement_date: Optional[datetime] = None
     installation_date: Optional[datetime] = None
+    requested_date: Optional[date] = None
+    contact_name: Optional[str] = None
+    contact_phone: Optional[str] = None
     comment: Optional[str] = None
     no_answer_at: Optional[str] = None
     measurement_required: Optional[bool] = None
@@ -603,13 +610,30 @@ class ManagerOrderCreatePayload(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
     source: str
-    request_text: str
+    client_request_id: Optional[UUID] = None
+    request_text: str = ""
+    workflow_type: Optional[str] = None
     service_type: Optional[str] = None
+    title: Optional[str] = None
+    customer_branch_id: Optional[int] = None
+    contact_name: Optional[str] = None
+    contact_phone: Optional[str] = None
     customer_type: Optional[str] = None
     customer_inn: Optional[str] = None
     customer_full_legal_name: Optional[str] = None
     target_date: Optional[datetime] = None
     address: Optional[str] = None
+
+
+class ManagerOrderScenarioOption(BaseModel):
+    label: str
+    workflow_type: str
+    service_type: Optional[str] = None
+    hint: str = ""
+
+
+class ManagerOrderScenariosResponse(BaseModel):
+    items: List[ManagerOrderScenarioOption]
 
 
 class ManagerOrderExportRequest(BaseModel):

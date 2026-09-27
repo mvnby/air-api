@@ -16,6 +16,12 @@ from api_contracts.bot import (
     BotQuickOrderCreateRequest,
     BotQuickOrderCreateResponse,
     BotQuickOrderDraft,
+    BotQuickOrderDraftStartRequest,
+    BotQuickOrderDraftPatchRequest,
+    BotQuickOrderDraftActionRequest,
+    BotQuickOrderDraftSessionResponse,
+    BotQuickOrderCustomerSearchRequest,
+    BotQuickOrderCustomerSearchResponse,
     BotQuickOrderParseRequest,
     BotQuickOrderParseResponse,
     BotStaffContextResponse,
@@ -45,6 +51,11 @@ from services.bot_customer_requisites_api_service import (
 from services.bot_quick_order_api_service import (
     BotQuickOrderAccessDeniedError,
     BotQuickOrderApiService,
+)
+from services.bot_quick_order_draft_service import (
+    BotQuickOrderDraftService,
+    BotQuickOrderDraftConflictError,
+    BotQuickOrderDraftNotFoundError,
 )
 from services.bot_task_mutation_service import (
     BotTaskMutationAccessDeniedError,
@@ -284,6 +295,95 @@ async def parse_internal_bot_quick_order(
     except BotQuickOrderAccessDeniedError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     return BotQuickOrderParseResponse(draft=BotQuickOrderDraft.model_validate(draft))
+
+
+def _draft_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, BotQuickOrderAccessDeniedError):
+        return HTTPException(status_code=403, detail=str(exc))
+    if isinstance(exc, BotQuickOrderDraftNotFoundError):
+        return HTTPException(status_code=404, detail=str(exc))
+    if isinstance(exc, BotQuickOrderDraftConflictError):
+        return HTTPException(status_code=409, detail=str(exc))
+    return HTTPException(status_code=422, detail=str(exc))
+
+
+@router.post("/quick-orders/drafts", response_model=BotQuickOrderDraftSessionResponse,
+             operation_id="start_internal_bot_quick_order_draft_v1")
+async def start_internal_bot_quick_order_draft(
+    payload: BotQuickOrderDraftStartRequest, session: AsyncSession = Depends(get_session)
+) -> BotQuickOrderDraftSessionResponse:
+    try:
+        result = await BotQuickOrderDraftService.start(session, **payload.model_dump())
+    except (BotQuickOrderAccessDeniedError, BotQuickOrderDraftNotFoundError,
+            BotQuickOrderDraftConflictError, ValueError) as exc:
+        raise _draft_error(exc) from exc
+    return BotQuickOrderDraftSessionResponse.model_validate(result)
+
+
+@router.post("/quick-orders/customers/search", response_model=BotQuickOrderCustomerSearchResponse,
+             operation_id="search_internal_bot_quick_order_customers_v1")
+async def search_internal_bot_quick_order_customers(
+    payload: BotQuickOrderCustomerSearchRequest, session: AsyncSession = Depends(get_session)
+) -> BotQuickOrderCustomerSearchResponse:
+    try:
+        result = await BotQuickOrderDraftService.search_customers(session, **payload.model_dump())
+    except (BotQuickOrderAccessDeniedError, ValueError) as exc:
+        raise _draft_error(exc) from exc
+    return BotQuickOrderCustomerSearchResponse.model_validate(result)
+
+
+@router.get("/quick-orders/drafts/{draft_id}", response_model=BotQuickOrderDraftSessionResponse,
+            operation_id="get_internal_bot_quick_order_draft_v1")
+async def get_internal_bot_quick_order_draft(
+    draft_id: str, telegram_id: int = Query(ge=1), session: AsyncSession = Depends(get_session)
+) -> BotQuickOrderDraftSessionResponse:
+    try:
+        result = await BotQuickOrderDraftService.get(session, telegram_id=telegram_id, draft_id=draft_id)
+    except (BotQuickOrderAccessDeniedError, BotQuickOrderDraftNotFoundError) as exc:
+        raise _draft_error(exc) from exc
+    return BotQuickOrderDraftSessionResponse.model_validate(result)
+
+
+@router.patch("/quick-orders/drafts/{draft_id}", response_model=BotQuickOrderDraftSessionResponse,
+              operation_id="patch_internal_bot_quick_order_draft_v1")
+async def patch_internal_bot_quick_order_draft(
+    draft_id: str, payload: BotQuickOrderDraftPatchRequest,
+    session: AsyncSession = Depends(get_session)
+) -> BotQuickOrderDraftSessionResponse:
+    try:
+        result = await BotQuickOrderDraftService.patch(session, draft_id=draft_id, **payload.model_dump())
+    except (BotQuickOrderAccessDeniedError, BotQuickOrderDraftNotFoundError,
+            BotQuickOrderDraftConflictError, ValueError) as exc:
+        raise _draft_error(exc) from exc
+    return BotQuickOrderDraftSessionResponse.model_validate(result)
+
+
+@router.post("/quick-orders/drafts/{draft_id}/cancel", response_model=BotQuickOrderDraftSessionResponse,
+             operation_id="cancel_internal_bot_quick_order_draft_v1")
+async def cancel_internal_bot_quick_order_draft(
+    draft_id: str, payload: BotQuickOrderDraftActionRequest,
+    session: AsyncSession = Depends(get_session)
+) -> BotQuickOrderDraftSessionResponse:
+    try:
+        result = await BotQuickOrderDraftService.cancel(session, draft_id=draft_id, **payload.model_dump())
+    except (BotQuickOrderAccessDeniedError, BotQuickOrderDraftNotFoundError,
+            BotQuickOrderDraftConflictError, ValueError) as exc:
+        raise _draft_error(exc) from exc
+    return BotQuickOrderDraftSessionResponse.model_validate(result)
+
+
+@router.post("/quick-orders/drafts/{draft_id}/create", response_model=BotQuickOrderCreateResponse,
+             operation_id="create_internal_bot_quick_order_from_draft_v1")
+async def create_internal_bot_quick_order_from_draft(
+    draft_id: str, payload: BotQuickOrderDraftActionRequest,
+    session: AsyncSession = Depends(get_session)
+) -> BotQuickOrderCreateResponse:
+    try:
+        result = await BotQuickOrderDraftService.create(session, draft_id=draft_id, **payload.model_dump())
+    except (BotQuickOrderAccessDeniedError, BotQuickOrderDraftNotFoundError,
+            BotQuickOrderDraftConflictError, ValueError) as exc:
+        raise _draft_error(exc) from exc
+    return BotQuickOrderCreateResponse.model_validate(result)
 
 
 @router.post(

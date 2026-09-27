@@ -2,8 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type BotCustomerRequisitesActionRequest = {
+export type BotQuickOrderDraftActionRequest = {
     telegram_id: number;
-    action: 'create' | 'update' | 'use' | 'cancel';
+    expected_version: number;
 };
 

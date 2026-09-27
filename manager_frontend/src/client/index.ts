@@ -82,9 +82,17 @@ export type { BotProductSelectionResponse } from './models/BotProductSelectionRe
 export type { BotQuickOrderAddressCheck } from './models/BotQuickOrderAddressCheck';
 export type { BotQuickOrderCreateRequest } from './models/BotQuickOrderCreateRequest';
 export type { BotQuickOrderCreateResponse } from './models/BotQuickOrderCreateResponse';
+export type { BotQuickOrderCustomerCandidate } from './models/BotQuickOrderCustomerCandidate';
+export type { BotQuickOrderCustomerSearchRequest } from './models/BotQuickOrderCustomerSearchRequest';
+export type { BotQuickOrderCustomerSearchResponse } from './models/BotQuickOrderCustomerSearchResponse';
 export type { BotQuickOrderDraft } from './models/BotQuickOrderDraft';
+export type { BotQuickOrderDraftActionRequest } from './models/BotQuickOrderDraftActionRequest';
+export type { BotQuickOrderDraftPatchRequest } from './models/BotQuickOrderDraftPatchRequest';
+export type { BotQuickOrderDraftSessionResponse } from './models/BotQuickOrderDraftSessionResponse';
+export type { BotQuickOrderDraftStartRequest } from './models/BotQuickOrderDraftStartRequest';
 export type { BotQuickOrderParseRequest } from './models/BotQuickOrderParseRequest';
 export type { BotQuickOrderParseResponse } from './models/BotQuickOrderParseResponse';
+export type { BotQuickOrderScenarioOption } from './models/BotQuickOrderScenarioOption';
 export type { BotRepairApplyRequest } from './models/BotRepairApplyRequest';
 export type { BotRepairApplyResponse } from './models/BotRepairApplyResponse';
 export type { BotRepairDraftRequest } from './models/BotRepairDraftRequest';
@@ -418,6 +426,8 @@ export type { ManagerOrderImportProductMatch } from './models/ManagerOrderImport
 export type { ManagerOrderListItemResponse } from './models/ManagerOrderListItemResponse';
 export type { ManagerOrderListResponse } from './models/ManagerOrderListResponse';
 export type { ManagerOrderProductLinePayload } from './models/ManagerOrderProductLinePayload';
+export type { ManagerOrderScenarioOption } from './models/ManagerOrderScenarioOption';
+export type { ManagerOrderScenariosResponse } from './models/ManagerOrderScenariosResponse';
 export type { ManagerOrderServiceLinePayload } from './models/ManagerOrderServiceLinePayload';
 export type { ManagerOrderTransferCustomer } from './models/ManagerOrderTransferCustomer';
 export type { ManagerOrderTransferCustomerBranch } from './models/ManagerOrderTransferCustomerBranch';

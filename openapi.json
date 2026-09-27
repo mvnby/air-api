@@ -547,6 +547,324 @@
         ]
       }
     },
+    "/api/internal/bot/v1/quick-orders/drafts": {
+      "post": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Start Internal Bot Quick Order Draft",
+        "operationId": "start_internal_bot_quick_order_draft_v1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotQuickOrderDraftStartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotQuickOrderDraftSessionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/quick-orders/customers/search": {
+      "post": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Search Internal Bot Quick Order Customers",
+        "operationId": "search_internal_bot_quick_order_customers_v1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotQuickOrderCustomerSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotQuickOrderCustomerSearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/quick-orders/drafts/{draft_id}": {
+      "get": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Get Internal Bot Quick Order Draft",
+        "operationId": "get_internal_bot_quick_order_draft_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Draft Id"
+            }
+          },
+          {
+            "name": "telegram_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Telegram Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotQuickOrderDraftSessionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Patch Internal Bot Quick Order Draft",
+        "operationId": "patch_internal_bot_quick_order_draft_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Draft Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotQuickOrderDraftPatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotQuickOrderDraftSessionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal/bot/v1/quick-orders/drafts/{draft_id}/cancel": {
+      "post": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Cancel Internal Bot Quick Order Draft",
+        "operationId": "cancel_internal_bot_quick_order_draft_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Draft Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotQuickOrderDraftActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotQuickOrderDraftSessionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal/bot/v1/quick-orders/drafts/{draft_id}/create": {
+      "post": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Create Internal Bot Quick Order From Draft",
+        "operationId": "create_internal_bot_quick_order_from_draft_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Draft Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotQuickOrderDraftActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotQuickOrderCreateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/internal/bot/v1/quick-orders": {
       "post": {
         "tags": [
@@ -14910,6 +15228,32 @@
             }
           }
         }
+      }
+    },
+    "/api/manager/orders/scenarios": {
+      "get": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "List Manager Order Scenarios",
+        "operationId": "list_manager_order_scenarios",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderScenariosResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
       }
     },
     "/api/manager/orders": {
@@ -30048,6 +30392,7 @@
             "enum": [
               "create",
               "update",
+              "use",
               "cancel"
             ],
             "title": "Action"
@@ -30144,7 +30489,8 @@
                 "type": "string",
                 "enum": [
                   "create",
-                  "update"
+                  "update",
+                  "use"
                 ]
               },
               {
@@ -30750,8 +31096,121 @@
         ],
         "title": "BotQuickOrderCreateResponse"
       },
+      "BotQuickOrderCustomerCandidate": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "customer_type": {
+            "type": "string",
+            "enum": [
+              "individual",
+              "individual_entrepreneur",
+              "company"
+            ],
+            "title": "Customer Type"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "inn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inn"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "customer_type"
+        ],
+        "title": "BotQuickOrderCustomerCandidate"
+      },
+      "BotQuickOrderCustomerSearchRequest": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Id"
+          },
+          "query": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 3,
+            "title": "Query"
+          }
+        },
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "query"
+        ],
+        "title": "BotQuickOrderCustomerSearchRequest"
+      },
+      "BotQuickOrderCustomerSearchResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BotQuickOrderCustomerCandidate"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "title": "BotQuickOrderCustomerSearchResponse"
+      },
       "BotQuickOrderDraft": {
         "properties": {
+          "customer_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Id"
+          },
+          "customer_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "individual",
+                  "individual_entrepreneur",
+                  "company"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Type"
+          },
           "name": {
             "anyOf": [
               {
@@ -30763,6 +31222,42 @@
               }
             ],
             "title": "Name"
+          },
+          "contact_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Name"
+          },
+          "contact_phone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Phone"
+          },
+          "contact_email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Email"
           },
           "phone": {
             "anyOf": [
@@ -30776,6 +31271,42 @@
             ],
             "title": "Phone"
           },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "inn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inn"
+          },
+          "customer_branch_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Branch Id"
+          },
           "address": {
             "anyOf": [
               {
@@ -30787,6 +31318,35 @@
               }
             ],
             "title": "Address"
+          },
+          "legal_address": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legal Address"
+          },
+          "workflow_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "sales_installation",
+                  "service_work",
+                  "maintenance",
+                  "repair"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Type"
           },
           "service_type": {
             "anyOf": [
@@ -30825,6 +31385,71 @@
             ],
             "title": "Target Date"
           },
+          "target_date_precision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "date",
+                  "datetime"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Date Precision"
+          },
+          "equipment_summary": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Summary"
+          },
+          "equipment_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 10000.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Count"
+          },
+          "equipment_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Type"
+          },
+          "field_sources": {
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "ai",
+                "fallback",
+                "user",
+                "customer"
+              ]
+            },
+            "type": "object",
+            "title": "Field Sources"
+          },
           "request_text": {
             "type": "string",
             "maxLength": 12000,
@@ -30858,6 +31483,153 @@
         ],
         "title": "BotQuickOrderDraft"
       },
+      "BotQuickOrderDraftActionRequest": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Id"
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "expected_version"
+        ],
+        "title": "BotQuickOrderDraftActionRequest"
+      },
+      "BotQuickOrderDraftPatchRequest": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Id"
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Version"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 12000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "changes": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Changes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "expected_version"
+        ],
+        "title": "BotQuickOrderDraftPatchRequest"
+      },
+      "BotQuickOrderDraftSessionResponse": {
+        "properties": {
+          "draft_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$",
+            "title": "Draft Id"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Version"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "created",
+              "cancelled"
+            ],
+            "title": "Status"
+          },
+          "draft": {
+            "$ref": "#/components/schemas/BotQuickOrderDraft"
+          },
+          "order_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Id"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "scenarios": {
+            "items": {
+              "$ref": "#/components/schemas/BotQuickOrderScenarioOption"
+            },
+            "type": "array",
+            "title": "Scenarios"
+          }
+        },
+        "type": "object",
+        "required": [
+          "draft_id",
+          "version",
+          "status",
+          "draft",
+          "expires_at"
+        ],
+        "title": "BotQuickOrderDraftSessionResponse"
+      },
+      "BotQuickOrderDraftStartRequest": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Id"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 12000,
+            "title": "Text",
+            "default": ""
+          },
+          "customer_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "telegram_id"
+        ],
+        "title": "BotQuickOrderDraftStartRequest"
+      },
       "BotQuickOrderParseRequest": {
         "properties": {
           "telegram_id": {
@@ -30890,6 +31662,49 @@
           "draft"
         ],
         "title": "BotQuickOrderParseResponse"
+      },
+      "BotQuickOrderScenarioOption": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "workflow_type": {
+            "type": "string",
+            "enum": [
+              "sales_installation",
+              "service_work",
+              "maintenance",
+              "repair"
+            ],
+            "title": "Workflow Type"
+          },
+          "service_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "turnkey",
+                  "install_only",
+                  "pre_install",
+                  "maintenance",
+                  "repair",
+                  "dismantling"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "workflow_type"
+        ],
+        "title": "BotQuickOrderScenarioOption"
       },
       "BotRepairApplyRequest": {
         "properties": {
@@ -40311,6 +41126,28 @@
               }
             ],
             "title": "Order Comment"
+          },
+          "workflow_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Type"
+          },
+          "service_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Type"
           }
         },
         "type": "object",
@@ -51757,9 +52594,33 @@
             "type": "string",
             "title": "Source"
           },
+          "client_request_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Request Id"
+          },
           "request_text": {
             "type": "string",
-            "title": "Request Text"
+            "title": "Request Text",
+            "default": ""
+          },
+          "workflow_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Type"
           },
           "service_type": {
             "anyOf": [
@@ -51771,6 +52632,50 @@
               }
             ],
             "title": "Service Type"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "customer_branch_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Branch Id"
+          },
+          "contact_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Name"
+          },
+          "contact_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Phone"
           },
           "customer_type": {
             "anyOf": [
@@ -51831,8 +52736,7 @@
         },
         "type": "object",
         "required": [
-          "source",
-          "request_text"
+          "source"
         ],
         "title": "ManagerOrderCreatePayload"
       },
@@ -52284,6 +53188,40 @@
             "type": "number",
             "title": "Balance Due",
             "default": 0.0
+          },
+          "contact_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Name"
+          },
+          "contact_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Phone"
+          },
+          "requested_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Date"
           },
           "attachment_count": {
             "type": "integer",
@@ -53590,6 +54528,56 @@
           "price"
         ],
         "title": "ManagerOrderProductLinePayload"
+      },
+      "ManagerOrderScenarioOption": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "workflow_type": {
+            "type": "string",
+            "title": "Workflow Type"
+          },
+          "service_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Type"
+          },
+          "hint": {
+            "type": "string",
+            "title": "Hint",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "workflow_type"
+        ],
+        "title": "ManagerOrderScenarioOption"
+      },
+      "ManagerOrderScenariosResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerOrderScenarioOption"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ManagerOrderScenariosResponse"
       },
       "ManagerOrderServiceLinePayload": {
         "properties": {
@@ -55200,6 +56188,40 @@
               }
             ],
             "title": "Installation Date"
+          },
+          "requested_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Date"
+          },
+          "contact_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Name"
+          },
+          "contact_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Phone"
           },
           "comment": {
             "anyOf": [
