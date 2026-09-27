@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { OrderMultiSplitConfigurationResponse } from './OrderMultiSplitConfigurationResponse';
 import type { OrderProductLineResponse } from './OrderProductLineResponse';
 import type { OrderServiceLineResponse } from './OrderServiceLineResponse';
 export type OrderProposalResponse = {
@@ -17,5 +18,6 @@ export type OrderProposalResponse = {
     margin?: (number | null);
     product_lines?: Array<OrderProductLineResponse>;
     service_lines?: Array<OrderServiceLineResponse>;
+    multi_split_configuration?: (OrderMultiSplitConfigurationResponse | null);
 };
 

@@ -5,9 +5,11 @@ import type { useOrderProposalLifecycle } from '../../composables/useOrderPropos
 import OrderDrawerSection from './OrderDrawerSection.vue';
 import OrderProductLinesEditor from './OrderProductLinesEditor.vue';
 import OrderInstallationEstimatePanel from './OrderInstallationEstimatePanel.vue';
+import OrderMultiSplitConfigurator from './OrderMultiSplitConfigurator.vue';
 import OrderProposalToolbar from './OrderProposalToolbar.vue';
 import OrderServiceLinesEditor from './OrderServiceLinesEditor.vue';
 import type { OrderWorkflowType } from './order-workspace';
+import type { ManagerOrderDetailResponse } from '../../client';
 
 const props = defineProps<{
   commercial: ReturnType<typeof useOrderCommercialEditor>;
@@ -27,15 +29,17 @@ const props = defineProps<{
   beginInstallationAttach: (orderId: number, proposalId: number, scopeKey: string, token: string) => Promise<boolean>;
   afterInstallationAttach: (orderId: number, proposalId: number, scopeKey: string, token: string) => Promise<boolean>;
   endInstallationAttach: (token: string) => void;
+  beforeMultiSplitSave: () => Promise<boolean>;
 }>();
 
-const emit = defineEmits<{ catalog: []; documents: [] }>();
+const emit = defineEmits<{ catalog: []; documents: []; multiSplitUpdated: [order: ManagerOrderDetailResponse] }>();
 const expanded = defineModel<boolean>('expanded', { required: true });
 const toolbarRef = ref<InstanceType<typeof OrderProposalToolbar> | null>(null);
 const installationPanelRef = ref<InstanceType<typeof OrderInstallationEstimatePanel> | null>(null);
 const commercial = reactive(props.commercial);
 const proposal = reactive(props.proposal);
 const hasAttachedInstallation = computed(() => commercial.serviceLines.some((line) => Boolean(line.installation_estimate_revision_id)));
+const multiSplitOpen = ref(false);
 
 defineExpose({
   addProduct: () => commercial.addProductLine(),
@@ -68,6 +72,17 @@ defineExpose({
         @change-status="proposal.changeActiveProposalStatus"
         @send="emit('documents')"
       />
+
+      <template v-if="orderId && workflow === 'sales_installation'">
+        <button type="button" class="btn-mini-outline mb-3" :aria-expanded="multiSplitOpen" @click="multiSplitOpen = !multiSplitOpen">{{ multiSplitOpen ? 'Скрыть мультисплит' : 'Собрать мультисплит' }}</button>
+        <OrderMultiSplitConfigurator
+          v-if="multiSplitOpen"
+          :order-id="orderId"
+          :proposals="proposal.proposals"
+          :before-save="beforeMultiSplitSave"
+          @updated="emit('multiSplitUpdated', $event)"
+        />
+      </template>
 
       <div v-if="proposal.activeProposalLocked" class="mb-3 flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
         <span v-if="hasAttachedInstallation">Эта редакция уже {{ proposal.activeProposalStatus === 'approved' ? 'принята клиентом' : 'отправлена' }}. Для замены монтажа создайте новый пустой черновик предложения.</span>

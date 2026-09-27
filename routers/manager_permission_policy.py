@@ -276,6 +276,13 @@ SYSTEM_OWNER_OPERATION_IDS = frozenset(
     }
 )
 
+MULTI_SPLIT_OPERATION_IDS = frozenset({
+    operation_ids.LIST_MANAGER_MULTI_SPLIT_OPTIONS,
+    operation_ids.PREVIEW_MANAGER_MULTI_SPLIT,
+    operation_ids.SAVE_MANAGER_MULTI_SPLIT_PROPOSAL,
+})
+
+
 SYSTEM_ANALYTICS_OPERATION_IDS = frozenset(
     {operation_ids.GET_MANAGER_CATALOG_USAGE}
 )
@@ -307,6 +314,8 @@ STOREFRONT_OWNER_OPERATION_IDS = frozenset(
 
 
 def required_permission_dependency(operation_id: str | None):
+    if operation_id in MULTI_SPLIT_OPERATION_IDS:
+        return require_manager_access
     if operation_id in SYSTEM_ANALYTICS_OPERATION_IDS:
         return require_system_analytics_manage
     if operation_id in TENANT_SERVICE_OPERATION_IDS:

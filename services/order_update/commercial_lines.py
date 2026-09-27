@@ -1,9 +1,11 @@
 """Commercial line reconciliation for Manager order updates."""
 
+from collections import Counter
+
 from sqlalchemy import delete
 from sqlmodel import select
 
-from models import OrderServiceLink, Product, Service
+from models import OrderMultiSplitConfiguration, OrderServiceLink, Product, Service
 from services.installation_estimate_confirmation_service import InstallationEstimateConfirmationService
 from services.order_product_line_service import OrderProductLineService
 from services.order_proposal_lifecycle import (
@@ -66,6 +68,19 @@ async def apply_commercial_lines(context: OrderUpdateContext) -> None:
     replaces_products = "products" in context.fields_set and context.payload.products is not None
     replaces_services = "services" in context.fields_set and context.payload.services is not None
     if replaces_products:
+        configuration = (await context.session.execute(
+            select(OrderMultiSplitConfiguration).where(OrderMultiSplitConfiguration.proposal_id == target_proposal_id)
+        )).scalar_one_or_none()
+        if configuration:
+            saved_components = Counter({
+                int(item["product_id"]): int(item["quantity"])
+                for item in configuration.component_snapshot
+            })
+            submitted_components = Counter()
+            for line in context.payload.products:
+                submitted_components[int(line.product_id)] += int(line.quantity)
+            if submitted_components != saved_components:
+                raise ValueError("Состав мультисплита сохранён как единое решение. Создайте новый вариант конфигурации.")
         await _replace_product_lines(context, target_proposal_id)
         await InstallationEstimateConfirmationService.validate_attached_claims(
             context.session, context.order_id, target_proposal_id,

@@ -546,6 +546,7 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
                 :customer-id="order?.customer?.id"
                 :order-id="order?.id ?? null"
                 :before-installation-action="orderSaving.flush"
+                :before-multi-split-save="orderSaving.flush"
                 :begin-installation-attach="beginInstallationAttach"
                 :after-installation-attach="refreshAfterInstallationAttach"
                 :end-installation-attach="endInstallationAttach"
@@ -553,6 +554,7 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
                 :catalog-opening="catalogNavigation.opening.value"
                 :catalog-needs-save="hasUnsavedChanges"
                 @catalog="catalogNavigation.open"
+                @multi-split-updated="emit('updated', $event)"
                 @documents="openWorkspaceTarget('documents')"
               />
             </section>

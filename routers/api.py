@@ -13,6 +13,7 @@ from routers.api_storefront import router as storefront_router
 from routers.api_storefront_settings import router as storefront_settings_router
 from routers.api_service_pricing import router as service_pricing_router
 from routers.api_yandex_business import router as yandex_business_router
+from routers.api_multi_split import router as multi_split_router
 
 router = APIRouter(prefix="/api", tags=["api"])
 router.include_router(admin_router)
@@ -27,3 +28,4 @@ router.include_router(storefront_router)
 router.include_router(storefront_settings_router)
 router.include_router(service_pricing_router)
 router.include_router(yandex_business_router)
+router.include_router(multi_split_router)
