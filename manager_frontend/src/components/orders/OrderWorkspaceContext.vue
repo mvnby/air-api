@@ -11,6 +11,7 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{
+  customer: [];
   object: [];
   payments: [];
 }>();
@@ -18,13 +19,13 @@ const emit = defineEmits<{
 
 <template>
   <aside class="grid grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-slate-50/70 p-2.5 text-sm dark:border-slate-700 dark:bg-slate-900/70 lg:sticky lg:top-4 lg:block lg:self-start lg:p-3" aria-label="Контекст заказа" data-order-usage="order-context">
-    <div class="flex items-start gap-2">
+    <button type="button" class="flex w-full items-start gap-2 rounded-lg p-1 text-left hover:bg-white dark:hover:bg-slate-800" data-order-usage="context-customer" @click="emit('customer')">
       <Building2 :size="17" class="mt-0.5 shrink-0 text-slate-400" aria-hidden="true" />
-      <div class="min-w-0">
+      <span class="min-w-0">
         <p class="text-xs font-medium text-slate-500 dark:text-slate-400">Клиент</p>
-        <p class="truncate font-semibold text-slate-900 dark:text-white">{{ customerName || 'Клиент не указан' }}</p>
-      </div>
-    </div>
+        <p class="truncate font-semibold text-slate-900 dark:text-white">{{ customerName || 'Выбрать клиента' }}</p>
+      </span>
+    </button>
     <button type="button" class="flex w-full items-start gap-2 rounded-lg p-1 text-left hover:bg-white dark:hover:bg-slate-800 lg:mt-3" data-order-usage="context-object" @click="emit('object')">
       <MapPin :size="17" class="mt-0.5 shrink-0 text-slate-400" aria-hidden="true" />
       <span class="min-w-0">

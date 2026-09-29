@@ -1,5 +1,6 @@
 import hashlib
 import json
+import mimetypes
 import re
 from dataclasses import dataclass, field
 from email.utils import parsedate_to_datetime
@@ -14,8 +15,18 @@ from core.config import settings
 from models import Customer, LeadSource, Order, OrderStatus
 from services.bank_email_parser_service import BankEmailParserService
 from services.order_service import OrderService
+from services.service_attachment_service import ServiceAttachmentService
 from services.tenant_entity_access_service import TenantEntityAccessService
 from services.tenant_scope_service import TenantScope
+
+
+EMAIL_DOCUMENT_MIME_BY_EXTENSION = {
+    ".pdf": "application/pdf",
+    ".doc": "application/msword",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xls": "application/vnd.ms-excel",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
 
 
 @dataclass
@@ -26,6 +37,15 @@ class EmailLeadProcessResult:
     lead_id: Optional[int] = None
     order_id: Optional[int] = None
     reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class EmailLeadAttachment:
+    """Original MIME attachment retained with an email-created lead."""
+
+    filename: str
+    content_type: str
+    content: bytes
 
 
 @dataclass
@@ -388,6 +408,7 @@ class EmailLeadIntakeService:
         raw_body: str,
         message_id: Optional[str] = None,
         email_date_raw: Optional[str] = None,
+        attachments: tuple[EmailLeadAttachment, ...] = (),
         dry_run: bool = False,
     ) -> EmailLeadProcessResult:
         clean_message_id = (message_id or "").strip() or None
@@ -484,6 +505,7 @@ class EmailLeadIntakeService:
             customer_inn=inn,
             customer_full_legal_name=company_name if customer_type == "company" else None,
             tenant_scope=tenant_scope,
+            commit=False,
         )
 
         from sqlalchemy.orm.attributes import flag_modified
@@ -503,6 +525,47 @@ class EmailLeadIntakeService:
         )
         flag_modified(order, "technical_meta")
         session.add(order)
+        skipped_attachments = []
+        for position, attachment in enumerate(attachments):
+            mime_type = str(attachment.content_type or "").lower()
+            if mime_type not in ServiceAttachmentService.SAFE_MIME_TYPES:
+                extension = "." + attachment.filename.rsplit(".", 1)[-1].lower()
+                guessed_type = EMAIL_DOCUMENT_MIME_BY_EXTENSION.get(extension)
+                if not guessed_type:
+                    guessed_type = mimetypes.guess_type(attachment.filename)[0]
+                mime_type = guessed_type or mime_type
+            if mime_type not in ServiceAttachmentService.SAFE_MIME_TYPES:
+                skipped_attachments.append({"filename": attachment.filename, "reason": "unsupported_type"})
+                continue
+            if len(attachment.content) > int(settings.SERVICE_ATTACHMENT_MAX_SIZE_BYTES):
+                skipped_attachments.append({"filename": attachment.filename, "reason": "size_limit"})
+                continue
+            await ServiceAttachmentService.create_and_link_order_attachment(
+                session,
+                order_id=int(order.id or 0),
+                content=attachment.content,
+                filename=attachment.filename,
+                mime_type=mime_type,
+                category="document",
+                caption=f"Вложение из письма: {attachment.filename}",
+                source="email_lead_intake",
+                created_by=sender_email or None,
+                source_meta={
+                    "intake": "email_lead",
+                    "message_id": clean_message_id,
+                    "message_fingerprint": fingerprint,
+                    "sender_email": sender_email,
+                    "sender_name": sender_name,
+                    "subject": subject,
+                    "email_date": email_date,
+                    "attachment_position": position,
+                },
+                commit=False,
+                tenant_scope=tenant_scope,
+            )
+        if skipped_attachments:
+            order.technical_meta["email_attachments_skipped"] = skipped_attachments
+            flag_modified(order, "technical_meta")
         await session.commit()
         await session.refresh(order)
         return EmailLeadProcessResult(

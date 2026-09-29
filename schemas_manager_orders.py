@@ -11,6 +11,7 @@ from models import PaymentCurrency
 from services.service_estimate_money import exact_money
 from schemas_common import Meta
 from schemas_manager_installers import ManagerInstallerResponse
+from schemas_belzakupki_enrichment import ManagerOrderSourceEnrichment
 
 
 class CalendarEventType(str, Enum):
@@ -496,6 +497,7 @@ class OrderProposalListResponse(BaseModel):
 
 
 class ManagerOrderDetailResponse(ManagerOrderListItemResponse):
+    source_enrichment: Optional[ManagerOrderSourceEnrichment] = None
     contact_name: Optional[str] = None
     contact_phone: Optional[str] = None
     requested_date: Optional[date] = None

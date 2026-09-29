@@ -11,6 +11,7 @@ const props = defineProps<{
   address: string;
   hasComment?: boolean;
   savingCustomer?: boolean;
+  editTarget?: 'customer' | 'object' | null;
 }>();
 
 const emit = defineEmits<{
@@ -42,6 +43,10 @@ watch(() => props.address, (value) => {
 }, { immediate: true });
 
 const startCustomerEdit = () => {
+  if (!props.customer?.id) {
+    emit('change-customer');
+    return;
+  }
   customerName.value = props.customer?.full_legal_name || props.customer?.name || '';
   customerPhone.value = phone.value;
   customerEmail.value = email.value;
@@ -70,6 +75,11 @@ const updateObjectAddress = (value: string) => {
 const finishObjectEdit = () => {
   editingObject.value = false;
 };
+
+watch(() => props.editTarget, (target) => {
+  if (target === 'customer') startCustomerEdit();
+  if (target === 'object') startObjectEdit();
+}, { immediate: true });
 </script>
 
 <template>
@@ -81,6 +91,7 @@ const finishObjectEdit = () => {
           <UserRound v-else :size="17" />
         </span>
         <div class="min-w-0 flex-1">
+          <p class="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">Клиент</p>
           <p class="break-words text-sm font-semibold leading-5 text-slate-900 dark:text-white">{{ displayName }}</p>
           <div class="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
             <a v-if="validPhone" :href="'tel:' + phoneDigits" class="inline-flex items-center gap-1 hover:text-brand-700 dark:hover:text-brand-300">
@@ -95,7 +106,7 @@ const finishObjectEdit = () => {
         </div>
         <div class="col-start-2 row-start-2 mt-1 flex shrink-0 gap-1 sm:col-start-3 sm:row-start-1 sm:mt-0">
           <button v-if="validPhone" type="button" class="icon-action" aria-label="Скопировать телефон" @click="emit('copy', phone, 'Телефон')"><Copy :size="15" /></button>
-          <button type="button" class="icon-action" aria-label="Редактировать клиента" @click="startCustomerEdit"><Pencil :size="15" /></button>
+          <button type="button" class="icon-action" :aria-label="customer?.id ? 'Редактировать клиента' : 'Выбрать клиента'" @click="startCustomerEdit"><Pencil :size="15" /></button>
           <button type="button" data-order-usage="customer_open" class="icon-action hidden sm:flex" aria-label="Открыть полную карточку клиента" @click="emit('open-customer')"><Route :size="15" /></button>
         </div>
       </div>

@@ -429,6 +429,11 @@ export type { ManagerOrderProductLinePayload } from './models/ManagerOrderProduc
 export type { ManagerOrderScenarioOption } from './models/ManagerOrderScenarioOption';
 export type { ManagerOrderScenariosResponse } from './models/ManagerOrderScenariosResponse';
 export type { ManagerOrderServiceLinePayload } from './models/ManagerOrderServiceLinePayload';
+export type { ManagerOrderSourceAnalyze } from './models/ManagerOrderSourceAnalyze';
+export type { ManagerOrderSourceApply } from './models/ManagerOrderSourceApply';
+export type { ManagerOrderSourceApplyResult } from './models/ManagerOrderSourceApplyResult';
+export type { ManagerOrderSourceEnrichment } from './models/ManagerOrderSourceEnrichment';
+export type { ManagerOrderSourcePreview } from './models/ManagerOrderSourcePreview';
 export type { ManagerOrderTransferCustomer } from './models/ManagerOrderTransferCustomer';
 export type { ManagerOrderTransferCustomerBranch } from './models/ManagerOrderTransferCustomerBranch';
 export type { ManagerOrderTransferOrder_Input } from './models/ManagerOrderTransferOrder_Input';
@@ -667,6 +672,10 @@ export type { RepairDiagnosticLeadResponse } from './models/RepairDiagnosticLead
 export type { ServiceCatalogCounts } from './models/ServiceCatalogCounts';
 export type { ServiceDirectionSetting } from './models/ServiceDirectionSetting';
 export type { ServiceResponse } from './models/ServiceResponse';
+export type { SourceCustomerDraft } from './models/SourceCustomerDraft';
+export type { SourceDocumentPreview } from './models/SourceDocumentPreview';
+export type { SourceEquipmentDraft } from './models/SourceEquipmentDraft';
+export type { SourceObjectDraft } from './models/SourceObjectDraft';
 export type { SpecRegistryItemResponse } from './models/SpecRegistryItemResponse';
 export type { SpecRegistryResponse } from './models/SpecRegistryResponse';
 export type { SpecsKeysResponse } from './models/SpecsKeysResponse';

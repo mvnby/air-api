@@ -9,13 +9,13 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel, select
 
 from core.config import settings
-from models import BankReceipt, Customer, LeadSource, Order, OrderDocument, OrderProposal, OrderServiceLink, OrderStatus, OutgoingEmail, Payment, PaymentCurrency, PaymentType
+from models import BankReceipt, Customer, LeadSource, Order, OrderAttachmentLink, OrderDocument, OrderProposal, OrderServiceLink, OrderStatus, OutgoingEmail, Payment, PaymentCurrency, PaymentType, ServiceAttachment
 from services.bank_email_parser_service import BankEmailParserService
 from services.bank_receipt_allocation_service import BankReceiptAllocationService
 from services.bank_receipt_service import BankReceiptService
 from services.bank_statement_csv_service import BankStatementCsvService
 from services.bot_service import BotService
-from services.email_lead_intake_service import EmailLeadIntakeService, EmailLeadProcessResult
+from services.email_lead_intake_service import EmailLeadAttachment, EmailLeadIntakeService, EmailLeadProcessResult
 from services.mail_smtp_service import MailAttachment, MailSmtpService
 from services.mail_imap_service import MailImapService
 from services.notification_service import NotificationService
@@ -124,8 +124,16 @@ def test_email_lead_attachment_text_participates_in_keyword_filter():
     )
 
     attachment_text = "\n".join(MailImapService._extract_attachment_texts(msg))
+    original_attachments = MailImapService._extract_original_attachments(msg)
 
     assert "ремонт двух кондиционеров" in attachment_text
+    assert original_attachments == (
+        EmailLeadAttachment(
+            filename="request.txt",
+            content_type="text/plain",
+            content="Просим предоставить предложение на ремонт двух кондиционеров.".encode("utf-8"),
+        ),
+    )
     assert EmailLeadIntakeService.looks_like_lead_candidate(
         sender_email="client@example.com",
         subject=msg["Subject"],
@@ -326,6 +334,132 @@ async def test_email_lead_intake_creates_visible_inbox_order_and_dedupes_by_mess
     assert orders[0].technical_meta["email_source_fingerprint"]
     assert orders[0].technical_meta["email_date"] == "2026-05-25T12:00"
     assert "торговом зале" in (orders[0].comment or "")
+
+
+@pytest.mark.asyncio
+async def test_email_lead_fills_missing_email_on_existing_phone_customer(sqlite_session, monkeypatch):
+    existing = Customer(
+        tenant_id=TEST_TENANT_SCOPE.tenant_id,
+        name="Постоянный клиент",
+        phone="+375291234567",
+        email=None,
+    )
+    sqlite_session.add(existing)
+    await sqlite_session.commit()
+
+    async def fake_classify(**_kwargs):
+        return {
+            "is_potential_order": True,
+            "confidence": 0.92,
+            "name": "Иван",
+            "phone": "+375291234567",
+            "email": "new@example.com",
+            "segment_hint": "b2c",
+            "request_text": "Нужен монтаж кондиционера.",
+            "reason": "Есть запрос на монтаж.",
+        }
+
+    monkeypatch.setattr(EmailLeadIntakeService, "classify_email", fake_classify)
+    result = await EmailLeadIntakeService.process_email(
+        sqlite_session,
+        tenant_scope=TEST_TENANT_SCOPE,
+        sender_email="new@example.com",
+        sender_name="Иван",
+        subject="Монтаж кондиционера",
+        raw_body="Нужен монтаж кондиционера.",
+        message_id="<existing-email@example.test>",
+    )
+
+    assert result.status == "created"
+    order = await sqlite_session.get(Order, result.order_id)
+    await sqlite_session.refresh(existing)
+    assert order.customer_id == existing.id
+    assert existing.email == "new@example.com"
+
+
+@pytest.mark.asyncio
+async def test_email_lead_intake_keeps_original_attachments_once_with_email_provenance(sqlite_session, monkeypatch):
+    class FakePrivateAttachmentStorage:
+        provider_name = "test_private"
+
+        def __init__(self):
+            self.saved = []
+
+        async def save(self, **kwargs):
+            self.saved.append(kwargs)
+            return SimpleNamespace(provider=self.provider_name, storage_key=f"private/{len(self.saved)}")
+
+        async def exists(self, _storage_key):
+            return True
+
+    async def fake_classify(**_kwargs):
+        return {
+            "is_potential_order": True,
+            "confidence": 0.92,
+            "name": "Иван",
+            "email": "ivan@example.com",
+            "segment_hint": "b2c",
+            "request_text": "Нужен монтаж кондиционера по приложенному расчету.",
+            "reason": "Есть запрос на монтаж.",
+        }
+
+    storage = FakePrivateAttachmentStorage()
+    monkeypatch.setattr("services.service_attachment_service.get_private_attachment_storage", lambda: storage)
+    monkeypatch.setattr(EmailLeadIntakeService, "classify_email", fake_classify)
+    attachment = EmailLeadAttachment(
+        filename="расчет.pdf",
+        content_type="application/pdf",
+        content=b"original-email-pdf",
+    )
+    word_attachment = EmailLeadAttachment(
+        filename="заявка.docx",
+        content_type="application/octet-stream",
+        content=b"original-email-word",
+    )
+    unsupported_attachment = EmailLeadAttachment(
+        filename="archive.unknown",
+        content_type="application/octet-stream",
+        content=b"unsupported",
+    )
+    request = {
+        "tenant_scope": TEST_TENANT_SCOPE,
+        "sender_email": "ivan@example.com",
+        "sender_name": "Иван Петров",
+        "subject": "Монтаж кондиционера",
+        "raw_body": "Нужен монтаж кондиционера, расчет во вложении.",
+        "message_id": "<email-attachment@example.test>",
+        "email_date_raw": "Mon, 25 May 2026 12:00:00 +0300",
+        "attachments": (attachment, word_attachment, unsupported_attachment),
+    }
+
+    first = await EmailLeadIntakeService.process_email(sqlite_session, **request)
+    replay = await EmailLeadIntakeService.process_email(sqlite_session, **request)
+
+    assert first.status == "created"
+    assert replay.status == "duplicate"
+    assert replay.order_id == first.order_id
+    attachments = (await sqlite_session.execute(select(ServiceAttachment))).scalars().all()
+    links = (await sqlite_session.execute(select(OrderAttachmentLink))).scalars().all()
+    assert len(attachments) == len(links) == len(storage.saved) == 2
+    stored = attachments[0]
+    assert stored.source == "email_lead_intake"
+    assert stored.original_filename == "расчет.pdf"
+    assert stored.source_meta == {
+        "intake": "email_lead",
+        "message_id": "<email-attachment@example.test>",
+        "message_fingerprint": stored.source_meta["message_fingerprint"],
+        "sender_email": "ivan@example.com",
+        "sender_name": "Иван Петров",
+        "subject": "Монтаж кондиционера",
+        "email_date": "2026-05-25T12:00",
+        "attachment_position": 0,
+    }
+    assert attachments[1].original_filename == "заявка.docx"
+    assert attachments[1].mime_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    order = await sqlite_session.get(Order, first.order_id)
+    assert order.technical_meta["email_attachments_skipped"] == [
+        {"filename": "archive.unknown", "reason": "unsupported_type"}
+    ]
 
 
 @pytest.mark.asyncio

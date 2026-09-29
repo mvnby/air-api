@@ -1044,6 +1044,8 @@ class OrderService:
         else:
             if customer.tenant_id is None:
                 customer.tenant_id = tenant_scope.tenant_id
+            if customer_email and not str(customer.email or "").strip():
+                customer.email = customer_email.strip()
             # Update address if provided
             if customer_address:
                 customer.actual_address = customer_address

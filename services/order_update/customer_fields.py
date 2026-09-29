@@ -5,7 +5,8 @@ from typing import Any, Optional
 from sqlmodel import select
 from sqlalchemy.orm.attributes import flag_modified
 
-from models import Customer, CustomerBranch, CustomerContract
+from models import Customer, CustomerBranch, CustomerContract, OrderStatus
+from services.customer_creation_service import CustomerCreationService
 from services.customer_party import customer_type_from_value, signing_mode_for_customer_type
 from services.customer_contract_service import CustomerContractService
 from services.order_service import OrderService
@@ -43,10 +44,14 @@ QUALIFICATION_META_FIELDS = {
 
 async def apply_customer_fields(context: OrderUpdateContext) -> None:
     customer_id_changed = await _apply_customer_link(context)
+    qualified_customer_linked = await _create_qualified_customer(context)
+    if qualified_customer_linked:
+        customer_id_changed = True
     await _clear_stale_customer_children(context, customer_id_changed)
     await _apply_customer_branch(context)
     await _apply_customer_contract(context)
-    await _update_linked_customer(context)
+    if not qualified_customer_linked:
+        await _update_linked_customer(context)
     _apply_customer_type_hint(context)
     _apply_qualification_meta(context)
 
@@ -56,6 +61,67 @@ async def apply_customer_fields(context: OrderUpdateContext) -> None:
     if context.current_workflow_type == "repair":
         OrderService._ensure_repair_meta_defaults(context.order)
         flag_modified(context.order, "technical_meta")
+
+
+async def _create_qualified_customer(context: OrderUpdateContext) -> bool:
+    """A lead's reviewed customer fields must not vanish during promotion."""
+    if (
+        context.previous_status != OrderStatus.NEW_LEAD
+        or context.order.status != OrderStatus.NEGOTIATION
+        or context.order.customer_id is not None
+    ):
+        return False
+
+    payload = context.payload
+    name = _clean_optional(getattr(payload, "customer_name", None))
+    if not name:
+        raise ValueError("Укажите клиента перед переводом обращения в переговоры")
+
+    inn = _clean_optional(getattr(payload, "customer_inn", None))
+    if inn:
+        matches = (
+            await context.session.execute(
+                select(Customer).where(
+                    Customer.inn == inn,
+                    tenant_scope_clause(Customer, context.tenant_scope),
+                ).limit(2)
+            )
+        ).scalars().all()
+        if len(matches) > 1:
+            raise ValueError("По УНП найдено несколько клиентов; выберите клиента явно")
+        if matches:
+            context.order.customer_id = int(matches[0].id)
+            return True
+
+    duplicate = await CustomerCreationService._find_duplicate(
+        context.session,
+        phone=_clean_optional(getattr(payload, "customer_phone", None)),
+        email=_clean_optional(getattr(payload, "customer_email", None)),
+        inn=inn,
+        tenant_scope=context.tenant_scope,
+    )
+    if duplicate is not None:
+        raise ValueError("Клиент с такими контактами уже существует; выберите его явно")
+
+    customer_type = customer_type_from_value(getattr(payload, "customer_type", None))
+    customer = Customer(
+        tenant_id=context.tenant_scope.tenant_id,
+        name=name,
+        phone=_clean_optional(getattr(payload, "customer_phone", None)) or "",
+        email=_clean_optional(getattr(payload, "customer_email", None)),
+        type=customer_type,
+        signing_mode=signing_mode_for_customer_type(customer_type),
+        inn=inn,
+        full_legal_name=_clean_optional(getattr(payload, "customer_full_legal_name", None)),
+        legal_address=_clean_optional(getattr(payload, "customer_legal_address", None)),
+        bank_name=_clean_optional(getattr(payload, "customer_bank_name", None)),
+        bic=_clean_optional(getattr(payload, "customer_bic", None)),
+        iban=_clean_optional(getattr(payload, "customer_iban", None)),
+    )
+    context.session.add(customer)
+    await context.session.flush()
+    context.order.customer_id = int(customer.id)
+    return True
 
 
 async def _apply_customer_link(context: OrderUpdateContext) -> bool:

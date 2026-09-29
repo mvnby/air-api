@@ -12,6 +12,7 @@ const emit = defineEmits<{
   (e: 'qualify', item: LeadsInboxItemResponse): void;
   (e: 'reject', item: LeadsInboxItemResponse): void;
   (e: 'no-answer', item: LeadsInboxItemResponse): void;
+  (e: 'review-source', item: LeadsInboxItemResponse): void;
 }>();
 
 const isCommentExpanded = ref(false);
@@ -203,11 +204,11 @@ const isBusinessCustomer = computed(() => (
         class="inline-flex min-h-9 items-center gap-1 rounded-full bg-cyan-50 px-2.5 py-1.5 text-xs font-semibold text-cyan-700 transition hover:bg-cyan-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2 dark:bg-cyan-500/10 dark:text-cyan-300 dark:hover:bg-cyan-500/20 dark:focus-visible:ring-offset-slate-800"
         :aria-expanded="attachmentsOpen"
         :aria-controls="attachmentsRegionId"
-        :aria-label="`${attachmentsOpen ? 'Скрыть' : 'Показать'} фото обращения: ${item.attachment_count}`"
+        :aria-label="`${attachmentsOpen ? 'Скрыть' : 'Показать'} вложения обращения: ${item.attachment_count}`"
         @click="attachmentsOpen = !attachmentsOpen"
       >
-        <span class="material-icons-round text-[15px]" aria-hidden="true">photo_library</span>
-        Фото: {{ item.attachment_count }}
+        <span class="material-icons-round text-[15px]" aria-hidden="true">attach_file</span>
+        Вложения: {{ item.attachment_count }}
         <span class="material-icons-round text-[15px]" aria-hidden="true">{{ attachmentsOpen ? 'expand_less' : 'expand_more' }}</span>
       </button>
     </div>
@@ -217,7 +218,7 @@ const isBusinessCustomer = computed(() => (
       :id="attachmentsRegionId"
       class="mx-4 mb-3 rounded-lg bg-slate-50/80 px-3 dark:bg-slate-900/40"
       role="region"
-      :aria-label="`Фото обращения #${item.id}`"
+      :aria-label="`Вложения обращения #${item.id}`"
       data-testid="lead-readonly-attachments"
     >
       <OrderAttachmentsPanel
@@ -273,6 +274,15 @@ const isBusinessCustomer = computed(() => (
 
     <!-- Actions footer -->
     <div v-if="!isArchive" class="flex flex-wrap gap-2 px-4 pb-4">
+      <button
+        v-if="item.source === 'belzakupki'"
+        class="inline-flex items-center justify-center gap-1.5 rounded-lg border border-brand-200 px-3 py-2 text-xs font-semibold text-brand-700 hover:bg-brand-50 dark:border-brand-800 dark:text-brand-300 dark:hover:bg-brand-950/30"
+        title="Проверить данные из закупки перед созданием сделки"
+        @click="emit('review-source', item)"
+      >
+        <span class="material-icons-round text-[16px]">fact_check</span>
+        Проработать
+      </button>
       <button
         class="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs md:text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700 active:scale-95 transition-all"
         title="Перевести в переговоры"

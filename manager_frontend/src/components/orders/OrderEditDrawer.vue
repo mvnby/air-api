@@ -10,6 +10,7 @@ import OrderWebsiteIntakePanel from './OrderWebsiteIntakePanel.vue';
 import OrderPlanningPanel from './OrderPlanningPanel.vue';
 import OrderRepairPanel from './OrderRepairPanel.vue';
 import OrderCustomerContext from './OrderCustomerContext.vue';
+import LeadSourceReviewModal from '../leads/LeadSourceReviewModal.vue';
 import OrderExecutionPanel from './OrderExecutionPanel.vue';
 import OrderDocumentsWorkspace from './OrderDocumentsWorkspace.vue';
 import OrderManagerLabels from './OrderManagerLabels.vue';
@@ -281,6 +282,8 @@ const {
   documentsWorkspaceRef,
 });
 const documentsMounted = ref(false);
+const customerContextTarget = ref<'customer' | 'object' | null>(null);
+const sourceReviewOpen = ref(false);
 watch(activeWorkspaceSection, (section) => {
   if (section === 'documents') documentsMounted.value = true;
 }, { immediate: true });
@@ -331,6 +334,21 @@ const compactObjectAddress = computed(() => (
   || props.order?.customer_branch?.delivery_address
   || ''
 ));
+type BelzakupkiEnrichment = {
+  work_summary?: string | null;
+  equipment_details?: string | null;
+  objects?: Array<{ address?: string | null; equipment?: Array<{ brand?: string | null; model?: string | null; quantity?: number | null }> }>;
+};
+const sourceEnrichment = computed<BelzakupkiEnrichment | null>(() => (
+  (props.order as (ManagerOrderDetailResponse & { source_enrichment?: BelzakupkiEnrichment | null }) | null)?.source_enrichment || null
+));
+const openCustomerContext = async (target: 'customer' | 'object') => {
+  if (customerContextTarget.value === target) {
+    customerContextTarget.value = null;
+    await nextTick();
+  }
+  customerContextTarget.value = target;
+};
 const orderWorkspace = computed(() => buildOrderWorkspaceViewModel({
   status: status.value,
   negotiationStatus: negotiationStatus.value,
@@ -577,21 +595,13 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
             </section>
 
             <section v-show="activeWorkspaceSection === 'work'" class="min-w-0" data-order-usage="workspace-work-panel">
-              <OrderCustomerContext
-                v-if="order"
-                v-model:delivery-address="customerDeliveryAddress"
-                v-model:customer-branch-id="customerBranchId"
-                v-model:comment="comment"
-                v-model:expanded="expandedDrawerSections.clientDetails"
-                v-model:new-branch-address="newBranchAddress"
-                :order="order"
-                :address-error="getFieldError('customer_delivery_address')"
-                :comment-error="getFieldError('comment')"
-                :before-navigate="closeDrawer"
-                @toast="setToast($event.message, $event.type)"
-                @updated="handleCustomerUpdated"
-                @reload="emit('reload', $event)"
-              />
+              <button v-if="order?.lead_source === 'belzakupki'" type="button" class="btn-mini-outline mb-3 text-xs" @click="sourceReviewOpen = true">Дозаполнить из источника</button>
+              <section v-if="sourceEnrichment" class="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-700 dark:bg-slate-900">
+                <h3 class="font-semibold">Данные из закупки</h3>
+                <p v-if="sourceEnrichment.work_summary" class="mt-2 whitespace-pre-line">{{ sourceEnrichment.work_summary }}</p>
+                <p v-if="sourceEnrichment.equipment_details" class="mt-2 text-slate-600 dark:text-slate-300">{{ sourceEnrichment.equipment_details }}</p>
+                <ul v-if="sourceEnrichment.objects?.length" class="mt-2 space-y-1 text-xs text-slate-600 dark:text-slate-300"><li v-for="(object, index) in sourceEnrichment.objects" :key="index"><span class="font-semibold">{{ object.address || 'Адрес не указан' }}</span><span v-if="object.equipment?.length"> · {{ object.equipment.map((item) => [item.brand, item.model, item.quantity && `×${item.quantity}`].filter(Boolean).join(' ')).join('; ') }}</span></li></ul>
+              </section>
               <OrderSalesInstallationWorkspace
                 v-if="workflowType === 'sales_installation'"
                 class="mt-4"
@@ -636,8 +646,35 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
             </section>
           </fieldset>
         </div>
-        <OrderWorkspaceContext class="order-first lg:order-none" :customer-name="customerDisplayName" :address="compactObjectAddress" :total="totalPreview" :paid="totalPaymentsPreview" :balance="balanceDuePreview" @object="openWorkspaceTarget('object')" @payments="openWorkspaceTarget('payments')" />
+        <div class="order-first min-w-0 space-y-3 lg:order-none lg:sticky lg:top-4 lg:self-start">
+          <OrderWorkspaceContext :customer-name="customerDisplayName" :address="compactObjectAddress" :total="totalPreview" :paid="totalPaymentsPreview" :balance="balanceDuePreview" @customer="openCustomerContext('customer')" @object="openCustomerContext('object')" @payments="openWorkspaceTarget('payments')" />
+          <OrderCustomerContext
+            v-if="order"
+            v-model:delivery-address="customerDeliveryAddress"
+            v-model:customer-branch-id="customerBranchId"
+            v-model:comment="comment"
+            v-model:expanded="expandedDrawerSections.clientDetails"
+            v-model:new-branch-address="newBranchAddress"
+            :order="order"
+            :address-error="getFieldError('customer_delivery_address')"
+            :comment-error="getFieldError('comment')"
+            :before-navigate="closeDrawer"
+            :edit-target="customerContextTarget"
+            :visible="Boolean(customerContextTarget)"
+            @toast="setToast($event.message, $event.type)"
+            @updated="handleCustomerUpdated"
+            @reload="emit('reload', $event)"
+          />
+        </div>
       </div>
+      <LeadSourceReviewModal
+        v-if="order"
+        :open="sourceReviewOpen"
+        :order-id="order.id"
+        :lead-status="status"
+        @close="sourceReviewOpen = false"
+        @applied="sourceReviewOpen = false; emit('reload', $event.orderId)"
+      />
     </aside>
     <div v-if="installationAttaching" role="status" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 px-4 text-center text-sm font-semibold text-slate-900">
       <span class="rounded-xl bg-white px-5 py-3 shadow-lg">Прикрепляем монтаж к предложению…</span>

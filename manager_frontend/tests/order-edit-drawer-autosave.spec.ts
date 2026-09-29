@@ -8,6 +8,7 @@ import OrderDocumentsWorkspace from '../src/components/orders/OrderDocumentsWork
 import OrderPaymentsPanel from '../src/components/orders/OrderPaymentsPanel.vue';
 import OrderWorkspaceHeader from '../src/components/orders/OrderWorkspaceHeader.vue';
 import OrderWorkspaceNav from '../src/components/orders/OrderWorkspaceNav.vue';
+import OrderWorkspaceContext from '../src/components/orders/OrderWorkspaceContext.vue';
 import { ManagerOrdersService, ManagerMailService, ManagerSettingsService } from '../src/client';
 import { ManagerOrderUsageService, CancelablePromise } from '../src/client';
 import { managerSession } from '../src/services/manager-session';
@@ -51,6 +52,7 @@ const mountDrawer = async () => {
 const customer = () => wrapper.findComponent(OrderCustomerContext);
 const header = () => wrapper.findComponent(OrderWorkspaceHeader);
 const payments = () => wrapper.findComponent(OrderPaymentsPanel);
+const workspaceContext = () => wrapper.findComponent(OrderWorkspaceContext);
 const openDocuments = async () => {
   wrapper.findComponent(OrderWorkspaceNav).vm.$emit('select', 'documents');
   await nextTick();
@@ -67,6 +69,38 @@ beforeEach(() => {
 afterEach(() => { wrapper?.unmount(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe('order drawer autosave integration', () => {
+  it('opens customer editing under the order context instead of rendering it in Work', async () => {
+    await mountDrawer();
+    expect(customer().props('visible')).toBe(false);
+
+    workspaceContext().vm.$emit('customer');
+    await nextTick();
+
+    expect(customer().props('visible')).toBe(true);
+    expect(customer().props('editTarget')).toBe('customer');
+  });
+
+  it('shows reviewed source work and both sites in the order workspace', async () => {
+    stored = {
+      ...stored,
+      lead_source: 'belzakupki',
+      source_enrichment: {
+        source: 'goszakupki_by', external_id: '3707082',
+        work_summary: 'Обслуживание восьми кондиционеров',
+        equipment_details: '6 в Витебске, 2 в Шумилино',
+        objects: [
+          { address: 'г. Витебск, ул. Суворова, 42/13', equipment: [] },
+          { address: 'г.п. Шумилино, ул. Короткина, 10', equipment: [] },
+        ],
+        customer_branch_ids: [],
+      },
+    } as ManagerOrderDetailResponse;
+    await mountDrawer();
+    expect(wrapper.text()).toContain('Обслуживание восьми кондиционеров');
+    expect(wrapper.text()).toContain('г. Витебск, ул. Суворова, 42/13');
+    expect(wrapper.text()).toContain('г.п. Шумилино, ул. Короткина, 10');
+  });
+
   it('counts opening once with the hydrated scenario, before any user edit', async () => {
     managerSession.isAuthenticated.value = true;
     managerSession.auth.value = { tenant_id: 1, staff_user_id: 99, username: 'usage-test' } as any;
