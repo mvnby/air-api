@@ -47,6 +47,7 @@ export type { Body_register_manager_external_contract } from './models/Body_regi
 export type { Body_replace_product_image_local } from './models/Body_replace_product_image_local';
 export type { Body_upload_local_images } from './models/Body_upload_local_images';
 export type { Body_upload_manager_customer_contract } from './models/Body_upload_manager_customer_contract';
+export type { Body_upload_manager_document_facsimile } from './models/Body_upload_manager_document_facsimile';
 export type { Body_upload_manager_native_template_version } from './models/Body_upload_manager_native_template_version';
 export type { Body_upload_manager_order_attachment } from './models/Body_upload_manager_order_attachment';
 export type { Body_upload_manager_order_document } from './models/Body_upload_manager_order_document';
@@ -191,6 +192,8 @@ export type { DashboardStatsResponse } from './models/DashboardStatsResponse';
 export type { DashboardTouchpoint } from './models/DashboardTouchpoint';
 export type { DocumentDriveAuthorizationUrlResponse } from './models/DocumentDriveAuthorizationUrlResponse';
 export type { DocumentDriveStatusResponse } from './models/DocumentDriveStatusResponse';
+export type { DocumentFacsimilePlacementItem } from './models/DocumentFacsimilePlacementItem';
+export type { DocumentFacsimilePlacementPayload } from './models/DocumentFacsimilePlacementPayload';
 export type { DocumentLegalEntityCreatePayload } from './models/DocumentLegalEntityCreatePayload';
 export type { DocumentLegalEntityItem } from './models/DocumentLegalEntityItem';
 export type { DocumentLegalEntityListResponse } from './models/DocumentLegalEntityListResponse';

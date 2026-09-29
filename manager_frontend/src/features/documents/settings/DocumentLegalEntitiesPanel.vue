@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import './documents-settings.css';
-import type { DocumentLegalEntityItem, DocumentLegalEntityUpdatePayload } from '../../../client';
+import { OpenAPI, type DocumentLegalEntityItem, type DocumentLegalEntityUpdatePayload } from '../../../client';
+import { getApiErrorMessage } from '../../../utils/api-errors';
 import { useB2BLookup } from '../../../composables/useB2BLookup';
 import { normalizeIban, normalizeUnp } from '../../../utils/legal-requisites';
 
@@ -44,6 +45,10 @@ const defaultGoodsWarrantyMonths = ref<number | null>(36);
 const defaultWorkWarrantyMonths = ref<number | null>(null);
 const egrLookupSucceeded = ref(false);
 const bankLookupSucceeded = ref(false);
+const signatureInput = ref<HTMLInputElement | null>(null);
+const sealInput = ref<HTMLInputElement | null>(null);
+const facsimileBusy = ref<'signature' | 'seal' | null>(null);
+const facsimileError = ref('');
 const {
   lookupCompany,
   lookupBank,
@@ -187,6 +192,20 @@ const save = () => {
     requisites,
   });
 };
+
+const uploadFacsimile = async (kind: 'signature' | 'seal', event: Event) => {
+  const file = (event.target as HTMLInputElement).files?.[0];
+  if (!file || !props.selectedId) return;
+  facsimileBusy.value = kind; facsimileError.value = '';
+  try {
+    const path = `/api/manager/document-system/legal-entities/${props.selectedId}/facsimiles/${kind}`;
+    const token = typeof OpenAPI.TOKEN === 'function' ? await OpenAPI.TOKEN({ method: 'POST', url: path }) : OpenAPI.TOKEN;
+    const body = new FormData(); body.append('file', file);
+    const response = await fetch(`${OpenAPI.BASE}${path}`, { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : undefined, body, credentials: OpenAPI.WITH_CREDENTIALS ? OpenAPI.CREDENTIALS : 'same-origin' });
+    if (!response.ok) { const payload = await response.json().catch(() => null); throw new Error(payload?.detail?.message || payload?.detail || `Ошибка (${response.status})`); }
+  } catch (error) { facsimileError.value = getApiErrorMessage(error); }
+  finally { facsimileBusy.value = null; if (kind === 'signature' && signatureInput.value) signatureInput.value.value = ''; if (kind === 'seal' && sealInput.value) sealInput.value.value = ''; }
+};
 </script>
 
 <template>
@@ -223,6 +242,15 @@ const save = () => {
       </div>
 
       <form v-if="selectedId" class="grid min-w-0 gap-4 sm:grid-cols-2" @submit.prevent="save">
+        <div class="settings-field sm:col-span-2">
+          <span>Факсимиле для PDF</span>
+          <p class="mb-2 text-xs font-normal text-slate-500">PNG подписи и печати хранятся приватно. Они используются только для отдельного PDF, исходный выпускной документ не меняется. Замена PNG не переписывает уже подготовленные PDF.</p>
+          <div class="flex flex-wrap gap-2">
+            <label class="settings-button-secondary cursor-pointer"><input ref="signatureInput" class="hidden" type="file" accept="image/png" @change="uploadFacsimile('signature', $event)" />{{ facsimileBusy === 'signature' ? 'Загрузка…' : 'Загрузить подпись PNG' }}</label>
+            <label class="settings-button-secondary cursor-pointer"><input ref="sealInput" class="hidden" type="file" accept="image/png" @change="uploadFacsimile('seal', $event)" />{{ facsimileBusy === 'seal' ? 'Загрузка…' : 'Загрузить печать PNG' }}</label>
+          </div>
+          <span v-if="facsimileError" class="mt-1 block font-normal text-red-600">{{ facsimileError }}</span>
+        </div>
         <div class="settings-field sm:col-span-2">
           <span>Тип продавца</span>
           <div data-testid="seller-entity-type" class="grid grid-cols-2 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-950">

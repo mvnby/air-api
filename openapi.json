@@ -13611,6 +13611,235 @@
         }
       }
     },
+    "/api/manager/document-system/legal-entities/{legal_entity_id}/facsimiles/{kind}": {
+      "post": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Upload Facsimile",
+        "operationId": "upload_manager_document_facsimile",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "legal_entity_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Legal Entity Id"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Kind"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_manager_document_facsimile"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/document-system/documents/{document_id}/facsimile-pdf": {
+      "post": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Prepare Facsimile Pdf",
+        "operationId": "prepare_manager_document_facsimile_pdf",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/document-system/templates/{template_id}/versions/{version_id}/facsimile-placement": {
+      "put": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Upsert Placement",
+        "operationId": "upsert_manager_document_facsimile_placement",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "template_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Template Id"
+            }
+          },
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Version Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentFacsimilePlacementPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentFacsimilePlacementItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Get Placement",
+        "operationId": "get_manager_document_facsimile_placement",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "template_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Template Id"
+            }
+          },
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Version Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentFacsimilePlacementItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/document-system/legal-entities": {
       "get": {
         "tags": [
@@ -30574,6 +30803,20 @@
         ],
         "title": "Body_upload_manager_customer_contract"
       },
+      "Body_upload_manager_document_facsimile": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_manager_document_facsimile"
+      },
       "Body_upload_manager_native_template_version": {
         "properties": {
           "legal_entity_id": {
@@ -37462,6 +37705,127 @@
           "connected"
         ],
         "title": "DocumentDriveStatusResponse"
+      },
+      "DocumentFacsimilePlacementItem": {
+        "properties": {
+          "page_number": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Page Number"
+          },
+          "signature_x_mm": {
+            "type": "number",
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Signature X Mm"
+          },
+          "signature_y_mm": {
+            "type": "number",
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Signature Y Mm"
+          },
+          "signature_width_mm": {
+            "type": "number",
+            "maximum": 500.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Signature Width Mm"
+          },
+          "seal_x_mm": {
+            "type": "number",
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Seal X Mm"
+          },
+          "seal_y_mm": {
+            "type": "number",
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Seal Y Mm"
+          },
+          "seal_width_mm": {
+            "type": "number",
+            "maximum": 500.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Seal Width Mm"
+          },
+          "template_version_id": {
+            "type": "integer",
+            "title": "Template Version Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "page_number",
+          "signature_x_mm",
+          "signature_y_mm",
+          "signature_width_mm",
+          "seal_x_mm",
+          "seal_y_mm",
+          "seal_width_mm",
+          "template_version_id"
+        ],
+        "title": "DocumentFacsimilePlacementItem"
+      },
+      "DocumentFacsimilePlacementPayload": {
+        "properties": {
+          "page_number": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Page Number"
+          },
+          "signature_x_mm": {
+            "type": "number",
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Signature X Mm"
+          },
+          "signature_y_mm": {
+            "type": "number",
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Signature Y Mm"
+          },
+          "signature_width_mm": {
+            "type": "number",
+            "maximum": 500.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Signature Width Mm"
+          },
+          "seal_x_mm": {
+            "type": "number",
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Seal X Mm"
+          },
+          "seal_y_mm": {
+            "type": "number",
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Seal Y Mm"
+          },
+          "seal_width_mm": {
+            "type": "number",
+            "maximum": 500.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Seal Width Mm"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "page_number",
+          "signature_x_mm",
+          "signature_y_mm",
+          "signature_width_mm",
+          "seal_x_mm",
+          "seal_y_mm",
+          "seal_width_mm"
+        ],
+        "title": "DocumentFacsimilePlacementPayload"
       },
       "DocumentLegalEntityCreatePayload": {
         "properties": {

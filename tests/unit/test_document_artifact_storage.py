@@ -65,6 +65,23 @@ async def test_document_artifact_readback_checks_hash_and_local_presign_is_none(
 
 
 @pytest.mark.asyncio
+async def test_signed_pdf_is_a_separate_private_artifact_kind(tmp_path):
+    storage = PrivateDocumentArtifactStorage(LocalPrivateAttachmentStorage(tmp_path))
+    artifact = await storage.save(
+        tenant_id=7,
+        document_id=12,
+        kind="signed_pdf",
+        filename="Договор-12-с-подписью-и-печатью.pdf",
+        content_type="application/pdf",
+        content=b"signed immutable pdf bytes",
+    )
+
+    assert artifact.kind == "signed_pdf"
+    assert "signed-pdf" in artifact.storage_key
+    assert await storage.read(artifact) == b"signed immutable pdf bytes"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("tenant_id", "document_id"),
     [(0, 1), (1, 0), (-1, 1), (True, 1)],

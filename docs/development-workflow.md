@@ -114,6 +114,10 @@ Use this after large catalog imports or when unknown spec keys appear.
 7. Contract review sends extracted text to DeepSeek only after a manager clicks the action. It uses `CONTRACT_REVIEW_MODEL` (default `deepseek-v4-pro`), separately from the platform ZAPRO.SU model and normal `DEEPSEEK_MODEL`. The UI discloses the provider. PDF extraction requires text on every page; DOC/DOCX show a verified clause number or section heading because page numbers are unreliable. Files over 15 MB, PDF over 100 pages and extracted text over 180,000 characters fail explicitly instead of producing a partial review. The original remains available for manual inspection.
 8. When a follow-up email belongs to an existing order, a manager can enter the target order number in the inbox and confirm the match. The source email lead remains auditable in the inbox archive, while its private attachments become visible on the target order. The manager can undo the link. A lead with sent documents, sent proposals or payments must be resolved separately. Contract review is available directly from the email card and from an order containing an imported email attachment.
 
+### Native signed PDF copies
+
+The storefront owner uploads private PNG images of the seller's signature and seal under the document legal entity, then sets their page and positions in millimeters for each active native template version. A manager can prepare a separate `signed_pdf` artifact from an issued contract, invoice or offer. The issued PDF remains unchanged; replacing either PNG does not rewrite a prepared copy. The native PDF download and email attachment path use the prepared copy when it exists. Check the final PDF visually before sending it.
+
 ## Compose names
 
 `docker-compose.yml` service names include `app`, `db`, `web`, and `bot`

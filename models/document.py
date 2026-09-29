@@ -119,7 +119,7 @@ class DocumentArtifact(SQLModel, table=True):
             ondelete="RESTRICT",
         ),
         CheckConstraint(
-            "kind IN ('source_docx', 'rendered_docx', 'pdf')",
+            "kind IN ('source_docx', 'rendered_docx', 'pdf', 'signed_pdf')",
             name="ck_document_artifact_kind_valid",
         ),
         CheckConstraint(
@@ -164,6 +164,63 @@ class DocumentArtifact(SQLModel, table=True):
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
+
+
+class DocumentFacsimileAsset(SQLModel, table=True):
+    """Immutable private PNG used to prepare a non-EDS PDF copy."""
+
+    __tablename__ = "document_facsimile_asset"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["legal_entity_id", "tenant_id"],
+            ["document_legal_entity.id", "document_legal_entity.tenant_id"],
+            name="fk_document_facsimile_asset_legal_entity_tenant",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("kind IN ('signature', 'seal')", name="ck_document_facsimile_asset_kind"),
+        CheckConstraint("size_bytes > 0", name="ck_document_facsimile_asset_size"),
+        Index(
+            "uq_document_facsimile_asset_current_kind",
+            "tenant_id", "legal_entity_id", "kind",
+            unique=True,
+            postgresql_where=text("is_current"),
+            sqlite_where=text("is_current = 1"),
+        ),
+    )
+
+    id: str = Field(default_factory=lambda: uuid4().hex, sa_column=Column(String(32), primary_key=True))
+    tenant_id: int = Field(foreign_key="tenant.id", nullable=False, index=True)
+    legal_entity_id: int = Field(sa_column=Column(Integer, nullable=False, index=True))
+    kind: str = Field(sa_column=Column(String(16), nullable=False, index=True))
+    provider: str = Field(sa_column=Column(String(40), nullable=False))
+    storage_key: str = Field(sa_column=Column(String(1000), nullable=False))
+    checksum_sha256: str = Field(sa_column=Column(String(64), nullable=False))
+    size_bytes: int = Field(nullable=False)
+    is_current: bool = Field(default=True, sa_column=Column(Boolean, nullable=False))
+    created_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class DocumentTemplateFacsimilePlacement(SQLModel, table=True):
+    """Coordinates in mm for one immutable native template version."""
+
+    __tablename__ = "document_template_facsimile_placement"
+    __table_args__ = (
+        UniqueConstraint("template_version_id", name="uq_document_template_facsimile_placement_version"),
+        CheckConstraint("page_number > 0", name="ck_document_template_facsimile_placement_page"),
+        CheckConstraint("signature_width_mm > 0 AND seal_width_mm > 0", name="ck_document_template_facsimile_placement_width"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    template_version_id: int = Field(foreign_key="document_template_version.id", nullable=False, index=True)
+    page_number: int = Field(nullable=False)
+    signature_x_mm: float = Field(nullable=False)
+    signature_y_mm: float = Field(nullable=False)
+    signature_width_mm: float = Field(nullable=False)
+    seal_x_mm: float = Field(nullable=False)
+    seal_y_mm: float = Field(nullable=False)
+    seal_width_mm: float = Field(nullable=False)
+    created_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False))
+    updated_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False))
 
 
 class DocumentTemplateVersion(SQLModel, table=True):

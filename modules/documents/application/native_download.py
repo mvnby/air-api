@@ -12,7 +12,7 @@ from models.tenancy import TenantScope
 from modules.documents.infrastructure.artifact_storage import (
     PrivateDocumentArtifactStorage,
 )
-from services.private_attachment_storage_service import get_private_attachment_storage
+from services import private_attachment_storage_service
 
 from .lifecycle_service import ManagedDocumentService
 
@@ -28,12 +28,17 @@ async def native_document_pdf_download(
         tenant_scope=tenant_scope,
         document_id=int(document.id),
     )
-    pdf_artifact = next((item for item in artifacts if item.kind == "pdf"), None)
+    pdf_artifact = next(
+        (item for item in artifacts if item.kind == "signed_pdf"),
+        next((item for item in artifacts if item.kind == "pdf"), None),
+    )
     if pdf_artifact is None:
         raise ValueError("У документа отсутствует выпущенный PDF-файл")
     try:
         storage = PrivateDocumentArtifactStorage(
-            get_private_attachment_storage(pdf_artifact.provider)
+            private_attachment_storage_service.get_private_attachment_storage(
+                pdf_artifact.provider
+            )
         )
         content = await storage.read(
             ManagedDocumentService.stored_artifact(pdf_artifact)
