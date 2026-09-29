@@ -25,6 +25,7 @@
 | Карточка заказа и автосохранение | [Рабочая область заказа](order-workspace-usability.md), [автосохранение](manager-order-autosave.md), [декомпозиция](order-domain-refactor.md) |
 | Клиенты, канбан/таблица заказов и входящие | [Аудит и доработка рабочих страниц](manager-working-pages-usability.md) |
 | Генерация документов и шаблоны | [Архитектура](document-module-architecture.md), [DOCX-шаблоны](native-document-template-bundles.md), [плейсхолдеры](document-placeholders.md) |
+| ТН-2 и ТТН-1 | [Исследование форм и подготовленные макеты](waybill-template-research.md) |
 | Ремонт и акты дефекта | [Сценарии ремонта](repair-workflow-v1.md), [акт дефекта V3](bot-defect-act-v3.md) |
 | Медиа и приватные вложения | [R2/S3](media-storage-r2.md), [вложения сервиса](service-attachments.md) |
 | Владение каталогом, CDN-пути и SVG | [Публикация медиа каталога](catalog-media-publication.md) |
