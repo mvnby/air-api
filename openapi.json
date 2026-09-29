@@ -18592,6 +18592,266 @@
         }
       }
     },
+    "/api/manager/leads/inbox/contract-review-jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "manager-leads-inbox"
+        ],
+        "summary": "Get Manager Email Lead Contract Review Job",
+        "operationId": "get_manager_email_lead_contract_review_job",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractReviewJobResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/leads/inbox/{order_id}/email-originals": {
+      "get": {
+        "tags": [
+          "manager-leads-inbox"
+        ],
+        "summary": "List Manager Email Lead Originals",
+        "operationId": "list_manager_email_lead_originals",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OriginalEmailAttachmentList"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/leads/inbox/{order_id}/email-originals/{position}/download": {
+      "get": {
+        "tags": [
+          "manager-leads-inbox"
+        ],
+        "summary": "Download Manager Email Lead Original",
+        "operationId": "download_manager_email_lead_original",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "position",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Position"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/leads/inbox/{order_id}/email-originals/{position}/review": {
+      "post": {
+        "tags": [
+          "manager-leads-inbox"
+        ],
+        "summary": "Review Manager Email Lead Original",
+        "operationId": "review_manager_email_lead_original",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "position",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Position"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractReviewJobResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/leads/inbox/{order_id}/contract-review/{attachment_id}": {
+      "post": {
+        "tags": [
+          "manager-leads-inbox"
+        ],
+        "summary": "Review Manager Email Lead Contract",
+        "operationId": "review_manager_email_lead_contract",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "attachment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Attachment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractReviewJobResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/leads": {
       "get": {
         "tags": [
@@ -35267,6 +35527,148 @@
           "goods_warranty_months"
         ],
         "title": "ConsumerEquipmentDefaultsResponse"
+      },
+      "ContractReviewJobResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContractReviewResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "status"
+        ],
+        "title": "ContractReviewJobResponse"
+      },
+      "ContractReviewResponse": {
+        "properties": {
+          "attachment_id": {
+            "type": "integer",
+            "title": "Attachment Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "content_sha256": {
+            "type": "string",
+            "title": "Content Sha256"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "pages": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pages"
+          },
+          "risks": {
+            "items": {
+              "$ref": "#/components/schemas/ContractRisk"
+            },
+            "type": "array",
+            "title": "Risks"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "attachment_id",
+          "filename",
+          "content_sha256",
+          "model",
+          "pages",
+          "risks",
+          "note"
+        ],
+        "title": "ContractReviewResponse"
+      },
+      "ContractRisk": {
+        "properties": {
+          "topic": {
+            "type": "string",
+            "maxLength": 80,
+            "title": "Topic"
+          },
+          "clause": {
+            "type": "string",
+            "maxLength": 100,
+            "title": "Clause"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page"
+          },
+          "quote": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Quote"
+          },
+          "concern": {
+            "type": "string",
+            "maxLength": 600,
+            "title": "Concern"
+          },
+          "proposal": {
+            "type": "string",
+            "maxLength": 600,
+            "title": "Proposal"
+          }
+        },
+        "type": "object",
+        "required": [
+          "topic",
+          "clause",
+          "quote",
+          "concern",
+          "proposal"
+        ],
+        "title": "ContractRisk"
       },
       "CustomerPayload": {
         "properties": {
@@ -65611,6 +66013,50 @@
         },
         "type": "object",
         "title": "OrderWorkStageUpdatePayload"
+      },
+      "OriginalEmailAttachmentItem": {
+        "properties": {
+          "position": {
+            "type": "integer",
+            "title": "Position"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "position",
+          "filename",
+          "size_bytes",
+          "content_type"
+        ],
+        "title": "OriginalEmailAttachmentItem"
+      },
+      "OriginalEmailAttachmentList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OriginalEmailAttachmentItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "OriginalEmailAttachmentList"
       },
       "OutgoingEmailAttachmentResponse": {
         "properties": {

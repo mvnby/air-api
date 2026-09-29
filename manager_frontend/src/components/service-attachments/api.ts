@@ -7,6 +7,8 @@ import type {
   ServiceAttachmentListResponse,
   ServiceAttachmentUpdatePayload,
   ServiceAttachmentVariant,
+  ContractReviewJobResponse,
+  OriginalEmailAttachmentList,
 } from './types';
 
 type RequestOptions = {
@@ -67,6 +69,48 @@ const request = async <T>(path: string, options: RequestOptions = {}): Promise<T
 };
 
 export const serviceAttachmentsApi = {
+  listEmailOriginals(orderId: number) {
+    return request<OriginalEmailAttachmentList>(
+      `/api/manager/leads/inbox/${encodeURIComponent(String(orderId))}/email-originals`,
+    );
+  },
+
+  reviewEmailOriginal(orderId: number, position: number) {
+    return request<ContractReviewJobResponse>(
+      `/api/manager/leads/inbox/${encodeURIComponent(String(orderId))}/email-originals/${encodeURIComponent(String(position))}/review`,
+      { method: 'POST' },
+    );
+  },
+
+  getEmailContractReviewJob(jobId: string) {
+    return request<ContractReviewJobResponse>(
+      `/api/manager/leads/inbox/contract-review-jobs/${encodeURIComponent(jobId)}`,
+    );
+  },
+
+  async downloadEmailOriginal(orderId: number, position: number, filename: string) {
+    const path = `/api/manager/leads/inbox/${encodeURIComponent(String(orderId))}/email-originals/${encodeURIComponent(String(position))}/download`;
+    const token = await resolveToken('GET', path);
+    const response = await fetch(`${OpenAPI.BASE}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: OpenAPI.WITH_CREDENTIALS ? OpenAPI.CREDENTIALS : 'same-origin',
+    });
+    if (!response.ok) throw new Error(`Не удалось скачать оригинал (${response.status})`);
+    const url = URL.createObjectURL(await response.blob());
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  },
+  reviewEmailContract(orderId: number, attachmentId: number) {
+    return request<ContractReviewJobResponse>(
+      `/api/manager/leads/inbox/${encodeURIComponent(String(orderId))}/contract-review/${encodeURIComponent(String(attachmentId))}`,
+      { method: 'POST' },
+    );
+  },
   list(orderId: number) {
     return request<ServiceAttachmentListResponse>(`/api/manager/orders/${encodeURIComponent(String(orderId))}/attachments`);
   },

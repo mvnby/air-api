@@ -110,6 +110,8 @@ Use this after large catalog imports or when unknown spec keys appear.
    - excluded from default active lead list,
    - auto-archived after 90 days by scheduler.
 5. Orders Kanban shows only real orders; leads stay separate until qualification.
+6. For email leads, Manager can review an original PDF, DOCX or DOC service contract on demand. New imports use the private order attachment; older leads without a saved file retrieve the MIME original read-only from IMAP by the order's Message-ID, sender, subject and date. A short-lived in-memory job keeps longer reviews outside HTTP proxy timeouts; its report expires after 30 minutes and is not stored in the order or sent to the customer.
+7. Contract review sends extracted text to DeepSeek only after a manager clicks the action. It uses `CONTRACT_REVIEW_MODEL` (default `deepseek-v4-pro`), separately from the platform ZAPRO.SU model and normal `DEEPSEEK_MODEL`. The UI discloses the provider. PDF extraction requires text on every page; DOC/DOCX have clause references but no reliable page numbers. Files over 15 MB, PDF over 100 pages and extracted text over 180,000 characters fail explicitly instead of producing a partial review. The original remains available for manual inspection.
 
 ## Compose names
 

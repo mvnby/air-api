@@ -39,6 +39,9 @@ async def request_deepseek_completion(
     system_prompt: str,
     temperature: float,
     thinking_enabled: bool | None = None,
+    model: str | None = None,
+    max_tokens: int = MAX_DEEPSEEK_OUTPUT_TOKENS,
+    deadline_seconds: float = DEEPSEEK_REQUEST_DEADLINE_SECONDS,
 ) -> str:
     token = settings.DEEPSEEK_TOKEN.strip()
     if not token:
@@ -50,9 +53,9 @@ async def request_deepseek_completion(
         )
 
     request_payload: dict[str, Any] = {
-        "model": settings.DEEPSEEK_MODEL,
+        "model": model or settings.DEEPSEEK_MODEL,
         "temperature": temperature,
-        "max_tokens": MAX_DEEPSEEK_OUTPUT_TOKENS,
+        "max_tokens": max_tokens,
         "response_format": {"type": "json_object"},
         "messages": [
             {"role": "system", "content": system_prompt},
@@ -66,8 +69,8 @@ async def request_deepseek_completion(
 
     response: httpx.Response | None = None
     try:
-        async with asyncio.timeout(DEEPSEEK_REQUEST_DEADLINE_SECONDS):
-            async with httpx.AsyncClient(timeout=45.0, trust_env=False) as client:
+        async with asyncio.timeout(deadline_seconds):
+            async with httpx.AsyncClient(timeout=max(45.0, deadline_seconds - 5), trust_env=False) as client:
                 request = client.build_request(
                     "POST",
                     settings.DEEPSEEK_API_URL,
@@ -111,6 +114,8 @@ async def request_deepseek_completion(
         )
     try:
         data = json.loads(raw_response)
+        if data["choices"][0].get("finish_reason") not in {None, "stop"}:
+            raise invalid_deepseek_response("DeepSeek response was incomplete")
         return str(data["choices"][0]["message"]["content"])
     except ValueError as exc:
         raise invalid_deepseek_response(
