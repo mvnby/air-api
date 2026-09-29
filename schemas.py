@@ -2798,6 +2798,7 @@ class LeadsInboxItemResponse(BaseModel):
     id: int
     status: str
     is_new: bool
+    linked_order_id: Optional[int] = None
     customer_id: Optional[int] = None
     customer_name: Optional[str] = None
     phone: Optional[str] = None

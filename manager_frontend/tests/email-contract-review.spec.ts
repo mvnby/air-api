@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   listEmailOriginals: vi.fn(),
+  list: vi.fn(),
   reviewEmailOriginal: vi.fn(),
   downloadEmailOriginal: vi.fn(),
   reviewEmailContract: vi.fn(),
@@ -11,12 +12,13 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../src/components/service-attachments/api', () => ({ serviceAttachmentsApi: mocks }));
 
-import EmailOriginals from '../src/components/leads/EmailOriginals.vue';
+import EmailContractReviewLauncher from '../src/components/leads/EmailContractReviewLauncher.vue';
 
 describe('Email original contract review', () => {
   afterEach(() => vi.clearAllMocks());
 
-  it('loads the historical original only on request and shows verified questions', async () => {
+  it('starts review from the lead card and shows verified questions', async () => {
+    mocks.list.mockResolvedValue({ items: [] });
     mocks.listEmailOriginals.mockResolvedValue({ items: [{
       position: 0, filename: 'Договор Кондиционеры.doc', size_bytes: 72704,
       content_type: 'application/msword',
@@ -31,16 +33,13 @@ describe('Email original contract review', () => {
         proposal: 'Согласовать оплату по зачислению?' }],
     };
     mocks.reviewEmailOriginal.mockResolvedValue({ job_id: 'job-1', status: 'completed', report, error: null });
-    const wrapper = mount(EmailOriginals, { props: { orderId: 456 } });
+    const wrapper = mount(EmailContractReviewLauncher, { props: { orderId: 456 } });
 
     expect(mocks.listEmailOriginals).not.toHaveBeenCalled();
     await wrapper.get('button').trigger('click');
     await flushPromises();
-    expect(wrapper.text()).toContain('Договор Кондиционеры.doc');
-    expect(wrapper.text()).toContain('текст оригинала будет передан DeepSeek');
-    expect(mocks.reviewEmailOriginal).not.toHaveBeenCalled();
-    await wrapper.findAll('button').find((button) => button.text().includes('Проверить договор'))!.trigger('click');
-    await flushPromises();
+    expect(mocks.listEmailOriginals).toHaveBeenCalledWith(456);
+    expect(wrapper.text()).toContain('текст договора будет передан DeepSeek');
     expect(mocks.reviewEmailOriginal).toHaveBeenCalledWith(456, 0);
     expect(wrapper.text()).toContain('4.5');
     expect(wrapper.text()).toContain('Согласовать оплату по зачислению?');

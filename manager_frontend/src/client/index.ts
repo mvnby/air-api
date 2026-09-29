@@ -209,6 +209,10 @@ export type { DocumentTemplateUpdatePayload } from './models/DocumentTemplateUpd
 export type { EmailLeadDecisionResponse } from './models/EmailLeadDecisionResponse';
 export type { EmailLeadImportJobResponse } from './models/EmailLeadImportJobResponse';
 export type { EmailLeadImportResponse } from './models/EmailLeadImportResponse';
+export type { EmailLeadLinkPayload } from './models/EmailLeadLinkPayload';
+export type { EmailLeadLinkResult } from './models/EmailLeadLinkResult';
+export type { EmailLeadLinkTarget } from './models/EmailLeadLinkTarget';
+export type { EmailLeadUnlinkResult } from './models/EmailLeadUnlinkResult';
 export type { EquipmentServiceEventType } from './models/EquipmentServiceEventType';
 export type { ExternalEditSessionItem } from './models/ExternalEditSessionItem';
 export type { FeatureCategoryResponse } from './models/FeatureCategoryResponse';

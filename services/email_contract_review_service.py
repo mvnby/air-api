@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from core.config import settings
-from models import LeadSource, OrderAttachmentLink, ServiceAttachment
+from models import OrderAttachmentLink, ServiceAttachment
 from models.tenancy import TenantScope
 from schemas_contract_review import ContractReviewResponse, ContractRisk
 from services.deepseek_provider_service import invalid_deepseek_response, request_deepseek_completion
@@ -135,7 +135,7 @@ class EmailContractReviewService:
         tenant_scope: TenantScope,
     ) -> tuple[str, bytes] | None:
         order = await TenantEntityAccessService.get_order(session, order_id, tenant_scope=tenant_scope)
-        if order is None or order.lead_source != LeadSource.EMAIL:
+        if order is None:
             return None
         row = (await session.execute(
             select(ServiceAttachment)

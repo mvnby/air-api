@@ -467,6 +467,7 @@ const onEmailImported = async () => {
         :is-archive="scope === 'archive'"
         @qualify="qualifyTarget = $event"
         @review-source="sourceReviewTarget = $event"
+        @link-changed="load"
         @reject="openRejectModal($event)"
         @no-answer="markNoAnswer($event)"
       />

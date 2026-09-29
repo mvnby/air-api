@@ -2272,6 +2272,7 @@ class OrderService:
             .outerjoin(Customer, Customer.id == Order.customer_id)
             .where(
                 Order.status == OrderStatus.NEW_LEAD,
+                Order.linked_order_id.is_(None),
                 TenantEntityAccessService.order_clause(tenant_scope),
                 TenantEntityAccessService.order_customer_clause(tenant_scope),
             )
@@ -2406,7 +2407,7 @@ class OrderService:
 
         scope="active"  → new_lead + assessment
                           sorted: new_lead first, then by created_at DESC.
-        scope="archive" → canceled only, created_at DESC.
+        scope="archive" → canceled or linked to an existing order.
         """
         from schemas import LeadsInboxItemResponse, LeadsInboxListResponse, Meta
         from sqlalchemy import case as sa_case
@@ -2431,14 +2432,15 @@ class OrderService:
         )
 
         if scope == "archive":
-            # Archived leads are just closed/lost leads
-            scope_filters = (
-                Order.status == OrderStatus.CLOSED,
-                Order.closing_result == "lost"
-            )
+            scope_filters = (or_(
+                and_(Order.status == OrderStatus.CLOSED, Order.closing_result == "lost"),
+                and_(Order.status == OrderStatus.NEW_LEAD, Order.linked_order_id.is_not(None)),
+            ),)
         else:
-            active_statuses = [OrderStatus.NEW_LEAD]
-            scope_filters = (Order.status.in_(active_statuses),)
+            scope_filters = (
+                Order.status == OrderStatus.NEW_LEAD,
+                Order.linked_order_id.is_(None),
+            )
 
         stmt = stmt.where(*scope_filters)
         count_stmt = count_stmt.where(*scope_filters)
@@ -2495,11 +2497,14 @@ class OrderService:
         items = [
             LeadsInboxItemResponse(
                 id=order.id,
-                status=order.status.value if hasattr(order.status, "value") else str(order.status),
+                status=("linked" if order.linked_order_id is not None else (
+                    order.status.value if hasattr(order.status, "value") else str(order.status)
+                )),
                 is_new=(
                     (order.status.value if hasattr(order.status, "value") else str(order.status))
-                    == "new_lead"
+                    == "new_lead" and order.linked_order_id is None
                 ),
+                linked_order_id=order.linked_order_id,
                 customer_id=order.customer_id,
                 customer_name=OrderService._lead_inbox_customer_name(order),
                 phone=order.customer.phone if order.customer else None,

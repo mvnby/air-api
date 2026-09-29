@@ -48,7 +48,7 @@ async def get_leads_inbox(
     """Unified inbox feed.
 
     scope=active  → new_lead + assessment, sorted by is_new DESC then created_at DESC.
-    scope=archive → canceled.
+    scope=archive → canceled or linked to an existing order.
     """
     return await OrderService.get_leads_inbox(
         session,

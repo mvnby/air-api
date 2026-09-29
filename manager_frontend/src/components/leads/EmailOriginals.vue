@@ -2,7 +2,6 @@
 import { ref } from 'vue';
 import { serviceAttachmentsApi } from '../service-attachments/api';
 import { formatAttachmentSize, type OriginalEmailAttachmentItem } from '../service-attachments/types';
-import EmailContractReview from './EmailContractReview.vue';
 
 const props = defineProps<{ orderId: number }>();
 const opened = ref(false);
@@ -46,7 +45,6 @@ const download = async (item: OriginalEmailAttachmentItem) => {
       <div v-for="item in items" :key="item.position" class="border-t border-slate-200 py-2 first:border-t-0 dark:border-slate-700">
         <p class="font-semibold text-slate-800 dark:text-slate-200">{{ item.filename }} · {{ formatAttachmentSize(item.size_bytes) }}</p>
         <button type="button" class="mt-1 font-semibold text-brand-700 underline dark:text-brand-300" @click="download(item)">Скачать оригинал</button>
-        <EmailContractReview v-if="/\.(pdf|docx?)$/i.test(item.filename)" :order-id="orderId" :original-position="item.position" />
       </div>
     </div>
   </div>
