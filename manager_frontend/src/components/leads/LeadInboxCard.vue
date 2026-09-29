@@ -3,6 +3,8 @@ import { computed, ref } from 'vue';
 import type { LeadsInboxItemResponse } from '../../api';
 import OrderAttachmentsPanel from '../service-attachments/OrderAttachmentsPanel.vue';
 import EmailOriginals from './EmailOriginals.vue';
+import EmailContractReviewLauncher from './EmailContractReviewLauncher.vue';
+import EmailLeadOrderLink from './EmailLeadOrderLink.vue';
 
 const props = defineProps<{
   item: LeadsInboxItemResponse;
@@ -14,6 +16,7 @@ const emit = defineEmits<{
   (e: 'reject', item: LeadsInboxItemResponse): void;
   (e: 'no-answer', item: LeadsInboxItemResponse): void;
   (e: 'review-source', item: LeadsInboxItemResponse): void;
+  (e: 'link-changed'): void;
 }>();
 
 const isCommentExpanded = ref(false);
@@ -43,7 +46,8 @@ const sourceIcon: Record<string, string> = {
 };
 
 const ORDER_STATUS_MAP: Record<string, string> = {
-  new_lead: 'Обращение',
+    new_lead: 'Обращение',
+    linked: 'Связано с заказом',
   negotiation: 'Переговоры',
   execution: 'Монтаж',
   closed: 'Закрыт',
@@ -228,11 +232,17 @@ const isBusinessCustomer = computed(() => (
         :default-expanded="true"
         :readonly="true"
         :embedded="true"
-        :email-contract-review="item.source === 'email'"
       />
     </div>
 
     <EmailOriginals v-if="item.source === 'email' && !item.attachment_count" :order-id="item.id" />
+    <EmailContractReviewLauncher v-if="item.source === 'email'" :order-id="item.id" />
+    <EmailLeadOrderLink
+      v-if="item.source === 'email' && (item.status === 'new_lead' || item.linked_order_id)"
+      :source-order-id="item.id"
+      :linked-order-id="item.linked_order_id"
+      @changed="emit('link-changed')"
+    />
 
     <div v-if="item.tender" class="mx-4 mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600 dark:text-slate-300">
       <span v-if="item.tender.source">Площадка: {{ item.tender.source }}</span>

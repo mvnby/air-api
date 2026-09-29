@@ -3,6 +3,10 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ContractReviewJobResponse } from '../models/ContractReviewJobResponse';
+import type { EmailLeadLinkPayload } from '../models/EmailLeadLinkPayload';
+import type { EmailLeadLinkResult } from '../models/EmailLeadLinkResult';
+import type { EmailLeadLinkTarget } from '../models/EmailLeadLinkTarget';
+import type { EmailLeadUnlinkResult } from '../models/EmailLeadUnlinkResult';
 import type { LeadsCounterResponse } from '../models/LeadsCounterResponse';
 import type { LeadsInboxListResponse } from '../models/LeadsInboxListResponse';
 import type { LeadSource } from '../models/LeadSource';
@@ -29,7 +33,7 @@ export class ManagerLeadsInboxService {
      * Unified inbox feed.
      *
      * scope=active  → new_lead + assessment, sorted by is_new DESC then created_at DESC.
-     * scope=archive → canceled.
+     * scope=archive → canceled or linked to an existing order.
      * @param scope
      * @param page
      * @param limit
@@ -163,6 +167,73 @@ export class ManagerLeadsInboxService {
             path: {
                 'order_id': orderId,
                 'attachment_id': attachmentId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Preview Manager Email Lead Link Target
+     * @param sourceOrderId
+     * @param targetOrderId
+     * @returns EmailLeadLinkTarget Successful Response
+     * @throws ApiError
+     */
+    public static previewManagerEmailLeadLinkTarget(
+        sourceOrderId: number,
+        targetOrderId: number,
+    ): CancelablePromise<EmailLeadLinkTarget> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/leads/inbox/{source_order_id}/link-target/{target_order_id}',
+            path: {
+                'source_order_id': sourceOrderId,
+                'target_order_id': targetOrderId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Link Manager Email Lead To Order
+     * @param sourceOrderId
+     * @param requestBody
+     * @returns EmailLeadLinkResult Successful Response
+     * @throws ApiError
+     */
+    public static linkManagerEmailLeadToOrder(
+        sourceOrderId: number,
+        requestBody: EmailLeadLinkPayload,
+    ): CancelablePromise<EmailLeadLinkResult> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/leads/inbox/{source_order_id}/link-to-order',
+            path: {
+                'source_order_id': sourceOrderId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Unlink Manager Email Lead From Order
+     * @param sourceOrderId
+     * @returns EmailLeadUnlinkResult Successful Response
+     * @throws ApiError
+     */
+    public static unlinkManagerEmailLeadFromOrder(
+        sourceOrderId: number,
+    ): CancelablePromise<EmailLeadUnlinkResult> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/manager/leads/inbox/{source_order_id}/linked-order',
+            path: {
+                'source_order_id': sourceOrderId,
             },
             errors: {
                 422: `Validation Error`,

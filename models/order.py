@@ -355,12 +355,27 @@ class Order(SQLModel, table=True):
             ["customer.id", "customer.tenant_id"],
             name="fk_order_customer_tenant",
         ),
+        ForeignKeyConstraint(
+            ["linked_order_id", "tenant_id", "storefront_id"],
+            ["order.id", "order.tenant_id", "order.storefront_id"],
+            name="fk_order_linked_target_same_scope",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "linked_order_id IS NULL OR linked_order_id <> id",
+            name="ck_order_linked_target_not_self",
+        ),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
 
     tenant_id: int = Field(foreign_key="tenant.id", nullable=False)
     storefront_id: int = Field(sa_column=Column(Integer, nullable=False))
+    # A follow-up email stays as an auditable source record while its files and
+    # review are attached to the existing customer order.
+    linked_order_id: Optional[int] = Field(default=None, index=True)
+    linked_at: Optional[datetime] = Field(default=None)
+    linked_by: Optional[str] = Field(default=None, sa_column=Column(String(120), nullable=True))
 
     customer_id: Optional[int] = Field(
         default=None,

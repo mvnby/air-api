@@ -7,6 +7,7 @@ export type LeadsInboxItemResponse = {
     id: number;
     status: string;
     is_new: boolean;
+    linked_order_id?: (number | null);
     customer_id?: (number | null);
     customer_name?: (string | null);
     phone?: (string | null);

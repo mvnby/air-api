@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { onUnmounted, ref } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 import { serviceAttachmentsApi } from '../service-attachments/api';
 import type { ContractReviewResponse } from '../service-attachments/types';
 
-const props = defineProps<{ orderId: number; attachmentId?: number; originalPosition?: number }>();
+const props = defineProps<{ orderId: number; attachmentId?: number; originalPosition?: number; autoStart?: boolean }>();
 const busy = ref(false);
 const error = ref('');
 const report = ref<ContractReviewResponse | null>(null);
@@ -34,6 +34,7 @@ const review = async () => {
     busy.value = false;
   }
 };
+onMounted(() => { if (props.autoStart) void review(); });
 </script>
 
 <template>

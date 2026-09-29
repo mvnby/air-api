@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from routers.manager_leads_inbox import router as manager_leads_inbox_router
 from routers.manager_leads_contract_review import router as manager_leads_contract_review_router
+from routers.manager_leads_link import router as manager_leads_link_router
 from routers.manager_leads_read import router as manager_leads_read_router
 from routers.manager_leads_write import router as manager_leads_write_router
 
@@ -11,5 +12,6 @@ router = APIRouter()
 # which would otherwise catch GET /counter and GET /inbox as path-parameter matches.
 router.include_router(manager_leads_inbox_router)
 router.include_router(manager_leads_contract_review_router)
+router.include_router(manager_leads_link_router)
 router.include_router(manager_leads_read_router)
 router.include_router(manager_leads_write_router)

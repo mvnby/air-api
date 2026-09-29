@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Optional
 
-from sqlalchemy import BigInteger, Column, Index, JSON, String, Text, UniqueConstraint, text
+from sqlalchemy import BigInteger, Column, ForeignKeyConstraint, Index, JSON, String, Text, UniqueConstraint, text
 from sqlmodel import Field, SQLModel
 
 
@@ -47,11 +47,17 @@ class OrderAttachmentLink(SQLModel, table=True):
     __tablename__ = "order_attachment_link"
     __table_args__ = (
         UniqueConstraint("order_id", "attachment_id", name="uq_order_attachment_link"),
+        ForeignKeyConstraint(
+            ["origin_order_id"], ["order.id"],
+            name="fk_order_attachment_link_origin_order", ondelete="RESTRICT",
+        ),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
     order_id: int = Field(foreign_key="order.id", index=True)
     attachment_id: int = Field(foreign_key="service_attachment.id", index=True)
+    # Set only on a mirror created by resolving a follow-up email into another order.
+    origin_order_id: Optional[int] = Field(default=None, index=True)
     work_stage_id: Optional[int] = Field(default=None, foreign_key="order_work_stage.id", index=True)
     category: str = Field(default="other", sa_column=Column(String(64), nullable=False, index=True))
     caption: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))

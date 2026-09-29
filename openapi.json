@@ -18492,7 +18492,7 @@
           "manager-leads-inbox"
         ],
         "summary": "Get Leads Inbox",
-        "description": "Unified inbox feed.\n\nscope=active  \u2192 new_lead + assessment, sorted by is_new DESC then created_at DESC.\nscope=archive \u2192 canceled.",
+        "description": "Unified inbox feed.\n\nscope=active  \u2192 new_lead + assessment, sorted by is_new DESC then created_at DESC.\nscope=archive \u2192 canceled or linked to an existing order.",
         "operationId": "get_manager_leads_inbox",
         "security": [
           {
@@ -18835,6 +18835,166 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ContractReviewJobResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/leads/inbox/{source_order_id}/link-target/{target_order_id}": {
+      "get": {
+        "tags": [
+          "manager-leads-inbox"
+        ],
+        "summary": "Preview Manager Email Lead Link Target",
+        "operationId": "preview_manager_email_lead_link_target",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Source Order Id"
+            }
+          },
+          {
+            "name": "target_order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Target Order Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailLeadLinkTarget"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/leads/inbox/{source_order_id}/link-to-order": {
+      "post": {
+        "tags": [
+          "manager-leads-inbox"
+        ],
+        "summary": "Link Manager Email Lead To Order",
+        "operationId": "link_manager_email_lead_to_order",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Source Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailLeadLinkPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailLeadLinkResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/leads/inbox/{source_order_id}/linked-order": {
+      "delete": {
+        "tags": [
+          "manager-leads-inbox"
+        ],
+        "summary": "Unlink Manager Email Lead From Order",
+        "operationId": "unlink_manager_email_lead_from_order",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Source Order Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailLeadUnlinkResult"
                 }
               }
             }
@@ -38673,6 +38833,89 @@
         "type": "object",
         "title": "EmailLeadImportResponse"
       },
+      "EmailLeadLinkPayload": {
+        "properties": {
+          "target_order_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Target Order Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "target_order_id"
+        ],
+        "title": "EmailLeadLinkPayload"
+      },
+      "EmailLeadLinkResult": {
+        "properties": {
+          "source_order_id": {
+            "type": "integer",
+            "title": "Source Order Id"
+          },
+          "target_order_id": {
+            "type": "integer",
+            "title": "Target Order Id"
+          },
+          "linked_files": {
+            "type": "integer",
+            "title": "Linked Files"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_order_id",
+          "target_order_id",
+          "linked_files"
+        ],
+        "title": "EmailLeadLinkResult"
+      },
+      "EmailLeadLinkTarget": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "customer_name": {
+            "type": "string",
+            "title": "Customer Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id",
+          "title",
+          "customer_name",
+          "status"
+        ],
+        "title": "EmailLeadLinkTarget"
+      },
+      "EmailLeadUnlinkResult": {
+        "properties": {
+          "source_order_id": {
+            "type": "integer",
+            "title": "Source Order Id"
+          },
+          "previous_target_order_id": {
+            "type": "integer",
+            "title": "Previous Target Order Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_order_id",
+          "previous_target_order_id"
+        ],
+        "title": "EmailLeadUnlinkResult"
+      },
       "EquipmentServiceEventType": {
         "type": "string",
         "enum": [
@@ -42174,6 +42417,17 @@
           "is_new": {
             "type": "boolean",
             "title": "Is New"
+          },
+          "linked_order_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linked Order Id"
           },
           "customer_id": {
             "anyOf": [
