@@ -470,6 +470,9 @@ defineExpose({
               <button v-for="artifact in document.artifacts" :key="artifact.id" class="native-action" type="button" @click="workspace.downloadArtifact(artifact.id, artifact.filename)">
                 <span class="material-icons-round text-[17px]">download</span>{{ artifactName(artifact.kind) }}
               </button>
+              <button v-if="['issued', 'sent', 'signed'].includes(document.status) && access.canCreate && !document.artifacts?.some((item) => item.kind === 'signed_pdf')" class="native-action" type="button" :disabled="workspace.busy.value" @click="workspace.prepareFacsimilePdf(document)">
+                <span class="material-icons-round text-[17px]">draw</span>Подготовить PDF с подписью и печатью
+              </button>
               <GoogleDocumentEditorActions
                 v-if="document.status === 'draft' && access.canCreate && googleEditor.connected.value"
                 :session="googleEditor.getSession(googleTarget(document.id))"

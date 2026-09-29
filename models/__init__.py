@@ -49,11 +49,13 @@ from .content import Article, GlobalConfig
 from .document import (
     DocumentArtifact,
     DocumentConditionPreset,
+    DocumentFacsimileAsset,
     DocumentLegalEntity,
     DocumentNumberPolicy,
     DocumentNumberReservation,
     DocumentNumberSequence,
     DocumentTemplateVersion,
+    DocumentTemplateFacsimilePlacement,
 )
 from .document_external_edit import DocumentExternalEditSession
 from .communication import CommunicationDelivery, CommunicationDeliveryAttempt
@@ -189,6 +191,7 @@ __all__ = [
     "CustomerType",
     "DocumentRoleType",
     "DocumentArtifact",
+    "DocumentFacsimileAsset",
     "DocumentLegalEntity",
     "DocumentConditionPreset",
     "DocumentNumberPolicy",
@@ -196,6 +199,7 @@ __all__ = [
     "DocumentNumberSequence",
     "DocumentTemplate",
     "DocumentTemplateVersion",
+    "DocumentTemplateFacsimilePlacement",
     "DocumentExternalEditSession",
     "DocumentTemplateActLink",
     "DocumentTemplateCustomerLink",

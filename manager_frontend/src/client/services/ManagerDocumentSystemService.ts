@@ -2,11 +2,14 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { Body_upload_manager_document_facsimile } from '../models/Body_upload_manager_document_facsimile';
 import type { Body_upload_manager_native_template_version } from '../models/Body_upload_manager_native_template_version';
 import type { ConditionPresetItem } from '../models/ConditionPresetItem';
 import type { ConditionPresetList } from '../models/ConditionPresetList';
 import type { ConditionPresetPayload } from '../models/ConditionPresetPayload';
 import type { ConsumerEquipmentDefaultsResponse } from '../models/ConsumerEquipmentDefaultsResponse';
+import type { DocumentFacsimilePlacementItem } from '../models/DocumentFacsimilePlacementItem';
+import type { DocumentFacsimilePlacementPayload } from '../models/DocumentFacsimilePlacementPayload';
 import type { DocumentLegalEntityCreatePayload } from '../models/DocumentLegalEntityCreatePayload';
 import type { DocumentLegalEntityItem } from '../models/DocumentLegalEntityItem';
 import type { DocumentLegalEntityListResponse } from '../models/DocumentLegalEntityListResponse';
@@ -111,6 +114,103 @@ export class ManagerDocumentSystemService {
             query: {
                 'proposal_id': proposalId,
                 'issue_date': issueDate,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Upload Facsimile
+     * @param legalEntityId
+     * @param kind
+     * @param formData
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static uploadManagerDocumentFacsimile(
+        legalEntityId: number,
+        kind: string,
+        formData: Body_upload_manager_document_facsimile,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/document-system/legal-entities/{legal_entity_id}/facsimiles/{kind}',
+            path: {
+                'legal_entity_id': legalEntityId,
+                'kind': kind,
+            },
+            formData: formData,
+            mediaType: 'multipart/form-data',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Prepare Facsimile Pdf
+     * @param documentId
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static prepareManagerDocumentFacsimilePdf(
+        documentId: number,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/document-system/documents/{document_id}/facsimile-pdf',
+            path: {
+                'document_id': documentId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Upsert Placement
+     * @param templateId
+     * @param versionId
+     * @param requestBody
+     * @returns DocumentFacsimilePlacementItem Successful Response
+     * @throws ApiError
+     */
+    public static upsertManagerDocumentFacsimilePlacement(
+        templateId: number,
+        versionId: number,
+        requestBody: DocumentFacsimilePlacementPayload,
+    ): CancelablePromise<DocumentFacsimilePlacementItem> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/manager/document-system/templates/{template_id}/versions/{version_id}/facsimile-placement',
+            path: {
+                'template_id': templateId,
+                'version_id': versionId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Placement
+     * @param templateId
+     * @param versionId
+     * @returns DocumentFacsimilePlacementItem Successful Response
+     * @throws ApiError
+     */
+    public static getManagerDocumentFacsimilePlacement(
+        templateId: number,
+        versionId: number,
+    ): CancelablePromise<DocumentFacsimilePlacementItem> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/document-system/templates/{template_id}/versions/{version_id}/facsimile-placement',
+            path: {
+                'template_id': templateId,
+                'version_id': versionId,
             },
             errors: {
                 422: `Validation Error`,

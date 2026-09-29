@@ -240,6 +240,21 @@ class NativeTemplateVersionListResponse(BaseModel):
     items: list[NativeTemplateVersionItem]
 
 
+class DocumentFacsimilePlacementPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    page_number: int = Field(ge=1, le=100)
+    signature_x_mm: float = Field(ge=0, le=1000)
+    signature_y_mm: float = Field(ge=0, le=1000)
+    signature_width_mm: float = Field(gt=0, le=500)
+    seal_x_mm: float = Field(ge=0, le=1000)
+    seal_y_mm: float = Field(ge=0, le=1000)
+    seal_width_mm: float = Field(gt=0, le=500)
+
+
+class DocumentFacsimilePlacementItem(DocumentFacsimilePlacementPayload):
+    template_version_id: int
+
+
 class NativePlaceholderDescriptorItem(BaseModel):
     name: str
     label: str

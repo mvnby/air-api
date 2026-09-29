@@ -50,6 +50,9 @@ const downloadingId = ref<number | null>(null);
 const showCreateTemplate = ref(false);
 const showVersionHistory = ref(false);
 const showPlaceholderCatalog = ref(false);
+const defaultFacsimile = () => ({ page_number: 1, signature_x_mm: 20, signature_y_mm: 230, signature_width_mm: 45, seal_x_mm: 70, seal_y_mm: 220, seal_width_mm: 35 });
+const facsimile = ref(defaultFacsimile());
+const facsimileSaved = ref(false);
 let loadId = 0;
 let versionLoadId = 0;
 
@@ -141,10 +144,43 @@ const loadVersions = async () => {
       || selectedTemplateId.value !== templateId
     ) return;
     versions.value = response.items;
+    await loadFacsimilePlacement(versions.value.find((item) => item.status === 'active') || null, templateId, requestId);
     loadGoogleSessions();
   } catch (error) {
     notify(`Не удалось загрузить версии: ${getApiErrorMessage(error)}`, 'error');
   }
+};
+const loadFacsimilePlacement = async (version: NativeTemplateVersionItem | null, templateId: number, requestId: number) => {
+  facsimile.value = defaultFacsimile();
+  facsimileSaved.value = false;
+  if (!version) return;
+  const path = `/api/manager/document-system/templates/${templateId}/versions/${version.id}/facsimile-placement`;
+  try {
+    const token = typeof OpenAPI.TOKEN === 'function' ? await OpenAPI.TOKEN({ method: 'GET', url: path }) : OpenAPI.TOKEN;
+    const response = await fetch(`${OpenAPI.BASE}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined, credentials: OpenAPI.WITH_CREDENTIALS ? OpenAPI.CREDENTIALS : 'same-origin' });
+    if (requestId !== versionLoadId || selectedTemplateId.value !== templateId) return;
+    if (response.status === 404) return;
+    if (!response.ok) throw new Error(`Ошибка загрузки (${response.status})`);
+    const value = await response.json();
+    facsimile.value = {
+      page_number: value.page_number, signature_x_mm: value.signature_x_mm, signature_y_mm: value.signature_y_mm,
+      signature_width_mm: value.signature_width_mm, seal_x_mm: value.seal_x_mm, seal_y_mm: value.seal_y_mm, seal_width_mm: value.seal_width_mm,
+    };
+    facsimileSaved.value = true;
+  } catch (error) { notify(`Не удалось загрузить координаты: ${getApiErrorMessage(error)}`, 'error'); }
+};
+const saveFacsimilePlacement = async (version: NativeTemplateVersionItem) => {
+  if (!selectedTemplateId.value) return;
+  saving.value = true;
+  try {
+    const path = `/api/manager/document-system/templates/${selectedTemplateId.value}/versions/${version.id}/facsimile-placement`;
+    const token = typeof OpenAPI.TOKEN === 'function' ? await OpenAPI.TOKEN({ method: 'PUT', url: path }) : OpenAPI.TOKEN;
+    const response = await fetch(`${OpenAPI.BASE}${path}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(facsimile.value), credentials: OpenAPI.WITH_CREDENTIALS ? OpenAPI.CREDENTIALS : 'same-origin' });
+    if (!response.ok) throw new Error(`Ошибка сохранения (${response.status})`);
+    facsimileSaved.value = true;
+    notify('Координаты сохранены для этой версии шаблона.');
+  } catch (error) { notify(`Не удалось сохранить координаты: ${getApiErrorMessage(error)}`, 'error'); }
+  finally { saving.value = false; }
 };
 reloadTemplateVersions = loadVersions;
 
@@ -183,6 +219,8 @@ watch(() => [props.legalEntityId, documentType.value], () => {
 }, { immediate: true });
 watch(selectedTemplateId, () => {
   showVersionHistory.value = false;
+  facsimile.value = defaultFacsimile();
+  facsimileSaved.value = false;
   void loadVersions();
 });
 watch(googleEditor.connected, (connected) => {
@@ -484,6 +522,13 @@ const googleBusy = (version: NativeTemplateVersionItem) => {
                 </div>
                 <div v-if="versionFields(version).length" class="mt-3 flex flex-wrap gap-1.5"><code v-for="field in versionFields(version)" :key="String(field)" class="rounded bg-slate-100 px-2 py-1 text-[11px] text-slate-700 dark:bg-slate-800 dark:text-slate-300" v-text="'{{ ' + field + ' }}'" /></div>
                 <div v-if="versionConditions(version).length" class="mt-2 flex flex-wrap gap-1.5"><code v-for="condition in versionConditions(version)" :key="String(condition)" class="rounded bg-violet-100 px-2 py-1 text-[11px] text-violet-800 dark:bg-violet-950/50 dark:text-violet-200" v-text="'{{#if ' + condition + '}} … {{/if ' + condition + '}}'" /></div>
+                <form v-if="version.status === 'active'" class="mt-3 grid gap-2 border-t border-slate-100 pt-3 sm:grid-cols-4 dark:border-slate-800" @submit.prevent="saveFacsimilePlacement(version)">
+                  <p class="sm:col-span-4 text-xs text-slate-500">PDF с подписью и печатью: координаты в мм от верхнего левого угла. Сверьте с предпросмотром DOCX. <span v-if="facsimileSaved" class="font-semibold text-emerald-700">Сохранено для этой версии.</span><span v-else>Для этой версии пока используются значения по умолчанию.</span></p>
+                  <label class="settings-field"><span>Страница</span><input v-model.number="facsimile.page_number" class="settings-input" type="number" min="1" /></label>
+                  <label class="settings-field"><span>Подпись X / Y / ширина</span><input v-model.number="facsimile.signature_x_mm" class="settings-input" type="number" min="0" /><input v-model.number="facsimile.signature_y_mm" class="settings-input mt-1" type="number" min="0" /><input v-model.number="facsimile.signature_width_mm" class="settings-input mt-1" type="number" min="1" /></label>
+                  <label class="settings-field"><span>Печать X / Y / ширина</span><input v-model.number="facsimile.seal_x_mm" class="settings-input" type="number" min="0" /><input v-model.number="facsimile.seal_y_mm" class="settings-input mt-1" type="number" min="0" /><input v-model.number="facsimile.seal_width_mm" class="settings-input mt-1" type="number" min="1" /></label>
+                  <button class="settings-button-secondary self-end" type="submit" :disabled="saving">Сохранить координаты</button>
+                </form>
               </article>
               <p v-if="!versions.length && !loading" class="text-sm text-amber-700 dark:text-amber-300">У шаблона ещё нет DOCX-версий.</p>
             </div>

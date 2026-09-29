@@ -21,7 +21,7 @@ from services.private_attachment_storage_service import (
 )
 
 
-DOCUMENT_ARTIFACT_KINDS = frozenset({"source_docx", "rendered_docx", "pdf"})
+DOCUMENT_ARTIFACT_KINDS = frozenset({"source_docx", "rendered_docx", "pdf", "signed_pdf"})
 
 _KIND_FORMATS: dict[str, tuple[str, str]] = {
     "source_docx": (
@@ -33,6 +33,7 @@ _KIND_FORMATS: dict[str, tuple[str, str]] = {
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ),
     "pdf": (".pdf", "application/pdf"),
+    "signed_pdf": (".pdf", "application/pdf"),
 }
 _MAX_FILENAME_LENGTH = 255
 
