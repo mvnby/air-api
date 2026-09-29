@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { getApiErrorMessage } from '../../utils/api-errors';
+import { api } from '../../api';
 import {
   orderSourceReviewApi,
   type OrderSourceApplyPayload,
@@ -10,6 +11,7 @@ import {
 } from '../../services/order-source-review';
 import CustomerSearchSelect from '../customers/CustomerSearchSelect.vue';
 import type { ManagerCatalogCustomerItemResponse } from '../../client';
+import type { OrderScenarioOption } from '../orders/OrderScenarioSelector.vue';
 
 const props = defineProps<{ open: boolean; orderId: number; leadStatus?: string | null }>();
 const emit = defineEmits<{ close: []; applied: [result: { orderId: number; customerId: number | null; appliedFields: string[]; customerAction: string }]; }>();
@@ -23,6 +25,9 @@ const customer = ref<SourceCustomer>({});
 const workSummary = ref('');
 const equipmentDetails = ref('');
 const objects = ref<SourceObject[]>([]);
+const scenarioOptions = ref<OrderScenarioOption[]>([]);
+const scenarioKey = ref('');
+const scenarioChangedByManager = ref(false);
 const fieldSources = ref<Record<string, string>>({});
 const selectedDocumentIds = ref<string[]>([]);
 const analysisSource = ref<'source' | 'ai' | 'reviewed'>('source');
@@ -34,10 +39,13 @@ const draftsChanged = ref(false);
 const analysisOverwriteConfirmed = ref(false);
 const confirmed = ref(false);
 const isNewLead = computed(() => props.leadStatus === 'new_lead');
+const keyForScenario = (value: { workflow_type: string; service_type?: string | null }) => `${value.workflow_type}:${value.service_type || ''}`;
+const selectedScenario = computed(() => scenarioOptions.value.find((item) => keyForScenario(item) === scenarioKey.value) || null);
 const hasCustomerSelection = computed(() => customerAction.value === 'skip'
   || (customerAction.value === 'existing' && Boolean(selectedExistingCustomer.value?.id))
   || (customerAction.value === 'create' && Boolean(customer.value.name?.trim())));
-const canApply = computed(() => confirmed.value && !applying.value && hasCustomerSelection.value && (!isNewLead.value || customerAction.value !== 'skip'));
+const canApply = computed(() => confirmed.value && !applying.value && Boolean(selectedScenario.value) && hasCustomerSelection.value && (!isNewLead.value || customerAction.value !== 'skip'));
+const chooseScenario = () => { scenarioChangedByManager.value = true; confirmed.value = false; };
 const safeSourceUrl = computed(() => {
   const value = preview.value?.source_url;
   if (!value) return null;
@@ -84,6 +92,10 @@ const analyze = async () => {
     analysisOverwriteConfirmed.value = false;
     confirmed.value = false;
     preview.value = { ...preview.value!, warnings: analyzed.warnings };
+    preview.value.suggested_scenario = analyzed.suggested_scenario;
+    if (isNewLead.value && !scenarioChangedByManager.value) {
+      scenarioKey.value = analyzed.suggested_scenario ? keyForScenario(analyzed.suggested_scenario) : '';
+    }
     fieldSources.value = { ...analyzed.field_sources };
     analysisSource.value = analyzed.analysis_source || 'ai';
     analyzedDocumentIds.value = analyzed.analyzed_document_ids || [...selectedDocumentIds.value];
@@ -98,6 +110,10 @@ const resetFromPreview = (value: OrderSourcePreview) => {
     ? { id: value.existing_customer_id, name: value.customer.name || `Клиент #${value.existing_customer_id}` } as ManagerCatalogCustomerItemResponse
     : null;
   customer.value = { ...value.customer };
+  scenarioKey.value = isNewLead.value
+    ? (value.suggested_scenario ? keyForScenario(value.suggested_scenario) : '')
+    : (value.current_scenario ? keyForScenario(value.current_scenario) : '');
+  scenarioChangedByManager.value = false;
   workSummary.value = value.work_summary || '';
   equipmentDetails.value = value.equipment_details || '';
   objects.value = value.objects.map((item) => ({ ...item, equipment: item.equipment.map((equipment) => ({ ...equipment })) }));
@@ -115,8 +131,15 @@ const load = async () => {
   loading.value = true;
   error.value = '';
   preview.value = null;
+  scenarioOptions.value = [];
   try {
-    resetFromPreview(await orderSourceReviewApi.preview(props.orderId));
+    const [source, scenarios] = await Promise.allSettled([
+      orderSourceReviewApi.preview(props.orderId), api.getManagerOrderScenarios(),
+    ]);
+    if (source.status === 'rejected') throw source.reason;
+    resetFromPreview(source.value);
+    if (scenarios.status === 'fulfilled') scenarioOptions.value = scenarios.value.items;
+    else error.value = 'Не удалось загрузить сценарии заказов. Повторно откройте проработку.';
   } catch (reason) {
     error.value = getApiErrorMessage(reason);
   } finally {
@@ -126,8 +149,11 @@ const load = async () => {
 
 const apply = async () => {
   if (!canApply.value) return;
+  const chosenScenario = selectedScenario.value!;
   const payload: OrderSourceApplyPayload = {
     customer_action: customerAction.value,
+    workflow_type: chosenScenario.workflow_type,
+    service_type: chosenScenario.service_type ?? null,
     work_summary: workSummary.value.trim() || undefined,
     equipment_details: equipmentDetails.value.trim() || undefined,
     objects: objects.value.filter((item) => item.address.trim()).map((item) => ({
@@ -178,6 +204,15 @@ watch(() => [props.open, props.orderId] as const, ([open]) => {
           <div class="flex flex-wrap gap-3 text-sm"><a v-if="safeSourceUrl" :href="safeSourceUrl" target="_blank" rel="noopener noreferrer" class="font-semibold text-brand-700 underline">Открыть источник</a><span v-if="preview.deadline_at">Срок: {{ new Date(preview.deadline_at).toLocaleDateString('ru-RU') }}</span></div>
           <p v-if="preview.title" class="mt-2 font-semibold">{{ preview.title }}</p>
           <div v-if="preview.warnings.length" class="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{{ preview.warnings.join(' ') }}</div>
+
+          <label class="mt-4 block text-sm font-semibold">Сценарий заказа
+            <select v-model="scenarioKey" class="field-input mt-1" aria-label="Сценарий заказа" @change="chooseScenario">
+              <option value="">Выберите сценарий</option>
+              <option v-for="option in scenarioOptions" :key="keyForScenario(option)" :value="keyForScenario(option)">{{ option.label }}</option>
+            </select>
+          </label>
+          <p v-if="preview.suggested_scenario" class="mt-1 text-xs text-slate-500">По смыслу работ предложено: {{ preview.suggested_scenario.label }}. Проверьте перед сохранением.</p>
+          <p v-else-if="isNewLead" class="mt-1 text-xs text-amber-700">Сценарий не удалось определить однозначно. Выберите его вручную.</p>
 
           <section class="mt-4"><h3 class="text-sm font-semibold">Клиент</h3>
             <div class="mt-2 flex gap-2 text-sm">

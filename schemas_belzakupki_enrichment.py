@@ -32,6 +32,12 @@ class SourceDocumentPreview(BaseModel):
     download_url: str
 
 
+class SourceScenarioDraft(BaseModel):
+    workflow_type: str
+    service_type: str | None = None
+    label: str
+
+
 class ManagerOrderSourcePreview(BaseModel):
     order_id: int
     source_code: str
@@ -42,6 +48,8 @@ class ManagerOrderSourcePreview(BaseModel):
     estimated_value: float | None = None
     customer: SourceCustomerDraft
     existing_customer_id: int | None = None
+    current_scenario: SourceScenarioDraft | None = None
+    suggested_scenario: SourceScenarioDraft | None = None
     work_summary: str | None = None
     equipment_details: str | None = None
     objects: list[SourceObjectDraft] = Field(default_factory=list)
@@ -60,6 +68,8 @@ class ManagerOrderSourceApply(BaseModel):
     customer_action: str
     customer_id: int | None = None
     customer: SourceCustomerDraft | None = None
+    workflow_type: str | None = None
+    service_type: str | None = None
     work_summary: str | None = Field(default=None, max_length=10000)
     equipment_details: str | None = Field(default=None, max_length=10000)
     objects: list[SourceObjectDraft] | None = Field(default=None, max_length=30)

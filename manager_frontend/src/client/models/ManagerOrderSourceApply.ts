@@ -8,6 +8,8 @@ export type ManagerOrderSourceApply = {
     customer_action: string;
     customer_id?: (number | null);
     customer?: (SourceCustomerDraft | null);
+    workflow_type?: (string | null);
+    service_type?: (string | null);
     work_summary?: (string | null);
     equipment_details?: (string | null);
     objects?: (Array<SourceObjectDraft> | null);

@@ -61,13 +61,17 @@ identified service sites. The original document opens through an authenticated
 Manager route; selected originals are copied to private order attachments only
 after manager confirmation. **Обработать ИИ** is a separate, on-demand draft
 step for selected documents. Its suggested work and equipment are reviewable
-and can be edited before applying. It does not set a proposal price from the
-procurement's estimated value.
+and can be edited before applying. The order scenario is suggested from the
+procurement title or AI work summary; ambiguous text requires a manual choice.
+The manager can change the suggestion before saving. It does not set a proposal
+price from the procurement's estimated value.
 
 Applying reviewed data links an existing tenant customer or creates a customer
 with the chosen party type, then saves source work details and distinct object
-addresses. A new lead advances to negotiation only after a customer is linked.
-Previously entered order fields remain authoritative; reopening review starts
+addresses. A new lead advances to negotiation only after a customer is linked
+and a scenario is selected. The reviewed scenario updates the order workflow
+and service type together. Previously entered order fields remain authoritative
+unless the manager explicitly changes them; reopening review starts
 from the saved reviewed enrichment. Repeated application reuses already attached
 source documents and object addresses. This path has no automatic backfill:
 existing orders such as #455 are enriched when a manager opens and confirms the

@@ -1,5 +1,6 @@
 """Shared interactive order scenarios and their persisted workflow mapping."""
 
+import re
 from typing import NamedTuple, Optional
 
 
@@ -37,6 +38,53 @@ WORKFLOW_LABELS = {
     "maintenance": "Обслуживание",
     "repair": "Ремонт",
 }
+
+
+_TASK_SCENARIO_PATTERNS = (
+    (
+        "maintenance",
+        re.compile(
+            r"\b(?:техническ\w*|сервисн\w*|профилактическ\w*)\s+обслуживан\w*\b"
+            r"|\bобслуживан\w*(?:\s+\w+){0,3}\s+кондиционер\w*\b"
+            r"|\bчистк\w*\s+кондиционер\w*\b",
+            re.I,
+        ),
+    ),
+    (
+        "repair",
+        re.compile(
+            r"\bремонт\w*\s+кондиционер\w*\b|\bустранен\w*\s+неисправност\w*\b",
+            re.I,
+        ),
+    ),
+    ("pre_install", re.compile(r"\b(?:закладк\w*|прокладк\w*)\s+трасс\w*\b", re.I)),
+    ("dismantling", re.compile(r"\bдемонтаж\w*\b", re.I)),
+)
+
+
+def infer_scenario_from_task(text: str | None) -> OrderScenario | None:
+    """Suggest only a clear task; conflicting work descriptions need manager review."""
+    value = " ".join(str(text or "").split())
+    if not value:
+        return None
+    matches = {service for service, pattern in _TASK_SCENARIO_PATTERNS if pattern.search(value)}
+    sells_equipment = bool(re.search(
+        r"\b(?:поставка|продажа|приобретение)(?:\s+\w+){0,8}\s+кондиционер\w*\b",
+        value, re.I,
+    ))
+    installs = bool(re.search(
+        r"\b(?:монтаж|установка)(?:\s+\w+){0,5}\s+кондиционер\w*\b"
+        r"|\bмонтажн\w*\s+работ\w*\b",
+        value, re.I,
+    ))
+    if sells_equipment and installs:
+        matches.add("turnkey")
+    elif installs:
+        matches.add("install_only")
+    if len(matches) != 1:
+        return None
+    selected = next(iter(matches))
+    return next(scenario for scenario in SCENARIOS if scenario.service_type == selected)
 
 
 def workflow_for_service_type(service_type: str) -> str:

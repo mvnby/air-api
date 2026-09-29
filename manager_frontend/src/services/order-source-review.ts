@@ -16,6 +16,12 @@ export type SourceObject = {
   equipment: Array<{ brand?: string | null; model?: string | null; quantity?: number | null }>;
 };
 
+export type SourceScenario = {
+  workflow_type: string;
+  service_type?: string | null;
+  label: string;
+};
+
 export type OrderSourcePreview = {
   order_id: number;
   source_code: string;
@@ -26,6 +32,8 @@ export type OrderSourcePreview = {
   estimated_value?: number | null;
   customer: SourceCustomer;
   existing_customer_id?: number | null;
+  current_scenario?: SourceScenario | null;
+  suggested_scenario?: SourceScenario | null;
   work_summary?: string | null;
   equipment_details?: string | null;
   objects: SourceObject[];
@@ -47,6 +55,8 @@ export type OrderSourceApplyPayload = {
   customer_action: 'existing' | 'create' | 'skip';
   customer_id?: number;
   customer?: SourceCustomer;
+  workflow_type?: string;
+  service_type?: string | null;
   work_summary?: string;
   equipment_details?: string;
   objects?: SourceObject[];
