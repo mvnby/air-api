@@ -208,11 +208,14 @@ class BelzakupkiEnrichmentService:
             _text(doc.get("extracted_text"), 100000) for doc in cls._documents(data)
         ]))
         name = _text(source_customer.get("name") or data.get("customer_name"), 500)
-        inn = _unp(source_customer.get("unp")) or _customer_unp_from_document(raw, name)
+        source_inn = _unp(source_customer.get("unp"))
+        inn = source_inn or _customer_unp_from_document(raw, name)
         contact_phone = str(contacts.get("phone") or "")
         match = _PHONE.search(contact_phone)
         phone = match.group(0) if match else None
         email = _text(contacts.get("email"), 255)
+        source_phone = bool(phone)
+        source_email = bool(email)
         if not phone:
             match = _PHONE.search(raw)
             phone = match.group(0) if match else None
@@ -275,13 +278,34 @@ class BelzakupkiEnrichmentService:
             equipment_details = previous.get("equipment_details")
             objects = [SourceObjectDraft.model_validate(obj) for obj in previous.get("objects") or []]
             warnings.append("Показаны ранее подтверждённые данные; новый анализ можно запустить отдельно.")
+        field_sources = {
+            "customer.name": "Карточка закупки",
+            "customer.type": "Определено по реквизитам заказчика",
+        }
+        if inn:
+            field_sources["customer.inn"] = "Карточка закупки" if source_inn else "Текст документа"
+        if phone:
+            field_sources["customer.phone"] = "Карточка закупки" if source_phone else "Текст документа"
+        if email:
+            field_sources["customer.email"] = "Карточка закупки" if source_email else "Текст документа"
+        if customer.legal_address:
+            field_sources["customer.legal_address"] = "Карточка закупки"
+        draft_source = "Ранее подтверждено менеджером" if reviewed else "Текст документа"
+        if summary:
+            field_sources["work_summary"] = draft_source if reviewed or not data.get("description") else "Описание закупки"
+        if equipment_details:
+            field_sources["equipment_details"] = draft_source
+        for index, obj in enumerate(objects):
+            field_sources[f"objects.{index}.address"] = draft_source
+            for equipment_index, _ in enumerate(obj.equipment):
+                field_sources[f"objects.{index}.equipment.{equipment_index}"] = draft_source
         return ManagerOrderSourcePreview(
             order_id=order_id, source_code=source, external_id=external_id,
             source_url=_text(data.get("source_url"), 2048), title=_text(data.get("title"), 1000),
             deadline_at=_text(data.get("deadline_at"), 80), estimated_value=_amount(data.get("estimated_value")),
             customer=customer, existing_customer_id=int(matches[0].id) if len(matches) == 1 else None,
             work_summary=summary, equipment_details=equipment_details, objects=objects,
-            documents=documents, warnings=warnings,
+            documents=documents, field_sources=field_sources, warnings=warnings,
             analysis_source="reviewed" if reviewed else "source",
             analyzed_document_ids=[str(value) for value in previous.get("analyzed_document_ids") or []] if reviewed else [],
         )
@@ -320,10 +344,19 @@ class BelzakupkiEnrichmentService:
         work_summary, equipment_details, objects = await analyze_tender_text("\n\n".join(texts))
         if work_summary:
             preview.work_summary = work_summary
+            preview.field_sources["work_summary"] = "ИИ по выбранным документам"
         if equipment_details:
             preview.equipment_details = equipment_details
+            preview.field_sources["equipment_details"] = "ИИ по выбранным документам"
         if objects:
             preview.objects = objects
+            for key in tuple(preview.field_sources):
+                if key.startswith("objects."):
+                    del preview.field_sources[key]
+            for index, obj in enumerate(objects):
+                preview.field_sources[f"objects.{index}.address"] = "ИИ по выбранным документам"
+                for equipment_index, _ in enumerate(obj.equipment):
+                    preview.field_sources[f"objects.{index}.equipment.{equipment_index}"] = "ИИ по выбранным документам"
         else:
             preview.warnings.append("AI не смог надёжно разделить объекты; проверьте адреса по оригиналу.")
         preview.analysis_source = "ai"

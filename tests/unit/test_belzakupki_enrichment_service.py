@@ -177,6 +177,9 @@ async def test_analyze_reads_missing_doc_text_and_returns_ai_draft(monkeypatch):
     assert preview.analyzed_document_ids == ["31"]
     assert len(preview.objects) == 2
     assert preview.work_summary == "Обслуживание восьми кондиционеров"
+    assert preview.field_sources["work_summary"] == "ИИ по выбранным документам"
+    assert preview.field_sources["objects.1.address"] == "ИИ по выбранным документам"
+    assert preview.field_sources["customer.email"] == "Карточка закупки"
     ai.assert_awaited_once()
     session.commit.assert_not_awaited()
 
@@ -208,6 +211,7 @@ async def test_replay_preserves_reviewed_work_and_objects_when_omitted(monkeypat
     assert preview.analysis_source == "reviewed"
     assert preview.work_summary == "Уточнённый менеджером объём работ"
     assert [sum(unit.quantity or 0 for unit in obj.equipment) for obj in preview.objects] == [6, 2]
+    assert preview.field_sources["objects.0.address"] == "Ранее подтверждено менеджером"
 
     payload = ManagerOrderSourceApply(customer_action="skip", document_ids=[])
     for _ in range(2):

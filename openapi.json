@@ -55213,6 +55213,13 @@
             "type": "array",
             "title": "Documents"
           },
+          "field_sources": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Field Sources"
+          },
           "warnings": {
             "items": {
               "type": "string"

@@ -23,6 +23,7 @@ const customer = ref<SourceCustomer>({});
 const workSummary = ref('');
 const equipmentDetails = ref('');
 const objects = ref<SourceObject[]>([]);
+const fieldSources = ref<Record<string, string>>({});
 const selectedDocumentIds = ref<string[]>([]);
 const analysisSource = ref<'source' | 'ai' | 'reviewed'>('source');
 const analyzedDocumentIds = ref<string[]>([]);
@@ -49,7 +50,22 @@ const safeDocumentUrl = (value: string) => (
   value.startsWith(`/api/manager/orders/${props.orderId}/source-documents/`) ? value : null
 );
 const documentExcerpt = (value: string) => value.length > 1_200 ? `${value.slice(0, 1_200)}…` : value;
-const markDraftChanged = () => { draftsChanged.value = true; analysisOverwriteConfirmed.value = false; confirmed.value = false; };
+const sourceFor = (key: string) => fieldSources.value[key] || 'Добавлено менеджером';
+const markCustomerChanged = (key: string) => { fieldSources.value[key] = 'Исправлено менеджером'; confirmed.value = false; };
+const markDraftChanged = (key?: string) => {
+  draftsChanged.value = true; analysisOverwriteConfirmed.value = false; confirmed.value = false;
+  if (key) fieldSources.value[key] = 'Исправлено менеджером';
+};
+const markObjectsChanged = () => {
+  markDraftChanged();
+  for (const key of Object.keys(fieldSources.value)) {
+    if (key.startsWith('objects.')) fieldSources.value[key] = 'Исправлено менеджером';
+  }
+};
+const addObject = () => { objects.value.push({ address: '', equipment: [] }); markObjectsChanged(); };
+const removeObject = (index: number) => { objects.value.splice(index, 1); markObjectsChanged(); };
+const addEquipment = (object: SourceObject) => { object.equipment.push({ brand: '', model: '', quantity: 1 }); markObjectsChanged(); };
+const removeEquipment = (object: SourceObject, index: number) => { object.equipment.splice(index, 1); markObjectsChanged(); };
 const analyze = async () => {
   if (!selectedDocumentIds.value.length || analyzing.value) return;
   if (draftsChanged.value && !analysisOverwriteConfirmed.value) {
@@ -68,6 +84,7 @@ const analyze = async () => {
     analysisOverwriteConfirmed.value = false;
     confirmed.value = false;
     preview.value = { ...preview.value!, warnings: analyzed.warnings };
+    fieldSources.value = { ...analyzed.field_sources };
     analysisSource.value = analyzed.analysis_source || 'ai';
     analyzedDocumentIds.value = analyzed.analyzed_document_ids || [...selectedDocumentIds.value];
   } catch (reason) { error.value = getApiErrorMessage(reason); }
@@ -84,6 +101,7 @@ const resetFromPreview = (value: OrderSourcePreview) => {
   workSummary.value = value.work_summary || '';
   equipmentDetails.value = value.equipment_details || '';
   objects.value = value.objects.map((item) => ({ ...item, equipment: item.equipment.map((equipment) => ({ ...equipment })) }));
+  fieldSources.value = { ...value.field_sources };
   selectedDocumentIds.value = value.documents.map((document) => document.id);
   analysisSource.value = value.analysis_source || 'source';
   analyzedDocumentIds.value = value.analyzed_document_ids || [];
@@ -113,7 +131,14 @@ const apply = async () => {
     work_summary: workSummary.value.trim() || undefined,
     equipment_details: equipmentDetails.value.trim() || undefined,
     objects: objects.value.filter((item) => item.address.trim()).map((item) => ({
-      address: item.address.trim(), equipment: item.equipment.filter((equipment) => equipment.brand || equipment.model || equipment.quantity),
+      address: item.address.trim(), equipment: item.equipment
+        .filter((equipment) => equipment.brand?.trim() || equipment.model?.trim() || Number(equipment.quantity) > 0)
+        .map((equipment) => ({
+          brand: equipment.brand?.trim() || undefined,
+          model: equipment.model?.trim() || undefined,
+          quantity: Number(equipment.quantity) >= 1 && Number.isInteger(Number(equipment.quantity))
+            ? Number(equipment.quantity) : undefined,
+        })),
     })),
     document_ids: selectedDocumentIds.value,
     analysis_source: analysisSource.value,
@@ -161,11 +186,33 @@ watch(() => [props.open, props.orderId] as const, ([open]) => {
               <button v-if="!isNewLead" type="button" class="btn-mini-outline" :class="customerAction === 'skip' ? 'border-brand-500 text-brand-700' : ''" @click="customerAction = 'skip'">Не менять клиента</button>
             </div>
             <div v-if="customerAction === 'existing'" class="mt-2"><p v-if="preview.existing_customer_id" class="mb-2 text-sm text-slate-600">Найден клиент #{{ preview.existing_customer_id }}. Можно выбрать другого.</p><CustomerSearchSelect v-model="selectedExistingCustomer" result-test-id-prefix="source-customer" /></div>
-            <div v-if="customerAction === 'create'" class="mt-2 grid gap-2 sm:grid-cols-2"><input v-model="customer.name" class="field-input sm:col-span-2" placeholder="Название или имя" /><select v-model="customer.type" class="field-input"><option value="individual">Физлицо</option><option value="individual_entrepreneur">ИП</option><option value="company">Юрлицо</option></select><input v-model="customer.inn" class="field-input" placeholder="УНП" /><input v-model="customer.email" class="field-input" placeholder="Email" /><input v-model="customer.phone" class="field-input" placeholder="Телефон" /><input v-model="customer.legal_address" class="field-input sm:col-span-2" placeholder="Юридический адрес" /></div>
+            <div v-if="customerAction === 'create'" class="mt-2 grid gap-2 sm:grid-cols-2">
+              <label class="text-xs sm:col-span-2">Название · {{ sourceFor('customer.name') }}<input v-model="customer.name" class="field-input mt-1" placeholder="Название или имя" @input="markCustomerChanged('customer.name')" /></label>
+              <label class="text-xs">Тип · {{ sourceFor('customer.type') }}<select v-model="customer.type" class="field-input mt-1" @change="markCustomerChanged('customer.type')"><option value="individual">Физлицо</option><option value="individual_entrepreneur">ИП</option><option value="company">Юрлицо</option></select></label>
+              <label class="text-xs">УНП · {{ sourceFor('customer.inn') }}<input v-model="customer.inn" class="field-input mt-1" placeholder="УНП" @input="markCustomerChanged('customer.inn')" /></label>
+              <label class="text-xs">Email · {{ sourceFor('customer.email') }}<input v-model="customer.email" class="field-input mt-1" placeholder="Email" @input="markCustomerChanged('customer.email')" /></label>
+              <label class="text-xs">Телефон · {{ sourceFor('customer.phone') }}<input v-model="customer.phone" class="field-input mt-1" placeholder="Телефон" @input="markCustomerChanged('customer.phone')" /></label>
+              <label class="text-xs sm:col-span-2">Юридический адрес · {{ sourceFor('customer.legal_address') }}<input v-model="customer.legal_address" class="field-input mt-1" placeholder="Юридический адрес" @input="markCustomerChanged('customer.legal_address')" /></label>
+            </div>
           </section>
 
-          <section class="mt-4"><h3 class="text-sm font-semibold">Работы</h3><textarea v-model="workSummary" class="field-input mt-2 min-h-20" placeholder="Состав работ" @input="markDraftChanged" /><textarea v-model="equipmentDetails" class="field-input mt-2 min-h-16" placeholder="Оборудование" @input="markDraftChanged" /></section>
-          <section class="mt-4"><h3 class="text-sm font-semibold">Объекты</h3><div v-for="(object, index) in objects" :key="index" class="mt-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700"><input v-model="object.address" class="field-input" placeholder="Адрес объекта" @input="markDraftChanged" /><p v-if="object.equipment.length" class="mt-2 text-xs text-slate-600">{{ object.equipment.map((item) => [item.brand, item.model, item.quantity && `×${item.quantity}`].filter(Boolean).join(' ')).join('; ') }}</p></div><p v-if="!objects.length" class="mt-2 text-sm text-slate-500">Объекты не извлечены из источника.</p></section>
+          <section class="mt-4"><h3 class="text-sm font-semibold">Работы</h3><label class="mt-2 block text-xs">Состав · {{ sourceFor('work_summary') }}<textarea v-model="workSummary" class="field-input mt-1 min-h-20" placeholder="Состав работ" @input="markDraftChanged('work_summary')" /></label><label class="mt-2 block text-xs">Оборудование · {{ sourceFor('equipment_details') }}<textarea v-model="equipmentDetails" class="field-input mt-1 min-h-16" placeholder="Оборудование" @input="markDraftChanged('equipment_details')" /></label></section>
+          <section class="mt-4">
+            <div class="flex items-center justify-between gap-3"><h3 class="text-sm font-semibold">Объекты</h3><button type="button" class="btn-mini-outline text-xs" @click="addObject">Добавить объект</button></div>
+            <div v-for="(object, index) in objects" :key="index" class="mt-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+              <p class="mb-1 text-xs text-slate-500">Адрес · {{ sourceFor(`objects.${index}.address`) }}</p>
+              <div class="flex gap-2"><input v-model="object.address" class="field-input min-w-0 flex-1" :aria-label="`Адрес объекта ${index + 1}`" placeholder="Адрес объекта" @input="markDraftChanged(`objects.${index}.address`)" /><button type="button" class="btn-mini-outline text-xs" :aria-label="`Удалить объект ${index + 1}`" @click="removeObject(index)">Удалить</button></div>
+              <div v-for="(equipment, equipmentIndex) in object.equipment" :key="equipmentIndex" class="mt-2 grid grid-cols-[1fr_1fr_5rem_auto] gap-2">
+                <p class="col-span-4 text-xs text-slate-500">Оборудование · {{ sourceFor(`objects.${index}.equipment.${equipmentIndex}`) }}</p>
+                <input v-model="equipment.brand" class="field-input min-w-0" :aria-label="`Бренд объекта ${index + 1}, строка ${equipmentIndex + 1}`" placeholder="Бренд" @input="markDraftChanged(`objects.${index}.equipment.${equipmentIndex}`)" />
+                <input v-model="equipment.model" class="field-input min-w-0" :aria-label="`Модель объекта ${index + 1}, строка ${equipmentIndex + 1}`" placeholder="Модель" @input="markDraftChanged(`objects.${index}.equipment.${equipmentIndex}`)" />
+                <input v-model.number="equipment.quantity" class="field-input min-w-0" :aria-label="`Количество объекта ${index + 1}, строка ${equipmentIndex + 1}`" type="number" min="1" placeholder="Шт." @input="markDraftChanged(`objects.${index}.equipment.${equipmentIndex}`)" />
+                <button type="button" class="btn-mini-outline text-xs" :aria-label="`Удалить оборудование объекта ${index + 1}, строка ${equipmentIndex + 1}`" @click="removeEquipment(object, equipmentIndex)">×</button>
+              </div>
+              <button type="button" class="mt-2 text-xs font-semibold text-brand-700" @click="addEquipment(object)">Добавить оборудование</button>
+            </div>
+            <p v-if="!objects.length" class="mt-2 text-sm text-slate-500">Объекты не извлечены из источника.</p>
+          </section>
           <section class="mt-4"><h3 class="text-sm font-semibold">Исходные документы</h3><label v-for="document in preview.documents" :key="document.id" class="mt-2 flex gap-2 rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-700"><input v-model="selectedDocumentIds" type="checkbox" :value="document.id" /><span class="min-w-0"><a v-if="safeDocumentUrl(document.download_url)" :href="safeDocumentUrl(document.download_url)!" target="_blank" rel="noopener noreferrer" class="font-semibold text-brand-700 underline">{{ document.name }}</a><span v-else class="font-semibold">{{ document.name }}</span><span v-if="document.extracted_text" class="mt-1 block whitespace-pre-line text-xs text-slate-500">{{ expandedDocuments[document.id] ? document.extracted_text : documentExcerpt(document.extracted_text) }}</span><button v-if="document.extracted_text && document.extracted_text.length > 1200" type="button" class="mt-1 text-xs font-semibold text-brand-700" @click="expandedDocuments[document.id] = !expandedDocuments[document.id]">{{ expandedDocuments[document.id] ? 'Свернуть' : 'Показать полностью' }}</button></span></label></section>
           <div class="mt-4"><button type="button" class="btn-mini-outline text-xs" :disabled="!selectedDocumentIds.length || analyzing" @click="analyze">{{ analyzing ? 'Обрабатываем ИИ…' : analysisOverwriteConfirmed ? 'Заменить черновик ИИ' : 'Обработать ИИ' }}</button></div><label class="mt-5 flex gap-2 text-sm"><input v-model="confirmed" type="checkbox" />Подтверждаю применение проверенных данных. Цена не устанавливается.</label>
         </template>

@@ -19,6 +19,7 @@ export type ManagerOrderSourcePreview = {
     equipment_details?: (string | null);
     objects?: Array<SourceObjectDraft>;
     documents?: Array<SourceDocumentPreview>;
+    field_sources?: Record<string, string>;
     warnings?: Array<string>;
     analysis_source?: string;
     analyzed_document_ids?: Array<string>;

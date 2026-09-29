@@ -37,6 +37,7 @@ export type OrderSourcePreview = {
     extracted_text_truncated?: boolean;
     download_url: string;
   }>;
+  field_sources?: Record<string, string>;
   warnings: string[];
   analysis_source?: 'source' | 'ai' | 'reviewed';
   analyzed_document_ids?: string[];
