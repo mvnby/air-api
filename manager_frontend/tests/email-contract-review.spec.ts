@@ -42,7 +42,7 @@ describe('Email original contract review', () => {
     await wrapper.findAll('button').find((button) => button.text().includes('Проверить договор'))!.trigger('click');
     await flushPromises();
     expect(mocks.reviewEmailOriginal).toHaveBeenCalledWith(456, 0);
-    expect(wrapper.text()).toContain('п. 4.5');
+    expect(wrapper.text()).toContain('4.5');
     expect(wrapper.text()).toContain('Согласовать оплату по зачислению?');
     wrapper.unmount();
   });

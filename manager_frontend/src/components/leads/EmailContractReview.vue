@@ -49,7 +49,7 @@ const review = async () => {
       <p v-if="!report.risks.length" class="mt-2">Подтверждённых цитатами рисков не найдено. Проверьте оригинал вручную.</p>
       <ol v-else class="mt-3 list-decimal space-y-3 pl-4">
         <li v-for="(risk, index) in report.risks" :key="`${risk.clause}-${index}`">
-          <p class="font-semibold">{{ risk.topic }}<span v-if="risk.clause"> · п. {{ risk.clause }}</span><span v-if="risk.page"> · стр. {{ risk.page }}</span></p>
+          <p class="font-semibold">{{ risk.topic }}<span v-if="risk.clause"> · {{ risk.clause }}</span><span v-if="risk.page"> · стр. {{ risk.page }}</span></p>
           <blockquote class="mt-1 border-l-2 border-slate-300 pl-2 italic dark:border-slate-600">«{{ risk.quote }}»</blockquote>
           <p class="mt-1">{{ risk.concern }}</p>
           <p class="mt-1 font-medium">Согласовать: {{ risk.proposal }}</p>

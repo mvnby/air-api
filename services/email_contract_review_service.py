@@ -118,7 +118,8 @@ class EmailContractReviewService:
         "Ищи условия оплаты, приёмки, сроков исполнения, ответственности, неустоек, односторонних прав "
         "и расторжения. Включай только существенные для исполнителя вопросы, подтверждённые дословной "
         "короткой цитатой из текста. Для PDF укажи номер страницы, для DOC/DOCX page=null. "
-        "Укажи номер пункта, если он виден; иначе пустую строку. Не утверждай, что условие незаконно, "
+        "В clause укажи номер пункта, если он виден, иначе ближайший дословный заголовок раздела. "
+        "Не утверждай, что условие незаконно, "
         "и не придумывай отсутствующие сроки или суммы. concern объясняет риск простыми словами, "
         "proposal содержит конкретный вопрос заказчику или редакцию для согласования. "
         "Формат: {\"risks\":[{\"topic\":\"...\",\"clause\":\"...\",\"page\":1,\"quote\":\"...\","
@@ -197,5 +198,6 @@ class EmailContractReviewService:
                 source_text = extracted.text
             if _normalized(risk.quote) not in _normalized(source_text):
                 continue
-            risks.append(ContractRisk(**risk.model_dump()))
+            verified_clause = risk.clause if _normalized(risk.clause) in _normalized(source_text) else ""
+            risks.append(ContractRisk(**{**risk.model_dump(), "clause": verified_clause}))
         return risks
