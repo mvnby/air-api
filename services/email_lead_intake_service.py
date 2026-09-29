@@ -20,6 +20,15 @@ from services.tenant_entity_access_service import TenantEntityAccessService
 from services.tenant_scope_service import TenantScope
 
 
+EMAIL_DOCUMENT_MIME_BY_EXTENSION = {
+    ".pdf": "application/pdf",
+    ".doc": "application/msword",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xls": "application/vnd.ms-excel",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
+
+
 @dataclass
 class EmailLeadProcessResult:
     status: str
@@ -520,7 +529,10 @@ class EmailLeadIntakeService:
         for position, attachment in enumerate(attachments):
             mime_type = str(attachment.content_type or "").lower()
             if mime_type not in ServiceAttachmentService.SAFE_MIME_TYPES:
-                guessed_type = mimetypes.guess_type(attachment.filename)[0]
+                extension = "." + attachment.filename.rsplit(".", 1)[-1].lower()
+                guessed_type = EMAIL_DOCUMENT_MIME_BY_EXTENSION.get(extension)
+                if not guessed_type:
+                    guessed_type = mimetypes.guess_type(attachment.filename)[0]
                 mime_type = guessed_type or mime_type
             if mime_type not in ServiceAttachmentService.SAFE_MIME_TYPES:
                 skipped_attachments.append({"filename": attachment.filename, "reason": "unsupported_type"})

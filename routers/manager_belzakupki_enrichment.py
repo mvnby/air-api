@@ -9,6 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.database import get_session
 from core.security import get_current_manager_tenant_scope, get_current_username
 from models.tenancy import TenantScope
+from routers.manager_operation_ids import (
+    ANALYZE_MANAGER_ORDER_SOURCE,
+    APPLY_MANAGER_ORDER_SOURCE,
+    DOWNLOAD_MANAGER_ORDER_SOURCE_DOCUMENT,
+    GET_MANAGER_ORDER_SOURCE_PREVIEW,
+)
 from schemas_belzakupki_enrichment import (
     ManagerOrderSourceApply,
     ManagerOrderSourceApplyResult,
@@ -33,7 +39,7 @@ def _error(exc: Exception) -> HTTPException:
 
 @router.get(
     "/{order_id}/source-preview", response_model=ManagerOrderSourcePreview,
-    operation_id="get_manager_order_source_preview",
+    operation_id=GET_MANAGER_ORDER_SOURCE_PREVIEW,
 )
 async def get_manager_order_source_preview(
     order_id: int,
@@ -49,7 +55,7 @@ async def get_manager_order_source_preview(
 
 @router.post(
     "/{order_id}/source-analyze", response_model=ManagerOrderSourcePreview,
-    operation_id="analyze_manager_order_source",
+    operation_id=ANALYZE_MANAGER_ORDER_SOURCE,
 )
 async def analyze_manager_order_source(
     order_id: int,
@@ -68,7 +74,7 @@ async def analyze_manager_order_source(
 
 @router.post(
     "/{order_id}/source-apply", response_model=ManagerOrderSourceApplyResult,
-    operation_id="apply_manager_order_source",
+    operation_id=APPLY_MANAGER_ORDER_SOURCE,
 )
 async def apply_manager_order_source(
     order_id: int,
@@ -88,7 +94,7 @@ async def apply_manager_order_source(
 
 @router.get(
     "/{order_id}/source-documents/{document_id}",
-    operation_id="download_manager_order_source_document",
+    operation_id=DOWNLOAD_MANAGER_ORDER_SOURCE_DOCUMENT,
 )
 async def download_manager_order_source_document(
     order_id: int,
