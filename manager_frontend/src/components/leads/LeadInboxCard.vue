@@ -204,11 +204,11 @@ const isBusinessCustomer = computed(() => (
         class="inline-flex min-h-9 items-center gap-1 rounded-full bg-cyan-50 px-2.5 py-1.5 text-xs font-semibold text-cyan-700 transition hover:bg-cyan-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2 dark:bg-cyan-500/10 dark:text-cyan-300 dark:hover:bg-cyan-500/20 dark:focus-visible:ring-offset-slate-800"
         :aria-expanded="attachmentsOpen"
         :aria-controls="attachmentsRegionId"
-        :aria-label="`${attachmentsOpen ? 'Скрыть' : 'Показать'} фото обращения: ${item.attachment_count}`"
+        :aria-label="`${attachmentsOpen ? 'Скрыть' : 'Показать'} вложения обращения: ${item.attachment_count}`"
         @click="attachmentsOpen = !attachmentsOpen"
       >
-        <span class="material-icons-round text-[15px]" aria-hidden="true">photo_library</span>
-        Фото: {{ item.attachment_count }}
+        <span class="material-icons-round text-[15px]" aria-hidden="true">attach_file</span>
+        Вложения: {{ item.attachment_count }}
         <span class="material-icons-round text-[15px]" aria-hidden="true">{{ attachmentsOpen ? 'expand_less' : 'expand_more' }}</span>
       </button>
     </div>
@@ -218,7 +218,7 @@ const isBusinessCustomer = computed(() => (
       :id="attachmentsRegionId"
       class="mx-4 mb-3 rounded-lg bg-slate-50/80 px-3 dark:bg-slate-900/40"
       role="region"
-      :aria-label="`Фото обращения #${item.id}`"
+      :aria-label="`Вложения обращения #${item.id}`"
       data-testid="lead-readonly-attachments"
     >
       <OrderAttachmentsPanel

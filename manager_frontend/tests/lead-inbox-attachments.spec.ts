@@ -98,6 +98,42 @@ afterEach(() => {
 });
 
 describe('LeadInboxCard read-only attachments', () => {
+  it('opens the original Word document from an email lead in the inbox', async () => {
+    const documentAttachment: ServiceAttachmentItem = {
+      ...attachment,
+      id: 703,
+      file_kind: 'document',
+      filename: 'заявка.docx',
+      mime_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      caption: 'Вложение из письма: заявка.docx',
+      source: 'email_lead_intake',
+      preview_available: false,
+    };
+    listMock.mockResolvedValueOnce({ items: [documentAttachment], total: 1 });
+    getAccessMock.mockResolvedValueOnce({
+      url: 'https://private.example/original.docx',
+      expires_at: '2026-07-28T09:05:00Z',
+      variant: 'original',
+    });
+    const wrapper = mount(LeadInboxCard, {
+      attachTo: document.body,
+      props: { item: { ...lead, source: 'email' } },
+    });
+    mountedWrappers.push(wrapper);
+
+    expect(wrapper.text()).toContain('Вложения: 1');
+    await openAttachments(wrapper);
+    expect(listMock).toHaveBeenCalledWith(lead.id);
+    await wrapper.get('button[aria-label="Открыть заявка.docx"]').trigger('click');
+    await flushPromises();
+
+    const viewer = document.body.querySelector<HTMLElement>('[role="dialog"]');
+    expect(viewer?.getAttribute('aria-label')).toBe('Просмотр файла заявка.docx');
+    expect(viewer?.querySelector<HTMLAnchorElement>('a[href="https://private.example/original.docx"]')?.textContent)
+      .toContain('Открыть файл');
+    expectNoWrites();
+  });
+
   it('shows tender context and permits only HTTP links', async () => {
     const wrapper = mount(LeadInboxCard, { props: { item: {
       ...lead, source: 'belzakupki', comment: 'Тендер Belzakupki\nСрок: 2026-10-01',
