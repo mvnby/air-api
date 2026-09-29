@@ -174,6 +174,7 @@ async def test_analyze_reads_missing_doc_text_and_returns_ai_draft(monkeypatch):
         payload=ManagerOrderSourceAnalyze(document_ids=["31"]),
     )
     assert preview.analysis_source == "ai"
+    assert preview.suggested_scenario.service_type == "maintenance"
     assert preview.analyzed_document_ids == ["31"]
     assert len(preview.objects) == 2
     assert preview.work_summary == "Обслуживание восьми кондиционеров"
@@ -209,6 +210,8 @@ async def test_replay_preserves_reviewed_work_and_objects_when_omitted(monkeypat
     scope = TenantScope(tenant_id=1, storefront_id=1)
     preview = await BelzakupkiEnrichmentService.preview(session, order_id=455, scope=scope)
     assert preview.analysis_source == "reviewed"
+    assert preview.current_scenario.service_type == "turnkey"
+    assert preview.suggested_scenario.service_type == "maintenance"
     assert preview.work_summary == "Уточнённый менеджером объём работ"
     assert [sum(unit.quantity or 0 for unit in obj.equipment) for obj in preview.objects] == [6, 2]
     assert preview.field_sources["objects.0.address"] == "Ранее подтверждено менеджером"
@@ -274,6 +277,7 @@ async def test_apply_links_customer_two_branches_and_original_once(monkeypatch):
         payload=ManagerOrderSourceApply(
             customer_action="create",
             customer=SourceCustomerDraft(name="ОАО Заказчик", inn="123456789", type="company"),
+            workflow_type="maintenance", service_type="maintenance",
             objects=objects, document_ids=["31"], work_summary="Обслужить 8 блоков",
             analysis_source="ai", analyzed_document_ids=["31"],
         ),
@@ -282,6 +286,9 @@ async def test_apply_links_customer_two_branches_and_original_once(monkeypatch):
     assert first.customer_id == 501
     assert first.attachment_ids == [601]
     assert order.status == OrderStatus.NEGOTIATION
+    assert order.workflow_type == "maintenance"
+    assert order.technical_meta["service_type"] == "maintenance"
+    assert "scenario" in first.applied_fields
     branches = [obj for obj in created if isinstance(obj, CustomerBranch)]
     assert len(branches) == 2
     assert branches[0].delivery_address != branches[1].delivery_address
@@ -304,6 +311,27 @@ async def test_apply_links_customer_two_branches_and_original_once(monkeypatch):
     assert len([obj for obj in created if isinstance(obj, CustomerBranch)]) == 2
     assert storage.await_count == 1
     assert document.await_count == 1
+    assert order.workflow_type == "maintenance"
+
+
+@pytest.mark.asyncio
+async def test_new_lead_cannot_keep_default_sales_scenario_silently(monkeypatch):
+    order = _order()
+    monkeypatch.setattr(BelzakupkiEnrichmentService, "_order", AsyncMock(return_value=order))
+    monkeypatch.setattr(BelzakupkiEnrichmentService, "_detail", AsyncMock(return_value=_detail()))
+    session = AsyncMock()
+
+    with pytest.raises(ValueError, match="Choose an order scenario"):
+        await BelzakupkiEnrichmentService.apply(
+            session, order_id=455, scope=TenantScope(tenant_id=1, storefront_id=1),
+            payload=ManagerOrderSourceApply(
+                customer_action="create",
+                customer=SourceCustomerDraft(name="ОАО Заказчик", type="company"),
+            ),
+            username="manager",
+        )
+    assert order.workflow_type == "sales_installation"
+    session.commit.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -330,6 +358,7 @@ async def test_create_rejects_existing_tenant_customer_by_phone_without_unp(monk
             session, order_id=455, scope=TenantScope(tenant_id=1, storefront_id=1),
             payload=ManagerOrderSourceApply(
                 customer_action="create",
+                workflow_type="maintenance", service_type="maintenance",
                 customer=SourceCustomerDraft(name="ОАО Заказчик", phone="+375212210029", type="company"),
             ),
             username="manager",

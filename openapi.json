@@ -54916,6 +54916,28 @@
               }
             ]
           },
+          "workflow_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Type"
+          },
+          "service_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Type"
+          },
           "work_summary": {
             "anyOf": [
               {
@@ -55176,6 +55198,26 @@
               }
             ],
             "title": "Existing Customer Id"
+          },
+          "current_scenario": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceScenarioDraft"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "suggested_scenario": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceScenarioDraft"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "work_summary": {
             "anyOf": [
@@ -71140,6 +71182,35 @@
           "address"
         ],
         "title": "SourceObjectDraft"
+      },
+      "SourceScenarioDraft": {
+        "properties": {
+          "workflow_type": {
+            "type": "string",
+            "title": "Workflow Type"
+          },
+          "service_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Type"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "workflow_type",
+          "label"
+        ],
+        "title": "SourceScenarioDraft"
       },
       "SpecRegistryItemResponse": {
         "properties": {

@@ -3,13 +3,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import LeadSourceReviewModal from '../src/components/leads/LeadSourceReviewModal.vue';
 
 const sourceApi = vi.hoisted(() => ({ preview: vi.fn(), apply: vi.fn(), analyze: vi.fn() }));
+const scenariosApi = vi.hoisted(() => ({ getManagerOrderScenarios: vi.fn() }));
 vi.mock('../src/services/order-source-review', () => ({ orderSourceReviewApi: sourceApi }));
+vi.mock('../src/api', () => ({ api: scenariosApi }));
 
 const preview = {
   order_id: 41,
   source_code: 'belzakupki', external_id: 'T-12', source_url: 'https://example.test/tender', title: 'Поставка',
   customer: { name: 'ООО Заказчик', inn: '123456789', type: 'company', email: 'office@example.test' },
-  existing_customer_id: null, work_summary: 'Монтаж', equipment_details: '2 блока',
+  existing_customer_id: null, work_summary: 'Обслуживание кондиционеров', equipment_details: '2 блока',
+  current_scenario: { workflow_type: 'sales_installation', service_type: 'turnkey', label: 'Продажа + монтаж' },
+  suggested_scenario: { workflow_type: 'maintenance', service_type: 'maintenance', label: 'Обслуживание' },
   objects: [{ address: 'Минск, Ленина, 1', equipment: [{ brand: 'Daikin', model: 'A1', quantity: 2 }] }],
   field_sources: { 'customer.name': 'Карточка закупки', 'customer.inn': 'Текст документа', 'objects.0.address': 'Текст документа', 'objects.0.equipment.0': 'Текст документа' },
   documents: [{ id: 'doc-1', name: 'ТЗ.pdf', download_url: '/api/manager/orders/41/source-documents/doc-1', extracted_text: 'Техническое задание' }],
@@ -22,12 +26,18 @@ describe('LeadSourceReviewModal', () => {
     sourceApi.preview.mockResolvedValue(preview);
     sourceApi.apply.mockResolvedValue({ order_id: 41, customer_id: 9, attachment_ids: [1], applied_fields: ['customer'] });
     sourceApi.analyze.mockRejectedValue(new Error('AI unavailable'));
+    scenariosApi.getManagerOrderScenarios.mockResolvedValue({ items: [
+      { workflow_type: 'sales_installation', service_type: 'turnkey', label: 'Продажа + монтаж' },
+      { workflow_type: 'maintenance', service_type: 'maintenance', label: 'Обслуживание' },
+      { workflow_type: 'service_work', service_type: null, label: 'Работы' },
+    ] });
   });
 
   it('requires explicit confirmation and sends reviewed data without a price', async () => {
     const wrapper = mount(LeadSourceReviewModal, { props: { open: true, orderId: 41, leadStatus: 'new_lead' } });
     await flushPromises();
     expect(wrapper.text()).toContain('ТЗ.pdf');
+    expect(wrapper.get<HTMLSelectElement>('select[aria-label="Сценарий заказа"]').element.value).toBe('maintenance:maintenance');
     expect(wrapper.find('input[placeholder*="Цен"]').exists()).toBe(false);
     expect(wrapper.get('button.btn-mini').attributes('disabled')).toBeDefined();
 
@@ -35,7 +45,8 @@ describe('LeadSourceReviewModal', () => {
     await wrapper.get('button.btn-mini').trigger('click');
 
     expect(sourceApi.apply).toHaveBeenCalledWith(41, expect.objectContaining({
-      customer_action: 'create', document_ids: ['doc-1'], objects: [{ address: 'Минск, Ленина, 1', equipment: [{ brand: 'Daikin', model: 'A1', quantity: 2 }] }],
+      customer_action: 'create', workflow_type: 'maintenance', service_type: 'maintenance',
+      document_ids: ['doc-1'], objects: [{ address: 'Минск, Ленина, 1', equipment: [{ brand: 'Daikin', model: 'A1', quantity: 2 }] }],
     }));
     expect(wrapper.emitted('applied')?.[0]?.[0]).toEqual(expect.objectContaining({ orderId: 41, customerId: 9 }));
   });
@@ -44,6 +55,59 @@ describe('LeadSourceReviewModal', () => {
     const wrapper = mount(LeadSourceReviewModal, { props: { open: true, orderId: 41, leadStatus: 'new_lead' } });
     await flushPromises();
     expect(wrapper.text()).not.toContain('Не менять клиента');
+  });
+
+  it('switches the suggestion after AI identifies maintenance and keeps a manual choice', async () => {
+    sourceApi.preview.mockResolvedValueOnce({
+      ...preview,
+      suggested_scenario: preview.current_scenario,
+    });
+    sourceApi.analyze.mockResolvedValue({
+      ...preview, work_summary: 'Техническое обслуживание кондиционеров', analysis_source: 'ai',
+    });
+    const wrapper = mount(LeadSourceReviewModal, { props: { open: true, orderId: 41, leadStatus: 'new_lead' } });
+    await flushPromises();
+    const select = wrapper.get<HTMLSelectElement>('select[aria-label="Сценарий заказа"]');
+    expect(select.element.value).toBe('sales_installation:turnkey');
+    await wrapper.findAll('button').find((button) => button.text() === 'Обработать ИИ')!.trigger('click');
+    await flushPromises();
+    expect(select.element.value).toBe('maintenance:maintenance');
+    await wrapper.findAll('input[type="checkbox"]').at(-1)!.setValue(true);
+    await wrapper.get('button.btn-mini').trigger('click');
+    expect(sourceApi.apply).toHaveBeenCalledWith(41, expect.objectContaining({
+      workflow_type: 'maintenance', service_type: 'maintenance',
+    }));
+
+    await select.setValue('service_work:');
+    await wrapper.findAll('button').find((button) => button.text() === 'Обработать ИИ')!.trigger('click');
+    await flushPromises();
+    expect(select.element.value).toBe('service_work:');
+  });
+
+  it('keeps the current scenario when reviewing an existing order', async () => {
+    const wrapper = mount(LeadSourceReviewModal, { props: { open: true, orderId: 41, leadStatus: 'negotiation' } });
+    await flushPromises();
+    expect(wrapper.get<HTMLSelectElement>('select[aria-label="Сценарий заказа"]').element.value)
+      .toBe('sales_installation:turnkey');
+    expect(wrapper.text()).toContain('По смыслу работ предложено: Обслуживание');
+  });
+
+  it('requires a scenario if the source and AI cannot identify one', async () => {
+    sourceApi.preview.mockResolvedValueOnce({ ...preview, suggested_scenario: null });
+    const wrapper = mount(LeadSourceReviewModal, { props: { open: true, orderId: 41, leadStatus: 'new_lead' } });
+    await flushPromises();
+    expect(wrapper.get<HTMLSelectElement>('select[aria-label="Сценарий заказа"]').element.value).toBe('');
+    await wrapper.findAll('input[type="checkbox"]').at(-1)!.setValue(true);
+    expect(wrapper.get('button.btn-mini').attributes('disabled')).toBeDefined();
+  });
+
+  it('keeps the source document visible if scenario options cannot load', async () => {
+    scenariosApi.getManagerOrderScenarios.mockRejectedValueOnce(new Error('unavailable'));
+    const wrapper = mount(LeadSourceReviewModal, { props: { open: true, orderId: 41, leadStatus: 'new_lead' } });
+    await flushPromises();
+    expect(wrapper.text()).toContain('ТЗ.pdf');
+    expect(wrapper.text()).toContain('Не удалось загрузить сценарии заказов');
+    expect(wrapper.get('button.btn-mini').attributes('disabled')).toBeDefined();
   });
 
   it('lets the manager correct equipment and add a missed site before applying', async () => {

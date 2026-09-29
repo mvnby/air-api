@@ -5,6 +5,7 @@
 import type { SourceCustomerDraft } from './SourceCustomerDraft';
 import type { SourceDocumentPreview } from './SourceDocumentPreview';
 import type { SourceObjectDraft } from './SourceObjectDraft';
+import type { SourceScenarioDraft } from './SourceScenarioDraft';
 export type ManagerOrderSourcePreview = {
     order_id: number;
     source_code: string;
@@ -15,6 +16,8 @@ export type ManagerOrderSourcePreview = {
     estimated_value?: (number | null);
     customer: SourceCustomerDraft;
     existing_customer_id?: (number | null);
+    current_scenario?: (SourceScenarioDraft | null);
+    suggested_scenario?: (SourceScenarioDraft | null);
     work_summary?: (string | null);
     equipment_details?: (string | null);
     objects?: Array<SourceObjectDraft>;

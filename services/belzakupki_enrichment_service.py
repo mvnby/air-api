@@ -28,10 +28,12 @@ from schemas_belzakupki_enrichment import (
     SourceDocumentPreview,
     SourceEquipmentDraft,
     SourceObjectDraft,
+    SourceScenarioDraft,
 )
 from services.customer_party_classifier import infer_customer_type_from_requisites
 from services.customer_creation_service import CustomerAlreadyExistsError, CustomerCreationService
 from services.belzakupki_source_analysis import analyze_tender_text, extract_missing_document_text
+from services.order_scenarios import SCENARIOS, infer_scenario_from_task, resolve_scenario
 from services.service_attachment_service import ServiceAttachmentService
 from services.tenant_entity_access_service import TenantEntityAccessService
 
@@ -124,6 +126,18 @@ def _source_identity(order: Order) -> tuple[str, str]:
     if not source or not external_id:
         raise ValueError("Belzakupki source identity is missing")
     return source, external_id
+
+
+def _scenario_draft(workflow_type: str, service_type: str | None) -> SourceScenarioDraft | None:
+    scenario = next(
+        (item for item in SCENARIOS if item.workflow_type == workflow_type and item.service_type == service_type),
+        None,
+    )
+    if scenario is None:
+        return None
+    return SourceScenarioDraft(
+        workflow_type=scenario.workflow_type, service_type=scenario.service_type, label=scenario.label,
+    )
 
 
 def _objects_from_text(raw: str) -> list[SourceObjectDraft]:
@@ -278,6 +292,16 @@ class BelzakupkiEnrichmentService:
             equipment_details = previous.get("equipment_details")
             objects = [SourceObjectDraft.model_validate(obj) for obj in previous.get("objects") or []]
             warnings.append("Показаны ранее подтверждённые данные; новый анализ можно запустить отдельно.")
+        current_service = (order.technical_meta or {}).get("service_type")
+        try:
+            current_workflow, current_service = resolve_scenario(
+                workflow_type=order.workflow_type, service_type=current_service,
+            )
+        except ValueError:
+            current_workflow = None
+        current_scenario = _scenario_draft(current_workflow, current_service) if current_workflow else None
+        suggested = infer_scenario_from_task(_text(data.get("title"), 1000)) or infer_scenario_from_task(summary)
+        suggested_scenario = _scenario_draft(suggested.workflow_type, suggested.service_type) if suggested else None
         field_sources = {
             "customer.name": "Карточка закупки",
             "customer.type": "Определено по реквизитам заказчика",
@@ -304,6 +328,7 @@ class BelzakupkiEnrichmentService:
             source_url=_text(data.get("source_url"), 2048), title=_text(data.get("title"), 1000),
             deadline_at=_text(data.get("deadline_at"), 80), estimated_value=_amount(data.get("estimated_value")),
             customer=customer, existing_customer_id=int(matches[0].id) if len(matches) == 1 else None,
+            current_scenario=current_scenario, suggested_scenario=suggested_scenario,
             work_summary=summary, equipment_details=equipment_details, objects=objects,
             documents=documents, field_sources=field_sources, warnings=warnings,
             analysis_source="reviewed" if reviewed else "source",
@@ -345,6 +370,10 @@ class BelzakupkiEnrichmentService:
         if work_summary:
             preview.work_summary = work_summary
             preview.field_sources["work_summary"] = "ИИ по выбранным документам"
+            suggested = infer_scenario_from_task(work_summary)
+            preview.suggested_scenario = (
+                _scenario_draft(suggested.workflow_type, suggested.service_type) if suggested else None
+            )
         if equipment_details:
             preview.equipment_details = equipment_details
             preview.field_sources["equipment_details"] = "ИИ по выбранным документам"
@@ -391,6 +420,17 @@ class BelzakupkiEnrichmentService:
         order = await cls._order(session, order_id, scope, lock=True)
         detail = await cls._detail(order)
         source, external_id = _source_identity(order)
+        fields_set = payload.model_fields_set
+        if order.status == OrderStatus.NEW_LEAD and "workflow_type" not in fields_set:
+            raise ValueError("Choose an order scenario before moving the lead to negotiations")
+        selected_scenario = None
+        if "workflow_type" in fields_set:
+            if payload.workflow_type is None:
+                raise ValueError("workflow_type is required")
+            workflow_type, service_type = resolve_scenario(
+                workflow_type=payload.workflow_type, service_type=payload.service_type,
+            )
+            selected_scenario = (workflow_type, service_type)
         applied: list[str] = []
         customer = None
         draft = payload.customer
@@ -451,11 +491,19 @@ class BelzakupkiEnrichmentService:
                 order.status = OrderStatus.NEGOTIATION
                 applied.append("status")
         source_meta = dict(order.technical_meta or {})
+        if selected_scenario is not None:
+            workflow_type, service_type = selected_scenario
+            if order.workflow_type != workflow_type or source_meta.get("service_type") != service_type:
+                applied.append("scenario")
+            order.workflow_type = workflow_type
+            if service_type is None:
+                source_meta.pop("service_type", None)
+            else:
+                source_meta["service_type"] = service_type
         belzakupki_meta = dict(source_meta.get("belzakupki") or {})
         previous = belzakupki_meta.get("enrichment")
         if not isinstance(previous, dict) or previous.get("source") != source or previous.get("external_id") != external_id:
             previous = {}
-        fields_set = payload.model_fields_set
         reviewed_objects = (
             payload.objects if "objects" in fields_set and payload.objects is not None
             else [SourceObjectDraft.model_validate(obj) for obj in previous.get("objects") or []]

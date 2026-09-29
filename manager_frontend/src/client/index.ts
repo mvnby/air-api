@@ -676,6 +676,7 @@ export type { SourceCustomerDraft } from './models/SourceCustomerDraft';
 export type { SourceDocumentPreview } from './models/SourceDocumentPreview';
 export type { SourceEquipmentDraft } from './models/SourceEquipmentDraft';
 export type { SourceObjectDraft } from './models/SourceObjectDraft';
+export type { SourceScenarioDraft } from './models/SourceScenarioDraft';
 export type { SpecRegistryItemResponse } from './models/SpecRegistryItemResponse';
 export type { SpecRegistryResponse } from './models/SpecRegistryResponse';
 export type { SpecsKeysResponse } from './models/SpecsKeysResponse';
