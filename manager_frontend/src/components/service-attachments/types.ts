@@ -49,6 +49,43 @@ export type ServiceAttachmentAccessResponse = {
   variant: ServiceAttachmentVariant;
 };
 
+export type ContractRisk = {
+  topic: string;
+  clause: string;
+  page: number | null;
+  quote: string;
+  concern: string;
+  proposal: string;
+};
+
+export type ContractReviewResponse = {
+  attachment_id: number;
+  filename: string;
+  content_sha256: string;
+  model: string;
+  pages: number | null;
+  risks: ContractRisk[];
+  note: string;
+};
+
+export type ContractReviewJobResponse = {
+  job_id: string;
+  status: 'running' | 'completed' | 'failed';
+  report: ContractReviewResponse | null;
+  error: string | null;
+};
+
+export type OriginalEmailAttachmentItem = {
+  position: number;
+  filename: string;
+  size_bytes: number;
+  content_type: string;
+};
+
+export type OriginalEmailAttachmentList = {
+  items: OriginalEmailAttachmentItem[];
+};
+
 export type ServiceAttachmentUpdatePayload = {
   category?: ServiceAttachmentCategory | string;
   caption?: string | null;

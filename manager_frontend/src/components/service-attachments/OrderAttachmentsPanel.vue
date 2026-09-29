@@ -2,6 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue';
 import { serviceAttachmentsApi } from './api';
 import ServiceAttachmentViewer from './ServiceAttachmentViewer.vue';
+import EmailContractReview from '../leads/EmailContractReview.vue';
 import { confirmDialog } from '../../services/ui-feedback';
 import {
   SERVICE_ATTACHMENT_CATEGORIES,
@@ -22,12 +23,14 @@ const props = withDefaults(defineProps<{
   defaultExpanded?: boolean;
   readonly?: boolean;
   embedded?: boolean;
+  emailContractReview?: boolean;
   equipmentOptions?: ServiceAttachmentEquipmentOption[];
 }>(), {
   initialCount: null,
   defaultExpanded: false,
   readonly: false,
   embedded: false,
+  emailContractReview: false,
   equipmentOptions: () => [],
 });
 
@@ -575,6 +578,11 @@ defineExpose({ refresh, expand });
               </button>
             </div>
             <audio v-if="isAudioAttachment(item) && audioUrls[attachmentKey(item)]" :src="audioUrls[attachmentKey(item)]" controls preload="metadata" class="mt-2 h-9 w-full" />
+            <EmailContractReview
+              v-if="emailContractReview && item.id !== null && item.source === 'email_lead_intake' && /\.(pdf|docx?)$/i.test(item.filename)"
+              :order-id="orderId"
+              :attachment-id="item.id"
+            />
             <p v-if="item.transcript" class="mt-2 line-clamp-3 whitespace-pre-wrap text-xs leading-5 text-slate-600 dark:text-slate-300">{{ item.transcript }}</p>
             <p v-if="item.processing_error" class="mt-1 text-xs text-red-600 dark:text-red-300">{{ item.processing_error }}</p>
           </article>

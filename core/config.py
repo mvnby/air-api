@@ -564,6 +564,7 @@ class Settings(BaseSettings):
     # AI integrations
     DEEPSEEK_TOKEN: str = ""
     DEEPSEEK_MODEL: str = "deepseek-v4-flash"
+    CONTRACT_REVIEW_MODEL: str = "deepseek-v4-pro"
     DEEPSEEK_API_URL: str = "https://api.deepseek.com/chat/completions"
     GOOGLE_VISION_CREDENTIALS_FILE: str = ""
     GOOGLE_VISION_PROJECT_ID: str = ""

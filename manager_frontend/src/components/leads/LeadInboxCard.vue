@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import type { LeadsInboxItemResponse } from '../../api';
 import OrderAttachmentsPanel from '../service-attachments/OrderAttachmentsPanel.vue';
+import EmailOriginals from './EmailOriginals.vue';
 
 const props = defineProps<{
   item: LeadsInboxItemResponse;
@@ -227,8 +228,11 @@ const isBusinessCustomer = computed(() => (
         :default-expanded="true"
         :readonly="true"
         :embedded="true"
+        :email-contract-review="item.source === 'email'"
       />
     </div>
+
+    <EmailOriginals v-if="item.source === 'email' && !item.attachment_count" :order-id="item.id" />
 
     <div v-if="item.tender" class="mx-4 mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600 dark:text-slate-300">
       <span v-if="item.tender.source">Площадка: {{ item.tender.source }}</span>
