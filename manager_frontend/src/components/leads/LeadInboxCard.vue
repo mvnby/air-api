@@ -12,6 +12,7 @@ const emit = defineEmits<{
   (e: 'qualify', item: LeadsInboxItemResponse): void;
   (e: 'reject', item: LeadsInboxItemResponse): void;
   (e: 'no-answer', item: LeadsInboxItemResponse): void;
+  (e: 'review-source', item: LeadsInboxItemResponse): void;
 }>();
 
 const isCommentExpanded = ref(false);
@@ -273,6 +274,15 @@ const isBusinessCustomer = computed(() => (
 
     <!-- Actions footer -->
     <div v-if="!isArchive" class="flex flex-wrap gap-2 px-4 pb-4">
+      <button
+        v-if="item.source === 'belzakupki'"
+        class="inline-flex items-center justify-center gap-1.5 rounded-lg border border-brand-200 px-3 py-2 text-xs font-semibold text-brand-700 hover:bg-brand-50 dark:border-brand-800 dark:text-brand-300 dark:hover:bg-brand-950/30"
+        title="Проверить данные из закупки перед созданием сделки"
+        @click="emit('review-source', item)"
+      >
+        <span class="material-icons-round text-[16px]">fact_check</span>
+        Проработать
+      </button>
       <button
         class="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs md:text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700 active:scale-95 transition-all"
         title="Перевести в переговоры"

@@ -94,11 +94,16 @@ const selectedBranch = computed(() => customerBranches.value.find((branch) => br
 
 const missingCustomerType = computed(() => !customerType.value);
 const missingServiceType = computed(() => !scenario.value);
+const missingCustomerName = computed(() => !existingCustomerId.value && !cleanText(
+  isBusinessCustomerType(customerType.value)
+    ? (companyName.value || companyFullLegalName.value || customerName.value)
+    : customerName.value,
+));
 const selectedCustomer = computed(() => customerCandidates.value.find((item) => item.id === existingCustomerId.value) || null);
 const customerTypeConflict = computed(() => Boolean(
   selectedCustomer.value && customerType.value && selectedCustomer.value.type !== customerType.value,
 ));
-const canSubmit = computed(() => !isLoading.value && !missingCustomerType.value && !missingServiceType.value && !customerTypeConflict.value);
+const canSubmit = computed(() => !isLoading.value && !missingCustomerType.value && !missingServiceType.value && !missingCustomerName.value && !customerTypeConflict.value);
 
 api.getManagerOrderScenarios().then((response) => {
   scenarioOptions.value = response.items;
@@ -670,6 +675,7 @@ const submitQualify = async () => {
       </div>
 
       <div class="flex shrink-0 gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4 dark:border-slate-800 dark:bg-slate-900">
+        <p v-if="attemptedSubmit && missingCustomerName" class="self-center text-xs font-semibold text-red-600">Укажите клиента или выберите существующего</p>
         <button
           class="flex flex-1 items-center justify-center gap-2 rounded-xl bg-brand-600 py-3 font-bold text-white transition-colors hover:bg-brand-700 disabled:opacity-50"
           :disabled="isLoading"

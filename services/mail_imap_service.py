@@ -21,7 +21,12 @@ from core.config import settings
 from models import GlobalConfig
 from services.bank_email_parser_service import BankEmailParserService
 from services.bank_receipt_service import BankReceiptImportResult, BankReceiptService
-from services.email_lead_intake_service import EmailLeadDecision, EmailLeadImportResult, EmailLeadIntakeService
+from services.email_lead_intake_service import (
+    EmailLeadAttachment,
+    EmailLeadDecision,
+    EmailLeadImportResult,
+    EmailLeadIntakeService,
+)
 from services.tenant_scope_service import TenantScope
 
 
@@ -245,6 +250,29 @@ class MailImapService:
         return texts
 
     @staticmethod
+    def _extract_original_attachments(msg: Message) -> tuple[EmailLeadAttachment, ...]:
+        """Keep the MIME parts that were sent as files, without transforming them."""
+        attachments: list[EmailLeadAttachment] = []
+        for part in msg.walk() if msg.is_multipart() else []:
+            if part.get_content_maintype() == "multipart":
+                continue
+            filename = MailImapService._decode_filename(part.get_filename())
+            disposition = str(part.get("Content-Disposition") or "").lower()
+            if not filename and "attachment" not in disposition:
+                continue
+            content = part.get_payload(decode=True)
+            if not content:
+                continue
+            attachments.append(
+                EmailLeadAttachment(
+                    filename=filename or "attachment",
+                    content_type=part.get_content_type(),
+                    content=content,
+                )
+            )
+        return tuple(attachments)
+
+    @staticmethod
     def _connect() -> imaplib.IMAP4:
         if not settings.MAIL_IMAP_USERNAME or not settings.MAIL_IMAP_PASSWORD:
             raise RuntimeError("IMAP credentials are not configured")
@@ -455,6 +483,7 @@ class MailImapService:
                 sender_email = sender_email.lower()
                 raw_body = await asyncio.to_thread(MailImapService._extract_body, msg)
                 attachment_texts = await asyncio.to_thread(MailImapService._extract_attachment_texts, msg)
+                original_attachments = await asyncio.to_thread(MailImapService._extract_original_attachments, msg)
                 if attachment_texts:
                     raw_body = f"{raw_body}\n\nТекст вложений:\n" + "\n\n".join(attachment_texts)
                 attachment_diagnostics = [item for item in attachment_texts if "legacy .doc не распознан" in item]
@@ -468,6 +497,7 @@ class MailImapService:
                         raw_body=raw_body,
                         message_id=msg.get("Message-ID"),
                         email_date_raw=msg.get("Date"),
+                        attachments=original_attachments,
                         dry_run=dry_run,
                         tenant_scope=tenant_scope,
                     )

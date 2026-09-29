@@ -16755,6 +16755,221 @@
         }
       }
     },
+    "/api/manager/orders/{order_id}/source-preview": {
+      "get": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "Get Manager Order Source Preview",
+        "operationId": "get_manager_order_source_preview",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderSourcePreview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/source-analyze": {
+      "post": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "Analyze Manager Order Source",
+        "operationId": "analyze_manager_order_source",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerOrderSourceAnalyze"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderSourcePreview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/source-apply": {
+      "post": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "Apply Manager Order Source",
+        "operationId": "apply_manager_order_source",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerOrderSourceApply"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderSourceApplyResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/source-documents/{document_id}": {
+      "get": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "Download Manager Order Source Document",
+        "operationId": "download_manager_order_source_document",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/order-workspace-usage/batch": {
       "post": {
         "tags": [
@@ -53189,6 +53404,16 @@
             "title": "Balance Due",
             "default": 0.0
           },
+          "source_enrichment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerOrderSourceEnrichment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "contact_name": {
             "anyOf": [
               {
@@ -54645,6 +54870,377 @@
           "price"
         ],
         "title": "ManagerOrderServiceLinePayload"
+      },
+      "ManagerOrderSourceAnalyze": {
+        "properties": {
+          "document_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Document Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_ids"
+        ],
+        "title": "ManagerOrderSourceAnalyze"
+      },
+      "ManagerOrderSourceApply": {
+        "properties": {
+          "customer_action": {
+            "type": "string",
+            "title": "Customer Action"
+          },
+          "customer_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Id"
+          },
+          "customer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceCustomerDraft"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "work_summary": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Summary"
+          },
+          "equipment_details": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Details"
+          },
+          "objects": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SourceObjectDraft"
+                },
+                "type": "array",
+                "maxItems": 30
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Objects"
+          },
+          "document_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 8,
+            "title": "Document Ids"
+          },
+          "analysis_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Analysis Source"
+          },
+          "analyzed_document_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Analyzed Document Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "customer_action"
+        ],
+        "title": "ManagerOrderSourceApply"
+      },
+      "ManagerOrderSourceApplyResult": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "customer_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Id"
+          },
+          "attachment_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Attachment Ids"
+          },
+          "applied_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Applied Fields"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id"
+        ],
+        "title": "ManagerOrderSourceApplyResult"
+      },
+      "ManagerOrderSourceEnrichment": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "external_id": {
+            "type": "string",
+            "title": "External Id"
+          },
+          "work_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Summary"
+          },
+          "equipment_details": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Details"
+          },
+          "objects": {
+            "items": {
+              "$ref": "#/components/schemas/SourceObjectDraft"
+            },
+            "type": "array",
+            "title": "Objects"
+          },
+          "customer_branch_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Customer Branch Ids"
+          },
+          "analysis_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Analysis Source"
+          },
+          "analyzed_document_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Analyzed Document Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "external_id"
+        ],
+        "title": "ManagerOrderSourceEnrichment"
+      },
+      "ManagerOrderSourcePreview": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "source_code": {
+            "type": "string",
+            "title": "Source Code"
+          },
+          "external_id": {
+            "type": "string",
+            "title": "External Id"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "deadline_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline At"
+          },
+          "estimated_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Value"
+          },
+          "customer": {
+            "$ref": "#/components/schemas/SourceCustomerDraft"
+          },
+          "existing_customer_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Existing Customer Id"
+          },
+          "work_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Summary"
+          },
+          "equipment_details": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Details"
+          },
+          "objects": {
+            "items": {
+              "$ref": "#/components/schemas/SourceObjectDraft"
+            },
+            "type": "array",
+            "title": "Objects"
+          },
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/SourceDocumentPreview"
+            },
+            "type": "array",
+            "title": "Documents"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          },
+          "analysis_source": {
+            "type": "string",
+            "title": "Analysis Source",
+            "default": "source"
+          },
+          "analyzed_document_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Analyzed Document Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id",
+          "source_code",
+          "external_id",
+          "customer"
+        ],
+        "title": "ManagerOrderSourcePreview"
       },
       "ManagerOrderTransferCustomer": {
         "properties": {
@@ -70350,6 +70946,193 @@
           "base_price"
         ],
         "title": "ServiceResponse"
+      },
+      "SourceCustomerDraft": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "inn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 30
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inn"
+          },
+          "type": {
+            "type": "string",
+            "maxLength": 40,
+            "title": "Type",
+            "default": "company"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "legal_address": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legal Address"
+          }
+        },
+        "type": "object",
+        "title": "SourceCustomerDraft"
+      },
+      "SourceDocumentPreview": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "extracted_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extracted Text"
+          },
+          "extracted_text_truncated": {
+            "type": "boolean",
+            "title": "Extracted Text Truncated",
+            "default": false
+          },
+          "download_url": {
+            "type": "string",
+            "title": "Download Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "download_url"
+        ],
+        "title": "SourceDocumentPreview"
+      },
+      "SourceEquipmentDraft": {
+        "properties": {
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          }
+        },
+        "type": "object",
+        "title": "SourceEquipmentDraft"
+      },
+      "SourceObjectDraft": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Address"
+          },
+          "equipment": {
+            "items": {
+              "$ref": "#/components/schemas/SourceEquipmentDraft"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Equipment"
+          }
+        },
+        "type": "object",
+        "required": [
+          "address"
+        ],
+        "title": "SourceObjectDraft"
       },
       "SpecRegistryItemResponse": {
         "properties": {

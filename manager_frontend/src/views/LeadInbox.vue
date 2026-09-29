@@ -5,6 +5,7 @@ import { managerSession } from '../services/manager-session';
 import { managerStorefrontSelection, managerStorefrontStorageKey } from '../services/manager-storefront-selection';
 import LeadInboxCard from '../components/leads/LeadInboxCard.vue';
 import LeadQualifyModal from '../components/leads/LeadQualifyModal.vue';
+import LeadSourceReviewModal from '../components/leads/LeadSourceReviewModal.vue';
 import EmailLeadImportPanel from '../components/leads/EmailLeadImportPanel.vue';
 import AddressSuggestInput from '../components/ui/AddressSuggestInput.vue';
 import { useBelarusPhoneMask } from '../composables/useBelarusPhoneMask';
@@ -66,6 +67,7 @@ const restoreContext = () => {
 // Qualify / Reject modals
 const qualifyTarget = ref<LeadsInboxItemResponse | null>(null);
 const rejectTarget = ref<LeadsInboxItemResponse | null>(null);
+const sourceReviewTarget = ref<LeadsInboxItemResponse | null>(null);
 
 // Create Lead modal
 const showCreateModal = ref(false);
@@ -289,6 +291,18 @@ const handleQualifySuccess = async (orderId: number) => {
   window.dispatchEvent(new PopStateEvent('popstate'));
 };
 
+const handleSourceApplied = async (result: { orderId: number; customerAction: string }) => {
+  sourceReviewTarget.value = null;
+  if (result.customerAction === 'skip') {
+    setToast(`Источник для обращения #${result.orderId} обновлён`);
+    await load();
+    return;
+  }
+  setToast(`Данные из источника применены, открываем сделку #${result.orderId}`);
+  window.history.pushState({}, '', `/manager/orders/kanban?orderId=${result.orderId}`);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+};
+
 // ── No Answer ────────────────────────────────────────────────────────────────
 const markNoAnswer = async (item: LeadsInboxItemResponse) => {
   try {
@@ -452,6 +466,7 @@ const onEmailImported = async () => {
         :item="item"
         :is-archive="scope === 'archive'"
         @qualify="qualifyTarget = $event"
+        @review-source="sourceReviewTarget = $event"
         @reject="openRejectModal($event)"
         @no-answer="markNoAnswer($event)"
       />
@@ -479,6 +494,14 @@ const onEmailImported = async () => {
       :lead="qualifyTarget"
       @close="qualifyTarget = null"
       @success="handleQualifySuccess"
+    />
+    <LeadSourceReviewModal
+      v-if="sourceReviewTarget"
+      :open="true"
+      :order-id="sourceReviewTarget.id"
+      :lead-status="sourceReviewTarget.status"
+      @close="sourceReviewTarget = null"
+      @applied="handleSourceApplied"
     />
 
     <!-- ── Reject Modal ───────────────────────────────── -->

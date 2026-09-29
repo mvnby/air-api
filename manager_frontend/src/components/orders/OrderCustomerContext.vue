@@ -13,12 +13,18 @@ import OrderCustomerObjectSummary from './OrderCustomerObjectSummary.vue';
 import OrderDrawerSection from './OrderDrawerSection.vue';
 import CustomerSearchSelect from '../customers/CustomerSearchSelect.vue';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   order: ManagerOrderDetailResponse;
   addressError?: string;
   commentError?: string;
   beforeNavigate?: () => Promise<boolean>;
-}>();
+  editTarget?: 'customer' | 'object' | null;
+  showSummary?: boolean;
+  visible?: boolean;
+}>(), {
+  showSummary: true,
+  visible: true,
+});
 
 const emit = defineEmits<{
   toast: [payload: { message: string; type: 'success' | 'error' }];
@@ -240,12 +246,15 @@ watch(
 </script>
 
 <template>
+  <template v-if="visible">
   <OrderCustomerObjectSummary
+    v-if="showSummary"
     :customer="customer"
     :branch="selectedBranch"
     :address="objectAddress"
     :has-comment="Boolean(comment.trim())"
     :saving-customer="savingCustomer"
+    :edit-target="editTarget"
     @copy="copyText"
     @save-customer="saveCustomer"
     @update:address="deliveryAddress = $event"
@@ -335,4 +344,5 @@ watch(
       </div>
     </div>
   </Transition>
+  </template>
 </template>

@@ -70,6 +70,75 @@ async def _create_order(session: AsyncSession) -> tuple[int, int]:
 
 
 @pytest.mark.asyncio
+async def test_promoting_unlinked_lead_creates_reviewed_customer(update_session):
+    order = Order(tenant_id=1, storefront_id=1, status=OrderStatus.NEW_LEAD)
+    update_session.add(order)
+    await update_session.commit()
+
+    result = await OrderUpdateCommandService.update_order_for_manager(
+        update_session,
+        int(order.id),
+        ManagerOrderUpdatePayload(
+            status="negotiation",
+            customer_name="Инспекция МНС по Витебскому району",
+            customer_type="company",
+            customer_inn="300003606",
+            customer_email="imns305@nalog.gov.by",
+        ),
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+
+    assert result is not None
+    assert result["customer"]["name"] == "Инспекция МНС по Витебскому району"
+    customer = await update_session.get(Customer, result["customer"]["id"])
+    assert customer is not None
+    assert customer.inn == "300003606"
+    assert customer.email == "imns305@nalog.gov.by"
+    assert customer.signing_mode == "statutory_body"
+
+
+@pytest.mark.asyncio
+async def test_promoting_unlinked_lead_reuses_exact_unp_without_rewriting_customer(update_session):
+    customer = Customer(tenant_id=1, name="Каноническое имя", phone="", inn="300003606", type=CustomerType.company)
+    order = Order(tenant_id=1, storefront_id=1, status=OrderStatus.NEW_LEAD)
+    update_session.add_all([customer, order])
+    await update_session.commit()
+
+    result = await OrderUpdateCommandService.update_order_for_manager(
+        update_session,
+        int(order.id),
+        ManagerOrderUpdatePayload(
+            status="negotiation",
+            customer_name="Имя из закупки",
+            customer_type="company",
+            customer_inn="300003606",
+        ),
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+
+    assert result is not None
+    assert result["customer"]["id"] == customer.id
+    assert (await update_session.get(Customer, customer.id)).name == "Каноническое имя"
+
+
+@pytest.mark.asyncio
+async def test_promoting_unlinked_lead_requires_customer(update_session):
+    order = Order(tenant_id=1, storefront_id=1, status=OrderStatus.NEW_LEAD)
+    update_session.add(order)
+    await update_session.commit()
+
+    with pytest.raises(ValueError, match="Укажите клиента"):
+        await OrderUpdateCommandService.update_order_for_manager(
+            update_session,
+            int(order.id),
+            ManagerOrderUpdatePayload(status="negotiation", customer_type="company"),
+            tenant_scope=TEST_TENANT_SCOPE,
+        )
+    await update_session.refresh(order)
+    assert order.status == OrderStatus.NEW_LEAD
+
+
+@pytest.mark.asyncio
 async def test_update_rolls_back_order_and_customer_when_outbox_enqueue_fails(
     update_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,

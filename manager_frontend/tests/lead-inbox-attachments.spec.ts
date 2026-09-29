@@ -167,6 +167,16 @@ describe('LeadInboxCard read-only attachments', () => {
     expectNoWrites();
   });
 
+  it('offers source review only for Belzakupki leads', async () => {
+    const regular = mount(LeadInboxCard, { props: { item: lead } });
+    expect(regular.text()).not.toContain('Проработать');
+    const tender = mount(LeadInboxCard, { props: { item: { ...lead, source: 'belzakupki' } } });
+    await tender.get('button[title="Проверить данные из закупки перед созданием сделки"]').trigger('click');
+    expect(tender.emitted('review-source')?.[0]?.[0]).toEqual(expect.objectContaining({ id: lead.id }));
+    regular.unmount();
+    tender.unmount();
+  });
+
   it('shows a retryable list error without changing CRM state', async () => {
     listMock
       .mockRejectedValueOnce(new Error('Список временно недоступен'))

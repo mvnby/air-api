@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { ManagerInstallerResponse } from './ManagerInstallerResponse';
 import type { ManagerOrderDocumentItem } from './ManagerOrderDocumentItem';
+import type { ManagerOrderSourceEnrichment } from './ManagerOrderSourceEnrichment';
 import type { OrderCustomerBranchBrief } from './OrderCustomerBranchBrief';
 import type { OrderCustomerBrief } from './OrderCustomerBrief';
 import type { OrderCustomerContractBrief } from './OrderCustomerContractBrief';
@@ -66,6 +67,7 @@ export type ManagerOrderDetailResponse = {
     execution_status_changed_at?: (string | null);
     total_payments?: number;
     balance_due?: number;
+    source_enrichment?: (ManagerOrderSourceEnrichment | null);
     contact_name?: (string | null);
     contact_phone?: (string | null);
     requested_date?: (string | null);

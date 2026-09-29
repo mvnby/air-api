@@ -47,6 +47,32 @@ change destination slugs to implicitly merge their data.
   Logs use `BELZAKUPKI_IMPORT` / `BELZAKUPKI_IMPORT_FAILED` without the API key.
   These are current-state reconciliations, not a deletion/event archive.
 
+## Manager review and source documents
+
+The inbox action **Проработать** and the order action **Дозаполнить из источника**
+request fresh details for the order's saved provider source and external ID. The
+source API must be deployed before these actions are enabled in Kitlane. Access
+uses the same integration key and tenant/profile scope as the intake feed. A
+missing or unavailable source returns an error without changing the order.
+
+The preview is read-only. It combines collector fields and bounded extracted
+document text, proposes customer type and contacts, and separates explicitly
+identified service sites. The original document opens through an authenticated
+Manager route; selected originals are copied to private order attachments only
+after manager confirmation. **Обработать ИИ** is a separate, on-demand draft
+step for selected documents. Its suggested work and equipment are reviewable
+and can be edited before applying. It does not set a proposal price from the
+procurement's estimated value.
+
+Applying reviewed data links an existing tenant customer or creates a customer
+with the chosen party type, then saves source work details and distinct object
+addresses. A new lead advances to negotiation only after a customer is linked.
+Previously entered order fields remain authoritative; reopening review starts
+from the saved reviewed enrichment. Repeated application reuses already attached
+source documents and object addresses. This path has no automatic backfill:
+existing orders such as #455 are enriched when a manager opens and confirms the
+source review.
+
 Apply migration `e64f5a6b7c8d` through the normal reviewed deployment path before
 starting this importer. Disabling `BELZAKUPKI_IMPORT_ENABLED` and redeploying
 stops new intake without deleting orders/checkpoints. Rollback of application

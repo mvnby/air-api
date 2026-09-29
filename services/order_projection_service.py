@@ -432,6 +432,9 @@ class OrderProjectionService:
             demo_read_only=tenant_scope.demo_read_only,
         )
         meta = order.technical_meta if isinstance(order.technical_meta, dict) else {}
+        belzakupki_meta = meta.get("belzakupki") if isinstance(meta.get("belzakupki"), dict) else {}
+        enrichment = belzakupki_meta.get("enrichment")
+        data["source_enrichment"] = enrichment if isinstance(enrichment, dict) else None
         raw_requested_date = meta.get("requested_date")
         try:
             data["requested_date"] = date.fromisoformat(str(raw_requested_date)[:10]) if raw_requested_date else None

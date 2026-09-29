@@ -28,6 +28,25 @@ const mountSummary = () => mount(OrderCustomerObjectSummary, {
 });
 
 describe('OrderCustomerObjectSummary', () => {
+  it('opens customer selection instead of an empty customer editor when no customer is assigned', async () => {
+    const wrapper = mount(OrderCustomerObjectSummary, {
+      props: { customer: null, address: '' },
+    });
+
+    await wrapper.get('button[aria-label="Выбрать клиента"]').trigger('click');
+
+    expect(wrapper.emitted('change-customer')).toHaveLength(1);
+    expect(wrapper.find('input[placeholder="Имя или название клиента"]').exists()).toBe(false);
+  });
+
+  it('opens the requested editor from the order context', async () => {
+    const wrapper = mountSummary();
+
+    await wrapper.setProps({ editTarget: 'object' });
+
+    expect(wrapper.text()).toContain('Выбрать филиал');
+  });
+
   it('updates the order address on every input for an individual customer', async () => {
     const wrapper = mountSummary();
 

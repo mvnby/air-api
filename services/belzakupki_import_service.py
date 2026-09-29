@@ -197,13 +197,16 @@ class BelzakupkiImportService:
             "reason": snapshot.get("reason"),
             "ai_analysis": snapshot.get("ai_analysis"),
         }
-        return {
+        next_metadata = {
             "source": snapshot["tender"]["source"],
             "external_tender_id": snapshot["tender"]["external_id"],
             "tender": snapshot["tender"],
             "matches": matches,
             "last_synced_at": datetime.now(timezone.utc).isoformat(),
         }
+        if isinstance(existing.get("enrichment"), dict):
+            next_metadata["enrichment"] = existing["enrichment"]
+        return next_metadata
 
     @classmethod
     async def _find_order(

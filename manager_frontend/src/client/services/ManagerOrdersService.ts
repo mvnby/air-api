@@ -13,6 +13,10 @@ import type { ManagerOrderImportPreviewRequest } from '../models/ManagerOrderImp
 import type { ManagerOrderImportPreviewResponse } from '../models/ManagerOrderImportPreviewResponse';
 import type { ManagerOrderListResponse } from '../models/ManagerOrderListResponse';
 import type { ManagerOrderScenariosResponse } from '../models/ManagerOrderScenariosResponse';
+import type { ManagerOrderSourceAnalyze } from '../models/ManagerOrderSourceAnalyze';
+import type { ManagerOrderSourceApply } from '../models/ManagerOrderSourceApply';
+import type { ManagerOrderSourceApplyResult } from '../models/ManagerOrderSourceApplyResult';
+import type { ManagerOrderSourcePreview } from '../models/ManagerOrderSourcePreview';
 import type { ManagerOrderTransferPackage_Output } from '../models/ManagerOrderTransferPackage_Output';
 import type { ManagerOrderUpdatePayload } from '../models/ManagerOrderUpdatePayload';
 import type { ManagerStaleWorkStageItem } from '../models/ManagerStaleWorkStageItem';
@@ -583,6 +587,97 @@ export class ManagerOrdersService {
             path: {
                 'order_id': orderId,
                 'stage_id': stageId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Manager Order Source Preview
+     * @param orderId
+     * @returns ManagerOrderSourcePreview Successful Response
+     * @throws ApiError
+     */
+    public static getManagerOrderSourcePreview(
+        orderId: number,
+    ): CancelablePromise<ManagerOrderSourcePreview> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/orders/{order_id}/source-preview',
+            path: {
+                'order_id': orderId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Analyze Manager Order Source
+     * @param orderId
+     * @param requestBody
+     * @returns ManagerOrderSourcePreview Successful Response
+     * @throws ApiError
+     */
+    public static analyzeManagerOrderSource(
+        orderId: number,
+        requestBody: ManagerOrderSourceAnalyze,
+    ): CancelablePromise<ManagerOrderSourcePreview> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/orders/{order_id}/source-analyze',
+            path: {
+                'order_id': orderId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Apply Manager Order Source
+     * @param orderId
+     * @param requestBody
+     * @returns ManagerOrderSourceApplyResult Successful Response
+     * @throws ApiError
+     */
+    public static applyManagerOrderSource(
+        orderId: number,
+        requestBody: ManagerOrderSourceApply,
+    ): CancelablePromise<ManagerOrderSourceApplyResult> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/orders/{order_id}/source-apply',
+            path: {
+                'order_id': orderId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Download Manager Order Source Document
+     * @param orderId
+     * @param documentId
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static downloadManagerOrderSourceDocument(
+        orderId: number,
+        documentId: string,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/orders/{order_id}/source-documents/{document_id}',
+            path: {
+                'order_id': orderId,
+                'document_id': documentId,
             },
             errors: {
                 422: `Validation Error`,

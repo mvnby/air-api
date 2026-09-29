@@ -153,6 +153,21 @@ afterEach(() => {
 });
 
 describe('OrderCustomerContext', () => {
+  it('opens customer selection immediately for an order without a customer', async () => {
+    const wrapper = mount(OrderCustomerContext, {
+      props: {
+        order: { ...order, customer: null },
+        deliveryAddress: '', customerBranchId: null, comment: '', expanded: false, newBranchAddress: '',
+        editTarget: 'customer',
+      },
+    });
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="customer-search"]').exists()).toBe(true);
+    expect(wrapper.find('input[placeholder="Имя или название клиента"]').exists()).toBe(false);
+  });
+
   it('loads branches and keeps branch selection coupled to the object address', async () => {
     const wrapper = mountContext();
     await flushPromises();
