@@ -20,10 +20,16 @@ Modulation min/max and digits in a product title never qualify a known nominal
 for a different equipment size. Free-text search retains its flexible nominal
 and title matching behavior.
 
-The current endpoint accepts only the canonical MVN system tenant scope.  Its
-projection includes mapped offers of active suppliers and exposes only the
-commercial fields required for selection.  It never exposes price-source,
-credentials, contacts, contracts or internal notes.
+The workspace is in the core Manager menu immediately after orders. Canonical
+MVN sees its master catalog. A partner sees only published complete systems
+with an active offer and active catalog grant for the selected storefront;
+retail prices come from that storefront's offers. Commercial metrics use
+mapped offers of active suppliers and are calculated before pagination. Demo
+read-only tenants and `test1` receive a synthetic purchase cost of 90% of RRC, falling back
+to their storefront retail price when RRC is absent. The same synthetic cost
+drives sorting and margin; supplier wholesale cost is never returned to demo
+accounts. Mutations remain blocked by the demo policy. The endpoint never
+exposes price-source, credentials, contacts, contracts or internal notes.
 
 ## Equipment selection and storefront categories
 
@@ -140,12 +146,5 @@ alternative; remaining models receive new proposals. Exact-target `append_to_pro
 bundle start at one and can be edited in the order. Creating proposals does not
 send anything to the customer or publish a collection.
 
-## Follow-up phases
-
-1. Add a system-admin-owned supplier visibility policy contract and migration.
-2. Implement independent `all_active` against that policy, including facets.
-3. Implement sponsored exact supplier allowlists with leakage tests for rows,
-   counts, facets and sorts; then attach the approved dynamic policy to Andrey.
-
 `TenantOffer` and `TenantCatalogGrant` remain storefront publication/price
-contracts and are not repurposed as supplier entitlement.
+contracts. Supplier-specific entitlements, if needed, require a separate policy.

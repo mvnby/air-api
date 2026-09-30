@@ -43,7 +43,7 @@ router = APIRouter(prefix="/api/manager/catalog-decision", tags=["manager catalo
 async def list_catalog_decision_filter_options(
     session: AsyncSession = Depends(get_session), tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
-    return await CatalogDecisionQueryService.list_system_filter_options(session, tenant_scope=tenant_scope)
+    return await CatalogDecisionQueryService.list_filter_options(session, tenant_scope=tenant_scope)
 
 
 @router.get("/products", response_model=CatalogDecisionListResponse, operation_id=LIST_MANAGER_CATALOG_DECISION_PRODUCTS)
@@ -68,7 +68,7 @@ async def list_catalog_decision_products(
     if category == "multi":
         raise HTTPException(status_code=422, detail="Мультисплиты не входят в подбор комплектных сплит-систем")
     effective_availability = None if include_orderable else (availability or "in_stock")
-    return await CatalogDecisionQueryService.list_system_products(
+    return await CatalogDecisionQueryService.list_products(
         session, tenant_scope=tenant_scope, page=page, limit=limit, sort=sort, direction=direction,
         filters=CatalogDecisionFilters(search=search, cooling_btu_classes=tuple(cooling_btu_classes or ()), cooling_min_kw=cooling_min_kw, cooling_max_kw=cooling_max_kw, retail_min_byn=retail_min_byn, retail_max_byn=retail_max_byn, area_min=area_min, area_max=area_max, category=category, indoor_form_factor=indoor_form_factor, brand_ids=tuple(brand_ids or ()), series_ids=tuple(series_ids or ()), is_inverter=is_inverter, has_wifi=has_wifi, wifi=wifi, availability=effective_availability, is_published=is_published, heating_min=heating_min, product_ids=tuple(product_ids or ())),
     )

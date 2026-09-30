@@ -43,7 +43,7 @@ export const requiredCapabilityForManagerPath = (path: string): ManagerCapabilit
     return MANAGER_CAPABILITY.platformManage;
   }
   if (path === '/manager/catalog-decision' || path === '/manager/catalog-decision/') {
-    return MANAGER_CAPABILITY.platformManage;
+    return MANAGER_CAPABILITY.crmManage;
   }
   if (path.startsWith('/manager/installation-discounts')) {
     return MANAGER_CAPABILITY.platformManage;

@@ -104,7 +104,7 @@ def _stub_catalog_snapshots(monkeypatch: pytest.MonkeyPatch, products: list[Prod
 
     monkeypatch.setattr(
         CatalogDecisionQueryService,
-        "get_system_product_snapshots",
+        "get_product_snapshots",
         classmethod(resolve),
     )
 

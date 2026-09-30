@@ -46,6 +46,7 @@ export const coreNavItems: NavItem[] = [
   { path: '/manager', label: 'Главная', icon: Home, match: 'exact' },
   { path: '/manager/leads', label: 'Входящие', icon: UserPlus, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.crmManage },
   { path: '/manager/orders/kanban', label: 'Заказы', icon: ShoppingCart, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.crmManage },
+  { path: '/manager/catalog-decision', label: 'Подбор оборудования', icon: Calculator, match: 'exact', requiredCapability: MANAGER_CAPABILITY.crmManage },
   { path: '/manager/calendar', label: 'Календарь', icon: Calendar, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.crmManage },
   { path: '/manager/customers', label: 'Клиенты', icon: Users, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.crmManage },
 ];
@@ -70,7 +71,6 @@ export const navSections: NavSection[] = [
     id: 'sales',
     label: 'Продажи и витрина',
     items: [
-      { path: '/manager/catalog-decision', label: 'Подбор оборудования', icon: Calculator, match: 'exact', requiredCapability: MANAGER_CAPABILITY.platformManage },
       { path: '/manager/installation-discounts', label: 'Скидки на монтаж', icon: Wallet, match: 'exact', requiredCapability: MANAGER_CAPABILITY.platformManage },
       { path: '/manager/product-collections', label: 'Подборки', icon: GalleryVerticalEnd, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.storefrontCollectionsManage },
       { path: '/manager/supply', label: 'Поставки', icon: Truck, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.platformManage },
