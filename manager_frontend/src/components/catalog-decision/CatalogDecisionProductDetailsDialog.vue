@@ -4,6 +4,8 @@ import { ExternalLink, X } from 'lucide-vue-next';
 import { useDialogA11y } from '../../composables/useDialogA11y';
 import type { CatalogDecisionItem } from '../../services/catalog-decision-api';
 import CatalogMoney from './CatalogMoney.vue';
+import { managerSession } from '../../services/manager-session';
+import { hasManagerCapability, MANAGER_CAPABILITY } from '../../manager-capabilities';
 
 const props = defineProps<{ open: boolean; item?: CatalogDecisionItem | null }>();
 const emit = defineEmits<{ close: [] }>();
@@ -20,6 +22,7 @@ const cooling = computed(() => props.item?.cooling_power_kw == null ? '—' : `$
 const heating = computed(() => props.item?.heating_min_c == null ? '—' : `До ${props.item.heating_min_c} °C`);
 const area = computed(() => props.item?.area_m2 == null ? '—' : `${props.item.area_m2} м²`);
 const availability = computed(() => props.item?.availability === 'in_stock' ? 'В наличии' : 'Нет в наличии');
+const canEditProduct = computed(() => hasManagerCapability(managerSession.auth.value, MANAGER_CAPABILITY.platformManage));
 const close = () => emit('close');
 
 useDialogA11y({
@@ -58,7 +61,7 @@ useDialogA11y({
           </dl>
         </div>
         <footer class="flex justify-end gap-2 border-t border-slate-200 px-4 py-3 sm:px-5">
-          <a v-if="item" :href="`/manager/products/${item.id}`" class="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"><ExternalLink class="h-4 w-4" />Редактировать товар</a>
+          <a v-if="item && canEditProduct" :href="`/manager/products/${item.id}`" class="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"><ExternalLink class="h-4 w-4" />Редактировать товар</a>
           <button type="button" class="h-10 rounded-lg bg-brand-600 px-4 text-sm font-semibold text-white hover:bg-brand-700" @click="close">Закрыть</button>
         </footer>
       </section>

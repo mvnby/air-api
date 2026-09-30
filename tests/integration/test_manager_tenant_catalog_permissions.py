@@ -22,6 +22,7 @@ from models import (
     TenantMembership,
     TenantOffer,
 )
+from models.supplier import ProductSupplierMapping, SupplierOffer
 
 
 async def _create_tenant_manager(
@@ -84,19 +85,86 @@ def _headers(user: StaffUser) -> dict[str, str]:
 
 
 @pytest.mark.asyncio
-async def test_tenant_manager_cannot_call_system_catalog_decision_projection(
+async def test_partner_catalog_decision_uses_only_granted_storefront_offers_and_demo_cost(
     async_client: AsyncClient,
     db: AsyncSession,
 ):
-    user, _tenant, _storefront, _other_storefront = await _create_tenant_manager(db)
+    user, tenant, storefront, other_storefront = await _create_tenant_manager(db)
+    brand = Brand(title="Decision partner brand", slug="decision-partner-brand")
+    db.add(brand)
+    await db.flush()
+    visible = Product(title="Decision visible", slug="decision-visible", price=2000,
+                      product_kind="complete_split_system", brand_id=brand.id, is_published=True)
+    foreign = Product(title="Decision foreign", slug="decision-foreign", price=2000,
+                      product_kind="complete_split_system", is_published=True)
+    ungranted = Product(title="Decision ungranted", slug="decision-ungranted", price=2000,
+                        product_kind="complete_split_system", is_published=True)
+    db.add_all([visible, foreign, ungranted])
+    await db.flush()
+    grant = TenantCatalogGrant(tenant_id=tenant.id, storefront_id=storefront.id,
+                               status="active", created_by_username="system:test", updated_by_username="system:test")
+    db.add(grant)
+    await db.flush()
+    db.add_all([
+        TenantOffer(tenant_id=tenant.id, storefront_id=storefront.id, product_id=visible.id,
+                    catalog_grant_id=grant.id, price=2200, status="active", is_published=True,
+                    created_by_username="system:test", updated_by_username="system:test"),
+        TenantOffer(tenant_id=tenant.id, storefront_id=other_storefront.id, product_id=foreign.id,
+                    price=2300, status="active", is_published=True,
+                    created_by_username="system:test", updated_by_username="system:test"),
+        TenantOffer(tenant_id=tenant.id, storefront_id=storefront.id, product_id=ungranted.id,
+                    price=2400, status="active", is_published=True,
+                    created_by_username="system:test", updated_by_username="system:test"),
+    ])
+    supplier = Supplier(name="Decision supplier", code="decision-supplier", is_active=True)
+    db.add(supplier)
+    await db.flush()
+    db.add(SupplierOffer(supplier_id=supplier.id, external_id="DECISION-1", wholesale_value=700,
+                         wholesale_currency="BYN", rrc_byn=2000, qty=4))
+    db.add(ProductSupplierMapping(product_id=visible.id, supplier_id=supplier.id,
+                                  external_id="DECISION-1"))
     await db.commit()
+    headers = _headers(user)
+    response = await async_client.get("/api/manager/catalog-decision/products?include_orderable=true&search=Decision", headers=headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["meta"]["total"] == 1
+    item = response.json()["items"][0]
+    assert item["id"] == visible.id
+    assert item["retail_price_byn"] == 2200
+    assert item["purchase_cost_byn"] == 700
+    options = await async_client.get("/api/manager/catalog-decision/filter-options", headers=headers)
+    assert options.status_code == 200
+    assert {value["id"] for value in options.json()["brands"]} == {brand.id}
+    created = await async_client.post("/api/manager/catalog-decision/orders", headers=headers, json={
+        "product_ids": [visible.id], "idempotency_key": "partner-decision-order",
+    })
+    assert created.status_code == 200, created.text
+    line = created.json()["proposals"][0]["product_lines"][0]
+    assert line["price"] == 2200
+    assert line["cost"] == 700
+    collection = await async_client.post("/api/manager/catalog-decision/collections", headers=headers, json={
+        "title": "Подбор партнёра", "product_ids": [visible.id],
+    })
+    assert collection.status_code == 200, collection.text
+    assert collection.json()["storefront_id"] == storefront.id
 
-    response = await async_client.get(
-        "/api/manager/catalog-decision/products",
-        headers=_headers(user),
-    )
-
-    assert response.status_code == 403
+    tenant.slug = "test1"
+    db.add(tenant)
+    await db.commit()
+    demo = await async_client.get("/api/manager/catalog-decision/products?include_orderable=true&search=Decision", headers=headers)
+    assert demo.status_code == 200, demo.text
+    demo_item = demo.json()["items"][0]
+    assert demo_item["purchase_cost_byn"] == 1800
+    assert demo_item["margin_abs_byn"] == 400
+    assert demo_item["margin_pct"] == pytest.approx(400 / 2200, abs=0.0001)
+    tenant.demo_read_only = True
+    db.add(tenant)
+    await db.commit()
+    read_only = await async_client.get("/api/manager/catalog-decision/products?include_orderable=true&search=Decision", headers=headers)
+    assert read_only.json()["items"][0]["purchase_cost_byn"] == 1800
+    assert (await async_client.post("/api/manager/catalog-decision/orders", headers=headers, json={
+        "product_ids": [visible.id], "idempotency_key": "demo-decision-order",
+    })).status_code == 403
 
 
 @pytest.mark.asyncio

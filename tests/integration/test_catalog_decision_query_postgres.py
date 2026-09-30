@@ -9,7 +9,6 @@ from models.tenancy import TenantScope
 from services.catalog_decision_projection import (
     CatalogDecisionFilters,
     CatalogDecisionQueryService,
-    CatalogDecisionScopeError,
 )
 from services.catalog_decision_quick_order_service import CatalogDecisionQuickOrderService
 from crud.catalog_management import CatalogManagementDAO
@@ -71,15 +70,15 @@ async def test_complete_split_scope_applies_before_count_sort_facets_and_snapsho
 
     scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
     filters = CatalogDecisionFilters(search="SCOPE", cooling_btu_classes=(9,))
-    first = await CatalogDecisionQueryService.list_system_products(db, tenant_scope=scope, filters=filters, page=1, limit=1, sort="purchase_cost", direction="asc")
-    second = await CatalogDecisionQueryService.list_system_products(db, tenant_scope=scope, filters=filters, page=2, limit=1, sort="purchase_cost", direction="asc")
+    first = await CatalogDecisionQueryService.list_products(db, tenant_scope=scope, filters=filters, page=1, limit=1, sort="purchase_cost", direction="asc")
+    second = await CatalogDecisionQueryService.list_products(db, tenant_scope=scope, filters=filters, page=2, limit=1, sort="purchase_cost", direction="asc")
     assert first["meta"]["total"] == second["meta"]["total"] == 2
     assert [first["items"][0]["id"], second["items"][0]["id"]] == [products[0].id, products[1].id]
-    options = await CatalogDecisionQueryService.list_system_filter_options(db, tenant_scope=scope)
+    options = await CatalogDecisionQueryService.list_filter_options(db, tenant_scope=scope)
     assert complete_brand.id in {item["id"] for item in options["brands"]}
     assert component_brand.id not in {item["id"] for item in options["brands"]}
     assert component_series.id not in {item["id"] for item in options["series"]}
-    snapshots = await CatalogDecisionQueryService.get_system_product_snapshots(db, tenant_scope=scope, product_ids=[int(item.id) for item in products])
+    snapshots = await CatalogDecisionQueryService.get_product_snapshots(db, tenant_scope=scope, product_ids=[int(item.id) for item in products])
     assert set(snapshots) == {products[0].id, products[1].id}
     management_ids = set((await db.execute(CatalogManagementDAO.selection(db, CatalogManagementFilters(search="SCOPE")))).scalars().all())
     assert {products[0].id, products[2].id, products[3].id}.issubset(management_ids)
@@ -101,7 +100,7 @@ async def test_complete_split_scope_keeps_semi_category_and_vetoes_multi_categor
     db.add_all([ProductTagLink(product_id=valid.id, tag_id=semi.id), ProductTagLink(product_id=wrong_multi.id, tag_id=multi.id)])
     await db.commit()
 
-    result = await CatalogDecisionQueryService.list_system_products(
+    result = await CatalogDecisionQueryService.list_products(
         db, tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
         filters=CatalogDecisionFilters(search="SCOPE"), page=1, limit=20, sort="title", direction="asc",
     )
@@ -128,9 +127,9 @@ async def test_catalog_decision_sorts_commercial_metrics_before_pagination_and_k
     ])
     await db.commit()
     scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
-    first = await CatalogDecisionQueryService.list_system_products(db, tenant_scope=scope, filters=CatalogDecisionFilters(search="DECISION"), page=1, limit=1, sort="purchase_cost", direction="asc")
-    second = await CatalogDecisionQueryService.list_system_products(db, tenant_scope=scope, filters=CatalogDecisionFilters(search="DECISION"), page=2, limit=1, sort="purchase_cost", direction="asc")
-    third = await CatalogDecisionQueryService.list_system_products(db, tenant_scope=scope, filters=CatalogDecisionFilters(search="DECISION"), page=3, limit=1, sort="purchase_cost", direction="asc")
+    first = await CatalogDecisionQueryService.list_products(db, tenant_scope=scope, filters=CatalogDecisionFilters(search="DECISION"), page=1, limit=1, sort="purchase_cost", direction="asc")
+    second = await CatalogDecisionQueryService.list_products(db, tenant_scope=scope, filters=CatalogDecisionFilters(search="DECISION"), page=2, limit=1, sort="purchase_cost", direction="asc")
+    third = await CatalogDecisionQueryService.list_products(db, tenant_scope=scope, filters=CatalogDecisionFilters(search="DECISION"), page=3, limit=1, sort="purchase_cost", direction="asc")
     assert [first["items"][0]["id"], second["items"][0]["id"], third["items"][0]["id"]] == [products[1].id, products[0].id, products[2].id]
     assert first["items"][0]["margin_abs_byn"] == 600
     assert third["items"][0]["purchase_cost_byn"] is None
@@ -142,7 +141,7 @@ async def test_catalog_decision_filters_use_normalized_power_and_form_factor(db)
     cassette = _complete_product(title="DECISION cassette", slug="decision-cassette", price=1000, power_cooling=5.0, specs={"area_m2": 55, "capacity_cooling_min_kw": "4.5", "capacity_cooling_max_kw": "5.5", "__filter_indoor_type": "cassette"})
     db.add_all([wall, cassette])
     await db.commit()
-    result = await CatalogDecisionQueryService.list_system_products(db, tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True), filters=CatalogDecisionFilters(search="DECISION", cooling_min_kw=3.2, cooling_max_kw=3.8, indoor_form_factor="wall", area_max=40), page=1, limit=20, sort="title", direction="asc")
+    result = await CatalogDecisionQueryService.list_products(db, tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True), filters=CatalogDecisionFilters(search="DECISION", cooling_min_kw=3.2, cooling_max_kw=3.8, indoor_form_factor="wall", area_max=40), page=1, limit=20, sort="title", direction="asc")
     assert [item["id"] for item in result["items"]] == [wall.id]
 
 
@@ -154,8 +153,8 @@ async def test_catalog_decision_finds_legacy_wall_30_and_console_with_visible_fo
     await db.commit()
     scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
 
-    wall_result = await CatalogDecisionQueryService.list_system_products(db, tenant_scope=scope, filters=CatalogDecisionFilters(search="DECISION legacy", cooling_btu_classes=(30,), indoor_form_factor="wall"), page=1, limit=20, sort="title", direction="asc")
-    console_result = await CatalogDecisionQueryService.list_system_products(db, tenant_scope=scope, filters=CatalogDecisionFilters(search="DECISION legacy", indoor_form_factor="console"), page=1, limit=20, sort="title", direction="asc")
+    wall_result = await CatalogDecisionQueryService.list_products(db, tenant_scope=scope, filters=CatalogDecisionFilters(search="DECISION legacy", cooling_btu_classes=(30,), indoor_form_factor="wall"), page=1, limit=20, sort="title", direction="asc")
+    console_result = await CatalogDecisionQueryService.list_products(db, tenant_scope=scope, filters=CatalogDecisionFilters(search="DECISION legacy", indoor_form_factor="console"), page=1, limit=20, sort="title", direction="asc")
 
     assert [item["id"] for item in wall_result["items"]] == [wall.id]
     assert wall_result["items"][0]["indoor_form_factor"] == "wall"
@@ -170,7 +169,7 @@ async def test_catalog_decision_filters_retail_before_pagination_and_count(db):
     db.add_all([low, middle, high])
     await db.commit()
 
-    result = await CatalogDecisionQueryService.list_system_products(
+    result = await CatalogDecisionQueryService.list_products(
         db,
         tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
         filters=CatalogDecisionFilters(
@@ -229,7 +228,7 @@ async def test_catalog_decision_filters_use_nominal_cooling_power_not_modulation
     await db.commit()
 
     scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
-    kw_result = await CatalogDecisionQueryService.list_system_products(
+    kw_result = await CatalogDecisionQueryService.list_products(
         db,
         tenant_scope=scope,
         filters=CatalogDecisionFilters(search="DECISION rated", cooling_min_kw=6.5, cooling_max_kw=7.5),
@@ -238,7 +237,7 @@ async def test_catalog_decision_filters_use_nominal_cooling_power_not_modulation
         sort="title",
         direction="asc",
     )
-    btu_result = await CatalogDecisionQueryService.list_system_products(
+    btu_result = await CatalogDecisionQueryService.list_products(
         db,
         tenant_scope=scope,
         filters=CatalogDecisionFilters(search="BTU trap", cooling_btu_classes=(12,)),
@@ -265,17 +264,17 @@ async def test_catalog_decision_btu_30_uses_its_nominal_band_and_area_fallback(d
     await db.commit()
     scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
 
-    thirty = await CatalogDecisionQueryService.list_system_products(
+    thirty = await CatalogDecisionQueryService.list_products(
         db, tenant_scope=scope,
         filters=CatalogDecisionFilters(search="DECISION class", cooling_btu_classes=(30,)),
         page=1, limit=20, sort="title", direction="asc",
     )
-    twenty_four = await CatalogDecisionQueryService.list_system_products(
+    twenty_four = await CatalogDecisionQueryService.list_products(
         db, tenant_scope=scope,
         filters=CatalogDecisionFilters(search="DECISION class", cooling_btu_classes=(24,)),
         page=1, limit=20, sort="title", direction="asc",
     )
-    thirty_six = await CatalogDecisionQueryService.list_system_products(
+    thirty_six = await CatalogDecisionQueryService.list_products(
         db, tenant_scope=scope,
         filters=CatalogDecisionFilters(search="DECISION class", cooling_btu_classes=(36,)),
         page=1, limit=20, sort="title", direction="asc",
@@ -322,7 +321,7 @@ async def test_catalog_decision_filters_heating_by_typed_minimum_with_legacy_fal
     await db.commit()
 
     scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
-    first = await CatalogDecisionQueryService.list_system_products(
+    first = await CatalogDecisionQueryService.list_products(
         db,
         tenant_scope=scope,
         filters=CatalogDecisionFilters(search="DECISION", heating_min=-25),
@@ -331,7 +330,7 @@ async def test_catalog_decision_filters_heating_by_typed_minimum_with_legacy_fal
         sort="title",
         direction="asc",
     )
-    second = await CatalogDecisionQueryService.list_system_products(
+    second = await CatalogDecisionQueryService.list_products(
         db,
         tenant_scope=scope,
         filters=CatalogDecisionFilters(search="DECISION", heating_min=-25),
@@ -429,16 +428,17 @@ async def test_catalog_decision_http_hydrates_exact_ids_and_validates_retail_and
 
 
 @pytest.mark.asyncio
-async def test_catalog_decision_rejects_tenant_scope_before_query(db):
-    with pytest.raises(CatalogDecisionScopeError):
-        await CatalogDecisionQueryService.list_system_products(db, tenant_scope=TenantScope(tenant_id=99, storefront_id=99, is_system=False), filters=CatalogDecisionFilters(), page=1, limit=10, sort="title", direction="asc")
-
-    with pytest.raises(CatalogDecisionScopeError):
-        await CatalogDecisionQueryService.get_system_product_snapshots(
-            db,
-            tenant_scope=TenantScope(tenant_id=99, storefront_id=99, is_system=False),
-            product_ids=[1],
-        )
+async def test_catalog_decision_fails_closed_without_storefront_offers(db):
+    scope = TenantScope(tenant_id=99, storefront_id=99, is_system=False)
+    result = await CatalogDecisionQueryService.list_products(
+        db, tenant_scope=scope, filters=CatalogDecisionFilters(), page=1,
+        limit=10, sort="title", direction="asc",
+    )
+    assert result["items"] == []
+    assert result["meta"]["total"] == 0
+    assert await CatalogDecisionQueryService.get_product_snapshots(
+        db, tenant_scope=scope, product_ids=[1],
+    ) == {}
 
 
 @pytest.mark.asyncio
@@ -453,7 +453,7 @@ async def test_catalog_decision_projection_has_a_bounded_query_count(db):
     assert engine is not None
     event.listen(engine.sync_engine, "after_cursor_execute", collect)
     try:
-        await CatalogDecisionQueryService.list_system_products(
+        await CatalogDecisionQueryService.list_products(
             db,
             tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
             filters=CatalogDecisionFilters(),
@@ -486,7 +486,7 @@ async def test_catalog_decision_order_snapshots_are_batched(db):
     assert engine is not None
     event.listen(engine.sync_engine, "after_cursor_execute", collect)
     try:
-        snapshots = await CatalogDecisionQueryService.get_system_product_snapshots(
+        snapshots = await CatalogDecisionQueryService.get_product_snapshots(
             db,
             tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
             product_ids=[int(product.id) for product in products],
@@ -585,9 +585,9 @@ async def test_catalog_decision_quick_order_rolls_back_when_any_product_is_missi
 
 
 @pytest.mark.asyncio
-async def test_catalog_decision_quick_order_rejects_tenant_projection_before_creating_order(db):
+async def test_catalog_decision_quick_order_rejects_products_without_tenant_offers(db):
     before = len((await db.execute(select(Order))).scalars().all())
-    with pytest.raises(CatalogDecisionScopeError):
+    with pytest.raises(ValueError, match="Товары не найдены"):
         await CatalogDecisionQuickOrderService.create(
             db,
             product_ids=[1],
@@ -612,7 +612,7 @@ async def test_catalog_decision_ignores_legacy_unit_suffixes_without_failing_the
     db.add_all([legacy, canonical])
     await db.commit()
 
-    result = await CatalogDecisionQueryService.list_system_products(
+    result = await CatalogDecisionQueryService.list_products(
         db, tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
         filters=CatalogDecisionFilters(search="DECISION"), page=1, limit=20, sort="title", direction="asc",
     )
@@ -636,7 +636,7 @@ async def test_catalog_decision_smart_search_and_multiple_btu_classes(db):
     db.add_all([nine, twelve])
     await db.commit()
 
-    result = await CatalogDecisionQueryService.list_system_products(
+    result = await CatalogDecisionQueryService.list_products(
         db, tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
         filters=CatalogDecisionFilters(search="Gree 12", cooling_btu_classes=(9, 12)), page=1, limit=20, sort="title", direction="asc",
     )
@@ -656,7 +656,7 @@ async def test_catalog_decision_filter_options_keep_series_owner(db):
     db.add(_complete_product(title="DECISION option product", slug="decision-option-product", price=1000, brand_id=brand.id, series_id=series.id))
     await db.commit()
 
-    options = await CatalogDecisionQueryService.list_system_filter_options(
+    options = await CatalogDecisionQueryService.list_filter_options(
         db, tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
     )
 

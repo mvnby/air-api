@@ -7,7 +7,6 @@ from models.tenancy import TenantScope
 from services.catalog_decision_projection import (
     CatalogDecisionProductSnapshot,
     CatalogDecisionQueryService,
-    SystemCatalogDecisionProjection,
 )
 from services.catalog_decision_order_lines import CatalogDecisionOrderLineService
 from services.command_transaction import command_transaction
@@ -38,7 +37,6 @@ class CatalogDecisionOrderService:
         tenant_scope: TenantScope,
         proposal_id: int | None = None,
     ) -> dict[str, Any]:
-        SystemCatalogDecisionProjection.require_scope(tenant_scope)
         ids = [int(product_id) for product_id in product_ids]
         if len(ids) != len(set(ids)):
             raise ValueError("Один товар нельзя добавить дважды")
@@ -178,7 +176,7 @@ class CatalogDecisionOrderService:
     ) -> dict[int, CatalogDecisionProductSnapshot]:
         if not product_ids:
             return {}
-        snapshots = await CatalogDecisionQueryService.get_system_product_snapshots(
+        snapshots = await CatalogDecisionQueryService.get_product_snapshots(
             session,
             tenant_scope=tenant_scope,
             product_ids=product_ids,

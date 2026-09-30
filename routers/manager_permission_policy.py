@@ -30,11 +30,6 @@ PLATFORM_MANAGER_OPERATION_IDS = frozenset(
         operation_ids.SELECT_MANAGER_CATALOG,
         operation_ids.PREVIEW_MANAGER_CATALOG_BULK,
         operation_ids.APPLY_MANAGER_CATALOG_BULK,
-        operation_ids.LIST_MANAGER_CATALOG_DECISION_PRODUCTS,
-        operation_ids.LIST_MANAGER_CATALOG_DECISION_FILTER_OPTIONS,
-        operation_ids.CREATE_MANAGER_CATALOG_DECISION_COLLECTION,
-        operation_ids.ATTACH_MANAGER_CATALOG_DECISION_TO_ORDER,
-        operation_ids.CREATE_MANAGER_CATALOG_DECISION_ORDER,
         operation_ids.GET_MANAGER_PRODUCT,
         operation_ids.SMART_SEARCH_PRODUCTS,
         operation_ids.CREATE_MANAGER_PRODUCT,
@@ -282,6 +277,14 @@ MULTI_SPLIT_OPERATION_IDS = frozenset({
     operation_ids.SAVE_MANAGER_MULTI_SPLIT_PROPOSAL,
 })
 
+CATALOG_DECISION_OPERATION_IDS = frozenset({
+    operation_ids.LIST_MANAGER_CATALOG_DECISION_PRODUCTS,
+    operation_ids.LIST_MANAGER_CATALOG_DECISION_FILTER_OPTIONS,
+    operation_ids.CREATE_MANAGER_CATALOG_DECISION_COLLECTION,
+    operation_ids.ATTACH_MANAGER_CATALOG_DECISION_TO_ORDER,
+    operation_ids.CREATE_MANAGER_CATALOG_DECISION_ORDER,
+})
+
 
 SYSTEM_ANALYTICS_OPERATION_IDS = frozenset(
     {operation_ids.GET_MANAGER_CATALOG_USAGE}
@@ -317,6 +320,8 @@ STOREFRONT_OWNER_OPERATION_IDS = frozenset(
 
 
 def required_permission_dependency(operation_id: str | None):
+    if operation_id in CATALOG_DECISION_OPERATION_IDS:
+        return require_manager_access
     if operation_id in MULTI_SPLIT_OPERATION_IDS:
         return require_manager_access
     if operation_id in SYSTEM_ANALYTICS_OPERATION_IDS:

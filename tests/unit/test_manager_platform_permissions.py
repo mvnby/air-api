@@ -56,6 +56,7 @@ from routers import (
     manager_yandex_business,
 )
 from routers.manager_permission_policy import (
+    CATALOG_DECISION_OPERATION_IDS,
     PLATFORM_MANAGER_OPERATION_IDS,
     STOREFRONT_COLLECTION_OPERATION_IDS,
     SYSTEM_OWNER_OPERATION_IDS,
@@ -250,6 +251,14 @@ def test_all_collection_routes_require_the_scoped_collection_capability():
             by_operation_id[operation_id],
             require_system_manager_tenant_scope,
         ), operation_id
+
+
+def test_catalog_decision_routes_require_manager_without_system_scope():
+    routes = {route.operation_id: route for route in _api_routes(manager_catalog_decision.router)}
+    assert CATALOG_DECISION_OPERATION_IDS == routes.keys()
+    for operation_id in CATALOG_DECISION_OPERATION_IDS:
+        assert _has_direct_dependency(routes[operation_id], require_manager_access)
+        assert not _has_direct_dependency(routes[operation_id], require_system_manager_tenant_scope)
 
 
 def test_catalog_usage_report_requires_system_analytics_capability():

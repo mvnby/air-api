@@ -1,9 +1,4 @@
-"""Server-side catalog decision query and explicit visibility boundary.
-
-This first slice intentionally exposes only the canonical MVN system scope.
-``CatalogDecisionProjection`` is the seam for later independent and sponsored
-tenant policies: each must supply an eligible offer relation before aggregation.
-"""
+"""Server-side catalog decision query with storefront-scoped visibility."""
 
 from __future__ import annotations
 
@@ -15,7 +10,8 @@ from sqlalchemy import Float, String, and_, case, cast, exists, func, not_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models import Brand, Product, ProductSeries, ProductTagLink, Tag
+from crud.public_catalog import PublicCatalogDAO
+from models import Brand, Product, ProductSeries, ProductTagLink, Tag, Tenant, TenantOffer
 from models.product_constants import BTU_MAPPING
 from models.supplier import ProductLocalStock, ProductSupplierMapping, Supplier, SupplierOffer
 from models.tenancy import TenantScope
@@ -24,10 +20,6 @@ from services.catalog_form_factor import indoor_form_factor_expr
 
 
 SUPPORTED_COOLING_BTU_CLASSES = frozenset({7, 9, 12, 18, 24, 30, 36, 42, 60})
-
-
-class CatalogDecisionScopeError(PermissionError):
-    """Raised when a non-system scope reaches the system supplier projection."""
 
 
 @dataclass(frozen=True)
@@ -60,35 +52,6 @@ class CatalogDecisionProductSnapshot:
     purchase_cost_byn: int
 
 
-class CatalogDecisionProjection:
-    """Projection policy interface.  It controls eligible supplier offers only."""
-
-    @classmethod
-    def require_scope(cls, tenant_scope: TenantScope) -> None:
-        raise NotImplementedError
-
-    @classmethod
-    def eligible_offer_conditions(cls):
-        raise NotImplementedError
-
-
-class SystemCatalogDecisionProjection(CatalogDecisionProjection):
-    """Canonical MVN policy: every active mapped supplier offer is eligible."""
-
-    @classmethod
-    def require_scope(cls, tenant_scope: TenantScope) -> None:
-        if not tenant_scope.is_system:
-            raise CatalogDecisionScopeError("System catalog projection cannot be used for tenant scope")
-
-    @classmethod
-    def eligible_offer_conditions(cls):
-        return (
-            ProductSupplierMapping.is_active.is_(True),
-            SupplierOffer.is_active.is_(True),
-            Supplier.is_active.is_(True),
-        )
-
-
 class CatalogDecisionQueryService:
     """A two-query (rate + count/page) projection with metrics before pagination."""
 
@@ -97,6 +60,39 @@ class CatalogDecisionQueryService:
         "multi": "cat-multi",
         "semi_industrial": "cat-industrial",
     }
+
+    @staticmethod
+    def _visible_offer_conditions(tenant_scope: TenantScope):
+        if tenant_scope.is_system:
+            return ()
+        return (
+            Product.is_published.is_(True),
+            *PublicCatalogDAO.visible_offer_conditions(
+                tenant_scope, require_catalog_grant=True,
+            ),
+        )
+
+    @staticmethod
+    def _retail_price(tenant_scope: TenantScope):
+        return cast(Product.price if tenant_scope.is_system else TenantOffer.price, Float)
+
+    @staticmethod
+    async def _uses_demo_cost(session: AsyncSession, tenant_scope: TenantScope) -> bool:
+        if tenant_scope.demo_read_only:
+            return True
+        if tenant_scope.is_system:
+            return False
+        slug = (await session.execute(
+            select(Tenant.slug).where(Tenant.id == tenant_scope.tenant_id)
+        )).scalar_one_or_none()
+        return slug == "test1"
+
+    @staticmethod
+    def _purchase_cost(demo_cost: bool, metrics, retail):
+        if demo_cost:
+            # Demo accounts see a plausible 10% discount from RRC, never supplier cost.
+            return func.coalesce(cast(metrics.c.recommended_price_byn, Float), retail) * 0.9
+        return metrics.c.purchase_cost_byn
 
     @staticmethod
     def _validate_filters(filters: CatalogDecisionFilters) -> None:
@@ -186,7 +182,11 @@ class CatalogDecisionQueryService:
             (and_(SupplierOffer.wholesale_currency == "USD", usd_byn_rate is not None), SupplierOffer.wholesale_value * usd_byn_rate),
             else_=None,
         )
-        active = SystemCatalogDecisionProjection.eligible_offer_conditions()
+        active = (
+            ProductSupplierMapping.is_active.is_(True),
+            SupplierOffer.is_active.is_(True),
+            Supplier.is_active.is_(True),
+        )
         # Cost follows the existing manager semantics: prefer an in-stock offer,
         # otherwise use the cheapest currently known active offer.
         in_stock_cost = func.min(case((SupplierOffer.qty > 0, cost), else_=None))
@@ -306,17 +306,18 @@ class CatalogDecisionQueryService:
         return conditions
 
     @classmethod
-    async def list_system_products(
+    async def list_products(
         cls, session: AsyncSession, *, tenant_scope: TenantScope, filters: CatalogDecisionFilters,
         page: int, limit: int, sort: str, direction: Literal["asc", "desc"],
     ) -> dict:
-        SystemCatalogDecisionProjection.require_scope(tenant_scope)
         cls._validate_filters(filters)
         usd_byn_rate = await FxRateService.get_supplier_usd_byn_rate(session)
         metrics = cls._metrics_cte(usd_byn_rate=usd_byn_rate)
         local_stock = cls._local_stock_cte()
-        purchase = metrics.c.purchase_cost_byn
-        retail = cast(Product.price, Float)
+        retail = cls._retail_price(tenant_scope)
+        purchase = cls._purchase_cost(
+            await cls._uses_demo_cost(session, tenant_scope), metrics, retail,
+        ).label("purchase_cost_byn")
         margin_abs = case((purchase.is_not(None), retail - purchase), else_=None).label("margin_abs_byn")
         margin_pct = case((and_(purchase.is_not(None), retail > 0), (retail - purchase) / retail), else_=None).label("margin_pct")
         total_qty = func.coalesce(metrics.c.supplier_qty, 0) + func.coalesce(local_stock.c.local_qty, 0)
@@ -335,7 +336,8 @@ class CatalogDecisionQueryService:
         base = (
             select(
                 Product, Brand.title.label("brand_title"), ProductSeries.title.label("series_title"),
-                purchase, metrics.c.recommended_price_byn, metrics.c.supplier_name, metrics.c.supplier_qty,
+                retail.label("retail_price_byn"), purchase, metrics.c.recommended_price_byn,
+                metrics.c.supplier_name, metrics.c.supplier_qty,
                 margin_abs, margin_pct, availability, cooling_nominal, cooling_min, cooling_max, heating_min,
                 area.label("area_m2"),
                 indoor_form.label("indoor_form_factor"),
@@ -348,6 +350,10 @@ class CatalogDecisionQueryService:
             .outerjoin(local_stock, local_stock.c.product_id == Product.id)
             .where(*conditions)
         )
+        if not tenant_scope.is_system:
+            base = base.join(TenantOffer, TenantOffer.product_id == Product.id).where(
+                *cls._visible_offer_conditions(tenant_scope),
+            )
         sort_columns = {
             "retail_price": retail, "purchase_cost": purchase, "rrc": metrics.c.recommended_price_byn,
             "margin_abs": margin_abs, "margin_pct": margin_pct, "availability": availability,
@@ -367,8 +373,9 @@ class CatalogDecisionQueryService:
             # Category is a display hint only; filtering remains the canonical tag EXISTS above.
             items.append({
                 "id": product.id, "title": product.title, "slug": product.slug, "main_image": product.main_image,
-                "brand_title": row.brand_title, "series_title": row.series_title, "retail_price_byn": float(product.price),
-                "purchase_cost_byn": float(row.purchase_cost_byn) if row.purchase_cost_byn is not None else None,
+                "brand_title": row.brand_title, "series_title": row.series_title,
+                "retail_price_byn": float(row.retail_price_byn),
+                "purchase_cost_byn": round(float(row.purchase_cost_byn), 2) if row.purchase_cost_byn is not None else None,
                 "recommended_price_byn": float(row.recommended_price_byn) if row.recommended_price_byn is not None else None,
                 "margin_abs_byn": round(float(row.margin_abs_byn), 2) if row.margin_abs_byn is not None else None,
                 "margin_pct": round(float(row.margin_pct), 4) if row.margin_pct is not None else None,
@@ -385,7 +392,7 @@ class CatalogDecisionQueryService:
         return {"items": items, "meta": {"page": page, "limit": limit, "total": total, "pages": max(1, (total + limit - 1) // limit)}}
 
     @classmethod
-    async def get_system_product_snapshots(
+    async def get_product_snapshots(
         cls,
         session: AsyncSession,
         *,
@@ -393,25 +400,29 @@ class CatalogDecisionQueryService:
         product_ids: list[int] | tuple[int, ...],
     ) -> dict[int, CatalogDecisionProductSnapshot]:
         """Resolve authoritative order-line price/cost snapshots in one query."""
-        SystemCatalogDecisionProjection.require_scope(tenant_scope)
         ids = tuple(dict.fromkeys(int(product_id) for product_id in product_ids))
         if not ids:
             return {}
         usd_byn_rate = await FxRateService.get_supplier_usd_byn_rate(session)
         metrics = cls._metrics_cte(usd_byn_rate=usd_byn_rate)
-        rows = list(
-            (
-                await session.execute(
-                    select(Product, metrics.c.purchase_cost_byn)
-                    .outerjoin(metrics, metrics.c.product_id == Product.id)
-                    .where(Product.id.in_(ids), cls._complete_split_condition(session))
-                )
-            ).all()
+        retail = cls._retail_price(tenant_scope)
+        purchase = cls._purchase_cost(
+            await cls._uses_demo_cost(session, tenant_scope), metrics, retail,
+        ).label("purchase_cost_byn")
+        statement = (
+            select(Product, retail.label("retail_price_byn"), purchase)
+            .outerjoin(metrics, metrics.c.product_id == Product.id)
+            .where(Product.id.in_(ids), cls._complete_split_condition(session))
         )
+        if not tenant_scope.is_system:
+            statement = statement.join(TenantOffer, TenantOffer.product_id == Product.id).where(
+                *cls._visible_offer_conditions(tenant_scope),
+            )
+        rows = list((await session.execute(statement)).all())
         return {
             int(row[0].id): CatalogDecisionProductSnapshot(
                 product=row[0],
-                retail_price_byn=int(round(float(row[0].price or 0))),
+                retail_price_byn=int(round(float(row.retail_price_byn or 0))),
                 purchase_cost_byn=(
                     int(round(float(row.purchase_cost_byn)))
                     if row.purchase_cost_byn is not None
@@ -422,23 +433,31 @@ class CatalogDecisionQueryService:
         }
 
     @classmethod
-    async def list_system_filter_options(cls, session: AsyncSession, *, tenant_scope: TenantScope) -> dict:
+    async def list_filter_options(cls, session: AsyncSession, *, tenant_scope: TenantScope) -> dict:
         """Small master-catalog dictionaries for the workspace filter controls."""
-        SystemCatalogDecisionProjection.require_scope(tenant_scope)
-        brands = list((await session.execute(
+        brand_query = (
             select(Brand.id, Brand.title)
             .join(Product, Product.brand_id == Brand.id)
             .where(cls._complete_split_condition(session))
             .group_by(Brand.id, Brand.title)
             .order_by(Brand.title.asc())
-        )).all())
-        series = list((await session.execute(
+        )
+        series_query = (
             select(ProductSeries.id, ProductSeries.title, ProductSeries.brand_id)
             .join(Product, Product.series_id == ProductSeries.id)
             .where(cls._complete_split_condition(session))
             .group_by(ProductSeries.id, ProductSeries.title, ProductSeries.brand_id)
             .order_by(ProductSeries.brand_id.asc(), ProductSeries.title.asc())
-        )).all())
+        )
+        if not tenant_scope.is_system:
+            brand_query = brand_query.join(TenantOffer, TenantOffer.product_id == Product.id).where(
+                *cls._visible_offer_conditions(tenant_scope),
+            )
+            series_query = series_query.join(TenantOffer, TenantOffer.product_id == Product.id).where(
+                *cls._visible_offer_conditions(tenant_scope),
+            )
+        brands = list((await session.execute(brand_query)).all())
+        series = list((await session.execute(series_query)).all())
         return {
             "brands": [{"id": int(item.id), "title": item.title} for item in brands],
             "series": [{"id": int(item.id), "title": item.title, "brand_id": int(item.brand_id) if item.brand_id is not None else None} for item in series],

@@ -553,7 +553,7 @@ watch(currentPath, () => {
       <EquipmentRegistryView v-else-if="authorizedView === 'equipment'" :key="currentLocation" />
       <MediaLibraryView v-else-if="authorizedView === 'media-library'" :key="currentLocation" />
       <CatalogQualityView v-else-if="authorizedView === 'catalog-quality'" :key="currentLocation" />
-      <CatalogDecisionWorkspaceView v-else-if="authorizedView === 'catalog-decision' && canManagePlatform" :key="currentLocation" />
+      <CatalogDecisionWorkspaceView v-else-if="authorizedView === 'catalog-decision'" :key="currentLocation" />
       <ProductCollectionsView v-else-if="authorizedView === 'product-collections'" :key="`${currentLocation}:${viewRevision}`" @location-change="acceptedBrowserLocation = $event" />
       <CustomerProfileView v-else-if="authorizedView === 'customer-profile'" :key="currentLocation" />
       <CustomersView v-else-if="authorizedView === 'customers'" :key="currentLocation" />

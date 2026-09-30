@@ -14,9 +14,9 @@ import { managerSession } from '../src/services/manager-session';
 import { MANAGER_CAPABILITY, requiredCapabilityForManagerPath } from '../src/manager-capabilities';
 
 describe('catalog decision workspace boundary', () => {
-  it('keeps the supplier-aware system workspace out of tenant navigation', () => {
+  it('makes the scoped workspace available to tenant managers', () => {
     expect(requiredCapabilityForManagerPath('/manager/catalog-decision'))
-      .toBe(MANAGER_CAPABILITY.platformManage);
+      .toBe(MANAGER_CAPABILITY.crmManage);
   });
 });
 
