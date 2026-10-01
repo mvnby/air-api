@@ -9,12 +9,15 @@ import {
   type SourceCustomer,
   type SourceObject,
   type SourceAppliedEvent,
+  type SourceCommandHook, type SourceCommandEndHook, downloadSourceOriginal,
 } from '../../services/order-source-review';
 import CustomerSearchSelect from '../customers/CustomerSearchSelect.vue';
 import type { ManagerCatalogCustomerItemResponse } from '../../client';
 import type { OrderScenarioOption } from '../orders/OrderScenarioSelector.vue';
 
-const props = defineProps<{ open: boolean; orderId: number; leadStatus?: string | null }>();
+const props = defineProps<{ open: boolean; orderId: number; leadStatus?: string | null;
+  beforeApply?: SourceCommandHook; afterApply?: SourceCommandHook; endApply?: SourceCommandEndHook;
+}>();
 const emit = defineEmits<{ close: []; applied: [result: SourceAppliedEvent]; }>();
 
 const preview = ref<OrderSourcePreview | null>(null);
@@ -39,6 +42,18 @@ const analyzing = ref(false);
 const draftsChanged = ref(false);
 const analysisOverwriteConfirmed = ref(false);
 const confirmed = ref(false);
+const downloadingDocumentId = ref<string | null>(null);
+let scopeVersion = 0;
+const sameScope = (orderId: number, version: number) => props.open && props.orderId === orderId && scopeVersion === version;
+const close = () => { if (!applying.value) emit('close'); };
+const downloadDocument = async (document: OrderSourcePreview['documents'][number]) => {
+  if (downloadingDocumentId.value) return;
+  const orderId = props.orderId;
+  downloadingDocumentId.value = document.id;
+  try { await downloadSourceOriginal(orderId, document.id, document.name, () => props.orderId === orderId && props.open); }
+  catch (reason) { if (props.orderId === orderId) error.value = getApiErrorMessage(reason); }
+  finally { if (props.orderId === orderId) downloadingDocumentId.value = null; }
+};
 const isNewLead = computed(() => props.leadStatus === 'new_lead');
 const keyForScenario = (value: { workflow_type: string; service_type?: string | null }) => `${value.workflow_type}:${value.service_type || ''}`;
 const selectedScenario = computed(() => scenarioOptions.value.find((item) => keyForScenario(item) === scenarioKey.value) || null);
@@ -47,7 +62,7 @@ const prefillWarnings = computed(() => (preview.value?.equipment_prefill?.warnin
 const hasCustomerSelection = computed(() => customerAction.value === 'skip'
   || (customerAction.value === 'existing' && Boolean(selectedExistingCustomer.value?.id))
   || (customerAction.value === 'create' && Boolean(customer.value.name?.trim())));
-const canApply = computed(() => confirmed.value && !applying.value && Boolean(selectedScenario.value) && hasCustomerSelection.value && (!isNewLead.value || customerAction.value !== 'skip'));
+const canApply = computed(() => confirmed.value && !loading.value && !analyzing.value && !applying.value && Boolean(selectedScenario.value) && hasCustomerSelection.value && (!isNewLead.value || customerAction.value !== 'skip'));
 const chooseScenario = () => { scenarioChangedByManager.value = true; confirmed.value = false; };
 const safeSourceUrl = computed(() => {
   const value = preview.value?.source_url;
@@ -78,7 +93,7 @@ const removeObject = (index: number) => { objects.value.splice(index, 1); markOb
 const addEquipment = (object: SourceObject) => { object.equipment.push({ brand: '', model: '', quantity: 1 }); markObjectsChanged(); };
 const removeEquipment = (object: SourceObject, index: number) => { object.equipment.splice(index, 1); markObjectsChanged(); };
 const analyze = async () => {
-  if (!selectedDocumentIds.value.length || analyzing.value) return;
+  if (!selectedDocumentIds.value.length || analyzing.value || applying.value) return;
   if (draftsChanged.value && !analysisOverwriteConfirmed.value) {
     analysisOverwriteConfirmed.value = true;
     error.value = 'Черновик уже редактировался. Нажмите «Заменить черновик ИИ», если хотите заменить состав работ и объекты.';
@@ -86,8 +101,10 @@ const analyze = async () => {
   }
   analyzing.value = true;
   error.value = '';
+  const orderId = props.orderId; const version = scopeVersion;
   try {
-    const analyzed = await orderSourceReviewApi.analyze(props.orderId, selectedDocumentIds.value);
+    const analyzed = await orderSourceReviewApi.analyze(orderId, selectedDocumentIds.value);
+    if (!sameScope(orderId, version)) return;
     workSummary.value = analyzed.work_summary || '';
     equipmentDetails.value = analyzed.equipment_details || '';
     objects.value = analyzed.objects.map((item) => ({ ...item, equipment: item.equipment.map((equipment) => ({ ...equipment })) }));
@@ -102,8 +119,8 @@ const analyze = async () => {
     fieldSources.value = { ...analyzed.field_sources };
     analysisSource.value = analyzed.analysis_source || 'ai';
     analyzedDocumentIds.value = analyzed.analyzed_document_ids || [...selectedDocumentIds.value];
-  } catch (reason) { error.value = getApiErrorMessage(reason); }
-  finally { analyzing.value = false; }
+  } catch (reason) { if (sameScope(orderId, version)) error.value = getApiErrorMessage(reason); }
+  finally { if (sameScope(orderId, version)) analyzing.value = false; }
 };
 
 const resetFromPreview = (value: OrderSourcePreview) => {
@@ -131,22 +148,24 @@ const resetFromPreview = (value: OrderSourcePreview) => {
 };
 
 const load = async () => {
+  const orderId = props.orderId; const version = scopeVersion;
   loading.value = true;
   error.value = '';
   preview.value = null;
   scenarioOptions.value = [];
   try {
     const [source, scenarios] = await Promise.allSettled([
-      orderSourceReviewApi.preview(props.orderId), api.getManagerOrderScenarios(),
+      orderSourceReviewApi.preview(orderId), api.getManagerOrderScenarios(),
     ]);
+    if (!sameScope(orderId, version)) return;
     if (source.status === 'rejected') throw source.reason;
     resetFromPreview(source.value);
     if (scenarios.status === 'fulfilled') scenarioOptions.value = scenarios.value.items;
     else error.value = 'Не удалось загрузить сценарии заказов. Повторно откройте проработку.';
   } catch (reason) {
-    error.value = getApiErrorMessage(reason);
+    if (sameScope(orderId, version)) error.value = getApiErrorMessage(reason);
   } finally {
-    loading.value = false;
+    if (sameScope(orderId, version)) loading.value = false;
   }
 };
 
@@ -159,7 +178,7 @@ const apply = async () => {
     service_type: chosenScenario.service_type ?? null,
     work_summary: workSummary.value.trim() || undefined,
     equipment_details: equipmentDetails.value.trim() || undefined,
-    objects: objects.value.filter((item) => item.address.trim()).map((item) => ({
+    objects: objects.value.filter((item) => item.address.trim() || item.equipment.some((equipment) => equipment.model?.trim())).map((item) => ({
       address: item.address.trim(), equipment: item.equipment
         .filter((equipment) => equipment.brand?.trim() || equipment.model?.trim() || Number(equipment.quantity) > 0)
         .map((equipment) => ({
@@ -177,28 +196,40 @@ const apply = async () => {
   if (customerAction.value === 'create') payload.customer = { ...customer.value };
   applying.value = true;
   error.value = '';
+  const orderId = props.orderId;
+  const version = scopeVersion;
+  let started = false;
+  let applied = false;
   try {
-    const result = await orderSourceReviewApi.apply(props.orderId, payload);
+    if (await props.beforeApply?.() === false) return;
+    started = true;
+    if (!sameScope(orderId, version)) return;
+    const result = await orderSourceReviewApi.apply(orderId, payload);
+    applied = true;
+    if (!sameScope(orderId, version)) return;
+    if (await props.afterApply?.() === false || !sameScope(orderId, version)) return;
     emit('applied', { orderId: result.order_id, customerId: result.customer_id || null, appliedFields: result.applied_fields, customerAction: customerAction.value, equipmentPrefill: result.equipment_prefill });
   } catch (reason) {
-    error.value = getApiErrorMessage(reason);
+    if (sameScope(orderId, version)) error.value = `${applied ? 'Данные применены, но карточку не удалось обновить. Повторно откройте заказ. ' : ''}${getApiErrorMessage(reason)}`;
   } finally {
+    if (started) props.endApply?.();
     applying.value = false;
   }
 };
 
 watch(() => [props.open, props.orderId] as const, ([open]) => {
+  scopeVersion++; analyzing.value = false; downloadingDocumentId.value = null;
   if (open) void load();
   else preview.value = null;
 }, { immediate: true });
 </script>
 
 <template>
-  <div v-if="open" class="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4" @click.self="emit('close')">
+  <div v-if="open" class="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4" @click.self="close">
     <section class="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-slate-900" role="dialog" aria-modal="true" aria-label="Проработка источника">
       <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 dark:border-slate-700">
         <div><h2 class="text-lg font-bold">Проработка источника</h2><p v-if="preview" class="mt-1 text-xs text-slate-500">{{ preview.source_code }} · {{ preview.external_id || 'без номера' }}</p></div>
-        <button type="button" class="icon-action" aria-label="Закрыть" @click="emit('close')">×</button>
+        <button type="button" class="icon-action" aria-label="Закрыть" :disabled="applying" @click="close">×</button>
       </header>
       <div class="min-h-0 overflow-y-auto p-5">
         <p v-if="loading" class="text-sm text-slate-500">Загружаем исходные данные…</p>
@@ -258,8 +289,8 @@ watch(() => [props.open, props.orderId] as const, ([open]) => {
             </div>
             <p v-if="!objects.length" class="mt-2 text-sm text-slate-500">Объекты не извлечены из источника.</p>
           </section>
-          <section class="mt-4"><h3 class="text-sm font-semibold">Исходные документы</h3><label v-for="document in preview.documents" :key="document.id" class="mt-2 flex gap-2 rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-700"><input v-model="selectedDocumentIds" type="checkbox" :value="document.id" /><span class="min-w-0"><a v-if="safeDocumentUrl(document.download_url)" :href="safeDocumentUrl(document.download_url)!" target="_blank" rel="noopener noreferrer" class="font-semibold text-brand-700 underline">{{ document.name }}</a><span v-else class="font-semibold">{{ document.name }}</span><span v-if="document.extracted_text" class="mt-1 block whitespace-pre-line text-xs text-slate-500">{{ expandedDocuments[document.id] ? document.extracted_text : documentExcerpt(document.extracted_text) }}</span><button v-if="document.extracted_text && document.extracted_text.length > 1200" type="button" class="mt-1 text-xs font-semibold text-brand-700" @click="expandedDocuments[document.id] = !expandedDocuments[document.id]">{{ expandedDocuments[document.id] ? 'Свернуть' : 'Показать полностью' }}</button></span></label></section>
-          <div class="mt-4"><button type="button" class="btn-mini-outline text-xs" :disabled="!selectedDocumentIds.length || analyzing" @click="analyze">{{ analyzing ? 'Обрабатываем ИИ…' : analysisOverwriteConfirmed ? 'Заменить черновик ИИ' : 'Обработать ИИ' }}</button></div><label class="mt-5 flex gap-2 text-sm"><input v-model="confirmed" type="checkbox" />Подтверждаю применение проверенных данных. Цена не устанавливается.</label>
+          <section class="mt-4"><h3 class="text-sm font-semibold">Исходные документы</h3><label v-for="document in preview.documents" :key="document.id" class="mt-2 flex gap-2 rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-700"><input v-model="selectedDocumentIds" type="checkbox" :value="document.id" /><span class="min-w-0"><button v-if="safeDocumentUrl(document.download_url)" type="button" :disabled="Boolean(downloadingDocumentId)" class="break-all text-left font-semibold text-brand-700 underline" @click.prevent="downloadDocument(document)">{{ downloadingDocumentId === document.id ? 'Скачиваем…' : document.name }}</button><span v-else class="font-semibold">{{ document.name }}</span><span v-if="document.extracted_text" class="mt-1 block whitespace-pre-line text-xs text-slate-500">{{ expandedDocuments[document.id] ? document.extracted_text : documentExcerpt(document.extracted_text) }}</span><button v-if="document.extracted_text && document.extracted_text.length > 1200" type="button" class="mt-1 text-xs font-semibold text-brand-700" @click="expandedDocuments[document.id] = !expandedDocuments[document.id]">{{ expandedDocuments[document.id] ? 'Свернуть' : 'Показать полностью' }}</button></span></label></section>
+          <div class="mt-4"><button type="button" class="btn-mini-outline text-xs" :disabled="!selectedDocumentIds.length || analyzing" @click="analyze">{{ analyzing ? 'Обрабатываем ИИ…' : analysisOverwriteConfirmed ? 'Заменить черновик ИИ' : 'Обработать ИИ' }}</button></div><label class="mt-5 flex gap-2 text-sm"><input v-model="confirmed" type="checkbox" />Подтверждаю применение проверенных данных.</label>
         </template>
       </div>
       <footer class="flex justify-end gap-2 border-t border-slate-200 p-4 dark:border-slate-700"><button type="button" class="btn-mini-outline" @click="emit('close')">Отмена</button><button type="button" class="btn-mini" :disabled="!canApply" @click="apply">{{ applying ? 'Применяем…' : 'Применить' }}</button></footer>

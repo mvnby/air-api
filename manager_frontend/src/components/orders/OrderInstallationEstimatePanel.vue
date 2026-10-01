@@ -2,14 +2,15 @@
 import { computed, nextTick, onScopeDispose, ref, watch } from 'vue';
 import {
   ManagerInstallationEstimatesService, ManagerOrdersService,
-  type InstallationInput, type InstallationPreviewPayload,
+  type InstallationInput,
   type ManagerInstallationConfirmResponse, type ManagerInstallationPreviewResponse,
   type OrderProductLineResponse, type TypedInstallationProfile_Input,
+  type ManagerInstallationPreviewPayload,
 } from '../../client';
 import { getApiErrorMessage } from '../../utils/api-errors';
 import { managerSession } from '../../services/manager-session';
 import { formatMoney } from './order-utils';
-import { installationStandardWork, resolveInstallationStandard } from '../../services/installation-estimate-api';
+import { installationStandardWork, resolveInstallationStandard, type StandardInstallationChoice } from '../../services/installation-estimate-api';
 
 type Mode = 'collapsed' | 'detailed';
 type Source = 'proposal' | 'manual';
@@ -30,6 +31,7 @@ type StoredDraft = {
   work: Record<string, Work>;
   manualKey: string;
   manualProfile: TypedInstallationProfile_Input;
+  manualTariff?: StandardInstallationChoice | null;
   scaffold: boolean;
   lift: boolean;
   scaffoldActual: number | null;
@@ -60,6 +62,7 @@ const selected = ref<string[]>([]);
 const work = ref<Record<string, Work>>({});
 const manualKey = ref<string>(crypto.randomUUID());
 const manualProfile = ref<TypedInstallationProfile_Input>({ product_kind: '', confirmed: false });
+const manualTariff = ref<StandardInstallationChoice | null>(null);
 const scaffold = ref(false);
 const lift = ref(false);
 const scaffoldActual = ref<number | null>(null);
@@ -137,6 +140,7 @@ const readableError = (failure: unknown): string => {
     proposal_not_editable: 'Редакция предложения закрыта. Создайте новый черновик предложения.',
     estimate_already_attached: 'Смета уже прикреплена в другом виде. Обновите заказ.',
     idempotency_key_reused: 'Данные расчёта изменились. Запустите новый расчёт.',
+    price_changed: 'Книга цен изменилась. Рассчитайте смету заново и проверьте сумму.',
   };
   return (detail?.code && messages[detail.code]) || getApiErrorMessage(failure);
 };
@@ -147,6 +151,7 @@ const save = (scope?: ActionScope) => {
     const draft: StoredDraft = {
       source: source.value, selected: selected.value, work: work.value,
       manualKey: manualKey.value, manualProfile: manualProfile.value,
+      manualTariff: manualTariff.value,
       scaffold: scaffold.value, lift: lift.value, mode: mode.value,
       scaffoldActual: scaffoldActual.value, scaffoldScope: scaffoldScope.value,
       liftActual: liftActual.value, liftScope: liftScope.value,
@@ -165,6 +170,7 @@ const restore = () => {
     work.value = draft.work || {};
     manualKey.value = draft.manualKey || crypto.randomUUID();
     manualProfile.value = draft.manualProfile || { product_kind: '', confirmed: false };
+    manualTariff.value = draft.manualTariff || null;
     scaffold.value = Boolean(draft.scaffold);
     lift.value = Boolean(draft.lift);
     scaffoldActual.value = draft.scaffoldActual ?? null;
@@ -186,6 +192,7 @@ const reset = () => {
   work.value = {};
   manualKey.value = crypto.randomUUID();
   manualProfile.value = { product_kind: '', confirmed: false };
+  manualTariff.value = null;
   scaffold.value = false;
   lift.value = false;
   scaffoldActual.value = null;
@@ -200,7 +207,7 @@ const reset = () => {
   restore();
 };
 watch(storageKey, () => { epoch += 1; reset(); }, { immediate: true, flush: 'sync' });
-watch([source, selected, work, manualKey, manualProfile, scaffold, lift, scaffoldActual, scaffoldScope, liftActual, liftScope, mode, intent], () => save(), { deep: true });
+watch([source, selected, work, manualKey, manualProfile, manualTariff, scaffold, lift, scaffoldActual, scaffoldScope, liftActual, liftScope, mode, intent], () => save(), { deep: true });
 watch([source, selected, work, manualProfile, scaffold, lift, scaffoldActual, scaffoldScope, liftActual, liftScope], () => { consent.value = false; }, { deep: true });
 
 const workFor = (key: string): Work => {
@@ -262,8 +269,7 @@ const show = async () => {
   } catch (failure) { if (current(scope)) error.value = readableError(failure); }
   finally { if (current(scope)) busy.value = false; }
 };
-defineExpose({ openPanel: async () => { if (!open.value) await show(); } });
-const payload = (): InstallationPreviewPayload => {
+const payload = (): ManagerInstallationPreviewPayload => {
   if (!activeKeys.value.length) throw new Error('Выберите оборудование или укажите параметры установки без товара.');
   if (activeKeys.value.length > 20) throw new Error('За один расчёт можно добавить не более 20 установок.');
   const installations: InstallationInput[] = activeKeys.value.map((key, index) => {
@@ -310,7 +316,10 @@ const payload = (): InstallationPreviewPayload => {
     ...(lift.value && liftActual.value != null && liftScope.value.trim().length >= 8
       ? [{ code: 'access.lift' as const, actual_total: liftActual.value, scope_note: liftScope.value.trim() }] : []),
   ];
-  return { installations, site_extras, approved_site_access };
+  return { installations, site_extras, approved_site_access,
+    ...(source.value === 'manual' && manualTariff.value ? { tariff_selections: { [manualKey.value]: manualTariff.value.code } } : {}),
+    ...(source.value === 'manual' && manualTariff.value?.bookRevision ? { expected_revision: manualTariff.value.bookRevision } : {}),
+  };
 };
 const ensureIntent = (fingerprint: string): StoredIntent => {
   if (intent.value?.fingerprint !== fingerprint) {
@@ -341,7 +350,12 @@ const calculate = async () => {
     attempt.preview = result;
     attempt.confirmed = undefined;
     save(scope);
-  } catch (failure) { if (current(scope)) error.value = readableError(failure); }
+  } catch (failure) {
+    if (current(scope)) {
+      if ((failure as { body?: { detail?: { code?: string } } })?.body?.detail?.code === 'price_changed' && manualTariff.value) manualTariff.value.bookRevision = null;
+      error.value = readableError(failure);
+    }
+  }
   finally { if (current(scope)) busy.value = false; }
 };
 const confirmEstimate = async () => {
@@ -372,6 +386,7 @@ const confirmEstimate = async () => {
     const detail = (failure as { body?: { detail?: { code?: string; fresh_preview?: ManagerInstallationPreviewResponse } } })?.body?.detail;
     if (detail?.code === 'price_changed') {
       intent.value = null;
+      if (manualTariff.value) manualTariff.value.bookRevision = null;
       error.value = 'Книга цен изменилась. Проверьте новый расчёт и подтвердите его заново.';
       // The fresh result is informational; a new preview creates a new attempt.
       notice.value = detail.fresh_preview?.total ? `Новая сумма: ${formatMoney(Number(detail.fresh_preview.total))}.` : '';
@@ -475,6 +490,33 @@ const addStandard = async () => {
   } catch (failure) { if (current(scope)) error.value = readableError(failure); }
   finally { if (current(scope)) { busy.value = false; quickBusy.value = false; } }
 };
+const selectStandardTariff = async (tariff: StandardInstallationChoice, edit = false) => {
+  if (busy.value || quickBusy.value) return;
+  const scope = capture();
+  if (!open.value) await show();
+  if (!current(scope) || error.value || !open.value) return;
+  if (confirmed.value || Object.keys(work.value).length) {
+    notice.value = 'Сначала завершите текущую смету или начните новый расчёт.';
+    return;
+  }
+  source.value = 'manual';
+  manualTariff.value = tariff;
+  manualProfile.value = { product_kind: tariff.product_kind,
+    indoor_type: tariff.indoor_type as TypedInstallationProfile_Input['indoor_type'], confirmed: true };
+  work.value[manualKey.value] = { ...makeWork(), ...installationStandardWork({
+    status: 'fixed', scope_ref: '', included: { route_m: tariff.route_m, holes_by_type: tariff.holes_by_type },
+  }) };
+  editing.value[manualKey.value] = edit;
+  await calculate();
+  if (!edit && current(scope) && !error.value) {
+    if (preview.value?.status === 'fixed' && Number(preview.value.total) !== Number(tariff.price)) {
+      error.value = 'Цена тарифа изменилась. Проверьте новую сумму перед добавлением.';
+      return;
+    }
+    await addCalculated();
+  }
+};
+defineExpose({ openPanel: async () => { if (!open.value) await show(); }, selectStandardTariff });
 </script>
 
 <template>
@@ -493,7 +535,7 @@ const addStandard = async () => {
         <p v-if="!slots.length" class="text-amber-800">Нет оплачиваемого оборудования без включённого монтажа. Сохраните товар в предложении или выберите установку без товара.</p>
         <label v-for="slot in slots" :key="slot.key" class="flex items-center gap-2"><input data-testid="installation-product" type="checkbox" :checked="selected.includes(slot.key)" :disabled="busy || quickBusy || Boolean(confirmed)" @change="toggleSlot(slot.key)" />{{ slot.label }}</label>
       </div>
-      <div v-else class="grid gap-2 sm:grid-cols-2">
+      <div v-else-if="!manualTariff" class="grid gap-2 sm:grid-cols-2">
         <label class="space-y-1">Вид оборудования<select v-model="manualProfile.product_kind" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)"><option value="">Выберите</option><option value="complete_split_system">Комплект сплит-системы</option><option value="multi_split_system">Мультисплит-система</option><option value="indoor_unit">Отдельный внутренний блок</option><option value="outdoor_unit">Отдельный наружный блок</option><option value="other">Другое</option></select></label>
         <label v-if="manualProfile.product_kind !== 'multi_split_system'" class="space-y-1">Тип внутреннего блока<select v-model="manualProfile.indoor_type" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)"><option :value="undefined">Выберите</option><option value="wall">Настенный</option><option value="cassette">Кассетный</option><option value="duct">Канальный</option><option value="floor_ceiling">Напольно-потолочный</option><option value="column">Колонный</option><option value="console">Консольный</option></select></label>
         <label v-if="manualProfile.product_kind === 'multi_split_system'" class="space-y-1">Внутренних блоков в системе<input v-model.number="manualProfile.indoor_unit_count" type="number" min="2" max="20" step="1" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
@@ -509,20 +551,21 @@ const addStandard = async () => {
         </template>
         <label class="flex items-center gap-2 sm:col-span-2"><input v-model="manualProfile.confirmed" type="checkbox" :disabled="busy || quickBusy || Boolean(confirmed)" />Параметры оборудования проверены; установка выполняется без продажи товара в этом предложении</label>
       </div>
+      <p v-else class="font-medium">{{ manualTariff.title }} · монтаж без товара</p>
       <div v-for="(key, index) in activeKeys" :key="key" class="space-y-2 border-t border-slate-200 pt-3">
         <p class="font-medium">Установка №{{ index + 1 }} · {{ source === 'manual' ? 'без товара' : slots.find((slot) => slot.key === key)?.label }}</p>
-        <template v-if="source === 'proposal' && !editing[key] && workFor(key).route != null">
+        <template v-if="(source === 'proposal' || manualTariff) && !editing[key] && workFor(key).route != null">
           <p class="text-slate-600" data-testid="installation-standard-summary">Трасса {{ workFor(key).route }} м · проходы: {{ Number(workFor(key).thin) + Number(workFor(key).thick) + Number(workFor(key).over80) }} · {{ workFor(key).pumpPackage ? 'с насосом' : 'без насоса' }}</p>
           <p v-if="workFor(key).chase" class="text-slate-600">Штробление {{ workFor(key).chase }} м</p>
           <button type="button" data-testid="installation-edit-work" class="btn-mini-outline" :disabled="busy || quickBusy || Boolean(confirmed)" @click="editing[key] = true">Изменить состав</button>
         </template>
         <template v-else>
-        <button v-if="source === 'manual'" type="button" class="btn-mini-outline" :disabled="busy || quickBusy || Boolean(confirmed) || !manualProfile.confirmed" @click="setWorkKind(key, workFor(key).workKind)">Заполнить базу по тарифу</button>
-        <div class="flex gap-2"><button type="button" class="btn-mini-outline" :class="workFor(key).workKind === 'standard' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || quickBusy || Boolean(confirmed)" @click="setWorkKind(key, 'standard')">Обычный монтаж</button><button type="button" class="btn-mini-outline" :class="workFor(key).workKind === 'prelaid_route' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || quickBusy || Boolean(confirmed)" @click="setWorkKind(key, 'prelaid_route')">На готовую трассу</button></div>
+        <button v-if="source === 'manual' && !manualTariff" type="button" class="btn-mini-outline" :disabled="busy || quickBusy || Boolean(confirmed) || !manualProfile.confirmed" @click="setWorkKind(key, workFor(key).workKind)">Заполнить базу по тарифу</button>
+        <div v-if="!manualTariff" class="flex gap-2"><button type="button" class="btn-mini-outline" :class="workFor(key).workKind === 'standard' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || quickBusy || Boolean(confirmed)" @click="setWorkKind(key, 'standard')">Обычный монтаж</button><button type="button" class="btn-mini-outline" :class="workFor(key).workKind === 'prelaid_route' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || quickBusy || Boolean(confirmed)" @click="setWorkKind(key, 'prelaid_route')">На готовую трассу</button></div>
         <div class="grid gap-2 sm:grid-cols-3">
           <label class="space-y-1">{{ workFor(key).workKind === 'prelaid_route' ? 'Новая дополнительная трасса, м' : 'Вся новая трасса, м' }}<input data-testid="installation-route" v-model.number="workFor(key).route" type="number" min="0" step="0.01" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
-          <label class="space-y-1">Проходы до 20 см<input data-testid="installation-holes" v-model.number="workFor(key).thin" type="number" min="0" step="1" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
-          <label class="space-y-1">Проходы свыше 20 до 80 см<input data-testid="installation-thick-holes" v-model.number="workFor(key).thick" type="number" min="0" step="1" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
+          <label class="space-y-1">Доп. межкомнатные проходы до 20 см<input data-testid="installation-holes" v-model.number="workFor(key).thin" type="number" min="0" step="1" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
+          <label class="space-y-1">Проходы основных стен до 80 см<input data-testid="installation-thick-holes" v-model.number="workFor(key).thick" type="number" min="0" step="1" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
           <label class="space-y-1">Проходы свыше 80 см (по запросу)<input data-testid="installation-over80-holes" v-model.number="workFor(key).over80" type="number" min="0" step="1" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
           <label class="space-y-1">Штробление, м<input v-model.number="workFor(key).chase" type="number" min="0" step="0.01" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
         </div>
@@ -537,7 +580,7 @@ const addStandard = async () => {
         <p v-if="statusText" class="text-amber-800">{{ statusText }} <a href="/manager/tariffs" class="underline">Тарифы</a></p>
         <template v-if="preview.status === 'fixed'">
           <div class="flex gap-2"><button type="button" class="btn-mini-outline" :class="mode === 'collapsed' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || quickBusy || Boolean(confirmed)" @click="mode = 'collapsed'">Одной строкой</button><button type="button" class="btn-mini-outline" :class="mode === 'detailed' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || quickBusy || Boolean(confirmed)" @click="mode = 'detailed'">По работам</button></div>
-          <div class="space-y-2"><div v-for="(line, index) in projectedLines" :key="index" class="flex flex-col gap-1 border-b border-slate-200 pb-2 sm:flex-row sm:justify-between sm:gap-4"><span class="min-w-0 break-words">{{ line.title }}</span><strong class="shrink-0">{{ formatMoney(Number(line.price)) }}</strong></div></div>
+          <div class="space-y-2"><div v-for="(line, index) in projectedLines" :key="index" class="border-b border-slate-200 pb-2"><div class="flex justify-between gap-4"><span class="min-w-0 break-words font-medium">{{ line.title }}</span><strong class="shrink-0">{{ line.quantity || 1 }} × {{ formatMoney(Number(line.price)) }}</strong></div><p v-if="line.description" class="mt-1 text-xs font-normal text-slate-500">{{ line.description }}</p></div></div>
           <p class="font-semibold">Итого: {{ formatMoney(Number(preview.total)) }}</p>
           <button v-if="!confirmed" type="button" data-testid="installation-add" class="btn-mini" :disabled="busy || quickBusy" @click="addCalculated">Добавить монтаж</button>
           <p v-else class="text-emerald-800">Цена подтверждена. Повторите прикрепление к текущему предложению.</p>

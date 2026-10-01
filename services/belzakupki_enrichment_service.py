@@ -559,7 +559,9 @@ class BelzakupkiEnrichmentService:
         flag_modified(order, "technical_meta")
         applied.append("source_enrichment")
         equipment_prefill = None
-        if order.workflow_type == "sales_installation" and "objects" in fields_set and payload.objects is not None:
+        if order.workflow_type == "sales_installation" and reviewed_objects and not (
+            "objects" in fields_set and payload.objects is None
+        ):
             equipment_prefill = await BelzakupkiEquipmentPrefillService.apply(
                 session, order=order, scope=scope, source=source,
                 external_id=external_id, objects=reviewed_objects,

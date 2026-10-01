@@ -6,7 +6,28 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from schemas_installation_price_book import InstallationPreviewResponse
+from schemas_installation_price_book import InstallationPreviewResponse, InstallationPreviewPayload
+
+
+class ManagerInstallationPreviewPayload(InstallationPreviewPayload):
+    # Explicit service-only tariff selection is accepted by Manager routes only.
+    tariff_selections: dict[str, str] = Field(default_factory=dict)
+
+
+class ManagerInstallationStandardTariff(BaseModel):
+    code: str
+    title: str
+    description: str
+    price: Decimal
+    product_kind: str
+    indoor_type: str | None = None
+    route_m: Decimal
+    holes_by_type: dict[str, Decimal]
+
+
+class ManagerInstallationStandardTariffList(BaseModel):
+    price_book_revision: int | None = None
+    items: list[ManagerInstallationStandardTariff] = Field(default_factory=list)
 
 
 class ManagerInstallationConfirmPayload(BaseModel):
@@ -41,6 +62,8 @@ class ManagerInstallationAttachedLine(BaseModel):
     link_id: int
     title: str
     price: Decimal
+    quantity: int = 1
+    description: str | None = None
 
 
 class ManagerInstallationAttachResponse(BaseModel):
@@ -63,6 +86,8 @@ class ManagerInstallationPriceChanged(BaseModel):
 class ManagerInstallationPreviewLine(BaseModel):
     title: str
     price: Decimal
+    quantity: int = 1
+    description: str | None = None
 
 
 class ManagerInstallationPreviewResponse(InstallationPreviewResponse):

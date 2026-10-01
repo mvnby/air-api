@@ -554,4 +554,11 @@ class OrderProjectionService:
             }
             for ws in (order.work_stages or [])
         ]
+        from services.installation_estimate_projection import frozen_installation_presentations
+        presentations = await frozen_installation_presentations(session, order.service_links)
+        for line in data["service_lines"]:
+            line.update(presentations.get(line["id"], {}))
+        for proposal in data["proposals"]:
+            for line in proposal["service_lines"]:
+                line.update(presentations.get(line["id"], {}))
         return data

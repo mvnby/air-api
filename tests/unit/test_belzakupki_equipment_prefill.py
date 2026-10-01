@@ -5,10 +5,11 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlmodel import SQLModel
 
-from models import Brand, Order, OrderProductLink, OrderProposal, Product, ProductTagLink, Tag, Tenant, TenantCatalogGrant, TenantOffer
+from models import Brand, LeadSource, Order, OrderProductLink, OrderProposal, OrderStatus, Product, ProductTagLink, Tag, Tenant, TenantCatalogGrant, TenantOffer
 from models.supplier import ProductLocalStock, ProductSupplierMapping, Supplier, SupplierOffer
 from models.tenancy import TenantScope
-from schemas_belzakupki_enrichment import SourceEquipmentDraft, SourceObjectDraft
+from schemas_belzakupki_enrichment import ManagerOrderSourceApply, SourceEquipmentDraft, SourceObjectDraft
+from services.belzakupki_enrichment_service import BelzakupkiEnrichmentService
 from services.belzakupki_equipment_prefill import (
     BelzakupkiEquipmentPrefillService, ExactCatalogCandidate, full_model_matches, normalize_model,
 )
@@ -172,6 +173,50 @@ async def test_missing_quantity_and_wrong_brand_remain_visible(monkeypatch):
     result, lines, _ = await _apply(monkeypatch, objects=objects)
     assert not lines
     assert [item.reason for item in result.skipped] == ["incomplete", "not_found"]
+
+
+@pytest.mark.asyncio
+async def test_actual_source_apply_reuses_reviewed_equipment_when_objects_are_omitted(monkeypatch):
+    order = Order(id=3, tenant_id=1, storefront_id=1, lead_source=LeadSource.BELZAKUPKI,
+                  status=OrderStatus.NEGOTIATION, workflow_type="maintenance", technical_meta={
+        "service_type": "maintenance", "belzakupki": {"source": "goszakupki_by", "external_tender_id": "T-1",
+            "enrichment": {"source": "goszakupki_by", "external_id": "T-1", "objects": [obj.model_dump() for obj in _objects(5)]}},
+    })
+    session, lines = _session([])
+    monkeypatch.setattr(BelzakupkiEnrichmentService, "_order", AsyncMock(return_value=order))
+    monkeypatch.setattr(BelzakupkiEnrichmentService, "_detail", AsyncMock(return_value={"source": "goszakupki_by", "external_id": "T-1", "documents": []}))
+    monkeypatch.setattr(BelzakupkiEquipmentPrefillService, "candidates", AsyncMock(return_value=[_candidate()]))
+    monkeypatch.setattr("services.belzakupki_equipment_prefill.OrderService.ensure_default_proposal", AsyncMock(return_value=OrderProposal(id=9, order_id=3, is_selected=True, status="draft")))
+    monkeypatch.setattr("services.belzakupki_equipment_prefill.OrderService._refresh_order_financials", AsyncMock())
+    payload = ManagerOrderSourceApply(customer_action="skip", workflow_type="sales_installation", service_type="turnkey")
+    assert "objects" not in payload.model_fields_set
+    first = await BelzakupkiEnrichmentService.apply(session, order_id=3, scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True), payload=payload, username="manager")
+    assert [(line.product_id, line.quantity) for line in lines] == [(5, 5)]
+    assert first.equipment_prefill.added[0].quantity == 5
+    assert order.technical_meta["belzakupki"]["enrichment"]["equipment_prefill"]["added"]
+    assert order.technical_meta["belzakupki"]["equipment_prefill_history"]
+    second = await BelzakupkiEnrichmentService.apply(session, order_id=3, scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True), payload=payload, username="manager")
+    assert len(lines) == 1
+    assert second.equipment_prefill.skipped[0].reason == "already_processed"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("objects", [None, []])
+async def test_explicit_empty_or_null_objects_never_replay_saved_equipment(monkeypatch, objects):
+    order = Order(id=3, tenant_id=1, storefront_id=1, lead_source=LeadSource.BELZAKUPKI,
+                  status=OrderStatus.NEGOTIATION, technical_meta={
+        "belzakupki": {"source": "goszakupki_by", "external_tender_id": "T-1",
+                       "enrichment": {"source": "goszakupki_by", "external_id": "T-1", "objects": [obj.model_dump() for obj in _objects()]}},
+    })
+    session, lines = _session([])
+    monkeypatch.setattr(BelzakupkiEnrichmentService, "_order", AsyncMock(return_value=order))
+    monkeypatch.setattr(BelzakupkiEnrichmentService, "_detail", AsyncMock(return_value={"documents": []}))
+    prefill = AsyncMock()
+    monkeypatch.setattr(BelzakupkiEquipmentPrefillService, "apply", prefill)
+    await BelzakupkiEnrichmentService.apply(session, order_id=3, scope=TenantScope(tenant_id=1, storefront_id=1),
+                                          payload=ManagerOrderSourceApply(customer_action="skip", objects=objects), username="manager")
+    prefill.assert_not_awaited()
+    assert not lines
 
 
 @pytest.mark.asyncio

@@ -39,6 +39,31 @@ from services.installation_preview_receipt_service import InstallationPreviewRec
 
 
 class InstallationPriceBookService:
+    STANDARD_INCLUDED_SCOPE = ["Электропитание до 5 м", "Расходные материалы"]
+
+    @classmethod
+    def short_title(cls, entry: dict[str, Any]) -> str:
+        label = cls._work_label(entry)
+        match = InstallationMatcher.model_validate(entry["match"])
+        if match.capacity_max_kw is not None:
+            maximum = cls._quantity_text(match.capacity_max_kw)
+            if match.capacity_min_kw is None:
+                label += f" до {maximum} кВт"
+            else:
+                label += f" {cls._quantity_text(match.capacity_min_kw)}–{maximum} кВт"
+        if match.work_kind == "prelaid_route":
+            label += " на готовую трассу"
+        return label
+
+    @classmethod
+    def standard_description(cls, entry: dict[str, Any]) -> str:
+        parts = [f"Трасса до {cls._quantity_text(Decimal(entry['included_route_m']))} м"]
+        for kind, quantity in entry["included_holes"].items():
+            if Decimal(quantity) > 0:
+                label = "Проход основной стены до 80 см" if kind == "shared_pass_through" else cls._measured_label(f"hole.{kind}")
+                parts.append(f"{label}: {cls._quantity_text(Decimal(quantity))} шт")
+        parts.extend(cls.STANDARD_INCLUDED_SCOPE)
+        return "; ".join(parts)
     RESOLVER_VERSION = "installation-book-v1"
     _WORK_LABELS = {
         "wall": "Монтаж настенного комплекта",
@@ -190,9 +215,9 @@ class InstallationPriceBookService:
         if code == "hole.diamond":
             return "Алмазные отверстия"
         if code == "hole.through_thin":
-            return "Проходы через стену до 20 см"
+            return "Дополнительные межкомнатные проходы до 20 см"
         if code == "hole.through_thick":
-            return "Проходы через стену свыше 20 до 80 см"
+            return "Проходы основных стен до 80 см"
         if code == "hole.through_over_80":
             return "Проходы через стену свыше 80 см"
         return f"Отверстия типа {code.removeprefix('hole.')}"
@@ -200,6 +225,7 @@ class InstallationPriceBookService:
     @classmethod
     def _summary_text(cls, summary: InstallationWorkSummary) -> str:
         parts = [summary.work_label]
+        parts.extend(summary.included_scope)
         for measured in summary.measured:
             if measured.actual == 0:
                 continue
@@ -498,8 +524,30 @@ class InstallationPriceBookService:
 
     @classmethod
     async def resolve(cls, session: AsyncSession, scope: TenantScope, target: InstallationTarget,
-                      *, book: InstallationPriceBook | None = None) -> tuple[InstallationResolveResponse, dict[str, Any] | None]:
+                      *, book: InstallationPriceBook | None = None,
+                      selected_tariff_code: str | None = None) -> tuple[InstallationResolveResponse, dict[str, Any] | None]:
         scope_ref = cls._scope_ref(scope)
+        if selected_tariff_code is not None:
+            # Only Manager's explicit service-only selection path supplies this argument.
+            book = book or await cls.latest(session, scope)
+            entry = next((entry for entry in book.entries if entry["code"] == selected_tariff_code), None) if book else None
+            if entry is None:
+                raise cls._bad("selected_tariff_unavailable", selected_tariff_code)
+            match = InstallationMatcher.model_validate(entry["match"])
+            profile = target.typed_profile
+            if target.product_id is not None or profile is None or not profile.confirmed or \
+               match.product_kind != "complete_split_system" or profile.product_kind != match.product_kind or \
+               profile.indoor_type != match.indoor_type or target.work_kind != match.work_kind or \
+               match.match_strategy not in {"capacity_only", "type_only"} or \
+               any(value is not None for field, value in profile.model_dump().items()
+                   if field not in {"product_kind", "indoor_type", "confirmed"}):
+                raise cls._bad("invalid_service_only_tariff_selection", selected_tariff_code)
+            return InstallationResolveResponse(status=entry["mode"], profile=profile,
+                profile_sources={"tariff": "manager_selection"}, matched_by=["manager_tariff_selection"],
+                tariff_code=entry["code"], scope_ref=scope_ref, price_book_id=book.id,
+                price_book_revision=book.revision,
+                included={"route_m": entry["included_route_m"], "holes_by_type": entry["included_holes"]},
+                base_price=Decimal(entry["base_price"]), price_mode=entry["mode"]), entry
         profile, sources = await cls._profile(session, scope, target)
         book = book or await cls.latest(session, scope)
         base = {"scope_ref": scope_ref, "profile": profile, "profile_sources": sources,
@@ -581,7 +629,11 @@ class InstallationPriceBookService:
 
     @classmethod
     async def preview(cls, session: AsyncSession, scope: TenantScope, payload: InstallationPreviewPayload,
-                      *, idempotency_key: str | None = None, persist: bool = True) -> InstallationPreviewResponse:
+                      *, idempotency_key: str | None = None, persist: bool = True,
+                      tariff_selections: dict[str, str] | None = None) -> InstallationPreviewResponse:
+        selections = tariff_selections or {}
+        if set(selections) - {item.key for item in payload.installations}:
+            raise cls._bad("unknown_tariff_selection_key", "Selection must belong to this preview")
         request_hash = None
         key_hash = None
         if persist:
@@ -608,7 +660,8 @@ class InstallationPriceBookService:
         matched_entries: list[dict[str, Any]] = []
         status = "fixed"
         for installation in payload.installations:
-            result, entry = await cls.resolve(session, scope, installation, book=book)
+            result, entry = await cls.resolve(session, scope, installation, book=book,
+                                              **({"selected_tariff_code": selections[installation.key]} if installation.key in selections else {}))
             if entry is None:
                 return InstallationPreviewResponse(status=result.status, reason_code=result.reason_code, **base)
             if entry["mode"] == "quote":
@@ -664,7 +717,7 @@ class InstallationPriceBookService:
                 if actual != actual.to_integral_value():
                     raise cls._bad("invalid_hole_quantity", "Hole counts must be whole numbers")
                 included = Decimal(entry["included_holes"].get(hole_type, "0"))
-                if hole_type in {"through_thin", "through_thick"} and shared_remaining > 0:
+                if hole_type == "through_thick" and shared_remaining > 0:
                     use = min(actual, shared_remaining)
                     included += use
                     shared_remaining -= use
@@ -709,6 +762,8 @@ class InstallationPriceBookService:
                 installation_key=installation.key, display_label=installation.display_label,
                 tariff_code=entry["code"],
                 work_label=work_label, measured=measured, selected_extras=selected_extras,
+                short_title=cls.short_title(entry),
+                included_scope=list(cls.STANDARD_INCLUDED_SCOPE) if matcher.work_kind == "standard" else [],
             ))
         approved_site = {item.code: item for item in payload.approved_site_access}
         seen_site: set[str] = set()

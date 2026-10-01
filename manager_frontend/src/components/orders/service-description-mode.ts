@@ -9,6 +9,8 @@ export type ServiceDescriptionLine = {
   installation_projection_mode?: string | null;
   service_id?: number | null;
   title: string;
+  description?: string | null;
+  installation_display_lines?: Array<{ title: string; description?: string | null; quantity: number; price: number }>;
   quantity: number;
   price: number;
   cost: number;

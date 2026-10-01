@@ -90,11 +90,13 @@ def test_import_refresh_preserves_reviewed_enrichment():
     snapshot = {"match_id": 7, "profile": {}, "score": 1, "reason": None, "ai_analysis": None,
                 "tender": {"source": "goszakupki_by", "external_id": "3707082"}}
     history = {"prefill-fingerprint": {"product_id": 5, "line_id": 50, "quantity": 9}}
+    commands = {"command-1": {"added": [{"product_id": 5}]}}
     updated = BelzakupkiImportService._next_metadata(
-        existing={"enrichment": reviewed, "equipment_prefill_history": history}, snapshot=snapshot, snapshot_fingerprint="fingerprint",
+        existing={"enrichment": reviewed, "equipment_prefill_history": history, "equipment_prefill_commands": commands}, snapshot=snapshot, snapshot_fingerprint="fingerprint",
     )
     assert updated["enrichment"] == reviewed
     assert updated["equipment_prefill_history"] == history
+    assert updated["equipment_prefill_commands"] == commands
 
 
 def test_source_file_magic_preserves_word_original_type_without_extension():
@@ -219,6 +221,7 @@ async def test_replay_preserves_reviewed_work_and_objects_when_omitted(monkeypat
     assert preview.field_sources["objects.0.address"] == "Ранее подтверждено менеджером"
 
     payload = ManagerOrderSourceApply(customer_action="skip", document_ids=[])
+    monkeypatch.setattr("services.belzakupki_equipment_prefill.BelzakupkiEquipmentPrefillService.candidates", AsyncMock(return_value=[]))
     for _ in range(2):
         result = await BelzakupkiEnrichmentService.apply(
             session, order_id=455, scope=scope, payload=payload, username="manager",

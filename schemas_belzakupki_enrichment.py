@@ -19,7 +19,7 @@ class SourceEquipmentDraft(BaseModel):
 
 
 class SourceObjectDraft(BaseModel):
-    address: str = Field(min_length=1, max_length=500)
+    address: str = Field(default="", max_length=500)
     equipment: list[SourceEquipmentDraft] = Field(default_factory=list, max_length=100)
 
 
@@ -38,6 +38,66 @@ class SourceEquipmentPrefillResult(BaseModel):
     added: list[SourceEquipmentPrefillItem] = Field(default_factory=list)
     skipped: list[SourceEquipmentPrefillItem] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+
+
+class SourceEquipmentCandidateItem(BaseModel):
+    brand: str | None = None
+    model: str | None = None
+    quantity: int | None = None
+    product_id: int | None = None
+    product_title: str | None = None
+    price: int | None = None
+    available_quantity: int | None = None
+    existing_quantity: int = 0
+    reason: str
+    message: str
+    can_add: bool = False
+    can_restore: bool = False
+
+
+class ManagerOrderSourceEquipmentPreview(BaseModel):
+    order_id: int
+    proposal_id: int | None = None
+    proposal_status: str | None = None
+    preview_fingerprint: str
+    items: list[SourceEquipmentCandidateItem] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ManagerOrderSourceEquipmentAdd(BaseModel):
+    proposal_id: int
+    command_id: str = Field(min_length=1, max_length=120)
+    preview_fingerprint: str = Field(min_length=64, max_length=64)
+    product_ids: list[int] = Field(min_length=1, max_length=100)
+    restore_removed_product_ids: list[int] = Field(default_factory=list, max_length=100)
+
+
+class SourceOriginalFile(BaseModel):
+    attachment_id: int
+    name: str
+    document_id: str | None = None
+    mime_type: str
+
+
+class SourceInstallationFact(BaseModel):
+    text: str
+    source: str
+    needs_review: bool = True
+    is_excerpt: bool = False
+
+
+class ManagerOrderSourceCard(BaseModel):
+    order_id: int
+    source: str
+    external_id: str
+    title: str | None = None
+    source_url: str | None = None
+    work_summary: str | None = None
+    equipment_details: str | None = None
+    objects: list[SourceObjectDraft] = Field(default_factory=list)
+    originals: list[SourceOriginalFile] = Field(default_factory=list)
+    equipment_prefill: SourceEquipmentPrefillResult | None = None
+    installation_facts: list[SourceInstallationFact] = Field(default_factory=list)
 
 
 class SourceDocumentPreview(BaseModel):

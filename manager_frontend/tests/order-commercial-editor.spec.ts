@@ -39,6 +39,17 @@ afterEach(() => {
 });
 
 describe('useOrderCommercialEditor', () => {
+  it('keeps legacy frozen row bytes in save payload while showing grouped presentation', () => {
+    const editor = createEditor();
+    editor.loadLines([], [{ id: 10, service_id: null, service_title: 'Установка №1…№5',
+      quantity: 1, price: 3000, line_total: 3000, installation_estimate_revision_id: 5,
+      installation_projection_mode: 'collapsed', installation_display_lines: [{
+        title: 'Монтаж настенного кондиционера', quantity: 5, price: 600, description: 'Трасса 3 м',
+      }] }]);
+    expect(editor.serviceLines.value[0]?.installation_display_lines?.[0]?.quantity).toBe(5);
+    expect(editor.buildLinesPayload(17).services).toEqual([{ link_id: 10, service_id: null,
+      title: 'Установка №1…№5', quantity: 1, price: 3000, cost: 0, proposal_id: 17 }]);
+  });
   it('preserves cents from estimate import through save and reload', () => {
     const editor = createEditor();
     editor.appendEstimateLines([

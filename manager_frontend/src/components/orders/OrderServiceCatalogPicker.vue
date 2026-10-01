@@ -6,6 +6,8 @@ import { getApiErrorMessage } from '../../utils/api-errors';
 import type { OrderWorkflowType } from './order-workspace';
 import { orderedServiceKinds, preferredServiceKind, serviceCategories } from './service-catalog-order';
 import { formatMoney } from './order-utils';
+import { listInstallationStandardTariffs } from '../../services/installation-estimate-api';
+import type { ManagerInstallationStandardTariff } from '../../client';
 
 const props = defineProps<{ workflow: OrderWorkflowType; customerId?: number | null; canOpenInstallationEstimate?: boolean }>();
 const emit = defineEmits<{
@@ -14,9 +16,11 @@ const emit = defineEmits<{
   createdEstimate: [payload: { id: number; lines: ManagerOrderServiceLinePayload[] }];
   close: [];
   openInstallationEstimate: [];
+  standardInstallation: [tariff: ManagerInstallationStandardTariff, edit: boolean];
 }>();
 
 const tariffs = ref<ManagerTariffResponse[]>([]);
+const standardTariffs = ref<ManagerInstallationStandardTariff[]>([]);
 const loading = ref(false);
 const busy = ref(false);
 const error = ref('');
@@ -42,6 +46,8 @@ const visibleTariffs = computed(() => tariffs.value.filter((tariff) => (
   && (!query.value.trim() || [tariff.short_name, tariff.full_description, tariff.category, tariff.power_range]
     .some((value) => String(value || '').toLocaleLowerCase('ru').includes(query.value.trim().toLocaleLowerCase('ru'))))
 )));
+const visibleStandards = computed(() => standardTariffs.value.filter((tariff) =>
+  !query.value.trim() || `${tariff.title} ${tariff.description}`.toLocaleLowerCase('ru').includes(query.value.trim().toLocaleLowerCase('ru'))));
 const manualRules = computed(() => (selectedTariff.value?.rules || []).filter((rule) => (
   rule.is_active && (rule.rule_type === 'per_unit_manual' || (rule.rule_type === 'fixed_once' && rule.is_optional))
 )));
@@ -71,6 +77,8 @@ const loadBookState = async () => {
     const response = await api.listManagerInstallationRates();
     publishedRevision.value = response.published_price_book_revision ?? null;
     if (publishedRevision.value !== null) {
+      const standards = await listInstallationStandardTariffs();
+      standardTariffs.value = standards.items;
       selectedTariff.value = null;
       calculation.value = null;
     }
@@ -172,9 +180,9 @@ onMounted(() => { void Promise.all([load(), loadBookState()]); });
     <p v-if="error" class="mt-2 text-xs text-red-700" role="alert">{{ error }}</p>
     <p v-if="bookStateError" class="mt-2 text-xs text-amber-800" role="alert">Не удалось проверить книгу цен монтажа: {{ bookStateError }} <button type="button" class="font-semibold underline" @click="loadBookState">Повторить</button></p>
     <div v-if="publishedRevision !== null && kind === 'installation'" class="mt-3 rounded-lg border border-brand-200 bg-white p-3 text-sm text-slate-700" role="status">
-      <p v-if="publishedRevision !== undefined">Монтаж рассчитывается по опубликованной книге цен в предложении заказа.</p>
+      <p v-if="publishedRevision !== undefined">Базовые тарифы опубликованной книги. Можно добавить монтаж без товара; дополнительные работы — в настройках состава.</p>
       <p v-else>{{ bookStateLoading ? 'Проверяем книгу цен монтажа…' : 'Пока книга цен не проверена, монтажные тарифы недоступны для быстрого добавления.' }}</p>
-      <button v-if="publishedRevision !== undefined && canOpenInstallationEstimate" type="button" class="btn-mini mt-2" @click="emit('openInstallationEstimate')">Открыть расчёт монтажа</button>
+      <button v-if="publishedRevision !== undefined && canOpenInstallationEstimate" type="button" class="btn-mini-outline mt-2" @click="emit('openInstallationEstimate')">Монтаж выбранного оборудования</button>
       <p v-else-if="publishedRevision !== undefined" class="mt-1 text-xs">Сохраните заказ и выберите черновик предложения для расчёта.</p>
     </div>
     <template v-if="selectedTariff">
@@ -211,13 +219,20 @@ onMounted(() => { void Promise.all([load(), loadBookState()]); });
       </div>
       <p v-if="loading" class="mt-3 text-xs text-slate-500">Загружаю услуги…</p>
       <div v-else class="mt-3 max-h-80 space-y-2 overflow-y-auto">
+        <template v-if="kind === 'installation' && publishedRevision != null">
+          <div v-for="tariff in visibleStandards" :key="tariff.code" class="rounded-lg border border-slate-200 bg-white p-2.5" data-testid="installation-standard-tariff">
+            <p class="text-sm font-semibold text-slate-900">{{ tariff.title }}</p>
+            <p class="mt-1 text-xs font-normal text-slate-500">{{ tariff.description }}</p>
+            <div class="mt-2 flex items-center justify-between gap-2"><span class="text-sm">{{ formatMoney(Number(tariff.price)) }} BYN</span><div class="flex gap-2"><button type="button" class="btn-mini" :disabled="!canOpenInstallationEstimate" @click="emit('standardInstallation', tariff, false)">Добавить</button><button type="button" class="btn-mini-outline" :disabled="!canOpenInstallationEstimate" @click="emit('standardInstallation', tariff, true)">Изменить состав</button></div></div>
+          </div>
+        </template>
         <div v-for="tariff in visibleTariffs" :key="tariff.id" class="rounded-lg border border-slate-200 bg-white p-2.5">
           <p class="text-sm font-semibold text-slate-900">{{ tariff.short_name || tariff.selector_label }}</p>
           <p v-if="tariff.full_description" class="mt-0.5 line-clamp-2 text-xs text-slate-500">{{ tariff.full_description }}</p>
           <div class="mt-2 flex flex-wrap items-center gap-2 text-xs"><span>{{ formatMoney(tariff.base_price) }} BYN</span><span v-if="tariff.power_range">· {{ tariff.power_range }}</span></div>
           <div class="mt-2 flex gap-2"><button type="button" class="btn-mini h-8 px-2 text-xs" @click="choose(tariff)">Добавить</button><button type="button" class="btn-mini-outline h-8 px-2 text-xs" @click="startEstimate(tariff)">Собрать смету</button></div>
         </div>
-        <p v-if="!visibleTariffs.length" class="text-xs text-slate-500">По этому запросу услуг нет.</p>
+        <p v-if="!visibleTariffs.length && !(kind === 'installation' && visibleStandards.length)" class="text-xs text-slate-500">По этому запросу услуг нет.</p>
       </div>
       <button type="button" class="mt-3 text-xs font-semibold text-brand-700" @click="emit('custom')">Добавить свою услугу вручную</button>
     </template>

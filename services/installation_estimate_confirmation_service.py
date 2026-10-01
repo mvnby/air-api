@@ -112,11 +112,13 @@ class InstallationEstimateConfirmationService:
             raise cls._bad("preview_not_fixed")
         if result.price_book_id != row.price_book_id or result.price_book_revision is None:
             raise cls._bad("invalid_preview_snapshot")
-        input_payload = InstallationPreviewPayload.model_validate(row.snapshot["input"])
+        from schemas_installation_confirmation import ManagerInstallationPreviewPayload
+        input_payload = ManagerInstallationPreviewPayload.model_validate(row.snapshot["input"])
         latest = await InstallationPriceBookService.latest(session, scope)
         if latest is None or latest.id != row.price_book_id:
             raise InstallationPriceChanged(input_payload, latest.revision if latest else None)
-        fresh = await InstallationPriceBookService.preview(session, scope, input_payload, persist=False)
+        fresh = await InstallationPriceBookService.preview(session, scope, input_payload, persist=False,
+                                                            tariff_selections=input_payload.tariff_selections)
         if fresh.model_dump(mode="json", exclude={"preview_ref", "expires_at"}) != \
            result.model_dump(mode="json", exclude={"preview_ref", "expires_at"}):
             raise InstallationPriceChanged(input_payload, latest.revision)
@@ -125,6 +127,8 @@ class InstallationEstimateConfirmationService:
         for installation in input_payload.installations:
             resolved, _ = await InstallationPriceBookService.resolve(
                 session, scope, installation, book=latest,
+                **({"selected_tariff_code": input_payload.tariff_selections[installation.key]}
+                   if installation.key in input_payload.tariff_selections else {}),
             )
             stored_resolution = stored_resolutions.get(installation.key) or {}
             if resolved.model_dump(mode="json").get("profile") != stored_resolution.get("profile"):
@@ -137,6 +141,7 @@ class InstallationEstimateConfirmationService:
         result: InstallationPreviewResponse, order_id: int, proposal_id: int,
         key_hash: str, request_hash: str, actor: str,
         verified_service_only_keys: list[str],
+        group_commercial_lines: bool = False,
     ) -> tuple[InstallationEstimate, InstallationEstimateRevision]:
         """Persist exact accepted bytes; membership/equipment checks remain with caller."""
         estimate = InstallationEstimate(
@@ -148,6 +153,8 @@ class InstallationEstimateConfirmationService:
         session.add(estimate)
         await session.flush()
         snapshot = copy.deepcopy(row.snapshot)
+        if group_commercial_lines:
+            snapshot["commercial_projection_version"] = 2
         snapshot["confirmation"] = {
             "order_id": order_id, "proposal_id": proposal_id,
             "verified_service_only_keys": sorted(verified_service_only_keys),
@@ -158,7 +165,7 @@ class InstallationEstimateConfirmationService:
             price_book_revision=result.price_book_revision,
             total=exact_money(result.total), snapshot=snapshot,
         )
-        cls._projection(revision, "collapsed")
+        cls.commercial_lines(revision, "collapsed")
         cls._projection(revision, "detailed")
         session.add(revision)
         await session.flush()
@@ -169,13 +176,28 @@ class InstallationEstimateConfirmationService:
         cls, *, order_id: int, proposal_id: int,
         saved: InstallationEstimateRevision, mode: str,
     ) -> list[OrderServiceLink]:
-        lines, _ = cls._projection(saved, mode)
+        lines = cls.commercial_lines(saved, mode)
         return [OrderServiceLink(
             order_id=order_id, proposal_id=proposal_id,
             installation_estimate_revision_id=int(saved.id),
             installation_line_index=index, installation_projection_mode=mode,
-            service_id=None, quantity=1, title=title, price=amount, cost=Decimal("0.00"),
-        ) for index, (title, amount) in enumerate(lines)]
+            service_id=None, quantity=line.quantity, title=line.title, price=line.price, cost=Decimal("0.00"),
+        ) for index, line in enumerate(lines)]
+
+    @classmethod
+    def commercial_lines(cls, saved: InstallationEstimateRevision, mode: str):
+        from schemas_installation_confirmation import ManagerInstallationPreviewLine
+        from services.installation_estimate_projection import grouped_installation_lines
+        if saved.snapshot.get("commercial_projection_version") == 2 and mode == "collapsed":
+            result = InstallationPreviewResponse.model_validate(saved.snapshot["result"])
+            cls.project_preview(result, "detailed", expected_total=saved.total)
+            writable_service_money(saved.total)
+            lines = grouped_installation_lines(result)
+            for line in lines:
+                writable_service_money(line.price)
+            return lines
+        return [ManagerInstallationPreviewLine(title=title, price=price)
+                for title, price in cls._projection(saved, mode)[0]]
 
     @classmethod
     def _verify_equipment(
@@ -323,6 +345,7 @@ class InstallationEstimateConfirmationService:
                 proposal_id=payload.proposal_id, key_hash=key_hash,
                 request_hash=fingerprint, actor=actor,
                 verified_service_only_keys=payload.verified_service_only_keys,
+                group_commercial_lines=True,
             )
             return PublicWriteCommandResponse(
                 value=cls._confirm_response(estimate, revision), status_code=201,
@@ -454,7 +477,8 @@ class InstallationEstimateConfirmationService:
             original_input = InstallationPreviewPayload.model_validate(saved.snapshot["input"])
             verified_keys = saved.snapshot.get("confirmation", {}).get("verified_service_only_keys", [])
             cls._verify_equipment(order, proposal_id, original_input, verified_keys)
-            lines, total = cls._projection(saved, payload.mode)
+            lines = cls.commercial_lines(saved, payload.mode)
+            total = exact_money(saved.total)
             existing = list((await session.execute(select(OrderServiceLink).join(
                 InstallationEstimateRevision,
                 InstallationEstimateRevision.id == OrderServiceLink.installation_estimate_revision_id,
@@ -467,9 +491,9 @@ class InstallationEstimateConfirmationService:
                 if len(existing) != len(lines) or any(
                     link.installation_estimate_revision_id != saved.id or
                     link.installation_projection_mode != payload.mode or
-                    link.installation_line_index != index or link.quantity != 1 or
-                    link.title != title or exact_money(link.price) != amount
-                    for index, (link, (title, amount)) in enumerate(zip(existing, lines))
+                    link.installation_line_index != index or link.quantity != projected.quantity or
+                    link.title != projected.title or exact_money(link.price) != projected.price
+                    for index, (link, projected) in enumerate(zip(existing, lines))
                 ):
                     raise cls._bad("estimate_already_attached")
                 persisted = existing
@@ -489,7 +513,8 @@ class InstallationEstimateConfirmationService:
                 estimate_id=estimate_id, revision=payload.revision, order_id=order_id,
                 proposal_id=proposal_id, mode=payload.mode, total=total,
                 lines=[ManagerInstallationAttachedLine(link_id=int(link.id), title=link.title,
-                                                       price=exact_money(link.price)) for link in persisted],
+                    price=exact_money(link.price), quantity=link.quantity, description=projected.description)
+                    for link, projected in zip(persisted, lines)],
             )
             encoded = json.dumps(response.model_dump(mode="json"), ensure_ascii=False,
                                  sort_keys=True, separators=(",", ":")).encode("utf-8")

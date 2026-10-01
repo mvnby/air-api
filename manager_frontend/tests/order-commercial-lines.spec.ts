@@ -191,6 +191,26 @@ describe('OrderServiceLinesEditor', () => {
     expect(wrapper.find('[data-order-usage="order_service_remove"]').exists()).toBe(false);
   });
 
+  it('shows a legacy frozen bundle as five installations without changing its underlying row', () => {
+    const legacy: ServiceLine = { ...serviceLine, title: 'Установка №1…№5', quantity: 1, price: 3000,
+      installation_estimate_revision_id: 10, installation_display_lines: [{
+        title: 'Монтаж настенного кондиционера', description: 'Трасса 3 м', quantity: 5, price: 600 }] };
+    const wrapper = mount(OrderServiceLinesEditor, { props: {
+      lines: [legacy], editingIndex: null, showEstimateImport: false, selectedEstimateId: null,
+      estimateSearchQuery: '', estimateImportMode: 'collapsed', descriptionMode: 'short',
+      serviceOptions: [], serviceLookupLoading: false, activeSuggestionIndex: null,
+      estimateOptions: [], estimateOptionsLoading: false, importingEstimate: false,
+      formatServiceKind: () => 'монтаж', workflow: 'sales_installation',
+    } });
+    mountedWrappers.push(wrapper);
+    expect(wrapper.text()).toContain('5 × 600');
+    expect(wrapper.text()).not.toContain('Установка №1');
+    expect(legacy.quantity).toBe(1);
+    expect(legacy.price).toBe(3000);
+    expect(legacy.title).toBe('Установка №1…№5');
+    expect(wrapper.emitted('update:lines')).toBeUndefined();
+  });
+
   it('delegates tariff selection and estimate import while keeping draft models controlled', async () => {
     const wrapper = mount(OrderServiceLinesEditor, {
       props: {

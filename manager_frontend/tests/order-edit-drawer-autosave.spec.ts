@@ -9,6 +9,8 @@ import OrderPaymentsPanel from '../src/components/orders/OrderPaymentsPanel.vue'
 import OrderWorkspaceHeader from '../src/components/orders/OrderWorkspaceHeader.vue';
 import OrderWorkspaceNav from '../src/components/orders/OrderWorkspaceNav.vue';
 import OrderWorkspaceContext from '../src/components/orders/OrderWorkspaceContext.vue';
+import OrderRequestSourceCard from '../src/components/orders/OrderRequestSourceCard.vue';
+import LeadSourceReviewModal from '../src/components/leads/LeadSourceReviewModal.vue';
 import { ManagerOrdersService, ManagerMailService, ManagerSettingsService } from '../src/client';
 import { ManagerOrderUsageService, CancelablePromise } from '../src/client';
 import { managerSession } from '../src/services/manager-session';
@@ -80,7 +82,7 @@ describe('order drawer autosave integration', () => {
     expect(customer().props('editTarget')).toBe('customer');
   });
 
-  it('shows reviewed source work and both sites in the order workspace', async () => {
+  it('places the reviewed request beside customer context and outside Work', async () => {
     stored = {
       ...stored,
       lead_source: 'belzakupki',
@@ -96,9 +98,34 @@ describe('order drawer autosave integration', () => {
       },
     } as ManagerOrderDetailResponse;
     await mountDrawer();
-    expect(wrapper.text()).toContain('Обслуживание восьми кондиционеров');
-    expect(wrapper.text()).toContain('г. Витебск, ул. Суворова, 42/13');
-    expect(wrapper.text()).toContain('г.п. Шумилино, ул. Короткина, 10');
+    const source = wrapper.findComponent(OrderRequestSourceCard);
+    expect(source.props('orderId')).toBe(395);
+    expect(source.props('sourceEnrichment')).toEqual(stored.source_enrichment);
+    expect(source.element.parentElement).toBe(workspaceContext().element.parentElement);
+    expect(wrapper.find('[data-order-usage="workspace-work-panel"]').text()).not.toContain('Данные из закупки');
+    expect(wrapper.find('[data-order-usage="workspace-work-panel"]').text()).not.toContain('Дозаполнить из источника');
+  });
+
+  it('saves local edits before source review and refreshes added lines before resuming autosave', async () => {
+    stored = { ...stored, lead_source: 'belzakupki' };
+    await mountDrawer();
+    customer().vm.$emit('update:comment', 'Сохранить перед проработкой заявки');
+    await nextTick();
+    wrapper.findComponent(OrderRequestSourceCard).vm.$emit('review');
+    await flushPromises();
+    expect(stored.comment).toBe('Сохранить перед проработкой заявки');
+    const modal = wrapper.findComponent(LeadSourceReviewModal);
+    expect(modal.props('open')).toBe(true);
+    expect(await modal.props('beforeApply')!()).toBe(true);
+    expect(wrapper.find('aside').attributes('aria-busy')).toBe('true');
+
+    const fresh = { ...stored, attachment_count: 2 };
+    vi.spyOn(ManagerOrdersService, 'getManagerOrderDetail').mockResolvedValue(fresh);
+    expect(await modal.props('afterApply')!()).toBe(true);
+    expect(wrapper.emitted('updated')?.at(-1)).toEqual([fresh]);
+    modal.props('endApply')!();
+    await nextTick();
+    expect(wrapper.find('aside').attributes('aria-busy')).toBe('false');
   });
 
   it('counts opening once with the hydrated scenario, before any user edit', async () => {

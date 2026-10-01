@@ -9,8 +9,12 @@ const apiMocks = vi.hoisted(() => ({
   calculateManagerInstallEstimate: vi.fn(),
   createManagerServiceEstimate: vi.fn(),
   getManagerServiceEstimateOrderLines: vi.fn(),
+  listInstallationStandardTariffs: vi.fn(),
 }));
 vi.mock('../src/api', () => ({ api: apiMocks }));
+vi.mock('../src/services/installation-estimate-api', () => ({
+  listInstallationStandardTariffs: apiMocks.listInstallationStandardTariffs,
+}));
 
 const tariff = {
   id: 21,
@@ -35,6 +39,11 @@ beforeEach(() => {
   vi.clearAllMocks();
   apiMocks.listManagerTariffsByKind.mockResolvedValue({ items: [tariff] });
   apiMocks.listManagerInstallationRates.mockResolvedValue({ published_price_book_revision: null, items: [] });
+  apiMocks.listInstallationStandardTariffs.mockResolvedValue({ price_book_revision: 2, items: [{
+    code: 'wall.small', title: 'Монтаж настенного кондиционера до 4,2 кВт', price: '600',
+    description: 'Трасса 3 м; один проход до 80 см; питание до 5 м; расходные материалы',
+    route_m: '3', holes_by_type: { shared_pass_through: '1' }, product_kind: 'complete_split_system', indoor_type: 'wall',
+  }] });
   apiMocks.calculateManagerInstallEstimate.mockResolvedValue({ total: 410, currency: 'BYN', lines: [{ name: 'Монтаж', line_total: 300 }], rule_lines: [] });
   apiMocks.createManagerServiceEstimate.mockResolvedValue({ id: 84 });
   apiMocks.getManagerServiceEstimateOrderLines.mockResolvedValue({ services: [{ title: 'Монтаж', quantity: 1, price: 410, service_id: 9 }] });
@@ -80,14 +89,19 @@ describe('OrderServiceCatalogPicker', () => {
     wrapper.unmount();
   });
 
-  it('hides typed installation quick-add and opens the order price-book panel after publication', async () => {
+  it('offers canonical quick standards and editing without the legacy estimate path after publication', async () => {
     apiMocks.listManagerInstallationRates.mockResolvedValue({ published_price_book_revision: 2, items: [] });
     const wrapper = mount(OrderServiceCatalogPicker, { props: { workflow: 'sales_installation', canOpenInstallationEstimate: true } });
     await flushPromises();
-    expect(wrapper.text()).toContain('Монтаж рассчитывается по опубликованной книге цен');
-    expect(wrapper.findAll('button').some((button) => button.text() === 'Добавить')).toBe(false);
+    expect(wrapper.text()).toContain('Базовые тарифы опубликованной книги');
+    expect(wrapper.text()).toContain('Монтаж настенного кондиционера до 4,2 кВт');
+    await wrapper.findAll('button').find((button) => button.text() === 'Добавить')!.trigger('click');
+    expect(wrapper.emitted('standardInstallation')?.[0]).toMatchObject([{ code: 'wall.small', price: '600' }, false]);
+    await wrapper.findAll('button').find((button) => button.text() === 'Изменить состав')!.trigger('click');
+    expect(wrapper.emitted('standardInstallation')?.[1]?.[1]).toBe(true);
+    expect(apiMocks.calculateManagerInstallEstimate).not.toHaveBeenCalled();
     expect(wrapper.findAll('button').some((button) => button.text() === 'Собрать смету')).toBe(false);
-    await wrapper.findAll('button').find((button) => button.text() === 'Открыть расчёт монтажа')!.trigger('click');
+    await wrapper.findAll('button').find((button) => button.text() === 'Монтаж выбранного оборудования')!.trigger('click');
     expect(wrapper.emitted('openInstallationEstimate')).toEqual([[]]);
     wrapper.unmount();
   });

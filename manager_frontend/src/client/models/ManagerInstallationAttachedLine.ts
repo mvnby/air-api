@@ -6,5 +6,7 @@ export type ManagerInstallationAttachedLine = {
     link_id: number;
     title: string;
     price: string;
+    quantity?: number;
+    description?: (string | null);
 };
 

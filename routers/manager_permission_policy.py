@@ -193,6 +193,7 @@ TENANT_SERVICE_OPERATION_IDS = frozenset(
         operation_ids.GET_MANAGER_SERVICE_ESTIMATE_ORDER_LINES,
         operation_ids.PREVIEW_MANAGER_INSTALLATION_ESTIMATE,
         operation_ids.RESOLVE_MANAGER_INSTALLATION_TARIFF,
+        operation_ids.LIST_MANAGER_INSTALLATION_STANDARD_TARIFFS,
         operation_ids.CONFIRM_MANAGER_INSTALLATION_ESTIMATE,
         operation_ids.GET_MANAGER_INSTALLATION_ESTIMATE_REVISION,
         operation_ids.ATTACH_MANAGER_INSTALLATION_ESTIMATE,
@@ -286,6 +287,12 @@ CATALOG_DECISION_OPERATION_IDS = frozenset({
     operation_ids.CREATE_MANAGER_CATALOG_DECISION_ORDER,
 })
 
+SOURCE_EQUIPMENT_OPERATION_IDS = frozenset({
+    operation_ids.GET_MANAGER_ORDER_SOURCE_CARD,
+    operation_ids.GET_MANAGER_ORDER_SOURCE_EQUIPMENT,
+    operation_ids.ADD_MANAGER_ORDER_SOURCE_EQUIPMENT,
+})
+
 
 SYSTEM_ANALYTICS_OPERATION_IDS = frozenset(
     {operation_ids.GET_MANAGER_CATALOG_USAGE}
@@ -321,6 +328,8 @@ STOREFRONT_OWNER_OPERATION_IDS = frozenset(
 
 
 def required_permission_dependency(operation_id: str | None):
+    if operation_id in SOURCE_EQUIPMENT_OPERATION_IDS:
+        return require_manager_access
     if operation_id in CATALOG_DECISION_OPERATION_IDS:
         return require_manager_access
     if operation_id in MULTI_SPLIT_OPERATION_IDS:

@@ -16984,6 +16984,171 @@
         }
       }
     },
+    "/api/manager/orders/{order_id}/source-card": {
+      "get": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "Get Manager Order Source Card",
+        "operationId": "get_manager_order_source_card",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderSourceCard"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/source-equipment": {
+      "get": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "Get Manager Order Source Equipment",
+        "operationId": "get_manager_order_source_equipment",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "proposal_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Proposal Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderSourceEquipmentPreview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "Add Manager Order Source Equipment",
+        "operationId": "add_manager_order_source_equipment",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerOrderSourceEquipmentAdd"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceEquipmentPrefillResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/orders/{order_id}/source-preview": {
       "get": {
         "tags": [
@@ -24274,6 +24439,32 @@
         }
       }
     },
+    "/api/manager/installation-estimates/standard-tariffs": {
+      "get": {
+        "tags": [
+          "manager/installation-estimates"
+        ],
+        "summary": "List Manager Installation Standard Tariffs",
+        "operationId": "list_manager_installation_standard_tariffs",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerInstallationStandardTariffList"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/installation-estimates/resolve": {
       "post": {
         "tags": [
@@ -24348,7 +24539,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/InstallationPreviewPayload"
+                "$ref": "#/components/schemas/ManagerInstallationPreviewPayload"
               }
             }
           }
@@ -40739,6 +40930,40 @@
         ],
         "title": "InstallationComponent"
       },
+      "InstallationDisplayLineResponse": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "quantity": {
+            "type": "integer",
+            "title": "Quantity"
+          },
+          "price": {
+            "type": "number",
+            "title": "Price"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "quantity",
+          "price"
+        ],
+        "title": "InstallationDisplayLineResponse"
+      },
       "InstallationEstimateLeadResponse": {
         "properties": {
           "lead_id": {
@@ -42055,6 +42280,24 @@
           "work_label": {
             "type": "string",
             "title": "Work Label"
+          },
+          "short_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Title"
+          },
+          "included_scope": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Included Scope"
           },
           "measured": {
             "items": {
@@ -51705,6 +51948,22 @@
             "type": "string",
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Price"
+          },
+          "quantity": {
+            "type": "integer",
+            "title": "Quantity",
+            "default": 1
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
           }
         },
         "type": "object",
@@ -52090,6 +52349,22 @@
             "type": "string",
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Price"
+          },
+          "quantity": {
+            "type": "integer",
+            "title": "Quantity",
+            "default": 1
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
           }
         },
         "type": "object",
@@ -52098,6 +52373,57 @@
           "price"
         ],
         "title": "ManagerInstallationPreviewLine"
+      },
+      "ManagerInstallationPreviewPayload": {
+        "properties": {
+          "installations": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationInput"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Installations"
+          },
+          "site_extras": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationExtraInput"
+            },
+            "type": "array",
+            "title": "Site Extras"
+          },
+          "approved_site_access": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationSiteApproval"
+            },
+            "type": "array",
+            "title": "Approved Site Access"
+          },
+          "expected_revision": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Revision"
+          },
+          "tariff_selections": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Tariff Selections"
+          }
+        },
+        "type": "object",
+        "required": [
+          "installations"
+        ],
+        "title": "ManagerInstallationPreviewPayload"
       },
       "ManagerInstallationPreviewResponse": {
         "properties": {
@@ -52441,6 +52767,90 @@
         ],
         "title": "ManagerInstallationRateUpdatePayload",
         "description": "Only checkout prices and explanatory text are editable from Manager."
+      },
+      "ManagerInstallationStandardTariff": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "price": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Price"
+          },
+          "product_kind": {
+            "type": "string",
+            "title": "Product Kind"
+          },
+          "indoor_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indoor Type"
+          },
+          "route_m": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Route M"
+          },
+          "holes_by_type": {
+            "additionalProperties": {
+              "type": "string",
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+            },
+            "type": "object",
+            "title": "Holes By Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "title",
+          "description",
+          "price",
+          "product_kind",
+          "route_m",
+          "holes_by_type"
+        ],
+        "title": "ManagerInstallationStandardTariff"
+      },
+      "ManagerInstallationStandardTariffList": {
+        "properties": {
+          "price_book_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Book Revision"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerInstallationStandardTariff"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "title": "ManagerInstallationStandardTariffList"
       },
       "ManagerInstallerCreatePayload": {
         "properties": {
@@ -56131,6 +56541,104 @@
         ],
         "title": "ManagerOrderSourceApplyResult"
       },
+      "ManagerOrderSourceCard": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "external_id": {
+            "type": "string",
+            "title": "External Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "work_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Summary"
+          },
+          "equipment_details": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Details"
+          },
+          "objects": {
+            "items": {
+              "$ref": "#/components/schemas/SourceObjectDraft"
+            },
+            "type": "array",
+            "title": "Objects"
+          },
+          "originals": {
+            "items": {
+              "$ref": "#/components/schemas/SourceOriginalFile"
+            },
+            "type": "array",
+            "title": "Originals"
+          },
+          "equipment_prefill": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceEquipmentPrefillResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "installation_facts": {
+            "items": {
+              "$ref": "#/components/schemas/SourceInstallationFact"
+            },
+            "type": "array",
+            "title": "Installation Facts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id",
+          "source",
+          "external_id"
+        ],
+        "title": "ManagerOrderSourceCard"
+      },
       "ManagerOrderSourceEnrichment": {
         "properties": {
           "source": {
@@ -56212,6 +56720,105 @@
           "external_id"
         ],
         "title": "ManagerOrderSourceEnrichment"
+      },
+      "ManagerOrderSourceEquipmentAdd": {
+        "properties": {
+          "proposal_id": {
+            "type": "integer",
+            "title": "Proposal Id"
+          },
+          "command_id": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Command Id"
+          },
+          "preview_fingerprint": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Preview Fingerprint"
+          },
+          "product_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Product Ids"
+          },
+          "restore_removed_product_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Restore Removed Product Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "proposal_id",
+          "command_id",
+          "preview_fingerprint",
+          "product_ids"
+        ],
+        "title": "ManagerOrderSourceEquipmentAdd"
+      },
+      "ManagerOrderSourceEquipmentPreview": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
+          },
+          "proposal_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Status"
+          },
+          "preview_fingerprint": {
+            "type": "string",
+            "title": "Preview Fingerprint"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SourceEquipmentCandidateItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id",
+          "preview_fingerprint"
+        ],
+        "title": "ManagerOrderSourceEquipmentPreview"
       },
       "ManagerOrderSourcePreview": {
         "properties": {
@@ -66149,6 +66756,24 @@
             "type": "string",
             "title": "Service Title"
           },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "installation_display_lines": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationDisplayLineResponse"
+            },
+            "type": "array",
+            "title": "Installation Display Lines"
+          },
           "service_category": {
             "anyOf": [
               {
@@ -72258,6 +72883,116 @@
         ],
         "title": "SourceDocumentPreview"
       },
+      "SourceEquipmentCandidateItem": {
+        "properties": {
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          },
+          "product_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Title"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "available_quantity": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Available Quantity"
+          },
+          "existing_quantity": {
+            "type": "integer",
+            "title": "Existing Quantity",
+            "default": 0
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "can_add": {
+            "type": "boolean",
+            "title": "Can Add",
+            "default": false
+          },
+          "can_restore": {
+            "type": "boolean",
+            "title": "Can Restore",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "reason",
+          "message"
+        ],
+        "title": "SourceEquipmentCandidateItem"
+      },
       "SourceEquipmentDraft": {
         "properties": {
           "brand": {
@@ -72411,13 +73146,41 @@
         "type": "object",
         "title": "SourceEquipmentPrefillResult"
       },
+      "SourceInstallationFact": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "needs_review": {
+            "type": "boolean",
+            "title": "Needs Review",
+            "default": true
+          },
+          "is_excerpt": {
+            "type": "boolean",
+            "title": "Is Excerpt",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "source"
+        ],
+        "title": "SourceInstallationFact"
+      },
       "SourceObjectDraft": {
         "properties": {
           "address": {
             "type": "string",
             "maxLength": 500,
-            "minLength": 1,
-            "title": "Address"
+            "title": "Address",
+            "default": ""
           },
           "equipment": {
             "items": {
@@ -72429,10 +73192,41 @@
           }
         },
         "type": "object",
-        "required": [
-          "address"
-        ],
         "title": "SourceObjectDraft"
+      },
+      "SourceOriginalFile": {
+        "properties": {
+          "attachment_id": {
+            "type": "integer",
+            "title": "Attachment Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "mime_type": {
+            "type": "string",
+            "title": "Mime Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "attachment_id",
+          "name",
+          "mime_type"
+        ],
+        "title": "SourceOriginalFile"
       },
       "SourceScenarioDraft": {
         "properties": {

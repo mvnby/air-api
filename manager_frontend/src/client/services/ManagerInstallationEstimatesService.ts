@@ -2,7 +2,6 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { InstallationPreviewPayload } from '../models/InstallationPreviewPayload';
 import type { InstallationResolvePayload } from '../models/InstallationResolvePayload';
 import type { InstallationResolveResponse } from '../models/InstallationResolveResponse';
 import type { ManagerInstallationAttachPayload } from '../models/ManagerInstallationAttachPayload';
@@ -10,11 +9,24 @@ import type { ManagerInstallationAttachResponse } from '../models/ManagerInstall
 import type { ManagerInstallationConfirmPayload } from '../models/ManagerInstallationConfirmPayload';
 import type { ManagerInstallationConfirmResponse } from '../models/ManagerInstallationConfirmResponse';
 import type { ManagerInstallationEstimateRevisionResponse } from '../models/ManagerInstallationEstimateRevisionResponse';
+import type { ManagerInstallationPreviewPayload } from '../models/ManagerInstallationPreviewPayload';
 import type { ManagerInstallationPreviewResponse } from '../models/ManagerInstallationPreviewResponse';
+import type { ManagerInstallationStandardTariffList } from '../models/ManagerInstallationStandardTariffList';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class ManagerInstallationEstimatesService {
+    /**
+     * List Manager Installation Standard Tariffs
+     * @returns ManagerInstallationStandardTariffList Successful Response
+     * @throws ApiError
+     */
+    public static listManagerInstallationStandardTariffs(): CancelablePromise<ManagerInstallationStandardTariffList> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/installation-estimates/standard-tariffs',
+        });
+    }
     /**
      * Resolve Manager Installation Tariff
      * @param requestBody
@@ -43,7 +55,7 @@ export class ManagerInstallationEstimatesService {
      */
     public static previewManagerInstallationEstimate(
         idempotencyKey: string,
-        requestBody: InstallationPreviewPayload,
+        requestBody: ManagerInstallationPreviewPayload,
     ): CancelablePromise<ManagerInstallationPreviewResponse> {
         return __request(OpenAPI, {
             method: 'POST',

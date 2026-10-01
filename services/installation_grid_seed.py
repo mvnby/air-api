@@ -56,7 +56,9 @@ class InstallationGridTariff:
             "selector_label": self.label,
             "estimate_template": self.label,
             "short_name": self.label,
-            "full_description": self.label,
+            "full_description": (f"{self.label}; трасса до {self.included_route_meters} м; "
+                "один проход основной стены до 80 см; электропитание до 5 м; расходные материалы"
+                if self.match.get("work_kind", "standard") == "standard" else self.label),
             "category": self.category,
             "power_range": self.power_range,
             "base_price": self.base_price,
