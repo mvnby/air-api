@@ -23,6 +23,23 @@ class SourceObjectDraft(BaseModel):
     equipment: list[SourceEquipmentDraft] = Field(default_factory=list, max_length=100)
 
 
+class SourceEquipmentPrefillItem(BaseModel):
+    brand: str | None = None
+    model: str | None = None
+    quantity: int | None = None
+    product_id: int | None = None
+    line_id: int | None = None
+    reason: str
+    message: str
+
+
+class SourceEquipmentPrefillResult(BaseModel):
+    proposal_id: int | None = None
+    added: list[SourceEquipmentPrefillItem] = Field(default_factory=list)
+    skipped: list[SourceEquipmentPrefillItem] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class SourceDocumentPreview(BaseModel):
     id: str
     name: str
@@ -58,6 +75,7 @@ class ManagerOrderSourcePreview(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     analysis_source: str = "source"
     analyzed_document_ids: list[str] = Field(default_factory=list)
+    equipment_prefill: SourceEquipmentPrefillResult | None = None
 
 
 class ManagerOrderSourceAnalyze(BaseModel):
@@ -97,6 +115,7 @@ class ManagerOrderSourceApplyResult(BaseModel):
     customer_id: int | None = None
     attachment_ids: list[int] = Field(default_factory=list)
     applied_fields: list[str] = Field(default_factory=list)
+    equipment_prefill: SourceEquipmentPrefillResult | None = None
 
 
 class ManagerOrderSourceEnrichment(BaseModel):
@@ -105,6 +124,7 @@ class ManagerOrderSourceEnrichment(BaseModel):
     work_summary: str | None = None
     equipment_details: str | None = None
     objects: list[SourceObjectDraft] = Field(default_factory=list)
+    equipment_prefill: SourceEquipmentPrefillResult | None = None
     customer_branch_ids: list[int] = Field(default_factory=list)
     analysis_source: str | None = None
     analyzed_document_ids: list[str] = Field(default_factory=list)

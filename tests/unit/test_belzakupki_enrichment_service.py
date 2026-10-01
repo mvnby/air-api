@@ -89,10 +89,12 @@ def test_import_refresh_preserves_reviewed_enrichment():
     reviewed = {"source": "goszakupki_by", "external_id": "3707082", "work_summary": "Подтверждено"}
     snapshot = {"match_id": 7, "profile": {}, "score": 1, "reason": None, "ai_analysis": None,
                 "tender": {"source": "goszakupki_by", "external_id": "3707082"}}
+    history = {"prefill-fingerprint": {"product_id": 5, "line_id": 50, "quantity": 9}}
     updated = BelzakupkiImportService._next_metadata(
-        existing={"enrichment": reviewed}, snapshot=snapshot, snapshot_fingerprint="fingerprint",
+        existing={"enrichment": reviewed, "equipment_prefill_history": history}, snapshot=snapshot, snapshot_fingerprint="fingerprint",
     )
     assert updated["enrichment"] == reviewed
+    assert updated["equipment_prefill_history"] == history
 
 
 def test_source_file_magic_preserves_word_original_type_without_extension():

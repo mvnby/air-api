@@ -40,7 +40,7 @@ def test_ci_parallelizes_isolated_lanes_behind_required_test_gate():
         "fail-fast": False,
         "matrix": {"suite": ["unit", "integration"]},
     }
-    assert jobs["python-tests"]["timeout-minutes"] == 60
+    assert jobs["python-tests"]["timeout-minutes"] == "${{ matrix.suite == 'unit' && 75 || 60 }}"
     assert "needs" not in jobs["manager-dist"]
     assert "needs" not in jobs["manager"]
     assert jobs["backend-contracts"]["needs"] == "manager-dist"

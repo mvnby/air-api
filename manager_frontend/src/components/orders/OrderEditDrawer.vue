@@ -12,6 +12,7 @@ import OrderPlanningPanel from './OrderPlanningPanel.vue';
 import OrderRepairPanel from './OrderRepairPanel.vue';
 import OrderCustomerContext from './OrderCustomerContext.vue';
 import LeadSourceReviewModal from '../leads/LeadSourceReviewModal.vue';
+import { sourceEquipmentPrefillMessage, type SourceAppliedEvent } from '../../services/order-source-review';
 import OrderExecutionPanel from './OrderExecutionPanel.vue';
 import OrderDocumentsWorkspace from './OrderDocumentsWorkspace.vue';
 import OrderManagerLabels from './OrderManagerLabels.vue';
@@ -285,6 +286,11 @@ const {
 const documentsMounted = ref(false);
 const customerContextTarget = ref<'customer' | 'object' | null>(null);
 const sourceReviewOpen = ref(false);
+const handleSourceApplied = (result: SourceAppliedEvent) => {
+  sourceReviewOpen.value = false;
+  setToast(sourceEquipmentPrefillMessage(result.equipmentPrefill) || 'Данные из источника применены');
+  emit('reload', result.orderId);
+};
 watch(activeWorkspaceSection, (section) => {
   if (section === 'documents') documentsMounted.value = true;
 }, { immediate: true });
@@ -675,7 +681,7 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
         :order-id="order.id"
         :lead-status="status"
         @close="sourceReviewOpen = false"
-        @applied="sourceReviewOpen = false; emit('reload', $event.orderId)"
+        @applied="handleSourceApplied"
       />
     </aside>
     <div v-if="installationAttaching" role="status" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 px-4 text-center text-sm font-semibold text-slate-900">

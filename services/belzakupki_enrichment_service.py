@@ -33,6 +33,7 @@ from schemas_belzakupki_enrichment import (
 from services.customer_party_classifier import infer_customer_type_from_requisites
 from services.customer_creation_service import CustomerAlreadyExistsError, CustomerCreationService
 from services.belzakupki_source_analysis import analyze_tender_text, extract_missing_document_text
+from services.belzakupki_equipment_prefill import BelzakupkiEquipmentPrefillService
 from services.order_scenarios import SCENARIOS, infer_scenario_from_task, resolve_scenario
 from services.service_attachment_service import ServiceAttachmentService
 from services.tenant_entity_access_service import TenantEntityAccessService
@@ -333,6 +334,7 @@ class BelzakupkiEnrichmentService:
             documents=documents, field_sources=field_sources, warnings=warnings,
             analysis_source="reviewed" if reviewed else "source",
             analyzed_document_ids=[str(value) for value in previous.get("analyzed_document_ids") or []] if reviewed else [],
+            equipment_prefill=previous.get("equipment_prefill") if reviewed else None,
         )
 
     @classmethod
@@ -549,12 +551,29 @@ class BelzakupkiEnrichmentService:
                 payload.analyzed_document_ids if payload.analyzed_document_ids is not None
                 else previous.get("analyzed_document_ids") or []
             ),
+            "equipment_prefill": previous.get("equipment_prefill"),
         }
         belzakupki_meta["enrichment"] = enrichment
         source_meta["belzakupki"] = belzakupki_meta
         order.technical_meta = source_meta
         flag_modified(order, "technical_meta")
         applied.append("source_enrichment")
+        equipment_prefill = None
+        if order.workflow_type == "sales_installation" and "objects" in fields_set and payload.objects is not None:
+            equipment_prefill = await BelzakupkiEquipmentPrefillService.apply(
+                session, order=order, scope=scope, source=source,
+                external_id=external_id, objects=reviewed_objects,
+            )
+            # The prefill service also stages provenance; preserve that ledger.
+            source_meta = dict(order.technical_meta or {})
+            belzakupki_meta = dict(source_meta.get("belzakupki") or {})
+            enrichment["equipment_prefill"] = equipment_prefill.model_dump()
+            belzakupki_meta["enrichment"] = enrichment
+            source_meta["belzakupki"] = belzakupki_meta
+            order.technical_meta = source_meta
+            flag_modified(order, "technical_meta")
+            if equipment_prefill.added:
+                applied.append("proposal_equipment")
         available = {str(doc["id"]): doc for doc in cls._documents(detail)}
         attachment_ids: list[int] = []
         if any(document_id not in available for document_id in payload.document_ids):
@@ -590,4 +609,5 @@ class BelzakupkiEnrichmentService:
         return ManagerOrderSourceApplyResult(
             order_id=order_id, customer_id=order.customer_id,
             attachment_ids=attachment_ids, applied_fields=applied,
+            equipment_prefill=equipment_prefill,
         )

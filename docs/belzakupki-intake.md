@@ -77,6 +77,23 @@ source documents and object addresses. This path has no automatic backfill:
 existing orders such as #455 are enriched when a manager opens and confirms the
 source review.
 
+For **Продажа и монтаж**, applying reviewed objects also appends equipment to
+the selected draft proposal when the full model has exactly one match in the
+manager's scoped catalog, a current selling price and enough available stock
+for the summed quantity across objects. Matching ignores case, whitespace and
+equivalent dash characters; it never uses partial model names. The explicit
+`(WF)` marker on an indoor/outdoor pair is accepted only when both canonical
+component models match and the catalog confirms built-in Wi-Fi. The price and
+cost come from the same storefront and supply projection as manual selection;
+unknown cost produces a warning. Adding a line does not reserve stock.
+
+Ambiguous, incomplete, unavailable or unpriced items remain for manual
+selection, with a saved report in source review. Existing proposal lines keep
+their quantity and price. A source provenance ledger survives importer refresh
+and prevents repeated review from duplicating items or recreating equipment a
+manager removed. Installation is added separately through
+**Добавить стандартный монтаж** or the editable installation estimate.
+
 Apply migration `e64f5a6b7c8d` through the normal reviewed deployment path before
 starting this importer. Disabling `BELZAKUPKI_IMPORT_ENABLED` and redeploying
 stops new intake without deleting orders/checkpoints. Rollback of application
