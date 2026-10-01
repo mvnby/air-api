@@ -206,10 +206,9 @@ describe('OrderProposalWorkspace', () => {
     commercial.serviceLines.value = [{ title: 'Монтаж', quantity: 1, price: 500, cost: 0,
       installation_estimate_revision_id: 21 }];
     await wrapper.vm.$nextTick();
-    expect(wrapper.text()).toContain('новый пустой черновик');
-    expect(wrapper.text()).not.toContain('Создать копию');
-    await wrapper.findAll('button').find((button) => button.text().includes('Новый черновик'))?.trigger('click');
-    expect(proposal.createProposal).toHaveBeenCalledOnce();
+    expect(wrapper.text()).not.toContain('новый пустой черновик');
+    expect(wrapper.text()).toContain('Создать копию');
+    expect(wrapper.get('fieldset').element.disabled).toBe(true);
   });
 
   it('keeps the real product editor and its edits mounted while switching to the client preview', async () => {

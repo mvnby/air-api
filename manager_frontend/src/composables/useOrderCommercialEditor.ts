@@ -24,6 +24,7 @@ import type {
 } from '../components/orders/order-editor-types';
 import { buildKnownProductClientDescription } from '../components/orders/product-client-description';
 import { createOrderProductDescriptionFiller } from './orderProductDescriptionFiller';
+import { manualInstallationLines } from '../components/orders/order-installation-manual-lines';
 
 type ToastHandler = (message: string, type?: 'success' | 'error') => void;
 
@@ -118,6 +119,7 @@ const mapProductLineFromResponse = (line: OrderProductLineResponse): ProductLine
   product_id: line.product_id || 0,
   product_query: line.product_title || '',
   client_description: line.client_description ?? null,
+  catalog_price: line.catalog_price ?? null,
   quantity: line.quantity,
   price: line.price,
   cost: Number(line.cost || 0),
@@ -217,7 +219,8 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
       rememberProductOption({
         id: line.product_id,
         title: line.product_query,
-        price: line.price,
+        price: line.catalog_price ?? line.price,
+        catalog_price_known: line.catalog_price != null,
         cost: line.cost,
         product_kind: 'unknown',
         is_inverter: false,
@@ -535,9 +538,21 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
     }
   };
 
-  const removeServiceLine = async (index: number) => {
+  const editInstallationLine = (index: number, displayIndex = 0) => {
+    const manual = manualInstallationLines(serviceLines.value, index, displayIndex);
+    serviceLines.value = manual.lines;
+    editingServiceLineIndex.value = manual.index;
+  };
+
+  const removeServiceLine = async (index: number, displayIndex = 0) => {
+    const selectedLine = serviceLines.value[index];
+    if (!selectedLine) return;
     if (!await confirmDialog({ title: 'Удалить услугу из заказа?', confirmText: 'Удалить', variant: 'danger' })) return;
-    serviceLines.value.splice(index, 1);
+    const currentIndex = serviceLines.value.indexOf(selectedLine);
+    if (currentIndex < 0) return;
+    const manual = manualInstallationLines(serviceLines.value, currentIndex, displayIndex);
+    serviceLines.value = manual.lines;
+    serviceLines.value.splice(manual.index, 1);
     editingServiceLineIndex.value = null;
     if (activeServiceSuggestionIndex.value === index) {
       activeServiceSuggestionIndex.value = null;
@@ -560,6 +575,8 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
       link_id: line.link_id ?? null,
       service_id: line.service_id ?? null,
       title: line.title,
+      ...(line.description !== undefined && !line.installation_estimate_revision_id
+        ? { description: line.description?.trim() || null } : {}),
       quantity: Math.trunc(Number(line.quantity) || 0),
       price: Number(line.price || 0),
       cost: (!line.cost && line.cost !== 0) ? null : Number(line.cost),
@@ -585,6 +602,7 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
     if (serviceLines.value.some((line) => !validServiceMoney(line.price))) return 'Цена услуги должна быть указана с точностью до копейки';
     if (serviceLines.value.some((line) => !validOptionalServiceMoney(line.cost))) return 'Себестоимость услуги должна быть указана с точностью до копейки';
     if (serviceLines.value.some((line) => !line.title?.trim())) return 'Для услуги укажите название';
+    if (serviceLines.value.some((line) => (line.description?.length || 0) > 10_000)) return 'Описание услуги не может быть длиннее 10000 символов';
     return '';
   };
 
@@ -606,6 +624,7 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
       link_id: line.link_id ?? null,
       service_id: line.service_id ?? null,
       title: String(line.title || '').trim(),
+      description: String(line.description || '').trim() || null,
       quantity: Number(line.quantity || 0),
       price: Number(line.price || 0),
       cost: Number(line.cost || 0),
@@ -643,6 +662,7 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
     createSupplyFromProductLine,
     currentLinesSnapshot,
     editingServiceLineIndex,
+    editInstallationLine,
     estimateImportMode,
     estimateOptions,
     estimateOptionsLoading,

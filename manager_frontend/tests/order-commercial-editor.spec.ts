@@ -39,6 +39,91 @@ afterEach(() => {
 });
 
 describe('useOrderCommercialEditor', () => {
+  const legacyInstallation = () => ({ id: 10, service_id: null, service_title: 'Установка №1…№5',
+    quantity: 1, price: 3300, cost: 0, line_total: 3300, installation_estimate_revision_id: 5,
+    installation_projection_mode: 'collapsed', installation_display_lines: [
+      { title: 'Монтаж настенного кондиционера', quantity: 5, price: 600, description: 'Трасса 3 м' },
+      { title: 'Сборка лесов', quantity: 2, price: 150, description: 'По согласованию' },
+    ] });
+
+  it('edits a legacy display group as a manual commercial row without changing the accepted source', () => {
+    const editor = createEditor();
+    const response = legacyInstallation();
+    editor.loadLines([], [response]);
+    editor.editInstallationLine(0, 1);
+    expect(editor.editingServiceLineIndex.value).toBe(1);
+    expect(editor.total.value).toBe(3300);
+    expect(editor.serviceLines.value.every((line) => !line.link_id && !line.installation_estimate_revision_id)).toBe(true);
+    const line = editor.serviceLines.value[1]!;
+    line.title = 'Монтаж лесов';
+    line.description = 'Согласованная формулировка';
+    line.price = 125.55;
+    const payload = editor.buildLinesPayload(17).services;
+    expect(payload[1]).toMatchObject({ title: 'Монтаж лесов', description: 'Согласованная формулировка', quantity: 2, price: 125.55 });
+    expect(payload[0]).toMatchObject({ title: 'Монтаж настенного кондиционера', description: 'Трасса 3 м', quantity: 5, price: 600 });
+    expect(response.installation_display_lines[1]).toMatchObject({ title: 'Сборка лесов', price: 150 });
+  });
+
+  it('deletes only the selected legacy group and leaves the other work in the same proposal', async () => {
+    const editor = createEditor();
+    editor.loadLines([], [legacyInstallation()]);
+    await editor.removeServiceLine(0, 0);
+    expect(editor.serviceLines.value).toHaveLength(1);
+    expect(editor.buildLinesPayload(17).services[0]).toMatchObject({ link_id: null, title: 'Сборка лесов', quantity: 2, price: 150 });
+    expect(editor.total.value).toBe(300);
+  });
+
+  it('retains frozen provenance if deletion is cancelled', async () => {
+    const editor = createEditor();
+    editor.loadLines([], [legacyInstallation()]);
+    const original = editor.currentLinesSnapshot(17);
+    feedbackMock.confirmDialog.mockResolvedValueOnce(false);
+    await editor.removeServiceLine(0, 1);
+    expect(editor.currentLinesSnapshot(17)).toBe(original);
+    expect(editor.serviceLines.value[0]!.installation_estimate_revision_id).toBe(5);
+  });
+
+  it('removes all commercial bindings of the edited revision while keeping other calculations', () => {
+    const editor = createEditor();
+    const first = legacyInstallation();
+    const sibling = { id: 11, service_id: null, service_title: 'Подключение', quantity: 1, price: 100, line_total: 100,
+      description: 'Старое согласованное описание', installation_estimate_revision_id: 5 };
+    const other = { id: 12, service_id: null, service_title: 'Другая смета', quantity: 1, price: 700, line_total: 700,
+      installation_estimate_revision_id: 6 };
+    editor.loadLines([], [first, sibling, other]);
+    editor.editInstallationLine(1);
+    expect(editor.editingServiceLineIndex.value).toBe(2);
+    expect(editor.serviceLines.value[2]).toMatchObject({ title: 'Подключение', description: 'Старое согласованное описание', price: 100 });
+    expect(editor.serviceLines.value[2]!.installation_estimate_revision_id).toBeUndefined();
+    expect(editor.serviceLines.value[3]!.installation_estimate_revision_id).toBe(6);
+    expect(editor.total.value).toBe(4100);
+  });
+
+  it('includes manual description changes in autosave and preserves explicit clearing through reload', () => {
+    const editor = createEditor();
+    editor.serviceLines.value = [{ link_id: 10, title: 'Монтаж', description: 'До 3 метров', quantity: 5, price: 600, cost: 0 }];
+    const original = editor.currentLinesSnapshot(17);
+    editor.serviceLines.value[0]!.description = 'До 5 метров';
+    expect(editor.currentLinesSnapshot(17)).not.toBe(original);
+    expect(editor.buildLinesPayload(17).services[0]!.description).toBe('До 5 метров');
+    editor.serviceLines.value[0]!.description = '';
+    expect(editor.buildLinesPayload(17).services[0]!.description).toBeNull();
+    editor.loadLines([], [{ id: 10, service_title: 'Монтаж лесов', description: 'До 5 метров', quantity: 5, price: 550, line_total: 2750 }]);
+    expect(editor.buildLinesPayload(17).services[0]).toMatchObject({ title: 'Монтаж лесов', description: 'До 5 метров', price: 550 });
+  });
+
+  it('uses canonical catalog price for loaded discounted products and marks unknown fallbacks', () => {
+    const editor = createEditor();
+    editor.loadLines([
+      { id: 1, product_id: 2, product_title: 'MDV', price: 2480, catalog_price: 2690, quantity: 5, line_total: 12400, is_installation_included: false, installation_price: 0 },
+      { id: 2, product_id: 3, product_title: 'Без цены', price: 2000, quantity: 1, line_total: 2000, is_installation_included: false, installation_price: 0 },
+    ], []);
+    editor.syncProductLookupFromLines();
+    expect(editor.productLookupById.value[2]).toMatchObject({ price: 2690, catalog_price_known: true });
+    expect(editor.productLookupById.value[3]).toMatchObject({ price: 2000, catalog_price_known: false });
+    expect(editor.buildLinesPayload(17).products[0]!.price).toBe(2480);
+    expect(editor.buildLinesPayload(17).products[0]).not.toHaveProperty('catalog_price');
+  });
   it('keeps legacy frozen row bytes in save payload while showing grouped presentation', () => {
     const editor = createEditor();
     editor.loadLines([], [{ id: 10, service_id: null, service_title: 'Установка №1…№5',

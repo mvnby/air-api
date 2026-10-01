@@ -52,7 +52,6 @@ watch(clientPreview, async (preview) => {
 });
 const commercial = reactive(props.commercial);
 const proposal = reactive(props.proposal);
-const hasAttachedInstallation = computed(() => commercial.serviceLines.some((line) => Boolean(line.installation_estimate_revision_id)));
 const multiSplitOpen = ref(false);
 const canAddInstallation = computed(() => Boolean(props.orderId && proposal.activeProposal?.id && (props.workflow === 'sales_installation' || props.workflow === 'service_work')));
 const addStandardInstallation = () => {
@@ -107,12 +106,10 @@ defineExpose({
       </template>
 
       <div v-if="proposal.activeProposalLocked" class="mb-3 flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
-        <span v-if="hasAttachedInstallation">Эта редакция уже {{ proposal.activeProposalStatus === 'approved' ? 'принята клиентом' : 'отправлена' }}. Для замены монтажа создайте новый пустой черновик предложения.</span>
-        <span v-else>Эта редакция уже {{ proposal.activeProposalStatus === 'approved' ? 'принята клиентом' : 'отправлена' }}. Чтобы изменить состав или стоимость, создайте копию либо верните её в черновик.</span>
+        <span>Эта редакция уже {{ proposal.activeProposalStatus === 'approved' ? 'принята клиентом' : 'отправлена' }}. Чтобы изменить состав или стоимость, создайте копию либо верните её в черновик.</span>
         <div class="flex shrink-0 gap-2">
-          <button v-if="hasAttachedInstallation" type="button" class="btn-mini-outline h-8 px-2 text-xs" @click="proposal.createProposal">Новый черновик</button>
-          <template v-else><button type="button" class="btn-mini-outline h-8 px-2 text-xs" @click="proposal.duplicateProposal">Создать копию</button>
-          <button type="button" class="btn-mini-outline h-8 px-2 text-xs" @click="proposal.changeActiveProposalStatus('draft')">В черновик</button></template>
+          <button type="button" class="btn-mini-outline h-8 px-2 text-xs" @click="proposal.duplicateProposal">Создать копию</button>
+          <button type="button" class="btn-mini-outline h-8 px-2 text-xs" @click="proposal.changeActiveProposalStatus('draft')">В черновик</button>
         </div>
       </div>
 
@@ -198,6 +195,7 @@ defineExpose({
           @select="commercial.selectServiceTariffForLine($event.index, $event.option)"
           @description-mode="commercial.setServiceLineDescriptionMode($event.index, $event.mode)"
           @remove="commercial.removeServiceLine"
+          @edit-installation="commercial.editInstallationLine"
           @add="commercial.addServiceLine"
           @add-tariff="commercial.addServiceTariff"
           @append-estimate="commercial.addCreatedEstimate($event.id, $event.lines)"
@@ -211,7 +209,6 @@ defineExpose({
         <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
           <button v-if="canAddInstallation" type="button" class="min-h-8 hover:text-brand-700" data-testid="installation-open" @click="installationPanelRef?.openPanel()">Настроить монтаж</button>
           <button v-if="orderId && workflow === 'sales_installation'" type="button" class="min-h-8 hover:text-brand-700" :aria-expanded="multiSplitOpen" @click="multiSplitOpen = !multiSplitOpen">{{ multiSplitOpen ? 'Скрыть мультисплит' : 'Собрать мультисплит' }}</button>
-          <span v-if="hasAttachedInstallation">Монтаж зафиксирован; для замены — новый пустой черновик.</span>
         </div>
       </fieldset>
       <button v-if="commercial.total > 0" type="button" class="mt-2 min-h-8 text-xs text-brand-700 hover:underline" data-testid="proposal-to-documents" @click="emit('documents')">Перейти к документам →</button>

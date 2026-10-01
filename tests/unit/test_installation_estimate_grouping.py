@@ -177,12 +177,13 @@ async def test_five_manual_standard_installations_confirm_attach_replay_and_rema
                 idempotency_key="grouped-replay-key")
             assert repeated.value == attached.value
             line = (await session.execute(select(OrderServiceLink).where(OrderServiceLink.order_id == order_id))).scalars().one()
-            with pytest.raises(ValueError):
-                await OrderUpdateCommandService.update_order_for_manager(session, order_id,
-                    ManagerOrderUpdatePayload(services=[{"link_id": line.id, "title": line.title,
-                        "quantity": 4, "price": 600, "installation_estimate_revision_id": line.installation_estimate_revision_id,
-                        "installation_projection_mode": "collapsed"}]), tenant_scope=scope)
+            await OrderUpdateCommandService.update_order_for_manager(session, order_id,
+                ManagerOrderUpdatePayload(services=[{"link_id": line.id, "title": line.title,
+                    "quantity": 4, "price": 550, "description": "Трасса 5 м"}]), tenant_scope=scope)
             await session.refresh(line)
-            assert line.quantity == 5 and line.price == Decimal("600")
+            assert line.quantity == 4 and line.price == Decimal("550") and line.description == "Трасса 5 м"
+            assert line.installation_estimate_revision_id is None
+            retained = await Confirm.get_revision(session, scope, accepted.value.estimate_id, 1)
+            assert retained.snapshot["result"]["total"] == "3000.00"
     finally:
         await engine.dispose()

@@ -402,12 +402,19 @@ async def test_confirmed_revision_survives_preview_expiry_and_attach_is_exact(tm
             assert await session.scalar(select(OrderServiceLink.quantity).where(
                 OrderServiceLink.id == unrelated_id,
             )) == 2
-            with pytest.raises(ValueError, match="Attached installation estimate lines are immutable"):
+            proposal.status = "sent"
+            session.add(proposal)
+            await session.commit()
+            with pytest.raises(ValueError, match="Sent or accepted proposal cannot be edited"):
                 await OrderUpdateCommandService.update_order_for_manager(
                     session, order_id, ManagerOrderUpdatePayload(services=[{
                         **unchanged, "price": 1,
                     }]), tenant_scope=scope,
                 )
+            proposal = await session.get(OrderProposal, proposal_id)
+            proposal.status = "draft"
+            session.add(proposal)
+            await session.commit()
 
             with pytest.raises(HTTPException) as duplicate:
                 await Confirm.attach(session, scope, order_id=order_id, proposal_id=proposal_id,

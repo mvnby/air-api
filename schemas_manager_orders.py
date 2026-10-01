@@ -148,6 +148,7 @@ class OrderProductLineResponse(BaseModel):
     currency_snapshot: Optional[str] = None
     quantity: int
     price: int
+    catalog_price: Optional[int] = None
     cost: Optional[int] = None
     is_installation_included: bool
     installation_price: int
@@ -541,6 +542,7 @@ class ManagerOrderServiceLinePayload(BaseModel):
     proposal_id: Optional[int] = None
     service_id: Optional[int] = None
     title: str
+    description: Optional[str] = Field(default=None, max_length=10000)
     quantity: int
     price: float
     cost: Optional[float] = None

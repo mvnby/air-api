@@ -30,3 +30,13 @@ def test_installation_description_does_not_change_legacy_or_other_service_titles
 
     assert service_line_document_title(legacy, {3: "Чужой состав"}) == legacy.title
     assert service_line_document_title(ordinary) == "Обслуживание"
+
+
+def test_manual_description_is_authoritative_for_customer_document_rows():
+    link = SimpleNamespace(id=41, title="Монтаж по договорённости", description="Трасса 5 м",
+                           service=None, price=Decimal("550"), quantity=5)
+    rows = line_rows([], [(link, 5)], {41: "Трасса 3 м"})
+    assert rows[0]["line.title"] == "Монтаж по договорённости\nТрасса 5 м"
+    assert Decimal(rows[0]["line.amount_raw"]) == Decimal("2750.00")
+    link.description = ""
+    assert service_line_document_title(link, {41: "Трасса 3 м"}) == link.title

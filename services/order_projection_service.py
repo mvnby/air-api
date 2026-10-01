@@ -169,6 +169,7 @@ class OrderProjectionService:
             "currency_snapshot": getattr(link, "currency_snapshot", None),
             "quantity": link.quantity,
             "price": link.price,
+            "catalog_price": link.product.price if link.product is not None else None,
             "cost": None if demo_read_only else link.cost,
             "is_installation_included": bool(link.is_installation_included),
             "installation_price": int(link.installation_price or 0),
@@ -191,6 +192,7 @@ class OrderProjectionService:
             "proposal_id": link.proposal_id,
             "service_id": link.service_id,
             "service_title": service_title,
+            "description": getattr(link, "description", None),
             "service_category": link.service.category if link.service else None,
             "quantity": link.quantity,
             "price": link.price,
@@ -557,8 +559,12 @@ class OrderProjectionService:
         from services.installation_estimate_projection import frozen_installation_presentations
         presentations = await frozen_installation_presentations(session, order.service_links)
         for line in data["service_lines"]:
-            line.update(presentations.get(line["id"], {}))
+            presentation = presentations.get(line["id"], {})
+            line.update({key: value for key, value in presentation.items()
+                         if key != "description" or line["description"] is None})
         for proposal in data["proposals"]:
             for line in proposal["service_lines"]:
-                line.update(presentations.get(line["id"], {}))
+                presentation = presentations.get(line["id"], {})
+                line.update({key: value for key, value in presentation.items()
+                             if key != "description" or line["description"] is None})
         return data
