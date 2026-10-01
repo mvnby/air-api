@@ -22,6 +22,7 @@ const props = defineProps<{
   saveFailed?: boolean;
   saveStatusText?: string;
   compact?: boolean;
+  workspace?: boolean;
   usageEnabled?: boolean;
   canViewUsageReport?: boolean;
 }>();
@@ -47,7 +48,7 @@ const titleDraft = ref('');
 const headerRef = ref<HTMLElement | null>(null);
 const contentRef = ref<HTMLElement | null>(null);
 const focusLocksCompactMode = ref(false);
-const effectiveCompact = computed(() => Boolean(props.compact && !editingTitle.value && !menuOpen.value && !focusLocksCompactMode.value));
+const effectiveCompact = computed(() => Boolean((props.workspace || props.compact) && !editingTitle.value && !menuOpen.value && !focusLocksCompactMode.value));
 const showCustomerName = computed(() => {
   const customerName = String(props.customerName || '').trim();
   return Boolean(effectiveCompact.value && customerName && customerName !== String(props.title || '').trim());
@@ -163,11 +164,11 @@ const onWorkflowChange = async (event: Event) => {
     @focusout="refreshFocusLock"
   >
     <div ref="contentRef">
-    <div class="flex gap-2 sm:gap-3" :class="effectiveCompact ? 'h-9 items-center' : 'items-start'">
+    <div class="flex gap-2 sm:gap-3" :class="effectiveCompact ? 'min-h-9 items-center' : 'items-start'">
       <div class="min-w-0 flex-1">
         <div v-if="effectiveCompact" class="flex min-w-0 items-center gap-2">
           <span class="shrink-0 text-xs font-semibold text-slate-600 dark:text-slate-300">№{{ orderId }}</span>
-          <button type="button" class="min-w-0 flex-1 truncate text-left text-sm font-semibold text-slate-950 dark:text-white" title="Изменить название" @click="startTitleEdit">
+          <button type="button" class="line-clamp-2 min-w-0 flex-1 break-words text-left text-sm font-semibold leading-5 text-slate-950 dark:text-white" title="Изменить название" @click="startTitleEdit">
             {{ title || 'Без названия' }}
           </button>
         </div>
@@ -207,7 +208,7 @@ const onWorkflowChange = async (event: Event) => {
 
       <div class="flex shrink-0 items-center gap-1">
         <button
-          v-if="effectiveCompact && dirty"
+          v-if="(effectiveCompact || workspace) && dirty"
           type="button"
           class="btn-mini h-9 w-9 justify-center p-0"
           :disabled="saving"
@@ -217,6 +218,7 @@ const onWorkflowChange = async (event: Event) => {
         >
           <Save :size="15" />
         </button>
+        <button v-if="workspace && dirty" type="button" class="btn-mini-outline h-9 w-9 justify-center p-0" :disabled="saving" title="Отменить изменения" aria-label="Отменить изменения" @click="emit('discard')"><Undo2 :size="15" /></button>
         <div class="relative">
           <button
             type="button"
@@ -279,9 +281,10 @@ const onWorkflowChange = async (event: Event) => {
       <span role="status" aria-live="polite" :class="saveFailed ? 'text-red-700 dark:text-red-300' : 'text-slate-500 dark:text-slate-400'">
         {{ saveStatusText || (saving ? 'Сохраняем…' : dirty ? 'Есть изменения' : 'Сохранено') }}
       </span>
+      <span v-if="workspace" class="hidden rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300 sm:inline">{{ viewModel.stageLabel }}</span>
     </div>
 
-    <div v-if="effectiveCompact" class="mt-2 flex h-8 min-w-0 items-center gap-2">
+    <div v-if="effectiveCompact && !workspace" class="mt-2 flex h-8 min-w-0 items-center gap-2">
       <span
         class="inline-flex min-w-0 max-w-[42%] items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300"
         :title="viewModel.stageLabel"
@@ -300,7 +303,7 @@ const onWorkflowChange = async (event: Event) => {
       </button>
     </div>
 
-    <div v-if="!effectiveCompact" class="mt-2.5 flex flex-wrap items-center gap-2">
+    <div v-if="!effectiveCompact && !workspace" class="mt-2.5 flex flex-wrap items-center gap-2">
       <span class="rounded-lg bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">Сумма {{ formatMoney(total) }}</span>
       <span class="text-xs text-slate-500 dark:text-slate-400">оплачено {{ formatMoney(paid) }}</span>
       <span class="text-xs font-semibold" :class="balance > 0 ? 'text-rose-600 dark:text-rose-300' : 'text-emerald-700 dark:text-emerald-300'">
@@ -308,7 +311,7 @@ const onWorkflowChange = async (event: Event) => {
       </span>
     </div>
 
-    <div v-if="!effectiveCompact" class="mt-2.5 flex items-center gap-2">
+    <div v-if="!effectiveCompact && !workspace" class="mt-2.5 flex items-center gap-2">
       <button type="button" class="btn-mini min-w-0 flex-1 justify-center text-xs sm:flex-none" @click="emit('next')">{{ viewModel.nextAction.label }}</button>
       <button v-if="balance > 0" type="button" class="btn-mini-outline hidden h-9 text-xs sm:inline-flex" @click="emit('payments')">Внести оплату</button>
       <div v-if="dirty" class="flex shrink-0 items-center gap-1.5">

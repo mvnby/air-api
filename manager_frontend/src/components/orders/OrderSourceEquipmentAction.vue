@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue';
 import { getApiErrorMessage } from '../../utils/api-errors';
 import { orderSourceReviewApi, sourceEquipmentPrefillMessage, type SourceEquipmentPreview, type SourceCommandHook, type SourceCommandEndHook } from '../../services/order-source-review';
 
-const props = defineProps<{ orderId: number; proposalId?: number | null; beforeAction?: SourceCommandHook; afterAction?: SourceCommandHook; endAction?: SourceCommandEndHook }>();
+const props = defineProps<{ orderId: number; proposalId?: number | null; compact?: boolean; beforeAction?: SourceCommandHook; afterAction?: SourceCommandHook; endAction?: SourceCommandEndHook }>();
 const emit = defineEmits<{ applied: [orderId: number]; toast: [result: { message: string; type: 'success' | 'error' }] }>();
 const expanded = ref(false);
 const loading = ref(false);
@@ -70,9 +70,9 @@ watch(() => [props.orderId, props.proposalId] as const, () => {
 </script>
 
 <template>
-  <section class="mb-3 text-sm" aria-label="Товары из заявки">
-    <button type="button" class="btn-mini-outline" :disabled="applying" :aria-expanded="expanded" @click="toggle">{{ expanded ? 'Скрыть подбор из заявки' : 'Добавить из заявки' }}</button>
-    <div v-if="expanded" class="mt-3 space-y-3">
+  <section :class="compact ? 'contents' : 'mb-3 text-sm'" aria-label="Товары из заявки">
+    <button type="button" class="btn-mini-outline" :class="compact ? 'h-8 text-xs' : ''" :disabled="applying" :aria-expanded="expanded" @click="toggle">{{ expanded ? 'Скрыть подбор из заявки' : 'Добавить из заявки' }}</button>
+    <div v-if="expanded" class="mt-3 space-y-3" :class="compact ? 'basis-full text-sm' : ''">
       <p v-if="loading" role="status" class="text-slate-500">Проверяем модели, цену и наличие…</p>
       <p v-if="error" role="alert" class="text-red-700">{{ error }} <button type="button" class="underline" :disabled="applying || loading" @click="load">Обновить подбор</button></p>
       <template v-if="preview">

@@ -19,6 +19,8 @@ import OrderExecutionPanel from './OrderExecutionPanel.vue';
 import OrderDocumentsWorkspace from './OrderDocumentsWorkspace.vue';
 import OrderManagerLabels from './OrderManagerLabels.vue';
 import OrderProposalWorkspace from './OrderProposalWorkspace.vue';
+import OrderProposalTotalsBar from './OrderProposalTotalsBar.vue';
+import { useDemoReadOnly } from '../../services/manager-demo';
 import OrderWorkspaceNav from './OrderWorkspaceNav.vue';
 import OrderWorkspaceContext from './OrderWorkspaceContext.vue';
 import OrderWorkspaceUsageReport from './OrderWorkspaceUsageReport.vue';
@@ -60,8 +62,18 @@ const emit = defineEmits<{
 }>();
 
 const drawerScrollContainer = ref<HTMLElement | null>(null);
+const workspaceScrollContainer = ref<HTMLElement | null>(null);
+const proposalClientPreview = ref(false);
+const showProposalCosts = ref(false);
+const mobileContextOpen = ref(false);
+const demoReadOnly = useDemoReadOnly();
 const { captureFocus, focusContainer, restoreFocus, trapFocus } = useDrawerFocusTrap(drawerScrollContainer);
-const { compact: compactWorkspaceHeader, reset: resetWorkspaceHeader } = useSmartStickyHeader(drawerScrollContainer);
+const { compact: compactWorkspaceHeader, reset: resetWorkspaceHeader } = useSmartStickyHeader(workspaceScrollContainer);
+watch(() => [props.order?.id, props.modelValue], () => {
+  proposalClientPreview.value = false;
+  showProposalCosts.value = false;
+  mobileContextOpen.value = false;
+});
 
 const serviceKindLabels: Record<string, string> = {
   installation: 'монтаж',
@@ -308,8 +320,10 @@ const handleSourceApplied = (result: SourceAppliedEvent) => {
   setToast(sourceEquipmentPrefillMessage(result.equipmentPrefill) || 'Данные из источника применены');
 };
 watch(activeWorkspaceSection, (section) => {
+  if (section !== 'proposal') proposalClientPreview.value = false;
   if (section === 'documents') documentsMounted.value = true;
 }, { immediate: true });
+watch(activeProposalId, () => { proposalClientPreview.value = false; });
 const customer = computed(() => props.order?.customer ?? null);
 const orderWorkspaceUsage = useOrderWorkspaceUsage({
   open: computed(() => props.modelValue),
@@ -515,8 +529,11 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
       </div>
     </Transition>
     <div class="flex-1 bg-black/60" aria-hidden="true" @click="closeDrawer" />
-    <aside ref="drawerScrollContainer" tabindex="-1" role="dialog" aria-modal="true" aria-label="Рабочая область заказа" :inert="installationAttaching || sourceApplying ? true : undefined" :aria-busy="installationAttaching || sourceApplying" class="relative h-full w-full min-w-0 overflow-y-auto bg-white text-gray-900 shadow-2xl outline-none dark:bg-slate-950 dark:text-slate-100 md:my-4 md:h-[calc(100%-2rem)] md:w-[calc(100%-2rem)] md:rounded-2xl xl:max-w-[1680px] xl:border xl:border-gray-200 dark:xl:border-slate-700" @keydown="trapFocus" @keydown.esc.stop="closeDrawer" @click="trackUsageControl" @change="trackUsageControl">
+    <aside ref="drawerScrollContainer" tabindex="-1" role="dialog" aria-modal="true" aria-label="Рабочая область заказа" :inert="installationAttaching || sourceApplying ? true : undefined" :aria-busy="installationAttaching || sourceApplying" class="relative flex h-full w-full min-w-0 flex-col overflow-hidden bg-white text-gray-900 shadow-2xl outline-none dark:bg-slate-950 dark:text-slate-100 md:my-4 md:h-[calc(100%-2rem)] md:w-[calc(100%-2rem)] md:rounded-2xl xl:max-w-[1680px] xl:border xl:border-gray-200 dark:xl:border-slate-700" @keydown="trapFocus" @keydown.esc.stop="closeDrawer" @click="trackUsageControl" @change="trackUsageControl">
       <OrderWorkspaceHeader
+        v-show="!proposalClientPreview"
+        class="shrink-0"
+        :workspace="activeWorkspaceSection === 'proposal'"
         :order-id="order?.id"
         :title="displayOrderTitle"
         :customer-name="customerDisplayName"
@@ -551,23 +568,29 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
 
       <OrderWorkspaceUsageReport :open="usageReportOpen" @close="usageReportOpen = false" />
 
-      <div class="grid gap-4 p-4 sm:p-6 lg:grid-cols-[minmax(0,1fr)_18rem] lg:gap-6">
+      <div ref="workspaceScrollContainer" class="grid min-h-0 flex-1 content-start gap-3 overflow-y-auto p-3" :class="proposalClientPreview ? '' : 'lg:grid-cols-[minmax(0,1fr)_18rem]'">
         <div class="min-w-0">
           <OrderWorkspaceNav
+            v-show="!proposalClientPreview"
             :active="activeWorkspaceSection"
             :workflow="workflowType"
             @select="selectWorkspaceSection"
             @add-product="openProposalForProduct"
           />
-          <p v-if="displayFormError" class="mt-4 rounded-xl border border-red-500/40 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p v-if="displayFormError && !proposalClientPreview" class="mt-4 rounded-xl border border-red-500/40 bg-red-50 px-3 py-2 text-sm text-red-700">
             {{ displayFormError }}
           </p>
           <fieldset :disabled="proposalActionLoading || installationAttaching || sourceApplying" class="min-w-0">
             <section v-show="activeWorkspaceSection === 'proposal'" class="min-w-0" data-order-usage="workspace-proposal-panel">
-              <OrderManagerLabels v-model="managerLabels" />
+              <OrderManagerLabels v-show="!proposalClientPreview" v-model="managerLabels" />
               <OrderProposalWorkspace
                 ref="proposalWorkspaceRef"
                 v-model:expanded="expandedDrawerSections.proposals"
+                v-model:client-preview="proposalClientPreview"
+                v-model:show-costs="showProposalCosts"
+                :order-title="displayOrderTitle"
+                :customer-name="customerDisplayName"
+                :object-address="compactObjectAddress"
                 :commercial="commercialEditor"
                 :proposal="proposalLifecycle"
                 :title="isRepairWorkflow ? 'Смета ремонта' : 'Предложения'"
@@ -593,6 +616,7 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
                 <template #source-equipment>
                   <OrderSourceEquipmentAction
                     v-if="order?.lead_source === 'belzakupki' && workflowType === 'sales_installation'"
+                    compact
                     :order-id="order.id"
                     :proposal-id="activeProposalId"
                     :before-action="beforeSourceCommand"
@@ -667,7 +691,9 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
             </section>
           </fieldset>
         </div>
-        <div class="order-first min-w-0 space-y-3 lg:order-none lg:sticky lg:top-4 lg:self-start">
+        <div v-show="!proposalClientPreview" class="order-first min-w-0 lg:order-none lg:sticky lg:top-0 lg:self-start">
+          <button type="button" class="flex min-h-9 w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold dark:border-slate-700 dark:bg-slate-900 lg:hidden" :aria-expanded="mobileContextOpen" @click="mobileContextOpen = !mobileContextOpen"><span>Клиент, объект и заявка</span><span aria-hidden="true">{{ mobileContextOpen ? '−' : '+' }}</span></button>
+          <div class="space-y-3 pt-2 lg:pt-0" :class="mobileContextOpen ? '' : 'hidden lg:block'">
           <OrderWorkspaceContext :customer-name="customerDisplayName" :address="compactObjectAddress" :total="totalPreview" :paid="totalPaymentsPreview" :balance="balanceDuePreview" @customer="openCustomerContext('customer')" @object="openCustomerContext('object')" @payments="openWorkspaceTarget('payments')" />
           <OrderRequestSourceCard
             v-if="order?.lead_source === 'belzakupki'"
@@ -694,8 +720,19 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
             @updated="handleCustomerUpdated"
             @reload="emit('reload', $event)"
           />
+          </div>
         </div>
       </div>
+      <OrderProposalTotalsBar
+        v-if="activeWorkspaceSection === 'proposal'"
+        :products="productLines"
+        :services="serviceLines"
+        :show-costs="showProposalCosts && !demoReadOnly"
+        :preview="proposalClientPreview"
+        :busy="saving || proposalActionLoading || installationAttaching || sourceApplying"
+        :action-label="orderWorkspace.nextAction.command === 'finish_proposal' ? 'Подготовить КП' : orderWorkspace.nextAction.label"
+        @next="handleWorkspaceNextAction"
+      />
       <LeadSourceReviewModal
         v-if="order"
         :open="sourceReviewOpen"

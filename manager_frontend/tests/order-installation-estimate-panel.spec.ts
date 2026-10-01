@@ -63,6 +63,18 @@ beforeEach(() => {
 });
 
 describe('OrderInstallationEstimatePanel', () => {
+  it('brings a calculation opened from the shared toolbar into view', async () => {
+    const wrapper = mountPanel();
+    await wrapper.setProps({ hideActions: true });
+    const scrollIntoView = vi.fn();
+    (wrapper.element as HTMLElement).scrollIntoView = scrollIntoView;
+    await (wrapper.vm as any).openPanel();
+    await flushPromises();
+    expect(wrapper.get('[data-testid="installation-product"]').exists()).toBe(true);
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' });
+    wrapper.unmount();
+  });
+
   it('adds a published service-only standard without inventing equipment capacity or opening the profile form', async () => {
     service.previewManagerInstallationEstimate.mockResolvedValueOnce({ ...fixed, total: '600' });
     const wrapper = mountPanel();
