@@ -21,6 +21,9 @@ const props = defineProps<{
   workflow: OrderWorkflowType;
   customerId?: number | null;
   canOpenInstallationEstimate?: boolean;
+  compact?: boolean;
+  hideActions?: boolean;
+  showCosts?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -43,6 +46,7 @@ const emit = defineEmits<{
 
 const lines = defineModel<ServiceLine[]>('lines', { required: true });
 const showCatalog = ref(false);
+defineExpose({ openCatalog: () => { showCatalog.value = !showCatalog.value; } });
 const chooseTariff = (option: ManagerQuickTariffResponse) => {
   emit('addTariff', option);
   showCatalog.value = false;
@@ -56,6 +60,7 @@ const addCustom = () => {
   showCatalog.value = false;
 };
 const demoReadOnly = useDemoReadOnly();
+const compactShowCosts = computed(() => props.compact && props.showCosts && !demoReadOnly.value);
 const editingIndex = defineModel<number | null>('editingIndex', { required: true });
 const showEstimateImport = defineModel<boolean>('showEstimateImport', { required: true });
 const selectedEstimateId = defineModel<number | null>('selectedEstimateId', { required: true });
@@ -84,11 +89,55 @@ const updatePreferredMode = (mode: ServiceDescriptionMode) => {
 </script>
 
 <template>
-  <section class="mt-6">
-    <div class="mb-2"><h4 class="text-md font-semibold text-gray-800">Услуги</h4></div>
+  <section :class="compact ? 'border-t border-slate-200 dark:border-slate-700' : 'mt-6'" aria-label="Услуги">
+    <div v-if="!hideActions" class="mb-2"><h4 class="text-md font-semibold text-gray-800">Услуги</h4></div>
     <p v-if="servicesError" class="mb-2 text-xs text-red-300">{{ servicesError }}</p>
     <div class="space-y-2">
-      <div v-for="(line, index) in lines" :key="`service-${index}`" class="relative rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+      <div v-for="(line, index) in lines" :key="`service-${index}`" class="relative bg-white" :class="compact ? 'border-b border-gray-100 dark:border-slate-800 dark:bg-slate-950' : 'rounded-xl border border-gray-200 p-3 shadow-sm'">
+        <template v-if="compact">
+          <div v-if="editingIndex === index && !line.installation_estimate_revision_id" class="p-3">
+            <button type="button" data-order-usage="order_service_remove" class="mb-2 inline-flex h-8 items-center rounded-lg border border-red-200 bg-red-50 px-3 text-xs font-medium text-red-600 hover:bg-red-100" :aria-label="`Удалить услугу #${index + 1}`" @click="emit('remove', index)">Удалить услугу</button>
+            <div class="grid grid-cols-6 gap-2 md:grid-cols-12 md:items-start">
+              <div class="relative col-span-6 space-y-1 md:col-span-5">
+                <span class="flex min-h-6 items-center justify-between gap-2 px-1 text-xs font-medium text-gray-500">
+                  <span>Название</span>
+                  <ServiceDescriptionModeSwitch v-if="line.template_full_description" :model-value="line.description_mode || 'short'" @update:model-value="emit('descriptionMode', { index, mode: $event })" />
+                </span>
+                <textarea v-model="line.title" data-order-usage="order_service_edit" class="field-input min-h-[64px] resize-none overflow-hidden text-sm leading-snug focus:min-h-[120px] focus:resize-y focus:overflow-auto sm:text-base" rows="2" placeholder="Название услуги" @focus="emit('focus', index)" @input="emit('input', index)" @blur="emit('blur', index)" />
+                <div v-if="line.title.trim().length >= 2 && activeSuggestionIndex === index && (serviceLookupLoading || suggestionsFor(index).length)" class="absolute left-0 right-0 top-full z-20 mt-1 max-h-64 overflow-auto rounded-[12px] border border-gray-200 bg-white p-1 shadow-xl">
+                  <div v-if="serviceLookupLoading" class="px-3 py-2 text-xs text-gray-500">Ищем тарифы...</div>
+                  <button v-for="item in suggestionsFor(index)" :key="`service-tariff-suggest-${index}-${item.tariff_id}`" type="button" :data-testid="`select-service-${item.tariff_id}`" class="mb-1 block w-full rounded-[12px] px-3 py-2 text-left text-xs text-gray-700 hover:bg-slate-100 last:mb-0" @mousedown.prevent @click="emit('select', { index, option: item })">
+                    <p class="line-clamp-2 font-medium text-gray-900">{{ item.short_name || item.title }}</p>
+                    <p v-if="item.full_description && item.full_description !== item.short_name" class="mt-0.5 line-clamp-2 text-[11px] leading-snug text-gray-500">{{ item.full_description }}</p>
+                    <p class="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-gray-500"><span>{{ formatMoney(item.price) }}</span><span v-if="item.service_kind">· {{ formatServiceKind(item.service_kind) }}</span><span v-if="item.category">· {{ item.category }}</span><span v-if="item.included_route_meters">· трасса до {{ item.included_route_meters }} м</span></p>
+                  </button>
+                </div>
+              </div>
+              <label class="col-span-4 space-y-1 md:col-span-2"><span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Цена</span><input v-model.number="line.price" type="number" min="0" step="0.01" class="field-input" placeholder="0" /></label>
+              <label class="col-span-2 space-y-1 md:col-span-1"><span class="flex h-auto items-center whitespace-nowrap px-1 text-xs font-medium text-gray-500 md:h-6 md:text-[11px]">Кол-во</span><input v-model.number="line.quantity" type="number" min="1" class="field-input" placeholder="1" /></label>
+              <label v-if="compactShowCosts" class="col-span-3 space-y-1 md:col-span-2"><span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Себест.</span><input v-model.number="line.cost" type="number" min="0" step="0.01" class="field-input" placeholder="0" /></label>
+              <div class="col-span-3 space-y-1 md:col-span-2"><span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Итого</span><div class="rounded-lg bg-gray-50 px-3 py-2"><p class="whitespace-nowrap text-base font-semibold leading-tight text-gray-900">{{ formatMoney(lineTotal(line)) }}</p></div></div>
+              <div class="col-span-6 flex justify-end md:col-span-12"><button type="button" class="btn-mini-outline h-8 px-3 text-xs" @click="editingIndex = null">Готово</button></div>
+            </div>
+          </div>
+          <div v-else class="divide-y divide-gray-100">
+            <div v-for="(display, displayIndex) in displayLines(line)" :key="`compact-service-${index}-${displayIndex}`" class="grid grid-cols-3 items-center gap-2 px-3 py-2.5" :class="compactShowCosts ? 'md:grid-cols-[minmax(0,1fr)_3.5rem_6rem_6.5rem_6rem_4.5rem]' : 'md:grid-cols-[minmax(0,1fr)_3.5rem_6rem_6.5rem_4.5rem]'" :data-testid="`compact-service-row-${index}-${displayIndex}`">
+              <div class="col-span-3 min-w-0 md:col-auto">
+                <p class="break-words text-sm font-semibold leading-snug text-slate-900 dark:text-slate-100">{{ display.title || 'Новая услуга' }}</p>
+                <p v-if="display.description" class="break-words text-xs font-normal leading-relaxed text-slate-500 dark:text-slate-400">{{ display.description }}</p>
+                <span v-if="line.installation_estimate_revision_id" class="text-[11px] font-medium text-emerald-700">Монтаж зафиксирован</span>
+              </div>
+              <span class="text-left text-xs text-slate-600 dark:text-slate-300 md:text-center"><span class="mb-1 block font-medium text-slate-500 md:hidden">Кол-во</span>{{ display.quantity }}</span>
+              <span class="text-left text-xs text-slate-600 dark:text-slate-300 md:text-right"><span class="mb-1 block font-medium text-slate-500 md:hidden">Цена</span>{{ formatMoney(display.price) }}</span>
+              <span class="text-left text-xs font-semibold text-slate-900 dark:text-slate-100 md:text-right"><span class="mb-1 block font-medium text-slate-500 md:hidden">Итого</span>{{ formatMoney(display.quantity * display.price) }}</span>
+              <span v-if="compactShowCosts" class="col-span-2 text-left text-xs text-slate-600 dark:text-slate-300 md:col-auto md:text-right"><span class="mb-1 block font-medium text-slate-500 md:hidden">Себест.</span>{{ line.installation_estimate_revision_id ? '—' : formatMoney(line.cost) }}</span>
+              <div class="flex justify-end md:justify-center" :class="compactShowCosts ? 'md:col-auto' : 'col-span-3 md:col-auto'">
+                <button v-if="!line.installation_estimate_revision_id && displayIndex === 0" type="button" data-order-usage="order_service_edit" class="btn-mini-outline h-8 w-8 shrink-0 justify-center p-0" :aria-label="`Редактировать услугу #${index + 1}`" title="Редактировать услугу" @click="editingIndex = index"><span class="material-icons-round text-[17px]">edit</span></button>
+              </div>
+            </div>
+          </div>
+        </template>
+        <template v-else>
         <button v-if="editingIndex === index && !line.installation_estimate_revision_id" type="button" data-order-usage="order_service_remove" class="absolute -right-2 -top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border border-red-200 bg-red-50 text-lg font-bold text-red-600 shadow-sm transition-colors hover:bg-red-100" :aria-label="`Удалить услугу #${index + 1}`" title="Удалить услугу" @click="emit('remove', index)">
           ×
         </button>
@@ -151,10 +200,11 @@ const updatePreferredMode = (mode: ServiceDescriptionMode) => {
           <div class="col-span-3 space-y-1 md:col-span-2"><span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Итого</span><div class="rounded-lg bg-gray-50 px-3 py-2"><p class="whitespace-nowrap text-base font-semibold leading-tight text-gray-900">{{ formatMoney(lineTotal(line)) }}</p></div></div>
           <div class="col-span-6 flex justify-end md:col-span-12"><button type="button" class="btn-mini-outline h-8 px-3 text-xs" @click="editingIndex = null">Готово</button></div>
         </div>
+        </template>
       </div>
     </div>
 
-    <div class="mt-3 grid grid-cols-2 gap-2">
+    <div v-if="!hideActions" class="mt-3 grid grid-cols-2 gap-2" :class="compact ? 'sm:max-w-md' : ''">
       <button type="button" data-testid="add-service-line" data-order-usage="order_service_add" class="btn-mini justify-center" @click="showCatalog = !showCatalog">+ услуга</button>
       <button type="button" class="btn-mini-outline justify-center" :class="showEstimateImport ? 'border-brand-200 bg-brand-50 text-brand-700' : ''" @click="emit('toggleEstimate')">Из сметы</button>
     </div>

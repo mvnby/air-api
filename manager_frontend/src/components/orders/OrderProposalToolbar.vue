@@ -14,6 +14,8 @@ const props = defineProps<{
   proposals: OrderProposalResponse[];
   activeProposalId?: number | null;
   loading?: boolean;
+  compact?: boolean;
+  hidePrimary?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -85,7 +87,7 @@ defineExpose({
 </script>
 
 <template>
-  <div class="border-b border-slate-200 pb-3 dark:border-slate-700" @keydown.esc="menuOpen = false; responseOpen = false">
+  <div :class="compact ? '' : 'border-b border-slate-200 pb-3 dark:border-slate-700'" @keydown.esc="menuOpen = false; responseOpen = false">
     <div v-if="proposals.length > 1" class="flex gap-2 overflow-x-auto pb-1">
       <button
         v-for="proposal in proposals"
@@ -109,18 +111,19 @@ defineExpose({
       </button>
     </div>
 
-    <div v-if="activeProposal" class="mt-2 flex min-w-0 items-center gap-2">
+    <div v-if="activeProposal" class="flex min-w-0 flex-wrap items-center gap-2" :class="compact ? '' : 'mt-2'">
       <div class="min-w-0 flex-1">
         <div class="flex min-w-0 flex-wrap items-center gap-1.5 text-xs">
           <span class="truncate font-semibold text-slate-900 dark:text-white">{{ activeProposal.name }}</span>
           <span v-if="activeProposal.is_selected" class="rounded-full bg-brand-50 px-2 py-0.5 font-semibold text-brand-700 dark:bg-brand-500/15 dark:text-brand-200">Активное</span>
           <span class="rounded-full px-2 py-0.5 font-semibold" :class="toneClass(activeProposal)">{{ statusMeta(activeProposal).label }}</span>
         </div>
-        <p class="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">{{ lineLabel(activeProposal) }} · {{ formatMoney(activeProposal.total_amount || 0) }}</p>
+        <p v-if="!compact" class="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">{{ lineLabel(activeProposal) }} · {{ formatMoney(activeProposal.total_amount || 0) }}</p>
       </div>
 
+      <div v-if="$slots.controls" class="order-last flex w-full min-w-0 flex-wrap items-center gap-2 sm:order-none sm:w-auto"><slot name="controls" /></div>
       <button
-        v-if="!activeProposal.is_selected || primaryAction"
+        v-if="!activeProposal.is_selected || (!hidePrimary && primaryAction)"
         type="button"
         class="btn-mini h-9 shrink-0 gap-1.5 px-3 text-xs"
         :disabled="loading"

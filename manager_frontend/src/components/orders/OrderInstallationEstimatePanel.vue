@@ -45,6 +45,8 @@ type StoredDraft = {
 const props = defineProps<{
   orderId: number;
   proposalId: number;
+  compact?: boolean;
+  hideActions?: boolean;
   beforeAction: () => Promise<boolean>;
   beginAttach: (orderId: number, proposalId: number, scopeKey: string, token: string) => Promise<boolean>;
   afterAttach: (orderId: number, proposalId: number, scopeKey: string, token: string) => Promise<boolean>;
@@ -516,16 +518,19 @@ const selectStandardTariff = async (tariff: StandardInstallationChoice, edit = f
     await addCalculated();
   }
 };
-defineExpose({ openPanel: async () => { if (!open.value) await show(); }, selectStandardTariff });
+defineExpose({ openPanel: async () => { if (!open.value) await show(); }, actionBusy: computed(() => busy.value || quickBusy.value), addStandard, selectStandardTariff });
 </script>
 
 <template>
-  <div class="mt-3">
-    <button type="button" data-testid="installation-standard-add" class="btn-mini w-full justify-center" :disabled="busy || quickBusy" @click="addStandard">{{ quickBusy ? 'Добавляем монтаж…' : 'Добавить стандартный монтаж' }}</button>
-    <button type="button" data-testid="installation-open" class="btn-mini-outline mt-2 w-full justify-center" :disabled="busy || quickBusy" @click="show">{{ open ? 'Скрыть настройки монтажа' : 'Настроить монтаж' }}</button>
+  <div>
+    <div v-if="!hideActions" class="mt-3" :class="compact ? 'flex flex-wrap gap-2' : 'space-y-2'">
+      <button type="button" data-testid="installation-standard-add" class="btn-mini justify-center" :class="compact ? 'text-xs' : 'w-full'" :disabled="busy || quickBusy" @click="addStandard">{{ quickBusy ? 'Добавляем монтаж…' : 'Стандартный монтаж' }}</button>
+      <button type="button" data-testid="installation-open" class="btn-mini-outline justify-center" :class="compact ? 'text-xs' : 'w-full'" :disabled="busy || quickBusy" @click="show">{{ open ? 'Скрыть настройки монтажа' : 'Настроить состав' }}</button>
+    </div>
     <p v-if="error && !open" role="alert" class="mt-2 text-sm text-red-700">{{ error }}</p>
     <p v-if="notice && !open" role="status" class="mt-2 text-sm text-emerald-700">{{ notice }}</p>
     <div v-if="open" class="mt-3 space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+      <button v-if="hideActions" type="button" class="btn-mini-outline ml-auto flex text-xs" :disabled="busy || quickBusy" @click="show">Закрыть расчёт</button>
       <p class="text-slate-600">Расчёт относится к текущему черновику предложения. Строки и суммы берутся из опубликованной книги цен.</p>
       <div class="flex gap-2">
         <button type="button" class="btn-mini-outline" :class="source === 'proposal' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || quickBusy || Boolean(confirmed)" @click="source = 'proposal'">Товар в предложении</button>
