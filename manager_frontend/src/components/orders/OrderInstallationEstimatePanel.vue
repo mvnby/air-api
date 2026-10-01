@@ -524,7 +524,8 @@ const selectStandardTariff = async (tariff: StandardInstallationChoice, edit = f
     await addCalculated();
   }
 };
-defineExpose({ openPanel: async () => { if (!open.value) await show(); }, actionBusy: computed(() => busy.value || quickBusy.value), addStandard, selectStandardTariff });
+const openPanel = async () => { if (!open.value) await show(); };
+defineExpose({ openPanel, actionBusy: computed(() => busy.value || quickBusy.value), addStandard, selectStandardTariff });
 </script>
 
 <template>
