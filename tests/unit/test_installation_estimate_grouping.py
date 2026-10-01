@@ -60,6 +60,33 @@ def test_historical_snapshot_keeps_its_saved_collapsed_line():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("manager_grouping", [False, True])
+async def test_persist_revision_preserves_public_collapsed_contract_unless_manager_opts_in(manager_grouping):
+    result = preview(2)
+    added = []
+    def add(entity):
+        entity.id = len(added) + 1
+        added.append(entity)
+    session = SimpleNamespace(add=add, flush=AsyncMock())
+    row = SimpleNamespace(token_hash="preview-token", price_book_id=1,
+        snapshot={"result": result.model_dump(mode="json")})
+    from models.tenancy import TenantScope
+    kwargs = {"group_commercial_lines": True} if manager_grouping else {}
+    _, saved = await Confirm.persist_revision(session, TenantScope(tenant_id=1, storefront_id=2),
+        row=row, result=result, order_id=3, proposal_id=4, key_hash="key", request_hash="request",
+        actor="manager" if manager_grouping else "public_checkout", verified_service_only_keys=[], **kwargs)
+    persisted = Confirm.new_revision_lines(order_id=3, proposal_id=4, saved=saved, mode="collapsed")
+    assert sum(line.quantity * line.price for line in persisted) == Decimal("1200")
+    if manager_grouping:
+        assert saved.snapshot["commercial_projection_version"] == 2
+        assert [(line.quantity, line.price) for line in persisted] == [(2, Decimal("600"))]
+    else:
+        assert "commercial_projection_version" not in saved.snapshot
+        assert [(line.title, line.quantity, line.price) for line in persisted] == [
+            ("Historical full text.", 1, Decimal("1200"))]
+
+
+@pytest.mark.asyncio
 async def test_frozen_description_checks_link_ownership_and_keeps_legacy_snapshot_unchanged():
     from services.installation_estimate_projection import frozen_installation_descriptions
     result = preview()

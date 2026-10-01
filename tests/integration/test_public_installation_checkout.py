@@ -119,6 +119,8 @@ async def test_public_checkout_attaches_exact_preview_and_bounded_event(async_cl
     selected = next(proposal for proposal in order.proposals if proposal.is_selected)
     attached = [line for line in order.service_links if line.proposal_id == selected.id]
     assert len(attached) == 1
+    assert attached[0].quantity == 1
+    assert attached[0].title == preview.customer_text
     assert attached[0].installation_estimate_revision_id is not None
     assert Decimal(str(attached[0].price)) == preview.total
     assert len(attached[0].title) > 180
@@ -129,6 +131,7 @@ async def test_public_checkout_attaches_exact_preview_and_bounded_event(async_cl
     revision = await db.get(InstallationEstimateRevision, attached[0].installation_estimate_revision_id)
     assert Decimal(str(revision.total)) == preview.total
     assert revision.snapshot["confirmation"]["actor"] == "public_checkout"
+    assert "commercial_projection_version" not in revision.snapshot
     event = (await db.execute(select(IntegrationOutboxEvent).where(
         IntegrationOutboxEvent.aggregate_type == "order",
         IntegrationOutboxEvent.aggregate_id == str(order_id),

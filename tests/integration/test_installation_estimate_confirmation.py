@@ -79,9 +79,12 @@ async def test_manager_confirm_stale_reprices_then_attach_exact_revision(async_c
     assert first_preview.json()["total"] == "580.75"
     assert "Установка №1" in first_preview.json()["customer_text"]
     assert "Установка one" not in first_preview.json()["customer_text"]
-    assert first_preview.json()["collapsed_lines"] == [{
-        "title": first_preview.json()["customer_text"], "price": "580.75",
-    }]
+    collapsed = first_preview.json()["collapsed_lines"]
+    assert len(collapsed) == 1
+    assert collapsed[0]["title"] == "Монтаж настенного комплекта 2–4 кВт"
+    assert collapsed[0]["price"] == "580.75" and collapsed[0]["quantity"] == 1
+    assert "Трасса: 6 м (включено 3 м)" in collapsed[0]["description"]
+    assert "Алмазные отверстия: 2 шт (включено 1 шт)" in collapsed[0]["description"]
     assert sum((Decimal(line["price"]) for line in first_preview.json()["detailed_lines"]), Decimal("0")) == Decimal("580.75")
     assert all("Установка one" not in line["title"] for line in first_preview.json()["detailed_lines"])
 
@@ -125,7 +128,7 @@ async def test_manager_confirm_stale_reprices_then_attach_exact_revision(async_c
     assert attached.status_code == 200, attached.text
     assert attached.json()["total"] == "630.75"
     assert len(attached.json()["lines"]) == 1
-    assert "трасса 6" in attached.json()["lines"][0]["title"].lower()
+    assert "Трасса: 6 м" in attached.json()["lines"][0]["description"]
     assert [(line["title"], line["price"]) for line in attached.json()["lines"]] == [
         (line["title"], line["price"]) for line in fresh["collapsed_lines"]]
     repeated_attach = await async_client.post(attach_url, json={"revision": 1},
@@ -146,6 +149,7 @@ async def test_manager_confirm_stale_reprices_then_attach_exact_revision(async_c
     assert retained.status_code == 200, retained.text
     assert retained.json()["snapshot"]["result"]["total"] == "630.75"
     assert retained.json()["snapshot"]["confirmation"]["actor"]
+    assert retained.json()["snapshot"]["commercial_projection_version"] == 2
     assert await db.scalar(select(func.count(InstallationEstimateRevision.id))) == 1
 
     alternative_preview = await async_client.post(f"{prefix}/preview", json=_preview_body(2),
@@ -358,10 +362,12 @@ async def test_confirm_holds_publication_lock_until_accepted_revision_commits(db
     original_preview = Book.preview.__func__
     original_tariffs = TariffsService.get_all_tariffs
 
-    async def pause_confirm_after_reprice(cls, session, current_scope, payload, *, idempotency_key=None, persist=True):
+    async def pause_confirm_after_reprice(cls, session, current_scope, payload, *, idempotency_key=None,
+                                         persist=True, tariff_selections=None):
         response = await original_preview(
             cls, session, current_scope, payload,
             idempotency_key=idempotency_key, persist=persist,
+            tariff_selections=tariff_selections,
         )
         if session.info.get("hold_confirm_after_reprice"):
             confirm_repriced.set()

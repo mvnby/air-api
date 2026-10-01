@@ -141,6 +141,7 @@ class InstallationEstimateConfirmationService:
         result: InstallationPreviewResponse, order_id: int, proposal_id: int,
         key_hash: str, request_hash: str, actor: str,
         verified_service_only_keys: list[str],
+        group_commercial_lines: bool = False,
     ) -> tuple[InstallationEstimate, InstallationEstimateRevision]:
         """Persist exact accepted bytes; membership/equipment checks remain with caller."""
         estimate = InstallationEstimate(
@@ -152,7 +153,8 @@ class InstallationEstimateConfirmationService:
         session.add(estimate)
         await session.flush()
         snapshot = copy.deepcopy(row.snapshot)
-        snapshot["commercial_projection_version"] = 2
+        if group_commercial_lines:
+            snapshot["commercial_projection_version"] = 2
         snapshot["confirmation"] = {
             "order_id": order_id, "proposal_id": proposal_id,
             "verified_service_only_keys": sorted(verified_service_only_keys),
@@ -343,6 +345,7 @@ class InstallationEstimateConfirmationService:
                 proposal_id=payload.proposal_id, key_hash=key_hash,
                 request_hash=fingerprint, actor=actor,
                 verified_service_only_keys=payload.verified_service_only_keys,
+                group_commercial_lines=True,
             )
             return PublicWriteCommandResponse(
                 value=cls._confirm_response(estimate, revision), status_code=201,
