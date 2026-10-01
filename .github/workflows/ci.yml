@@ -202,7 +202,8 @@ jobs:
       fail-fast: false
       matrix:
         suite: [unit, integration]
-    timeout-minutes: 60
+    # Slow hosted runners can need an hour for the complete unit suite.
+    timeout-minutes: ${{ matrix.suite == 'unit' && 75 || 60 }}
     env:
       COMPOSE_FILE: docker-compose.yml:.github/docker-compose.ci.yml
       COMPOSE_PROJECT_NAME: air-api-ci
