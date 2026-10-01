@@ -100,6 +100,19 @@ describe('OrderInstallationEstimatePanel', () => {
     expect(service.attachManagerInstallationEstimate).toHaveBeenCalledOnce();
   });
 
+  it.each([[21], [11, 10]])('does not silently add a partial standard estimate for quantities %j', async (...quantities: number[]) => {
+    service.getManagerOrderDetail.mockResolvedValue({ ...order, proposals: [{
+      ...order.proposals[0], product_lines: quantities.map((quantity, index) => ({ ...product, id: 71 + index, quantity })),
+    }] });
+    const wrapper = mountPanel();
+    await wrapper.get('[data-testid="installation-standard-add"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('до 20 установок');
+    expect(service.resolveInstallationStandard).not.toHaveBeenCalled();
+    expect(service.previewManagerInstallationEstimate).not.toHaveBeenCalled();
+    expect(service.attachManagerInstallationEstimate).not.toHaveBeenCalled();
+  });
+
   it('keeps an existing custom draft when the standard shortcut is clicked', async () => {
     const wrapper = mountPanel();
     await prepare(wrapper);

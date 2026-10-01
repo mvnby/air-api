@@ -99,8 +99,9 @@ const current = (scope: ActionScope) => !disposed && scope.epoch === epoch
   && scope.key === storageKey.value && scope.orderId === props.orderId && scope.proposalId === props.proposalId;
 onScopeDispose(() => { disposed = true; epoch += 1; });
 const makeWork = (): Work => ({ workKind: 'standard', route: null, thin: null, thick: null, over80: null, pumpPackage: false, chase: 0 });
-const slots = computed<Slot[]>(() => products.value
-  .filter((line) => line.proposal_id === props.proposalId && line.product_id && line.quantity > 0 && line.price > 0 && !line.is_installation_included)
+const eligibleProducts = computed(() => products.value
+  .filter((line) => line.proposal_id === props.proposalId && line.product_id && line.quantity > 0 && line.price > 0 && !line.is_installation_included));
+const slots = computed<Slot[]>(() => eligibleProducts.value
   .flatMap((line) => Array.from({ length: Math.min(line.quantity, 20) }, (_, index) => ({
     key: `p:${props.proposalId}:${line.id}:${index + 1}`,
     label: `${line.product_title} · шт. ${index + 1}`,
@@ -455,6 +456,9 @@ const addStandard = async () => {
       await calculate();
       if (current(scope)) notice.value = 'Сохранён состав монтажа. Проверьте его и нажмите «Добавить монтаж».';
       return;
+    }
+    if (eligibleProducts.value.reduce((sum, line) => sum + line.quantity, 0) > 20) {
+      throw new Error('В одной смете можно добавить до 20 установок. Выберите нужное оборудование в настройках монтажа.');
     }
     source.value = 'proposal';
     selected.value = slots.value.map((slot) => slot.key);
