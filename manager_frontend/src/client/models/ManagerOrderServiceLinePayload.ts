@@ -7,6 +7,7 @@ export type ManagerOrderServiceLinePayload = {
     proposal_id?: (number | null);
     service_id?: (number | null);
     title: string;
+    description?: (string | null);
     quantity: number;
     price: number;
     cost?: (number | null);

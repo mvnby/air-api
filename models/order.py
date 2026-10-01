@@ -170,6 +170,8 @@ class OrderServiceLink(SQLModel, table=True):
 
     title: Optional[str] = Field(default=None)
 
+    description: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+
     price: Decimal = Field(default=Decimal("0.00"), sa_column=Column(Numeric(), nullable=False))
     cost: Decimal = Field(default=Decimal("0.00"), sa_column=Column(Numeric(), nullable=False))
 

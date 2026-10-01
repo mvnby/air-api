@@ -169,7 +169,7 @@ describe('OrderProductLinesEditor', () => {
 });
 
 describe('OrderServiceLinesEditor', () => {
-  it('shows attached installation lines without edit or remove actions', async () => {
+  it('lets the manager edit or remove calculated installation rows', async () => {
     const wrapper = mount(OrderServiceLinesEditor, {
       props: {
         lines: [{ ...serviceLine, link_id: 88, installation_estimate_revision_id: 21,
@@ -182,13 +182,15 @@ describe('OrderServiceLinesEditor', () => {
       },
     });
     mountedWrappers.push(wrapper);
-    expect(wrapper.text()).toContain('По книге · зафиксировано');
-    expect(wrapper.find('[data-order-usage="order_service_edit"]').exists()).toBe(false);
-    expect(wrapper.find('[data-order-usage="order_service_remove"]').exists()).toBe(false);
+    expect(wrapper.text()).toContain('По расчёту');
+    await wrapper.get('[data-order-usage="order_service_edit"]').trigger('click');
+    await wrapper.get('[data-order-usage="order_service_remove"]').trigger('click');
+    expect(wrapper.emitted('editInstallation')).toEqual([[0, 0]]);
+    expect(wrapper.emitted('remove')).toEqual([[0, 0]]);
     expect(wrapper.get('[data-testid="add-service-line"]').exists()).toBe(true);
     await wrapper.setProps({ editingIndex: 0 });
     expect(wrapper.find('textarea').exists()).toBe(false);
-    expect(wrapper.find('[data-order-usage="order_service_remove"]').exists()).toBe(false);
+    expect(wrapper.find('[data-order-usage="order_service_remove"]').exists()).toBe(true);
   });
 
   it('shows a legacy frozen bundle as five installations without changing its underlying row', () => {

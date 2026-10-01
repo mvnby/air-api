@@ -60,7 +60,7 @@ afterEach(() => {
 });
 
 describe('OrderServiceLinesEditor compact rows', () => {
-  it('renders immutable installation snapshots as individual quantity by price rows', () => {
+  it('renders accepted calculations as grouped rows with direct edit and remove actions', async () => {
     const frozen: ServiceLine = {
       service_id: null,
       title: 'Установка №1…№5',
@@ -80,9 +80,13 @@ describe('OrderServiceLinesEditor compact rows', () => {
     expect(wrapper.text()).toContain('5');
     expect(wrapper.get('[data-testid="compact-service-row-0-0"]').text()).toContain('600 BYN');
     expect(wrapper.text()).toContain('3 000 BYN');
-    expect(wrapper.text()).toContain('Монтаж зафиксирован');
-    expect(wrapper.find('[data-order-usage="order_service_edit"]').exists()).toBe(false);
-    expect(wrapper.find('[data-order-usage="order_service_remove"]').exists()).toBe(false);
+    expect(wrapper.text()).toContain('По расчёту');
+    expect(wrapper.findAll('[data-order-usage="order_service_edit"]')).toHaveLength(2);
+    expect(wrapper.findAll('[data-order-usage="order_service_remove"]')).toHaveLength(2);
+    await wrapper.get('[data-testid="compact-service-row-0-1"] [data-order-usage="order_service_edit"]').trigger('click');
+    await wrapper.get('[data-testid="compact-service-row-0-0"] [data-order-usage="order_service_remove"]').trigger('click');
+    expect(wrapper.emitted('editInstallation')).toEqual([[0, 1]]);
+    expect(wrapper.emitted('remove')).toEqual([[0, 0]]);
     expect(wrapper.emitted('update:lines')).toBeUndefined();
     expect(frozen).toMatchObject({ title: 'Установка №1…№5', quantity: 1, price: 3_000 });
   });
@@ -95,12 +99,14 @@ describe('OrderServiceLinesEditor compact rows', () => {
     ];
     const wrapper = mountEditor(lines, { compact: true, editingIndex: 1 });
 
-    expect(wrapper.findAll('textarea')).toHaveLength(1);
+    expect(wrapper.findAll('textarea')).toHaveLength(2);
     expect(wrapper.findAll('button[data-order-usage="order_service_edit"]')).toHaveLength(1);
     expect(wrapper.get('button[data-order-usage="order_service_edit"]').attributes('aria-label')).toContain('#1');
     await wrapper.getComponent(ServiceDescriptionModeSwitch).get('button[aria-pressed="false"]').trigger('click');
     expect(wrapper.emitted('descriptionMode')).toEqual([[{ index: 1, mode: 'full' }]]);
     expect(wrapper.emitted('remove')).toBeUndefined();
+    await wrapper.get('[data-testid="service-client-description"]').setValue('Монтаж лесов; трасса до 5 метров');
+    expect(lines[1]!.description).toBe('Монтаж лесов; трасса до 5 метров');
   });
 
   it('shows compact cost only when requested and permitted', async () => {

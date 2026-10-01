@@ -164,15 +164,20 @@ class OrderProposalCommandService:
                             ),
                         )
                     )
-                for link in [
+                from services.installation_estimate_projection import frozen_installation_presentations
+                from services.order_service_description import service_line_description
+                source_service_links = [
                     item for item in order.service_links if item.proposal_id == source.id
-                ]:
+                ]
+                presentations = await frozen_installation_presentations(session, source_service_links)
+                for link in source_service_links:
                     session.add(
                         OrderServiceLink(
                             order_id=order_id,
                             proposal_id=proposal.id,
                             service_id=link.service_id,
                             title=link.title,
+                            description=service_line_description(link, presentations.get(link.id)),
                             quantity=link.quantity,
                             price=link.price,
                             cost=link.cost,

@@ -144,6 +144,18 @@ def test_manager_product_line_dto_prefers_immutable_title_snapshot():
     assert response.currency_snapshot == "BYN"
 
 
+def test_manager_product_line_distinguishes_catalog_price_from_manual_sale_price():
+    product = _product()
+    product.price = 2990
+    link = OrderProductLink(id=31, order_id=10, proposal_id=20, product_id=17, quantity=1, price=2480)
+    link.product = product
+    response = OrderProductLineResponse.model_validate(OrderProjectionService._map_product_line(link))
+    assert (response.price, response.catalog_price) == (2480, 2990)
+    link.product = None
+    response = OrderProductLineResponse.model_validate(OrderProjectionService._map_product_line(link))
+    assert response.price == 2480 and response.catalog_price is None
+
+
 def test_demo_projection_redacts_line_cost_without_changing_normal_projection():
     link = OrderProductLink(
         id=31,

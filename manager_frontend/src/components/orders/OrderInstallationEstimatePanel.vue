@@ -119,6 +119,10 @@ const slots = computed<Slot[]>(() => eligibleProducts.value
     productId: Number(line.product_id),
   }))));
 const activeKeys = computed(() => source.value === 'manual' ? [manualKey.value] : selected.value);
+// Keep every equipment row in place while only its selected work is visible.
+const workCards = computed(() => source.value === 'proposal'
+  ? slots.value
+  : [{ key: manualKey.value, label: manualTariff.value?.title || 'Состав монтажа', productId: 0 }]);
 const preview = computed(() => {
   if (!intent.value?.preview) return null;
   try { return JSON.stringify(payload()) === intent.value.fingerprint ? intent.value.preview : null; }
@@ -539,15 +543,12 @@ defineExpose({ openPanel, actionBusy: computed(() => busy.value || quickBusy.val
     <div v-if="open" class="mt-3 space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
       <button v-if="hideActions" type="button" class="btn-mini-outline ml-auto flex text-xs" :disabled="busy || quickBusy" @click="show">Закрыть расчёт</button>
       <p class="text-slate-600">Расчёт относится к текущему черновику предложения. Строки и суммы берутся из опубликованной книги цен.</p>
-      <div class="flex gap-2">
+      <div class="flex flex-wrap gap-2">
         <button type="button" class="btn-mini-outline" :class="source === 'proposal' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || quickBusy || Boolean(confirmed)" @click="source = 'proposal'">Товар в предложении</button>
         <button type="button" class="btn-mini-outline" :class="source === 'manual' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || quickBusy || Boolean(confirmed)" @click="source = 'manual'">Без товара</button>
       </div>
-      <div v-if="source === 'proposal'" class="space-y-2">
-        <p v-if="!slots.length" class="text-amber-800">Нет оплачиваемого оборудования без включённого монтажа. Сохраните товар в предложении или выберите установку без товара.</p>
-        <label v-for="slot in slots" :key="slot.key" class="flex items-center gap-2"><input data-testid="installation-product" type="checkbox" :checked="selected.includes(slot.key)" :disabled="busy || quickBusy || Boolean(confirmed)" @change="toggleSlot(slot.key)" />{{ slot.label }}</label>
-      </div>
-      <div v-else-if="!manualTariff" class="grid gap-2 sm:grid-cols-2">
+      <p v-if="source === 'proposal' && !slots.length" class="text-amber-800">Нет оплачиваемого оборудования без включённого монтажа. Сохраните товар в предложении или выберите установку без товара.</p>
+      <div v-if="source === 'manual' && !manualTariff" class="grid gap-2 sm:grid-cols-2">
         <label class="space-y-1">Вид оборудования<select v-model="manualProfile.product_kind" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)"><option value="">Выберите</option><option value="complete_split_system">Комплект сплит-системы</option><option value="multi_split_system">Мультисплит-система</option><option value="indoor_unit">Отдельный внутренний блок</option><option value="outdoor_unit">Отдельный наружный блок</option><option value="other">Другое</option></select></label>
         <label v-if="manualProfile.product_kind !== 'multi_split_system'" class="space-y-1">Тип внутреннего блока<select v-model="manualProfile.indoor_type" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)"><option :value="undefined">Выберите</option><option value="wall">Настенный</option><option value="cassette">Кассетный</option><option value="duct">Канальный</option><option value="floor_ceiling">Напольно-потолочный</option><option value="column">Колонный</option><option value="console">Консольный</option></select></label>
         <label v-if="manualProfile.product_kind === 'multi_split_system'" class="space-y-1">Внутренних блоков в системе<input v-model.number="manualProfile.indoor_unit_count" type="number" min="2" max="20" step="1" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
@@ -563,26 +564,37 @@ defineExpose({ openPanel, actionBusy: computed(() => busy.value || quickBusy.val
         </template>
         <label class="flex items-center gap-2 sm:col-span-2"><input v-model="manualProfile.confirmed" type="checkbox" :disabled="busy || quickBusy || Boolean(confirmed)" />Параметры оборудования проверены; установка выполняется без продажи товара в этом предложении</label>
       </div>
-      <p v-else class="font-medium">{{ manualTariff.title }} · монтаж без товара</p>
-      <div v-for="(key, index) in activeKeys" :key="key" class="space-y-2 border-t border-slate-200 pt-3">
-        <p class="font-medium">Установка №{{ index + 1 }} · {{ source === 'manual' ? 'без товара' : slots.find((slot) => slot.key === key)?.label }}</p>
-        <template v-if="(source === 'proposal' || manualTariff) && !editing[key] && workFor(key).route != null">
-          <p class="text-slate-600" data-testid="installation-standard-summary">Трасса {{ workFor(key).route }} м · проходы: {{ Number(workFor(key).thin) + Number(workFor(key).thick) + Number(workFor(key).over80) }} · {{ workFor(key).pumpPackage ? 'с насосом' : 'без насоса' }}</p>
-          <p v-if="workFor(key).chase" class="text-slate-600">Штробление {{ workFor(key).chase }} м</p>
-          <button type="button" data-testid="installation-edit-work" class="btn-mini-outline" :disabled="busy || quickBusy || Boolean(confirmed)" @click="editing[key] = true">Изменить состав</button>
-        </template>
-        <template v-else>
-        <button v-if="source === 'manual' && !manualTariff" type="button" class="btn-mini-outline" :disabled="busy || quickBusy || Boolean(confirmed) || !manualProfile.confirmed" @click="setWorkKind(key, workFor(key).workKind)">Заполнить базу по тарифу</button>
-        <div v-if="!manualTariff" class="flex gap-2"><button type="button" class="btn-mini-outline" :class="workFor(key).workKind === 'standard' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || quickBusy || Boolean(confirmed)" @click="setWorkKind(key, 'standard')">Обычный монтаж</button><button type="button" class="btn-mini-outline" :class="workFor(key).workKind === 'prelaid_route' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || quickBusy || Boolean(confirmed)" @click="setWorkKind(key, 'prelaid_route')">На готовую трассу</button></div>
-        <div class="grid gap-2 sm:grid-cols-3">
-          <label class="space-y-1">{{ workFor(key).workKind === 'prelaid_route' ? 'Новая дополнительная трасса, м' : 'Вся новая трасса, м' }}<input data-testid="installation-route" v-model.number="workFor(key).route" type="number" min="0" step="0.01" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
-          <label class="space-y-1">Доп. межкомнатные проходы до 20 см<input data-testid="installation-holes" v-model.number="workFor(key).thin" type="number" min="0" step="1" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
-          <label class="space-y-1">Проходы основных стен до 80 см<input data-testid="installation-thick-holes" v-model.number="workFor(key).thick" type="number" min="0" step="1" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
-          <label class="space-y-1">Проходы свыше 80 см (по запросу)<input data-testid="installation-over80-holes" v-model.number="workFor(key).over80" type="number" min="0" step="1" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
-          <label class="space-y-1">Штробление, м<input v-model.number="workFor(key).chase" type="number" min="0" step="0.01" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
+      <div v-for="{ key, label } in workCards" :key="key" data-testid="installation-card" class="min-w-0 rounded-lg border border-slate-200 bg-white p-3">
+        <label v-if="source === 'proposal'" class="flex cursor-pointer items-start gap-3 font-medium">
+          <input data-testid="installation-product" type="checkbox" class="mt-1 shrink-0" :checked="selected.includes(key)" :disabled="busy || quickBusy || Boolean(confirmed)" @change="toggleSlot(key)" />
+          <span class="min-w-0 break-words">{{ label }}</span>
+        </label>
+        <p v-else class="break-words font-medium">{{ label }} · без товара</p>
+        <div v-if="source === 'manual' || selected.includes(key)" data-testid="installation-card-work" class="mt-3 space-y-3 border-t border-slate-100 pt-3">
+          <template v-if="(source === 'proposal' || manualTariff) && !editing[key] && workFor(key).route != null">
+            <p class="text-slate-600" data-testid="installation-standard-summary">Трасса {{ workFor(key).route }} м · стены до 80 см: {{ workFor(key).thick ?? 'не указано' }}<span v-if="workFor(key).thin !== 0"> · доп. проходы до 20 см: {{ workFor(key).thin ?? 'не указано' }}</span> · {{ workFor(key).pumpPackage ? 'с насосом' : 'без насоса' }}</p>
+            <p v-if="workFor(key).over80" class="text-amber-800">Проходы свыше 80 см: {{ workFor(key).over80 }} · нужна отдельная оценка</p>
+            <p v-if="workFor(key).chase" class="text-slate-600">Штробление {{ workFor(key).chase }} м</p>
+            <button type="button" data-testid="installation-edit-work" class="btn-mini-outline" :disabled="busy || quickBusy || Boolean(confirmed)" @click="editing[key] = true">Изменить состав</button>
+          </template>
+          <template v-else>
+            <button v-if="source === 'manual' && !manualTariff" type="button" class="btn-mini-outline" :disabled="busy || quickBusy || Boolean(confirmed) || !manualProfile.confirmed" @click="setWorkKind(key, workFor(key).workKind)">Заполнить базу по тарифу</button>
+            <div v-if="!manualTariff" class="flex flex-wrap gap-2"><button type="button" class="btn-mini-outline" :class="workFor(key).workKind === 'standard' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || quickBusy || Boolean(confirmed)" @click="setWorkKind(key, 'standard')">Стандартный монтаж</button><button type="button" class="btn-mini-outline" :class="workFor(key).workKind === 'prelaid_route' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || quickBusy || Boolean(confirmed)" @click="setWorkKind(key, 'prelaid_route')">На готовую трассу</button></div>
+            <div class="grid min-w-0 gap-3 sm:grid-cols-2">
+              <label class="min-w-0 space-y-1">{{ workFor(key).workKind === 'prelaid_route' ? 'Новая дополнительная трасса, м' : 'Общая длина трассы, м' }}<input data-testid="installation-route" v-model.number="workFor(key).route" type="number" min="0" step="0.01" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
+              <label class="min-w-0 space-y-1">Проходы стены до 80 см, шт.<input data-testid="installation-thick-holes" v-model.number="workFor(key).thick" type="number" min="0" step="1" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
+            </div>
+            <label class="flex items-center gap-2"><input data-testid="installation-pump" v-model="workFor(key).pumpPackage" type="checkbox" :disabled="busy || quickBusy || Boolean(confirmed)" />Насос с установкой</label>
+            <details data-testid="installation-extra-work" :open="workFor(key).thin == null || workFor(key).over80 == null || Boolean(workFor(key).thin || workFor(key).over80 || workFor(key).chase)" class="rounded-md bg-slate-50 p-2">
+              <summary class="cursor-pointer text-slate-600">Дополнительные проходы и штробление</summary>
+              <div class="mt-3 grid min-w-0 gap-3 sm:grid-cols-2">
+                <label class="min-w-0 space-y-1">Межкомнатные проходы до 20 см, шт.<input data-testid="installation-holes" v-model.number="workFor(key).thin" type="number" min="0" step="1" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
+                <label class="min-w-0 space-y-1">Проходы свыше 80 см, шт.<input data-testid="installation-over80-holes" v-model.number="workFor(key).over80" type="number" min="0" step="1" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /><span class="block text-xs text-slate-500">По отдельной смете</span></label>
+                <label class="min-w-0 space-y-1">Штробление, м<input data-testid="installation-chase" v-model.number="workFor(key).chase" type="number" min="0" step="0.01" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
+              </div>
+            </details>
+          </template>
         </div>
-        <label class="flex items-center gap-2"><input v-model="workFor(key).pumpPackage" type="checkbox" :disabled="busy || quickBusy || Boolean(confirmed)" />Насос с установкой</label>
-        </template>
       </div>
       <div class="flex flex-wrap gap-4 border-t border-slate-200 pt-3"><label class="flex items-center gap-2"><input v-model="scaffold" type="checkbox" :disabled="busy || quickBusy || Boolean(confirmed)" />Леса на объекте</label><label class="flex items-center gap-2"><input v-model="lift" type="checkbox" :disabled="busy || quickBusy || Boolean(confirmed)" />Вышка на объекте</label></div>
       <div v-if="scaffold || lift" class="grid gap-2 sm:grid-cols-2"><p v-if="accessApprovalPending" class="sm:col-span-2 text-amber-800">Цены доступа пока ориентировочные. Для точной сметы укажите согласованные сумму и состав работ.</p><template v-if="scaffold"><label class="space-y-1">Леса: согласованная сумма, BYN<input data-testid="scaffold-actual" v-model.number="scaffoldActual" type="number" min="0" step="0.01" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label><label class="space-y-1">Леса: согласованный состав<input data-testid="scaffold-scope" v-model="scaffoldScope" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label></template><template v-if="lift"><label class="space-y-1">Вышка: согласованная сумма, BYN<input v-model.number="liftActual" type="number" min="0" step="0.01" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label><label class="space-y-1">Вышка: согласованный состав и время<input v-model="liftScope" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label></template></div>

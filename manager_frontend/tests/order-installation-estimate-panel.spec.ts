@@ -63,6 +63,67 @@ beforeEach(() => {
 });
 
 describe('OrderInstallationEstimatePanel', () => {
+  it('keeps each selected composition inline and retains independent values when deselected', async () => {
+    service.getManagerOrderDetail.mockResolvedValue({ ...order, proposals: [{ ...order.proposals[0],
+      product_lines: [{ ...product, quantity: 2 }] }] });
+    const wrapper = mountPanel();
+    await wrapper.get('[data-testid="installation-open"]').trigger('click');
+    await flushPromises();
+    const cards = wrapper.findAll('[data-testid="installation-card"]');
+    expect(cards).toHaveLength(2);
+    expect(cards[0]!.text()).toContain('шт. 1');
+    expect(cards[1]!.text()).toContain('шт. 2');
+    expect(wrapper.find('[data-testid="installation-card-work"]').exists()).toBe(false);
+    await cards[0]!.get('[data-testid="installation-product"]').setValue(true);
+    await flushPromises();
+    expect(cards[0]!.get('[data-testid="installation-standard-summary"]').text()).toContain('стены до 80 см: 1');
+    expect(cards[1]!.find('[data-testid="installation-card-work"]').exists()).toBe(false);
+    await cards[0]!.get('[data-testid="installation-edit-work"]').trigger('click');
+    expect(cards[0]!.get('[data-testid="installation-extra-work"]').attributes('open')).toBeUndefined();
+    await cards[0]!.get('[data-testid="installation-route"]').setValue('7');
+    await cards[0]!.get('[data-testid="installation-holes"]').setValue('2');
+    await cards[0]!.get('[data-testid="installation-pump"]').setValue(true);
+    expect(cards[0]!.get('[data-testid="installation-extra-work"]').attributes('open')).toBeDefined();
+    await cards[0]!.get('[data-testid="installation-product"]').setValue(false);
+    expect(cards[0]!.find('[data-testid="installation-card-work"]').exists()).toBe(false);
+    await cards[1]!.get('[data-testid="installation-product"]').setValue(true);
+    await flushPromises();
+    expect(cards[1]!.get('[data-testid="installation-standard-summary"]').text()).toContain('Трасса 3 м');
+    await cards[0]!.get('[data-testid="installation-product"]').setValue(true);
+    await flushPromises();
+    expect((cards[0]!.get('[data-testid="installation-route"]').element as HTMLInputElement).value).toBe('7');
+    expect((cards[0]!.get('[data-testid="installation-holes"]').element as HTMLInputElement).value).toBe('2');
+    expect((cards[0]!.get('[data-testid="installation-pump"]').element as HTMLInputElement).checked).toBe(true);
+    expect(service.resolveInstallationStandard).toHaveBeenCalledTimes(2);
+    await wrapper.get('[data-testid="installation-preview"]').trigger('click');
+    await flushPromises();
+    expect(service.previewManagerInstallationEstimate.mock.calls[0][1].installations).toEqual([
+      expect.objectContaining({ route_length_m: 3 }),
+      expect.objectContaining({ route_length_m: 7, holes_by_type: { through_thin: 2, through_thick: 1, through_over_80: 0 },
+        extras: [{ code: 'pump.package', quantity: 1 }] }),
+    ]);
+    wrapper.unmount();
+  });
+
+  it('exposes unknown work inputs without replacing them with zeros when the standard is unavailable', async () => {
+    service.resolveInstallationStandard.mockRejectedValue(new Error('Тариф недоступен'));
+    const wrapper = mountPanel();
+    await wrapper.get('[data-testid="installation-open"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="installation-product"]').setValue(true);
+    await flushPromises();
+    const card = wrapper.get('[data-testid="installation-card"]');
+    expect(card.get('[data-testid="installation-extra-work"]').attributes('open')).toBeDefined();
+    for (const field of ['installation-route', 'installation-holes', 'installation-thick-holes', 'installation-over80-holes']) {
+      expect((card.get(`[data-testid="${field}"]`).element as HTMLInputElement).value).toBe('');
+    }
+    await wrapper.get('[data-testid="installation-preview"]').trigger('click');
+    await flushPromises();
+    expect(service.previewManagerInstallationEstimate).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('укажите новую трассу и проходы стен');
+    wrapper.unmount();
+  });
+
   it('brings a calculation opened from the shared toolbar into view', async () => {
     const wrapper = mountPanel();
     await wrapper.setProps({ hideActions: true });

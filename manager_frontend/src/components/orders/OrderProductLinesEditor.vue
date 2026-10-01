@@ -72,11 +72,32 @@ const isEditing = (line: ProductLine) => editingLine.value === line;
 const suggestionsFor = (index: number) => (
   props.activeSuggestionIndex === index ? props.productOptions.slice(0, 10) : []
 );
-const catalogPrice = (productId: number) => props.productLookupById[productId]?.price ?? null;
+const catalogPrice = (productId: number) => {
+  const option = props.productLookupById[productId];
+  if (!option || option.catalog_price_known === false) return null;
+  return option.price ?? null;
+};
+const priceAdjustment = (line: ProductLine) => {
+  const catalog = Number(catalogPrice(line.product_id));
+  const price = Number(line.price);
+  if (!Number.isFinite(catalog) || !Number.isFinite(price) || catalog <= 0 || price <= 0) return null;
+
+  const difference = Number((price - catalog).toFixed(2));
+  if (difference === 0) return null;
+
+  const amount = Math.abs(difference);
+  const percent = Number((amount / catalog * 100).toFixed(1));
+  const direction = difference < 0 ? 'discount' : 'markup';
+  const description = direction === 'discount' ? 'Скидка' : 'Наценка';
+  const percentLabel = `${percent.toLocaleString('ru-RU', { maximumFractionDigits: 1 })}%`;
+  const details = `${description} ${formatMoney(amount)} (${percentLabel}) относительно каталожной цены ${formatMoney(catalog)}`;
+  return { direction, description, percentLabel, details };
+};
 const isPriceDifferent = (line: ProductLine) => {
   const price = catalogPrice(line.product_id);
   return price !== null && Number(line.price) !== Number(price);
 };
+const productQueryRows = (query: string) => Math.min(5, Math.max(2, Math.ceil(query.length / 36)));
 const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(line.price || 0);
 </script>
 
@@ -106,7 +127,7 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
           <button type="button" class="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700" :aria-label="`Готово: товар #${index + 1}`" @click="finishEditing">Готово</button>
         </div>
         <div class="grid grid-cols-6 gap-2 md:grid-cols-12 md:items-start" :class="compact ? 'px-3 pb-3' : ''">
-          <label class="relative col-span-6 space-y-1 md:col-span-5">
+          <label class="relative col-span-6 min-w-0 space-y-1 md:col-span-5">
             <span class="flex items-center justify-between gap-2 px-1 text-xs font-medium text-gray-500 md:h-6">
               <span>Название</span>
               <button v-if="line.product_id && canManagePlatform" type="button" data-order-usage="order_product_open_catalog" class="text-xs font-semibold text-brand-700 hover:text-brand-900" @click="emit('open', index)">
@@ -115,8 +136,8 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
             </span>
             <textarea
               v-model="line.product_query"
-              class="field-input min-h-[44px] resize-none overflow-hidden text-sm leading-snug focus:min-h-[120px] focus:resize-y focus:overflow-auto sm:text-base"
-              rows="1"
+              class="field-input min-h-[56px] w-full min-w-0 resize-y overflow-y-auto text-sm leading-snug sm:text-base"
+              :rows="productQueryRows(line.product_query)"
               placeholder="Поиск и выбор товара"
               @focus="emit('focus', index)"
               @input="emit('input', index)"
@@ -149,23 +170,23 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
               </button>
             </div>
           </label>
-          <label class="col-span-4 space-y-1 md:col-span-2">
+          <label class="col-span-4 min-w-0 space-y-1 md:col-span-2">
             <span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Цена</span>
-            <input v-model.number="line.price" type="number" min="0" class="field-input" placeholder="0" />
+            <input v-model.number="line.price" type="number" min="0" class="field-input w-full min-w-0 px-2 text-sm" placeholder="0" />
           </label>
-          <label class="col-span-2 space-y-1 md:col-span-1">
+          <label class="col-span-2 min-w-0 space-y-1 md:col-span-1">
             <span class="flex h-auto items-center whitespace-nowrap px-1 text-xs font-medium text-gray-500 md:h-6 md:text-[11px]">Кол-во</span>
-            <input v-model.number="line.quantity" type="number" min="1" class="field-input" placeholder="1" />
+            <input v-model.number="line.quantity" type="number" min="1" class="field-input w-full min-w-0 px-2 text-sm" placeholder="1" />
           </label>
-          <label v-if="compact ? visibleCosts : !demoReadOnly" class="col-span-3 space-y-1 md:col-span-2">
+          <label v-if="compact ? visibleCosts : !demoReadOnly" class="col-span-3 min-w-0 space-y-1 md:col-span-2">
             <span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Себест.</span>
-            <input v-model.number="line.cost" type="number" min="0" class="field-input" placeholder="0" />
+            <input v-model.number="line.cost" type="number" min="0" class="field-input w-full min-w-0 px-2 text-sm" placeholder="0" />
           </label>
           <div class="col-span-3 space-y-1 md:col-span-2">
             <span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Итого</span>
-            <div class="rounded-lg bg-gray-50 px-3 py-2"><p class="whitespace-nowrap text-base font-semibold leading-tight text-gray-900">{{ formatMoney(lineTotal(line)) }}</p></div>
+            <div class="rounded-lg bg-gray-50 px-2 py-1.5 md:px-3 md:py-2"><p class="whitespace-nowrap text-sm font-semibold leading-tight text-gray-900 md:text-base">{{ formatMoney(lineTotal(line)) }}</p></div>
           </div>
-          <label class="col-span-6 space-y-1 md:col-span-12">
+          <label class="col-span-6 min-w-0 space-y-1 md:col-span-12">
             <span class="flex items-center justify-between gap-2 px-1 text-xs font-medium text-gray-500">
               <span>Описание для клиента</span>
               <button
@@ -181,7 +202,7 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
             <textarea
               v-model="line.client_description"
               data-order-usage="order_product_description"
-              class="field-input min-h-[64px] resize-y text-sm leading-snug"
+              class="field-input min-h-[64px] w-full min-w-0 resize-y text-sm leading-snug"
               rows="2"
               maxlength="2000"
               placeholder="Ключевые характеристики и уточнения для клиента"
@@ -206,7 +227,17 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
             <p v-if="line.client_description" class="mt-0.5 whitespace-pre-wrap break-words text-xs font-normal leading-relaxed text-gray-500 dark:text-slate-400">{{ line.client_description }}</p>
           </div>
           <p class="flex flex-col gap-1 md:block md:text-center"><span class="text-xs text-gray-500 md:hidden">Кол-во</span><span class="font-medium text-gray-700 dark:text-slate-300">{{ line.quantity }}</span></p>
-          <p class="flex flex-col gap-1 md:block md:text-right"><span class="text-xs text-gray-500 md:hidden">Цена</span><span class="font-medium text-gray-700 dark:text-slate-300">{{ formatMoney(line.price) }}</span></p>
+          <p class="flex flex-col gap-1 md:block md:text-right"><span class="text-xs text-gray-500 md:hidden">Цена</span><span class="font-medium text-gray-700 dark:text-slate-300">{{ formatMoney(line.price) }}</span>
+            <span
+              v-if="priceAdjustment(line)"
+              data-testid="product-price-adjustment"
+              class="mt-0.5 block text-[11px] leading-tight md:whitespace-nowrap"
+              role="note"
+              :class="priceAdjustment(line)?.direction === 'discount' ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'"
+              :aria-label="priceAdjustment(line)?.details"
+              :title="priceAdjustment(line)?.details"
+            >{{ priceAdjustment(line)?.direction === 'discount' ? '↓' : '↑' }} {{ priceAdjustment(line)?.description }} {{ priceAdjustment(line)?.percentLabel }}</span>
+          </p>
           <p class="flex flex-col gap-1 md:block md:text-right"><span class="text-xs text-gray-500 md:hidden">Итого</span><span class="font-semibold text-gray-900 dark:text-slate-100">{{ formatMoney(lineTotal(line)) }}</span></p>
           <p v-if="visibleCosts" class="col-span-2 flex flex-col gap-1 md:col-auto md:block md:text-right"><span class="text-xs text-gray-500 md:hidden">Себест.</span><span class="font-medium text-gray-700 dark:text-slate-300">{{ formatMoney(line.cost) }}</span></p>
           <div class="flex justify-end gap-1 md:justify-center" :class="visibleCosts ? 'md:col-auto' : 'col-span-3 md:col-auto'">

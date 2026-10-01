@@ -691,7 +691,7 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
             </section>
           </fieldset>
         </div>
-        <div v-show="!proposalClientPreview" class="order-first min-w-0 lg:order-none lg:sticky lg:top-0 lg:self-start">
+        <div v-show="!proposalClientPreview" class="order-first min-w-0 lg:order-none lg:self-start">
           <button type="button" class="flex min-h-9 w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold dark:border-slate-700 dark:bg-slate-900 lg:hidden" :aria-expanded="mobileContextOpen" @click="mobileContextOpen = !mobileContextOpen"><span>Клиент, объект и заявка</span><span aria-hidden="true">{{ mobileContextOpen ? '−' : '+' }}</span></button>
           <div class="space-y-3 pt-2 lg:pt-0" :class="mobileContextOpen ? '' : 'hidden lg:block'">
           <OrderWorkspaceContext :customer-name="customerDisplayName" :address="compactObjectAddress" :total="totalPreview" :paid="totalPaymentsPreview" :balance="balanceDuePreview" @customer="openCustomerContext('customer')" @object="openCustomerContext('object')" @payments="openWorkspaceTarget('payments')" />

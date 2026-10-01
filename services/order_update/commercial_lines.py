@@ -14,6 +14,8 @@ from services.order_proposal_lifecycle import (
     normalize_proposal_status,
 )
 from services.order_service import OrderService
+from services.order_service_description import service_line_description
+from services.installation_estimate_projection import frozen_installation_presentations
 from services.service_catalog_scope import service_catalog_scope_clause
 from services.service_estimate_money import exact_money, writable_service_money
 from services.order_update.context import OrderUpdateContext
@@ -82,13 +84,13 @@ async def apply_commercial_lines(context: OrderUpdateContext) -> None:
             if submitted_components != saved_components:
                 raise ValueError("Состав мультисплита сохранён как единое решение. Создайте новый вариант конфигурации.")
         await _replace_product_lines(context, target_proposal_id)
-        await InstallationEstimateConfirmationService.validate_attached_claims(
-            context.session, context.order_id, target_proposal_id,
-        )
     if replaces_services:
         await _replace_service_lines(context, target_proposal_id)
 
     await context.session.flush()
+    await InstallationEstimateConfirmationService.validate_attached_claims(
+        context.session, context.order_id, target_proposal_id,
+    )
     await OrderService._refresh_order_financials(
         context.session,
         context.order,
@@ -230,16 +232,29 @@ async def _replace_service_lines(
     if len(incoming_ids) != len(set(incoming_ids)) or any(link_id not in by_id for link_id in incoming_ids):
         raise ValueError("Service line does not belong to the target proposal")
     incoming_by_id = {int(line.link_id): line for line in service_lines if line.link_id is not None}
+    attached = [link for link in existing if link.installation_estimate_revision_id is not None]
+    presentations = await frozen_installation_presentations(context.session, attached)
+    detached_revisions = set()
     for link in existing:
         if link.installation_estimate_revision_id is None:
             continue
         incoming = incoming_by_id.get(int(link.id))
+        description_changed = incoming is not None and "description" in incoming.model_fields_set and \
+            incoming.description != service_line_description(link, presentations.get(link.id))
         if incoming is None or incoming.service_id != link.service_id or incoming.title != link.title \
            or incoming.quantity != link.quantity or exact_money(incoming.price) != exact_money(link.price) \
-           or exact_money(incoming.cost if incoming.cost is not None else 0) != exact_money(link.cost):
-            raise ValueError("Attached installation estimate lines are immutable")
-    removed = [int(link.id) for link in existing
-               if link.id not in incoming_by_id and link.installation_estimate_revision_id is None]
+           or exact_money(incoming.cost if incoming.cost is not None else link.cost) != exact_money(link.cost) \
+           or description_changed:
+            detached_revisions.add(link.installation_estimate_revision_id)
+    for link in attached:
+        if link.installation_estimate_revision_id not in detached_revisions:
+            continue
+        link.description = service_line_description(link, presentations.get(link.id))
+        link.installation_estimate_revision_id = None
+        link.installation_line_index = None
+        link.installation_projection_mode = None
+        context.session.add(link)
+    removed = [int(link.id) for link in existing if link.id not in incoming_by_id]
     if removed:
         await context.session.execute(delete(OrderServiceLink).where(OrderServiceLink.id.in_(removed)))
     for line in service_lines:
@@ -250,6 +265,8 @@ async def _replace_service_lines(
         )
         link.service_id = line.service_id
         link.title = line.title
+        if "description" in line.model_fields_set:
+            link.description = line.description
         link.quantity = line.quantity
         link.price = writable_service_money(line.price)
         link.cost = (

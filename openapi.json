@@ -56319,6 +56319,18 @@
             "type": "string",
             "title": "Title"
           },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
           "quantity": {
             "type": "integer",
             "title": "Quantity"
@@ -66411,6 +66423,17 @@
           "price": {
             "type": "integer",
             "title": "Price"
+          },
+          "catalog_price": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Price"
           },
           "cost": {
             "anyOf": [

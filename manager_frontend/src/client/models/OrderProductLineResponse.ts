@@ -14,6 +14,7 @@ export type OrderProductLineResponse = {
     currency_snapshot?: (string | null);
     quantity: number;
     price: number;
+    catalog_price?: (number | null);
     cost?: (number | null);
     is_installation_included: boolean;
     installation_price: number;

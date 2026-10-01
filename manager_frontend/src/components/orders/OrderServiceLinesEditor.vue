@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { Pencil } from 'lucide-vue-next';
 import type { ManagerQuickTariffResponse, ManagerServiceEstimateResponse, ManagerInstallationStandardTariff } from '../../client';
 import OrderServiceCatalogPicker from './OrderServiceCatalogPicker.vue';
 import type { OrderWorkflowType } from './order-workspace';
@@ -32,7 +33,8 @@ const emit = defineEmits<{
   blur: [index: number];
   select: [payload: { index: number; option: ManagerQuickTariffResponse }];
   descriptionMode: [payload: { index: number; mode: ServiceDescriptionMode }];
-  remove: [index: number];
+  remove: [index: number, displayIndex?: number];
+  editInstallation: [index: number, displayIndex: number];
   add: [];
   addTariff: [option: ManagerQuickTariffResponse];
   appendEstimate: [payload: { id: number; lines: Array<{ service_id?: number | null; title: string; quantity: number; price: number; cost?: number | null }> }];
@@ -82,6 +84,10 @@ const filteredEstimates = computed(() => {
 const lineTotal = (line: ServiceLine) => Number(line.quantity || 0) * Number(line.price || 0);
 const displayLines = (line: ServiceLine) => line.installation_display_lines?.length
   ? line.installation_display_lines : [line];
+const editLine = (index: number, displayIndex = 0) => {
+  if (lines.value[index]?.installation_estimate_revision_id) emit('editInstallation', index, displayIndex);
+  else editingIndex.value = index;
+};
 const updatePreferredMode = (mode: ServiceDescriptionMode) => {
   descriptionMode.value = mode;
   emit('rememberDescriptionMode', mode);
@@ -103,7 +109,7 @@ const updatePreferredMode = (mode: ServiceDescriptionMode) => {
                   <span>Название</span>
                   <ServiceDescriptionModeSwitch v-if="line.template_full_description" :model-value="line.description_mode || 'short'" @update:model-value="emit('descriptionMode', { index, mode: $event })" />
                 </span>
-                <textarea v-model="line.title" data-order-usage="order_service_edit" class="field-input min-h-[64px] resize-none overflow-hidden text-sm leading-snug focus:min-h-[120px] focus:resize-y focus:overflow-auto sm:text-base" rows="2" placeholder="Название услуги" @focus="emit('focus', index)" @input="emit('input', index)" @blur="emit('blur', index)" />
+                <textarea v-model="line.title" data-order-usage="order_service_edit" class="field-input min-h-[64px] resize-y text-sm leading-snug [field-sizing:content]" rows="2" placeholder="Название услуги" @focus="emit('focus', index)" @input="emit('input', index)" @blur="emit('blur', index)" />
                 <div v-if="line.title.trim().length >= 2 && activeSuggestionIndex === index && (serviceLookupLoading || suggestionsFor(index).length)" class="absolute left-0 right-0 top-full z-20 mt-1 max-h-64 overflow-auto rounded-[12px] border border-gray-200 bg-white p-1 shadow-xl">
                   <div v-if="serviceLookupLoading" class="px-3 py-2 text-xs text-gray-500">Ищем тарифы...</div>
                   <button v-for="item in suggestionsFor(index)" :key="`service-tariff-suggest-${index}-${item.tariff_id}`" type="button" :data-testid="`select-service-${item.tariff_id}`" class="mb-1 block w-full rounded-[12px] px-3 py-2 text-left text-xs text-gray-700 hover:bg-slate-100 last:mb-0" @mousedown.prevent @click="emit('select', { index, option: item })">
@@ -117,6 +123,7 @@ const updatePreferredMode = (mode: ServiceDescriptionMode) => {
               <label class="col-span-2 space-y-1 md:col-span-1"><span class="flex h-auto items-center whitespace-nowrap px-1 text-xs font-medium text-gray-500 md:h-6 md:text-[11px]">Кол-во</span><input v-model.number="line.quantity" type="number" min="1" class="field-input" placeholder="1" /></label>
               <label v-if="compactShowCosts" class="col-span-3 space-y-1 md:col-span-2"><span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Себест.</span><input v-model.number="line.cost" type="number" min="0" step="0.01" class="field-input" placeholder="0" /></label>
               <div class="col-span-3 space-y-1 md:col-span-2"><span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Итого</span><div class="rounded-lg bg-gray-50 px-3 py-2"><p class="whitespace-nowrap text-base font-semibold leading-tight text-gray-900">{{ formatMoney(lineTotal(line)) }}</p></div></div>
+              <label class="col-span-6 space-y-1 md:col-span-12"><span class="block text-xs font-medium text-gray-500">Описание для клиента</span><textarea v-model="line.description" data-testid="service-client-description" rows="2" maxlength="10000" class="field-input min-h-[64px] resize-y text-sm leading-relaxed [field-sizing:content]" placeholder="Состав работ и согласованные условия" /></label>
               <div class="col-span-6 flex justify-end md:col-span-12"><button type="button" class="btn-mini-outline h-8 px-3 text-xs" @click="editingIndex = null">Готово</button></div>
             </div>
           </div>
@@ -125,14 +132,15 @@ const updatePreferredMode = (mode: ServiceDescriptionMode) => {
               <div class="col-span-3 min-w-0 md:col-auto">
                 <p class="break-words text-sm font-semibold leading-snug text-slate-900 dark:text-slate-100">{{ display.title || 'Новая услуга' }}</p>
                 <p v-if="display.description" class="break-words text-xs font-normal leading-relaxed text-slate-500 dark:text-slate-400">{{ display.description }}</p>
-                <span v-if="line.installation_estimate_revision_id" class="text-[11px] font-medium text-emerald-700">Монтаж зафиксирован</span>
+                <span v-if="line.installation_estimate_revision_id" class="text-[11px] font-medium text-slate-500">По расчёту</span>
               </div>
               <span class="text-left text-xs text-slate-600 dark:text-slate-300 md:text-center"><span class="mb-1 block font-medium text-slate-500 md:hidden">Кол-во</span>{{ display.quantity }}</span>
               <span class="text-left text-xs text-slate-600 dark:text-slate-300 md:text-right"><span class="mb-1 block font-medium text-slate-500 md:hidden">Цена</span>{{ formatMoney(display.price) }}</span>
               <span class="text-left text-xs font-semibold text-slate-900 dark:text-slate-100 md:text-right"><span class="mb-1 block font-medium text-slate-500 md:hidden">Итого</span>{{ formatMoney(display.quantity * display.price) }}</span>
               <span v-if="compactShowCosts" class="col-span-2 text-left text-xs text-slate-600 dark:text-slate-300 md:col-auto md:text-right"><span class="mb-1 block font-medium text-slate-500 md:hidden">Себест.</span>{{ line.installation_estimate_revision_id ? '—' : formatMoney(line.cost) }}</span>
               <div class="flex justify-end md:justify-center" :class="compactShowCosts ? 'md:col-auto' : 'col-span-3 md:col-auto'">
-                <button v-if="!line.installation_estimate_revision_id && displayIndex === 0" type="button" data-order-usage="order_service_edit" class="btn-mini-outline h-8 w-8 shrink-0 justify-center p-0" :aria-label="`Редактировать услугу #${index + 1}`" title="Редактировать услугу" @click="editingIndex = index"><span class="material-icons-round text-[17px]">edit</span></button>
+                <button type="button" data-order-usage="order_service_edit" class="btn-mini-outline h-8 w-8 shrink-0 justify-center p-0" :aria-label="`Редактировать услугу #${index + 1}.${displayIndex + 1}`" title="Редактировать услугу" @click="editLine(index, displayIndex)"><Pencil :size="16" aria-hidden="true" /></button>
+                <button type="button" data-order-usage="order_service_remove" class="ml-1 inline-flex h-8 w-8 items-center justify-center rounded-lg text-lg text-red-600 hover:bg-red-50" :aria-label="`Удалить услугу #${index + 1}.${displayIndex + 1}`" title="Удалить услугу" @click="emit('remove', index, displayIndex)">×</button>
               </div>
             </div>
           </div>
@@ -147,14 +155,12 @@ const updatePreferredMode = (mode: ServiceDescriptionMode) => {
             <p class="break-words text-sm font-semibold leading-snug text-slate-900 dark:text-slate-100">{{ display.title || 'Новая услуга' }}</p>
             <p v-if="display.description" class="mt-1 break-words text-xs font-normal leading-relaxed text-slate-500">{{ display.description }}</p>
             <div class="mt-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-              <span>{{ display.quantity }} × {{ formatMoney(display.price) }} <span v-if="line.installation_estimate_revision_id" class="ml-1 text-emerald-700">По книге · зафиксировано</span></span>
+              <span>{{ display.quantity }} × {{ formatMoney(display.price) }} <span v-if="line.installation_estimate_revision_id" class="ml-1 text-slate-500">По расчёту</span></span>
               <span class="font-semibold text-slate-800 dark:text-slate-200">{{ formatMoney(display.quantity * display.price) }}</span>
             </div>
+            <div class="mt-1 flex gap-1"><button type="button" data-order-usage="order_service_edit" class="btn-mini-outline h-8 text-xs" @click="editLine(index, displayIndex)">Редактировать</button><button type="button" data-order-usage="order_service_remove" class="h-8 px-2 text-xs text-red-600" @click="emit('remove', index, displayIndex)">Удалить</button></div>
             </div>
           </div>
-          <button v-if="!line.installation_estimate_revision_id" type="button" data-order-usage="order_service_edit" class="btn-mini-outline h-9 w-9 shrink-0 justify-center p-0" :aria-label="`Редактировать услугу #${index + 1}`" title="Редактировать" @click="editingIndex = index">
-            <span class="material-icons-round text-[17px]">edit</span>
-          </button>
         </div>
         <div v-else class="grid grid-cols-6 gap-2 md:grid-cols-12 md:items-start">
           <div class="relative col-span-6 space-y-1 md:col-span-5">
@@ -198,6 +204,7 @@ const updatePreferredMode = (mode: ServiceDescriptionMode) => {
           <label class="col-span-2 space-y-1 md:col-span-1"><span class="flex h-auto items-center whitespace-nowrap px-1 text-xs font-medium text-gray-500 md:h-6 md:text-[11px]">Кол-во</span><input v-model.number="line.quantity" type="number" min="1" class="field-input" placeholder="1" /></label>
           <label v-if="!demoReadOnly" class="col-span-3 space-y-1 md:col-span-2"><span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Себест.</span><input v-model.number="line.cost" type="number" min="0" step="0.01" class="field-input" placeholder="0" /></label>
           <div class="col-span-3 space-y-1 md:col-span-2"><span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Итого</span><div class="rounded-lg bg-gray-50 px-3 py-2"><p class="whitespace-nowrap text-base font-semibold leading-tight text-gray-900">{{ formatMoney(lineTotal(line)) }}</p></div></div>
+          <label class="col-span-6 space-y-1 md:col-span-12"><span class="block text-xs font-medium text-gray-500">Описание для клиента</span><textarea v-model="line.description" data-testid="service-client-description" rows="2" maxlength="10000" class="field-input min-h-[64px] resize-y text-sm leading-relaxed [field-sizing:content]" placeholder="Состав работ и согласованные условия" /></label>
           <div class="col-span-6 flex justify-end md:col-span-12"><button type="button" class="btn-mini-outline h-8 px-3 text-xs" @click="editingIndex = null">Готово</button></div>
         </div>
         </template>

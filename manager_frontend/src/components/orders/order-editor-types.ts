@@ -4,6 +4,7 @@ export type ProductOption = {
   id: number;
   title: string;
   price: number;
+  catalog_price_known?: boolean;
   cost?: number;
   product_kind?: string;
   is_inverter: boolean;
@@ -39,6 +40,7 @@ export type ProductLine = {
   product_id: number;
   product_query: string;
   client_description?: string | null;
+  catalog_price?: number | null;
   quantity: number;
   price: number;
   cost: number;
