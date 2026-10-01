@@ -37,6 +37,9 @@ const deferred = <T>() => {
 const originalScrollIntoView = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView');
 
 beforeEach(() => {
+  // A real calendar date can equal the date used to trigger a defaults refresh.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(NOW));
   Element.prototype.scrollIntoView = vi.fn();
   vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
     callback(0);
@@ -55,6 +58,7 @@ beforeEach(() => {
 afterEach(() => {
   for (const wrapper of wrappers.splice(0)) wrapper.unmount();
   vi.restoreAllMocks();
+  vi.useRealTimers();
   if (originalScrollIntoView) Object.defineProperty(Element.prototype, 'scrollIntoView', originalScrollIntoView);
   else Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
   managerSession.auth.value = null;

@@ -44,11 +44,27 @@ class OrderProposalCommandService:
                 selectinload(Order.installers),
             ),
             for_update=True,
+            populate_existing=True,
         )
         if not order:
             raise ValueError("Order not found")
         await OrderService.ensure_default_proposal(session, order)
         return order
+
+    @staticmethod
+    async def ensure_default_order_proposal(
+        session: AsyncSession,
+        order_id: int,
+        *,
+        tenant_scope: TenantScope,
+    ) -> None:
+        """Persist a legacy default before its ID is returned to the editor."""
+        if tenant_scope.demo_read_only:
+            return
+        async with command_transaction(session):
+            await OrderProposalCommandService._load_order_for_write(
+                session, order_id, tenant_scope=tenant_scope,
+            )
 
     @staticmethod
     async def _project_committed_order(
