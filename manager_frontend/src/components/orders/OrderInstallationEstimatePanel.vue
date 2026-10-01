@@ -53,6 +53,12 @@ const props = defineProps<{
   endAttach: (token: string) => void;
 }>();
 const open = ref(false);
+const panelContainer = ref<HTMLElement | null>(null);
+watch(open, async (isOpen) => {
+  if (!isOpen || !props.hideActions) return;
+  await nextTick();
+  panelContainer.value?.scrollIntoView?.({ block: 'start' });
+});
 const busy = ref(false);
 const quickBusy = ref(false);
 const editing = ref<Record<string, boolean>>({});
@@ -522,7 +528,7 @@ defineExpose({ openPanel: async () => { if (!open.value) await show(); }, action
 </script>
 
 <template>
-  <div>
+  <div ref="panelContainer">
     <div v-if="!hideActions" class="mt-3" :class="compact ? 'flex flex-wrap gap-2' : 'space-y-2'">
       <button type="button" data-testid="installation-standard-add" class="btn-mini justify-center" :class="compact ? 'text-xs' : 'w-full'" :disabled="busy || quickBusy" @click="addStandard">{{ quickBusy ? 'Добавляем монтаж…' : 'Стандартный монтаж' }}</button>
       <button type="button" data-testid="installation-open" class="btn-mini-outline justify-center" :class="compact ? 'text-xs' : 'w-full'" :disabled="busy || quickBusy" @click="show">{{ open ? 'Скрыть настройки монтажа' : 'Настроить состав' }}</button>
