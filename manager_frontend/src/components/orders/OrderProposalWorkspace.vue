@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed, nextTick, reactive, ref, watch } from 'vue';
 import type { useOrderCommercialEditor } from '../../composables/useOrderCommercialEditor';
 import type { useOrderProposalLifecycle } from '../../composables/useOrderProposalLifecycle';
 import OrderProposalClientPreview from './OrderProposalClientPreview.vue';
@@ -44,6 +44,12 @@ const demoReadOnly = useDemoReadOnly();
 const toolbarRef = ref<InstanceType<typeof OrderProposalToolbar> | null>(null);
 const installationPanelRef = ref<InstanceType<typeof OrderInstallationEstimatePanel> | null>(null);
 const serviceEditorRef = ref<InstanceType<typeof OrderServiceLinesEditor> | null>(null);
+const previewOpenButton = ref<HTMLButtonElement | null>(null);
+const previewReturnButton = ref<HTMLButtonElement | null>(null);
+watch(clientPreview, async (preview) => {
+  await nextTick();
+  (preview ? previewReturnButton.value : previewOpenButton.value)?.focus({ preventScroll: true });
+});
 const commercial = reactive(props.commercial);
 const proposal = reactive(props.proposal);
 const hasAttachedInstallation = computed(() => commercial.serviceLines.some((line) => Boolean(line.installation_estimate_revision_id)));
@@ -63,7 +69,7 @@ defineExpose({
 <template>
   <section id="order-workspace-proposal" class="min-w-0" :aria-label="title">
     <div v-if="clientPreview" class="mb-3 flex justify-end">
-      <button type="button" class="btn-mini-outline min-h-8 text-xs" aria-pressed="true" @click="clientPreview = false">Вернуться в редактор</button>
+      <button ref="previewReturnButton" type="button" class="btn-mini-outline min-h-8 text-xs" aria-pressed="true" @click="clientPreview = false">Вернуться в редактор</button>
     </div>
     <OrderProposalClientPreview v-if="clientPreview" :product-lines="commercial.productLines" :service-lines="commercial.serviceLines" :title="orderTitle" :customer-name="customerName" :address="objectAddress" />
     <div v-show="!clientPreview" class="min-w-0">
@@ -86,7 +92,7 @@ defineExpose({
       >
         <template #controls>
           <label v-if="!demoReadOnly" class="inline-flex min-h-8 cursor-pointer items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300"><input v-model="showCosts" type="checkbox" class="rounded border-slate-300 text-brand-600" />Себестоимость</label>
-          <button type="button" class="btn-mini-outline min-h-8 text-xs" aria-pressed="false" @click="clientPreview = true">Предпросмотр для клиента</button>
+          <button ref="previewOpenButton" type="button" class="btn-mini-outline min-h-8 text-xs" aria-pressed="false" @click="clientPreview = true">Предпросмотр для клиента</button>
         </template>
       </OrderProposalToolbar>
 

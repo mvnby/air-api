@@ -231,6 +231,7 @@ describe('OrderProposalWorkspace', () => {
     };
     const fixture = createWorkspaceFixture({ productLines: [productLine], serviceLines: [serviceLine] });
     const wrapper = mount(OrderProposalWorkspace, {
+      attachTo: document.body,
       props: { ...fixture.props, showCosts: true },
       slots: {
         'source-equipment': '<div data-testid="source-equipment-only">Внутренний источник оборудования</div>',
@@ -259,6 +260,7 @@ describe('OrderProposalWorkspace', () => {
     expect(preview.findAll('button, input, textarea')).toHaveLength(0);
     expect(wrapper.get('[data-testid="source-equipment-only"]').isVisible()).toBe(false);
     expect(wrapper.get('[data-testid="add-product-line"]').isVisible()).toBe(false);
+    expect(document.activeElement).toBe(wrapper.get('button[aria-pressed="true"]').element);
 
     await wrapper.get('button[aria-pressed="true"]').trigger('click');
     const editorAfter = wrapper.findComponent(OrderProductLinesEditor);
@@ -268,6 +270,8 @@ describe('OrderProposalWorkspace', () => {
     expect((editorAfter.get('[data-order-usage="order_product_description"]').element as HTMLTextAreaElement).value)
       .toBe('Комплект и параметры согласованы с клиентом.');
     expect(editorAfter.get('[aria-label="Готово: товар #1"]').exists()).toBe(true);
+    expect(document.activeElement).toBe(wrapper.get('button[aria-pressed="false"]').element);
+    wrapper.unmount();
   });
 
   it('routes shared add actions through the real editors and the installation panel capability', async () => {
