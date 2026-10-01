@@ -421,11 +421,21 @@ class OrderProjectionService:
             ).scalar_one_or_none()
             if owned_customer_id is None:
                 return None
-        # Transitional compatibility: a legacy detail read may still repair a
-        # missing default proposal. Demo reads must remain read-only even while
-        # this compatibility path exists.
-        if not tenant_scope.demo_read_only:
-            await OrderService.ensure_default_proposal(session, order)
+        # Legacy/imported orders may have no selected proposal. Persist that
+        # repair through a locked command before exposing its ID: a plain flush
+        # in this read session is rolled back when the request closes.
+        selected_proposal = OrderService._selected_proposal(order)
+        if not tenant_scope.demo_read_only and (
+            selected_proposal is None or not selected_proposal.is_selected
+        ):
+            from services.order_proposal_command_service import OrderProposalCommandService
+
+            await OrderProposalCommandService.ensure_default_order_proposal(
+                session, order_id, tenant_scope=tenant_scope,
+            )
+            return await OrderProjectionService.get_order_detail_for_manager(
+                session, order_id, tenant_scope=tenant_scope,
+            )
 
         data = OrderProjectionService._map_order_list_item(
             order,
