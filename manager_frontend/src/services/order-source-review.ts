@@ -49,6 +49,25 @@ export type OrderSourcePreview = {
   warnings: string[];
   analysis_source?: 'source' | 'ai' | 'reviewed';
   analyzed_document_ids?: string[];
+  equipment_prefill?: SourceEquipmentPrefillResult | null;
+};
+
+export type SourceEquipmentPrefillResult = {
+  proposal_id?: number | null;
+  added: Array<{ model?: string | null; quantity?: number | null; product_id?: number | null; message: string }>;
+  skipped: Array<{ model?: string | null; quantity?: number | null; product_id?: number | null; reason: string; message: string }>;
+  warnings: string[];
+};
+
+export type SourceAppliedEvent = {
+  orderId: number; customerId: number | null; appliedFields: string[]; customerAction: string;
+  equipmentPrefill?: SourceEquipmentPrefillResult | null;
+};
+
+export const sourceEquipmentPrefillMessage = (result?: SourceEquipmentPrefillResult | null) => {
+  if (!result) return '';
+  const summary = result.added.length ? `В черновик добавлено позиций: ${result.added.length}.` : '';
+  return [summary, ...result.warnings].filter(Boolean).join(' ');
 };
 
 export type OrderSourceApplyPayload = {
@@ -70,6 +89,7 @@ export type OrderSourceApplyResult = {
   customer_id?: number | null;
   attachment_ids: number[];
   applied_fields: string[];
+  equipment_prefill?: SourceEquipmentPrefillResult | null;
 };
 
 export const orderSourceReviewApi = {

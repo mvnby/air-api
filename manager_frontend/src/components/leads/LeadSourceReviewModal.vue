@@ -8,13 +8,14 @@ import {
   type OrderSourcePreview,
   type SourceCustomer,
   type SourceObject,
+  type SourceAppliedEvent,
 } from '../../services/order-source-review';
 import CustomerSearchSelect from '../customers/CustomerSearchSelect.vue';
 import type { ManagerCatalogCustomerItemResponse } from '../../client';
 import type { OrderScenarioOption } from '../orders/OrderScenarioSelector.vue';
 
 const props = defineProps<{ open: boolean; orderId: number; leadStatus?: string | null }>();
-const emit = defineEmits<{ close: []; applied: [result: { orderId: number; customerId: number | null; appliedFields: string[]; customerAction: string }]; }>();
+const emit = defineEmits<{ close: []; applied: [result: SourceAppliedEvent]; }>();
 
 const preview = ref<OrderSourcePreview | null>(null);
 const loading = ref(false);
@@ -41,6 +42,8 @@ const confirmed = ref(false);
 const isNewLead = computed(() => props.leadStatus === 'new_lead');
 const keyForScenario = (value: { workflow_type: string; service_type?: string | null }) => `${value.workflow_type}:${value.service_type || ''}`;
 const selectedScenario = computed(() => scenarioOptions.value.find((item) => keyForScenario(item) === scenarioKey.value) || null);
+const prefillWarnings = computed(() => (preview.value?.equipment_prefill?.warnings || [])
+  .filter((warning) => !preview.value?.equipment_prefill?.skipped.some((item) => item.message === warning)));
 const hasCustomerSelection = computed(() => customerAction.value === 'skip'
   || (customerAction.value === 'existing' && Boolean(selectedExistingCustomer.value?.id))
   || (customerAction.value === 'create' && Boolean(customer.value.name?.trim())));
@@ -176,7 +179,7 @@ const apply = async () => {
   error.value = '';
   try {
     const result = await orderSourceReviewApi.apply(props.orderId, payload);
-    emit('applied', { orderId: result.order_id, customerId: result.customer_id || null, appliedFields: result.applied_fields, customerAction: customerAction.value });
+    emit('applied', { orderId: result.order_id, customerId: result.customer_id || null, appliedFields: result.applied_fields, customerAction: customerAction.value, equipmentPrefill: result.equipment_prefill });
   } catch (reason) {
     error.value = getApiErrorMessage(reason);
   } finally {
@@ -204,6 +207,12 @@ watch(() => [props.open, props.orderId] as const, ([open]) => {
           <div class="flex flex-wrap gap-3 text-sm"><a v-if="safeSourceUrl" :href="safeSourceUrl" target="_blank" rel="noopener noreferrer" class="font-semibold text-brand-700 underline">Открыть источник</a><span v-if="preview.deadline_at">Срок: {{ new Date(preview.deadline_at).toLocaleDateString('ru-RU') }}</span></div>
           <p v-if="preview.title" class="mt-2 font-semibold">{{ preview.title }}</p>
           <div v-if="preview.warnings.length" class="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{{ preview.warnings.join(' ') }}</div>
+          <div v-if="preview.equipment_prefill" class="mt-3 text-sm" aria-label="Результат переноса оборудования">
+            <p class="font-semibold">Последний перенос оборудования</p>
+            <p v-for="(item, index) in preview.equipment_prefill.added" :key="`added-${index}`">{{ item.message }}</p>
+            <p v-for="(item, index) in preview.equipment_prefill.skipped" :key="`skipped-${index}`" class="text-amber-800">{{ item.message }}</p>
+            <p v-for="(warning, index) in prefillWarnings" :key="`warning-${index}`" class="text-amber-800">{{ warning }}</p>
+          </div>
 
           <label class="mt-4 block text-sm font-semibold">Сценарий заказа
             <select v-model="scenarioKey" class="field-input mt-1" aria-label="Сценарий заказа" @change="chooseScenario">
@@ -213,6 +222,7 @@ watch(() => [props.open, props.orderId] as const, ([open]) => {
           </label>
           <p v-if="preview.suggested_scenario" class="mt-1 text-xs text-slate-500">По смыслу работ предложено: {{ preview.suggested_scenario.label }}. Проверьте перед сохранением.</p>
           <p v-else-if="isNewLead" class="mt-1 text-xs text-amber-700">Сценарий не удалось определить однозначно. Выберите его вручную.</p>
+          <p v-if="selectedScenario?.workflow_type === 'sales_installation'" class="mt-2 text-xs text-slate-500">При сохранении полные модели с единственным точным совпадением и достаточным наличием добавятся в черновик по текущей цене каталога. Количество по объектам суммируется; остальные позиции останутся для ручного подбора. Остаток не резервируется. Монтаж добавляется отдельно в предложении.</p>
 
           <section class="mt-4"><h3 class="text-sm font-semibold">Клиент</h3>
             <div class="mt-2 flex gap-2 text-sm">

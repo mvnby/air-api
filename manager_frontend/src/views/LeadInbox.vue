@@ -6,6 +6,7 @@ import { managerStorefrontSelection, managerStorefrontStorageKey } from '../serv
 import LeadInboxCard from '../components/leads/LeadInboxCard.vue';
 import LeadQualifyModal from '../components/leads/LeadQualifyModal.vue';
 import LeadSourceReviewModal from '../components/leads/LeadSourceReviewModal.vue';
+import { sourceEquipmentPrefillMessage, type SourceAppliedEvent } from '../services/order-source-review';
 import EmailLeadImportPanel from '../components/leads/EmailLeadImportPanel.vue';
 import AddressSuggestInput from '../components/ui/AddressSuggestInput.vue';
 import { useBelarusPhoneMask } from '../composables/useBelarusPhoneMask';
@@ -291,14 +292,14 @@ const handleQualifySuccess = async (orderId: number) => {
   window.dispatchEvent(new PopStateEvent('popstate'));
 };
 
-const handleSourceApplied = async (result: { orderId: number; customerAction: string }) => {
+const handleSourceApplied = async (result: SourceAppliedEvent) => {
   sourceReviewTarget.value = null;
   if (result.customerAction === 'skip') {
-    setToast(`Источник для обращения #${result.orderId} обновлён`);
+    setToast([`Источник для обращения #${result.orderId} обновлён.`, sourceEquipmentPrefillMessage(result.equipmentPrefill)].filter(Boolean).join(' '));
     await load();
     return;
   }
-  setToast(`Данные из источника применены, открываем сделку #${result.orderId}`);
+  setToast([`Данные из источника применены, открываем сделку #${result.orderId}.`, sourceEquipmentPrefillMessage(result.equipmentPrefill)].filter(Boolean).join(' '));
   window.history.pushState({}, '', `/manager/orders/kanban?orderId=${result.orderId}`);
   window.dispatchEvent(new PopStateEvent('popstate'));
 };

@@ -687,6 +687,8 @@ export type { ServiceResponse } from './models/ServiceResponse';
 export type { SourceCustomerDraft } from './models/SourceCustomerDraft';
 export type { SourceDocumentPreview } from './models/SourceDocumentPreview';
 export type { SourceEquipmentDraft } from './models/SourceEquipmentDraft';
+export type { SourceEquipmentPrefillItem } from './models/SourceEquipmentPrefillItem';
+export type { SourceEquipmentPrefillResult } from './models/SourceEquipmentPrefillResult';
 export type { SourceObjectDraft } from './models/SourceObjectDraft';
 export type { SourceScenarioDraft } from './models/SourceScenarioDraft';
 export type { SpecRegistryItemResponse } from './models/SpecRegistryItemResponse';

@@ -140,4 +140,38 @@ describe('LeadSourceReviewModal', () => {
     expect(wrapper.text()).toContain('ТЗ.pdf');
     expect(wrapper.find('input[placeholder="Название или имя"]').exists()).toBe(true);
   });
+
+  it('explains exact prefill only for sales and forwards added lines and warnings', async () => {
+    const equipmentPrefill = {
+      proposal_id: 5,
+      added: [{ model: 'A1', quantity: 2, product_id: 7, message: 'A1 × 2: добавлено в черновик.' }],
+      skipped: [{ model: 'A2', reason: 'insufficient_stock', message: 'A2: требуется 2, доступно 1.' }],
+      warnings: ['A2: требуется 2, доступно 1.'],
+    };
+    sourceApi.apply.mockResolvedValueOnce({ order_id: 41, customer_id: 9, attachment_ids: [], applied_fields: ['proposal_equipment'], equipment_prefill: equipmentPrefill });
+    const wrapper = mount(LeadSourceReviewModal, { props: { open: true, orderId: 41, leadStatus: 'negotiation' } });
+    await flushPromises();
+    expect(wrapper.text()).toContain('единственным точным совпадением и достаточным наличием');
+    expect(wrapper.text()).toContain('Монтаж добавляется отдельно');
+    await wrapper.findAll('input[type="checkbox"]').at(-1)!.setValue(true);
+    await wrapper.get('button.btn-mini').trigger('click');
+    await flushPromises();
+    expect(wrapper.emitted('applied')?.[0]?.[0]).toEqual(expect.objectContaining({ equipmentPrefill }));
+    await wrapper.get('select[aria-label="Сценарий заказа"]').setValue('maintenance:maintenance');
+    expect(wrapper.text()).not.toContain('единственным точным совпадением и достаточным наличием');
+  });
+
+  it('shows saved pending equipment when the source review is reopened', async () => {
+    sourceApi.preview.mockResolvedValueOnce({ ...preview, equipment_prefill: {
+      proposal_id: 5, added: [],
+      skipped: [{ model: 'A2', reason: 'insufficient_stock', message: 'A2: требуется 2, доступно 1; уточните поставку.' }],
+      warnings: ['A2: требуется 2, доступно 1; уточните поставку.', 'A1: закупочная стоимость неизвестна.'],
+    } });
+    const wrapper = mount(LeadSourceReviewModal, { props: { open: true, orderId: 41 } });
+    await flushPromises();
+    expect(wrapper.get('[aria-label="Результат переноса оборудования"]').text())
+      .toContain('A2: требуется 2, доступно 1; уточните поставку.');
+    expect(wrapper.get('[aria-label="Результат переноса оборудования"]').text())
+      .toContain('A1: закупочная стоимость неизвестна.');
+  });
 });

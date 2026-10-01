@@ -56113,6 +56113,16 @@
             },
             "type": "array",
             "title": "Applied Fields"
+          },
+          "equipment_prefill": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceEquipmentPrefillResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -56159,6 +56169,16 @@
             },
             "type": "array",
             "title": "Objects"
+          },
+          "equipment_prefill": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceEquipmentPrefillResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "customer_branch_ids": {
             "items": {
@@ -56346,6 +56366,16 @@
             },
             "type": "array",
             "title": "Analyzed Document Ids"
+          },
+          "equipment_prefill": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceEquipmentPrefillResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -72269,6 +72299,117 @@
         },
         "type": "object",
         "title": "SourceEquipmentDraft"
+      },
+      "SourceEquipmentPrefillItem": {
+        "properties": {
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          },
+          "line_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line Id"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reason",
+          "message"
+        ],
+        "title": "SourceEquipmentPrefillItem"
+      },
+      "SourceEquipmentPrefillResult": {
+        "properties": {
+          "proposal_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
+          },
+          "added": {
+            "items": {
+              "$ref": "#/components/schemas/SourceEquipmentPrefillItem"
+            },
+            "type": "array",
+            "title": "Added"
+          },
+          "skipped": {
+            "items": {
+              "$ref": "#/components/schemas/SourceEquipmentPrefillItem"
+            },
+            "type": "array",
+            "title": "Skipped"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "title": "SourceEquipmentPrefillResult"
       },
       "SourceObjectDraft": {
         "properties": {

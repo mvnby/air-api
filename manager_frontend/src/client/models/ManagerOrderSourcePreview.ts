@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { SourceCustomerDraft } from './SourceCustomerDraft';
 import type { SourceDocumentPreview } from './SourceDocumentPreview';
+import type { SourceEquipmentPrefillResult } from './SourceEquipmentPrefillResult';
 import type { SourceObjectDraft } from './SourceObjectDraft';
 import type { SourceScenarioDraft } from './SourceScenarioDraft';
 export type ManagerOrderSourcePreview = {
@@ -26,5 +27,6 @@ export type ManagerOrderSourcePreview = {
     warnings?: Array<string>;
     analysis_source?: string;
     analyzed_document_ids?: Array<string>;
+    equipment_prefill?: (SourceEquipmentPrefillResult | null);
 };
 

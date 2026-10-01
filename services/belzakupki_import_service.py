@@ -206,6 +206,8 @@ class BelzakupkiImportService:
         }
         if isinstance(existing.get("enrichment"), dict):
             next_metadata["enrichment"] = existing["enrichment"]
+        if isinstance(existing.get("equipment_prefill_history"), dict):
+            next_metadata["equipment_prefill_history"] = existing["equipment_prefill_history"]
         return next_metadata
 
     @classmethod
