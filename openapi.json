@@ -24274,6 +24274,52 @@
         }
       }
     },
+    "/api/manager/installation-estimates/resolve": {
+      "post": {
+        "tags": [
+          "manager/installation-estimates"
+        ],
+        "summary": "Resolve Manager Installation Tariff",
+        "operationId": "resolve_manager_installation_tariff",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstallationResolvePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallationResolveResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/installation-estimates/preview": {
       "post": {
         "tags": [

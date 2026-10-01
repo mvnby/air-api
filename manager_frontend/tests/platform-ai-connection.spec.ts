@@ -2,7 +2,8 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { ref } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn(), remove: vi.fn(), models: vi.fn(), test: vi.fn() }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn(), remove: vi.fn(), models: vi.fn(), test: vi.fn(), confirm: vi.fn() }));
+vi.mock('../src/services/ui-feedback', () => ({ confirmDialog: mocks.confirm }));
 vi.mock('../src/client', () => ({
   ManagerPlatformAiService: {
     getPlatformAiConnection: mocks.get,
@@ -54,5 +55,21 @@ describe('platform AI connection', () => {
     expect(mocks.test).toHaveBeenCalledOnce();
     await wrapper.findAll('button').find(button => button.text() === 'Включить')!.trigger('click');
     expect(mocks.put).toHaveBeenCalledWith({ enabled: true });
+  });
+
+  it('deletes the connection only after confirmation through the shared dialog', async () => {
+    const wrapper = mountPanel();
+    await flushPromises();
+    const remove = wrapper.findAll('button').find(button => button.text() === 'Удалить ключ')!;
+    mocks.confirm.mockResolvedValueOnce(false);
+    await remove.trigger('click');
+    await flushPromises();
+    expect(mocks.remove).not.toHaveBeenCalled();
+    mocks.confirm.mockResolvedValueOnce(true);
+    mocks.remove.mockResolvedValueOnce({ configured: false, enabled: false, selected_model: null });
+    await remove.trigger('click');
+    await flushPromises();
+    expect(mocks.remove).toHaveBeenCalledOnce();
+    expect(wrapper.text()).toContain('Ключ удалён.');
   });
 });

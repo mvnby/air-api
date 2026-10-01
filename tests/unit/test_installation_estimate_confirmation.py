@@ -24,6 +24,31 @@ from services.order_update.command import OrderUpdateCommandService
 from services.order_proposal_command_service import OrderProposalCommandService
 
 
+@pytest.mark.asyncio
+async def test_manager_standard_resolve_uses_authenticated_tenant_scope(monkeypatch):
+    from unittest.mock import AsyncMock
+    from core.security import get_current_manager_tenant_scope, require_manager_access
+    from routers.manager_installation_estimates import router, resolve_manager_installation_tariff
+    from routers.manager_operation_ids import RESOLVE_MANAGER_INSTALLATION_TARIFF
+    from routers.manager_permission_policy import TENANT_SERVICE_OPERATION_IDS
+    from schemas_installation_price_book import InstallationResolvePayload, InstallationResolveResponse
+
+    scope = TenantScope(tenant_id=41, storefront_id=42)
+    payload = InstallationResolvePayload(product_id=123, work_kind="standard")
+    result = InstallationResolveResponse(status="fixed", scope_ref="tenant:41",
+        included={"route_m": "3", "holes_by_type": {"shared_pass_through": "1"}})
+    resolve = AsyncMock(return_value=(result, {}))
+    monkeypatch.setattr(Book, "resolve", resolve)
+    session = object()
+    assert await resolve_manager_installation_tariff(payload, session, scope) is result
+    resolve.assert_awaited_once_with(session, scope, payload)
+    route = next(route for route in router.routes if route.operation_id == RESOLVE_MANAGER_INSTALLATION_TARIFF)
+    dependencies = {dependency.call for dependency in route.dependant.dependencies}
+    assert get_current_manager_tenant_scope in dependencies
+    assert require_manager_access in dependencies
+    assert RESOLVE_MANAGER_INSTALLATION_TARIFF in TENANT_SERVICE_OPERATION_IDS
+
+
 def _entry(mode="fixed", price="500.00"):
     return {
         "tariff_id": 1, "code": "installation.wall.2_4", "mode": mode,
