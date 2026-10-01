@@ -3,6 +3,8 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { InstallationPreviewPayload } from '../models/InstallationPreviewPayload';
+import type { InstallationResolvePayload } from '../models/InstallationResolvePayload';
+import type { InstallationResolveResponse } from '../models/InstallationResolveResponse';
 import type { ManagerInstallationAttachPayload } from '../models/ManagerInstallationAttachPayload';
 import type { ManagerInstallationAttachResponse } from '../models/ManagerInstallationAttachResponse';
 import type { ManagerInstallationConfirmPayload } from '../models/ManagerInstallationConfirmPayload';
@@ -13,6 +15,25 @@ import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class ManagerInstallationEstimatesService {
+    /**
+     * Resolve Manager Installation Tariff
+     * @param requestBody
+     * @returns InstallationResolveResponse Successful Response
+     * @throws ApiError
+     */
+    public static resolveManagerInstallationTariff(
+        requestBody: InstallationResolvePayload,
+    ): CancelablePromise<InstallationResolveResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/installation-estimates/resolve',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
     /**
      * Preview Manager Installation Estimate
      * @param idempotencyKey

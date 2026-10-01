@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { ManagerPlatformAiService } from '../../../../client';
+import { confirmDialog } from '../../../../services/ui-feedback';
 import { usePlatformSettingsContext } from '../platform-settings-context';
 
 const { activeSettingsTab } = usePlatformSettingsContext();
@@ -63,7 +64,12 @@ const testInference = async () => {
 };
 
 const remove = async () => {
-  if (!window.confirm('Удалить ключ ZAPRO.SU и отключить подключение?')) return;
+  if (!await confirmDialog({
+    title: 'Удалить ключ ZAPRO.SU?',
+    description: 'Подключение будет отключено.',
+    confirmText: 'Удалить ключ',
+    variant: 'danger',
+  })) return;
   busy.value = true; error.value = ''; message.value = '';
   try {
     status.value = await ManagerPlatformAiService.deletePlatformAiConnection() as Status;

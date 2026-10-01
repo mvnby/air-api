@@ -12,6 +12,7 @@ from models.tenancy import TenantScope
 from routers.manager_operation_ids import (
     ATTACH_MANAGER_INSTALLATION_ESTIMATE, CONFIRM_MANAGER_INSTALLATION_ESTIMATE,
     GET_MANAGER_INSTALLATION_ESTIMATE_REVISION, PREVIEW_MANAGER_INSTALLATION_ESTIMATE,
+    RESOLVE_MANAGER_INSTALLATION_TARIFF,
 )
 from routers.manager_permission_policy import ManagerPermissionRoute
 from schemas_installation_confirmation import (
@@ -20,7 +21,10 @@ from schemas_installation_confirmation import (
     ManagerInstallationEstimateRevisionResponse,
     ManagerInstallationPreviewResponse,
 )
-from schemas_installation_price_book import InstallationPreviewPayload, InstallationPreviewResponse
+from schemas_installation_price_book import (
+    InstallationPreviewPayload, InstallationPreviewResponse,
+    InstallationResolvePayload, InstallationResolveResponse,
+)
 from services.installation_estimate_confirmation_service import (
     InstallationEstimateConfirmationService, InstallationPriceChanged,
 )
@@ -52,6 +56,19 @@ def _idempotency_error(exc: Exception) -> HTTPException:
         return HTTPException(status_code=409, detail={"code": "idempotency_key_reused"})
     return HTTPException(status_code=503, detail={"code": "idempotency_unavailable"},
                          headers={"Retry-After": "1"})
+
+
+@router.post("/resolve", response_model=InstallationResolveResponse,
+             operation_id=RESOLVE_MANAGER_INSTALLATION_TARIFF)
+async def resolve_manager_installation_tariff(
+    payload: InstallationResolvePayload,
+    session: AsyncSession = Depends(get_session),
+    scope: TenantScope = Depends(get_current_manager_tenant_scope),
+):
+    result, _ = await InstallationPriceBookService.resolve(
+        session, scope, payload,
+    )
+    return result
 
 
 @router.post("/preview", response_model=ManagerInstallationPreviewResponse,

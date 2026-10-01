@@ -311,6 +311,28 @@ def _new_entry(*, kind: str = "complete_split_system", work: str = "standard",
             "rules": rules}
 
 
+@pytest.mark.asyncio
+async def test_standard_shared_passage_and_included_route_have_no_extra_charge(monkeypatch):
+    entry = _new_entry()
+    book = InstallationPriceBook(id=8, tenant_id=12, revision=2, fingerprint="standard-base", entries=[entry])
+    async def latest(*_args):
+        return book
+    async def profile(_session, _scope, target):
+        return target.typed_profile, {}
+    monkeypatch.setattr(BookService, "latest", latest)
+    monkeypatch.setattr(BookService, "_profile", profile)
+    result = await BookService.preview(None, TenantScope(tenant_id=12, storefront_id=34),
+        InstallationPreviewPayload.model_validate({"installations": [{
+            "key": "one", "typed_profile": {"product_kind": "complete_split_system",
+                "indoor_type": "wall", "capacity_cooling_kw": "3.5", "confirmed": True},
+            "route_length_m": "3", "holes_by_type": {
+                "through_thin": 1, "through_thick": 0, "through_over_80": 0},
+        }]}), persist=False)
+    assert result.status == "fixed"
+    assert result.total == Decimal(entry["base_price"])
+    assert [part.code for part in result.components] == ["installation.base"]
+
+
 def test_capacity_boundaries_are_disjoint_and_unknown_large_fails_closed():
     matchers = [
         InstallationMatcher(indoor_type="wall", match_strategy="capacity_only",

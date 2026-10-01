@@ -8,6 +8,11 @@ const service = vi.hoisted(() => ({
   previewManagerInstallationEstimate: vi.fn(),
   confirmManagerInstallationEstimate: vi.fn(),
   attachManagerInstallationEstimate: vi.fn(),
+  resolveInstallationStandard: vi.fn(),
+}));
+vi.mock('../src/services/installation-estimate-api', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../src/services/installation-estimate-api')>(),
+  resolveInstallationStandard: service.resolveInstallationStandard,
 }));
 vi.mock('../src/client', () => ({
   ManagerOrdersService: { getManagerOrderDetail: service.getManagerOrderDetail },
@@ -37,6 +42,8 @@ const prepare = async (wrapper: ReturnType<typeof mountPanel>) => {
   await wrapper.get('[data-testid="installation-open"]').trigger('click');
   await flushPromises();
   await wrapper.get('[data-testid="installation-product"]').setValue(true);
+  await flushPromises();
+  await wrapper.get('[data-testid="installation-edit-work"]').trigger('click');
   await wrapper.get('[data-testid="installation-route"]').setValue('6');
   await wrapper.get('[data-testid="installation-holes"]').setValue('1');
   await wrapper.get('[data-testid="installation-thick-holes"]').setValue('0');
@@ -48,12 +55,107 @@ beforeEach(() => {
   vi.clearAllMocks();
   managerSession.auth.value = null;
   service.getManagerOrderDetail.mockResolvedValue(order);
+  service.resolveInstallationStandard.mockResolvedValue({ status: 'fixed', scope_ref: 'scope',
+    included: { route_m: '3', holes_by_type: { shared_pass_through: '1' } } });
   service.previewManagerInstallationEstimate.mockResolvedValue(fixed);
   service.confirmManagerInstallationEstimate.mockResolvedValue({ estimate_id: 31, revision: 1, total: '530.25' });
   service.attachManagerInstallationEstimate.mockResolvedValue({ lines: [{ title: 'Установка №1: монтаж.', price: '530.25' }], total: '530.25' });
 });
 
 describe('OrderInstallationEstimatePanel', () => {
+  it('adds canonical standard installation in one click without entering measurements', async () => {
+    service.resolveInstallationStandard.mockResolvedValueOnce({ status: 'fixed', scope_ref: 'scope',
+      included: { route_m: '4.5', holes_by_type: { shared_pass_through: '2', through_thick: '1' } } });
+    const wrapper = mountPanel();
+    await wrapper.get('[data-testid="installation-standard-add"]').trigger('click');
+    await flushPromises();
+    expect(service.resolveInstallationStandard).toHaveBeenCalledWith({ product_id: 44, work_kind: 'standard' });
+    expect(service.previewManagerInstallationEstimate.mock.calls[0][1].installations[0]).toMatchObject({
+      route_length_m: 4.5, holes_by_type: { through_thin: 2, through_thick: 1, through_over_80: 0 }, extras: [],
+    });
+    expect(service.confirmManagerInstallationEstimate).toHaveBeenCalledOnce();
+    expect(service.attachManagerInstallationEstimate).toHaveBeenCalledOnce();
+    expect(wrapper.text()).toContain('Смета прикреплена');
+  });
+
+  it('starts selected equipment at canonical base and allows extra metres and a pump before adding', async () => {
+    const wrapper = mountPanel();
+    await wrapper.get('[data-testid="installation-open"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="installation-product"]').setValue(true);
+    await flushPromises();
+    expect(wrapper.get('[data-testid="installation-standard-summary"]').text()).toContain('Трасса 3 м');
+    await wrapper.get('[data-testid="installation-edit-work"]').trigger('click');
+    expect((wrapper.get('[data-testid="installation-holes"]').element as HTMLInputElement).value).toBe('1');
+    await wrapper.get('[data-testid="installation-route"]').setValue('5');
+    const pump = wrapper.findAll('input[type="checkbox"]').find((input) => input.element.parentElement?.textContent?.includes('Насос с установкой'));
+    await pump?.setValue(true);
+    await wrapper.get('[data-testid="installation-preview"]').trigger('click');
+    await flushPromises();
+    expect(service.previewManagerInstallationEstimate.mock.calls[0][1].installations[0]).toMatchObject({
+      route_length_m: 5, extras: [{ code: 'pump.package', quantity: 1 }],
+    });
+    await wrapper.get('[data-testid="installation-add"]').trigger('click');
+    await flushPromises();
+    expect(service.attachManagerInstallationEstimate).toHaveBeenCalledOnce();
+  });
+
+  it('keeps an existing custom draft when the standard shortcut is clicked', async () => {
+    const wrapper = mountPanel();
+    await prepare(wrapper);
+    await wrapper.get('[data-testid="installation-standard-add"]').trigger('click');
+    await flushPromises();
+    expect(service.previewManagerInstallationEstimate.mock.calls[0][1].installations[0].route_length_m).toBe(6);
+    expect(service.attachManagerInstallationEstimate).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('Сохранён состав');
+  });
+
+  it('does not add a standard estimate when its price is a quote', async () => {
+    service.previewManagerInstallationEstimate.mockResolvedValueOnce({ status: 'quote', scope_ref: 'scope', reason_code: 'no_match' });
+    const wrapper = mountPanel();
+    await wrapper.get('[data-testid="installation-standard-add"]').trigger('click');
+    await flushPromises();
+    expect(service.confirmManagerInstallationEstimate).not.toHaveBeenCalled();
+    expect(service.attachManagerInstallationEstimate).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('индивидуальная смета');
+  });
+
+  it('does not apply a tariff resolved for a proposal that was switched away from', async () => {
+    let finish!: (value: unknown) => void;
+    service.resolveInstallationStandard.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    const wrapper = mountPanel();
+    await wrapper.get('[data-testid="installation-standard-add"]').trigger('click');
+    await flushPromises();
+    await wrapper.setProps({ proposalId: 13 });
+    finish({ status: 'fixed', scope_ref: 'old', included: { route_m: '3', holes_by_type: { shared_pass_through: '1' } } });
+    await flushPromises();
+    expect(service.previewManagerInstallationEstimate).not.toHaveBeenCalled();
+    expect(service.attachManagerInstallationEstimate).not.toHaveBeenCalled();
+  });
+
+  it('stops the shortcut on a price change and requires a new calculation', async () => {
+    service.confirmManagerInstallationEstimate.mockRejectedValueOnce({ body: { detail: {
+      code: 'price_changed', fresh_preview: { ...fixed, total: '540.25' },
+    } } });
+    const wrapper = mountPanel();
+    await wrapper.get('[data-testid="installation-standard-add"]').trigger('click');
+    await flushPromises();
+    expect(service.attachManagerInstallationEstimate).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('подтвердите его заново');
+    expect(wrapper.find('[data-testid="installation-add"]').exists()).toBe(false);
+  });
+
+  it('reuses the same attachment key when the shortcut had an uncertain response', async () => {
+    service.attachManagerInstallationEstimate.mockRejectedValueOnce(new Error('Connection lost'));
+    const wrapper = mountPanel();
+    await wrapper.get('[data-testid="installation-standard-add"]').trigger('click');
+    await flushPromises();
+    const key = service.attachManagerInstallationEstimate.mock.calls[0][3];
+    await wrapper.get('[data-testid="installation-standard-add"]').trigger('click');
+    await flushPromises();
+    expect(service.attachManagerInstallationEstimate.mock.calls[1][3]).toBe(key);
+    expect(service.confirmManagerInstallationEstimate).toHaveBeenCalledOnce();
+  });
   it('uses persisted proposal equipment, previews exact server lines, then confirms and attaches once', async () => {
     const wrapper = mountPanel();
     await prepare(wrapper);
@@ -64,15 +166,11 @@ describe('OrderInstallationEstimatePanel', () => {
       holes_by_type: { through_thin: 1, through_thick: 0, through_over_80: 0 } }]);
     expect(wrapper.text()).toContain('Установка №1: монтаж.');
     expect(wrapper.text()).toContain('530,25');
-    expect(wrapper.get('[data-testid="installation-confirm"]').attributes('disabled')).toBeDefined();
-    await wrapper.get('[data-testid="installation-consent"]').setValue(true);
-    await wrapper.get('[data-testid="installation-confirm"]').trigger('click');
+    await wrapper.get('[data-testid="installation-add"]').trigger('click');
     await flushPromises();
     expect(service.confirmManagerInstallationEstimate).toHaveBeenCalledWith(expect.any(String), {
       preview_ref: 'a'.repeat(64), order_id: 8, proposal_id: 12, verified_service_only_keys: [],
     });
-    await wrapper.get('[data-testid="installation-attach"]').trigger('click');
-    await flushPromises();
     expect(service.attachManagerInstallationEstimate).toHaveBeenCalledWith(31, 8, 12,
       expect.any(String), { revision: 1, mode: 'collapsed' });
     expect(wrapper.props('afterAttach')).toHaveBeenCalledOnce();
@@ -84,13 +182,13 @@ describe('OrderInstallationEstimatePanel', () => {
     await prepare(wrapper);
     await wrapper.get('[data-testid="installation-preview"]').trigger('click');
     await flushPromises();
-    expect(wrapper.find('[data-testid="installation-confirm"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="installation-add"]').exists()).toBe(false);
     service.previewManagerInstallationEstimate.mockResolvedValueOnce(fixed);
     await wrapper.get('[data-testid="installation-preview"]').trigger('click');
     await flushPromises();
-    expect(wrapper.find('[data-testid="installation-confirm"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="installation-add"]').exists()).toBe(true);
     await wrapper.get('[data-testid="installation-route"]').setValue('7');
-    expect(wrapper.find('[data-testid="installation-confirm"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="installation-add"]').exists()).toBe(false);
   });
 
   it('sends one confirmed multi system with shared work inputs', async () => {
@@ -142,7 +240,7 @@ describe('OrderInstallationEstimatePanel', () => {
     await wrapper.get('[data-testid="installation-preview"]').trigger('click');
     await flushPromises();
     expect(wrapper.text()).toContain('Ориентировочная сумма');
-    expect(wrapper.find('[data-testid="installation-confirm"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="installation-add"]').exists()).toBe(false);
     await wrapper.get('[data-testid="scaffold-actual"]').setValue('125');
     await wrapper.get('[data-testid="scaffold-scope"]').setValue('Леса на фасаде первого этажа');
     await wrapper.get('[data-testid="installation-preview"]').trigger('click');
@@ -150,7 +248,7 @@ describe('OrderInstallationEstimatePanel', () => {
     const input = service.previewManagerInstallationEstimate.mock.calls[1][1];
     expect(input.approved_site_access).toEqual([{ code: 'access.scaffold', actual_total: 125,
       scope_note: 'Леса на фасаде первого этажа' }]);
-    expect(wrapper.find('[data-testid="installation-confirm"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="installation-add"]').exists()).toBe(true);
   });
 
   it('does not offer installation for a product whose price includes it', async () => {
@@ -196,12 +294,11 @@ describe('OrderInstallationEstimatePanel', () => {
     service.confirmManagerInstallationEstimate.mockRejectedValueOnce({ body: { detail: {
       code: 'price_changed', fresh_preview: { ...fixed, total: '540.25' },
     } } });
-    await wrapper.get('[data-testid="installation-consent"]').setValue(true);
-    await wrapper.get('[data-testid="installation-confirm"]').trigger('click');
+    await wrapper.get('[data-testid="installation-add"]').trigger('click');
     await flushPromises();
     expect(service.confirmManagerInstallationEstimate.mock.calls[0][1].verified_service_only_keys).toEqual([payload.installations[0].key]);
     expect(wrapper.text()).toContain('подтвердите его заново');
-    expect(wrapper.find('[data-testid="installation-confirm"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="installation-add"]').exists()).toBe(false);
     await wrapper.get('[data-testid="installation-preview"]').trigger('click');
     await flushPromises();
     expect(service.previewManagerInstallationEstimate.mock.calls[1][0]).not.toBe(service.previewManagerInstallationEstimate.mock.calls[0][0]);
@@ -212,12 +309,9 @@ describe('OrderInstallationEstimatePanel', () => {
     await prepare(wrapper);
     await wrapper.get('[data-testid="installation-preview"]').trigger('click');
     await flushPromises();
-    await wrapper.get('[data-testid="installation-consent"]').setValue(true);
-    await wrapper.get('[data-testid="installation-confirm"]').trigger('click');
-    await flushPromises();
     let finish!: (value: unknown) => void;
     service.attachManagerInstallationEstimate.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
-    await wrapper.get('[data-testid="installation-attach"]').trigger('click');
+    await wrapper.get('[data-testid="installation-add"]').trigger('click');
     await flushPromises();
     const oldKey = service.attachManagerInstallationEstimate.mock.calls[0][3];
     await wrapper.setProps({ proposalId: 13 });
@@ -256,7 +350,7 @@ describe('OrderInstallationEstimatePanel', () => {
     finishPreview(fixed);
     await flushPromises();
     expect(wrapper.text()).not.toContain('530,25');
-    expect(wrapper.find('[data-testid="installation-confirm"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="installation-add"]').exists()).toBe(false);
   });
 
   it('ignores a confirmation completed after the account changes', async () => {
@@ -265,10 +359,9 @@ describe('OrderInstallationEstimatePanel', () => {
     await prepare(wrapper);
     await wrapper.get('[data-testid="installation-preview"]').trigger('click');
     await flushPromises();
-    await wrapper.get('[data-testid="installation-consent"]').setValue(true);
     let finish!: (value: unknown) => void;
     service.confirmManagerInstallationEstimate.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
-    await wrapper.get('[data-testid="installation-confirm"]').trigger('click');
+    await wrapper.get('[data-testid="installation-add"]').trigger('click');
     await flushPromises();
     managerSession.auth.value = { tenant_id: 2, staff_user_id: 9, username: 'second' } as any;
     await flushPromises();
@@ -285,11 +378,8 @@ describe('OrderInstallationEstimatePanel', () => {
     await prepare(wrapper);
     await wrapper.get('[data-testid="installation-preview"]').trigger('click');
     await flushPromises();
-    await wrapper.get('[data-testid="installation-consent"]').setValue(true);
-    await wrapper.get('[data-testid="installation-confirm"]').trigger('click');
-    await flushPromises();
     service.attachManagerInstallationEstimate.mockRejectedValueOnce(new Error('Connection lost'));
-    await wrapper.get('[data-testid="installation-attach"]').trigger('click');
+    await wrapper.get('[data-testid="installation-add"]').trigger('click');
     await flushPromises();
     expect(wrapper.get('[data-testid="installation-start-new"]').attributes('disabled')).toBeDefined();
     const key = service.attachManagerInstallationEstimate.mock.calls[0][3];
@@ -308,8 +398,8 @@ describe('OrderInstallationEstimatePanel', () => {
     await prepare(wrapper);
     await wrapper.get('[data-testid="installation-preview"]').trigger('click');
     await flushPromises();
-    await wrapper.get('[data-testid="installation-consent"]').setValue(true);
-    await wrapper.get('[data-testid="installation-confirm"]').trigger('click');
+    service.attachManagerInstallationEstimate.mockRejectedValueOnce({ body: { detail: { code: 'equipment_not_in_proposal' } } });
+    await wrapper.get('[data-testid="installation-add"]').trigger('click');
     await flushPromises();
     await wrapper.setProps({ proposalId: 13 });
     service.getManagerOrderDetail.mockResolvedValueOnce({ id: 8, proposals: [{
@@ -319,7 +409,7 @@ describe('OrderInstallationEstimatePanel', () => {
     await wrapper.setProps({ proposalId: 12 });
     await wrapper.get('[data-testid="installation-open"]').trigger('click');
     await flushPromises();
-    expect(wrapper.find('[data-testid="installation-confirm"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="installation-add"]').exists()).toBe(false);
     expect(wrapper.get('[data-testid="installation-start-new"]').exists()).toBe(true);
     await wrapper.get('[data-testid="installation-start-new"]').trigger('click');
     expect(wrapper.get('[data-testid="installation-preview"]').attributes('disabled')).toBeUndefined();

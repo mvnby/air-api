@@ -9,6 +9,7 @@ import {
 import { getApiErrorMessage } from '../../utils/api-errors';
 import { managerSession } from '../../services/manager-session';
 import { formatMoney } from './order-utils';
+import { installationStandardWork, resolveInstallationStandard } from '../../services/installation-estimate-api';
 
 type Mode = 'collapsed' | 'detailed';
 type Source = 'proposal' | 'manual';
@@ -49,6 +50,8 @@ const props = defineProps<{
 }>();
 const open = ref(false);
 const busy = ref(false);
+const quickBusy = ref(false);
+const editing = ref<Record<string, boolean>>({});
 const error = ref('');
 const notice = ref('');
 const products = ref<OrderProductLineResponse[]>([]);
@@ -173,6 +176,8 @@ const restore = () => {
 };
 const reset = () => {
   busy.value = false;
+  quickBusy.value = false;
+  editing.value = {};
   open.value = false;
   products.value = [];
   source.value = 'proposal';
@@ -202,10 +207,35 @@ const workFor = (key: string): Work => {
   else if (work.value[key].thin === undefined) work.value[key] = { ...makeWork(), ...work.value[key] };
   return work.value[key];
 };
-const toggleSlot = (key: string) => {
+const fillStandard = async (key: string, scope: ActionScope) => {
+  const item = workFor(key);
+  const slot = slots.value.find((candidate) => candidate.key === key);
+  const tariff = await resolveInstallationStandard(source.value === 'manual'
+    ? { typed_profile: manualProfile.value, work_kind: item.workKind }
+    : { product_id: slot?.productId, work_kind: item.workKind });
+  if (!current(scope)) return;
+  Object.assign(item, installationStandardWork(tariff));
+};
+const toggleSlot = async (key: string) => {
   selected.value = selected.value.includes(key)
     ? selected.value.filter((item) => item !== key)
     : [...selected.value, key];
+  if (!selected.value.includes(key) || work.value[key]?.route != null) return;
+  const scope = capture();
+  busy.value = true;
+  error.value = '';
+  try { await fillStandard(key, scope); }
+  catch (failure) { if (current(scope)) { error.value = readableError(failure); editing.value[key] = true; } }
+  finally { if (current(scope)) busy.value = false; }
+};
+const setWorkKind = async (key: string, kind: Work['workKind']) => {
+  const scope = capture();
+  workFor(key).workKind = kind;
+  busy.value = true;
+  error.value = '';
+  try { await fillStandard(key, scope); }
+  catch (failure) { if (current(scope)) error.value = readableError(failure); }
+  finally { if (current(scope)) busy.value = false; }
 };
 const loadProducts = async (scope: ActionScope): Promise<boolean> => {
   const order = await ManagerOrdersService.getManagerOrderDetail(scope.orderId);
@@ -313,7 +343,7 @@ const calculate = async () => {
   } catch (failure) { if (current(scope)) error.value = readableError(failure); }
   finally { if (current(scope)) busy.value = false; }
 };
-const confirm = async () => {
+const confirmEstimate = async () => {
   if (busy.value || !preview.value?.preview_ref || !consent.value || !intent.value) return;
   const scope = capture();
   busy.value = true;
@@ -404,69 +434,114 @@ const startNew = () => {
   notice.value = 'Измените параметры и рассчитайте новую смету. Уже прикреплённые строки сохранятся.';
   save();
 };
+const addCalculated = async () => {
+  const scope = capture();
+  if (!preview.value || preview.value.status !== 'fixed') return;
+  consent.value = true;
+  await confirmEstimate();
+  if (current(scope) && confirmed.value && !error.value) await attach();
+};
+const addStandard = async () => {
+  if (busy.value || quickBusy.value) return;
+  const scope = capture();
+  quickBusy.value = true;
+  error.value = '';
+  try {
+    if (!open.value) await show();
+    if (!current(scope) || error.value || !open.value) return;
+    if (confirmed.value) { await attach(); return; }
+    // Browser drafts are intentional work: continue them without replacing their measurements/extras.
+    if (Object.keys(work.value).length) {
+      await calculate();
+      if (current(scope)) notice.value = 'Сохранён состав монтажа. Проверьте его и нажмите «Добавить монтаж».';
+      return;
+    }
+    source.value = 'proposal';
+    selected.value = slots.value.map((slot) => slot.key);
+    if (!selected.value.length) throw new Error('Нет оборудования для стандартного монтажа. Выберите установку без товара.');
+    busy.value = true;
+    for (const key of selected.value) {
+      await fillStandard(key, scope);
+      if (!current(scope)) return;
+    }
+    busy.value = false;
+    mode.value = 'collapsed';
+    await calculate();
+    if (current(scope) && !error.value) await addCalculated();
+  } catch (failure) { if (current(scope)) error.value = readableError(failure); }
+  finally { if (current(scope)) { busy.value = false; quickBusy.value = false; } }
+};
 </script>
 
 <template>
   <div class="mt-3">
-    <button type="button" data-testid="installation-open" class="btn-mini-outline w-full justify-center" :disabled="busy" @click="show">{{ open ? 'Скрыть монтаж по книге' : 'Монтаж по книге цен' }}</button>
+    <button type="button" data-testid="installation-standard-add" class="btn-mini w-full justify-center" :disabled="busy || quickBusy" @click="addStandard">{{ quickBusy ? 'Добавляем монтаж…' : 'Добавить стандартный монтаж' }}</button>
+    <button type="button" data-testid="installation-open" class="btn-mini-outline mt-2 w-full justify-center" :disabled="busy || quickBusy" @click="show">{{ open ? 'Скрыть настройки монтажа' : 'Настроить монтаж' }}</button>
     <p v-if="error && !open" role="alert" class="mt-2 text-sm text-red-700">{{ error }}</p>
     <p v-if="notice && !open" role="status" class="mt-2 text-sm text-emerald-700">{{ notice }}</p>
     <div v-if="open" class="mt-3 space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
       <p class="text-slate-600">Расчёт относится к текущему черновику предложения. Строки и суммы берутся из опубликованной книги цен.</p>
       <div class="flex gap-2">
-        <button type="button" class="btn-mini-outline" :class="source === 'proposal' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || Boolean(confirmed)" @click="source = 'proposal'">Товар в предложении</button>
-        <button type="button" class="btn-mini-outline" :class="source === 'manual' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || Boolean(confirmed)" @click="source = 'manual'">Без товара</button>
+        <button type="button" class="btn-mini-outline" :class="source === 'proposal' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || quickBusy || Boolean(confirmed)" @click="source = 'proposal'">Товар в предложении</button>
+        <button type="button" class="btn-mini-outline" :class="source === 'manual' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || quickBusy || Boolean(confirmed)" @click="source = 'manual'">Без товара</button>
       </div>
       <div v-if="source === 'proposal'" class="space-y-2">
         <p v-if="!slots.length" class="text-amber-800">Нет оплачиваемого оборудования без включённого монтажа. Сохраните товар в предложении или выберите установку без товара.</p>
-        <label v-for="slot in slots" :key="slot.key" class="flex items-center gap-2"><input data-testid="installation-product" type="checkbox" :checked="selected.includes(slot.key)" :disabled="busy || Boolean(confirmed)" @change="toggleSlot(slot.key)" />{{ slot.label }}</label>
+        <label v-for="slot in slots" :key="slot.key" class="flex items-center gap-2"><input data-testid="installation-product" type="checkbox" :checked="selected.includes(slot.key)" :disabled="busy || quickBusy || Boolean(confirmed)" @change="toggleSlot(slot.key)" />{{ slot.label }}</label>
       </div>
       <div v-else class="grid gap-2 sm:grid-cols-2">
-        <label class="space-y-1">Вид оборудования<select v-model="manualProfile.product_kind" class="field-input" :disabled="busy || Boolean(confirmed)"><option value="">Выберите</option><option value="complete_split_system">Комплект сплит-системы</option><option value="multi_split_system">Мультисплит-система</option><option value="indoor_unit">Отдельный внутренний блок</option><option value="outdoor_unit">Отдельный наружный блок</option><option value="other">Другое</option></select></label>
-        <label v-if="manualProfile.product_kind !== 'multi_split_system'" class="space-y-1">Тип внутреннего блока<select v-model="manualProfile.indoor_type" class="field-input" :disabled="busy || Boolean(confirmed)"><option :value="undefined">Выберите</option><option value="wall">Настенный</option><option value="cassette">Кассетный</option><option value="duct">Канальный</option><option value="floor_ceiling">Напольно-потолочный</option><option value="column">Колонный</option><option value="console">Консольный</option></select></label>
-        <label v-if="manualProfile.product_kind === 'multi_split_system'" class="space-y-1">Внутренних блоков в системе<input v-model.number="manualProfile.indoor_unit_count" type="number" min="2" max="20" step="1" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
-        <label v-if="manualProfile.product_kind === 'multi_split_system'" class="space-y-1 sm:col-span-2">Проверенный состав системы<textarea v-model="manualProfile.composition_note" class="field-input" rows="2" placeholder="Например, два внутренних блока и один наружный блок" :disabled="busy || Boolean(confirmed)" /></label>
+        <label class="space-y-1">Вид оборудования<select v-model="manualProfile.product_kind" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)"><option value="">Выберите</option><option value="complete_split_system">Комплект сплит-системы</option><option value="multi_split_system">Мультисплит-система</option><option value="indoor_unit">Отдельный внутренний блок</option><option value="outdoor_unit">Отдельный наружный блок</option><option value="other">Другое</option></select></label>
+        <label v-if="manualProfile.product_kind !== 'multi_split_system'" class="space-y-1">Тип внутреннего блока<select v-model="manualProfile.indoor_type" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)"><option :value="undefined">Выберите</option><option value="wall">Настенный</option><option value="cassette">Кассетный</option><option value="duct">Канальный</option><option value="floor_ceiling">Напольно-потолочный</option><option value="column">Колонный</option><option value="console">Консольный</option></select></label>
+        <label v-if="manualProfile.product_kind === 'multi_split_system'" class="space-y-1">Внутренних блоков в системе<input v-model.number="manualProfile.indoor_unit_count" type="number" min="2" max="20" step="1" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
+        <label v-if="manualProfile.product_kind === 'multi_split_system'" class="space-y-1 sm:col-span-2">Проверенный состав системы<textarea v-model="manualProfile.composition_note" class="field-input" rows="2" placeholder="Например, два внутренних блока и один наружный блок" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
         <template v-if="manualProfile.product_kind !== 'multi_split_system'">
-          <label class="space-y-1">Холодопроизводительность, кВт<input v-model.number="manualProfile.capacity_cooling_kw" type="number" min="0.001" step="0.001" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
-          <label class="space-y-1">Жидкостная труба<input v-model="manualProfile.pipe_liquid" class="field-input" placeholder="Например 1/4&quot;" :disabled="busy || Boolean(confirmed)" /></label>
-          <label class="space-y-1">Газовая труба<input v-model="manualProfile.pipe_gas" class="field-input" placeholder="Например 3/8&quot;" :disabled="busy || Boolean(confirmed)" /></label>
-          <label class="space-y-1">Вес внутреннего блока, кг<input v-model.number="manualProfile.weight_indoor" type="number" min="0.01" step="0.01" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
-          <label class="space-y-1">Вес наружного блока, кг<input v-model.number="manualProfile.weight_outdoor" type="number" min="0.01" step="0.01" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
-          <label class="space-y-1">Вес упаковки внутреннего блока, кг<input v-model.number="manualProfile.weight_indoor_package" type="number" min="0.01" step="0.01" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
-          <label class="space-y-1">Вес упаковки наружного блока, кг<input v-model.number="manualProfile.weight_outdoor_package" type="number" min="0.01" step="0.01" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
+          <label class="space-y-1">Холодопроизводительность, кВт<input v-model.number="manualProfile.capacity_cooling_kw" type="number" min="0.001" step="0.001" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
+          <label class="space-y-1">Жидкостная труба<input v-model="manualProfile.pipe_liquid" class="field-input" placeholder="Например 1/4&quot;" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
+          <label class="space-y-1">Газовая труба<input v-model="manualProfile.pipe_gas" class="field-input" placeholder="Например 3/8&quot;" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
+          <label class="space-y-1">Вес внутреннего блока, кг<input v-model.number="manualProfile.weight_indoor" type="number" min="0.01" step="0.01" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
+          <label class="space-y-1">Вес наружного блока, кг<input v-model.number="manualProfile.weight_outdoor" type="number" min="0.01" step="0.01" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
+          <label class="space-y-1">Вес упаковки внутреннего блока, кг<input v-model.number="manualProfile.weight_indoor_package" type="number" min="0.01" step="0.01" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
+          <label class="space-y-1">Вес упаковки наружного блока, кг<input v-model.number="manualProfile.weight_outdoor_package" type="number" min="0.01" step="0.01" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
         </template>
-        <label class="flex items-center gap-2 sm:col-span-2"><input v-model="manualProfile.confirmed" type="checkbox" :disabled="busy || Boolean(confirmed)" />Параметры оборудования проверены; установка выполняется без продажи товара в этом предложении</label>
+        <label class="flex items-center gap-2 sm:col-span-2"><input v-model="manualProfile.confirmed" type="checkbox" :disabled="busy || quickBusy || Boolean(confirmed)" />Параметры оборудования проверены; установка выполняется без продажи товара в этом предложении</label>
       </div>
       <div v-for="(key, index) in activeKeys" :key="key" class="space-y-2 border-t border-slate-200 pt-3">
         <p class="font-medium">Установка №{{ index + 1 }} · {{ source === 'manual' ? 'без товара' : slots.find((slot) => slot.key === key)?.label }}</p>
-        <div class="flex gap-2"><button type="button" class="btn-mini-outline" :class="workFor(key).workKind === 'standard' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || Boolean(confirmed)" @click="workFor(key).workKind = 'standard'">Обычный монтаж</button><button type="button" class="btn-mini-outline" :class="workFor(key).workKind === 'prelaid_route' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || Boolean(confirmed)" @click="workFor(key).workKind = 'prelaid_route'">На готовую трассу</button></div>
+        <template v-if="source === 'proposal' && !editing[key] && workFor(key).route != null">
+          <p class="text-slate-600" data-testid="installation-standard-summary">Трасса {{ workFor(key).route }} м · проходы: {{ Number(workFor(key).thin) + Number(workFor(key).thick) + Number(workFor(key).over80) }} · {{ workFor(key).pumpPackage ? 'с насосом' : 'без насоса' }}</p>
+          <p v-if="workFor(key).chase" class="text-slate-600">Штробление {{ workFor(key).chase }} м</p>
+          <button type="button" data-testid="installation-edit-work" class="btn-mini-outline" :disabled="busy || quickBusy || Boolean(confirmed)" @click="editing[key] = true">Изменить состав</button>
+        </template>
+        <template v-else>
+        <button v-if="source === 'manual'" type="button" class="btn-mini-outline" :disabled="busy || quickBusy || Boolean(confirmed) || !manualProfile.confirmed" @click="setWorkKind(key, workFor(key).workKind)">Заполнить базу по тарифу</button>
+        <div class="flex gap-2"><button type="button" class="btn-mini-outline" :class="workFor(key).workKind === 'standard' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || quickBusy || Boolean(confirmed)" @click="setWorkKind(key, 'standard')">Обычный монтаж</button><button type="button" class="btn-mini-outline" :class="workFor(key).workKind === 'prelaid_route' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || quickBusy || Boolean(confirmed)" @click="setWorkKind(key, 'prelaid_route')">На готовую трассу</button></div>
         <div class="grid gap-2 sm:grid-cols-3">
-          <label class="space-y-1">{{ workFor(key).workKind === 'prelaid_route' ? 'Новая дополнительная трасса, м' : 'Вся новая трасса, м' }}<input data-testid="installation-route" v-model.number="workFor(key).route" type="number" min="0" step="0.01" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
-          <label class="space-y-1">Проходы до 20 см<input data-testid="installation-holes" v-model.number="workFor(key).thin" type="number" min="0" step="1" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
-          <label class="space-y-1">Проходы свыше 20 до 80 см<input data-testid="installation-thick-holes" v-model.number="workFor(key).thick" type="number" min="0" step="1" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
-          <label class="space-y-1">Проходы свыше 80 см (по запросу)<input data-testid="installation-over80-holes" v-model.number="workFor(key).over80" type="number" min="0" step="1" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
-          <label class="space-y-1">Штробление, м<input v-model.number="workFor(key).chase" type="number" min="0" step="0.01" class="field-input" :disabled="busy || Boolean(confirmed)" /></label>
+          <label class="space-y-1">{{ workFor(key).workKind === 'prelaid_route' ? 'Новая дополнительная трасса, м' : 'Вся новая трасса, м' }}<input data-testid="installation-route" v-model.number="workFor(key).route" type="number" min="0" step="0.01" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
+          <label class="space-y-1">Проходы до 20 см<input data-testid="installation-holes" v-model.number="workFor(key).thin" type="number" min="0" step="1" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
+          <label class="space-y-1">Проходы свыше 20 до 80 см<input data-testid="installation-thick-holes" v-model.number="workFor(key).thick" type="number" min="0" step="1" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
+          <label class="space-y-1">Проходы свыше 80 см (по запросу)<input data-testid="installation-over80-holes" v-model.number="workFor(key).over80" type="number" min="0" step="1" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
+          <label class="space-y-1">Штробление, м<input v-model.number="workFor(key).chase" type="number" min="0" step="0.01" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label>
         </div>
-        <label class="flex items-center gap-2"><input v-model="workFor(key).pumpPackage" type="checkbox" :disabled="busy || Boolean(confirmed)" />Насос с установкой</label>
+        <label class="flex items-center gap-2"><input v-model="workFor(key).pumpPackage" type="checkbox" :disabled="busy || quickBusy || Boolean(confirmed)" />Насос с установкой</label>
+        </template>
       </div>
-      <div class="flex flex-wrap gap-4 border-t border-slate-200 pt-3"><label class="flex items-center gap-2"><input v-model="scaffold" type="checkbox" :disabled="busy || Boolean(confirmed)" />Леса на объекте</label><label class="flex items-center gap-2"><input v-model="lift" type="checkbox" :disabled="busy || Boolean(confirmed)" />Вышка на объекте</label></div>
-      <div v-if="scaffold || lift" class="grid gap-2 sm:grid-cols-2"><p v-if="accessApprovalPending" class="sm:col-span-2 text-amber-800">Цены доступа пока ориентировочные. Для точной сметы укажите согласованные сумму и состав работ.</p><template v-if="scaffold"><label class="space-y-1">Леса: согласованная сумма, BYN<input data-testid="scaffold-actual" v-model.number="scaffoldActual" type="number" min="0" step="0.01" class="field-input" :disabled="busy || Boolean(confirmed)" /></label><label class="space-y-1">Леса: согласованный состав<input data-testid="scaffold-scope" v-model="scaffoldScope" class="field-input" :disabled="busy || Boolean(confirmed)" /></label></template><template v-if="lift"><label class="space-y-1">Вышка: согласованная сумма, BYN<input v-model.number="liftActual" type="number" min="0" step="0.01" class="field-input" :disabled="busy || Boolean(confirmed)" /></label><label class="space-y-1">Вышка: согласованный состав и время<input v-model="liftScope" class="field-input" :disabled="busy || Boolean(confirmed)" /></label></template></div>
-      <button type="button" data-testid="installation-preview" class="btn-mini" :disabled="busy || Boolean(confirmed)" @click="calculate">{{ busy ? 'Проверяем…' : 'Рассчитать по книге' }}</button>
+      <div class="flex flex-wrap gap-4 border-t border-slate-200 pt-3"><label class="flex items-center gap-2"><input v-model="scaffold" type="checkbox" :disabled="busy || quickBusy || Boolean(confirmed)" />Леса на объекте</label><label class="flex items-center gap-2"><input v-model="lift" type="checkbox" :disabled="busy || quickBusy || Boolean(confirmed)" />Вышка на объекте</label></div>
+      <div v-if="scaffold || lift" class="grid gap-2 sm:grid-cols-2"><p v-if="accessApprovalPending" class="sm:col-span-2 text-amber-800">Цены доступа пока ориентировочные. Для точной сметы укажите согласованные сумму и состав работ.</p><template v-if="scaffold"><label class="space-y-1">Леса: согласованная сумма, BYN<input data-testid="scaffold-actual" v-model.number="scaffoldActual" type="number" min="0" step="0.01" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label><label class="space-y-1">Леса: согласованный состав<input data-testid="scaffold-scope" v-model="scaffoldScope" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label></template><template v-if="lift"><label class="space-y-1">Вышка: согласованная сумма, BYN<input v-model.number="liftActual" type="number" min="0" step="0.01" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label><label class="space-y-1">Вышка: согласованный состав и время<input v-model="liftScope" class="field-input" :disabled="busy || quickBusy || Boolean(confirmed)" /></label></template></div>
+      <button type="button" data-testid="installation-preview" class="btn-mini" :disabled="busy || quickBusy || Boolean(confirmed)" @click="calculate">{{ busy ? 'Проверяем…' : 'Рассчитать по книге' }}</button>
       <div v-if="preview" class="space-y-3 border-t border-slate-200 pt-3">
         <p class="font-semibold">{{ preview.status === 'fixed' ? 'Точная цена' : preview.status === 'from' ? 'Цена от' : preview.status === 'provisional' ? 'Ориентировочная сумма' : 'Цена недоступна' }}<span v-if="preview.total"> · {{ formatMoney(Number(preview.total)) }}</span></p>
         <p v-if="statusText" class="text-amber-800">{{ statusText }} <a href="/manager/tariffs" class="underline">Тарифы</a></p>
         <template v-if="preview.status === 'fixed'">
-          <div class="flex gap-2"><button type="button" class="btn-mini-outline" :class="mode === 'collapsed' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || Boolean(confirmed)" @click="mode = 'collapsed'">Одной строкой</button><button type="button" class="btn-mini-outline" :class="mode === 'detailed' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || Boolean(confirmed)" @click="mode = 'detailed'">По работам</button></div>
+          <div class="flex gap-2"><button type="button" class="btn-mini-outline" :class="mode === 'collapsed' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || quickBusy || Boolean(confirmed)" @click="mode = 'collapsed'">Одной строкой</button><button type="button" class="btn-mini-outline" :class="mode === 'detailed' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || quickBusy || Boolean(confirmed)" @click="mode = 'detailed'">По работам</button></div>
           <div class="space-y-2"><div v-for="(line, index) in projectedLines" :key="index" class="flex flex-col gap-1 border-b border-slate-200 pb-2 sm:flex-row sm:justify-between sm:gap-4"><span class="min-w-0 break-words">{{ line.title }}</span><strong class="shrink-0">{{ formatMoney(Number(line.price)) }}</strong></div></div>
           <p class="font-semibold">Итого: {{ formatMoney(Number(preview.total)) }}</p>
-          <label v-if="!confirmed" class="flex items-start gap-2"><input data-testid="installation-consent" v-model="consent" type="checkbox" :disabled="busy" />Подтверждаю состав работ и цену по этой редакции книги</label>
-          <button v-if="!confirmed" type="button" data-testid="installation-confirm" class="btn-mini" :disabled="busy || !consent" @click="confirm">Подтвердить цену</button>
-          <p v-else class="text-emerald-800">Цена подтверждена. Прикрепите {{ mode === 'collapsed' ? 'одну строку' : 'строки работ' }} к текущему предложению.</p>
+          <button v-if="!confirmed" type="button" data-testid="installation-add" class="btn-mini" :disabled="busy || quickBusy" @click="addCalculated">Добавить монтаж</button>
+          <p v-else class="text-emerald-800">Цена подтверждена. Повторите прикрепление к текущему предложению.</p>
         </template>
       </div>
       <div v-if="confirmed" class="flex flex-wrap gap-2 border-t border-slate-200 pt-3">
-        <button type="button" data-testid="installation-attach" class="btn-mini" :disabled="busy" @click="attach">{{ attachRetryRequired ? 'Повторить прикрепление' : 'Прикрепить к предложению' }}</button>
-        <button type="button" data-testid="installation-start-new" class="btn-mini-outline" :disabled="busy || attachRetryRequired" @click="startNew">Новый расчёт</button>
+        <button type="button" data-testid="installation-attach" class="btn-mini" :disabled="busy || quickBusy" @click="attach">{{ attachRetryRequired ? 'Повторить прикрепление' : 'Прикрепить к предложению' }}</button>
+        <button type="button" data-testid="installation-start-new" class="btn-mini-outline" :disabled="busy || quickBusy || attachRetryRequired" @click="startNew">Новый расчёт</button>
       </div>
       <p v-if="error" role="alert" class="text-red-700">{{ error }}</p>
       <p v-if="notice" role="status" class="text-amber-800">{{ notice }}</p>
