@@ -13,6 +13,7 @@ from routers.manager_operation_ids import (
     ATTACH_MANAGER_INSTALLATION_ESTIMATE, CONFIRM_MANAGER_INSTALLATION_ESTIMATE,
     GET_MANAGER_INSTALLATION_ESTIMATE_REVISION, PREVIEW_MANAGER_INSTALLATION_ESTIMATE,
     RESOLVE_MANAGER_INSTALLATION_TARIFF,
+    LIST_MANAGER_INSTALLATION_STANDARD_TARIFFS,
 )
 from routers.manager_permission_policy import ManagerPermissionRoute
 from schemas_installation_confirmation import (
@@ -20,6 +21,7 @@ from schemas_installation_confirmation import (
     ManagerInstallationConfirmPayload, ManagerInstallationConfirmResponse,
     ManagerInstallationEstimateRevisionResponse,
     ManagerInstallationPreviewResponse,
+    ManagerInstallationPreviewPayload, ManagerInstallationStandardTariffList,
 )
 from schemas_installation_price_book import (
     InstallationPreviewPayload, InstallationPreviewResponse,
@@ -29,6 +31,7 @@ from services.installation_estimate_confirmation_service import (
     InstallationEstimateConfirmationService, InstallationPriceChanged,
 )
 from services.installation_price_book_service import InstallationPriceBookService
+from services.installation_standard_catalogue_service import list_standard_tariffs
 from services.public_write_idempotency_service import (
     PublicWriteIdempotencyConflict, PublicWriteIdempotencyUnavailable,
 )
@@ -48,6 +51,8 @@ def _manager_preview(result: InstallationPreviewResponse) -> ManagerInstallation
         for mode in ("collapsed", "detailed"):
             projected, _ = InstallationEstimateConfirmationService.project_preview(result, mode)
             lines[f"{mode}_lines"] = [{"title": title, "price": price} for title, price in projected]
+        from services.installation_estimate_projection import grouped_installation_lines
+        lines["collapsed_lines"] = grouped_installation_lines(result)
     return ManagerInstallationPreviewResponse(**result.model_dump(), **lines)
 
 
@@ -56,6 +61,15 @@ def _idempotency_error(exc: Exception) -> HTTPException:
         return HTTPException(status_code=409, detail={"code": "idempotency_key_reused"})
     return HTTPException(status_code=503, detail={"code": "idempotency_unavailable"},
                          headers={"Retry-After": "1"})
+
+
+@router.get("/standard-tariffs", response_model=ManagerInstallationStandardTariffList,
+            operation_id=LIST_MANAGER_INSTALLATION_STANDARD_TARIFFS)
+async def list_manager_installation_standard_tariffs(
+    session: AsyncSession = Depends(get_session),
+    scope: TenantScope = Depends(get_current_manager_tenant_scope),
+):
+    return await list_standard_tariffs(session, scope)
 
 
 @router.post("/resolve", response_model=InstallationResolveResponse,
@@ -74,13 +88,14 @@ async def resolve_manager_installation_tariff(
 @router.post("/preview", response_model=ManagerInstallationPreviewResponse,
              operation_id=PREVIEW_MANAGER_INSTALLATION_ESTIMATE)
 async def preview_manager_installation_estimate(
-    payload: InstallationPreviewPayload,
+    payload: ManagerInstallationPreviewPayload,
     idempotency_key: str = Depends(get_required_public_write_idempotency_key),
     session: AsyncSession = Depends(get_session),
     scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     result = await InstallationPriceBookService.preview(
         session, scope, payload, idempotency_key=idempotency_key,
+        tariff_selections=payload.tariff_selections,
     )
     return _manager_preview(result)
 
@@ -103,6 +118,7 @@ async def confirm_manager_installation_estimate(
         fresh_payload = exc.payload.model_copy(update={"expected_revision": None})
         fresh = await InstallationPriceBookService.preview(
             session, scope, fresh_payload, idempotency_key=secrets.token_urlsafe(32),
+            tariff_selections=getattr(fresh_payload, "tariff_selections", {}),
         )
         raise HTTPException(status_code=409, detail={
             "code": "price_changed", "current_revision": exc.current_revision,

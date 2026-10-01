@@ -2,9 +2,9 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import LeadSourceReviewModal from '../src/components/leads/LeadSourceReviewModal.vue';
 
-const sourceApi = vi.hoisted(() => ({ preview: vi.fn(), apply: vi.fn(), analyze: vi.fn() }));
+const sourceApi = vi.hoisted(() => ({ preview: vi.fn(), apply: vi.fn(), analyze: vi.fn(), downloadOriginal: vi.fn() }));
 const scenariosApi = vi.hoisted(() => ({ getManagerOrderScenarios: vi.fn() }));
-vi.mock('../src/services/order-source-review', () => ({ orderSourceReviewApi: sourceApi }));
+vi.mock('../src/services/order-source-review', () => ({ orderSourceReviewApi: sourceApi, downloadSourceOriginal: sourceApi.downloadOriginal }));
 vi.mock('../src/api', () => ({ api: scenariosApi }));
 
 const preview = {
@@ -26,6 +26,7 @@ describe('LeadSourceReviewModal', () => {
     sourceApi.preview.mockResolvedValue(preview);
     sourceApi.apply.mockResolvedValue({ order_id: 41, customer_id: 9, attachment_ids: [1], applied_fields: ['customer'] });
     sourceApi.analyze.mockRejectedValue(new Error('AI unavailable'));
+    sourceApi.downloadOriginal.mockResolvedValue(undefined);
     scenariosApi.getManagerOrderScenarios.mockResolvedValue({ items: [
       { workflow_type: 'sales_installation', service_type: 'turnkey', label: 'Продажа + монтаж' },
       { workflow_type: 'maintenance', service_type: 'maintenance', label: 'Обслуживание' },
@@ -173,5 +174,46 @@ describe('LeadSourceReviewModal', () => {
       .toContain('A2: требуется 2, доступно 1; уточните поставку.');
     expect(wrapper.get('[aria-label="Результат переноса оборудования"]').text())
       .toContain('A1: закупочная стоимость неизвестна.');
+  });
+
+  it('preserves equipment with no address and downloads source originals through authenticated fetch', async () => {
+    const wrapper = mount(LeadSourceReviewModal, { props: { open: true, orderId: 41, leadStatus: 'new_lead' } });
+    await flushPromises();
+    await wrapper.get('input[aria-label="Адрес объекта 1"]').setValue('');
+    await wrapper.findAll('button').find((button) => button.text() === 'ТЗ.pdf')!.trigger('click'); await flushPromises();
+    expect(sourceApi.downloadOriginal).toHaveBeenCalledWith(41, 'doc-1', 'ТЗ.pdf', expect.any(Function));
+    expect(wrapper.find('a[href*="source-documents"]').exists()).toBe(false);
+    await wrapper.findAll('input[type="checkbox"]').at(-1)!.setValue(true);
+    await wrapper.get('button.btn-mini').trigger('click'); await flushPromises();
+    expect(sourceApi.apply).toHaveBeenCalledWith(41, expect.objectContaining({ objects: [{ address: '', equipment: [{ brand: 'Daikin', model: 'A1', quantity: 2 }] }] }));
+  });
+
+  it('awaits flush and reload hooks and leaves a rejected action lock alone', async () => {
+    const beforeApply = vi.fn().mockResolvedValue(false); const afterApply = vi.fn().mockResolvedValue(true); const endApply = vi.fn();
+    const wrapper = mount(LeadSourceReviewModal, { props: { open: true, orderId: 41, leadStatus: 'new_lead', beforeApply, afterApply, endApply } });
+    await flushPromises(); await wrapper.findAll('input[type="checkbox"]').at(-1)!.setValue(true);
+    await wrapper.get('button.btn-mini').trigger('click'); await flushPromises();
+    expect(sourceApi.apply).not.toHaveBeenCalled(); expect(endApply).not.toHaveBeenCalled();
+    beforeApply.mockResolvedValue(true);
+    let complete!: (value: boolean) => void; afterApply.mockReturnValue(new Promise<boolean>((resolve) => { complete = resolve; }));
+    await wrapper.get('button.btn-mini').trigger('click'); await flushPromises();
+    expect(wrapper.emitted('applied')).toBeUndefined(); expect(wrapper.get('button[aria-label="Закрыть"]').attributes('disabled')).toBeDefined();
+    complete(true); await flushPromises();
+    expect(wrapper.emitted('applied')).toHaveLength(1); expect(endApply).toHaveBeenCalledTimes(1);
+  });
+
+  it('drops source previews and AI responses belonging to a previous order', async () => {
+    let oldPreview!: (value: typeof preview) => void;
+    sourceApi.preview.mockReturnValueOnce(new Promise((resolve) => { oldPreview = resolve; }));
+    const wrapper = mount(LeadSourceReviewModal, { props: { open: true, orderId: 41 } });
+    await wrapper.setProps({ orderId: 42 }); await flushPromises();
+    oldPreview({ ...preview, title: 'Старая заявка' }); await flushPromises();
+    expect(wrapper.text()).not.toContain('Старая заявка');
+    let oldAnalysis!: (value: typeof preview) => void;
+    sourceApi.analyze.mockReturnValueOnce(new Promise((resolve) => { oldAnalysis = resolve; }));
+    await wrapper.findAll('button').find((button) => button.text() === 'Обработать ИИ')!.trigger('click');
+    await wrapper.setProps({ orderId: 43 }); await flushPromises();
+    oldAnalysis({ ...preview, work_summary: 'Старый результат ИИ' }); await flushPromises();
+    expect(wrapper.get<HTMLTextAreaElement>('textarea[placeholder="Состав работ"]').element.value).toBe(preview.work_summary);
   });
 });

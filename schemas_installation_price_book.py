@@ -205,6 +205,8 @@ class InstallationWorkSummary(BaseModel):
     display_label: str | None = None
     tariff_code: str
     work_label: str
+    short_title: str | None = None
+    included_scope: list[str] = Field(default_factory=list)
     measured: list[InstallationMeasuredWork]
     selected_extras: list[InstallationSelectedWork]
 

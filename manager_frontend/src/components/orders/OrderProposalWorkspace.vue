@@ -119,7 +119,9 @@ defineExpose({
           @add="commercial.addProductLine"
           @fill-description="commercial.fillProductClientDescription"
           @supply="commercial.createSupplyFromProductLine($event.line, $event.intent)"
-        />
+        >
+          <template #source-equipment><slot name="source-equipment" /></template>
+        </OrderProductLinesEditor>
 
         <OrderServiceLinesEditor
           v-model:lines="commercial.serviceLines"
@@ -154,6 +156,7 @@ defineExpose({
           @load-estimates="commercial.loadEstimateOptions"
           @remember-description-mode="commercial.setDefaultServiceDescriptionMode"
           @open-installation-estimate="installationPanelRef?.openPanel()"
+          @standard-installation="(tariff, edit) => installationPanelRef?.selectStandardTariff(tariff, edit)"
         />
         <p v-if="hasAttachedInstallation" class="mt-2 text-xs text-slate-500">Строки монтажа по книге зафиксированы. Для замены используйте новый пустой черновик предложения.</p>
         <OrderInstallationEstimatePanel

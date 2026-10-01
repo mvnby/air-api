@@ -94,6 +94,31 @@ and prevents repeated review from duplicating items or recreating equipment a
 manager removed. Installation is added separately through
 **Добавить стандартный монтаж** or the editable installation estimate.
 
+Changing the scenario to **Продажа и монтаж** reuses confirmed saved equipment
+even when a later source apply omits `objects`. Explicit `objects: []` clears the
+reviewed list; `objects: null` suppresses equipment transfer for that apply.
+Models with no known object address remain reviewable without inventing an
+address or an installation allocation.
+
+The collapsed source card reads saved reviewed evidence and already attached
+originals locally. Expanded details show model quantities, original filenames,
+literal installation facts and the complete reviewed request text on demand.
+Files open through authenticated Manager attachment access. The card requires
+an active attachment link to the scoped order and the same source identity.
+Route lengths such as 5/8/10 metres are evidence to verify by room; they do not
+silently become priced installation lines or a guessed equipment allocation.
+
+**Добавить из заявки** loads a read-only preview through
+`GET /api/manager/orders/{order_id}/source-equipment?proposal_id=...`.
+`POST` to the same path appends only selected eligible products after verifying
+the preview fingerprint, current stock, price and draft status under the order
+lock. Manual lines keep their price and quantity. Removed equipment needs the
+separate unchecked restoration choice; equipment previously added to another
+proposal is labelled as a repeat addition. Each explicit command carries an
+idempotency ID: retrying it cannot recreate a line removed after that command.
+The editor saves pending changes before this action and awaits a fresh order
+projection before allowing further edits. No stock reservation occurs.
+
 Apply migration `e64f5a6b7c8d` through the normal reviewed deployment path before
 starting this importer. Disabling `BELZAKUPKI_IMPORT_ENABLED` and redeploying
 stops new intake without deleting orders/checkpoints. Rollback of application

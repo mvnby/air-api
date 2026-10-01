@@ -1,16 +1,18 @@
 """Build monetary table rows from the selected document lines."""
 
 from decimal import Decimal
-from typing import Sequence
+from typing import Mapping, Sequence
 
 from models import OrderProductLink, OrderServiceLink
 from services.order_product_description import product_line_document_title
+from services.order_service_description import service_line_document_title
 from .value_formatters import money
 
 
 def line_rows(
     product_links: Sequence[OrderProductLink],
     service_lines: Sequence[tuple[OrderServiceLink, int]],
+    installation_descriptions: Mapping[int, str] | None = None,
 ) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     for item in product_links:
@@ -30,9 +32,7 @@ def line_rows(
         rows.append(
             line_row(
                 len(rows) + 1,
-                title=str(
-                    item.title or getattr(item.service, "title", "") or "Услуга"
-                ),
+                title=service_line_document_title(item, installation_descriptions),
                 kind="service",
                 quantity=quantity,
                 unit_price=unit_price,

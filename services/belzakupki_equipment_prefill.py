@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 from sqlmodel import select
 
-from models import Brand, Order, OrderProductLink, Product, TenantOffer
+from models import Brand, Order, OrderProductLink, OrderProposal, Product, TenantOffer
 from models.tenancy import TenantScope
 from schemas_belzakupki_enrichment import (
     SourceEquipmentDraft, SourceEquipmentPrefillItem, SourceEquipmentPrefillResult,
@@ -129,12 +129,9 @@ class BelzakupkiEquipmentPrefillService:
         return sha256(f"{source}:{external_id}:{product_id}".encode()).hexdigest()
 
     @classmethod
-    async def apply(
-        cls, session: AsyncSession, *, order: Order, scope: TenantScope,
-        source: str, external_id: str, objects: list[SourceObjectDraft],
-    ) -> SourceEquipmentPrefillResult:
-        if scope.demo_read_only:
-            raise ValueError("Demo workspace is read-only")
+    async def resolve(
+        cls, session: AsyncSession, *, scope: TenantScope, objects: list[SourceObjectDraft],
+    ) -> tuple[SourceEquipmentPrefillResult, dict[int, tuple[ExactCatalogCandidate, SourceEquipmentDraft]]]:
         result = SourceEquipmentPrefillResult()
         grouped: dict[tuple[str, str], SourceEquipmentDraft] = {}
 
@@ -156,7 +153,7 @@ class BelzakupkiEquipmentPrefillService:
                 else:
                     grouped[key] = equipment.model_copy(deep=True)
         if not grouped:
-            return result
+            return result, {}
 
         candidates = await cls.candidates(session, scope=scope, models={key[1] for key in grouped})
         resolved: dict[int, tuple[ExactCatalogCandidate, SourceEquipmentDraft]] = {}
@@ -177,11 +174,40 @@ class BelzakupkiEquipmentPrefillService:
                 resolved[product_id][1].quantity += int(equipment.quantity)
             else:
                 resolved[product_id] = (candidate, equipment.model_copy(deep=True))
+        return result, resolved
+
+    @classmethod
+    async def apply(
+        cls, session: AsyncSession, *, order: Order, scope: TenantScope,
+        source: str, external_id: str, objects: list[SourceObjectDraft],
+        proposal_id: int | None = None, product_ids: set[int] | None = None,
+        restore_removed_product_ids: set[int] | None = None,
+    ) -> SourceEquipmentPrefillResult:
+        if scope.demo_read_only:
+            raise ValueError("Demo workspace is read-only")
+        result, resolved = await cls.resolve(session, scope=scope, objects=objects)
+        if product_ids is not None:
+            resolved = {key: value for key, value in resolved.items() if key in product_ids}
         if not resolved:
             return result
 
-        await session.refresh(order, attribute_names=["proposals", "product_links", "service_links"])
-        proposal = await OrderService.ensure_default_proposal(session, order)
+        def skip(equipment: SourceEquipmentDraft, reason: str, message: str, product_id: int | None = None):
+            result.skipped.append(SourceEquipmentPrefillItem(
+                **equipment.model_dump(), product_id=product_id, reason=reason, message=message,
+            ))
+            if message not in result.warnings:
+                result.warnings.append(message)
+
+        if proposal_id is not None:
+            proposal = await session.scalar(select(OrderProposal).where(
+                OrderProposal.id == proposal_id, OrderProposal.order_id == order.id,
+                OrderProposal.is_archived.is_(False),
+            ))
+            if proposal is None:
+                raise ValueError("Proposal not found")
+        else:
+            await session.refresh(order, attribute_names=["proposals", "product_links", "service_links"])
+            proposal = await OrderService.ensure_default_proposal(session, order)
         result.proposal_id = int(proposal.id)
         if proposal.status != "draft" or proposal.is_archived:
             for product_id, (_, equipment) in resolved.items():
@@ -196,7 +222,7 @@ class BelzakupkiEquipmentPrefillService:
         for product_id, (candidate, equipment) in resolved.items():
             fingerprint = cls._fingerprint(source, external_id, product_id)
             label = " ".join(filter(None, [equipment.brand, equipment.model]))
-            if fingerprint in history:
+            if fingerprint in history and product_id not in (restore_removed_product_ids or set()):
                 skip(equipment, "already_processed", f"{label}: уже переносилось в предложение; изменения менеджера сохранены. Проверьте текущие строки вручную.", product_id)
                 continue
             existing = next((line for line in lines if line.product_id == product_id), None)
@@ -223,7 +249,7 @@ class BelzakupkiEquipmentPrefillService:
             )
             session.add(line)
             await session.flush()
-            history[fingerprint] = {"product_id": product_id, "proposal_id": int(proposal.id), "line_id": int(line.id), "quantity": quantity, "source": source, "external_id": external_id, "model": equipment.model, "brand": equipment.brand, "action": "added"}
+            history[fingerprint] = {"product_id": product_id, "proposal_id": int(proposal.id), "line_id": int(line.id), "quantity": quantity, "source": source, "external_id": external_id, "model": equipment.model, "brand": equipment.brand, "action": "restored" if product_id in (restore_removed_product_ids or set()) else "added"}
             result.added.append(SourceEquipmentPrefillItem(
                 **equipment.model_dump(), product_id=product_id, line_id=int(line.id), reason="added",
                 message=f"{label} × {quantity}: добавлено в черновик по текущей цене каталога.",

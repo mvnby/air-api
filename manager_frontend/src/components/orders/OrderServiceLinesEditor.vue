@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import type { ManagerQuickTariffResponse, ManagerServiceEstimateResponse } from '../../client';
+import type { ManagerQuickTariffResponse, ManagerServiceEstimateResponse, ManagerInstallationStandardTariff } from '../../client';
 import OrderServiceCatalogPicker from './OrderServiceCatalogPicker.vue';
 import type { OrderWorkflowType } from './order-workspace';
 import ServiceDescriptionModeSwitch from './ServiceDescriptionModeSwitch.vue';
@@ -38,6 +38,7 @@ const emit = defineEmits<{
   loadEstimates: [];
   rememberDescriptionMode: [mode: ServiceDescriptionMode];
   openInstallationEstimate: [];
+  standardInstallation: [tariff: ManagerInstallationStandardTariff, edit: boolean];
 }>();
 
 const lines = defineModel<ServiceLine[]>('lines', { required: true });
@@ -74,6 +75,8 @@ const filteredEstimates = computed(() => {
   ));
 });
 const lineTotal = (line: ServiceLine) => Number(line.quantity || 0) * Number(line.price || 0);
+const displayLines = (line: ServiceLine) => line.installation_display_lines?.length
+  ? line.installation_display_lines : [line];
 const updatePreferredMode = (mode: ServiceDescriptionMode) => {
   descriptionMode.value = mode;
   emit('rememberDescriptionMode', mode);
@@ -91,10 +94,13 @@ const updatePreferredMode = (mode: ServiceDescriptionMode) => {
         </button>
         <div v-if="editingIndex !== index || line.installation_estimate_revision_id" class="flex min-w-0 items-start gap-3">
           <div class="min-w-0 flex-1">
-            <p class="break-words text-sm font-semibold leading-snug text-slate-900 dark:text-slate-100">{{ line.title || 'Новая услуга' }}</p>
+            <div v-for="(display, displayIndex) in displayLines(line)" :key="displayIndex" :class="displayIndex ? 'mt-3' : ''">
+            <p class="break-words text-sm font-semibold leading-snug text-slate-900 dark:text-slate-100">{{ display.title || 'Новая услуга' }}</p>
+            <p v-if="display.description" class="mt-1 break-words text-xs font-normal leading-relaxed text-slate-500">{{ display.description }}</p>
             <div class="mt-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-              <span>{{ line.quantity }} × {{ formatMoney(line.price) }} <span v-if="line.installation_estimate_revision_id" class="ml-1 text-emerald-700">По книге · зафиксировано</span></span>
-              <span class="font-semibold text-slate-800 dark:text-slate-200">{{ formatMoney(lineTotal(line)) }}</span>
+              <span>{{ display.quantity }} × {{ formatMoney(display.price) }} <span v-if="line.installation_estimate_revision_id" class="ml-1 text-emerald-700">По книге · зафиксировано</span></span>
+              <span class="font-semibold text-slate-800 dark:text-slate-200">{{ formatMoney(display.quantity * display.price) }}</span>
+            </div>
             </div>
           </div>
           <button v-if="!line.installation_estimate_revision_id" type="button" data-order-usage="order_service_edit" class="btn-mini-outline h-9 w-9 shrink-0 justify-center p-0" :aria-label="`Редактировать услугу #${index + 1}`" title="Редактировать" @click="editingIndex = index">
@@ -162,6 +168,7 @@ const updatePreferredMode = (mode: ServiceDescriptionMode) => {
       @created-estimate="createEstimate"
       @close="showCatalog = false"
       @open-installation-estimate="showCatalog = false; emit('openInstallationEstimate')"
+      @standard-installation="(tariff, edit) => { showCatalog = false; emit('standardInstallation', tariff, edit); }"
     />
     <div v-if="showEstimateImport" class="mt-3 grid gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3">
       <div class="grid gap-2 md:grid-cols-3">

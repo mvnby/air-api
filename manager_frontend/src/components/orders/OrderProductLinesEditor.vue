@@ -65,6 +65,7 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
         </label>
       </div>
     </div>
+    <slot name="source-equipment" />
     <p v-if="productsError" class="mb-2 text-xs text-red-300">{{ productsError }}</p>
     <div class="space-y-2">
       <div v-for="(line, index) in lines" :key="`product-${index}`" class="relative rounded-xl border border-gray-200 bg-white p-3 shadow-sm">

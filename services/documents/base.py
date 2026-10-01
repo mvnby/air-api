@@ -11,6 +11,7 @@ from num2words import num2words
 
 from models import CustomerContract, DocumentTemplate, Order, OrderDocument, OrderProductLink, OrderServiceLink, CustomerType
 from services.document_role_service import DocumentRoleService
+from services.installation_estimate_projection import frozen_installation_descriptions
 
 # Template IDs
 TEMPLATES = {
@@ -48,6 +49,7 @@ class BaseDocumentStrategy(ABC):
         self.session = session
         self.order_id = order_id
         self.order: Optional[Order] = None
+        self.installation_descriptions: dict[int, str] = {}
 
     async def fetch_order(self) -> None:
         query = select(Order).where(Order.id == self.order_id).options(
@@ -60,6 +62,9 @@ class BaseDocumentStrategy(ABC):
         ).execution_options(populate_existing=True)
         result = await self.session.execute(query)
         self.order = result.unique().scalar_one_or_none()
+        self.installation_descriptions = await frozen_installation_descriptions(
+            self.session, self.order.service_links if self.order else [],
+        )
 
     @staticmethod
     def _line_total(link: Any) -> Decimal:

@@ -12,6 +12,8 @@ import OrderPlanningPanel from './OrderPlanningPanel.vue';
 import OrderRepairPanel from './OrderRepairPanel.vue';
 import OrderCustomerContext from './OrderCustomerContext.vue';
 import LeadSourceReviewModal from '../leads/LeadSourceReviewModal.vue';
+import OrderRequestSourceCard from './OrderRequestSourceCard.vue';
+import OrderSourceEquipmentAction from './OrderSourceEquipmentAction.vue';
 import { sourceEquipmentPrefillMessage, type SourceAppliedEvent } from '../../services/order-source-review';
 import OrderExecutionPanel from './OrderExecutionPanel.vue';
 import OrderDocumentsWorkspace from './OrderDocumentsWorkspace.vue';
@@ -41,6 +43,7 @@ import { useOrderWorkspaceUsage } from '../../composables/useOrderWorkspaceUsage
 import { useOrderWorkspaceUsageControls } from '../../composables/useOrderWorkspaceUsageControls';
 import { useOrderCatalogNavigation } from '../../composables/useOrderCatalogNavigation';
 import { useOrderInstallationAttachment } from '../../composables/useOrderInstallationAttachment';
+import { useOrderSourceCommand } from '../../composables/useOrderSourceCommand';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -228,9 +231,18 @@ const {
   onUpdated: (updated) => emit('updated', updated),
 });
 
+const {
+  busy: sourceApplying, before: beforeSourceCommand,
+  after: refreshAfterSourceCommand, end: endSourceCommand,
+} = useOrderSourceCommand({
+  order: computed(() => props.order), open: computed(() => props.modelValue),
+  proposalId: activeProposalId, otherCommandBusy: installationAttaching,
+  flush: () => orderSaving.flush(), clearDraft,
+  onUpdated: (updated) => emit('updated', updated),
+});
 const orderSaving = useOrderDrawerSaving({
   order: computed(() => props.order),
-  ready: computed(() => props.modelValue && !initializing.value && !installationAutosavePaused.value && Boolean(props.order)),
+  ready: computed(() => props.modelValue && !initializing.value && !installationAutosavePaused.value && !sourceApplying.value && Boolean(props.order)),
   activeProposalId,
   activeProposalLocked,
   productLines,
@@ -286,10 +298,14 @@ const {
 const documentsMounted = ref(false);
 const customerContextTarget = ref<'customer' | 'object' | null>(null);
 const sourceReviewOpen = ref(false);
+const openSourceReview = async () => {
+  const orderId = props.order?.id;
+  if (!await orderSaving.flush() || !props.modelValue || props.order?.id !== orderId) return;
+  sourceReviewOpen.value = true;
+};
 const handleSourceApplied = (result: SourceAppliedEvent) => {
   sourceReviewOpen.value = false;
   setToast(sourceEquipmentPrefillMessage(result.equipmentPrefill) || 'Данные из источника применены');
-  emit('reload', result.orderId);
 };
 watch(activeWorkspaceSection, (section) => {
   if (section === 'documents') documentsMounted.value = true;
@@ -330,7 +346,7 @@ const {
   persistDraft,
   clearDraft,
   setToast,
-  beforeClose: async () => !proposalActionLoading.value && await orderSaving.beforeClose(),
+  beforeClose: async () => !proposalActionLoading.value && !sourceApplying.value && await orderSaving.beforeClose(),
   onBeforeClose: orderSaving.cancelScheduled,
   onModelValue: (open) => emit('update:modelValue', open),
   onUpdated: (updatedOrder) => emit('updated', updatedOrder),
@@ -340,14 +356,6 @@ const compactObjectAddress = computed(() => (
   customerDeliveryAddress.value.trim()
   || props.order?.customer_branch?.delivery_address
   || ''
-));
-type BelzakupkiEnrichment = {
-  work_summary?: string | null;
-  equipment_details?: string | null;
-  objects?: Array<{ address?: string | null; equipment?: Array<{ brand?: string | null; model?: string | null; quantity?: number | null }> }>;
-};
-const sourceEnrichment = computed<BelzakupkiEnrichment | null>(() => (
-  (props.order as (ManagerOrderDetailResponse & { source_enrichment?: BelzakupkiEnrichment | null }) | null)?.source_enrichment || null
 ));
 const openCustomerContext = async (target: 'customer' | 'object') => {
   if (customerContextTarget.value === target) {
@@ -507,7 +515,7 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
       </div>
     </Transition>
     <div class="flex-1 bg-black/60" aria-hidden="true" @click="closeDrawer" />
-    <aside ref="drawerScrollContainer" tabindex="-1" role="dialog" aria-modal="true" aria-label="Рабочая область заказа" :inert="installationAttaching ? true : undefined" :aria-busy="installationAttaching" class="relative h-full w-full min-w-0 overflow-y-auto bg-white text-gray-900 shadow-2xl outline-none dark:bg-slate-950 dark:text-slate-100 md:my-4 md:h-[calc(100%-2rem)] md:w-[calc(100%-2rem)] md:rounded-2xl xl:max-w-[1680px] xl:border xl:border-gray-200 dark:xl:border-slate-700" @keydown="trapFocus" @keydown.esc.stop="closeDrawer" @click="trackUsageControl" @change="trackUsageControl">
+    <aside ref="drawerScrollContainer" tabindex="-1" role="dialog" aria-modal="true" aria-label="Рабочая область заказа" :inert="installationAttaching || sourceApplying ? true : undefined" :aria-busy="installationAttaching || sourceApplying" class="relative h-full w-full min-w-0 overflow-y-auto bg-white text-gray-900 shadow-2xl outline-none dark:bg-slate-950 dark:text-slate-100 md:my-4 md:h-[calc(100%-2rem)] md:w-[calc(100%-2rem)] md:rounded-2xl xl:max-w-[1680px] xl:border xl:border-gray-200 dark:xl:border-slate-700" @keydown="trapFocus" @keydown.esc.stop="closeDrawer" @click="trackUsageControl" @change="trackUsageControl">
       <OrderWorkspaceHeader
         :order-id="order?.id"
         :title="displayOrderTitle"
@@ -554,7 +562,7 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
           <p v-if="displayFormError" class="mt-4 rounded-xl border border-red-500/40 bg-red-50 px-3 py-2 text-sm text-red-700">
             {{ displayFormError }}
           </p>
-          <fieldset :disabled="proposalActionLoading || installationAttaching" class="min-w-0">
+          <fieldset :disabled="proposalActionLoading || installationAttaching || sourceApplying" class="min-w-0">
             <section v-show="activeWorkspaceSection === 'proposal'" class="min-w-0" data-order-usage="workspace-proposal-panel">
               <OrderManagerLabels v-model="managerLabels" />
               <OrderProposalWorkspace
@@ -581,7 +589,19 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
                 @catalog="catalogNavigation.open"
                 @multi-split-updated="emit('updated', $event)"
                 @documents="openWorkspaceTarget('documents')"
-              />
+              >
+                <template #source-equipment>
+                  <OrderSourceEquipmentAction
+                    v-if="order?.lead_source === 'belzakupki' && workflowType === 'sales_installation'"
+                    :order-id="order.id"
+                    :proposal-id="activeProposalId"
+                    :before-action="beforeSourceCommand"
+                    :after-action="refreshAfterSourceCommand"
+                    :end-action="endSourceCommand"
+                    @toast="setToast($event.message, $event.type)"
+                  />
+                </template>
+              </OrderProposalWorkspace>
             </section>
 
             <section v-if="documentsMounted" v-show="activeWorkspaceSection === 'documents'" class="min-w-0" data-order-usage="workspace-documents-panel">
@@ -602,13 +622,6 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
             </section>
 
             <section v-show="activeWorkspaceSection === 'work'" class="min-w-0" data-order-usage="workspace-work-panel">
-              <button v-if="order?.lead_source === 'belzakupki'" type="button" class="btn-mini-outline mb-3 text-xs" @click="sourceReviewOpen = true">Дозаполнить из источника</button>
-              <section v-if="sourceEnrichment" class="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-700 dark:bg-slate-900">
-                <h3 class="font-semibold">Данные из закупки</h3>
-                <p v-if="sourceEnrichment.work_summary" class="mt-2 whitespace-pre-line">{{ sourceEnrichment.work_summary }}</p>
-                <p v-if="sourceEnrichment.equipment_details" class="mt-2 text-slate-600 dark:text-slate-300">{{ sourceEnrichment.equipment_details }}</p>
-                <ul v-if="sourceEnrichment.objects?.length" class="mt-2 space-y-1 text-xs text-slate-600 dark:text-slate-300"><li v-for="(object, index) in sourceEnrichment.objects" :key="index"><span class="font-semibold">{{ object.address || 'Адрес не указан' }}</span><span v-if="object.equipment?.length"> · {{ object.equipment.map((item) => [item.brand, item.model, item.quantity && `×${item.quantity}`].filter(Boolean).join(' ')).join('; ') }}</span></li></ul>
-              </section>
               <OrderSalesInstallationWorkspace
                 v-if="workflowType === 'sales_installation'"
                 class="mt-4"
@@ -656,6 +669,14 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
         </div>
         <div class="order-first min-w-0 space-y-3 lg:order-none lg:sticky lg:top-4 lg:self-start">
           <OrderWorkspaceContext :customer-name="customerDisplayName" :address="compactObjectAddress" :total="totalPreview" :paid="totalPaymentsPreview" :balance="balanceDuePreview" @customer="openCustomerContext('customer')" @object="openCustomerContext('object')" @payments="openWorkspaceTarget('payments')" />
+          <OrderRequestSourceCard
+            v-if="order?.lead_source === 'belzakupki'"
+            :key="`order-source-${order.id}`"
+            :order-id="order.id"
+            :source-enrichment="order.source_enrichment"
+            @review="openSourceReview"
+            @toast="setToast($event.message, $event.type)"
+          />
           <OrderCustomerContext
             v-if="order"
             v-model:delivery-address="customerDeliveryAddress"
@@ -680,12 +701,18 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
         :open="sourceReviewOpen"
         :order-id="order.id"
         :lead-status="status"
+        :before-apply="beforeSourceCommand"
+        :after-apply="refreshAfterSourceCommand"
+        :end-apply="endSourceCommand"
         @close="sourceReviewOpen = false"
         @applied="handleSourceApplied"
       />
     </aside>
     <div v-if="installationAttaching" role="status" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 px-4 text-center text-sm font-semibold text-slate-900">
       <span class="rounded-xl bg-white px-5 py-3 shadow-lg">Прикрепляем монтаж к предложению…</span>
+    </div>
+    <div v-if="sourceApplying" role="status" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 px-4 text-center text-sm font-semibold text-slate-900">
+      <span class="rounded-xl bg-white px-5 py-3 shadow-lg">Применяем данные заявки…</span>
     </div>
 
   </div>

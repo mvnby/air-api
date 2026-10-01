@@ -43,6 +43,9 @@ async def analyze_tender_text(raw_text: str) -> tuple[str | None, str | None, li
         "Верни JSON с ключами work_summary (строка или null), equipment_details (строка или null), "
         "objects (массив объектов: address, equipment: массив brand, model, quantity). "
         "Разделяй каждый явно указанный адрес в отдельный объект. Сохраняй количество единиц по каждому адресу. "
+        "Если адрес не указан, сохрани явно названное оборудование с пустым address. "
+        "В equipment_details сохрани явно указанные кабинеты/помещения, длины трасс/коммуникаций, "
+        "электропитание и условия монтажа. Не распределяй их между моделями или объектами, если связь не указана прямо. "
         "Не выдумывай адреса, модели, количество, цену или клиента. Если не уверен, оставь массив пустым.\n\n"
         f"Текст:\n{raw_text[:24000]}"
     )
@@ -74,7 +77,7 @@ async def analyze_tender_text(raw_text: str) -> tuple[str | None, str | None, li
             obj = SourceObjectDraft.model_validate(item)
         except ValueError:
             continue
-        if obj.address.strip():
+        if obj.address.strip() or obj.equipment:
             objects.append(obj)
     def clean(value: Any) -> str | None:
         text = " ".join(str(value or "").split())

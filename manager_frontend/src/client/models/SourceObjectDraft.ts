@@ -4,7 +4,7 @@
 /* eslint-disable */
 import type { SourceEquipmentDraft } from './SourceEquipmentDraft';
 export type SourceObjectDraft = {
-    address: string;
+    address?: string;
     equipment?: Array<SourceEquipmentDraft>;
 };
 

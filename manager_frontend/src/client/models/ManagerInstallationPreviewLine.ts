@@ -5,5 +5,7 @@
 export type ManagerInstallationPreviewLine = {
     title: string;
     price: string;
+    quantity?: number;
+    description?: (string | null);
 };
 

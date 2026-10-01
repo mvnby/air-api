@@ -117,6 +117,8 @@ export const useOrderDrawerPersistence = ({
           installation_projection_mode: line.installation_projection_mode || null,
           service_id: line.service_id ?? null,
           title: String(line.title || ''),
+          description: line.description || null,
+          installation_display_lines: line.installation_display_lines,
           quantity: Number(line.quantity || 1),
           price: Number(line.price || 0),
           cost: Number(line.cost || 0),

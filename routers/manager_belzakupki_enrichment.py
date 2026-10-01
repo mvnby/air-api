@@ -10,24 +10,29 @@ from core.database import get_session
 from core.security import get_current_manager_tenant_scope, get_current_username
 from models.tenancy import TenantScope
 from routers.manager_operation_ids import (
+    ADD_MANAGER_ORDER_SOURCE_EQUIPMENT, GET_MANAGER_ORDER_SOURCE_CARD, GET_MANAGER_ORDER_SOURCE_EQUIPMENT,
     ANALYZE_MANAGER_ORDER_SOURCE,
     APPLY_MANAGER_ORDER_SOURCE,
     DOWNLOAD_MANAGER_ORDER_SOURCE_DOCUMENT,
     GET_MANAGER_ORDER_SOURCE_PREVIEW,
 )
 from schemas_belzakupki_enrichment import (
+    ManagerOrderSourceCard, ManagerOrderSourceEquipmentAdd, ManagerOrderSourceEquipmentPreview, SourceEquipmentPrefillResult,
     ManagerOrderSourceApply,
     ManagerOrderSourceApplyResult,
     ManagerOrderSourceAnalyze,
     ManagerOrderSourcePreview,
 )
 from services.belzakupki_enrichment_service import BelzakupkiEnrichmentService
+from services.belzakupki_source_equipment_service import BelzakupkiSourceEquipmentService, SourceEquipmentPreviewChangedError
 
 
 router = APIRouter(prefix="/api/manager/orders", tags=["manager-orders"])
 
 
 def _error(exc: Exception) -> HTTPException:
+    if isinstance(exc, SourceEquipmentPreviewChangedError):
+        return HTTPException(status_code=409, detail=str(exc))
     if isinstance(exc, LookupError):
         return HTTPException(status_code=404, detail=str(exc))
     if isinstance(exc, ValueError):
@@ -35,6 +40,40 @@ def _error(exc: Exception) -> HTTPException:
     if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 404:
         return HTTPException(status_code=404, detail="Source tender or document not found")
     return HTTPException(status_code=502, detail="Belzakupki source is unavailable")
+
+
+@router.get("/{order_id}/source-card", response_model=ManagerOrderSourceCard, operation_id=GET_MANAGER_ORDER_SOURCE_CARD)
+async def get_manager_order_source_card(
+    order_id: int, _: str = Depends(get_current_username), session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
+):
+    try:
+        return await BelzakupkiSourceEquipmentService.card(session, order_id=order_id, scope=tenant_scope)
+    except (LookupError, ValueError) as exc:
+        raise _error(exc) from exc
+
+
+@router.get("/{order_id}/source-equipment", response_model=ManagerOrderSourceEquipmentPreview, operation_id=GET_MANAGER_ORDER_SOURCE_EQUIPMENT)
+async def get_manager_order_source_equipment(
+    order_id: int, proposal_id: int | None = None, _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session), tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
+):
+    try:
+        return await BelzakupkiSourceEquipmentService.preview(session, order_id=order_id, scope=tenant_scope, proposal_id=proposal_id)
+    except (LookupError, ValueError) as exc:
+        raise _error(exc) from exc
+
+
+@router.post("/{order_id}/source-equipment", response_model=SourceEquipmentPrefillResult, operation_id=ADD_MANAGER_ORDER_SOURCE_EQUIPMENT)
+async def add_manager_order_source_equipment(
+    order_id: int, payload: ManagerOrderSourceEquipmentAdd, _: str = Depends(get_current_username),
+    session: AsyncSession = Depends(get_session), tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
+):
+    try:
+        return await BelzakupkiSourceEquipmentService.add(session, order_id=order_id, scope=tenant_scope, payload=payload)
+    except (LookupError, ValueError) as exc:
+        await session.rollback()
+        raise _error(exc) from exc
 
 
 @router.get(

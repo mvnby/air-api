@@ -16,6 +16,9 @@ import type { ManagerOrderScenariosResponse } from '../models/ManagerOrderScenar
 import type { ManagerOrderSourceAnalyze } from '../models/ManagerOrderSourceAnalyze';
 import type { ManagerOrderSourceApply } from '../models/ManagerOrderSourceApply';
 import type { ManagerOrderSourceApplyResult } from '../models/ManagerOrderSourceApplyResult';
+import type { ManagerOrderSourceCard } from '../models/ManagerOrderSourceCard';
+import type { ManagerOrderSourceEquipmentAdd } from '../models/ManagerOrderSourceEquipmentAdd';
+import type { ManagerOrderSourceEquipmentPreview } from '../models/ManagerOrderSourceEquipmentPreview';
 import type { ManagerOrderSourcePreview } from '../models/ManagerOrderSourcePreview';
 import type { ManagerOrderTransferPackage_Output } from '../models/ManagerOrderTransferPackage_Output';
 import type { ManagerOrderUpdatePayload } from '../models/ManagerOrderUpdatePayload';
@@ -27,6 +30,7 @@ import type { OrderWorkStageCreatePayload } from '../models/OrderWorkStageCreate
 import type { OrderWorkStageUpdatePayload } from '../models/OrderWorkStageUpdatePayload';
 import type { PaymentCreatePayload } from '../models/PaymentCreatePayload';
 import type { PaymentResponse } from '../models/PaymentResponse';
+import type { SourceEquipmentPrefillResult } from '../models/SourceEquipmentPrefillResult';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -588,6 +592,75 @@ export class ManagerOrdersService {
                 'order_id': orderId,
                 'stage_id': stageId,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Manager Order Source Card
+     * @param orderId
+     * @returns ManagerOrderSourceCard Successful Response
+     * @throws ApiError
+     */
+    public static getManagerOrderSourceCard(
+        orderId: number,
+    ): CancelablePromise<ManagerOrderSourceCard> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/orders/{order_id}/source-card',
+            path: {
+                'order_id': orderId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Manager Order Source Equipment
+     * @param orderId
+     * @param proposalId
+     * @returns ManagerOrderSourceEquipmentPreview Successful Response
+     * @throws ApiError
+     */
+    public static getManagerOrderSourceEquipment(
+        orderId: number,
+        proposalId?: (number | null),
+    ): CancelablePromise<ManagerOrderSourceEquipmentPreview> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/orders/{order_id}/source-equipment',
+            path: {
+                'order_id': orderId,
+            },
+            query: {
+                'proposal_id': proposalId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Add Manager Order Source Equipment
+     * @param orderId
+     * @param requestBody
+     * @returns SourceEquipmentPrefillResult Successful Response
+     * @throws ApiError
+     */
+    public static addManagerOrderSourceEquipment(
+        orderId: number,
+        requestBody: ManagerOrderSourceEquipmentAdd,
+    ): CancelablePromise<SourceEquipmentPrefillResult> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/orders/{order_id}/source-equipment',
+            path: {
+                'order_id': orderId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

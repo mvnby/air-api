@@ -136,6 +136,8 @@ const mapServiceLineFromResponse = (line: OrderServiceLineResponse): ServiceLine
   installation_projection_mode: line.installation_projection_mode,
   service_id: line.service_id,
   title: line.service_title,
+  description: line.description,
+  installation_display_lines: line.installation_display_lines,
   quantity: Math.max(1, Number(line.quantity || 1)),
   price: Number(line.price || 0),
   cost: Number(line.cost || 0),

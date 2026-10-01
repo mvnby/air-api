@@ -161,11 +161,20 @@ class OrderProductLineResponse(BaseModel):
     )
 
 
+class InstallationDisplayLineResponse(BaseModel):
+    title: str
+    description: Optional[str] = None
+    quantity: int
+    price: float
+
+
 class OrderServiceLineResponse(BaseModel):
     id: int
     proposal_id: Optional[int] = None
     service_id: Optional[int] = None
     service_title: str
+    description: Optional[str] = None
+    installation_display_lines: List[InstallationDisplayLineResponse] = Field(default_factory=list)
     service_category: Optional[str] = None
     quantity: int
     price: float

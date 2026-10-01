@@ -187,10 +187,15 @@ class DocumentContextBuilder:
         elif selection.document_role_type is not None:
             raise DocumentContextError("Названия сторон доступны для договора, счета, КП и акта")
 
+        from services.installation_estimate_projection import frozen_installation_descriptions
+
+        installation_descriptions = await frozen_installation_descriptions(
+            session, [item for item, _ in service_lines],
+        )
         rows = (
             build_logistics_rows(product_links)
             if document_type in {"tn2", "ttn1"}
-            else line_rows(product_links, service_lines)
+            else line_rows(product_links, service_lines, installation_descriptions)
         )
         vat_label = "с НДС" if legal_entity.is_vat_payer else "без НДС"
         for row in rows:

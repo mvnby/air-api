@@ -9,6 +9,8 @@ export type InstallationWorkSummary = {
     display_label?: (string | null);
     tariff_code: string;
     work_label: string;
+    short_title?: (string | null);
+    included_scope?: Array<string>;
     measured: Array<InstallationMeasuredWork>;
     selected_extras: Array<InstallationSelectedWork>;
 };

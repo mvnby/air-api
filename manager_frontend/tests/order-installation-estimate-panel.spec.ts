@@ -63,6 +63,50 @@ beforeEach(() => {
 });
 
 describe('OrderInstallationEstimatePanel', () => {
+  it('adds a published service-only standard without inventing equipment capacity or opening the profile form', async () => {
+    service.previewManagerInstallationEstimate.mockResolvedValueOnce({ ...fixed, total: '600' });
+    const wrapper = mountPanel();
+    const tariff = { code: 'wall.small', title: 'Монтаж настенного кондиционера до 4,2 кВт',
+      price: '600', description: 'Стандарт', route_m: '3', holes_by_type: { shared_pass_through: '1' },
+      product_kind: 'complete_split_system', indoor_type: 'wall', bookRevision: 7 };
+    await (wrapper.vm as any).selectStandardTariff(tariff);
+    await flushPromises();
+    const payload = service.previewManagerInstallationEstimate.mock.calls[0][1];
+    expect(payload.installations[0].typed_profile).toEqual({ product_kind: 'complete_split_system', indoor_type: 'wall', confirmed: true });
+    expect(payload.tariff_selections).toEqual({ [payload.installations[0].key]: 'wall.small' });
+    expect(payload.expected_revision).toBe(7);
+    expect(payload.installations[0].holes_by_type).toEqual({ through_thin: 0, through_thick: 1, through_over_80: 0 });
+    expect(service.attachManagerInstallationEstimate).toHaveBeenCalledOnce();
+  });
+
+  it('does not automatically attach when an old catalogue choice has a different current price', async () => {
+    const wrapper = mountPanel();
+    await (wrapper.vm as any).selectStandardTariff({ code: 'wall.small', title: 'Малый настенный',
+      price: '600', description: 'Стандарт', route_m: '3', holes_by_type: { shared_pass_through: '1' },
+      product_kind: 'complete_split_system', indoor_type: 'wall' });
+    await flushPromises();
+    expect(wrapper.text()).toContain('Цена тарифа изменилась');
+    expect(service.confirmManagerInstallationEstimate).not.toHaveBeenCalled();
+    expect(service.attachManagerInstallationEstimate).not.toHaveBeenCalled();
+    expect(wrapper.get('[data-testid="installation-add"]').exists()).toBe(true);
+  });
+
+  it('opens only work options for editing a selected service-only base tariff', async () => {
+    const wrapper = mountPanel();
+    await (wrapper.vm as any).selectStandardTariff({ code: 'wall.small', title: 'Малый настенный',
+      price: '600', description: 'Стандарт', route_m: '3', holes_by_type: { shared_pass_through: '1' },
+      product_kind: 'complete_split_system', indoor_type: 'wall' }, true);
+    await flushPromises();
+    expect(wrapper.findAll('select')).toHaveLength(0);
+    expect(wrapper.get('[data-testid="installation-route"]').exists()).toBe(true);
+    expect(service.confirmManagerInstallationEstimate).not.toHaveBeenCalled();
+    await wrapper.get('[data-testid="installation-route"]').setValue('5');
+    await wrapper.get('[data-testid="installation-preview"]').trigger('click');
+    await flushPromises();
+    expect(service.previewManagerInstallationEstimate.mock.calls[1][1].tariff_selections).toEqual(expect.objectContaining({
+      [service.previewManagerInstallationEstimate.mock.calls[1][1].installations[0].key]: 'wall.small',
+    }));
+  });
   it('adds canonical standard installation in one click without entering measurements', async () => {
     service.resolveInstallationStandard.mockResolvedValueOnce({ status: 'fixed', scope_ref: 'scope',
       included: { route_m: '4.5', holes_by_type: { shared_pass_through: '2', through_thick: '1' } } });
@@ -71,7 +115,7 @@ describe('OrderInstallationEstimatePanel', () => {
     await flushPromises();
     expect(service.resolveInstallationStandard).toHaveBeenCalledWith({ product_id: 44, work_kind: 'standard' });
     expect(service.previewManagerInstallationEstimate.mock.calls[0][1].installations[0]).toMatchObject({
-      route_length_m: 4.5, holes_by_type: { through_thin: 2, through_thick: 1, through_over_80: 0 }, extras: [],
+      route_length_m: 4.5, holes_by_type: { through_thin: 0, through_thick: 3, through_over_80: 0 }, extras: [],
     });
     expect(service.confirmManagerInstallationEstimate).toHaveBeenCalledOnce();
     expect(service.attachManagerInstallationEstimate).toHaveBeenCalledOnce();
@@ -86,7 +130,7 @@ describe('OrderInstallationEstimatePanel', () => {
     await flushPromises();
     expect(wrapper.get('[data-testid="installation-standard-summary"]').text()).toContain('Трасса 3 м');
     await wrapper.get('[data-testid="installation-edit-work"]').trigger('click');
-    expect((wrapper.get('[data-testid="installation-holes"]').element as HTMLInputElement).value).toBe('1');
+    expect((wrapper.get('[data-testid="installation-holes"]').element as HTMLInputElement).value).toBe('0');
     await wrapper.get('[data-testid="installation-route"]').setValue('5');
     const pump = wrapper.findAll('input[type="checkbox"]').find((input) => input.element.parentElement?.textContent?.includes('Насос с установкой'));
     await pump?.setValue(true);

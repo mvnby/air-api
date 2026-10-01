@@ -326,11 +326,38 @@ async def test_standard_shared_passage_and_included_route_have_no_extra_charge(m
             "key": "one", "typed_profile": {"product_kind": "complete_split_system",
                 "indoor_type": "wall", "capacity_cooling_kw": "3.5", "confirmed": True},
             "route_length_m": "3", "holes_by_type": {
-                "through_thin": 1, "through_thick": 0, "through_over_80": 0},
+                "through_thin": 0, "through_thick": 1, "through_over_80": 0},
         }]}), persist=False)
     assert result.status == "fixed"
     assert result.total == Decimal(entry["base_price"])
     assert [part.code for part in result.components] == ["installation.base"]
+
+
+@pytest.mark.asyncio
+async def test_manager_explicit_tariff_selection_preserves_unknown_capacity_and_requires_canonical_entry(monkeypatch):
+    from schemas_installation_confirmation import ManagerInstallationPreviewPayload
+    entry = _new_entry()
+    scope = TenantScope(tenant_id=12, storefront_id=34)
+    book = InstallationPriceBook(id=8, tenant_id=12, revision=2, fingerprint="manual-standard", entries=[entry])
+    async def latest(*_args):
+        return book
+    monkeypatch.setattr(BookService, "latest", latest)
+    payload = ManagerInstallationPreviewPayload.model_validate({"installations": [{
+        "key": "manual", "typed_profile": {"product_kind": "complete_split_system", "indoor_type": "wall", "confirmed": True},
+        "route_length_m": "3", "holes_by_type": {"through_thick": 1}}],
+        "tariff_selections": {"manual": entry["code"]}})
+    public = await BookService.preview(None, scope, payload, persist=False)
+    assert public.status == "quote"  # The public path cannot use the Manager selection override.
+    result = await BookService.preview(None, scope, payload, persist=False, tariff_selections=payload.tariff_selections)
+    assert result.status == "fixed" and result.total == Decimal("600")
+    assert payload.installations[0].typed_profile.capacity_cooling_kw is None
+    with pytest.raises(HTTPException) as unavailable:
+        await BookService.preview(None, scope, payload, persist=False, tariff_selections={"manual": "other-tenant-code"})
+    assert unavailable.value.detail["code"] == "selected_tariff_unavailable"
+    payload.installations[0].typed_profile.capacity_cooling_kw = Decimal("20")
+    with pytest.raises(HTTPException) as invalid:
+        await BookService.preview(None, scope, payload, persist=False, tariff_selections=payload.tariff_selections)
+    assert invalid.value.detail["code"] == "invalid_service_only_tariff_selection"
 
 
 def test_capacity_boundaries_are_disjoint_and_unknown_large_fails_closed():

@@ -7,6 +7,7 @@ from services.google_service import get_google_service
 from services.documents.base import BaseDocumentStrategy, TEMPLATES, DOC_NAMES
 from services.repair_defect_template_service import RepairDefectTemplateService
 from services.order_product_description import product_line_document_title
+from services.order_service_description import service_line_document_title
 from models import CustomerContract, CustomerEquipment, EquipmentComponent, OrderDocument
 
 class GoogleDocStrategy(BaseDocumentStrategy):
@@ -90,7 +91,7 @@ class ActStrategy(GoogleDocStrategy):
         table_rows = []
         counter = 1
         for link in self.order.service_links:
-            title = link.title or (link.service.title if link.service else "Услуга")
+            title = service_line_document_title(link, self.installation_descriptions)
             # 6 columns
             row = [
                 str(counter), title, "шт.", 
@@ -689,7 +690,7 @@ class GeneralDocStrategy(GoogleDocStrategy):
 
         # Services
         for link in self.order.service_links:
-            title = link.title or (link.service.title if link.service else "Услуга")
+            title = service_line_document_title(link, self.installation_descriptions)
             row = [
                 str(counter), title, "шт.", 
                 str(link.quantity), f"{link.price:.2f}", f"{link.price * link.quantity:.2f}"

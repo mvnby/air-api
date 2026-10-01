@@ -52,7 +52,9 @@ async def test_source_apply_persists_exact_mdv_pair_lines_financials_report_and_
     products = await _products(db)
     order = Order(
         tenant_id=1, storefront_id=1, status=OrderStatus.NEGOTIATION, lead_source=LeadSource.BELZAKUPKI,
-        technical_meta={"belzakupki": {"source": "goszakupki_by", "external_tender_id": "PREFILL-1"}},
+        workflow_type="maintenance",
+        technical_meta={"service_type": "maintenance", "belzakupki": {"source": "goszakupki_by", "external_tender_id": "PREFILL-1",
+            "enrichment": {"source": "goszakupki_by", "external_id": "PREFILL-1", "objects": [obj.model_dump() for obj in _objects()]}}},
     )
     db.add(order)
     await db.commit()
@@ -61,7 +63,8 @@ async def test_source_apply_persists_exact_mdv_pair_lines_financials_report_and_
         "source": "goszakupki_by", "external_id": "PREFILL-1", "documents": [], "customer": {},
     }))
     scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
-    payload = ManagerOrderSourceApply(customer_action="skip", workflow_type="sales_installation", service_type="turnkey", objects=_objects())
+    payload = ManagerOrderSourceApply(customer_action="skip", workflow_type="sales_installation", service_type="turnkey")
+    assert "objects" not in payload.model_fields_set
     first = await BelzakupkiEnrichmentService.apply(db, order_id=order_id, scope=scope, payload=payload, username="test")
     assert [item.product_id for item in first.equipment_prefill.added] == [product.id for product in products]
     lines = list((await db.execute(select(OrderProductLink).where(OrderProductLink.order_id == order_id).order_by(OrderProductLink.id))).scalars().all())

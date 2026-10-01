@@ -128,7 +128,8 @@ def test_collapsed_and_detailed_projection_reconcile_discount_cent():
     assert sum((price for _, price in detailed), Decimal("0")) == total
     assert "фактически 4 м" in detailed[1][0]
     manager_preview = _manager_preview(InstallationPreviewResponse.model_validate(snapshot["result"]))
-    assert [(line.title, line.price) for line in manager_preview.collapsed_lines] == collapsed
+    assert [(line.title, line.price) for line in manager_preview.collapsed_lines] == [("Монтаж", Decimal("510.24"))]
+    assert "Трасса: 4 м" in manager_preview.collapsed_lines[0].description
     assert [(line.title, line.price) for line in manager_preview.detailed_lines] == detailed
 
 
