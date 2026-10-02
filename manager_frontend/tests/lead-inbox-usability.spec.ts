@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   createManagerOrder: vi.fn(),
   getLeadsInbox: vi.fn(),
+  getLeadsCounter: vi.fn(),
   getManagerCustomers: vi.fn(),
 }));
 
@@ -11,6 +12,7 @@ vi.mock('../src/api', () => ({
   api: {
     createManagerOrder: mocks.createManagerOrder,
     getLeadsInbox: mocks.getLeadsInbox,
+    getLeadsCounter: mocks.getLeadsCounter,
     getManagerCustomers: mocks.getManagerCustomers,
     patchManagerOrder: vi.fn(),
   },
@@ -46,6 +48,7 @@ describe('LeadInbox usability', () => {
     window.sessionStorage.clear();
     managerSession.auth.value = null;
     managerStorefrontSelection.selectedSlug.value = null;
+    mocks.getLeadsCounter.mockResolvedValue({ pending_count: 1, unread_count: 1, count: 1 });
     mocks.getManagerCustomers.mockResolvedValue({ items: [] });
     mocks.getLeadsInbox.mockImplementation((scope: string) => Promise.resolve(response(scope === 'active' ? [activeItem] : [archiveItem])));
   });
@@ -63,7 +66,7 @@ describe('LeadInbox usability', () => {
     await wrapper.get('input[type="search"]').setValue('example.test');
     await new Promise(resolve => setTimeout(resolve, 320));
     await flushPromises();
-    expect(mocks.getLeadsInbox).toHaveBeenCalledWith('active', 1, 50, 'example.test', undefined);
+    expect(mocks.getLeadsInbox).toHaveBeenCalledWith('active', 1, 50, 'example.test', undefined, false, 'deadline');
     expect(wrapper.findAll('[data-testid="inbox-item"]')).toHaveLength(1);
     await wrapper.get('input[type="search"]').setValue('нет совпадений');
     await new Promise(resolve => setTimeout(resolve, 320));
@@ -88,23 +91,23 @@ describe('LeadInbox usability', () => {
     const first = mount(LeadInbox);
     await flushPromises();
     expect(mocks.getLeadsInbox).toHaveBeenCalledTimes(1);
-    await first.get('select[aria-label="Источник входящих"]').setValue('belzakupki');
+    await first.findAll('.channels button').find(button => button.text() === 'Тендеры')!.trigger('click');
     await flushPromises();
     await first.findAll('button').find(button => button.text() === 'Далее')!.trigger('click');
     await flushPromises();
-    expect(mocks.getLeadsInbox).toHaveBeenLastCalledWith('active', 2, 50, undefined, 'belzakupki');
+    expect(mocks.getLeadsInbox).toHaveBeenLastCalledWith('active', 2, 50, undefined, 'belzakupki', false, 'deadline');
     first.unmount();
 
     const returned = mount(LeadInbox);
     await flushPromises();
-    expect(returned.get('select[aria-label="Источник входящих"]').element).toHaveProperty('value', 'belzakupki');
-    expect(mocks.getLeadsInbox).toHaveBeenLastCalledWith('active', 2, 50, undefined, 'belzakupki');
+    expect(returned.findAll('.channels button').find(button => button.text() === 'Тендеры')!.attributes('aria-pressed')).toBe('true');
+    expect(mocks.getLeadsInbox).toHaveBeenLastCalledWith('active', 2, 50, undefined, 'belzakupki', false, 'deadline');
     returned.unmount();
 
     managerStorefrontSelection.selectedSlug.value = 'other';
     const other = mount(LeadInbox);
     await flushPromises();
-    expect(mocks.getLeadsInbox).toHaveBeenLastCalledWith('active', 1, 50, undefined, undefined);
+    expect(mocks.getLeadsInbox).toHaveBeenLastCalledWith('active', 1, 50, undefined, undefined, false, 'deadline');
     other.unmount();
   });
 
@@ -126,8 +129,8 @@ describe('LeadInbox usability', () => {
       : response([activeItem])));
     const restored = mount(LeadInbox);
     await flushPromises();
-    expect(mocks.getLeadsInbox).toHaveBeenCalledWith('active', 2, 50, undefined, undefined);
-    expect(mocks.getLeadsInbox).toHaveBeenLastCalledWith('active', 1, 50, undefined, undefined);
+    expect(mocks.getLeadsInbox).toHaveBeenCalledWith('active', 2, 50, undefined, undefined, false, 'deadline');
+    expect(mocks.getLeadsInbox).toHaveBeenLastCalledWith('active', 1, 50, undefined, undefined, false, 'deadline');
     expect(restored.get('[data-testid="inbox-item"]').text()).toBe('Анна');
     restored.unmount();
   });
@@ -179,4 +182,20 @@ describe('LeadInbox usability', () => {
     expect(wrapper.text()).toContain('уже в переговорах');
     wrapper.unmount();
   });
+  it('does not let an older personal counter overwrite the newest read decision', async () => {
+    let resolveOld: ((value: { pending_count: number; unread_count: number; count: number }) => void) | undefined;
+    mocks.getLeadsCounter.mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve; }));
+    const wrapper = mount(LeadInbox);
+    await flushPromises();
+    const card = wrapper.findComponent({ name: 'LeadInboxCard' });
+    card.vm.$emit('updated', { ...activeItem, is_read: true, is_new: false });
+    card.vm.$emit('updated', { ...activeItem, is_read: false, is_new: true });
+    await flushPromises();
+    expect(wrapper.get('.inbox-header p').text()).toContain('Непросмотрено: 1');
+    resolveOld?.({ pending_count: 1, unread_count: 0, count: 0 });
+    await flushPromises();
+    expect(wrapper.get('.inbox-header p').text()).toContain('Непросмотрено: 1');
+    wrapper.unmount();
+  });
+
 });

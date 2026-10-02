@@ -224,9 +224,9 @@ async def test_manager_crm_reads_and_mutations_are_exactly_storefront_scoped(
     assert {item["id"] for item in main_leads.json()["items"]} == {main_lead.id}
     assert {item["id"] for item in orsha_leads.json()["items"]} == {orsha_lead.id}
 
-    for headers, expected_order_id in (
-        (main_headers, main_inbox.id),
-        (orsha_headers, orsha_inbox.id),
+    for headers, expected_order_id, expected_lead_id in (
+        (main_headers, main_inbox.id, main_lead.id),
+        (orsha_headers, orsha_inbox.id, orsha_lead.id),
     ):
         counter = await async_client.get("/api/manager/leads/counter", headers=headers)
         inbox = await async_client.get("/api/manager/leads/inbox", headers=headers)
@@ -234,8 +234,12 @@ async def test_manager_crm_reads_and_mutations_are_exactly_storefront_scoped(
             "/api/manager/dashboard/stats",
             headers=headers,
         )
-        assert counter.json() == {"count": 1, "has_new": True}
-        assert [item["id"] for item in inbox.json()["items"]] == [expected_order_id]
+        assert counter.json() == {
+            "count": 2, "has_new": True, "pending_count": 2, "unread_count": 2,
+        }
+        assert {(item["entity_kind"], item["id"]) for item in inbox.json()["items"]} == {
+            ("order", expected_order_id), ("lead", expected_lead_id),
+        }
         assert dashboard.json()["new_leads_count"] == 1
 
     main_customer = await async_client.get(

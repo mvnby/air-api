@@ -5,5 +5,7 @@
 export type LeadsCounterResponse = {
     count: number;
     has_new: boolean;
+    pending_count?: number;
+    unread_count?: number;
 };
 

@@ -9,7 +9,7 @@ const emit = defineEmits<{ updateTerms: [terms: BusinessDocumentTerms] }>();
 
 const modes: Array<{ value: PaymentMode; label: string; note: string }> = [
   { value: 'full_prepayment', label: '100% предоплата', note: 'Оплата до поставки или начала работ' },
-  { value: 'equipment_prepayment', label: 'Аванс за оборудование', note: 'Остаток после выполнения работ' },
+  { value: 'equipment_prepayment', label: '50% аванс до поставки', note: 'Половина общей суммы, остаток после приёмки' },
   { value: 'postpayment', label: 'Оплата после работ', note: 'Оплата в согласованный срок' },
   { value: 'custom', label: 'Свой график', note: 'Разбейте сумму на части ниже' },
 ];
@@ -29,7 +29,7 @@ const setMode = (next: PaymentMode) => {
   const supplyScenario = ['supply', 'supply_installation'].includes(props.terms.contract_scenario || '');
   if (next === 'full_prepayment') update([{ share_percent: 100, due_event: supplyScenario ? 'before_supply' : 'before_work', due_days: null, due_day_kind: 'banking', note: null }]);
   if (next === 'equipment_prepayment') update([
-    { share_percent: 50, due_event: 'before_supply', due_days: null, due_day_kind: 'banking', note: 'Предоплата за оборудование' },
+    { share_percent: 50, due_event: 'before_supply', due_days: null, due_day_kind: 'banking', note: 'Аванс 50% общей суммы до поставки' },
     { share_percent: 50, due_event: 'after_acceptance', due_days: null, due_day_kind: 'banking', note: 'После подписания акта' },
   ]);
   if (next === 'postpayment') update([{ share_percent: 100, due_event: 'after_acceptance', due_days: 5, due_day_kind: 'banking', note: 'После подписания акта' }]);
@@ -78,7 +78,7 @@ const removeItem = (index: number) => update(
         <label class="business-field"><span>Доля, %</span><input :value="item.share_percent" class="business-input" type="number" min="0.01" max="100" step="0.01" @input="updateNumber(index, 'share_percent', $event)" /></label>
         <label class="business-field"><span>От события</span><select :value="item.due_event" class="business-input" @change="updateItem(index, { due_event: ($event.target as HTMLSelectElement).value as PaymentScheduleItem['due_event'] })"><option value="before_supply">До поставки</option><option value="before_work">До начала работ</option><option value="after_supply">После поставки</option><option value="after_work">После выполнения работ</option><option value="after_acceptance">После приёмки</option></select></label>
         <label class="business-field"><span>Дней</span><input :value="item.due_days ?? ''" class="business-input" type="number" min="1" max="3650" placeholder="Сразу" @input="updateNumber(index, 'due_days', $event)" /></label>
-        <label class="business-field"><span>Вид дней</span><select :value="item.due_day_kind" class="business-input" @change="updateItem(index, { due_day_kind: ($event.target as HTMLSelectElement).value as PaymentScheduleItem['due_day_kind'] })"><option value="banking">Банковские</option><option value="calendar">Календарные</option></select></label>
+        <label class="business-field"><span>Вид дней</span><select :value="item.due_day_kind" class="business-input" @change="updateItem(index, { due_day_kind: ($event.target as HTMLSelectElement).value as PaymentScheduleItem['due_day_kind'] })"><option value="banking">Банковские</option><option value="calendar">Календарные</option><option value="working">Рабочие</option></select></label>
         <label class="business-field"><span>Пояснение</span><input :value="item.note || ''" class="business-input" placeholder="Необязательно" @input="updateItem(index, { note: ($event.target as HTMLInputElement).value.trim() || null })" /></label>
         <button class="payment-remove" type="button" :aria-label="`Удалить платёж ${index + 1}`" :disabled="terms.payment_schedule.length === 1" @click="removeItem(index)"><span class="material-icons-round text-[18px]">delete</span></button>
       </div>

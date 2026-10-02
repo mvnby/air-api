@@ -8,5 +8,7 @@ export type LeadsInboxListResponse = {
     items: Array<LeadsInboxItemResponse>;
     total: number;
     meta: Meta;
+    pending_count?: number;
+    unread_count?: number;
 };
 

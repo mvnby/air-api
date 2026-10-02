@@ -386,18 +386,18 @@ def _payment_due_label(item: PaymentScheduleItem) -> str:
 
 
 def _payment_day_kind_label(value: str) -> str:
-    return "банковские дни" if value == "banking" else "календарные дни"
+    return {"banking": "банковские дни", "working": "рабочие дни", "calendar": "календарные дни"}[value]
 
 
 def _payment_days_phrase(value: int, kind: str) -> str:
     remainder_100 = value % 100
     remainder_10 = value % 10
     if remainder_10 == 1 and remainder_100 != 11:
-        noun = "банковский день" if kind == "banking" else "календарный день"
+        noun = {"banking": "банковский день", "working": "рабочий день", "calendar": "календарный день"}[kind]
     elif 2 <= remainder_10 <= 4 and not 12 <= remainder_100 <= 14:
-        noun = "банковских дня" if kind == "banking" else "календарных дня"
+        noun = {"banking": "банковских дня", "working": "рабочих дня", "calendar": "календарных дня"}[kind]
     else:
-        noun = "банковских дней" if kind == "banking" else "календарных дней"
+        noun = {"banking": "банковских дней", "working": "рабочих дней", "calendar": "календарных дней"}[kind]
     return f"{value} {noun}"
 
 

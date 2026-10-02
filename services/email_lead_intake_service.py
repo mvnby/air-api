@@ -393,8 +393,6 @@ class EmailLeadIntakeService:
             parsed = parsedate_to_datetime(raw)
         except (TypeError, ValueError):
             return None
-        if parsed.tzinfo is not None:
-            parsed = parsed.replace(tzinfo=None)
         return parsed.isoformat(timespec="minutes")
 
     @staticmethod
@@ -517,12 +515,21 @@ class EmailLeadIntakeService:
                 "email_source_fingerprint": fingerprint,
                 "email_sender": sender_email,
                 "email_subject": subject,
+                # Keep source wording separate from the classifier's summary.
+                "email_source_text": raw_body[:180_000],
+                "email_source_text_truncated": len(raw_body) > 180_000,
                 "email_date": email_date,
                 "email_ai_reason": EmailLeadIntakeService._clean_optional(classification.get("reason"), max_length=300),
                 "lead_customer_type_known": segment_hint in {"b2b", "b2c"} or bool(inn or company_name),
                 "lead_customer_type": customer_type if segment_hint in {"b2b", "b2c"} or inn or company_name else None,
             }
         )
+        from services.commercial_terms_extraction import extract_commercial_terms
+        from services.order_commercial_terms_service import store_source_terms
+
+        # Partial source text must not yield apparently complete payment defaults.
+        if len(raw_body) <= 180_000:
+            store_source_terms(order, extract_commercial_terms(raw_body, source="Письмо заказчика"))
         flag_modified(order, "technical_meta")
         session.add(order)
         skipped_attachments = []

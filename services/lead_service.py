@@ -348,6 +348,8 @@ class LeadService:
         )
         if not lead:
             return None
+        from services.inbox_eligibility import require_unarchived_inbox
+        await require_unarchived_inbox(session, "lead", lead_id)
         if lead.tenant_id is None:
             lead.tenant_id = tenant_scope.tenant_id
         if lead.storefront_id is None:

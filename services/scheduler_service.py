@@ -156,6 +156,9 @@ class SchedulerService:
         # Run lead archive loop (once a day)
         tasks.append(asyncio.create_task(self._lead_archive_loop()))
 
+        # Tender expiry is separate from the raw Lead 90-day retention job.
+        tasks.append(asyncio.create_task(self._inbox_tender_expiry_loop()))
+
         # Run supplier sheets sync loop
         tasks.append(asyncio.create_task(self._supplier_sync_loop()))
 
@@ -305,6 +308,26 @@ class SchedulerService:
                 await asyncio.sleep(24 * 3600)
             except Exception:
                 logger.exception("❌ Lead archive loop error")
+                await asyncio.sleep(3600)
+
+    async def _inbox_tender_expiry_loop(self):
+        """Hourly bounded scan; rollout remains report-only until reviewed."""
+        from services.leads_inbox_expiry_service import LeadsInboxExpiryService
+
+        after_id = 0
+        while True:
+            try:
+                mode = await self._get_global_config_value("inbox_tender_archive_mode", "report_only")
+                async with async_session_maker() as session:
+                    result = await LeadsInboxExpiryService.run(session, execute=mode == "execute", after_id=after_id)
+                after_id = result["next_after_id"]
+                if result["candidates"]:
+                    logger.info("Tender deadline inbox expiry mode=%s candidates=%s archived=%s",
+                        result["mode"], len(result["candidates"]), result["archived"])
+                # Continue a full bounded pass, then wait for the hourly run.
+                await asyncio.sleep(1 if after_id else 3600)
+            except Exception:
+                logger.exception("Tender inbox expiry failed")
                 await asyncio.sleep(3600)
 
     async def _supplier_sync_loop(self):

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { api, type LeadsInboxItemResponse } from '../api';
+import { api } from '../api';
+import { leadInboxApi, notifyInboxChanged, type InboxItem, type InboxContactRequest } from '../services/lead-inbox';
 import { managerSession } from '../services/manager-session';
 import { managerStorefrontSelection, managerStorefrontStorageKey } from '../services/manager-storefront-selection';
 import LeadInboxCard from '../components/leads/LeadInboxCard.vue';
@@ -28,9 +29,17 @@ const sourceOptions: { value: Source; label: string }[] = [
 ];
 
 const scope = ref<Scope>('active');
+const unreadOnly = ref(false);
+const sort = ref<'newest' | 'deadline'>('deadline');
+const showEmailImport = ref(false);
+const pendingCount = ref(0);
+const unreadCount = ref(0);
+const undoTarget = ref<InboxItem | null>(null);
+const restoreSaving = ref(false);
+const contactSaving = ref(false);
 const source = ref<Source>('');
 const page = ref(1);
-const items = ref<LeadsInboxItemResponse[]>([]);
+const items = ref<InboxItem[]>([]);
 const total = ref(0);
 const loading = ref(false);
 const loadError = ref('');
@@ -39,6 +48,7 @@ const search = ref('');
 const appliedSearch = ref('');
 let inboxSearchTimeout: ReturnType<typeof setTimeout> | null = null;
 let loadRequestId = 0;
+let summaryRequestId = 0;
 let disposed = false;
 let ready = false;
 
@@ -50,7 +60,7 @@ const contextStorageKey = () => {
 const saveContext = () => {
   const key = contextStorageKey();
   if (!key) return;
-  try { window.sessionStorage.setItem(key, JSON.stringify({ scope: scope.value, source: source.value, search: appliedSearch.value, page: page.value })); }
+  try { window.sessionStorage.setItem(key, JSON.stringify({ scope: scope.value, source: source.value, search: appliedSearch.value, page: page.value, unreadOnly: unreadOnly.value, sort: sort.value })); }
   catch { /* Browsing still works when storage is unavailable. */ }
 };
 const restoreContext = () => {
@@ -61,14 +71,15 @@ const restoreContext = () => {
     if (saved.scope === 'active' || saved.scope === 'archive') scope.value = saved.scope;
     if (sourceOptions.some(option => option.value === saved.source)) source.value = saved.source;
     if (typeof saved.search === 'string') search.value = appliedSearch.value = saved.search.slice(0, 200);
+    if (typeof saved.unreadOnly === 'boolean') unreadOnly.value = saved.unreadOnly;
+    if (saved.sort === 'newest' || saved.sort === 'deadline') sort.value = saved.sort;
     if (Number.isSafeInteger(saved.page) && saved.page > 0) page.value = saved.page;
   } catch { /* Ignore malformed or inaccessible storage. */ }
 };
 
 // Qualify / Reject modals
-const qualifyTarget = ref<LeadsInboxItemResponse | null>(null);
-const rejectTarget = ref<LeadsInboxItemResponse | null>(null);
-const sourceReviewTarget = ref<LeadsInboxItemResponse | null>(null);
+const qualifyTarget = ref<InboxItem | null>(null);
+const sourceReviewTarget = ref<InboxItem | null>(null);
 
 // Create Lead modal
 const showCreateModal = ref(false);
@@ -156,17 +167,19 @@ watch(() => createForm.value.phone, (val) => {
 });
 
 const setToast = (msg: string) => {
+  undoTarget.value = null;
   toast.value = msg;
-  setTimeout(() => { if (toast.value === msg) toast.value = ''; }, 3000);
+  setTimeout(() => { if (toast.value === msg) { toast.value = ''; undoTarget.value = null; } }, 8000);
 };
 
 const load = async () => {
   const requestId = ++loadRequestId;
+  summaryRequestId += 1;
   loading.value = true;
   loadError.value = '';
   saveContext();
   try {
-    const result = await api.getLeadsInbox(scope.value, page.value, pageLimit, appliedSearch.value || undefined, source.value || undefined);
+    const result = await api.getLeadsInbox(scope.value, page.value, pageLimit, appliedSearch.value || undefined, source.value || undefined, unreadOnly.value, sort.value);
     if (disposed || requestId !== loadRequestId) return;
     const nextTotal = result.meta?.total ?? result.total;
     if (page.value > 1 && page.value > Math.max(1, result.meta?.pages ?? Math.ceil(nextTotal / pageLimit))) {
@@ -174,6 +187,8 @@ const load = async () => {
       return;
     }
     items.value = result.items;
+    pendingCount.value = result.pending_count ?? (scope.value === 'active' ? nextTotal : pendingCount.value);
+    unreadCount.value = result.unread_count ?? result.items.filter(item => item.is_read === false).length;
     total.value = nextTotal;
   } catch (e) {
     if (disposed || requestId !== loadRequestId) return;
@@ -190,12 +205,12 @@ onMounted(async () => {
   ready = true;
   await load();
 });
-watch([scope, source], () => {
+watch([scope, source, unreadOnly, sort], () => {
   if (inboxSearchTimeout) clearTimeout(inboxSearchTimeout);
   appliedSearch.value = search.value.trim().slice(0, 200);
   page.value = 1;
 }, { flush: 'sync' });
-watch([scope, source, page, appliedSearch], () => { if (ready) void load(); });
+watch([scope, source, unreadOnly, sort, page, appliedSearch], () => { if (ready) void load(); });
 watch(search, (value) => {
   if (!ready) return;
   loadRequestId += 1;
@@ -259,6 +274,7 @@ const submitCreateLead = async () => {
             target_date: createForm.value.service_type === 'maintenance' && createForm.value.target_date ? new Date(createForm.value.target_date).toISOString() : undefined,
         });
         showCreateModal.value = false;
+        notifyInboxChanged();
         if (created.status === 'new_lead') {
           setToast(`Обращение #${created.id} создано`);
           await load();
@@ -287,6 +303,7 @@ const onCreateInnBlur = async () => {
 // ── Qualify ───────────────────────────────────────────────────────────────────
 const handleQualifySuccess = async (orderId: number) => {
   qualifyTarget.value = null;
+  notifyInboxChanged();
   setToast(`Сделка #${orderId} создана, открываем карточку`);
   window.history.pushState({}, '', `/manager/orders/kanban?orderId=${orderId}`);
   window.dispatchEvent(new PopStateEvent('popstate'));
@@ -294,6 +311,7 @@ const handleQualifySuccess = async (orderId: number) => {
 
 const handleSourceApplied = async (result: SourceAppliedEvent) => {
   sourceReviewTarget.value = null;
+  notifyInboxChanged();
   if (result.customerAction === 'skip') {
     setToast([`Источник для обращения #${result.orderId} обновлён.`, sourceEquipmentPrefillMessage(result.equipmentPrefill)].filter(Boolean).join(' '));
     await load();
@@ -304,51 +322,42 @@ const handleSourceApplied = async (result: SourceAppliedEvent) => {
   window.dispatchEvent(new PopStateEvent('popstate'));
 };
 
-// ── No Answer ────────────────────────────────────────────────────────────────
-const markNoAnswer = async (item: LeadsInboxItemResponse) => {
+const markNoAnswer = async ({ item, note, nextFollowupAt }: InboxContactRequest) => {
+  if (contactSaving.value) return;
+  contactSaving.value = true;
   try {
-    const noAnswerPayload = { 
-      status: 'new_lead', 
-      no_answer_at: new Date().toISOString() 
-    };
-    await api.patchManagerOrder(item.id, noAnswerPayload);
+    const updated = await leadInboxApi.noAnswer(item.id, nextFollowupAt, item.entity_kind, note);
+    updateItem(updated);
     setToast(`Обращение #${item.id}: нет ответа, остаётся в работе`);
-    await load();
-  } catch (e) {
-    console.error(e);
-    setToast('Ошибка при обновлении статуса');
-  }
+  } catch { setToast('Не удалось сохранить попытку контакта'); }
+  finally { contactSaving.value = false; }
 };
-
-// ── Rejection ─────────────────────────────────────────────────────────────────
-const rejectReason = ref('');
-
-const confirmReject = async () => {
-  if (!rejectTarget.value) return;
+const updateItem = (updated: InboxItem) => {
+  items.value = items.value.map(item => item.id === updated.id && (item.entity_kind || 'order') === (updated.entity_kind || 'order') ? updated : item);
+  // Refresh counts without remounting an opened card.
+  const requestId = ++summaryRequestId;
+  void api.getLeadsCounter().then(counter => {
+    if (disposed || requestId !== summaryRequestId) return;
+    pendingCount.value = counter.pending_count ?? pendingCount.value;
+    unreadCount.value = counter.unread_count ?? counter.count;
+  }).catch(() => {});
+};
+const archived = async (item: InboxItem) => {
+  setToast(`Обращение #${item.id} в архиве`);
+  undoTarget.value = item;
+  await load();
+};
+const restoreItem = async (item: InboxItem) => {
+  if (restoreSaving.value) return;
+  restoreSaving.value = true;
   try {
-    const newComment = rejectReason.value
-      ? (rejectTarget.value.comment ? `${rejectTarget.value.comment}\n[Отказ: ${rejectReason.value}]` : `[Отказ: ${rejectReason.value}]`)
-      : rejectTarget.value.comment;
-
-    await api.patchManagerOrder(rejectTarget.value.id, {
-      status: 'closed',
-      closing_result: 'lost',
-      reject_reason: rejectReason.value || undefined,
-      comment: newComment || undefined,
-    });
-    setToast(`Обращение #${rejectTarget.value.id} перемещено в архив`);
-    rejectTarget.value = null;
-    rejectReason.value = '';
+    await leadInboxApi.restore(item.id, item.entity_kind);
+    undoTarget.value = null;
+    notifyInboxChanged();
+    setToast(`Обращение #${item.id} возвращено в работу`);
     await load();
-  } catch (e) {
-    console.error(e);
-    setToast('Ошибка при отклонении');
-  }
-};
-
-const openRejectModal = (item: LeadsInboxItemResponse) => {
-  rejectTarget.value = item;
-  rejectReason.value = '';
+  } catch { setToast('Не удалось вернуть обращение в работу'); }
+  finally { restoreSaving.value = false; }
 };
 
 const scopeOptions: { value: Scope; label: string }[] = [
@@ -357,85 +366,30 @@ const scopeOptions: { value: Scope; label: string }[] = [
 ];
 
 const onEmailImported = async () => {
+  notifyInboxChanged();
   if (scope.value !== 'active') scope.value = 'active';
   else await load();
 };
 </script>
 
 <template>
-  <div class="p-6 bg-slate-50 dark:bg-[#0f172a] min-h-full text-slate-900 dark:text-white transition-colors duration-200">
-
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-6 gap-4 flex-wrap">
-      <h1 class="text-2xl font-bold flex items-center gap-3">
-        <span class="material-icons-round text-brand-600 dark:text-brand-400">move_to_inbox</span>
-        Входящие
-        <span
-          v-if="total > 0 && scope === 'active'"
-          class="inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-sm font-bold bg-red-500 text-white ml-1"
-        >{{ total }}</span>
-      </h1>
-
-      <div class="flex flex-wrap items-center gap-2">
-        <!-- Create Lead button -->
-        <button
-          class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700 active:scale-95 transition-all shadow-sm"
-          @click="openCreateModal"
-        >
-          <span class="material-icons-round text-[18px]">add</span>
-          Создать обращение
-        </button>
-
-        <!-- Scope filter -->
-        <div class="flex shrink-0 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium shadow-sm">
-          <button
-            v-for="opt in scopeOptions"
-            :key="opt.value"
-            class="px-4 py-2 transition-colors"
-            :class="scope === opt.value
-              ? 'bg-brand-600 text-white'
-              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'"
-            :aria-pressed="scope === opt.value"
-            @click="scope = opt.value"
-          >
-            {{ opt.label }}
-          </button>
-        </div>
+  <div class="inbox-workspace">
+    <header class="inbox-header">
+      <div><div class="eyebrow">ПЕРВИЧНЫЙ РАЗБОР</div><h1>Входящие</h1><p>Ожидают решения: {{ pendingCount }} · Непросмотрено: {{ unreadCount }}</p></div>
+      <div class="header-actions"><button type="button" class="inbox-button" :aria-expanded="showEmailImport" @click="showEmailImport = !showEmailImport">Проверить почту</button><button type="button" class="inbox-button" @click="openCreateModal">Создать обращение</button></div>
+    </header>
+    <EmailLeadImportPanel v-if="showEmailImport" @notice="setToast" @imported="onEmailImported" />
+    <section class="inbox-toolbar" aria-label="Фильтры обращений">
+      <div class="toolbar-first">
+        <div class="segments"><button v-for="opt in scopeOptions" :key="opt.value" type="button" :aria-pressed="scope === opt.value" @click="scope = opt.value">{{ opt.label }}</button></div>
+        <label class="inbox-search"><span class="material-icons-round" aria-hidden="true">search</span><span class="sr-only">Поиск по входящим обращениям</span><input v-model="search" type="search" placeholder="Найти обращение или клиента"><button v-if="search" type="button" aria-label="Очистить поиск" @click="search = ''"><span class="material-icons-round" aria-hidden="true">close</span></button></label>
       </div>
-    </div>
-
-    <EmailLeadImportPanel @notice="setToast" @imported="onEmailImported" />
-
-    <div class="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <label class="relative block max-w-xl flex-1">
-        <span class="sr-only">Поиск по входящим обращениям</span>
-        <span class="material-icons-round pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-slate-400">search</span>
-        <input
-          v-model="search"
-          type="search"
-          class="w-full rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-10 text-sm text-slate-800 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-          placeholder="Имя, телефон, email, УНП или текст обращения"
-        >
-        <button
-          v-if="search"
-          type="button"
-          class="absolute right-2 top-1/2 inline-flex -translate-y-1/2 rounded p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700"
-          aria-label="Очистить поиск"
-          @click="search = ''"
-        ><span class="material-icons-round text-[18px]">close</span></button>
-      </label>
-      <label class="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-        <span>Источник</span>
-        <select v-model="source" aria-label="Источник входящих" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-white">
-          <option v-for="option in sourceOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-        </select>
-      </label>
-      <p v-if="loading" class="text-sm text-slate-500 dark:text-slate-400" aria-live="polite">Обновляем список…</p>
-      <p v-else-if="loadError" class="text-sm text-red-600 dark:text-red-300" aria-live="polite">Список не загружен</p>
-      <p v-else class="text-sm text-slate-500 dark:text-slate-400" aria-live="polite">
-        Найдено: {{ total }}
-      </p>
-    </div>
+      <div class="toolbar-second">
+        <div class="channels" aria-label="Источник входящих"><button v-for="option in sourceOptions" :key="option.value" type="button" :aria-pressed="source === option.value" @click="source = option.value">{{ option.value ? option.label : 'Все' }}</button></div>
+        <div class="inbox-filters"><button type="button" :aria-pressed="unreadOnly" @click="unreadOnly = !unreadOnly"><span class="unread-dot" />Непросмотренные</button><select v-model="sort" aria-label="Сортировка входящих"><option value="deadline">Ближайший срок</option><option value="newest">Сначала новые</option></select></div>
+      </div>
+      <p class="result-count" aria-live="polite">{{ loading ? 'Обновляем список…' : `Найдено: ${total}` }}</p>
+    </section>
 
     <!-- Loading -->
     <div v-if="loading" class="flex items-center gap-3 text-slate-500 dark:text-slate-400 py-12 justify-center">
@@ -455,21 +409,25 @@ const onEmailImported = async () => {
     >
       <span class="material-icons-round text-5xl mb-3 block opacity-30">inbox</span>
       <p class="text-lg font-medium">
-        {{ search || source ? 'По этому запросу обращений нет' : (scope === 'active' ? 'Входящих нет — всё обработано!' : 'Архив пуст') }}
+        {{ search || source || unreadOnly ? 'По этому запросу обращений нет' : (scope === 'active' ? 'Входящих нет — всё обработано!' : 'Архив пуст') }}
       </p>
     </div>
 
     <!-- Feed -->
-    <div v-else class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+    <div v-else class="inbox-list">
       <LeadInboxCard
         v-for="item in items"
-        :key="item.id"
+        :key="`${item.entity_kind || 'order'}:${item.id}`"
         :item="item"
         :is-archive="scope === 'archive'"
+        :contact-saving="contactSaving"
         @qualify="qualifyTarget = $event"
         @review-source="sourceReviewTarget = $event"
-        @link-changed="load"
-        @reject="openRejectModal($event)"
+        @link-changed="notifyInboxChanged(); load()"
+        @updated="updateItem"
+        @details-closed="unreadOnly && load()"
+        @archived="archived"
+        @restore="restoreItem"
         @no-answer="markNoAnswer($event)"
       />
     </div>
@@ -484,9 +442,10 @@ const onEmailImported = async () => {
     <transition name="slide-up">
       <div
         v-if="toast"
-        class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl text-sm font-medium z-50"
+        role="status"
+        class="fixed bottom-6 left-1/2 w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl text-sm font-medium z-50"
       >
-        {{ toast }}
+        {{ toast }}<button v-if="undoTarget" type="button" class="ml-4 underline text-blue-200" :disabled="restoreSaving" @click="restoreItem(undoTarget)">Отменить</button>
       </div>
     </transition>
 
@@ -505,44 +464,6 @@ const onEmailImported = async () => {
       @close="sourceReviewTarget = null"
       @applied="handleSourceApplied"
     />
-
-    <!-- ── Reject Modal ───────────────────────────────── -->
-    <div
-      v-if="rejectTarget"
-      class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-      @click.self="rejectTarget = null"
-    >
-      <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-sm w-full p-6 space-y-4">
-        <h2 class="text-lg font-bold flex items-center gap-2">
-          <span class="material-icons-round text-red-500">cancel</span>
-          Отказать по обращению #{{ rejectTarget.id }}
-        </h2>
-        <p class="text-sm text-slate-600 dark:text-slate-300">
-          Обращение будет перемещено в архив со статусом <strong>«Отменена»</strong>.
-        </p>
-
-        <div>
-          <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">Причина отказа (опционально)</label>
-          <input
-            v-model="rejectReason"
-            type="text"
-            placeholder="Например: Дорого, Нецелевой, Спам"
-            class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500"
-          />
-        </div>
-
-        <div class="flex gap-3 pt-1">
-          <button
-            class="flex-1 py-2.5 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-700 transition-colors text-sm"
-            @click="confirmReject"
-          >⛔ Подтвердить</button>
-          <button
-            class="flex-1 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors text-sm"
-            @click="rejectTarget = null"
-          >Отмена</button>
-        </div>
-      </div>
-    </div>
 
     <!-- ── Create Lead Modal ───────────────────────────── -->
     <div
@@ -721,9 +642,15 @@ const onEmailImported = async () => {
   </div>
 </template>
 
+<style src="./lead-inbox.css"></style>
 <style scoped>
 .slide-up-enter-active,
-.slide-up-leave-active { transition: all 0.3s ease; }
+.slide-up-leave-active {
+  transition:  all 0.3s ease;
+}
 .slide-up-enter-from,
-.slide-up-leave-to { opacity: 0; transform: translate(-50%, 12px); }
+.slide-up-leave-to {
+  opacity:  0;
+  transform:  translate(-50%, 12px);
+}
 </style>

@@ -1,6 +1,7 @@
 """Manager review contract for Belzakupki source enrichment."""
 
 from pydantic import BaseModel, Field, field_validator
+from schemas_commercial_terms import ManagerCommercialTermsResponse
 
 
 class SourceCustomerDraft(BaseModel):
@@ -116,6 +117,7 @@ class SourceScenarioDraft(BaseModel):
 
 
 class ManagerOrderSourcePreview(BaseModel):
+    commercial_terms: ManagerCommercialTermsResponse | None = None
     order_id: int
     source_code: str
     external_id: str

@@ -24,6 +24,7 @@
 | Совместимость читателей денег услуг при поэтапном релизе | [Порядок выпуска](order-service-money-reader-compatibility.md) |
 | Карточка заказа и автосохранение | [Рабочая область заказа](order-workspace-usability.md), [автосохранение](manager-order-autosave.md), [декомпозиция](order-domain-refactor.md) |
 | Клиенты, канбан/таблица заказов и входящие | [Аудит и доработка рабочих страниц](manager-working-pages-usability.md) |
+| Входящие: прочтение, разбор, автоархив тендеров и условия документов | [Согласованный контракт и макет](incoming-triage-workspace.md) |
 | Генерация документов и шаблоны | [Архитектура](document-module-architecture.md), [DOCX-шаблоны](native-document-template-bundles.md), [плейсхолдеры](document-placeholders.md) |
 | ТН-2 и ТТН-1 | [Исследование форм и подготовленные макеты](waybill-template-research.md) |
 | Ремонт и акты дефекта | [Сценарии ремонта](repair-workflow-v1.md), [акт дефекта V3](bot-defect-act-v3.md) |

@@ -10,7 +10,7 @@ export const CONTRACT_SCENARIOS = [
 
 export type ContractScenario = typeof CONTRACT_SCENARIOS[number]['value'];
 export type PaymentDueEvent = 'before_supply' | 'before_work' | 'after_supply' | 'after_work' | 'after_acceptance';
-export type PaymentDayKind = 'calendar' | 'banking';
+export type PaymentDayKind = 'calendar' | 'banking' | 'working';
 
 export type PaymentScheduleItem = {
   share_percent: number;

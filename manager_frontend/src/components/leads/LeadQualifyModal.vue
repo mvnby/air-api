@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { api } from '../../api';
+import { ManagerLeadsService } from '../../client/services/ManagerLeadsService';
 import type { LeadsInboxItemResponse } from '../../api';
 import type { ManagerCustomerBranchItemResponse, ManagerOrderUpdatePayload } from '../../client';
 import { useBelarusPhoneMask } from '../../composables/useBelarusPhoneMask';
@@ -355,8 +356,31 @@ const submitQualify = async () => {
 
   isLoading.value = true;
   try {
-    await api.patchManagerOrder(props.lead.id, buildPayload());
-    emit('success', props.lead.id);
+    const payload = buildPayload();
+    if (props.lead.entity_kind === 'lead') {
+      const result = await ManagerLeadsService.qualifyManagerLead(props.lead.id, {
+        customer_id: payload.customer_id ?? undefined,
+        customer_branch_id: payload.customer_branch_id ?? undefined,
+        customer_type: payload.customer_type ?? undefined,
+        name: payload.customer_name,
+        phone: payload.customer_phone,
+        email: payload.customer_email,
+        inn: payload.customer_inn,
+        full_legal_name: payload.customer_full_legal_name,
+        legal_address: payload.customer_legal_address,
+        iban: payload.customer_iban,
+        bic: payload.customer_bic,
+        bank_name: payload.customer_bank_name,
+        delivery_address: payload.customer_delivery_address,
+        order_comment: payload.comment,
+        workflow_type: payload.workflow_type,
+        service_type: payload.service_type,
+      });
+      emit('success', result.order_id);
+    } else {
+      await api.patchManagerOrder(props.lead.id, payload);
+      emit('success', props.lead.id);
+    }
   } catch (e) {
     console.error(e);
     notify(getApiErrorMessage(e), 'error');

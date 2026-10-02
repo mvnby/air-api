@@ -1,6 +1,7 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../src/api';
+import { ManagerLeadsService } from '../src/client/services/ManagerLeadsService';
 import LeadQualifyModal from '../src/components/leads/LeadQualifyModal.vue';
 
 const wrappers: VueWrapper[] = [];
@@ -62,4 +63,19 @@ describe('LeadQualifyModal customer choice', () => {
     await flushPromises();
     expect(api.patchManagerOrder).toHaveBeenCalledWith(55, expect.objectContaining({ customer_id: 42 }));
   });
+  it('qualifies raw site leads through their dedicated contract and opens the resulting order', async () => {
+    const qualify = vi.spyOn(ManagerLeadsService, 'qualifyManagerLead').mockResolvedValue({ order_id: 109, customer_id: 42, lead_id: 55 } as never);
+    const wrapper = mount(LeadQualifyModal, { props: { lead: { ...lead, entity_kind: 'lead', status: 'new' } as never } });
+    wrappers.push(wrapper);
+    await flushPromises();
+    await wrapper.findAll('button').find(button => button.text().includes('Иван Петров'))!.trigger('click');
+    await flushPromises();
+    await wrapper.findAll('button').find(button => button.text() === 'Обслуживание')!.trigger('click');
+    await wrapper.findAll('button').find(button => button.text().includes('В переговоры'))!.trigger('click');
+    await flushPromises();
+    expect(qualify).toHaveBeenCalledWith(55, expect.objectContaining({ customer_id: 42, workflow_type: 'maintenance', service_type: 'maintenance' }));
+    expect(api.patchManagerOrder).not.toHaveBeenCalled();
+    expect(wrapper.emitted('success')).toEqual([[109]]);
+  });
+
 });

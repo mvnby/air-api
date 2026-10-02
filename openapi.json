@@ -17364,6 +17364,212 @@
         }
       }
     },
+    "/api/manager/orders/{order_id}/commercial-terms": {
+      "get": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "Get Terms",
+        "operationId": "get_manager_order_commercial_terms",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerCommercialTermsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "Update Terms",
+        "operationId": "update_manager_order_commercial_terms",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerCommercialTermsUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerCommercialTermsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/commercial-terms/extract": {
+      "post": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "Extract Terms",
+        "operationId": "extract_manager_order_commercial_terms",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerCommercialTermsExtract"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerCommercialTermsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/commercial-terms/document-defaults": {
+      "get": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "Get Defaults",
+        "operationId": "get_manager_order_commercial_document_defaults",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerCommercialDocumentDefaults"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/order-workspace-usage/batch": {
       "post": {
         "tags": [
@@ -18853,6 +19059,271 @@
         }
       }
     },
+    "/api/manager/leads/inbox/raw/{lead_id}": {
+      "get": {
+        "tags": [
+          "manager-leads-inbox"
+        ],
+        "summary": "Detail",
+        "operationId": "get_manager_raw_inbox_lead",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "lead_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Lead Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadsInboxDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/leads/inbox/raw/{lead_id}/read": {
+      "put": {
+        "tags": [
+          "manager-leads-inbox"
+        ],
+        "summary": "Mark Read",
+        "operationId": "set_manager_raw_inbox_lead_read",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "lead_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Lead Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InboxReadPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadsInboxDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/leads/inbox/raw/{lead_id}/archive": {
+      "post": {
+        "tags": [
+          "manager-leads-inbox"
+        ],
+        "summary": "Archive",
+        "operationId": "archive_manager_raw_inbox_lead",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "lead_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Lead Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InboxArchivePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadsInboxDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/leads/inbox/raw/{lead_id}/restore": {
+      "post": {
+        "tags": [
+          "manager-leads-inbox"
+        ],
+        "summary": "Restore",
+        "operationId": "restore_manager_raw_inbox_lead",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "lead_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Lead Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadsInboxDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/leads/inbox/raw/{lead_id}/no-answer": {
+      "post": {
+        "tags": [
+          "manager-leads-inbox"
+        ],
+        "summary": "No Answer",
+        "operationId": "record_manager_raw_inbox_lead_no_answer",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "lead_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Lead Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InboxNoAnswerPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadsInboxDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/leads/counter": {
       "get": {
         "tags": [
@@ -18886,7 +19357,7 @@
           "manager-leads-inbox"
         ],
         "summary": "Get Leads Inbox",
-        "description": "Unified inbox feed.\n\nscope=active  \u2192 new_lead + assessment, sorted by is_new DESC then created_at DESC.\nscope=archive \u2192 canceled or linked to an existing order.",
+        "description": "Unified inbox feed.\n\nscope=active  \u2192 unlinked, unarchived new_lead incoming records.\nscope=archive \u2192 canceled or linked to an existing order.",
         "operationId": "get_manager_leads_inbox",
         "security": [
           {
@@ -18960,6 +19431,30 @@
               ],
               "title": "Source"
             }
+          },
+          {
+            "name": "unread_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Unread Only"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "newest",
+                "deadline"
+              ],
+              "type": "string",
+              "default": "newest",
+              "title": "Sort"
+            }
           }
         ],
         "responses": {
@@ -18969,6 +19464,328 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/LeadsInboxListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/leads/inbox/{order_id}": {
+      "get": {
+        "tags": [
+          "manager-leads-inbox"
+        ],
+        "summary": "Get Inbox Detail",
+        "operationId": "get_manager_inbox_detail",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadsInboxDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/leads/inbox/{order_id}/read": {
+      "put": {
+        "tags": [
+          "manager-leads-inbox"
+        ],
+        "summary": "Set Inbox Read",
+        "operationId": "set_manager_inbox_read",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InboxReadPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadsInboxDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/leads/inbox/{order_id}/archive": {
+      "post": {
+        "tags": [
+          "manager-leads-inbox"
+        ],
+        "summary": "Archive Inbox Item",
+        "operationId": "archive_manager_inbox_item",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InboxArchivePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadsInboxDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/leads/inbox/{order_id}/restore": {
+      "post": {
+        "tags": [
+          "manager-leads-inbox"
+        ],
+        "summary": "Restore Inbox Item",
+        "operationId": "restore_manager_inbox_item",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadsInboxDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/leads/inbox/{order_id}/no-answer": {
+      "post": {
+        "tags": [
+          "manager-leads-inbox"
+        ],
+        "summary": "Record Inbox No Answer",
+        "operationId": "record_manager_inbox_no_answer",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InboxNoAnswerPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadsInboxDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/leads/inbox/{order_id}/tender": {
+      "patch": {
+        "tags": [
+          "manager-leads-inbox"
+        ],
+        "summary": "Set Inbox Tender",
+        "operationId": "set_manager_inbox_tender",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InboxTenderPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadsInboxDetailResponse"
                 }
               }
             }
@@ -34012,7 +34829,7 @@
         ],
         "title": "BulkSpecUpdate"
       },
-      "BusinessDocumentTermsPayload": {
+      "BusinessDocumentTermsPayload-Input": {
         "properties": {
           "contract_scenario": {
             "anyOf": [
@@ -34093,7 +34910,149 @@
           },
           "payment_schedule": {
             "items": {
-              "$ref": "#/components/schemas/PaymentScheduleItemPayload"
+              "$ref": "#/components/schemas/PaymentScheduleItemPayload-Input"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Payment Schedule"
+          },
+          "goods_warranty_months": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 240.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goods Warranty Months"
+          },
+          "goods_warranty_terms": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goods Warranty Terms"
+          },
+          "work_warranty_months": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 240.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Warranty Months"
+          },
+          "work_warranty_terms": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Warranty Terms"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "BusinessDocumentTermsPayload"
+      },
+      "BusinessDocumentTermsPayload-Output": {
+        "properties": {
+          "contract_scenario": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(framework|installation|maintenance|repair|services|supply|supply_installation)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Scenario"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          },
+          "delivery_deadline": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivery Deadline"
+          },
+          "performance_deadline": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Performance Deadline"
+          },
+          "valid_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid Until"
+          },
+          "additional_conditions": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 8000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Additional Conditions"
+          },
+          "additional_conditions_overridden": {
+            "type": "boolean",
+            "title": "Additional Conditions Overridden",
+            "default": false
+          },
+          "payment_schedule": {
+            "items": {
+              "$ref": "#/components/schemas/PaymentScheduleItemPayload-Output"
             },
             "type": "array",
             "maxItems": 20,
@@ -35813,6 +36772,126 @@
           "items"
         ],
         "title": "CatalogUsageReport"
+      },
+      "CommercialSourceTerm": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "payment",
+              "delivery"
+            ],
+            "title": "Kind"
+          },
+          "source": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "Source"
+          },
+          "evidence": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Evidence"
+          },
+          "share_percent": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Share Percent"
+          },
+          "due_days": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 3650.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Days"
+          },
+          "day_kind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "calendar",
+                  "banking",
+                  "working"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day Kind"
+          },
+          "due_event": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "before_supply",
+                  "before_work",
+                  "after_supply",
+                  "after_work",
+                  "after_acceptance"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Event"
+          },
+          "trigger_text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Text"
+          },
+          "deadline": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline"
+          },
+          "issues": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Issues"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "source",
+          "evidence"
+        ],
+        "title": "CommercialSourceTerm"
       },
       "CommonGalleryImageResponse": {
         "properties": {
@@ -40817,6 +41896,197 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "InboxArchivePayload": {
+        "properties": {
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "refusal",
+              "spam",
+              "duplicate"
+            ],
+            "title": "Outcome"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "profile",
+                  "region",
+                  "terms",
+                  "capacity",
+                  "unclear",
+                  "other"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "outcome"
+        ],
+        "title": "InboxArchivePayload"
+      },
+      "InboxNoAnswerPayload": {
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "next_followup_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Followup At"
+          }
+        },
+        "type": "object",
+        "title": "InboxNoAnswerPayload"
+      },
+      "InboxReadPayload": {
+        "properties": {
+          "is_read": {
+            "type": "boolean",
+            "title": "Is Read"
+          }
+        },
+        "type": "object",
+        "required": [
+          "is_read"
+        ],
+        "title": "InboxReadPayload"
+      },
+      "InboxRelatedRequest": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id",
+          "url"
+        ],
+        "title": "InboxRelatedRequest"
+      },
+      "InboxTenderPayload": {
+        "properties": {
+          "is_tender": {
+            "type": "boolean",
+            "title": "Is Tender"
+          },
+          "deadline_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline At"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "is_tender"
+        ],
+        "title": "InboxTenderPayload"
+      },
       "InferenceTest": {
         "properties": {
           "ok": {
@@ -43094,6 +44364,16 @@
           "has_new": {
             "type": "boolean",
             "title": "Has New"
+          },
+          "pending_count": {
+            "type": "integer",
+            "title": "Pending Count",
+            "default": 0
+          },
+          "unread_count": {
+            "type": "integer",
+            "title": "Unread Count",
+            "default": 0
           }
         },
         "type": "object",
@@ -43103,11 +44383,93 @@
         ],
         "title": "LeadsCounterResponse"
       },
-      "LeadsInboxItemResponse": {
+      "LeadsInboxArchiveResponse": {
+        "properties": {
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "refusal",
+              "spam",
+              "duplicate",
+              "deadline_expired",
+              "legacy_lost",
+              "linked"
+            ],
+            "title": "Outcome"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "archived_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "outcome"
+        ],
+        "title": "LeadsInboxArchiveResponse"
+      },
+      "LeadsInboxDetailResponse": {
         "properties": {
           "id": {
             "type": "integer",
             "title": "Id"
+          },
+          "entity_kind": {
+            "type": "string",
+            "enum": [
+              "order",
+              "lead"
+            ],
+            "title": "Entity Kind",
+            "default": "order"
+          },
+          "related_requests": {
+            "items": {
+              "$ref": "#/components/schemas/InboxRelatedRequest"
+            },
+            "type": "array",
+            "title": "Related Requests"
           },
           "status": {
             "type": "string",
@@ -43116,6 +44478,132 @@
           "is_new": {
             "type": "boolean",
             "title": "Is New"
+          },
+          "is_read": {
+            "type": "boolean",
+            "title": "Is Read",
+            "default": false
+          },
+          "read_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Read At"
+          },
+          "source_kind": {
+            "type": "string",
+            "enum": [
+              "customer_request",
+              "tender"
+            ],
+            "title": "Source Kind",
+            "default": "customer_request"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "budget_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Amount"
+          },
+          "budget_currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Currency"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "deadline_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline At"
+          },
+          "archive": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LeadsInboxArchiveResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "auto_archive_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Archive At"
           },
           "linked_order_id": {
             "anyOf": [
@@ -43205,6 +44693,23 @@
               }
             ],
             "title": "No Answer At"
+          },
+          "no_answer_count": {
+            "type": "integer",
+            "title": "No Answer Count",
+            "default": 0
+          },
+          "next_followup_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Followup At"
           },
           "source_created_at": {
             "anyOf": [
@@ -43325,6 +44830,509 @@
                 "type": "null"
               }
             ]
+          },
+          "commercial_terms_summary": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Commercial Terms Summary"
+          },
+          "original_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Text"
+          },
+          "original_text_truncated": {
+            "type": "boolean",
+            "title": "Original Text Truncated",
+            "default": false
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/LeadsInboxHistoryResponse"
+            },
+            "type": "array",
+            "title": "History"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "is_new",
+          "created_at"
+        ],
+        "title": "LeadsInboxDetailResponse"
+      },
+      "LeadsInboxHistoryResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "actor": {
+            "type": "string",
+            "title": "Actor"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "next_followup_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Followup At"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "actor",
+          "created_at"
+        ],
+        "title": "LeadsInboxHistoryResponse"
+      },
+      "LeadsInboxItemResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "entity_kind": {
+            "type": "string",
+            "enum": [
+              "order",
+              "lead"
+            ],
+            "title": "Entity Kind",
+            "default": "order"
+          },
+          "related_requests": {
+            "items": {
+              "$ref": "#/components/schemas/InboxRelatedRequest"
+            },
+            "type": "array",
+            "title": "Related Requests"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "is_new": {
+            "type": "boolean",
+            "title": "Is New"
+          },
+          "is_read": {
+            "type": "boolean",
+            "title": "Is Read",
+            "default": false
+          },
+          "read_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Read At"
+          },
+          "source_kind": {
+            "type": "string",
+            "enum": [
+              "customer_request",
+              "tender"
+            ],
+            "title": "Source Kind",
+            "default": "customer_request"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "budget_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Amount"
+          },
+          "budget_currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Currency"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "deadline_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline At"
+          },
+          "archive": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LeadsInboxArchiveResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "auto_archive_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Archive At"
+          },
+          "linked_order_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linked Order Id"
+          },
+          "customer_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Id"
+          },
+          "customer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Name"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "no_answer_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "No Answer At"
+          },
+          "no_answer_count": {
+            "type": "integer",
+            "title": "No Answer Count",
+            "default": 0
+          },
+          "next_followup_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Followup At"
+          },
+          "source_created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Created At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "customer_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Type"
+          },
+          "customer_inn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Inn"
+          },
+          "customer_full_legal_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Full Legal Name"
+          },
+          "customer_delivery_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Delivery Address"
+          },
+          "object_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Type"
+          },
+          "service_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Type"
+          },
+          "equipment_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Class"
+          },
+          "marketing_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marketing Source"
+          },
+          "attachment_count": {
+            "type": "integer",
+            "title": "Attachment Count",
+            "default": 0
+          },
+          "tender": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LeadsInboxTenderResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "commercial_terms_summary": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Commercial Terms Summary"
           }
         },
         "type": "object",
@@ -43351,6 +45359,16 @@
           },
           "meta": {
             "$ref": "#/components/schemas/Meta"
+          },
+          "pending_count": {
+            "type": "integer",
+            "title": "Pending Count",
+            "default": 0
+          },
+          "unread_count": {
+            "type": "integer",
+            "title": "Unread Count",
+            "default": 0
           }
         },
         "type": "object",
@@ -43697,7 +45715,7 @@
           "business_terms": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/BusinessDocumentTermsPayload"
+                "$ref": "#/components/schemas/BusinessDocumentTermsPayload-Input"
               },
               {
                 "type": "null"
@@ -47125,6 +49143,130 @@
           "supplier_name"
         ],
         "title": "ManagerCatalogQualitySupplierResponse"
+      },
+      "ManagerCommercialDocumentDefaults": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision"
+          },
+          "business_terms": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BusinessDocumentTermsPayload-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id",
+          "revision"
+        ],
+        "title": "ManagerCommercialDocumentDefaults"
+      },
+      "ManagerCommercialTermsExtract": {
+        "properties": {
+          "attachment_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "maxItems": 8,
+            "title": "Attachment Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ManagerCommercialTermsExtract"
+      },
+      "ManagerCommercialTermsResponse": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision",
+            "default": 0
+          },
+          "customer_requested": {
+            "items": {
+              "$ref": "#/components/schemas/CommercialSourceTerm"
+            },
+            "type": "array",
+            "title": "Customer Requested"
+          },
+          "proposed": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BusinessDocumentTermsPayload-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "suggested": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BusinessDocumentTermsPayload-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "confirmed": {
+            "type": "boolean",
+            "title": "Confirmed",
+            "default": false
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id"
+        ],
+        "title": "ManagerCommercialTermsResponse"
+      },
+      "ManagerCommercialTermsUpdate": {
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Revision"
+          },
+          "proposed": {
+            "$ref": "#/components/schemas/BusinessDocumentTermsPayload-Input"
+          },
+          "confirmed": {
+            "type": "boolean",
+            "title": "Confirmed",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_revision",
+          "proposed"
+        ],
+        "title": "ManagerCommercialTermsUpdate"
       },
       "ManagerCrmHealthReportResponse": {
         "properties": {
@@ -56974,6 +59116,16 @@
       },
       "ManagerOrderSourcePreview": {
         "properties": {
+          "commercial_terms": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerCommercialTermsResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "order_id": {
             "type": "integer",
             "title": "Order Id"
@@ -68334,7 +70486,7 @@
         ],
         "title": "PaymentResponse"
       },
-      "PaymentScheduleItemPayload": {
+      "PaymentScheduleItemPayload-Input": {
         "properties": {
           "share_percent": {
             "anyOf": [
@@ -68370,7 +70522,59 @@
           },
           "due_day_kind": {
             "type": "string",
-            "pattern": "^(banking|calendar)$",
+            "pattern": "^(banking|calendar|working)$",
+            "title": "Due Day Kind",
+            "default": "calendar"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "share_percent",
+          "due_event"
+        ],
+        "title": "PaymentScheduleItemPayload"
+      },
+      "PaymentScheduleItemPayload-Output": {
+        "properties": {
+          "share_percent": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,3}|(?=[\\d.]{1,6}0*$)\\d{0,3}\\.\\d{0,2}0*$)",
+            "title": "Share Percent"
+          },
+          "due_event": {
+            "type": "string",
+            "pattern": "^(after_acceptance|after_supply|after_work|before_supply|before_work)$",
+            "title": "Due Event"
+          },
+          "due_days": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 3650.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Days"
+          },
+          "due_day_kind": {
+            "type": "string",
+            "pattern": "^(banking|calendar|working)$",
             "title": "Due Day Kind",
             "default": "calendar"
           },

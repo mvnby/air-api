@@ -1,3 +1,4 @@
+import { leadInboxApi } from './services/lead-inbox';
 import {
     OpenAPI,
     LoginService,
@@ -1362,8 +1363,8 @@ export const api = {
 
     async getLeadsInbox(
         scope: 'active' | 'archive' = 'active', page = 1, limit = 50,
-        search?: string, source?: LeadSource,
+        search?: string, source?: LeadSource, unreadOnly = false, sort = 'newest',
     ) {
-        return await ManagerLeadsInboxService.getManagerLeadsInbox(scope, page, limit, search, source);
+        return await leadInboxApi.list(scope, page, limit, search, source, unreadOnly, sort);
     },
 };

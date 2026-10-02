@@ -332,7 +332,9 @@ async def test_email_lead_intake_creates_visible_inbox_order_and_dedupes_by_mess
     assert orders[0].storefront_id == TEST_TENANT_SCOPE.storefront_id
     assert orders[0].technical_meta["email_source_message_id"] == "<lead-1@example.test>"
     assert orders[0].technical_meta["email_source_fingerprint"]
-    assert orders[0].technical_meta["email_date"] == "2026-05-25T12:00"
+    assert orders[0].technical_meta["email_date"] == "2026-05-25T12:00+03:00"
+    assert orders[0].technical_meta["email_source_text"]
+    assert orders[0].technical_meta["email_source_text_truncated"] is False
     assert "торговом зале" in (orders[0].comment or "")
 
 
@@ -451,7 +453,7 @@ async def test_email_lead_intake_keeps_original_attachments_once_with_email_prov
         "sender_email": "ivan@example.com",
         "sender_name": "Иван Петров",
         "subject": "Монтаж кондиционера",
-        "email_date": "2026-05-25T12:00",
+        "email_date": "2026-05-25T12:00+03:00",
         "attachment_position": 0,
     }
     assert attachments[1].original_filename == "заявка.docx"
@@ -1769,3 +1771,26 @@ async def test_failed_offer_email_keeps_proposal_ready_to_send(sqlite_session, m
     assert refreshed_order.proposal_sent_at is None
     assert refreshed_order.negotiation_status == "awaiting_offer"
     assert refreshed_proposal.status == "ready_to_send"
+
+
+@pytest.mark.asyncio
+async def test_email_commercial_terms_use_original_not_ai_summary(sqlite_session, monkeypatch):
+    from services.order_commercial_terms_service import commercial_terms_response
+
+    async def classify(**_kwargs):
+        return {'is_potential_order': True, 'confidence': 0.95, 'name': 'Покупатель',
+                'segment_hint': 'b2c', 'request_text': 'Купить кондиционер'}
+
+    monkeypatch.setattr(EmailLeadIntakeService, 'classify_email', classify)
+    original = 'Нужен кондиционер. Оплата 100% в течение 50 календарных дней после выполнения работ.'
+    result = await EmailLeadIntakeService.process_email(sqlite_session, tenant_scope=TEST_TENANT_SCOPE,
+        sender_email='terms@example.test', sender_name='Покупатель', subject='Условия закупки',
+        raw_body=original, message_id='<terms-source@example.test>')
+    order = await sqlite_session.get(Order, result.order_id)
+    terms = commercial_terms_response(order)
+    assert order.technical_meta['email_source_text'] == original
+    assert terms.customer_requested[0].due_days == 50
+    assert terms.customer_requested[0].day_kind == 'calendar'
+    assert terms.customer_requested[0].due_event == 'after_work'
+    assert terms.suggested.payment_schedule[0].due_days == 50
+    assert terms.proposed is None and terms.confirmed is False

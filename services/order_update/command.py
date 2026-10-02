@@ -39,6 +39,10 @@ class OrderUpdateCommandService:
             if fields_set is None:
                 fields_set = getattr(payload, "__fields_set__", set())
 
+            if "status" in fields_set and getattr(payload, "status", None) is not None:
+                from services.inbox_eligibility import require_unarchived_inbox
+                await require_unarchived_inbox(session, "order", order_id)
+
             context = OrderUpdateContext(
                 session=session,
                 order_id=order_id,

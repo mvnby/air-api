@@ -2783,49 +2783,9 @@ class DashboardStatsResponse(BaseModel):
 
 # --- LEADS INBOX ---
 
-class LeadsCounterResponse(BaseModel):
-    count: int
-    has_new: bool
-
-
-class LeadsInboxTenderResponse(BaseModel):
-    source: Optional[str] = None
-    url: Optional[str] = None
-    deadline_at: Optional[datetime] = None
-    reason: Optional[str] = None
-    profile_name: Optional[str] = None
-
-
-class LeadsInboxItemResponse(BaseModel):
-    id: int
-    status: str
-    is_new: bool
-    linked_order_id: Optional[int] = None
-    customer_id: Optional[int] = None
-    customer_name: Optional[str] = None
-    phone: Optional[str] = None
-    email: Optional[str] = None
-    source: Optional[str] = None
-    comment: Optional[str] = None
-    no_answer_at: Optional[datetime] = None
-    source_created_at: Optional[datetime] = None
-    created_at: datetime
-    customer_type: Optional[str] = None
-    customer_inn: Optional[str] = None
-    customer_full_legal_name: Optional[str] = None
-    customer_delivery_address: Optional[str] = None
-    object_type: Optional[str] = None
-    service_type: Optional[str] = None
-    equipment_class: Optional[str] = None
-    marketing_source: Optional[str] = None
-    attachment_count: int = 0
-    tender: Optional[LeadsInboxTenderResponse] = None
-
-
-class LeadsInboxListResponse(BaseModel):
-    items: List[LeadsInboxItemResponse]
-    total: int
-    meta: Meta
+from schemas_leads_inbox import (
+    LeadsCounterResponse, LeadsInboxTenderResponse, LeadsInboxItemResponse, LeadsInboxListResponse,
+)
 
 
 # --- CATALOG IMPORT (universal) ---

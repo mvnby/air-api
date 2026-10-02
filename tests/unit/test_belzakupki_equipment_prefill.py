@@ -1,5 +1,6 @@
 from unittest.mock import AsyncMock, MagicMock
 from decimal import Decimal
+from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -8,6 +9,7 @@ from sqlmodel import SQLModel
 from models import Brand, LeadSource, Order, OrderProductLink, OrderProposal, OrderStatus, Product, ProductTagLink, Tag, Tenant, TenantCatalogGrant, TenantOffer
 from models.supplier import ProductLocalStock, ProductSupplierMapping, Supplier, SupplierOffer
 from models.tenancy import TenantScope
+from models.leads_inbox import InboxTriageState
 from schemas_belzakupki_enrichment import ManagerOrderSourceApply, SourceEquipmentDraft, SourceObjectDraft
 from services.belzakupki_enrichment_service import BelzakupkiEnrichmentService
 from services.belzakupki_equipment_prefill import (
@@ -73,6 +75,7 @@ def _session(lines):
     result.scalars.return_value.all.return_value = lines
     session = AsyncMock()
     session.execute.return_value = result
+    session.get.return_value = None
     added = []
     def add(item):
         if isinstance(item, OrderProductLink):
@@ -216,6 +219,29 @@ async def test_explicit_empty_or_null_objects_never_replay_saved_equipment(monke
     await BelzakupkiEnrichmentService.apply(session, order_id=3, scope=TenantScope(tenant_id=1, storefront_id=1),
                                           payload=ManagerOrderSourceApply(customer_action="skip", objects=objects), username="manager")
     prefill.assert_not_awaited()
+    assert not lines
+
+
+@pytest.mark.asyncio
+async def test_source_apply_rejects_archived_inbox_before_loading_source(monkeypatch):
+    order = Order(id=3, tenant_id=1, storefront_id=1, status=OrderStatus.NEW_LEAD)
+    session, lines = _session([])
+    session.get.return_value = InboxTriageState(
+        entity_kind="order", entity_id=3, order_id=3, tenant_id=1, storefront_id=1,
+        archived_at=datetime.now(timezone.utc), outcome="refusal",
+    )
+    monkeypatch.setattr(BelzakupkiEnrichmentService, "_order", AsyncMock(return_value=order))
+    detail = AsyncMock()
+    monkeypatch.setattr(BelzakupkiEnrichmentService, "_detail", detail)
+
+    with pytest.raises(ValueError, match="Сначала восстановите"):
+        await BelzakupkiEnrichmentService.apply(
+            session, order_id=3, scope=TenantScope(tenant_id=1, storefront_id=1),
+            payload=ManagerOrderSourceApply(customer_action="skip"), username="manager",
+        )
+
+    detail.assert_not_awaited()
+    session.commit.assert_not_awaited()
     assert not lines
 
 
