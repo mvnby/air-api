@@ -97,6 +97,8 @@ export const useServiceDescriptionMode = () => {
     const fullDescription = String(option.full_description || '').trim() || null;
     const mode: ServiceDescriptionMode = requestedMode === 'full' && fullDescription ? 'full' : 'short';
     const title = resolveServiceDescription(shortName, fullDescription, mode);
+    // Changing an installation into another service must not keep its old scope.
+    const clearInstallationScope = Boolean(row.installation_standard);
     Object.assign(row, {
       service_id: null,
       tariff_id: option.tariff_id,
@@ -109,6 +111,7 @@ export const useServiceDescriptionMode = () => {
       price: Math.round(Number(option.price || 0) * 100) / 100,
       cost: 0,
       installation_standard: null,
+      ...(clearInstallationScope ? { description: null } : {}),
     });
   };
 

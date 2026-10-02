@@ -70,6 +70,10 @@ describe('useOrderCommercialEditor', () => {
     Object.assign(line, { title: 'Согласованный монтаж', price: 550.50, description: 'До 5 метров; монтаж лесов' });
     expect(editor.buildLinesPayload(17).services[0]).toMatchObject({ title: 'Согласованный монтаж', price: 550.5, quantity: 27, description: 'До 5 метров; монтаж лесов' });
     expect(editor.validateLines()).toBe('');
+    editor.selectServiceTariffForLine(0, { tariff_id: 91, service_kind: 'maintenance',
+      title: 'Обслуживание', short_name: 'Обслуживание', price: '150.25' });
+    expect(editor.serviceLines.value[0]).toMatchObject({ title: 'Обслуживание',
+      price: 150.25, description: null, installation_standard: null });
   });
 
   it('edits a legacy display group as a manual commercial row without changing the accepted source', () => {
