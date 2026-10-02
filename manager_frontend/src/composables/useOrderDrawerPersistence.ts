@@ -128,6 +128,7 @@ export const useOrderDrawerPersistence = ({
           template_full_description: line.template_full_description || null,
           template_applied_text: line.template_applied_text || null,
           description_mode: line.description_mode === 'full' ? 'full' : 'short',
+          installation_standard: line.installation_standard || null,
         }));
       }
     } catch (error) {

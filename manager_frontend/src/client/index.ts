@@ -387,6 +387,9 @@ export type { ManagerInstallationRateListResponse } from './models/ManagerInstal
 export type { ManagerInstallationRateResponse } from './models/ManagerInstallationRateResponse';
 export type { ManagerInstallationRateSelectionStatus } from './models/ManagerInstallationRateSelectionStatus';
 export type { ManagerInstallationRateUpdatePayload } from './models/ManagerInstallationRateUpdatePayload';
+export type { ManagerInstallationStandardSuggestion } from './models/ManagerInstallationStandardSuggestion';
+export type { ManagerInstallationStandardSuggestionsPayload } from './models/ManagerInstallationStandardSuggestionsPayload';
+export type { ManagerInstallationStandardSuggestionsResponse } from './models/ManagerInstallationStandardSuggestionsResponse';
 export type { ManagerInstallationStandardTariff } from './models/ManagerInstallationStandardTariff';
 export type { ManagerInstallationStandardTariffList } from './models/ManagerInstallationStandardTariffList';
 export type { ManagerInstallerCreatePayload } from './models/ManagerInstallerCreatePayload';

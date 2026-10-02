@@ -63,6 +63,20 @@ beforeEach(() => {
 });
 
 describe('OrderInstallationEstimatePanel', () => {
+  it('offers reset before calculating and retains the available equipment after clearing a draft', async () => {
+    const wrapper = mountPanel();
+    await prepare(wrapper);
+    await wrapper.findAll('button').find((button) => button.text() === 'Сбросить расчёт')!.trigger('click');
+    expect(wrapper.get('[data-testid="installation-product"]').element).toHaveProperty('checked', false);
+    expect(wrapper.find('[data-testid="installation-card-work"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Нет оплачиваемого оборудования');
+    expect(service.previewManagerInstallationEstimate).not.toHaveBeenCalled();
+    await wrapper.get('[data-testid="installation-product"]').setValue(true);
+    await flushPromises();
+    expect(wrapper.get('[data-testid="installation-standard-summary"]').text()).toContain('Трасса 3 м');
+    wrapper.unmount();
+  });
+
   it('adds standard installation to the remaining ready-to-send proposal after the active proposal is archived', async () => {
     const wrapper = mountPanel();
     service.getManagerOrderDetail.mockResolvedValue({ ...order, proposals: [

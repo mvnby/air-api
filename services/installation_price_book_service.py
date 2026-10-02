@@ -63,6 +63,10 @@ class InstallationPriceBookService:
                 label = "Проход основной стены до 80 см" if kind == "shared_pass_through" else cls._measured_label(f"hole.{kind}")
                 parts.append(f"{label}: {cls._quantity_text(Decimal(quantity))} шт")
         parts.extend(cls.STANDARD_INCLUDED_SCOPE)
+        parts.extend([
+            "Не включены: дренажный насос, вышка, леса, дополнительная трасса",
+            "Новая линия от щита и отдельная розетка — по согласованию",
+        ])
         return "; ".join(parts)
     RESOLVER_VERSION = "installation-book-v1"
     _WORK_LABELS = {
@@ -452,6 +456,13 @@ class InstallationPriceBookService:
         if projection is None:
             return None, {}
         product: Product = projection.product
+        return cls._product_profile(product)
+
+    @classmethod
+    def _product_profile(
+        cls, product: Product, *, basic_only: bool = False,
+    ) -> tuple[TypedInstallationProfile | None, dict[str, str]]:
+        """Canonical profile extraction shared by resolve and batched recommendations."""
         if not product.is_published:
             return None, {}
         specs = product.specs if isinstance(product.specs, dict) else {}
@@ -477,7 +488,11 @@ class InstallationPriceBookService:
         values: dict[str, Any] = {"product_kind": product_kind,
                                   "indoor_type": None if product_kind == "multi_split_system" else indoor_type,
                                   "capacity_cooling_kw": capacity, "confirmed": True}
-        for key in ("pipe_liquid", "pipe_gas", "weight_indoor", "weight_outdoor", "weight_indoor_package", "weight_outdoor_package"):
+        detail_keys = () if basic_only else (
+            "pipe_liquid", "pipe_gas", "weight_indoor", "weight_outdoor",
+            "weight_indoor_package", "weight_outdoor_package",
+        )
+        for key in detail_keys:
             raw = _spec_value(specs, key)
             if raw is not None:
                 values[key] = cls._single_quantity(raw, kind="weight") if key.startswith("weight_") else str(raw).strip()

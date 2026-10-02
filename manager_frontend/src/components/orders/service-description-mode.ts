@@ -1,5 +1,5 @@
 import { ref } from 'vue';
-import type { ManagerQuickTariffResponse } from '../../client';
+import type { ManagerQuickTariffResponse, ManagerInstallationStandardTariff } from '../../client';
 
 export type ServiceDescriptionMode = 'short' | 'full';
 
@@ -19,6 +19,7 @@ export type ServiceDescriptionLine = {
   template_full_description?: string | null;
   template_applied_text?: string | null;
   description_mode?: ServiceDescriptionMode;
+  installation_standard?: ManagerInstallationStandardTariff | null;
 };
 
 const STORAGE_KEY = 'manager.service-description-mode';
@@ -78,10 +79,26 @@ export const useServiceDescriptionMode = () => {
     option: ManagerQuickTariffResponse,
     requestedMode: ServiceDescriptionMode = preferredMode.value,
   ) => {
+    if (option.installation_standard) {
+      Object.assign(row, {
+        service_id: null, tariff_id: null,
+        title: option.short_name || option.title,
+        description: option.full_description || null,
+        quantity: Math.max(1, Number(row.quantity || 1)),
+        price: Math.round(Number(option.price || 0) * 100) / 100,
+        cost: 0,
+        installation_standard: option.installation_standard,
+        template_short_name: null, template_full_description: null, template_applied_text: null,
+        description_mode: 'short',
+      });
+      return;
+    }
     const shortName = option.short_name || option.title || 'Услуга';
     const fullDescription = String(option.full_description || '').trim() || null;
     const mode: ServiceDescriptionMode = requestedMode === 'full' && fullDescription ? 'full' : 'short';
     const title = resolveServiceDescription(shortName, fullDescription, mode);
+    // Changing an installation into another service must not keep its old scope.
+    const clearInstallationScope = Boolean(row.installation_standard);
     Object.assign(row, {
       service_id: null,
       tariff_id: option.tariff_id,
@@ -91,8 +108,10 @@ export const useServiceDescriptionMode = () => {
       description_mode: mode,
       title,
       quantity: Math.max(1, Number(row.quantity || 1)),
-      price: Math.round(Number(option.price || 0)),
+      price: Math.round(Number(option.price || 0) * 100) / 100,
       cost: 0,
+      installation_standard: null,
+      ...(clearInstallationScope ? { description: null } : {}),
     });
   };
 

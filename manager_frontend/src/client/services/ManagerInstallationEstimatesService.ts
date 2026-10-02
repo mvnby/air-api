@@ -11,6 +11,8 @@ import type { ManagerInstallationConfirmResponse } from '../models/ManagerInstal
 import type { ManagerInstallationEstimateRevisionResponse } from '../models/ManagerInstallationEstimateRevisionResponse';
 import type { ManagerInstallationPreviewPayload } from '../models/ManagerInstallationPreviewPayload';
 import type { ManagerInstallationPreviewResponse } from '../models/ManagerInstallationPreviewResponse';
+import type { ManagerInstallationStandardSuggestionsPayload } from '../models/ManagerInstallationStandardSuggestionsPayload';
+import type { ManagerInstallationStandardSuggestionsResponse } from '../models/ManagerInstallationStandardSuggestionsResponse';
 import type { ManagerInstallationStandardTariffList } from '../models/ManagerInstallationStandardTariffList';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
@@ -25,6 +27,25 @@ export class ManagerInstallationEstimatesService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/manager/installation-estimates/standard-tariffs',
+        });
+    }
+    /**
+     * Suggest Manager Installation Standard Tariffs
+     * @param requestBody
+     * @returns ManagerInstallationStandardSuggestionsResponse Successful Response
+     * @throws ApiError
+     */
+    public static suggestManagerInstallationStandardTariffs(
+        requestBody: ManagerInstallationStandardSuggestionsPayload,
+    ): CancelablePromise<ManagerInstallationStandardSuggestionsResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/installation-estimates/standard-suggestions',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
         });
     }
     /**

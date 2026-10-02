@@ -10,6 +10,7 @@ from pydantic import (
     model_serializer,
 )
 from datetime import datetime
+from decimal import Decimal
 from enum import Enum
 from core.input_validation import (
     validate_optional_bic,
@@ -41,6 +42,7 @@ from schemas_installation_estimate import (
     InstallationEstimateLeadResponse,
 )
 from schemas_installation_price_book import InstallationMatcher, PriceMode
+from schemas_installation_confirmation import ManagerInstallationStandardTariff
 from schemas_catalog import CatalogRevisionResponse
 from schemas_common import Meta
 from schemas_manager_installers import (
@@ -3194,13 +3196,14 @@ class ManagerTariffListResponse(BaseModel):
 
 
 class ManagerQuickTariffResponse(BaseModel):
-    tariff_id: int
+    tariff_id: int | None = None
     service_kind: ManagerTariffServiceKind
     short_name: str
     full_description: Optional[str] = None
     # Compatibility title for Manager builds deployed before description modes.
     title: str
-    price: int
+    price: Decimal
+    installation_standard: ManagerInstallationStandardTariff | None = None
     category: str = ""
     power_range: str = ""
     included_route_meters: float = 0.0

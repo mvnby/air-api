@@ -14,6 +14,7 @@ from routers.manager_operation_ids import (
     GET_MANAGER_INSTALLATION_ESTIMATE_REVISION, PREVIEW_MANAGER_INSTALLATION_ESTIMATE,
     RESOLVE_MANAGER_INSTALLATION_TARIFF,
     LIST_MANAGER_INSTALLATION_STANDARD_TARIFFS,
+    SUGGEST_MANAGER_INSTALLATION_STANDARD_TARIFFS,
 )
 from routers.manager_permission_policy import ManagerPermissionRoute
 from schemas_installation_confirmation import (
@@ -22,6 +23,7 @@ from schemas_installation_confirmation import (
     ManagerInstallationEstimateRevisionResponse,
     ManagerInstallationPreviewResponse,
     ManagerInstallationPreviewPayload, ManagerInstallationStandardTariffList,
+    ManagerInstallationStandardSuggestionsPayload, ManagerInstallationStandardSuggestionsResponse,
 )
 from schemas_installation_price_book import (
     InstallationPreviewPayload, InstallationPreviewResponse,
@@ -31,7 +33,7 @@ from services.installation_estimate_confirmation_service import (
     InstallationEstimateConfirmationService, InstallationPriceChanged,
 )
 from services.installation_price_book_service import InstallationPriceBookService
-from services.installation_standard_catalogue_service import list_standard_tariffs
+from services.installation_standard_catalogue_service import list_standard_tariffs, suggest_standard_tariffs
 from services.public_write_idempotency_service import (
     PublicWriteIdempotencyConflict, PublicWriteIdempotencyUnavailable,
 )
@@ -70,6 +72,16 @@ async def list_manager_installation_standard_tariffs(
     scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     return await list_standard_tariffs(session, scope)
+
+
+@router.post("/standard-suggestions", response_model=ManagerInstallationStandardSuggestionsResponse,
+             operation_id=SUGGEST_MANAGER_INSTALLATION_STANDARD_TARIFFS)
+async def suggest_manager_installation_standard_tariffs(
+    payload: ManagerInstallationStandardSuggestionsPayload,
+    session: AsyncSession = Depends(get_session),
+    scope: TenantScope = Depends(get_current_manager_tenant_scope),
+):
+    return await suggest_standard_tariffs(session, scope, payload.product_ids)
 
 
 @router.post("/resolve", response_model=InstallationResolveResponse,

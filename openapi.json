@@ -23677,7 +23677,7 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "maximum": 50,
+              "maximum": 100,
               "minimum": 1,
               "default": 10,
               "title": "Limit"
@@ -24453,6 +24453,52 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ManagerInstallationStandardTariffList"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/installation-estimates/standard-suggestions": {
+      "post": {
+        "tags": [
+          "manager/installation-estimates"
+        ],
+        "summary": "Suggest Manager Installation Standard Tariffs",
+        "operationId": "suggest_manager_installation_standard_tariffs",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerInstallationStandardSuggestionsPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerInstallationStandardSuggestionsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -52768,6 +52814,54 @@
         "title": "ManagerInstallationRateUpdatePayload",
         "description": "Only checkout prices and explanatory text are editable from Manager."
       },
+      "ManagerInstallationStandardSuggestion": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "tariff": {
+            "$ref": "#/components/schemas/ManagerInstallationStandardTariff"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "tariff"
+        ],
+        "title": "ManagerInstallationStandardSuggestion"
+      },
+      "ManagerInstallationStandardSuggestionsPayload": {
+        "properties": {
+          "product_ids": {
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0.0
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Product Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_ids"
+        ],
+        "title": "ManagerInstallationStandardSuggestionsPayload"
+      },
+      "ManagerInstallationStandardSuggestionsResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerInstallationStandardSuggestion"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "title": "ManagerInstallationStandardSuggestionsResponse"
+      },
       "ManagerInstallationStandardTariff": {
         "properties": {
           "code": {
@@ -52814,6 +52908,52 @@
             },
             "type": "object",
             "title": "Holes By Type"
+          },
+          "capacity_min_kw": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capacity Min Kw"
+          },
+          "capacity_max_kw": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capacity Max Kw"
+          },
+          "capacity_min_inclusive": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capacity Min Inclusive"
+          },
+          "capacity_max_inclusive": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capacity Max Inclusive"
           }
         },
         "type": "object",
@@ -60271,7 +60411,14 @@
       "ManagerQuickTariffResponse": {
         "properties": {
           "tariff_id": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Tariff Id"
           },
           "service_kind": {
@@ -60297,8 +60444,19 @@
             "title": "Title"
           },
           "price": {
-            "type": "integer",
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Price"
+          },
+          "installation_standard": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerInstallationStandardTariff"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "category": {
             "type": "string",
@@ -60318,7 +60476,6 @@
         },
         "type": "object",
         "required": [
-          "tariff_id",
           "service_kind",
           "short_name",
           "title",

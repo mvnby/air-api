@@ -466,6 +466,14 @@ const startNew = () => {
   notice.value = 'Измените параметры и рассчитайте новую смету. Уже прикреплённые строки сохранятся.';
   save();
 };
+const clearCalculation = () => {
+  if (busy.value || attachRetryRequired.value) return;
+  const availableProducts = products.value;
+  sessionStorage.removeItem(storageKey.value);
+  reset();
+  products.value = availableProducts;
+  open.value = true;
+};
 const addCalculated = async () => {
   const scope = capture();
   if (!preview.value || preview.value.status !== 'fixed') return;
@@ -545,8 +553,11 @@ defineExpose({ openPanel, actionBusy: computed(() => busy.value || quickBusy.val
     <p v-if="error && !open" role="alert" class="mt-2 text-sm text-red-700">{{ error }}</p>
     <p v-if="notice && !open" role="status" class="mt-2 text-sm text-emerald-700">{{ notice }}</p>
     <div v-if="open" class="mt-3 space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
-      <button v-if="hideActions" type="button" class="btn-mini-outline ml-auto flex text-xs" :disabled="busy || quickBusy" @click="show">Закрыть расчёт</button>
-      <p class="text-slate-600">Расчёт относится к текущему черновику предложения. Строки и суммы берутся из опубликованной книги цен.</p>
+      <div class="flex flex-wrap justify-end gap-2">
+        <button type="button" class="btn-mini-outline text-xs" :disabled="busy || quickBusy || attachRetryRequired" @click="clearCalculation">Сбросить расчёт</button>
+        <button v-if="hideActions" type="button" class="btn-mini-outline text-xs" :disabled="busy || quickBusy" @click="show">Закрыть расчёт</button>
+      </div>
+      <p class="text-slate-600">Необязательная подробная смета по оборудованию. Для ручной цены или стандартного тарифа используйте «+ Услуга» — этот расчёт не ограничивает строки предложения.</p>
       <div class="flex flex-wrap gap-2">
         <button type="button" class="btn-mini-outline" :class="source === 'proposal' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || quickBusy || Boolean(confirmed)" @click="source = 'proposal'">Товар в предложении</button>
         <button type="button" class="btn-mini-outline" :class="source === 'manual' ? 'border-brand-500 bg-brand-50 text-brand-700' : ''" :disabled="busy || quickBusy || Boolean(confirmed)" @click="source = 'manual'">Без товара</button>

@@ -1,7 +1,9 @@
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { defineComponent, h, ref } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
 import OrderProposalWorkspace from '../src/components/orders/OrderProposalWorkspace.vue';
+import { ManagerInstallationEstimatesService } from '../src/client';
+vi.spyOn(ManagerInstallationEstimatesService, 'suggestManagerInstallationStandardTariffs').mockResolvedValue({ items: [] });
 import OrderProductLinesEditor from '../src/components/orders/OrderProductLinesEditor.vue';
 
 const sectionStub = {
@@ -273,7 +275,7 @@ describe('OrderProposalWorkspace', () => {
     wrapper.unmount();
   });
 
-  it('routes shared add actions through the real editors and the installation panel capability', async () => {
+  it('creates a manual service immediately without opening an estimate or another picker', async () => {
     const addStandard = vi.fn();
     const fixture = createWorkspaceFixture({
       productLines: [{ link_id: 88, product_id: 501, product_query: 'Nova', quantity: 1, price: 1_200, cost: 700 }],
@@ -282,21 +284,13 @@ describe('OrderProposalWorkspace', () => {
       props: fixture.props,
       global: { stubs: sharedStubs(addStandard) },
     });
-
     await wrapper.get('[data-testid="add-product-line"]').trigger('click');
     expect(fixture.commercial.addProductLine).toHaveBeenCalledOnce();
-
     await wrapper.get('[data-testid="add-service-line"]').trigger('click');
-    expect(wrapper.get('[data-testid="service-catalog-picker-stub"]').isVisible()).toBe(true);
-    await wrapper.get('[data-testid="service-catalog-picker-stub"] button').trigger('click');
-
-    await wrapper.get('[data-testid="installation-standard-add"]').trigger('click');
-    expect(addStandard).toHaveBeenCalledOnce();
+    expect(fixture.commercial.addServiceLine).toHaveBeenCalledOnce();
     expect(wrapper.find('[data-testid="service-catalog-picker-stub"]').exists()).toBe(false);
-
-    fixture.commercial.productLines.value = [];
-    await wrapper.get('[data-testid="installation-standard-add"]').trigger('click');
-    expect(addStandard).toHaveBeenCalledOnce();
-    expect(wrapper.get('[data-testid="service-catalog-picker-stub"]').isVisible()).toBe(true);
+    expect(wrapper.find('[data-testid="installation-standard-add"]').exists()).toBe(false);
+    expect(addStandard).not.toHaveBeenCalled();
+    wrapper.unmount();
   });
 });

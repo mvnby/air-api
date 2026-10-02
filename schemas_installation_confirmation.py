@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
@@ -23,11 +23,28 @@ class ManagerInstallationStandardTariff(BaseModel):
     indoor_type: str | None = None
     route_m: Decimal
     holes_by_type: dict[str, Decimal]
+    capacity_min_kw: Decimal | None = None
+    capacity_max_kw: Decimal | None = None
+    capacity_min_inclusive: bool | None = None
+    capacity_max_inclusive: bool | None = None
 
 
 class ManagerInstallationStandardTariffList(BaseModel):
     price_book_revision: int | None = None
     items: list[ManagerInstallationStandardTariff] = Field(default_factory=list)
+
+
+class ManagerInstallationStandardSuggestionsPayload(BaseModel):
+    product_ids: list[Annotated[int, Field(gt=0, strict=True)]] = Field(max_length=100)
+
+
+class ManagerInstallationStandardSuggestion(BaseModel):
+    product_id: int
+    tariff: ManagerInstallationStandardTariff
+
+
+class ManagerInstallationStandardSuggestionsResponse(BaseModel):
+    items: list[ManagerInstallationStandardSuggestion] = Field(default_factory=list)
 
 
 class ManagerInstallationConfirmPayload(BaseModel):

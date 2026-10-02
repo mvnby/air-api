@@ -185,7 +185,7 @@ async def test_manager_quick_tariffs_search_active_only(async_client, db):
     items = response.json()["items"]
     assert len(items) == 1
     assert items[0]["tariff_id"] == active.id
-    assert items[0]["price"] == 500
+    assert items[0]["price"] == "500"
     assert items[0]["title"] == "Монтаж настенного кондиционера, мощностью до 3,5 кВт, включая трассу длиной до 3 м"
 
     all_kinds_resp = await async_client.get(

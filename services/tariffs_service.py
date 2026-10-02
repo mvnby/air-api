@@ -1,5 +1,6 @@
 import logging
 import re
+from decimal import Decimal
 from typing import List, Optional
 
 from fastapi import HTTPException, status
@@ -107,7 +108,7 @@ class TariffsService:
             short_name=tariff.effective_short_name or "Услуга",
             full_description=(tariff.full_description or "").strip() or None,
             title=TariffsService.build_quick_add_title(tariff),
-            price=int(tariff.base_price or 0),
+            price=Decimal(str(tariff.base_price or 0)),
             category=tariff.category or "",
             power_range=tariff.power_range or "",
             included_route_meters=float(tariff.included_route_meters or 0),
@@ -153,13 +154,17 @@ class TariffsService:
         limit: int = 10,
         tenant_scope: TenantScope | None = None,
     ) -> List[ManagerQuickTariffResponse]:
-        from services.legacy_installation_estimate_policy import LegacyInstallationEstimatePolicy
+        from services.installation_price_book_service import InstallationPriceBookService as Book
+        from services.installation_standard_catalogue_service import project_standard_tariff, standard_entries
+
+        bounded_limit = max(1, min(int(limit or 10), 100))
+        book = await Book.latest(session, tenant_scope) if tenant_scope is not None else None
 
         stmt = select(ServiceTariff).where(  # noqa: E712
             TariffsService._scope_clause(tenant_scope),
             ServiceTariff.is_active == True,
         )
-        if tenant_scope is not None and await LegacyInstallationEstimatePolicy.book_is_published(session, tenant_scope):
+        if book is not None:
             stmt = stmt.where(ServiceTariff.service_kind != "installation")
         if service_kind is not None:
             kind_value = service_kind.value if hasattr(service_kind, "value") else str(service_kind)
@@ -196,9 +201,36 @@ class TariffsService:
         ]
         if relevance_order is not None:
             order_by.insert(0, relevance_order)
-        stmt = stmt.order_by(*order_by).limit(max(1, min(int(limit or 10), 50)))
+        stmt = stmt.order_by(*order_by).limit(bounded_limit)
         result = await session.execute(stmt)
-        return [TariffsService._map_quick_tariff(tariff) for tariff in result.scalars().all()]
+        items = [TariffsService._map_quick_tariff(tariff) for tariff in result.scalars().all()]
+        if service_kind is None or service_kind == ManagerTariffServiceKind.installation:
+            standards = []
+            for entry, match in standard_entries(book):
+                standard = project_standard_tariff(entry, match)
+                category = standard.indoor_type or ""
+                if query and query.casefold() not in " ".join((
+                    standard.title, standard.description, category, entry.get("short_name", ""),
+                )).casefold():
+                    continue
+                standards.append(ManagerQuickTariffResponse(
+                    service_kind=ManagerTariffServiceKind.installation,
+                    short_name=standard.title, full_description=standard.description,
+                    title=standard.title, price=standard.price, category=category,
+                    included_route_meters=float(standard.route_m), installation_standard=standard,
+                ))
+            items = standards + items
+        if query:
+            # Apply the same relevance ordering to both published and ordinary choices.
+            folded = query.casefold()
+            def relevance(item):
+                if item.short_name.casefold().startswith(folded):
+                    return 0
+                if (item.full_description or "").casefold().startswith(folded):
+                    return 1
+                return 2
+            items.sort(key=relevance)
+        return items[:bounded_limit]
 
     @staticmethod
     async def get_tariff_by_id(

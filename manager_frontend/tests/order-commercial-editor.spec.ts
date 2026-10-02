@@ -46,6 +46,36 @@ describe('useOrderCommercialEditor', () => {
       { title: 'Сборка лесов', quantity: 2, price: 150, description: 'По согласованию' },
     ] });
 
+  it('adds an arbitrary manual service without equipment or an estimate', () => {
+    const editor = createEditor();
+    editor.addServiceLine();
+    expect(editor.editingServiceLineIndex.value).toBe(0);
+    Object.assign(editor.serviceLines.value[0]!, { title: 'Монтаж лесов', price: 600, description: 'Трасса до 5 м' });
+    expect(editor.validateLines()).toBe('');
+    expect(editor.buildLinesPayload(17).services[0]).toMatchObject({ title: 'Монтаж лесов', quantity: 1, price: 600, description: 'Трасса до 5 м' });
+  });
+
+  it('selects a published standard as an editable commercial row with its scope and cents', () => {
+    const editor = createEditor();
+    const standard = { code: 'wall.small', title: 'Стандартный монтаж до 4,2 кВт', price: '600.25',
+      description: 'Трасса 3 м; проход стены до 80 см; питание 5 м', route_m: '3', holes_by_type: { shared_pass_through: '1' },
+      product_kind: 'complete_split_system', indoor_type: 'wall' };
+    editor.addServiceLine();
+    editor.selectServiceTariffForLine(0, { tariff_id: null, service_kind: 'installation',
+      title: standard.title, short_name: standard.title, full_description: standard.description,
+      price: standard.price, installation_standard: standard }, 27);
+    expect(editor.serviceLines.value[0]).toMatchObject({ title: standard.title, description: standard.description, quantity: 27, price: 600.25 });
+    const line = editor.serviceLines.value[0]!;
+    expect(line.installation_estimate_revision_id).toBeUndefined();
+    Object.assign(line, { title: 'Согласованный монтаж', price: 550.50, description: 'До 5 метров; монтаж лесов' });
+    expect(editor.buildLinesPayload(17).services[0]).toMatchObject({ title: 'Согласованный монтаж', price: 550.5, quantity: 27, description: 'До 5 метров; монтаж лесов' });
+    expect(editor.validateLines()).toBe('');
+    editor.selectServiceTariffForLine(0, { tariff_id: 91, service_kind: 'maintenance',
+      title: 'Обслуживание', short_name: 'Обслуживание', price: '150.25' });
+    expect(editor.serviceLines.value[0]).toMatchObject({ title: 'Обслуживание',
+      price: 150.25, description: null, installation_standard: null });
+  });
+
   it('edits a legacy display group as a manual commercial row without changing the accepted source', () => {
     const editor = createEditor();
     const response = legacyInstallation();
