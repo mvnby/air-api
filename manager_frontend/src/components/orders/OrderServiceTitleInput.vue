@@ -4,7 +4,7 @@ import type { ManagerQuickTariffResponse, ManagerTariffServiceKind } from '../..
 import { api } from '../../api';
 import { getApiErrorMessage } from '../../utils/api-errors';
 import { formatMoney } from './order-utils';
-import { orderedServiceKinds } from './service-catalog-order';
+import { orderedServiceKinds, preferredServiceKind } from './service-catalog-order';
 import type { OrderWorkflowType } from './order-workspace';
 import { standardServiceChoice, type SuggestedInstallation } from './service-installation-choices';
 
@@ -22,7 +22,12 @@ const emit = defineEmits<{
 const container = ref<HTMLElement | null>(null);
 const field = ref<HTMLTextAreaElement | null>(null);
 const open = ref(false);
-const kind = ref<ManagerTariffServiceKind | null>(null);
+// Undefined follows the workflow for an empty row and searches all kinds for text.
+// Null is the manager's explicit choice to search all categories.
+const kind = ref<ManagerTariffServiceKind | null | undefined>(undefined);
+const activeKind = computed(() => kind.value === undefined
+  ? (title.value.trim() ? null : preferredServiceKind(props.workflow))
+  : kind.value);
 const browsingCategory = ref(false);
 const options = ref<ManagerQuickTariffResponse[]>([]);
 const loading = ref(false);
@@ -39,7 +44,7 @@ const load = async () => {
   highlighted.value = -1;
   error.value = '';
   try {
-    const response = await api.listManagerQuickTariffs(query, kind.value, 100);
+    const response = await api.listManagerQuickTariffs(query, activeKind.value, 100);
     if (attempt !== request) return;
     options.value = response.items;
     highlighted.value = -1;
@@ -64,7 +69,7 @@ const input = () => {
   timer = setTimeout(() => void load(), 200);
 };
 const selectKind = (value: ManagerTariffServiceKind) => {
-  kind.value = kind.value === value ? null : value;
+  kind.value = activeKind.value === value ? null : value;
   // Browse a section even when the manager's current text matches no template.
   // Their text stays in the row; further typing searches this section.
   browsingCategory.value = kind.value !== null;
@@ -108,6 +113,10 @@ const keydown = (event: KeyboardEvent) => {
 watch(() => props.autofocus, async (autofocus) => {
   if (autofocus) { await nextTick(); field.value?.focus({ preventScroll: true }); }
 }, { immediate: true });
+watch(() => props.workflow, () => {
+  clearTimeout(timer);
+  if (open.value) void load();
+});
 onBeforeUnmount(() => { request += 1; clearTimeout(timer); });
 </script>
 
@@ -116,10 +125,10 @@ onBeforeUnmount(() => { request += 1; clearTimeout(timer); });
     <textarea ref="field" v-model="title" data-testid="service-title-input" data-order-usage="order_service_edit" class="field-input min-h-[64px] resize-y text-sm leading-snug [field-sizing:content]" rows="2" placeholder="Название услуги — можно написать своё" aria-label="Название услуги" :aria-expanded="open" aria-autocomplete="list" @focus="focus" @click="focus" @input="input" @keydown="keydown" />
     <div v-if="open" data-testid="service-context-menu" class="mt-1 min-w-0 rounded-lg border border-slate-200 bg-white p-2 shadow-sm dark:border-slate-700 dark:bg-slate-950">
       <div class="flex flex-wrap gap-1" role="group" aria-label="Разделы услуг">
-        <button v-for="item in kinds" :key="item.value" type="button" class="min-h-8 rounded-lg px-2 text-xs font-medium" :class="kind === item.value ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200'" :aria-pressed="kind === item.value" @mousedown.prevent @click="selectKind(item.value)">{{ item.label }}</button>
+        <button v-for="item in kinds" :key="item.value" type="button" class="min-h-8 rounded-lg px-2 text-xs font-medium" :class="activeKind === item.value ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200'" :aria-pressed="activeKind === item.value" @mousedown.prevent @click="selectKind(item.value)">{{ item.label }}</button>
       </div>
       <div class="mt-2 max-h-72 space-y-1 overflow-y-auto" aria-label="Подсказки услуг">
-        <div v-if="suggestions?.length && !title.trim() && (!kind || kind === 'installation')" class="border-b border-slate-100 pb-2">
+        <div v-if="suggestions?.length && !title.trim() && activeKind === 'installation'" class="border-b border-slate-100 pb-2">
           <p class="px-2 text-[11px] text-slate-500">Для оборудования в предложении</p>
           <button v-for="group in suggestions" :key="group.tariff.code" type="button" class="block w-full rounded-lg px-2 py-2 text-left text-xs hover:bg-slate-100 dark:hover:bg-slate-800" @mousedown.prevent @click="choose(standardServiceChoice(group.tariff), group.quantity)">
             <span class="block font-medium text-slate-900 dark:text-slate-100">{{ group.tariff.title }}</span>

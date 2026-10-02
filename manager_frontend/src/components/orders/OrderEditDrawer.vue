@@ -22,7 +22,6 @@ import OrderProposalWorkspace from './OrderProposalWorkspace.vue';
 import OrderProposalTotalsBar from './OrderProposalTotalsBar.vue';
 import { useDemoReadOnly } from '../../services/manager-demo';
 import OrderWorkspaceNav from './OrderWorkspaceNav.vue';
-import OrderWorkspaceContext from './OrderWorkspaceContext.vue';
 import OrderWorkspaceUsageReport from './OrderWorkspaceUsageReport.vue';
 import type { ServiceAttachmentEquipmentOption } from '../service-attachments/types';
 import type {
@@ -309,6 +308,7 @@ const {
 });
 const documentsMounted = ref(false);
 const customerContextTarget = ref<'customer' | 'object' | null>(null);
+const customerContextRef = ref<InstanceType<typeof OrderCustomerContext> | null>(null);
 const sourceReviewOpen = ref(false);
 const openSourceReview = async () => {
   const orderId = props.order?.id;
@@ -325,6 +325,8 @@ watch(activeWorkspaceSection, (section) => {
 }, { immediate: true });
 watch(activeProposalId, () => { proposalClientPreview.value = false; });
 const customer = computed(() => props.order?.customer ?? null);
+const customerDisplayName = computed(() => customer.value?.full_legal_name || customer.value?.name || '');
+const compactObjectAddress = computed(() => customerDeliveryAddress.value.trim() || props.order?.customer_branch?.delivery_address || '');
 const orderWorkspaceUsage = useOrderWorkspaceUsage({
   open: computed(() => props.modelValue),
   ready: computed(() => props.modelValue && !initializing.value && Boolean(props.order) && initializedOrderId.value === props.order?.id),
@@ -334,11 +336,6 @@ const orderWorkspaceUsage = useOrderWorkspaceUsage({
 });
 const usageReportOpen = ref(false);
 const { trackControl: trackUsageControl } = useOrderWorkspaceUsageControls(orderWorkspaceUsage.track);
-const customerDisplayName = computed(() => (
-  customer.value?.full_legal_name
-  || customer.value?.name
-  || ''
-));
 const isWebsiteOrder = computed(() => props.order?.lead_source === 'site');
 const isB2cCustomer = buildIsB2cCustomer(computed(() => props.order));
 const displayOrderTitle = computed(() => (
@@ -360,24 +357,13 @@ const {
   persistDraft,
   clearDraft,
   setToast,
-  beforeClose: async () => !proposalActionLoading.value && !sourceApplying.value && await orderSaving.beforeClose(),
+  beforeClose: async () => !proposalActionLoading.value && !sourceApplying.value
+    && await (customerContextRef.value?.beforeClose?.() ?? true) && await orderSaving.beforeClose(),
   onBeforeClose: orderSaving.cancelScheduled,
   onModelValue: (open) => emit('update:modelValue', open),
   onUpdated: (updatedOrder) => emit('updated', updatedOrder),
   onDeleted: (orderId) => emit('deleted', orderId),
 });
-const compactObjectAddress = computed(() => (
-  customerDeliveryAddress.value.trim()
-  || props.order?.customer_branch?.delivery_address
-  || ''
-));
-const openCustomerContext = async (target: 'customer' | 'object') => {
-  if (customerContextTarget.value === target) {
-    customerContextTarget.value = null;
-    await nextTick();
-  }
-  customerContextTarget.value = target;
-};
 const orderWorkspace = computed(() => buildOrderWorkspaceViewModel({
   status: status.value,
   negotiationStatus: negotiationStatus.value,
@@ -427,6 +413,7 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   localServerErrors.value = {};
   localFormError.value = '';
   if (initializedOrderId.value !== order.id) {
+    customerContextTarget.value = null;
     initializedOrderId.value = order.id;
     expandedDrawerSections.value = restoreDrawerSections();
     selectWorkspaceSection('proposal');
@@ -516,7 +503,28 @@ const discardUnsavedChanges = async () => {
 };
 
 const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) => {
+  if (updatedOrder.id !== props.order?.id) return;
   emit('updated', updatedOrder);
+};
+const saveContextObject = async (draft: { address: string; branchId: number | null; comment: string }) => {
+  const orderId = props.order?.id;
+  const customerId = props.order?.customer?.id;
+  if (!await orderSaving.flush() || props.order?.id !== orderId || props.order?.customer?.id !== customerId) return false;
+  const previous = { address: customerDeliveryAddress.value, branchId: customerBranchId.value, comment: comment.value };
+  orderSaving.cancelScheduled();
+  customerDeliveryAddress.value = draft.address;
+  customerBranchId.value = draft.branchId;
+  comment.value = draft.comment;
+  await nextTick();
+  const saved = await orderSaving.flush();
+  if (!saved && props.order?.id === orderId && props.order?.customer?.id === customerId) {
+    // Keep a failed object edit inside its editor; other order edits stay intact.
+    if (customerDeliveryAddress.value === draft.address) customerDeliveryAddress.value = previous.address;
+    if (customerBranchId.value === draft.branchId) customerBranchId.value = previous.branchId;
+    if (comment.value === draft.comment) comment.value = previous.comment;
+    await nextTick();
+  }
+  return saved;
 };
 
 </script>
@@ -694,7 +702,29 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
         <div v-show="!proposalClientPreview" class="order-first min-w-0 lg:order-none lg:self-start">
           <button type="button" class="flex min-h-9 w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold dark:border-slate-700 dark:bg-slate-900 lg:hidden" :aria-expanded="mobileContextOpen" @click="mobileContextOpen = !mobileContextOpen"><span>Клиент, объект и заявка</span><span aria-hidden="true">{{ mobileContextOpen ? '−' : '+' }}</span></button>
           <div class="space-y-3 pt-2 lg:pt-0" :class="mobileContextOpen ? '' : 'hidden lg:block'">
-          <OrderWorkspaceContext :customer-name="customerDisplayName" :address="compactObjectAddress" :total="totalPreview" :paid="totalPaymentsPreview" :balance="balanceDuePreview" @customer="openCustomerContext('customer')" @object="openCustomerContext('object')" @payments="openWorkspaceTarget('payments')" />
+          <OrderCustomerContext
+            v-if="order"
+            ref="customerContextRef"
+            v-model:delivery-address="customerDeliveryAddress"
+            v-model:customer-branch-id="customerBranchId"
+            v-model:comment="comment"
+            v-model:edit-target="customerContextTarget"
+            :order="order"
+            :total="totalPreview"
+            :paid="totalPaymentsPreview"
+            :balance="balanceDuePreview"
+            :disabled="demoReadOnly"
+            :address-error="getFieldError('customer_delivery_address')"
+            :comment-error="getFieldError('comment')"
+            :save-error="displayFormError"
+            :before-navigate="closeDrawer"
+            :before-save="orderSaving.flush"
+            :persist-object="saveContextObject"
+            @toast="setToast($event.message, $event.type)"
+            @updated="handleCustomerUpdated"
+            @reload="emit('reload', $event)"
+            @payments="openWorkspaceTarget('payments')"
+          />
           <OrderRequestSourceCard
             v-if="order?.lead_source === 'belzakupki'"
             :key="`order-source-${order.id}`"
@@ -702,23 +732,6 @@ const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) =
             :source-enrichment="order.source_enrichment"
             @review="openSourceReview"
             @toast="setToast($event.message, $event.type)"
-          />
-          <OrderCustomerContext
-            v-if="order"
-            v-model:delivery-address="customerDeliveryAddress"
-            v-model:customer-branch-id="customerBranchId"
-            v-model:comment="comment"
-            v-model:expanded="expandedDrawerSections.clientDetails"
-            v-model:new-branch-address="newBranchAddress"
-            :order="order"
-            :address-error="getFieldError('customer_delivery_address')"
-            :comment-error="getFieldError('comment')"
-            :before-navigate="closeDrawer"
-            :edit-target="customerContextTarget"
-            :visible="Boolean(customerContextTarget)"
-            @toast="setToast($event.message, $event.type)"
-            @updated="handleCustomerUpdated"
-            @reload="emit('reload', $event)"
           />
           </div>
         </div>

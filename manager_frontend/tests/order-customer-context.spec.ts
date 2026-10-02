@@ -2,267 +2,169 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ManagerOrderDetailResponse } from '../src/client';
 import OrderCustomerContext from '../src/components/orders/OrderCustomerContext.vue';
-
 const suggestAddress = vi.hoisted(() => vi.fn());
-
-const apiMock = vi.hoisted(() => ({
-  createManagerCustomerBranch: vi.fn(),
-  getManagerCustomerBranches: vi.fn(),
-  getManagerCustomers: vi.fn(),
-  patchManagerCustomer: vi.fn(),
-  patchManagerOrder: vi.fn(),
-}));
-
-vi.mock('../src/api', () => ({ api: apiMock }));
-vi.mock('../src/client', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../src/client')>()),
-  ManagerSettingsService: { suggestAddress },
-}));
-
-const order = {
-  id: 42,
-  status: 'new_lead',
-  created_at: '2026-07-31T10:00:00Z',
-  total_amount: 0,
-  total_cost: 0,
-  margin: 0,
-  is_paid: false,
-  customer: {
-    id: 11,
-    type: 'individual',
-    name: 'Анна',
-    phone: '+375291112233',
-    email: 'anna@example.test',
-  },
-  customer_branch: null,
-  product_lines: [],
-  service_lines: [],
-  needs_attention: false,
-  awaiting_measurement: false,
-  client_thinking: false,
-  ready_for_execution: false,
-} as ManagerOrderDetailResponse;
-
-const branches = [
-  {
-    id: 31,
-    customer_id: 11,
-    name: 'Склад',
-    delivery_address: 'Минск, ул. Складская, 1',
-    is_default: true,
-  },
-  {
-    id: 32,
-    customer_id: 11,
-    name: 'Офис',
-    delivery_address: 'Минск, ул. Офисная, 2',
-    is_default: false,
-  },
-];
-
-const mountedWrappers: VueWrapper[] = [];
-
-const mountContext = () => {
-  const wrapper = mount(OrderCustomerContext, {
-    props: {
-      order,
-      deliveryAddress: '',
-      customerBranchId: null,
-      comment: '',
-      expanded: false,
-      newBranchAddress: '',
-    },
-  });
-  mountedWrappers.push(wrapper);
-  return wrapper;
+const confirmClose = vi.hoisted(() => vi.fn());
+vi.mock('../src/services/ui-feedback', () => ({ confirmDialog: confirmClose }));
+const api = vi.hoisted(() => ({ createManagerCustomerBranch: vi.fn(), getManagerCustomerBranches: vi.fn(), getManagerCustomers: vi.fn(), patchManagerCustomer: vi.fn(), patchManagerOrder: vi.fn() }));
+vi.mock('../src/api', () => ({ api }));
+vi.mock('../src/client', async original => ({ ...(await original<typeof import('../src/client')>()), ManagerSettingsService: { suggestAddress } }));
+const order = { id: 42, customer: { id: 11, type: 'individual', name: 'Анна', phone: '+375291112233', email: 'anna@example.test' }, customer_branch: null, product_lines: [], service_lines: [] } as unknown as ManagerOrderDetailResponse;
+const branches = [{ id: 31, name: 'Склад', delivery_address: 'Минск, Складская, 1' }, { id: 32, name: 'Офис', delivery_address: 'Минск, Офисная, 2' }];
+const wrappers: VueWrapper[] = [];
+const make = (extra: Record<string, unknown> = {}) => {
+  const w = mount(OrderCustomerContext, { props: { order, deliveryAddress: '', customerBranchId: null, comment: '', editTarget: null,
+    'onUpdate:editTarget': value => w.setProps({ editTarget: value }), 'onUpdate:deliveryAddress': value => w.setProps({ deliveryAddress: value }),
+    'onUpdate:customerBranchId': value => w.setProps({ customerBranchId: value }), 'onUpdate:comment': value => w.setProps({ comment: value }), ...extra },
+    global: { stubs: { AddressSuggestInput: { name: 'AddressSuggestInput', props: ['modelValue'], emits: ['update:modelValue'], template: '<input data-testid="address-input" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' } } } });
+  wrappers.push(w); return w;
 };
-
-it('keeps the current page when the order cannot finish saving before navigation', async () => {
-  const wrapper = mountContext();
-  const beforeNavigate = vi.fn().mockResolvedValue(false);
-  await wrapper.setProps({ beforeNavigate });
-  const navigate = vi.spyOn(window.history, 'pushState');
-  wrapper.findComponent({ name: 'OrderCustomerObjectSummary' }).vm.$emit('open-customer');
-  await flushPromises();
-  expect(beforeNavigate).toHaveBeenCalledOnce();
-  expect(navigate).not.toHaveBeenCalled();
-  navigate.mockRestore();
-});
-
-it('does not detach the saved branch when the lookup returns no choices', async () => {
-  apiMock.getManagerCustomerBranches.mockResolvedValue({ items: [] });
-  const wrapper = mount(OrderCustomerContext, {
-    props: {
-      order: { ...order, customer_branch: branches[0] },
-      deliveryAddress: branches[0]!.delivery_address,
-      customerBranchId: 31, comment: '', expanded: false, newBranchAddress: '',
-    },
-  });
-  mountedWrappers.push(wrapper);
-  await flushPromises();
-  expect(wrapper.emitted('update:customerBranchId')).toBeUndefined();
-  expect(wrapper.props('customerBranchId')).toBe(31);
-  wrapper.findComponent({ name: 'OrderCustomerObjectSummary' }).vm.$emit('toggle-branch');
-  await flushPromises();
-  expect((wrapper.get('[data-testid="customer-branch"]').element as HTMLSelectElement).value).toBe('31');
-});
-
-const companyOrder = {
-  ...order,
-  customer: {
-    id: 12,
-    type: 'company',
-    name: 'ООО Альфа',
-    full_legal_name: 'ООО «Альфа»',
-    phone: '+375291112233',
-    email: 'office@example.test',
-  },
-} as ManagerOrderDetailResponse;
-
-const mountCompanyContext = () => {
-  const wrapper = mount(OrderCustomerContext, {
-    props: {
-      order: companyOrder,
-      deliveryAddress: '',
-      customerBranchId: null,
-      comment: '',
-      expanded: true,
-      newBranchAddress: '',
-    },
-  });
-  mountedWrappers.push(wrapper);
-  return wrapper;
-};
-
+const open = async (w: VueWrapper, target: string) => { await w.get('[data-order-usage="context-' + target + '"]').trigger('click'); await flushPromises(); };
+const address = (w: VueWrapper) => w.get('[data-testid="object-address"]');
+const deferred = <T,>() => { let resolve!: (v: T) => void; const promise = new Promise<T>(r => resolve = r); return { promise, resolve }; };
 beforeEach(() => {
-  apiMock.getManagerCustomerBranches.mockResolvedValue({ items: branches });
-  apiMock.getManagerCustomers.mockResolvedValue({
-    items: [{ id: 22, name: 'Новый клиент', phone: '+375291234567' }],
-  });
-  apiMock.patchManagerOrder.mockResolvedValue({
-    ...order,
-    customer: { id: 22, name: 'Новый клиент', phone: '+375291234567' },
-  });
-  suggestAddress.mockResolvedValue({ items: [] });
+  api.getManagerCustomerBranches.mockResolvedValue({ items: branches });
+  api.getManagerCustomers.mockResolvedValue({ items: [{ id: 22, name: 'Новый клиент', phone: '+375291234567', inn: '123456789' }] });
+  api.patchManagerCustomer.mockResolvedValue({}); api.patchManagerOrder.mockResolvedValue({ ...order, customer: { id: 22, name: 'Новый клиент' } });
+  suggestAddress.mockResolvedValue({ items: [] }); confirmClose.mockResolvedValue(false);
 });
-
-afterEach(() => {
-  for (const wrapper of mountedWrappers.splice(0)) wrapper.unmount();
-  vi.useRealTimers();
-  vi.clearAllMocks();
-});
-
-describe('OrderCustomerContext', () => {
-  it('opens customer selection immediately for an order without a customer', async () => {
-    const wrapper = mount(OrderCustomerContext, {
-      props: {
-        order: { ...order, customer: null },
-        deliveryAddress: '', customerBranchId: null, comment: '', expanded: false, newBranchAddress: '',
-        editTarget: 'customer',
-      },
-    });
-    mountedWrappers.push(wrapper);
-    await flushPromises();
-
-    expect(wrapper.get('[data-testid="customer-search"]').exists()).toBe(true);
-    expect(wrapper.find('input[placeholder="Имя или название клиента"]').exists()).toBe(false);
+afterEach(() => { wrappers.splice(0).forEach(w => w.unmount()); vi.useRealTimers(); vi.clearAllMocks(); });
+describe('inline customer and object context', () => {
+  it('expands inside the selected summary and directly toggles closed', async () => {
+    const w = make(); await open(w, 'customer');
+    expect(w.get('#order-context-customer-editor').isVisible()).toBe(true);
+    expect(w.get('#order-context-customer-editor').get('[data-testid="change-customer"]').exists()).toBe(true);
+    expect(w.find('[role="dialog"]').exists()).toBe(false);
+    await open(w, 'customer'); expect(w.props('editTarget')).toBe(null); expect(w.get('#order-context-customer-editor').attributes('style')).toContain('display: none');
+    await open(w, 'object'); expect(w.get('#order-context-object-editor').isVisible()).toBe(true);
+    expect(w.get('#order-context-customer-editor').attributes('style')).toContain('display: none');
   });
-
-  it('loads branches and keeps branch selection coupled to the object address', async () => {
-    const wrapper = mountContext();
-    await flushPromises();
-    expect(apiMock.getManagerCustomerBranches).toHaveBeenCalledWith(11);
-    await wrapper.get('button[aria-label="Редактировать объект"]').trigger('click');
-    await wrapper.findAll('button').find((button) => button.text().includes('Выбрать филиал'))?.trigger('click');
-    await wrapper.get('[data-testid="customer-branch"]').setValue('32');
-
-    expect(wrapper.emitted('update:customerBranchId')).toContainEqual([32]);
-    expect(wrapper.emitted('update:deliveryAddress')).toContainEqual(['Минск, ул. Офисная, 2']);
+  it('keeps a saved branch when lookup has no options', async () => {
+    api.getManagerCustomerBranches.mockResolvedValue({ items: [] });
+    const w = make({ order: { ...order, customer_branch: branches[0] }, customerBranchId: 31, deliveryAddress: branches[0].delivery_address }); await open(w, 'object');
+    expect(w.emitted('update:customerBranchId')).toBeUndefined();
+    expect((w.get('[data-testid="customer-branch"]').element as HTMLSelectElement).value).toBe('31');
   });
-
-  it('searches and reassigns the customer through the order API', async () => {
-    vi.useFakeTimers();
-    const wrapper = mountContext();
-    await flushPromises();
-
-    await wrapper.get('button[aria-label="Редактировать клиента"]').trigger('click');
-    await wrapper.findAll('button').find((button) => button.text().includes('Сменить клиента'))?.trigger('click');
-    await wrapper.get('[data-testid="customer-search"]').setValue('Новый');
-    await vi.advanceTimersByTimeAsync(450);
-    await flushPromises();
-    await wrapper.get('[data-testid="assign-customer-22"]').trigger('click');
-    await flushPromises();
-
-    expect(apiMock.getManagerCustomers).toHaveBeenCalledWith(1, 10, 'Новый');
-    expect(apiMock.patchManagerOrder).toHaveBeenCalledWith(42, { customer_id: 22 });
-    expect(wrapper.emitted('updated')?.[0]?.[0]).toEqual(expect.objectContaining({
-      customer: expect.objectContaining({ id: 22 }),
-    }));
-    expect(wrapper.emitted('reload')).toEqual([[42]]);
+  it('stages branch address and comment and saves them explicitly', async () => {
+    const w = make(); await open(w, 'object'); await w.get('[data-testid="customer-branch"]').setValue('32');
+    await w.get('[data-testid="object-comment"]').setValue('Вход со двора');
+    expect(w.emitted('update:deliveryAddress')).toBeUndefined(); expect(api.patchManagerOrder).not.toHaveBeenCalled();
+    await w.get('[data-testid="save-object"]').trigger('click'); await flushPromises();
+    expect(api.patchManagerOrder).toHaveBeenCalledWith(42, { customer_delivery_address: 'Минск, Офисная, 2', customer_branch_id: 32, comment: 'Вход со двора' });
+    expect(w.props('deliveryAddress')).toBe('Минск, Офисная, 2'); expect(w.props('editTarget')).toBe(null);
   });
-
-  it('returns to customer search after an assignment error', async () => {
-    vi.useFakeTimers();
-    apiMock.patchManagerOrder.mockRejectedValueOnce(new Error('offline'));
-    const wrapper = mountContext();
-    await flushPromises();
-
-    await wrapper.get('button[aria-label="Редактировать клиента"]').trigger('click');
-    await wrapper.findAll('button').find((button) => button.text().includes('Сменить клиента'))?.trigger('click');
-    await wrapper.get('[data-testid="customer-search"]').setValue('Новый');
-    await vi.advanceTimersByTimeAsync(450);
-    await flushPromises();
-    await wrapper.get('[data-testid="assign-customer-22"]').trigger('click');
-    await flushPromises();
-
-    expect(wrapper.get('[data-testid="customer-search"]').exists()).toBe(true);
-    expect(wrapper.emitted('toast')).toContainEqual([{ message: 'Ошибка смены клиента: offline', type: 'error' }]);
+  it('creates a branch explicitly and stages its link until the object is saved', async () => {
+    api.createManagerCustomerBranch.mockResolvedValue({ id: 44, name: 'Новый корпус', delivery_address: 'Минск, Новая, 4' });
+    const w = make(); await open(w, 'object');
+    await w.findAll('button').find(b => b.text() === 'Новый филиал')!.trigger('click');
+    await w.findAll('label').find(l => l.text() === 'Название филиала')!.get('input').setValue('Новый корпус');
+    await w.get('input[label="Адрес филиала"]').setValue('Минск, Новая, 4');
+    await w.findAll('button').find(b => b.text() === 'Создать и выбрать')!.trigger('click'); await flushPromises();
+    expect(api.createManagerCustomerBranch).toHaveBeenCalledWith(11, { name: 'Новый корпус', delivery_address: 'Минск, Новая, 4', is_default: false });
+    expect(w.emitted('update:customerBranchId')).toBeUndefined();
+    expect((address(w).element as HTMLInputElement).value).toBe('Минск, Новая, 4');
+    await w.get('[data-testid="save-object"]').trigger('click'); await flushPromises();
+    expect(api.patchManagerOrder).toHaveBeenCalledWith(42, expect.objectContaining({ customer_branch_id: 44, customer_delivery_address: 'Минск, Новая, 4' }));
   });
-
-  it('offers company-name address suggestions only after an explicit request and selection', async () => {
-    suggestAddress.mockResolvedValue({
-      items: [{ value: 'Минск, проспект Победителей, 1', title: 'Минск, проспект Победителей, 1' }],
-    });
-    const wrapper = mountCompanyContext();
-    await flushPromises();
-
-    expect(suggestAddress).not.toHaveBeenCalled();
-    expect(wrapper.get('[data-testid="suggest-company-address"]').text()).toContain('Подобрать адрес');
-
-    await wrapper.get('[data-testid="suggest-company-address"]').trigger('click');
-    await flushPromises();
-
-    expect(suggestAddress).toHaveBeenCalledWith('ООО «Альфа»');
-    expect(wrapper.emitted('update:deliveryAddress')).toBeUndefined();
-    await wrapper.get('[data-testid="company-address-candidate-Минск, проспект Победителей, 1"]').trigger('click');
-    expect(wrapper.emitted('update:deliveryAddress')).toContainEqual(['Минск, проспект Победителей, 1']);
+  it('keeps draft through collapse and unrelated refresh and cancels explicitly', async () => {
+    const w = make({ deliveryAddress: 'Старый адрес' }); await open(w, 'object'); await address(w).setValue('Новый адрес');
+    await open(w, 'object'); await w.setProps({ order: { ...order, total_amount: 99 } }); await open(w, 'object');
+    expect((address(w).element as HTMLInputElement).value).toBe('Новый адрес');
+    await w.get('[data-testid="inline-object-editor"]').findAll('button').find(b => b.text() === 'Отмена')!.trigger('click'); await open(w, 'object');
+    expect((address(w).element as HTMLInputElement).value).toBe('Старый адрес');
   });
-
-  it('does not offer company-name suggestions to an individual customer', async () => {
-    const wrapper = mountContext();
+  it('refreshes saved branch choices and untouched fields without overwriting the edited address', async () => {
+    const w = make(); await open(w, 'object'); await address(w).setValue('Адрес менеджера');
+    await w.setProps({ order: { ...order, customer_branch: branches[0] }, customerBranchId: 31, comment: 'Комментарий из источника' });
     await flushPromises();
-
-    expect(wrapper.find('[data-testid="suggest-company-address"]').exists()).toBe(false);
+    expect(api.getManagerCustomerBranches).toHaveBeenCalledTimes(2);
+    expect((address(w).element as HTMLInputElement).value).toBe('Адрес менеджера');
+    expect((w.get('[data-testid="customer-branch"]').element as HTMLSelectElement).value).toBe('31');
+    expect((w.get('[data-testid="object-comment"]').element as HTMLTextAreaElement).value).toBe('Комментарий из источника');
   });
-
-  it('does not overwrite a branch selected while a refreshed branch list is loading', async () => {
-    const wrapper = mountContext();
-    await flushPromises();
-    await wrapper.setProps({ customerBranchId: 32 });
-    const updatesBeforeRefresh = wrapper.emitted('update:customerBranchId')?.length || 0;
-
-    let resolveBranches: ((value: { items: typeof branches }) => void) | undefined;
-    apiMock.getManagerCustomerBranches.mockImplementationOnce(() => new Promise((resolve) => {
-      resolveBranches = resolve;
-    }));
-    await wrapper.setProps({
-      order: { ...order, customer_branch: branches[0] },
-    });
-
-    resolveBranches?.({ items: branches });
-    await flushPromises();
-
-    expect(wrapper.props('customerBranchId')).toBe(32);
-    expect(wrapper.emitted('update:customerBranchId')?.slice(updatesBeforeRefresh) || []).toEqual([]);
+  it('keeps failed object edits open and intact', async () => {
+    const persistObject = vi.fn().mockResolvedValue(false); const w = make({ persistObject, saveError: 'Нет связи' });
+    await open(w, 'object'); await address(w).setValue('Новый адрес'); await w.get('[data-testid="save-object"]').trigger('click'); await flushPromises();
+    expect(w.props('editTarget')).toBe('object'); expect(w.get('[role="alert"]').text()).toBe('Нет связи');
+    expect((address(w).element as HTMLInputElement).value).toBe('Новый адрес');
+  });
+  it('keeps an object draft when the shared queue rolls its failed model update back', async () => {
+    const w = make({ deliveryAddress: 'Старый адрес' });
+    await w.setProps({ persistObject: async draft => {
+      await w.setProps({ deliveryAddress: draft.address });
+      await w.setProps({ deliveryAddress: 'Старый адрес' });
+      return false;
+    } });
+    await open(w, 'object'); await address(w).setValue('Новый адрес');
+    await w.get('[data-testid="save-object"]').trigger('click'); await flushPromises();
+    expect((address(w).element as HTMLInputElement).value).toBe('Новый адрес');
+    expect(w.props('deliveryAddress')).toBe('Старый адрес');
+  });
+  it('protects unsaved context drafts when closing the entire order', async () => {
+    const w = make(); await open(w, 'object'); await address(w).setValue('Новый адрес');
+    expect(await w.vm.beforeClose()).toBe(false); expect(confirmClose).toHaveBeenCalledOnce();
+    confirmClose.mockResolvedValueOnce(true); expect(await w.vm.beforeClose()).toBe(true);
+    expect((address(w).element as HTMLInputElement).value).toBe('Новый адрес');
+  });
+  it('keeps the physical object draft when correcting the customer and clears its old branch', async () => {
+    const w = make({ customerBranchId: 31 }); await open(w, 'object'); await address(w).setValue('Адрес фактического объекта');
+    await w.setProps({ order: { ...order, customer: { ...order.customer!, id: 22 }, customer_branch: null }, customerBranchId: null });
+    await flushPromises(); expect((address(w).element as HTMLInputElement).value).toBe('Адрес фактического объекта');
+    expect((w.get('[data-testid="customer-branch"]').element as HTMLSelectElement).value).toBe('');
+  });
+  it('collapses after customer save succeeds and retains values on error', async () => {
+    const pending = deferred<{}>(); api.patchManagerCustomer.mockReturnValueOnce(pending.promise); const w = make();
+    await open(w, 'customer'); await w.get('[data-testid="edit-customer"]').trigger('click'); await w.get('[data-testid="customer-name"]').setValue('Анна Иванова');
+    await w.get('[data-testid="save-customer"]').trigger('click'); await flushPromises();
+    expect(w.props('editTarget')).toBe('customer'); expect((w.get('[data-testid="inline-customer-editor"]').element as HTMLFieldSetElement).disabled).toBe(true);
+    pending.resolve({}); await flushPromises(); expect(w.props('editTarget')).toBe(null);
+    api.patchManagerCustomer.mockRejectedValueOnce(new Error('offline')); await open(w, 'customer'); await w.get('[data-testid="edit-customer"]').trigger('click');
+    await w.get('[data-testid="customer-name"]').setValue('Другое имя'); await w.get('[data-testid="save-customer"]').trigger('click'); await flushPromises();
+    expect(w.props('editTarget')).toBe('customer'); expect(w.get('[role="alert"]').text()).toContain('offline');
+    expect((w.get('[data-testid="customer-name"]').element as HTMLTextAreaElement).value).toBe('Другое имя');
+  });
+  const pickCustomer = async (w: VueWrapper) => {
+    await open(w, 'customer'); await w.get('[data-testid="change-customer"]').trigger('click'); await w.get('[data-testid="customer-search"]').setValue('Новый');
+    await vi.advanceTimersByTimeAsync(450); await flushPromises(); expect(w.get('[data-testid="assign-customer-22"]').text()).toContain('УНП 123456789');
+    await w.get('[data-testid="assign-customer-22"]').trigger('click');
+  };
+  it('applies selected customer explicitly after saving order edits and clears old branch', async () => {
+    vi.useFakeTimers(); const beforeSave = vi.fn().mockResolvedValue(true); const w = make({ beforeSave, customerBranchId: 31 }); await pickCustomer(w);
+    expect(api.patchManagerOrder).not.toHaveBeenCalled(); await w.get('[data-testid="assign-customer"]').trigger('click'); await flushPromises();
+    expect(beforeSave).toHaveBeenCalledOnce(); expect(api.patchManagerOrder).toHaveBeenCalledWith(42, { customer_id: 22, customer_branch_id: null });
+    expect(w.props('customerBranchId')).toBe(null); expect(w.props('editTarget')).toBe(null);
+  });
+  it('retains selected customer on error and supports retry', async () => {
+    vi.useFakeTimers(); api.patchManagerOrder.mockRejectedValueOnce(new Error('offline')); const w = make(); await pickCustomer(w);
+    await w.get('[data-testid="assign-customer"]').trigger('click'); await flushPromises(); expect(w.props('editTarget')).toBe('customer'); expect(w.text()).toContain('offline'); expect(w.text()).toContain('Новый клиент');
+    await w.get('[data-testid="assign-customer"]').trigger('click'); await flushPromises(); expect(w.props('editTarget')).toBe(null);
+  });
+  it('offers inline selection immediately for an unassigned customer', async () => {
+    const w = make({ order: { ...order, customer: null } }); await open(w, 'customer'); expect(w.get('[data-testid="customer-search"]').isVisible()).toBe(true);
+  });
+  it('blocks identity change if preceding order edits fail to save', async () => {
+    const w = make({ beforeSave: vi.fn().mockResolvedValue(false) }); await open(w, 'customer'); await w.get('[data-testid="edit-customer"]').trigger('click'); await w.get('[data-testid="save-customer"]').trigger('click'); await flushPromises();
+    expect(api.patchManagerCustomer).not.toHaveBeenCalled(); expect(w.props('editTarget')).toBe('customer');
+  });
+  it('honors failed navigation and allows successful deliberate unmount', async () => {
+    const w = make({ beforeNavigate: vi.fn().mockResolvedValue(false) }); await open(w, 'customer'); const push = vi.spyOn(window.history, 'pushState');
+    await w.get('[aria-label="Открыть полную карточку клиента"]').trigger('click'); await flushPromises(); expect(push).not.toHaveBeenCalled();
+    await w.setProps({ beforeNavigate: async () => { w.unmount(); return true; } }); await w.get('[aria-label="Открыть полную карточку клиента"]').trigger('click'); await flushPromises();
+    expect(push).toHaveBeenCalledWith({}, '', expect.stringContaining('customerId=11')); push.mockRestore();
+  });
+  it('ignores customer-save response after changing orders', async () => {
+    const pending = deferred<{}>(); api.patchManagerCustomer.mockReturnValueOnce(pending.promise); const w = make();
+    await open(w, 'customer'); await w.get('[data-testid="edit-customer"]').trigger('click'); await w.get('[data-testid="save-customer"]').trigger('click'); await flushPromises();
+    await w.setProps({ order: { ...order, id: 43 }, editTarget: null }); pending.resolve({}); await flushPromises(); expect(w.emitted('updated')).toBeUndefined();
+  });
+  it('ignores stale branch choices after changing customers', async () => {
+    const pending = deferred<{ items: typeof branches }>(); api.getManagerCustomerBranches.mockReturnValueOnce(pending.promise); const w = make();
+    await w.setProps({ order: { ...order, customer: { ...order.customer!, id: 12 } } }); await flushPromises(); pending.resolve({ items: [{ ...branches[0], id: 99 }] }); await flushPromises(); await open(w, 'object');
+    expect(w.find('option[value="99"]').exists()).toBe(false);
+  });
+  it('stages explicit company address suggestion without autosaving it', async () => {
+    suggestAddress.mockResolvedValue({ items: [{ value: 'Минск, Победителей, 1', title: 'Минск, Победителей, 1' }] });
+    const w = make({ order: { ...order, customer: { ...order.customer!, type: 'company', full_legal_name: 'ООО Альфа' } } }); await open(w, 'object'); expect(suggestAddress).not.toHaveBeenCalled();
+    await w.get('[data-testid="suggest-company-address"]').trigger('click'); await flushPromises(); await w.get('[data-testid="company-address-candidate-Минск, Победителей, 1"]').trigger('click');
+    expect(w.emitted('update:deliveryAddress')).toBeUndefined(); expect((address(w).element as HTMLInputElement).value).toBe('Минск, Победителей, 1');
   });
 });
