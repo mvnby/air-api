@@ -1,9 +1,12 @@
-import { mount, type VueWrapper } from '@vue/test-utils';
-import { afterEach, describe, expect, it } from 'vitest';
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import OrderServiceLinesEditor from '../src/components/orders/OrderServiceLinesEditor.vue';
 import ServiceDescriptionModeSwitch from '../src/components/orders/ServiceDescriptionModeSwitch.vue';
 import type { ServiceLine } from '../src/components/orders/order-editor-types';
 import { managerSession } from '../src/services/manager-session';
+
+const apiMock = vi.hoisted(() => ({ listManagerQuickTariffs: vi.fn() }));
+vi.mock('../src/api', () => ({ api: apiMock }));
 
 const tariff = {
   tariff_id: 91,
@@ -15,6 +18,8 @@ const tariff = {
   category: 'Монтаж',
   included_route_meters: 3,
 };
+
+apiMock.listManagerQuickTariffs.mockImplementation(async () => ({ items: [tariff] }));
 
 const estimate = {
   id: 81,
@@ -127,39 +132,18 @@ describe('OrderServiceLinesEditor compact rows', () => {
     expect(demoWrapper.text()).not.toContain('Себест.');
   });
 
-  it('preserves service tariff, estimate, and installation command emits', async () => {
-    const wrapper = mount(OrderServiceLinesEditor, {
-      props: baseProps([
-        { service_id: null, title: 'Монтаж', quantity: 1, price: 500, cost: 100 },
-      ], { compact: true, editingIndex: 0, showEstimateImport: true, selectedEstimateId: estimate.id, activeSuggestionIndex: 0 }),
-      global: {
-        stubs: {
-          OrderServiceCatalogPicker: {
-            template: `<div data-testid="catalog-stub">
-              <button @click='$emit("choose", { tariff_id: 91, price: 600 })'>Выбрать тариф</button>
-              <button @click='$emit("standard-installation", { id: 9 }, false)'>Стандартный монтаж</button>
-              <button @click='$emit("open-installation-estimate")'>Открыть расчёт</button>
-            </div>`,
-            emits: ['choose', 'standard-installation', 'open-installation-estimate', 'close', 'custom', 'created-estimate'],
-          },
-        },
-      },
-    });
-    mounted.push(wrapper);
-
+  it('selects a suggestion in the title field and preserves estimate import as an optional action', async () => {
+    const wrapper = mountEditor([
+      { service_id: null, title: 'Монтаж', quantity: 1, price: 500, cost: 100 },
+    ], { compact: true, editingIndex: 0, showEstimateImport: true, selectedEstimateId: estimate.id });
+    await wrapper.get('[data-testid="service-title-input"]').trigger('focus');
+    await flushPromises();
     await wrapper.get('[data-testid="select-service-91"]').trigger('click');
     await wrapper.get('[data-testid="import-estimate"]').trigger('click');
     await wrapper.get('[data-testid="add-service-line"]').trigger('click');
-    await wrapper.findAll('button').find((button) => button.text() === 'Выбрать тариф')!.trigger('click');
-    await wrapper.get('[data-testid="add-service-line"]').trigger('click');
-    await wrapper.findAll('button').find((button) => button.text() === 'Стандартный монтаж')!.trigger('click');
-    await wrapper.get('[data-testid="add-service-line"]').trigger('click');
-    await wrapper.findAll('button').find((button) => button.text() === 'Открыть расчёт')!.trigger('click');
-
-    expect(wrapper.emitted('select')).toEqual([[{ index: 0, option: tariff }]]);
+    expect(wrapper.emitted('select')).toEqual([[{ index: 0, option: tariff, quantity: undefined }]]);
     expect(wrapper.emitted('importEstimate')).toEqual([[]]);
-    expect(wrapper.emitted('addTariff')).toEqual([[{ tariff_id: 91, price: 600 }]]);
-    expect(wrapper.emitted('standardInstallation')).toEqual([[{ id: 9 }, false]]);
-    expect(wrapper.emitted('openInstallationEstimate')).toEqual([[]]);
+    expect(wrapper.emitted('add')).toEqual([[]]);
+    expect(wrapper.find('[data-testid="service-catalog-picker"]').exists()).toBe(false);
   });
 });

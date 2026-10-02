@@ -63,7 +63,7 @@ describe('OrderServiceCatalogPicker', () => {
     expect(wrapper.text()).toContain('Настенные');
     await wrapper.findAll('button').find((button) => button.text() === 'Добавить')!.trigger('click');
     await flushPromises();
-    expect(wrapper.emitted('choose')?.[0]?.[0]).toMatchObject({ tariff_id: 21, price: 300 });
+    expect(wrapper.emitted('choose')?.[0]?.[0]).toMatchObject({ tariff_id: 21, price: '300' });
     wrapper.unmount();
   });
 
@@ -93,16 +93,13 @@ describe('OrderServiceCatalogPicker', () => {
     apiMocks.listManagerInstallationRates.mockResolvedValue({ published_price_book_revision: 2, items: [] });
     const wrapper = mount(OrderServiceCatalogPicker, { props: { workflow: 'sales_installation', canOpenInstallationEstimate: true } });
     await flushPromises();
-    expect(wrapper.text()).toContain('Базовые тарифы опубликованной книги');
+    expect(wrapper.text()).toContain('Стандартные монтажи из опубликованной книги');
     expect(wrapper.text()).toContain('Монтаж настенного кондиционера до 4,2 кВт');
     await wrapper.findAll('button').find((button) => button.text() === 'Добавить')!.trigger('click');
-    expect(wrapper.emitted('standardInstallation')?.[0]).toMatchObject([{ code: 'wall.small', price: '600' }, false]);
-    await wrapper.findAll('button').find((button) => button.text() === 'Изменить состав')!.trigger('click');
-    expect(wrapper.emitted('standardInstallation')?.[1]?.[1]).toBe(true);
+    expect(wrapper.emitted('choose')?.[0]?.[0]).toMatchObject({ tariff_id: null, price: '600', installation_standard: { code: 'wall.small' } });
     expect(apiMocks.calculateManagerInstallEstimate).not.toHaveBeenCalled();
     expect(wrapper.findAll('button').some((button) => button.text() === 'Собрать смету')).toBe(false);
-    await wrapper.findAll('button').find((button) => button.text() === 'Монтаж выбранного оборудования')!.trigger('click');
-    expect(wrapper.emitted('openInstallationEstimate')).toEqual([[]]);
+    expect(wrapper.findAll('button').some((button) => button.text() === 'Изменить состав')).toBe(false);
     wrapper.unmount();
   });
 });

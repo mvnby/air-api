@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import OrderServiceTitleInput from './OrderServiceTitleInput.vue';
+import OrderServiceInstallationCalculator from './OrderServiceInstallationCalculator.vue';
+import { type SuggestedInstallation } from './service-installation-choices';
 import { Pencil } from 'lucide-vue-next';
 import type { ManagerQuickTariffResponse, ManagerServiceEstimateResponse, ManagerInstallationStandardTariff } from '../../client';
 import OrderServiceCatalogPicker from './OrderServiceCatalogPicker.vue';
@@ -25,13 +28,15 @@ const props = defineProps<{
   compact?: boolean;
   hideActions?: boolean;
   showCosts?: boolean;
+  suggestedInstallations?: SuggestedInstallation[];
 }>();
 
 const emit = defineEmits<{
   focus: [index: number];
   input: [index: number];
   blur: [index: number];
-  select: [payload: { index: number; option: ManagerQuickTariffResponse }];
+  select: [payload: { index: number; option: ManagerQuickTariffResponse; quantity?: number }];
+  addSuggested: [index: number];
   descriptionMode: [payload: { index: number; mode: ServiceDescriptionMode }];
   remove: [index: number, displayIndex?: number];
   editInstallation: [index: number, displayIndex: number];
@@ -48,6 +53,12 @@ const emit = defineEmits<{
 
 const lines = defineModel<ServiceLine[]>('lines', { required: true });
 const showCatalog = ref(false);
+const calculatingLine = ref<ServiceLine | null>(null);
+const applyCalculation = (line: ServiceLine, result: { title: string; description: string; price: number; installation_standard: ManagerInstallationStandardTariff }) => {
+  if (!lines.value.includes(line)) return;
+  Object.assign(line, result);
+  calculatingLine.value = null;
+};
 defineExpose({ openCatalog: () => { showCatalog.value = !showCatalog.value; } });
 const chooseTariff = (option: ManagerQuickTariffResponse) => {
   emit('addTariff', option);
@@ -70,9 +81,6 @@ const estimateSearchQuery = defineModel<string>('estimateSearchQuery', { require
 const estimateImportMode = defineModel<'detailed' | 'collapsed'>('estimateImportMode', { required: true });
 const descriptionMode = defineModel<ServiceDescriptionMode>('descriptionMode', { required: true });
 
-const suggestionsFor = (index: number) => (
-  props.activeSuggestionIndex === index ? props.serviceOptions.slice(0, 10) : []
-);
 const filteredEstimates = computed(() => {
   const query = estimateSearchQuery.value.trim().toLowerCase();
   if (!query) return props.estimateOptions;
@@ -109,22 +117,15 @@ const updatePreferredMode = (mode: ServiceDescriptionMode) => {
                   <span>Название</span>
                   <ServiceDescriptionModeSwitch v-if="line.template_full_description" :model-value="line.description_mode || 'short'" @update:model-value="emit('descriptionMode', { index, mode: $event })" />
                 </span>
-                <textarea v-model="line.title" data-order-usage="order_service_edit" class="field-input min-h-[64px] resize-y text-sm leading-snug [field-sizing:content]" rows="2" placeholder="Название услуги" @focus="emit('focus', index)" @input="emit('input', index)" @blur="emit('blur', index)" />
-                <div v-if="line.title.trim().length >= 2 && activeSuggestionIndex === index && (serviceLookupLoading || suggestionsFor(index).length)" class="absolute left-0 right-0 top-full z-20 mt-1 max-h-64 overflow-auto rounded-[12px] border border-gray-200 bg-white p-1 shadow-xl">
-                  <div v-if="serviceLookupLoading" class="px-3 py-2 text-xs text-gray-500">Ищем тарифы...</div>
-                  <button v-for="item in suggestionsFor(index)" :key="`service-tariff-suggest-${index}-${item.tariff_id}`" type="button" :data-testid="`select-service-${item.tariff_id}`" class="mb-1 block w-full rounded-[12px] px-3 py-2 text-left text-xs text-gray-700 hover:bg-slate-100 last:mb-0" @mousedown.prevent @click="emit('select', { index, option: item })">
-                    <p class="line-clamp-2 font-medium text-gray-900">{{ item.short_name || item.title }}</p>
-                    <p v-if="item.full_description && item.full_description !== item.short_name" class="mt-0.5 line-clamp-2 text-[11px] leading-snug text-gray-500">{{ item.full_description }}</p>
-                    <p class="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-gray-500"><span>{{ formatMoney(item.price) }}</span><span v-if="item.service_kind">· {{ formatServiceKind(item.service_kind) }}</span><span v-if="item.category">· {{ item.category }}</span><span v-if="item.included_route_meters">· трасса до {{ item.included_route_meters }} м</span></p>
-                  </button>
-                </div>
+                <OrderServiceTitleInput v-model="line.title" :workflow="workflow" :autofocus="!line.title" :suggestions="suggestedInstallations" @focus="emit('focus', index)" @input="emit('input', index)" @blur="emit('blur', index)" @select="(option, quantity) => emit('select', { index, option, quantity })" @add-suggested="emit('addSuggested', index)" />
               </div>
               <label class="col-span-4 space-y-1 md:col-span-2"><span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Цена</span><input v-model.number="line.price" type="number" min="0" step="0.01" class="field-input" placeholder="0" /></label>
               <label class="col-span-2 space-y-1 md:col-span-1"><span class="flex h-auto items-center whitespace-nowrap px-1 text-xs font-medium text-gray-500 md:h-6 md:text-[11px]">Кол-во</span><input v-model.number="line.quantity" type="number" min="1" class="field-input" placeholder="1" /></label>
               <label v-if="compactShowCosts" class="col-span-3 space-y-1 md:col-span-2"><span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Себест.</span><input v-model.number="line.cost" type="number" min="0" step="0.01" class="field-input" placeholder="0" /></label>
               <div class="col-span-3 space-y-1 md:col-span-2"><span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Итого</span><div class="rounded-lg bg-gray-50 px-3 py-2"><p class="whitespace-nowrap text-base font-semibold leading-tight text-gray-900">{{ formatMoney(lineTotal(line)) }}</p></div></div>
               <label class="col-span-6 space-y-1 md:col-span-12"><span class="block text-xs font-medium text-gray-500">Описание для клиента</span><textarea v-model="line.description" data-testid="service-client-description" rows="2" maxlength="10000" class="field-input min-h-[64px] resize-y text-sm leading-relaxed [field-sizing:content]" placeholder="Состав работ и согласованные условия" /></label>
-              <div class="col-span-6 flex justify-end md:col-span-12"><button type="button" class="btn-mini-outline h-8 px-3 text-xs" @click="editingIndex = null">Готово</button></div>
+              <div class="col-span-6 flex flex-wrap items-center justify-between gap-2 md:col-span-12"><button type="button" data-testid="service-open-calculator" class="min-h-8 text-xs text-brand-700" @click="calculatingLine = calculatingLine === line ? null : line">{{ calculatingLine === line ? 'Скрыть расчёт' : 'Рассчитать монтаж' }}</button><button type="button" class="btn-mini-outline h-8 px-3 text-xs" @click="editingIndex = null">Готово</button></div>
+              <OrderServiceInstallationCalculator v-if="calculatingLine === line" class="col-span-6 md:col-span-12" :initial-tariff="line.installation_standard" :quantity="line.quantity" @close="calculatingLine = null" @apply="applyCalculation(line, $event)" />
             </div>
           </div>
           <div v-else class="divide-y divide-gray-100">
@@ -168,51 +169,22 @@ const updatePreferredMode = (mode: ServiceDescriptionMode) => {
               <span>Название</span>
               <ServiceDescriptionModeSwitch v-if="line.template_full_description" :model-value="line.description_mode || 'short'" @update:model-value="emit('descriptionMode', { index, mode: $event })" />
             </span>
-            <textarea
-              v-model="line.title"
-              data-order-usage="order_service_edit"
-              class="field-input min-h-[64px] resize-none overflow-hidden text-sm leading-snug focus:min-h-[120px] focus:resize-y focus:overflow-auto sm:text-base"
-              rows="2"
-              placeholder="Название услуги"
-              @focus="emit('focus', index)"
-              @input="emit('input', index)"
-              @blur="emit('blur', index)"
-            />
-            <div v-if="line.title.trim().length >= 2 && activeSuggestionIndex === index && (serviceLookupLoading || suggestionsFor(index).length)" class="absolute left-0 right-0 top-full z-20 mt-1 max-h-64 overflow-auto rounded-[12px] border border-gray-200 bg-white p-1 shadow-xl">
-              <div v-if="serviceLookupLoading" class="px-3 py-2 text-xs text-gray-500">Ищем тарифы...</div>
-              <button
-                v-for="item in suggestionsFor(index)"
-                :key="`service-tariff-suggest-${index}-${item.tariff_id}`"
-                type="button"
-                :data-testid="`select-service-${item.tariff_id}`"
-                class="mb-1 block w-full rounded-[12px] px-3 py-2 text-left text-xs text-gray-700 hover:bg-slate-100 last:mb-0"
-                @mousedown.prevent
-                @click="emit('select', { index, option: item })"
-              >
-                <p class="line-clamp-2 font-medium text-gray-900">{{ item.short_name || item.title }}</p>
-                <p v-if="item.full_description && item.full_description !== item.short_name" class="mt-0.5 line-clamp-2 text-[11px] leading-snug text-gray-500">{{ item.full_description }}</p>
-                <p class="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-gray-500">
-                  <span>{{ formatMoney(item.price) }}</span>
-                  <span v-if="item.service_kind">· {{ formatServiceKind(item.service_kind) }}</span>
-                  <span v-if="item.category">· {{ item.category }}</span>
-                  <span v-if="item.included_route_meters">· трасса до {{ item.included_route_meters }} м</span>
-                </p>
-              </button>
-            </div>
+            <OrderServiceTitleInput v-model="line.title" :workflow="workflow" :autofocus="!line.title" :suggestions="suggestedInstallations" @focus="emit('focus', index)" @input="emit('input', index)" @blur="emit('blur', index)" @select="(option, quantity) => emit('select', { index, option, quantity })" @add-suggested="emit('addSuggested', index)" />
           </div>
           <label class="col-span-4 space-y-1 md:col-span-2"><span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Цена</span><input v-model.number="line.price" type="number" min="0" step="0.01" class="field-input" placeholder="0" /></label>
           <label class="col-span-2 space-y-1 md:col-span-1"><span class="flex h-auto items-center whitespace-nowrap px-1 text-xs font-medium text-gray-500 md:h-6 md:text-[11px]">Кол-во</span><input v-model.number="line.quantity" type="number" min="1" class="field-input" placeholder="1" /></label>
           <label v-if="!demoReadOnly" class="col-span-3 space-y-1 md:col-span-2"><span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Себест.</span><input v-model.number="line.cost" type="number" min="0" step="0.01" class="field-input" placeholder="0" /></label>
           <div class="col-span-3 space-y-1 md:col-span-2"><span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Итого</span><div class="rounded-lg bg-gray-50 px-3 py-2"><p class="whitespace-nowrap text-base font-semibold leading-tight text-gray-900">{{ formatMoney(lineTotal(line)) }}</p></div></div>
           <label class="col-span-6 space-y-1 md:col-span-12"><span class="block text-xs font-medium text-gray-500">Описание для клиента</span><textarea v-model="line.description" data-testid="service-client-description" rows="2" maxlength="10000" class="field-input min-h-[64px] resize-y text-sm leading-relaxed [field-sizing:content]" placeholder="Состав работ и согласованные условия" /></label>
-          <div class="col-span-6 flex justify-end md:col-span-12"><button type="button" class="btn-mini-outline h-8 px-3 text-xs" @click="editingIndex = null">Готово</button></div>
+          <div class="col-span-6 flex flex-wrap items-center justify-between gap-2 md:col-span-12"><button type="button" data-testid="service-open-calculator" class="min-h-8 text-xs text-brand-700" @click="calculatingLine = calculatingLine === line ? null : line">{{ calculatingLine === line ? 'Скрыть расчёт' : 'Рассчитать монтаж' }}</button><button type="button" class="btn-mini-outline h-8 px-3 text-xs" @click="editingIndex = null">Готово</button></div>
+          <OrderServiceInstallationCalculator v-if="calculatingLine === line" class="col-span-6 md:col-span-12" :initial-tariff="line.installation_standard" :quantity="line.quantity" @close="calculatingLine = null" @apply="applyCalculation(line, $event)" />
         </div>
         </template>
       </div>
     </div>
 
     <div v-if="!hideActions" class="mt-3 grid grid-cols-2 gap-2" :class="compact ? 'sm:max-w-md' : ''">
-      <button type="button" data-testid="add-service-line" data-order-usage="order_service_add" class="btn-mini justify-center" @click="showCatalog = !showCatalog">+ услуга</button>
+      <button type="button" data-testid="add-service-line" data-order-usage="order_service_add" class="btn-mini justify-center" @click="emit('add')">+ услуга</button>
       <button type="button" class="btn-mini-outline justify-center" :class="showEstimateImport ? 'border-brand-200 bg-brand-50 text-brand-700' : ''" @click="emit('toggleEstimate')">Из сметы</button>
     </div>
     <OrderServiceCatalogPicker

@@ -1,4 +1,4 @@
-import { mount, type VueWrapper } from '@vue/test-utils';
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import OrderProductLinesEditor from '../src/components/orders/OrderProductLinesEditor.vue';
 import OrderServiceLinesEditor from '../src/components/orders/OrderServiceLinesEditor.vue';
@@ -235,12 +235,15 @@ describe('OrderServiceLinesEditor', () => {
     });
     mountedWrappers.push(wrapper);
 
-    await wrapper.get(`[data-testid="select-service-${serviceOption.tariff_id}"]`).trigger('click');
+    const titleField = wrapper.getComponent({ name: 'OrderServiceTitleInput' });
+    titleField.vm.$emit('select', serviceOption);
+    await flushPromises();
     await wrapper.get('[data-testid="import-estimate"]').trigger('click');
     await wrapper.get('[data-testid="add-service-line"]').trigger('click');
 
-    expect(wrapper.emitted('select')).toEqual([[{ index: 0, option: serviceOption }]]);
+    expect(wrapper.emitted('select')).toEqual([[{ index: 0, option: serviceOption, quantity: undefined }]]);
     expect(wrapper.emitted('importEstimate')).toEqual([[]]);
-    expect(wrapper.find('[data-testid="service-catalog-picker"]').exists()).toBe(true);
+    expect(wrapper.emitted('add')).toEqual([[]]);
+    expect(wrapper.find('[data-testid="service-catalog-picker"]').exists()).toBe(false);
   });
 });

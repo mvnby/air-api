@@ -8,6 +8,7 @@ import { orderedServiceKinds, preferredServiceKind, serviceCategories } from './
 import { formatMoney } from './order-utils';
 import { listInstallationStandardTariffs } from '../../services/installation-estimate-api';
 import type { ManagerInstallationStandardTariff } from '../../client';
+import { standardServiceChoice } from './service-installation-choices';
 
 const props = defineProps<{ workflow: OrderWorkflowType; customerId?: number | null; canOpenInstallationEstimate?: boolean }>();
 const emit = defineEmits<{
@@ -101,7 +102,7 @@ const choose = async (tariff: ManagerTariffResponse) => {
     short_name: tariff.short_name || tariff.selector_label,
     full_description: tariff.full_description || null,
     title: tariff.short_name || tariff.selector_label,
-    price: tariff.base_price,
+    price: String(tariff.base_price),
     category: tariff.category,
     power_range: tariff.power_range,
     included_route_meters: tariff.included_route_meters,
@@ -180,10 +181,8 @@ onMounted(() => { void Promise.all([load(), loadBookState()]); });
     <p v-if="error" class="mt-2 text-xs text-red-700" role="alert">{{ error }}</p>
     <p v-if="bookStateError" class="mt-2 text-xs text-amber-800" role="alert">Не удалось проверить книгу цен монтажа: {{ bookStateError }} <button type="button" class="font-semibold underline" @click="loadBookState">Повторить</button></p>
     <div v-if="publishedRevision !== null && kind === 'installation'" class="mt-3 rounded-lg border border-brand-200 bg-white p-3 text-sm text-slate-700" role="status">
-      <p v-if="publishedRevision !== undefined">Базовые тарифы опубликованной книги. Можно добавить монтаж без товара; дополнительные работы — в настройках состава.</p>
+      <p v-if="publishedRevision !== undefined">Стандартные монтажи из опубликованной книги. После добавления название, состав и цену можно изменить в строке услуги.</p>
       <p v-else>{{ bookStateLoading ? 'Проверяем книгу цен монтажа…' : 'Пока книга цен не проверена, монтажные тарифы недоступны для быстрого добавления.' }}</p>
-      <button v-if="publishedRevision !== undefined && canOpenInstallationEstimate" type="button" class="btn-mini-outline mt-2" @click="emit('openInstallationEstimate')">Монтаж выбранного оборудования</button>
-      <p v-else-if="publishedRevision !== undefined" class="mt-1 text-xs">Сохраните заказ и выберите черновик предложения для расчёта.</p>
     </div>
     <template v-if="selectedTariff">
       <div class="mt-3 flex items-start justify-between gap-3">
@@ -223,7 +222,7 @@ onMounted(() => { void Promise.all([load(), loadBookState()]); });
           <div v-for="tariff in visibleStandards" :key="tariff.code" class="rounded-lg border border-slate-200 bg-white p-2.5" data-testid="installation-standard-tariff">
             <p class="text-sm font-semibold text-slate-900">{{ tariff.title }}</p>
             <p class="mt-1 text-xs font-normal text-slate-500">{{ tariff.description }}</p>
-            <div class="mt-2 flex items-center justify-between gap-2"><span class="text-sm">{{ formatMoney(Number(tariff.price)) }} BYN</span><div class="flex gap-2"><button type="button" class="btn-mini" :disabled="!canOpenInstallationEstimate" @click="emit('standardInstallation', tariff, false)">Добавить</button><button type="button" class="btn-mini-outline" :disabled="!canOpenInstallationEstimate" @click="emit('standardInstallation', tariff, true)">Изменить состав</button></div></div>
+            <div class="mt-2 flex items-center justify-between gap-2"><span class="text-sm">{{ formatMoney(Number(tariff.price)) }} BYN</span><button type="button" class="btn-mini" @click="emit('choose', standardServiceChoice(tariff))">Добавить</button></div>
           </div>
         </template>
         <div v-for="tariff in visibleTariffs" :key="tariff.id" class="rounded-lg border border-slate-200 bg-white p-2.5">

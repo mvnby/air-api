@@ -91,7 +91,7 @@ async def list_manager_tariffs(
 async def list_manager_quick_tariffs(
     q: str = Query(""),
     service_kind: ManagerTariffServiceKind | None = Query(None),
-    limit: int = Query(10, ge=1, le=50),
+    limit: int = Query(10, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):

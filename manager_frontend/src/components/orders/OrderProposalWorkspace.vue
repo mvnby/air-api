@@ -1,16 +1,18 @@
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import type { useOrderCommercialEditor } from '../../composables/useOrderCommercialEditor';
 import type { useOrderProposalLifecycle } from '../../composables/useOrderProposalLifecycle';
 import OrderProposalClientPreview from './OrderProposalClientPreview.vue';
 import { useDemoReadOnly } from '../../services/manager-demo';
 import OrderProductLinesEditor from './OrderProductLinesEditor.vue';
-import OrderInstallationEstimatePanel from './OrderInstallationEstimatePanel.vue';
 import OrderMultiSplitConfigurator from './OrderMultiSplitConfigurator.vue';
 import OrderProposalToolbar from './OrderProposalToolbar.vue';
 import OrderServiceLinesEditor from './OrderServiceLinesEditor.vue';
+import OrderInstallationEstimatePanel from './OrderInstallationEstimatePanel.vue';
 import type { OrderWorkflowType } from './order-workspace';
-import type { ManagerOrderDetailResponse } from '../../client';
+import { ManagerInstallationEstimatesService, type ManagerOrderDetailResponse, type ManagerInstallationStandardTariff } from '../../client';
+import { groupSuggestedInstallations, standardServiceChoice } from './service-installation-choices';
+import { managerSession } from '../../services/manager-session';
 
 const props = defineProps<{
   commercial: ReturnType<typeof useOrderCommercialEditor>;
@@ -43,7 +45,6 @@ const showCosts = defineModel<boolean>('showCosts', { default: false });
 const demoReadOnly = useDemoReadOnly();
 const toolbarRef = ref<InstanceType<typeof OrderProposalToolbar> | null>(null);
 const installationPanelRef = ref<InstanceType<typeof OrderInstallationEstimatePanel> | null>(null);
-const serviceEditorRef = ref<InstanceType<typeof OrderServiceLinesEditor> | null>(null);
 const previewOpenButton = ref<HTMLButtonElement | null>(null);
 const previewReturnButton = ref<HTMLButtonElement | null>(null);
 watch(clientPreview, async (preview) => {
@@ -53,10 +54,40 @@ watch(clientPreview, async (preview) => {
 const commercial = reactive(props.commercial);
 const proposal = reactive(props.proposal);
 const multiSplitOpen = ref(false);
-const canAddInstallation = computed(() => Boolean(props.orderId && proposal.activeProposal?.id && (props.workflow === 'sales_installation' || props.workflow === 'service_work')));
-const addStandardInstallation = () => {
-  if (commercial.productLines.some((line) => line.product_id)) void installationPanelRef.value?.addStandard();
-  else serviceEditorRef.value?.openCatalog();
+const canCalculateDetailed = computed(() => Boolean(props.orderId && proposal.activeProposal?.id
+  && ['sales_installation', 'service_work'].includes(props.workflow)));
+const recommendationChoices = ref<Array<{ product_id: number; tariff: ManagerInstallationStandardTariff }>>([]);
+const suggestedInstallations = computed(() => groupSuggestedInstallations(
+  commercial.productLines, recommendationChoices.value, commercial.serviceLines,
+));
+let recommendationRequest = 0;
+watch(() => JSON.stringify([
+  managerSession.auth.value?.tenant_id, managerSession.auth.value?.staff_user_id,
+  props.orderId, proposal.activeProposal?.id, props.workflow,
+  [...new Set(commercial.productLines.map((line) => line.product_id).filter((id) => id > 0))].sort((a, b) => a - b),
+]), async () => {
+  const attempt = ++recommendationRequest;
+  recommendationChoices.value = [];
+  if (!['sales_installation', 'service_work'].includes(props.workflow)) return;
+  const productIds = [...new Set(commercial.productLines.map((line) => line.product_id).filter((id) => id > 0))];
+  if (!productIds.length) return;
+  try {
+    const response = await ManagerInstallationEstimatesService.suggestManagerInstallationStandardTariffs({ product_ids: productIds.slice(0, 100) });
+    if (attempt === recommendationRequest) recommendationChoices.value = response.items || [];
+  } catch { /* Optional recommendations never block adding an ordinary service. */ }
+}, { immediate: true });
+onBeforeUnmount(() => { recommendationRequest += 1; });
+const addSuggested = (index: number) => {
+  const blank = commercial.serviceLines[index];
+  if (!blank || blank.title.trim() || blank.price) return;
+  const groups = suggestedInstallations.value;
+  if (!groups.length) return;
+  groups.forEach((group, groupIndex) => {
+    if (groupIndex > 0) commercial.addServiceLine();
+    const target = groupIndex === 0 ? index : commercial.serviceLines.length - 1;
+    commercial.selectServiceTariffForLine(target, standardServiceChoice(group.tariff), group.quantity);
+  });
+  commercial.editingServiceLineIndex = null;
 };
 
 defineExpose({
@@ -116,24 +147,12 @@ defineExpose({
       <fieldset :disabled="proposal.activeProposalLocked" :class="proposal.activeProposalLocked ? 'opacity-60' : ''">
         <div class="mb-2 flex flex-wrap items-center gap-2" aria-label="Добавить в предложение">
           <button v-if="showProductLines" type="button" class="btn-mini-outline h-8 text-xs" data-testid="add-product-line" data-order-usage="order_product_add" @click="commercial.addProductLine">+ Товар</button>
-          <button type="button" class="btn-mini-outline h-8 text-xs" data-testid="add-service-line" data-order-usage="order_service_add" @click="serviceEditorRef?.openCatalog()">+ Услуга</button>
-          <button v-if="canAddInstallation" type="button" class="btn-mini h-8 text-xs" data-testid="installation-standard-add" :disabled="installationPanelRef?.actionBusy" @click="addStandardInstallation">{{ installationPanelRef?.actionBusy ? 'Рассчитываем монтаж…' : 'Стандартный монтаж' }}</button>
+          <button type="button" class="btn-mini-outline h-8 text-xs" data-testid="add-service-line" data-order-usage="order_service_add" @click="commercial.addServiceLine">+ Услуга</button>
+
           <button v-if="catalogAvailable && showProductLines" type="button" class="btn-mini-outline h-8 text-xs" :disabled="catalogOpening" @click="emit('catalog')">{{ catalogOpening ? 'Открываем подбор…' : catalogNeedsSave ? 'Сохранить и подобрать' : 'Подобрать по параметрам' }}</button>
           <slot name="source-equipment" />
           <button type="button" class="h-8 px-1 text-xs text-slate-500 hover:text-brand-700" :aria-expanded="commercial.showEstimateImport" @click="commercial.toggleEstimateImport">Из сметы</button>
         </div>
-        <OrderInstallationEstimatePanel
-          v-if="canAddInstallation && orderId && proposal.activeProposal?.id"
-          ref="installationPanelRef"
-          compact
-          hide-actions
-          :order-id="orderId"
-          :proposal-id="proposal.activeProposal.id"
-          :before-action="beforeInstallationAction"
-          :begin-attach="beginInstallationAttach"
-          :after-attach="afterInstallationAttach"
-          :end-attach="endInstallationAttach"
-        />
         <div class="hidden gap-2 rounded-t-lg border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500 dark:border-slate-700 dark:bg-slate-900 md:grid" :class="showCosts && !demoReadOnly ? 'grid-cols-[minmax(0,1fr)_3.5rem_6rem_6.5rem_6rem_4.5rem]' : 'grid-cols-[minmax(0,1fr)_3.5rem_6rem_6.5rem_4.5rem]'" aria-hidden="true">
           <span>Наименование и состав</span><span class="text-center">Кол-во</span><span class="text-right">Цена</span><span class="text-right">Сумма</span><span v-if="showCosts && !demoReadOnly" class="text-right">Себест.</span><span class="text-center">Действия</span>
         </div>
@@ -167,7 +186,6 @@ defineExpose({
         />
 
         <OrderServiceLinesEditor
-          ref="serviceEditorRef"
           compact
           hide-actions
           :show-costs="showCosts"
@@ -188,28 +206,37 @@ defineExpose({
           :format-service-kind="formatServiceKind"
           :workflow="workflow"
           :customer-id="customerId"
-          :can-open-installation-estimate="Boolean(orderId && proposal.activeProposal?.id && (workflow === 'sales_installation' || workflow === 'service_work'))"
+          :suggested-installations="suggestedInstallations"
+          :can-open-installation-estimate="false"
           @focus="commercial.onServiceTitleFocus"
           @input="commercial.onServiceTitleInput"
           @blur="commercial.onServiceTitleBlur"
-          @select="commercial.selectServiceTariffForLine($event.index, $event.option)"
+          @select="commercial.selectServiceTariffForLine($event.index, $event.option, $event.quantity)"
           @description-mode="commercial.setServiceLineDescriptionMode($event.index, $event.mode)"
           @remove="commercial.removeServiceLine"
           @edit-installation="commercial.editInstallationLine"
           @add="commercial.addServiceLine"
+          @add-suggested="addSuggested"
           @add-tariff="commercial.addServiceTariff"
           @append-estimate="commercial.addCreatedEstimate($event.id, $event.lines)"
           @toggle-estimate="commercial.toggleEstimateImport"
           @import-estimate="commercial.applyEstimateToServices"
           @load-estimates="commercial.loadEstimateOptions"
           @remember-description-mode="commercial.setDefaultServiceDescriptionMode"
-          @open-installation-estimate="installationPanelRef?.openPanel()"
-          @standard-installation="(tariff, edit) => installationPanelRef?.selectStandardTariff(tariff, edit)"
+          @standard-installation="(tariff) => commercial.addServiceTariff(standardServiceChoice(tariff))"
         />
         <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
-          <button v-if="canAddInstallation" type="button" class="min-h-8 hover:text-brand-700" data-testid="installation-open" @click="installationPanelRef?.openPanel()">Настроить монтаж</button>
+          <button v-if="canCalculateDetailed" type="button" class="min-h-8 hover:text-brand-700" @click="installationPanelRef?.openPanel()">Подробная смета монтажа</button>
+
           <button v-if="orderId && workflow === 'sales_installation'" type="button" class="min-h-8 hover:text-brand-700" :aria-expanded="multiSplitOpen" @click="multiSplitOpen = !multiSplitOpen">{{ multiSplitOpen ? 'Скрыть мультисплит' : 'Собрать мультисплит' }}</button>
         </div>
+        <OrderInstallationEstimatePanel
+          v-if="canCalculateDetailed && orderId && proposal.activeProposal?.id"
+          ref="installationPanelRef" compact hide-actions
+          :order-id="orderId" :proposal-id="proposal.activeProposal.id"
+          :before-action="beforeInstallationAction" :begin-attach="beginInstallationAttach"
+          :after-attach="afterInstallationAttach" :end-attach="endInstallationAttach"
+        />
       </fieldset>
       <button v-if="commercial.total > 0" type="button" class="mt-2 min-h-8 text-xs text-brand-700 hover:underline" data-testid="proposal-to-documents" @click="emit('documents')">Перейти к документам →</button>
     </div>

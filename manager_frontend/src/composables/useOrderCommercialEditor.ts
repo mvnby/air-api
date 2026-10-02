@@ -161,7 +161,6 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
   const activeServiceSuggestionIndex = ref<number | null>(null);
   const serviceTariffOptions = ref<ManagerQuickTariffResponse[]>([]);
   const serviceTariffLookupLoading = ref(false);
-  let serviceTariffSearchRequestId = 0;
   const estimateOptions = ref<ManagerServiceEstimateResponse[]>([]);
   const estimateOptionsLoading = ref(false);
   const estimateImportMode = ref<'detailed' | 'collapsed'>('detailed');
@@ -413,39 +412,15 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
     setToast(`Смета #${id} сохранена и добавлена в заказ`);
   };
 
-  const debouncedLoadServiceTariffOptions = useDebounceFn(async (index: number, query: string, requestId: number) => {
-    try {
-      serviceTariffLookupLoading.value = true;
-      const response = await api.listManagerQuickTariffs(query, null, 10);
-      if (requestId !== serviceTariffSearchRequestId || activeServiceSuggestionIndex.value !== index) return;
-      serviceTariffOptions.value = response.items || [];
-    } catch (error) {
-      setToast(`Ошибка поиска тарифов: ${getApiErrorMessage(error)}`, 'error');
-      if (requestId === serviceTariffSearchRequestId) serviceTariffOptions.value = [];
-    } finally {
-      if (requestId === serviceTariffSearchRequestId) serviceTariffLookupLoading.value = false;
-    }
-  }, 300);
-
   const onServiceTitleInput = (index: number) => {
     const row = serviceLines.value[index];
     if (!row) return;
     activeServiceSuggestionIndex.value = index;
     row.service_id = null;
-    const query = row.title.trim();
-    serviceTariffSearchRequestId += 1;
-    if (query.length < 2) {
-      serviceTariffOptions.value = [];
-      serviceTariffLookupLoading.value = false;
-      return;
-    }
-    debouncedLoadServiceTariffOptions(index, query, serviceTariffSearchRequestId);
   };
 
   const onServiceTitleFocus = (index: number) => {
     activeServiceSuggestionIndex.value = index;
-    const row = serviceLines.value[index];
-    if (row?.title.trim() && row.title.trim().length >= 2) onServiceTitleInput(index);
   };
 
   const onServiceTitleBlur = (index: number) => {
@@ -454,10 +429,11 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
     }, 120);
   };
 
-  const selectServiceTariffForLine = (index: number, option: ManagerQuickTariffResponse) => {
+  const selectServiceTariffForLine = (index: number, option: ManagerQuickTariffResponse, quantity?: number) => {
     const row = serviceLines.value[index];
     if (!row) return;
     applyTariffTemplateToLine(row, option);
+    if (quantity != null) row.quantity = Math.max(1, Math.trunc(quantity));
     activeServiceSuggestionIndex.value = null;
     serviceTariffOptions.value = [];
   };
