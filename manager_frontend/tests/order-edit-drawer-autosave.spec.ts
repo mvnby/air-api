@@ -8,7 +8,6 @@ import OrderDocumentsWorkspace from '../src/components/orders/OrderDocumentsWork
 import OrderPaymentsPanel from '../src/components/orders/OrderPaymentsPanel.vue';
 import OrderWorkspaceHeader from '../src/components/orders/OrderWorkspaceHeader.vue';
 import OrderWorkspaceNav from '../src/components/orders/OrderWorkspaceNav.vue';
-import OrderWorkspaceContext from '../src/components/orders/OrderWorkspaceContext.vue';
 import OrderRequestSourceCard from '../src/components/orders/OrderRequestSourceCard.vue';
 import LeadSourceReviewModal from '../src/components/leads/LeadSourceReviewModal.vue';
 import { ManagerOrdersService, ManagerMailService, ManagerSettingsService } from '../src/client';
@@ -54,7 +53,6 @@ const mountDrawer = async () => {
 const customer = () => wrapper.findComponent(OrderCustomerContext);
 const header = () => wrapper.findComponent(OrderWorkspaceHeader);
 const payments = () => wrapper.findComponent(OrderPaymentsPanel);
-const workspaceContext = () => wrapper.findComponent(OrderWorkspaceContext);
 const openDocuments = async () => {
   wrapper.findComponent(OrderWorkspaceNav).vm.$emit('select', 'documents');
   await nextTick();
@@ -73,13 +71,34 @@ afterEach(() => { wrapper?.unmount(); vi.restoreAllMocks(); vi.useRealTimers(); 
 describe('order drawer autosave integration', () => {
   it('opens customer editing under the order context instead of rendering it in Work', async () => {
     await mountDrawer();
-    expect(customer().props('visible')).toBe(false);
+    expect(customer().props('editTarget')).toBe(null);
 
-    workspaceContext().vm.$emit('customer');
+    customer().vm.$emit('update:editTarget', 'customer');
     await nextTick();
 
-    expect(customer().props('visible')).toBe(true);
-    expect(customer().props('editTarget')).toBe('customer');
+        expect(customer().props('editTarget')).toBe('customer');
+  });
+
+  it('saves the object through the shared save queue while preserving proposal edits', async () => {
+    await mountDrawer();
+    const commercial = wrapper.findComponent(OrderProposalWorkspace).props('commercial') as any;
+    commercial.addServiceLine();
+    commercial.serviceLines.value[0].title = 'Монтаж по согласованию';
+    commercial.serviceLines.value[0].price = 600;
+    await nextTick();
+    expect(await customer().props('persistObject')!({ address: 'Минск, Новая, 1', branchId: null, comment: 'Вход со двора' })).toBe(true);
+    expect(stored.delivery_address).toBe('Минск, Новая, 1');
+    expect(stored.comment).toBe('Вход со двора');
+    expect(stored.proposals![0].service_lines).toEqual(expect.arrayContaining([expect.objectContaining({ title: 'Монтаж по согласованию', price: 600 })]));
+  });
+
+  it('rolls back failed object model changes without discarding other order edits', async () => {
+    await mountDrawer();
+    vi.mocked(ManagerOrdersService.patchManagerOrder).mockRejectedValueOnce(new Error('offline'));
+    expect(await customer().props('persistObject')!({ address: 'Несохранённый адрес', branchId: null, comment: 'Несохранённый комментарий' })).toBe(false);
+    expect(customer().props('deliveryAddress')).toBe('');
+    expect(customer().props('comment')).toBe('');
+    expect(header().props('saveFailed')).toBe(true);
   });
 
   it('places the reviewed request beside customer context and outside Work', async () => {
@@ -101,7 +120,7 @@ describe('order drawer autosave integration', () => {
     const source = wrapper.findComponent(OrderRequestSourceCard);
     expect(source.props('orderId')).toBe(395);
     expect(source.props('sourceEnrichment')).toEqual(stored.source_enrichment);
-    expect(source.element.parentElement).toBe(workspaceContext().element.parentElement);
+    expect(source.element.parentElement).toBe(customer().element.parentElement);
     expect(wrapper.find('[data-order-usage="workspace-work-panel"]').text()).not.toContain('Данные из закупки');
     expect(wrapper.find('[data-order-usage="workspace-work-panel"]').text()).not.toContain('Дозаполнить из источника');
   });

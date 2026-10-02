@@ -2,6 +2,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import OrderServiceTitleInput from '../src/components/orders/OrderServiceTitleInput.vue';
 import type { ManagerQuickTariffResponse, ManagerInstallationStandardTariff } from '../src/client';
+import type { OrderWorkflowType } from '../src/components/orders/order-workspace';
 
 const mocks = vi.hoisted(() => ({ list: vi.fn() }));
 vi.mock('../src/api', () => ({ api: { listManagerQuickTariffs: mocks.list } }));
@@ -17,8 +18,9 @@ const deferred = <T,>() => {
   return { promise, resolve };
 };
 const mounted: VueWrapper[] = [];
-const mountInput = (value = '', suggestions?: Array<{ tariff: ManagerInstallationStandardTariff; quantity: number }>) => {
-  const wrapper = mount(OrderServiceTitleInput, { props: { modelValue: value, workflow: 'sales_installation',
+const mountInput = (value = '', suggestions?: Array<{ tariff: ManagerInstallationStandardTariff; quantity: number }>,
+  workflow: OrderWorkflowType = 'sales_installation') => {
+  const wrapper = mount(OrderServiceTitleInput, { props: { modelValue: value, workflow,
     suggestions, 'onUpdate:modelValue': (next: string) => wrapper.setProps({ modelValue: next }) } });
   mounted.push(wrapper);
   return wrapper;
@@ -32,11 +34,78 @@ describe('inline service title suggestions', () => {
     expect(wrapper.find('[data-testid="service-context-menu"]').exists()).toBe(false);
     await wrapper.get('textarea').trigger('focus');
     await flushPromises();
-    expect(mocks.list).toHaveBeenCalledWith('', null, 100);
+    expect(mocks.list).toHaveBeenCalledWith('', 'installation', 100);
     expect(wrapper.get('[role="group"]').text()).toContain('Монтаж');
     expect(wrapper.get('[role="group"]').text()).toContain('Обслуживание');
     expect(wrapper.get('[data-testid="select-service-91"]').text()).toContain('600 BYN');
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+  });
+
+  it.each([
+    ['maintenance', 'maintenance'], ['repair', 'repair'],
+    ['sales_installation', 'installation'], ['service_work', 'installation'],
+  ] as const)('loads the %s workflow category for an empty row', async (workflow, category) => {
+    const wrapper = mountInput('', [{ tariff: standard, quantity: 2 }], workflow);
+    await wrapper.get('textarea').trigger('focus');
+    await flushPromises();
+    expect(mocks.list).toHaveBeenLastCalledWith('', category, 100);
+    expect(wrapper.findAll('[aria-pressed="true"]')).toHaveLength(1);
+    expect(wrapper.text().includes('Для оборудования в предложении')).toBe(category === 'installation');
+    await wrapper.get('textarea').setValue('Монтаж');
+    await vi.advanceTimersByTimeAsync(200);
+    expect(mocks.list).toHaveBeenLastCalledWith('Монтаж', null, 100);
+    await wrapper.get('textarea').setValue('');
+    await vi.advanceTimersByTimeAsync(200);
+    expect(mocks.list).toHaveBeenLastCalledWith('', category, 100);
+  });
+
+  it('keeps an explicit category and its browsing mode after blur and refocus', async () => {
+    const wrapper = mountInput('Особая работа');
+    await wrapper.get('textarea').trigger('focus');
+    await wrapper.findAll('[role="group"] button').find((button) => button.text() === 'Ремонт')!.trigger('click');
+    await wrapper.get('textarea').trigger('focusout');
+    await wrapper.get('textarea').trigger('focus');
+    await flushPromises();
+    expect(mocks.list).toHaveBeenLastCalledWith('', 'repair', 100);
+    expect((wrapper.get('textarea').element as HTMLTextAreaElement).value).toBe('Особая работа');
+    await wrapper.get('textarea').setValue('Диагностика');
+    await vi.advanceTimersByTimeAsync(200);
+    await wrapper.get('textarea').trigger('focusout');
+    await wrapper.get('textarea').trigger('focus');
+    await flushPromises();
+    expect(mocks.list).toHaveBeenLastCalledWith('Диагностика', 'repair', 100);
+  });
+
+  it('keeps all categories explicitly enabled after toggling the workflow category off', async () => {
+    const wrapper = mountInput('', [{ tariff: standard, quantity: 2 }]);
+    await wrapper.get('textarea').trigger('focus');
+    await wrapper.findAll('[role="group"] button').find((button) => button.text() === 'Монтаж')!.trigger('click');
+    await flushPromises();
+    expect(mocks.list).toHaveBeenLastCalledWith('', null, 100);
+    expect(wrapper.text()).not.toContain('Для оборудования в предложении');
+    await wrapper.get('textarea').trigger('focusout');
+    await wrapper.setProps({ workflow: 'maintenance' });
+    await wrapper.get('textarea').trigger('focus');
+    await flushPromises();
+    expect(mocks.list).toHaveBeenLastCalledWith('', null, 100);
+  });
+
+  it('switches the default workflow while open and ignores the former workflow response', async () => {
+    const previous = deferred<{ items: ManagerQuickTariffResponse[] }>();
+    mocks.list.mockReturnValueOnce(previous.promise).mockResolvedValue({ items: [] });
+    const wrapper = mountInput('', [{ tariff: standard, quantity: 2 }]);
+    await wrapper.get('textarea').trigger('focus');
+    await wrapper.setProps({ workflow: 'repair' });
+    await flushPromises();
+    expect(mocks.list).toHaveBeenLastCalledWith('', 'repair', 100);
+    expect(wrapper.text()).not.toContain('Для оборудования в предложении');
+    previous.resolve({ items: [tariff] });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="select-service-91"]').exists()).toBe(false);
+    await wrapper.findAll('[role="group"] button').find((button) => button.text() === 'Обслуживание')!.trigger('click');
+    await wrapper.setProps({ workflow: 'sales_installation' });
+    await flushPromises();
+    expect(mocks.list).toHaveBeenLastCalledWith('', 'maintenance', 100);
   });
 
   it('searches a single character and filters by category while retaining arbitrary typed text', async () => {
