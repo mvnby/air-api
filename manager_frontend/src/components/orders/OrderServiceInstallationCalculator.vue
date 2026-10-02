@@ -104,30 +104,30 @@ onBeforeUnmount(() => { disposed = true; epoch += 1; });
 </script>
 
 <template>
-  <div class="mt-3 min-w-0 rounded-lg border border-slate-200 bg-slate-50 p-3" data-testid="service-installation-calculator">
+  <div class="mt-3 min-w-0 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900" data-testid="service-installation-calculator">
     <div class="flex flex-wrap items-center justify-between gap-2">
-      <p class="text-sm font-medium text-slate-900">Рассчитать монтаж</p>
+      <p class="text-sm font-medium text-slate-900 dark:text-slate-100">Рассчитать монтаж</p>
       <button type="button" class="btn-mini-outline min-h-8 text-xs" @click="emit('close')">Закрыть расчёт</button>
     </div>
     <p class="mt-1 text-xs text-slate-500">Расчёт на один монтаж. Количество в строке — {{ quantity }}. Название, описание и цена изменятся только после применения.</p>
     <p v-if="loading" class="mt-2 text-xs text-slate-500">Загружаем опубликованные тарифы…</p>
     <template v-else>
-      <label class="mt-3 block text-xs text-slate-600">Стандартный тариф
+      <label class="mt-3 block text-xs text-slate-600 dark:text-slate-300">Стандартный тариф
         <select v-model="selectedCode" data-testid="calculator-tariff" class="field-input mt-1"><option value="">Выберите тип и мощность</option><option v-for="tariff in tariffs" :key="tariff.code" :value="tariff.code">{{ tariff.title }} · {{ formatMoney(Number(tariff.price)) }}</option></select>
       </label>
-      <p v-if="!tariffs.length && !error" class="mt-2 text-xs text-slate-600">Нет опубликованных стандартных тарифов. Название и цену услуги можно указать вручную.</p>
+      <p v-if="!tariffs.length && !error" class="mt-2 text-xs text-slate-600 dark:text-slate-300">Нет опубликованных стандартных тарифов. Название и цену услуги можно указать вручную.</p>
       <div v-if="selected" class="mt-3 space-y-3">
         <div class="grid gap-3 sm:grid-cols-2">
-          <label class="text-xs text-slate-600">Трасса на один монтаж, м<input v-model.number="route" data-testid="calculator-route" type="number" min="0" max="1000" step="0.01" class="field-input mt-1" /></label>
-          <label class="text-xs text-slate-600">Проходы стены до 80 см, шт.<input v-model.number="thick" data-testid="calculator-thick" type="number" min="0" max="100" step="1" class="field-input mt-1" /></label>
+          <label class="text-xs text-slate-600 dark:text-slate-300">Трасса на один монтаж, м<input v-model.number="route" data-testid="calculator-route" type="number" min="0" max="1000" step="0.01" class="field-input mt-1" /></label>
+          <label class="text-xs text-slate-600 dark:text-slate-300">Проходы стены до 80 см, шт.<input v-model.number="thick" data-testid="calculator-thick" type="number" min="0" max="100" step="1" class="field-input mt-1" /></label>
         </div>
         <label class="flex items-center gap-2 text-xs"><input v-model="pump" type="checkbox" data-testid="calculator-pump" />Дренажный насос с установкой</label>
-        <details class="rounded-md border border-slate-200 bg-white p-2">
-          <summary class="cursor-pointer text-xs text-slate-600">Дополнительные проходы и штробление</summary>
+        <details class="rounded-md border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-950">
+          <summary class="cursor-pointer text-xs text-slate-600 dark:text-slate-300">Дополнительные проходы и штробление</summary>
           <div class="mt-3 grid gap-3 sm:grid-cols-2">
-            <label class="text-xs text-slate-600">Межкомнатные проходы до 20 см, шт.<input v-model.number="thin" type="number" min="0" max="100" step="1" class="field-input mt-1" /></label>
-            <label class="text-xs text-slate-600">Проходы свыше 80 см, шт.<input v-model.number="over80" type="number" min="0" max="100" step="1" class="field-input mt-1" /><span class="block text-[11px]">Потребуют отдельной оценки</span></label>
-            <label class="text-xs text-slate-600">Штробление, м<input v-model.number="chase" type="number" min="0" max="1000" step="0.01" class="field-input mt-1" /></label>
+            <label class="text-xs text-slate-600 dark:text-slate-300">Межкомнатные проходы до 20 см, шт.<input v-model.number="thin" type="number" min="0" max="100" step="1" class="field-input mt-1" /></label>
+            <label class="text-xs text-slate-600 dark:text-slate-300">Проходы свыше 80 см, шт.<input v-model.number="over80" type="number" min="0" max="100" step="1" class="field-input mt-1" /><span class="block text-[11px]">Потребуют отдельной оценки</span></label>
+            <label class="text-xs text-slate-600 dark:text-slate-300">Штробление, м<input v-model.number="chase" type="number" min="0" max="1000" step="0.01" class="field-input mt-1" /></label>
           </div>
         </details>
         <div class="flex flex-wrap gap-2">
@@ -140,10 +140,10 @@ onBeforeUnmount(() => { disposed = true; epoch += 1; });
     <div v-if="preview" class="mt-3 border-t border-slate-200 pt-3">
       <template v-if="resultLine">
         <p class="text-sm font-semibold">{{ formatMoney(resultLine.price) }} за монтаж · {{ formatMoney(resultLine.price * quantity) }} за {{ quantity }} шт.</p>
-        <p class="mt-1 text-xs leading-relaxed text-slate-600">{{ resultLine.description }}</p>
+        <p class="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-300">{{ resultLine.description }}</p>
         <button type="button" class="btn-mini mt-3 min-h-8 text-xs" data-testid="calculator-apply" @click="apply">Применить к строке</button>
       </template>
-      <p v-else class="text-xs text-slate-600" role="status">{{ preview.status === 'quote' ? 'Для этого состава нужна отдельная оценка. Можно указать согласованную цену вручную.' : 'Точной цены по тарифу нет. Можно указать согласованную цену вручную.' }}</p>
+      <p v-else class="text-xs text-slate-600 dark:text-slate-300" role="status">{{ preview.status === 'quote' ? 'Для этого состава нужна отдельная оценка. Можно указать согласованную цену вручную.' : 'Точной цены по тарифу нет. Можно указать согласованную цену вручную.' }}</p>
     </div>
   </div>
 </template>

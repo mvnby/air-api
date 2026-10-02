@@ -121,18 +121,18 @@ onBeforeUnmount(() => { request += 1; clearTimeout(timer); });
       <div class="mt-2 max-h-72 space-y-1 overflow-y-auto" aria-label="Подсказки услуг">
         <div v-if="suggestions?.length && !title.trim() && (!kind || kind === 'installation')" class="border-b border-slate-100 pb-2">
           <p class="px-2 text-[11px] text-slate-500">Для оборудования в предложении</p>
-          <button v-for="group in suggestions" :key="group.tariff.code" type="button" class="block w-full rounded-lg px-2 py-2 text-left text-xs hover:bg-slate-100" @mousedown.prevent @click="choose(standardServiceChoice(group.tariff), group.quantity)">
-            <span class="block font-medium text-slate-900">{{ group.tariff.title }}</span>
-            <span class="text-slate-500">{{ group.quantity }} шт. × {{ formatMoney(Number(group.tariff.price)) }}</span>
+          <button v-for="group in suggestions" :key="group.tariff.code" type="button" class="block w-full rounded-lg px-2 py-2 text-left text-xs hover:bg-slate-100 dark:hover:bg-slate-800" @mousedown.prevent @click="choose(standardServiceChoice(group.tariff), group.quantity)">
+            <span class="block font-medium text-slate-900 dark:text-slate-100">{{ group.tariff.title }}</span>
+            <span class="text-slate-500 dark:text-slate-400">{{ group.quantity }} шт. × {{ formatMoney(Number(group.tariff.price)) }}</span>
           </button>
           <button v-if="suggestions.length > 1" type="button" data-testid="add-all-suggested-installations" class="min-h-8 px-2 text-xs font-medium text-brand-700" @mousedown.prevent @click="open = false; emit('addSuggested')">Добавить все предложенные монтажи</button>
         </div>
         <p v-if="loading" class="px-2 py-2 text-xs text-slate-500">Ищем услуги…</p>
         <p v-else-if="error" class="px-2 py-2 text-xs text-slate-500" role="status">Подсказки не загрузились. Можно заполнить услугу вручную. <button type="button" class="underline" @mousedown.prevent @click="load">Повторить</button></p>
-        <button v-for="(option, index) in options" :key="option.installation_standard?.code || option.tariff_id || index" type="button" :data-testid="`select-service-${option.installation_standard?.code || option.tariff_id}`" class="block w-full rounded-lg px-2 py-2 text-left text-xs hover:bg-slate-100 dark:hover:bg-slate-800" :class="highlighted === index ? 'bg-brand-50' : ''" @mousedown.prevent @click="choose(option)">
+        <button v-for="(option, index) in options" :key="option.installation_standard?.code || option.tariff_id || index" type="button" :data-testid="`select-service-${option.installation_standard?.code || option.tariff_id}`" class="block w-full rounded-lg px-2 py-2 text-left text-xs hover:bg-slate-100 dark:hover:bg-slate-800" :class="highlighted === index ? 'bg-brand-50 dark:bg-slate-800' : ''" @mousedown.prevent @click="choose(option)">
           <span class="block font-medium text-slate-900 dark:text-slate-100">{{ option.short_name || option.title }}</span>
           <span v-if="option.full_description" class="mt-0.5 block line-clamp-2 text-[11px] leading-snug text-slate-500">{{ option.full_description }}</span>
-          <span class="mt-1 block text-slate-600">{{ formatMoney(Number(option.price)) }}</span>
+          <span class="mt-1 block text-slate-600 dark:text-slate-300">{{ formatMoney(Number(option.price)) }}</span>
         </button>
         <p v-if="!loading && !error && !options.length" class="px-2 py-2 text-xs text-slate-500">Подходящих услуг нет. Оставьте своё название и укажите цену.</p>
       </div>
