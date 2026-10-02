@@ -32,6 +32,8 @@ from schemas_belzakupki_enrichment import (
 )
 from services.customer_party_classifier import infer_customer_type_from_requisites
 from services.customer_creation_service import CustomerAlreadyExistsError, CustomerCreationService
+from services.commercial_terms_extraction import extract_commercial_terms
+from services.order_commercial_terms_service import commercial_terms_response, store_source_terms
 from services.belzakupki_source_analysis import analyze_tender_text, extract_missing_document_text
 from services.belzakupki_equipment_prefill import BelzakupkiEquipmentPrefillService
 from services.order_scenarios import SCENARIOS, infer_scenario_from_task, resolve_scenario
@@ -324,7 +326,16 @@ class BelzakupkiEnrichmentService:
             field_sources[f"objects.{index}.address"] = draft_source
             for equipment_index, _ in enumerate(obj.equipment):
                 field_sources[f"objects.{index}.equipment.{equipment_index}"] = draft_source
+        commercial_source_terms = extract_commercial_terms(str(data.get("description") or ""), source="Описание закупки")
+        for document in documents:
+            if document.extracted_text:
+                extracted_terms = extract_commercial_terms(document.extracted_text, source=document.name)
+                if document.extracted_text_truncated:
+                    for term in extracted_terms:
+                        term.issues.append("Текст документа обрезан; проверьте оригинал")
+                commercial_source_terms.extend(extracted_terms)
         return ManagerOrderSourcePreview(
+            commercial_terms=commercial_terms_response(order, terms=commercial_source_terms),
             order_id=order_id, source_code=source, external_id=external_id,
             source_url=_text(data.get("source_url"), 2048), title=_text(data.get("title"), 1000),
             deadline_at=_text(data.get("deadline_at"), 80), estimated_value=_amount(data.get("estimated_value")),
@@ -390,6 +401,16 @@ class BelzakupkiEnrichmentService:
                     preview.field_sources[f"objects.{index}.equipment.{equipment_index}"] = "ИИ по выбранным документам"
         else:
             preview.warnings.append("AI не смог надёжно разделить объекты; проверьте адреса по оригиналу.")
+        order = await cls._order(session, order_id, scope)
+        selected_terms = []
+        for doc in preview.documents:
+            if doc.id in selected and doc.extracted_text:
+                extracted_terms = extract_commercial_terms(doc.extracted_text, source=doc.name)
+                if doc.extracted_text_truncated:
+                    for term in extracted_terms:
+                        term.issues.append("Текст документа обрезан; проверьте оригинал")
+                selected_terms.extend(extracted_terms)
+        preview.commercial_terms = commercial_terms_response(order, terms=selected_terms)
         preview.analysis_source = "ai"
         preview.analyzed_document_ids = list(selected)
         preview.warnings.append("AI подготовил черновик; проверьте адреса, модели и количество по оригиналу.")
@@ -420,8 +441,20 @@ class BelzakupkiEnrichmentService:
         if scope.demo_read_only:
             raise ValueError("Demo workspace is read-only")
         order = await cls._order(session, order_id, scope, lock=True)
+        from services.inbox_eligibility import require_unarchived_inbox
+        await require_unarchived_inbox(session, "order", order_id)
         detail = await cls._detail(order)
         source, external_id = _source_identity(order)
+        source_terms = extract_commercial_terms(str(detail.get("description") or ""), source="Описание закупки")
+        for document in cls._documents(detail):
+            if document.get("extracted_text"):
+                extracted_terms = extract_commercial_terms(str(document["extracted_text"]), source=str(document.get("name") or "Документ закупки"))
+                if document.get("extracted_text_truncated"):
+                    for term in extracted_terms:
+                        term.issues.append("Текст документа обрезан; проверьте оригинал")
+                source_terms.extend(extracted_terms)
+        if source_terms:
+            store_source_terms(order, source_terms)
         fields_set = payload.model_fields_set
         if order.status == OrderStatus.NEW_LEAD and "workflow_type" not in fields_set:
             raise ValueError("Choose an order scenario before moving the lead to negotiations")
@@ -596,6 +629,14 @@ class BelzakupkiEnrichmentService:
             content, filename, mime_type = await cls.document(session, order_id=order_id, document_id=document_id, scope=scope)
             if mime_type not in ServiceAttachmentService.SAFE_MIME_TYPES:
                 raise ValueError("Unsupported source document type for private attachment")
+            if not doc.get("extracted_text"):
+                extracted, _ = await extract_missing_document_text(filename=filename, mime_type=mime_type, content=content)
+                if extracted:
+                    extracted_terms = extract_commercial_terms(extracted, source=filename)
+                    if len(extracted) >= 24000:
+                        for term in extracted_terms:
+                            term.issues.append("Текст документа обрезан; проверьте оригинал")
+                    source_terms.extend(extracted_terms)
             attachment = await ServiceAttachmentService.create_and_link_order_attachment(
                 session, order_id=order_id, content=content, filename=filename,
                 mime_type=mime_type,
@@ -607,6 +648,8 @@ class BelzakupkiEnrichmentService:
             )
             attachment_ids.append(int(attachment["id"]))
             applied.append("attachment")
+        if source_terms:
+            store_source_terms(order, source_terms)
         await session.commit()
         return ManagerOrderSourceApplyResult(
             order_id=order_id, customer_id=order.customer_id,

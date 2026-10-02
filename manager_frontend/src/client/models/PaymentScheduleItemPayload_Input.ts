@@ -2,7 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type PaymentScheduleItemPayload = {
+export type PaymentScheduleItemPayload_Input = {
     share_percent: (number | string);
     due_event: string;
     due_days?: (number | null);

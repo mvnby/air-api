@@ -79,7 +79,7 @@ const unlink = async () => {
     </div>
     <template v-else>
       <button type="button" class="font-semibold text-brand-700 underline dark:text-brand-300" :aria-expanded="expanded" @click="expanded = !expanded">
-        {{ expanded ? 'Скрыть привязку' : 'Привязать письмо к заказу' }}
+        {{ expanded ? 'Скрыть привязку' : 'Не новое обращение · связать с заказом' }}
       </button>
       <div v-if="expanded" class="mt-2 rounded-lg bg-slate-50 p-3 dark:bg-slate-900/40">
         <label class="block font-medium text-slate-700 dark:text-slate-200" :for="`email-lead-target-${sourceOrderId}`">Номер существующего заказа</label>

@@ -7,7 +7,12 @@ import type { EmailLeadLinkPayload } from '../models/EmailLeadLinkPayload';
 import type { EmailLeadLinkResult } from '../models/EmailLeadLinkResult';
 import type { EmailLeadLinkTarget } from '../models/EmailLeadLinkTarget';
 import type { EmailLeadUnlinkResult } from '../models/EmailLeadUnlinkResult';
+import type { InboxArchivePayload } from '../models/InboxArchivePayload';
+import type { InboxNoAnswerPayload } from '../models/InboxNoAnswerPayload';
+import type { InboxReadPayload } from '../models/InboxReadPayload';
+import type { InboxTenderPayload } from '../models/InboxTenderPayload';
 import type { LeadsCounterResponse } from '../models/LeadsCounterResponse';
+import type { LeadsInboxDetailResponse } from '../models/LeadsInboxDetailResponse';
 import type { LeadsInboxListResponse } from '../models/LeadsInboxListResponse';
 import type { LeadSource } from '../models/LeadSource';
 import type { OriginalEmailAttachmentList } from '../models/OriginalEmailAttachmentList';
@@ -15,6 +20,118 @@ import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class ManagerLeadsInboxService {
+    /**
+     * Detail
+     * @param leadId
+     * @returns LeadsInboxDetailResponse Successful Response
+     * @throws ApiError
+     */
+    public static getManagerRawInboxLead(
+        leadId: number,
+    ): CancelablePromise<LeadsInboxDetailResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/leads/inbox/raw/{lead_id}',
+            path: {
+                'lead_id': leadId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Mark Read
+     * @param leadId
+     * @param requestBody
+     * @returns LeadsInboxDetailResponse Successful Response
+     * @throws ApiError
+     */
+    public static setManagerRawInboxLeadRead(
+        leadId: number,
+        requestBody: InboxReadPayload,
+    ): CancelablePromise<LeadsInboxDetailResponse> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/manager/leads/inbox/raw/{lead_id}/read',
+            path: {
+                'lead_id': leadId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Archive
+     * @param leadId
+     * @param requestBody
+     * @returns LeadsInboxDetailResponse Successful Response
+     * @throws ApiError
+     */
+    public static archiveManagerRawInboxLead(
+        leadId: number,
+        requestBody: InboxArchivePayload,
+    ): CancelablePromise<LeadsInboxDetailResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/leads/inbox/raw/{lead_id}/archive',
+            path: {
+                'lead_id': leadId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Restore
+     * @param leadId
+     * @returns LeadsInboxDetailResponse Successful Response
+     * @throws ApiError
+     */
+    public static restoreManagerRawInboxLead(
+        leadId: number,
+    ): CancelablePromise<LeadsInboxDetailResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/leads/inbox/raw/{lead_id}/restore',
+            path: {
+                'lead_id': leadId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * No Answer
+     * @param leadId
+     * @param requestBody
+     * @returns LeadsInboxDetailResponse Successful Response
+     * @throws ApiError
+     */
+    public static recordManagerRawInboxLeadNoAnswer(
+        leadId: number,
+        requestBody: InboxNoAnswerPayload,
+    ): CancelablePromise<LeadsInboxDetailResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/leads/inbox/raw/{lead_id}/no-answer',
+            path: {
+                'lead_id': leadId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
     /**
      * Get Leads Counter
      * Fast counter for the Dashboard / Sidebar badge.
@@ -32,13 +149,15 @@ export class ManagerLeadsInboxService {
      * Get Leads Inbox
      * Unified inbox feed.
      *
-     * scope=active  → new_lead + assessment, sorted by is_new DESC then created_at DESC.
+     * scope=active  → unlinked, unarchived new_lead incoming records.
      * scope=archive → canceled or linked to an existing order.
      * @param scope
      * @param page
      * @param limit
      * @param search
      * @param source
+     * @param unreadOnly
+     * @param sort
      * @returns LeadsInboxListResponse Successful Response
      * @throws ApiError
      */
@@ -48,6 +167,8 @@ export class ManagerLeadsInboxService {
         limit: number = 50,
         search?: (string | null),
         source?: (LeadSource | null),
+        unreadOnly: boolean = false,
+        sort: 'newest' | 'deadline' = 'newest',
     ): CancelablePromise<LeadsInboxListResponse> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -58,7 +179,145 @@ export class ManagerLeadsInboxService {
                 'limit': limit,
                 'search': search,
                 'source': source,
+                'unread_only': unreadOnly,
+                'sort': sort,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Inbox Detail
+     * @param orderId
+     * @returns LeadsInboxDetailResponse Successful Response
+     * @throws ApiError
+     */
+    public static getManagerInboxDetail(
+        orderId: number,
+    ): CancelablePromise<LeadsInboxDetailResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/leads/inbox/{order_id}',
+            path: {
+                'order_id': orderId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Set Inbox Read
+     * @param orderId
+     * @param requestBody
+     * @returns LeadsInboxDetailResponse Successful Response
+     * @throws ApiError
+     */
+    public static setManagerInboxRead(
+        orderId: number,
+        requestBody: InboxReadPayload,
+    ): CancelablePromise<LeadsInboxDetailResponse> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/manager/leads/inbox/{order_id}/read',
+            path: {
+                'order_id': orderId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Archive Inbox Item
+     * @param orderId
+     * @param requestBody
+     * @returns LeadsInboxDetailResponse Successful Response
+     * @throws ApiError
+     */
+    public static archiveManagerInboxItem(
+        orderId: number,
+        requestBody: InboxArchivePayload,
+    ): CancelablePromise<LeadsInboxDetailResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/leads/inbox/{order_id}/archive',
+            path: {
+                'order_id': orderId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Restore Inbox Item
+     * @param orderId
+     * @returns LeadsInboxDetailResponse Successful Response
+     * @throws ApiError
+     */
+    public static restoreManagerInboxItem(
+        orderId: number,
+    ): CancelablePromise<LeadsInboxDetailResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/leads/inbox/{order_id}/restore',
+            path: {
+                'order_id': orderId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Record Inbox No Answer
+     * @param orderId
+     * @param requestBody
+     * @returns LeadsInboxDetailResponse Successful Response
+     * @throws ApiError
+     */
+    public static recordManagerInboxNoAnswer(
+        orderId: number,
+        requestBody: InboxNoAnswerPayload,
+    ): CancelablePromise<LeadsInboxDetailResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/leads/inbox/{order_id}/no-answer',
+            path: {
+                'order_id': orderId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Set Inbox Tender
+     * @param orderId
+     * @param requestBody
+     * @returns LeadsInboxDetailResponse Successful Response
+     * @throws ApiError
+     */
+    public static setManagerInboxTender(
+        orderId: number,
+        requestBody: InboxTenderPayload,
+    ): CancelablePromise<LeadsInboxDetailResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/manager/leads/inbox/{order_id}/tender',
+            path: {
+                'order_id': orderId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

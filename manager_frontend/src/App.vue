@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { inboxChangedEvent } from './services/lead-inbox';
 import { computed, defineAsyncComponent, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import { Zap, Loader2, AlertTriangle } from 'lucide-vue-next';
 import { api } from './api';
@@ -388,11 +389,13 @@ const handleRebuild = async () => {
     rebuildLoading.value = false;
   }
 };
+let counterRequestId = 0;
 const fetchLeadsCount = async () => {
+  const requestId = ++counterRequestId;
   if (!hasManagerCapability(auth.value, MANAGER_CAPABILITY.crmManage)) return;
   try {
     const counter = await api.getLeadsCounter();
-    leadsCount.value = counter.count;
+    if (requestId === counterRequestId && isAuthenticated.value) leadsCount.value = counter.count;
   } catch {
     // Badge is non-critical — silence errors
   }
@@ -422,6 +425,7 @@ onMounted(() => {
     navigate('/manager');
   }
   window.addEventListener('popstate', onPopState);
+  window.addEventListener(inboxChangedEvent, fetchLeadsCount);
   webRebuildStatusInterval = window.setInterval(() => {
     if (isAuthenticated.value && canManagePlatform.value) void fetchWebRebuildStatus();
   }, 60_000);
@@ -429,6 +433,7 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
   window.removeEventListener('popstate', onPopState);
+  window.removeEventListener(inboxChangedEvent, fetchLeadsCount);
   if (webRebuildStatusInterval) {
     window.clearInterval(webRebuildStatusInterval);
     webRebuildStatusInterval = null;

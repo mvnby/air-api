@@ -2,6 +2,10 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ManagerCommercialDocumentDefaults } from '../models/ManagerCommercialDocumentDefaults';
+import type { ManagerCommercialTermsExtract } from '../models/ManagerCommercialTermsExtract';
+import type { ManagerCommercialTermsResponse } from '../models/ManagerCommercialTermsResponse';
+import type { ManagerCommercialTermsUpdate } from '../models/ManagerCommercialTermsUpdate';
 import type { ManagerOrderCreatePayload } from '../models/ManagerOrderCreatePayload';
 import type { ManagerOrderDetailResponse } from '../models/ManagerOrderDetailResponse';
 import type { ManagerOrderDocumentGeneratePayload } from '../models/ManagerOrderDocumentGeneratePayload';
@@ -751,6 +755,94 @@ export class ManagerOrdersService {
             path: {
                 'order_id': orderId,
                 'document_id': documentId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Terms
+     * @param orderId
+     * @returns ManagerCommercialTermsResponse Successful Response
+     * @throws ApiError
+     */
+    public static getManagerOrderCommercialTerms(
+        orderId: number,
+    ): CancelablePromise<ManagerCommercialTermsResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/orders/{order_id}/commercial-terms',
+            path: {
+                'order_id': orderId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Update Terms
+     * @param orderId
+     * @param requestBody
+     * @returns ManagerCommercialTermsResponse Successful Response
+     * @throws ApiError
+     */
+    public static updateManagerOrderCommercialTerms(
+        orderId: number,
+        requestBody: ManagerCommercialTermsUpdate,
+    ): CancelablePromise<ManagerCommercialTermsResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/manager/orders/{order_id}/commercial-terms',
+            path: {
+                'order_id': orderId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Extract Terms
+     * @param orderId
+     * @param requestBody
+     * @returns ManagerCommercialTermsResponse Successful Response
+     * @throws ApiError
+     */
+    public static extractManagerOrderCommercialTerms(
+        orderId: number,
+        requestBody: ManagerCommercialTermsExtract,
+    ): CancelablePromise<ManagerCommercialTermsResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/orders/{order_id}/commercial-terms/extract',
+            path: {
+                'order_id': orderId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Defaults
+     * @param orderId
+     * @returns ManagerCommercialDocumentDefaults Successful Response
+     * @throws ApiError
+     */
+    public static getManagerOrderCommercialDocumentDefaults(
+        orderId: number,
+    ): CancelablePromise<ManagerCommercialDocumentDefaults> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/orders/{order_id}/commercial-terms/document-defaults',
+            path: {
+                'order_id': orderId,
             },
             errors: {
                 422: `Validation Error`,

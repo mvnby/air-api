@@ -29,7 +29,7 @@ PAYMENT_DUE_EVENTS = frozenset(
     }
 )
 
-PAYMENT_DAY_KINDS = frozenset({"calendar", "banking"})
+PAYMENT_DAY_KINDS = frozenset({"calendar", "banking", "working"})
 
 
 @dataclass(frozen=True, slots=True)

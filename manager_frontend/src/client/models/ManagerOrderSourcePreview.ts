@@ -2,12 +2,14 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ManagerCommercialTermsResponse } from './ManagerCommercialTermsResponse';
 import type { SourceCustomerDraft } from './SourceCustomerDraft';
 import type { SourceDocumentPreview } from './SourceDocumentPreview';
 import type { SourceEquipmentPrefillResult } from './SourceEquipmentPrefillResult';
 import type { SourceObjectDraft } from './SourceObjectDraft';
 import type { SourceScenarioDraft } from './SourceScenarioDraft';
 export type ManagerOrderSourcePreview = {
+    commercial_terms?: (ManagerCommercialTermsResponse | null);
     order_id: number;
     source_code: string;
     external_id: string;

@@ -25,6 +25,26 @@ TENANT_SCOPE = TenantScope(
 NOW = datetime(2026, 9, 19, 12, 0, tzinfo=timezone.utc)
 
 
+@pytest.mark.asyncio
+async def test_import_preserves_factual_context_and_excludes_delivery_deadline_from_expiry(db):
+    from services.leads_inbox_expiry_service import LeadsInboxExpiryService
+    from services.leads_inbox_service import LeadsInboxService
+
+    source = _item()
+    source["tender"].update(currency="BYN", location="Витебск", quantity=12,
+        summary="Поставка и монтаж", deadline_kind="delivery")
+    await BelzakupkiImportService.import_page(db, tenant_scope=TENANT_SCOPE,
+        page={"items": [source], "next_cursor": None, "has_more": False}, cursor_before=None, now=NOW)
+    page = await LeadsInboxService.get_leads_inbox(db, tenant_scope=TENANT_SCOPE, username="alice")
+    item = page.items[0]
+    assert (item.title, item.summary, item.budget_amount, item.budget_currency, item.quantity, item.location) == (
+        "Поставка кондиционеров", "Поставка и монтаж", 120000, "BYN", 12, "Витебск")
+    assert item.deadline_at is None and item.auto_archive_at is None
+    result = await LeadsInboxExpiryService.run(db, tenant_scope=TENANT_SCOPE, execute=True,
+        now=datetime(2026, 11, 1, tzinfo=timezone.utc))
+    assert result["archived"] == 0
+
+
 def _item(
     *,
     match_id: int = 10,

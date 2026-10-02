@@ -130,6 +130,7 @@ async def test_preview_uses_exact_tenant_unp_and_does_not_write(monkeypatch):
     monkeypatch.setattr(BelzakupkiEnrichmentService, "_detail", AsyncMock(return_value=_detail()))
 
     class Session:
+        get = AsyncMock(return_value=None)
         execute = AsyncMock()
         commit = AsyncMock()
 
@@ -167,6 +168,7 @@ async def test_analyze_reads_missing_doc_text_and_returns_ai_draft(monkeypatch):
     monkeypatch.setattr("services.belzakupki_enrichment_service.analyze_tender_text", ai)
 
     class Session:
+        get = AsyncMock(return_value=None)
         execute = AsyncMock()
         commit = AsyncMock()
 
@@ -205,6 +207,7 @@ async def test_replay_preserves_reviewed_work_and_objects_when_omitted(monkeypat
     monkeypatch.setattr(BelzakupkiEnrichmentService, "_detail", AsyncMock(return_value=_detail()))
 
     class Session:
+        get = AsyncMock(return_value=None)
         execute = AsyncMock()
         commit = AsyncMock()
 
@@ -254,6 +257,7 @@ async def test_apply_links_customer_two_branches_and_original_once(monkeypatch):
     created: list[object] = []
 
     class Session:
+        get = AsyncMock(return_value=None)
         execute = AsyncMock()
         scalar = AsyncMock()
         flush = AsyncMock()
@@ -325,6 +329,7 @@ async def test_new_lead_cannot_keep_default_sales_scenario_silently(monkeypatch)
     monkeypatch.setattr(BelzakupkiEnrichmentService, "_order", AsyncMock(return_value=order))
     monkeypatch.setattr(BelzakupkiEnrichmentService, "_detail", AsyncMock(return_value=_detail()))
     session = AsyncMock()
+    session.get.return_value = None
 
     with pytest.raises(ValueError, match="Choose an order scenario"):
         await BelzakupkiEnrichmentService.apply(
@@ -354,6 +359,7 @@ async def test_create_rejects_existing_tenant_customer_by_phone_without_unp(monk
     )
 
     class Session:
+        get = AsyncMock(return_value=None)
         execute = AsyncMock()
         commit = AsyncMock()
 

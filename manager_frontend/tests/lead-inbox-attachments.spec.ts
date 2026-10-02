@@ -5,6 +5,10 @@ import LeadInboxCard from '../src/components/leads/LeadInboxCard.vue';
 import { serviceAttachmentsApi } from '../src/components/service-attachments/api';
 import type { ServiceAttachmentItem } from '../src/components/service-attachments/types';
 
+const inboxMocks = vi.hoisted(() => ({ detail: vi.fn(), read: vi.fn() }));
+vi.mock('../src/services/lead-inbox', () => ({ leadInboxApi: inboxMocks, notifyInboxChanged: vi.fn() }));
+vi.mock('../src/components/orders/CommercialTermsPanel.vue', () => ({ default: { template: '<div />' } }));
+
 vi.mock('../src/components/service-attachments/api', () => ({
   serviceAttachmentsApi: {
     list: vi.fn(),
@@ -84,6 +88,8 @@ const expectNoWrites = () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  inboxMocks.detail.mockResolvedValue({ ...lead, history: [] });
+  inboxMocks.read.mockResolvedValue({ ...lead, is_read: true });
   listMock.mockResolvedValue({ items: [attachment], total: 1 });
   getAccessMock.mockImplementation(async (_attachmentId, variant) => ({
     url: `https://private.example/${variant}.webp`,
@@ -139,6 +145,8 @@ describe('LeadInboxCard read-only attachments', () => {
       ...lead, source: 'belzakupki', comment: 'Тендер Belzakupki\nСрок: 2026-10-01',
       tender: { source: 'goszakupki', url: 'https://example.test/tender', deadline_at: '2026-10-01T10:00:00', reason: 'Вентиляция', profile_name: 'Профиль 1' },
     } } });
+    await wrapper.get('button.title').trigger('click');
+    await flushPromises();
     expect(wrapper.text()).toContain('Площадка: goszakupki');
     expect(wrapper.text()).toContain('Профиль: Профиль 1');
     expect(wrapper.text()).toContain('Срок подачи:');
@@ -197,9 +205,10 @@ describe('LeadInboxCard read-only attachments', () => {
     await disclosure.trigger('click');
     expect(wrapper.find('[data-testid="lead-readonly-attachments"]').exists()).toBe(false);
     await wrapper.get('button[title="Перевести в переговоры"]').trigger('click');
-    await wrapper.get('button[title="Отмена / В архив"]').trigger('click');
+    await wrapper.findAll('button').find(button => button.text() === 'Не брать')!.trigger('click');
     expect(wrapper.emitted('qualify')).toEqual([[lead]]);
-    expect(wrapper.emitted('reject')).toEqual([[lead]]);
+    expect(wrapper.text()).toContain('Почему не берём обращение?');
+    expect(wrapper.emitted('archived')).toBeUndefined();
     expectNoWrites();
   });
 
@@ -207,6 +216,8 @@ describe('LeadInboxCard read-only attachments', () => {
     const regular = mount(LeadInboxCard, { props: { item: lead } });
     expect(regular.text()).not.toContain('Проработать');
     const tender = mount(LeadInboxCard, { props: { item: { ...lead, source: 'belzakupki' } } });
+    await tender.get('button.title').trigger('click');
+    await flushPromises();
     await tender.get('button[title="Проверить данные из закупки перед созданием сделки"]').trigger('click');
     expect(tender.emitted('review-source')?.[0]?.[0]).toEqual(expect.objectContaining({ id: lead.id }));
     regular.unmount();

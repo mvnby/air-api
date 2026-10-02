@@ -3,7 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ActTermsPayload } from './ActTermsPayload';
-import type { BusinessDocumentTermsPayload } from './BusinessDocumentTermsPayload';
+import type { BusinessDocumentTermsPayload_Input } from './BusinessDocumentTermsPayload_Input';
 import type { ConsumerDocumentTermsPayload } from './ConsumerDocumentTermsPayload';
 import type { TransportTermsPayload } from './TransportTermsPayload';
 export type ManagedDocumentDraftPayload = {
@@ -25,7 +25,7 @@ export type ManagedDocumentDraftPayload = {
     business_role?: (string | null);
     replaces_document_id?: (number | null);
     consumer_terms?: (ConsumerDocumentTermsPayload | null);
-    business_terms?: (BusinessDocumentTermsPayload | null);
+    business_terms?: (BusinessDocumentTermsPayload_Input | null);
     act_terms?: (ActTermsPayload | null);
     transport_terms?: (TransportTermsPayload | null);
 };

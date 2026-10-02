@@ -1,328 +1,284 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import type { LeadsInboxItemResponse } from '../../api';
-import OrderAttachmentsPanel from '../service-attachments/OrderAttachmentsPanel.vue';
-import EmailOriginals from './EmailOriginals.vue';
-import EmailContractReviewLauncher from './EmailContractReviewLauncher.vue';
-import EmailLeadOrderLink from './EmailLeadOrderLink.vue';
-
-const props = defineProps<{
-  item: LeadsInboxItemResponse;
-  isArchive?: boolean;
-}>();
-
+import { computed, ref, watch } from 'vue';
+import { leadInboxApi, notifyInboxChanged, type InboxItem, type InboxHistory, type InboxContactRequest } from '../../services/lead-inbox';
+import LeadInboxDetails from './LeadInboxDetails.vue';
+import LeadRefusalPanel from './LeadRefusalPanel.vue';
+const props = defineProps<{ item: InboxItem; isArchive?: boolean; contactSaving?: boolean }>();
 const emit = defineEmits<{
-  (e: 'qualify', item: LeadsInboxItemResponse): void;
-  (e: 'reject', item: LeadsInboxItemResponse): void;
-  (e: 'no-answer', item: LeadsInboxItemResponse): void;
-  (e: 'review-source', item: LeadsInboxItemResponse): void;
-  (e: 'link-changed'): void;
+  (e: 'qualify', item: InboxItem): void; (e: 'no-answer', request: InboxContactRequest): void;
+  (e: 'review-source', item: InboxItem): void; (e: 'link-changed'): void;
+  (e: 'updated', item: InboxItem): void; (e: 'archived', item: InboxItem): void;
+  (e: 'restore', item: InboxItem): void; (e: 'details-closed'): void;
 }>();
-
-const isCommentExpanded = ref(false);
-const attachmentsOpen = ref(false);
-const attachmentsRegionId = computed(() => `lead-attachments-${props.item.id}`);
-
-const sourceLabel: Record<string, string> = {
-  site: 'Сайт',
-  phone: 'Телефон',
-  bot: 'Бот',
-  email: 'Email',
-  manager: 'Менеджер',
-  referral: 'Рекомендация',
-  belzakupki: 'Тендер',
-  other: 'Другое',
-};
-
-const sourceIcon: Record<string, string> = {
-  site: 'language',
-  phone: 'call',
-  bot: 'smart_toy',
-  email: 'email',
-  manager: 'person',
-  referral: 'group',
-  belzakupki: 'business_center',
-  other: 'help_outline',
-};
-
-const ORDER_STATUS_MAP: Record<string, string> = {
-    new_lead: 'Обращение',
-    linked: 'Связано с заказом',
-  negotiation: 'Переговоры',
-  execution: 'Монтаж',
-  closed: 'Закрыт',
-};
-
-const getSourceIcon = (source: string | null | undefined) =>
-  sourceIcon[source ?? ''] ?? 'help_outline';
-
-const getSourceLabel = (source: string | null | undefined) =>
-  sourceLabel[source ?? ''] ?? source ?? '—';
-
-const getStatusLabel = (status: string) =>
-  ORDER_STATUS_MAP[status] ?? status;
-
-const formatDate = (dt: string) => {
-  const d = new Date(dt);
-  if (Number.isNaN(d.getTime())) return 'Дата не указана';
-  return d.toLocaleString('ru-RU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
-};
-
-const formatPhone = (phone: string | null | undefined): string => {
-  if (!phone) return '';
-  // Normalize to digits only
-  const digits = phone.replace(/\D/g, '');
-  // Expect 375XXXXXXXXX (12 digits)
-  if (digits.length === 12 && digits.startsWith('375')) {
-    const cc = digits.slice(0, 3);   // 375
-    const op = digits.slice(3, 5);   // operator code (2 digits)
-    const p1 = digits.slice(5, 8);   // 3 digits
-    const p2 = digits.slice(8, 10);  // 2 digits
-    const p3 = digits.slice(10, 12); // 2 digits
-    return `+${cc} (${op}) ${p1}-${p2}-${p3}`;
-  }
-  return phone;
-};
-
-const formatEmail = (email: string | null | undefined): string => {
-  return (email || '').trim();
-};
-
+const expanded = ref(false);
+const refusing = ref(false);
+const refusalMode = ref<'refusal' | 'not_request'>('refusal');
+const detailLoading = ref(false);
+const error = ref('');
+const detail = ref<InboxItem | null>(null);
+const history = ref<InboxHistory[]>([]);
+const readSaving = ref(false);
+const current = computed(() => detail.value ? { ...detail.value, ...props.item } : props.item);
+const unread = computed(() => props.item.is_read === undefined ? props.item.is_new : !props.item.is_read);
+const regionId = computed(() => `lead-details-${props.item.entity_kind || 'order'}-${props.item.id}`);
+const sources: Record<string, string> = { site: 'Сайт', phone: 'Телефон', bot: 'Бот', email: 'Почта', manager: 'Менеджер', referral: 'Рекомендация', belzakupki: 'Тендер', other: 'Другое' };
+const reasons: Record<string, string> = { profile: 'Не наш профиль', region: 'Не наш регион', terms: 'Не подходят условия', capacity: 'Нет ресурсов / сроков', unclear: 'Не хватает данных', other: 'Другое' };
+const outcomes: Record<string, string> = { spam: 'Спам', duplicate: 'Дубликат', deadline_expired: 'Срок истёк', legacy_lost: 'Архивное обращение', refusal: 'Не берём', linked: 'Связано с заказом' };
+const title = computed(() => props.item.title || props.item.summary || props.item.comment?.split('\n').find(line => line.trim()) || 'Обращение без описания');
+const summary = computed(() => props.item.summary || (props.item.comment?.trim() !== title.value.trim() ? props.item.comment : ''));
+const customer = computed(() => props.item.customer_full_legal_name || props.item.customer_name || 'Клиент не указан');
+const date = (value: string) => { const parsed = new Date(value); return Number.isNaN(parsed.getTime()) ? 'Дата не указана' : parsed.toLocaleString('ru-RU', { timeZone: 'Europe/Minsk', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); };
 const displayDate = computed(() => props.item.source_created_at || props.item.created_at);
-const tenderUrl = computed(() => {
-  const raw = props.item.tender?.url;
-  if (!raw) return null;
-  try {
-    const url = new URL(raw);
-    return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : null;
-  } catch { return null; }
-});
-
-const getRelativeTime = (dt: string | null | undefined) => {
-  if (!dt) return '';
-  const date = new Date(dt);
-  if (Number.isNaN(date.getTime())) return 'дата не указана';
-  const now = new Date();
-  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-  
-  const rtf = new Intl.RelativeTimeFormat('ru', { numeric: 'auto' });
-
-  if (diffInSeconds < 60) {
-    return rtf.format(-diffInSeconds, 'second');
-  }
-  const diffInMinutes = Math.floor(diffInSeconds / 60);
-  if (diffInMinutes < 60) {
-    return rtf.format(-diffInMinutes, 'minute');
-  }
-  const diffInHours = Math.floor(diffInMinutes / 60);
-  if (diffInHours < 24) {
-    return rtf.format(-diffInHours, 'hour');
-  }
-  const diffInDays = Math.floor(diffInHours / 24);
-  return rtf.format(-diffInDays, 'day');
+const deadline = computed(() => props.item.deadline_at || props.item.tender?.deadline_at);
+const budget = computed(() => props.item.budget_amount == null ? null : new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(props.item.budget_amount));
+const setRead = async (isRead: boolean) => {
+  if (readSaving.value) return;
+  readSaving.value = true; error.value = '';
+  try { const updated = await leadInboxApi.read(props.item.id, isRead, props.item.entity_kind); emit('updated', updated); notifyInboxChanged(); }
+  catch (caught) { error.value = caught instanceof Error ? caught.message : 'Не удалось сохранить отметку просмотра'; }
+  finally { readSaving.value = false; }
 };
-
-const hasLongComment = computed(() => (props.item.comment || '').length > 140);
-const isBusinessCustomer = computed(() => (
-  props.item.customer_type === 'individual_entrepreneur' || props.item.customer_type === 'company'
-));
+const loadDetails = async () => {
+  detailLoading.value = true; error.value = '';
+  try {
+    const result = await leadInboxApi.detail(props.item.id, props.item.entity_kind);
+    if (!expanded.value) return;
+    detail.value = result; history.value = result.history || [];
+    if (unread.value) await setRead(true);
+  } catch (caught) { error.value = caught instanceof Error ? caught.message : 'Не удалось загрузить подробности'; }
+  finally { detailLoading.value = false; }
+};
+watch(() => props.item.no_answer_count, (value, oldValue) => { if (expanded.value && value !== oldValue) void loadDetails(); });
+const toggleDetails = () => {
+  expanded.value = !expanded.value;
+  if (expanded.value) { refusing.value = false; void loadDetails(); }
+  else emit('details-closed');
+};
+const sourceUpdated = (updated: InboxItem, events: InboxHistory[]) => { detail.value = { ...detail.value, ...updated }; history.value = events; emit('updated', updated); notifyInboxChanged(); };
+const markUnread = async () => { await setRead(false); if (!error.value) expanded.value = false; };
 </script>
-
 <template>
-  <div
-    class="group relative bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700/60 shadow-sm hover:shadow-md transition-all duration-200"
-    :class="{
-      'border-l-4 border-l-brand-500': item.is_new,
-      'bg-brand-50/40 dark:bg-brand-900/10': item.is_new,
-    }"
-  >
-    <!-- Header row -->
-    <div class="flex flex-col items-start gap-2 p-4 pb-2">
-      <div class="flex items-center gap-2 min-w-0">
-        <!-- Source icon -->
-        <span
-          class="material-icons-round text-[18px] shrink-0"
-          :class="item.is_new ? 'text-brand-500' : 'text-slate-400 dark:text-slate-500'"
-        >{{ getSourceIcon(item.source) }}</span>
-
-        <!-- Name -->
-        <div class="flex flex-col min-w-0">
-          <span class="font-semibold text-slate-800 dark:text-white line-clamp-2 text-sm" :title="item.customer_name || item.customer_full_legal_name || 'Имя не указано'">
-            {{ item.customer_name || item.customer_full_legal_name || '(Имя не указано)' }}
-          </span>
-          <span v-if="isBusinessCustomer && item.customer_inn" class="text-[10px] text-slate-400 dark:text-slate-500 uppercase font-bold tracking-tighter">
-            УНП {{ item.customer_inn }}
-          </span>
-        </div>
-      </div>
-
-      <!-- Badges -->
-      <div class="flex items-center gap-2 shrink-0">
-        <span
-          v-if="item.customer_type === 'company'"
-          class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600"
-        >🏢 ЮР</span>
-        <span
-          v-else-if="item.customer_type === 'individual_entrepreneur'"
-          class="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:border-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
-        >💼 ИП</span>
-        <span
-          v-if="item.is_new"
-          class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold bg-brand-500 text-white"
-        >🔥 НОВЫЙ</span>
-        <span
-          v-else
-          class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
-        >{{ getStatusLabel(item.status) }}</span>
-      </div>
+  <article class="inbox-card" :class="{ 'is-unread': unread && !isArchive }" :data-testid="`inbox-card-${item.entity_kind || 'order'}-${item.id}`">
+    <div class="card-body">
+      <div class="card-meta"><span v-if="unread && !isArchive" class="unread-dot" aria-label="Непросмотрено" /><span class="source">{{ sources[item.source || ''] || item.source || 'Источник не указан' }}</span><span class="lead-id">#{{ item.id }}</span><time :datetime="displayDate" class="time">{{ date(displayDate) }}</time></div>
+      <div class="headline"><div class="subject"><h2><button type="button" class="title" :title="title" :aria-expanded="expanded" :aria-controls="regionId" @click="toggleDetails">{{ title }}</button></h2><p class="customer">{{ customer }}<span v-if="item.customer_type === 'individual_entrepreneur'"> · ИП</span><span v-if="item.customer_inn"> · УНП {{ item.customer_inn }}</span></p></div><div v-if="budget !== null" class="budget"><small>Бюджет</small><strong>{{ budget }} {{ item.budget_currency || '' }}</strong></div></div>
+      <div v-if="deadline || item.auto_archive_at || item.location || item.quantity != null || item.attachment_count" class="facts"><span v-if="deadline" class="deadline">{{ item.source_kind === 'tender' || item.source === 'belzakupki' ? 'Срок подачи' : 'Срок' }}: {{ date(deadline) }}</span><span v-if="!isArchive && item.auto_archive_at">В архив автоматически: {{ date(item.auto_archive_at) }}</span><span v-if="item.quantity != null">{{ item.quantity }} ед.</span><span v-if="item.location">{{ item.location }}</span><button v-if="item.attachment_count && item.entity_kind !== 'lead'" type="button" :aria-expanded="expanded" :aria-controls="`lead-attachments-${item.id}`" :aria-label="`Показать вложения обращения: ${item.attachment_count}`" @click="toggleDetails">Вложения: {{ item.attachment_count }}</button></div>
+      <p v-if="summary" class="blurb">{{ summary }}</p>
+      <p v-if="item.commercial_terms_summary?.length" class="terms-summary">{{ item.commercial_terms_summary.join(' · ') }}</p>
+      <div v-if="item.related_requests?.length" class="related-requests"><p v-for="related in item.related_requests" :key="related.order_id"><strong>Эта закупка уже встречалась:</strong> <a :href="`/manager/orders/kanban?orderId=${related.order_id}`">#{{ related.order_id }} {{ related.title }}</a><span v-if="related.outcome"> · {{ outcomes[related.outcome] || related.outcome }}</span><span v-if="related.reason"> · {{ reasons[related.reason] || related.reason }}</span><span v-if="related.note"> · {{ related.note }}</span></p></div>
+      <p v-if="item.no_answer_at" class="no-answer">Нет ответа: {{ date(item.no_answer_at) }}<span v-if="item.no_answer_count && item.no_answer_count > 1"> · Попыток: {{ item.no_answer_count }}</span><span v-if="item.next_followup_at"> · Следующий контакт: {{ date(item.next_followup_at) }}</span></p>
+      <p v-if="isArchive && item.archive" class="decision"><strong>{{ outcomes[item.archive.outcome] || item.archive.outcome }}</strong><span v-if="item.archive.reason"> · {{ reasons[item.archive.reason] || item.archive.reason }}</span><span v-if="item.archive.note"> · {{ item.archive.note }}</span><small v-if="item.archive.archived_at">{{ date(item.archive.archived_at) }}<span v-if="item.archive.actor"> · {{ item.archive.actor }}</span></small></p>
+      <p v-if="item.linked_order_id" class="decision">Связано с <a :href="`/manager/orders/kanban?orderId=${item.linked_order_id}`">заказом #{{ item.linked_order_id }}</a></p>
     </div>
-
-    <!-- Phone & source row -->
-    <div class="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 pb-2">
-      <a
-        v-if="item.phone"
-        :href="`tel:${item.phone}`"
-        class="flex items-center gap-1 text-sm text-brand-600 dark:text-brand-400 hover:underline font-medium"
-      >
-        <span class="material-icons-round text-[15px]">call</span>
-        {{ formatPhone(item.phone) }}
-      </a>
-      <a
-        v-if="formatEmail(item.email)"
-        :href="`mailto:${formatEmail(item.email)}`"
-        class="flex min-w-0 items-center gap-1 text-sm text-brand-600 dark:text-brand-400 hover:underline font-medium"
-        :title="formatEmail(item.email)"
-      >
-        <span class="material-icons-round text-[15px]">email</span>
-        <span class="min-w-0 break-all">{{ formatEmail(item.email) }}</span>
-      </a>
-      <span class="text-xs text-slate-400 dark:text-slate-500 flex items-center gap-1">
-        <span class="material-icons-round text-[13px]">{{ getSourceIcon(item.source) }}</span>
-        {{ getSourceLabel(item.source) }}
-      </span>
-      <span class="text-xs text-slate-400 dark:text-slate-500 ml-auto" :title="formatDate(displayDate)">
-        {{ getRelativeTime(displayDate) }}
-      </span>
-      <button
-        v-if="item.attachment_count"
-        type="button"
-        class="inline-flex min-h-9 items-center gap-1 rounded-full bg-cyan-50 px-2.5 py-1.5 text-xs font-semibold text-cyan-700 transition hover:bg-cyan-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2 dark:bg-cyan-500/10 dark:text-cyan-300 dark:hover:bg-cyan-500/20 dark:focus-visible:ring-offset-slate-800"
-        :aria-expanded="attachmentsOpen"
-        :aria-controls="attachmentsRegionId"
-        :aria-label="`${attachmentsOpen ? 'Скрыть' : 'Показать'} вложения обращения: ${item.attachment_count}`"
-        @click="attachmentsOpen = !attachmentsOpen"
-      >
-        <span class="material-icons-round text-[15px]" aria-hidden="true">attach_file</span>
-        Вложения: {{ item.attachment_count }}
-        <span class="material-icons-round text-[15px]" aria-hidden="true">{{ attachmentsOpen ? 'expand_less' : 'expand_more' }}</span>
-      </button>
+    <div class="card-footer">
+      <template v-if="!isArchive"><button type="button" class="inbox-button primary" title="Перевести в переговоры" @click="emit('qualify', item)">В переговоры</button><button type="button" class="inbox-button" :aria-expanded="refusing" @click="refusalMode = 'refusal'; refusing = !refusing; expanded = false">Не брать</button></template>
+      <button v-else-if="!item.linked_order_id" type="button" class="inbox-button" @click="emit('restore', item)">Вернуть в работу</button>
+      <button type="button" class="inbox-button subtle" :aria-expanded="expanded" :aria-controls="regionId" @click="toggleDetails">{{ expanded ? 'Скрыть подробности' : 'Подробнее' }}</button>
+      <span class="read-status">{{ unread ? 'Не просмотрено' : 'Просмотрено' }}</span>
     </div>
-
-    <div
-      v-if="attachmentsOpen"
-      :id="attachmentsRegionId"
-      class="mx-4 mb-3 rounded-lg bg-slate-50/80 px-3 dark:bg-slate-900/40"
-      role="region"
-      :aria-label="`Вложения обращения #${item.id}`"
-      data-testid="lead-readonly-attachments"
-    >
-      <OrderAttachmentsPanel
-        :order-id="item.id"
-        :initial-count="item.attachment_count"
-        :default-expanded="true"
-        :readonly="true"
-        :embedded="true"
-      />
-    </div>
-
-    <EmailOriginals v-if="item.source === 'email' && !item.attachment_count" :order-id="item.id" />
-    <EmailContractReviewLauncher v-if="item.source === 'email'" :order-id="item.id" />
-    <EmailLeadOrderLink
-      v-if="item.source === 'email' && (item.status === 'new_lead' || item.linked_order_id)"
-      :source-order-id="item.id"
-      :linked-order-id="item.linked_order_id"
-      @changed="emit('link-changed')"
-    />
-
-    <div v-if="item.tender" class="mx-4 mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600 dark:text-slate-300">
-      <span v-if="item.tender.source">Площадка: {{ item.tender.source }}</span>
-      <span v-if="item.tender.deadline_at">Срок подачи: {{ formatDate(item.tender.deadline_at) }}</span>
-      <a v-if="tenderUrl" :href="tenderUrl" target="_blank" rel="noopener noreferrer" class="font-semibold text-brand-600 underline dark:text-brand-400">Открыть закупку</a>
-      <span v-if="item.tender.profile_name">Профиль: {{ item.tender.profile_name }}</span>
-      <span v-if="item.tender.reason">Причина: {{ item.tender.reason }}</span>
-    </div>
-
-    <!-- Comment (the core decision-making field) -->
-    <div
-      v-if="item.comment"
-      class="mx-4 mb-3 px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-700/50 border border-slate-100 dark:border-slate-700"
-    >
-      <p
-        class="whitespace-pre-line text-sm text-slate-700 dark:text-slate-200 leading-relaxed"
-        :class="{ 'line-clamp-3': !isCommentExpanded }"
-      >
-        {{ item.comment }}
-      </p>
-      <button
-        v-if="hasLongComment"
-        type="button"
-        class="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand-700 hover:text-brand-800 dark:text-brand-300 dark:hover:text-brand-200"
-        @click="isCommentExpanded = !isCommentExpanded"
-      >
-        <span class="material-icons-round text-[15px]">{{ isCommentExpanded ? 'expand_less' : 'expand_more' }}</span>
-        {{ isCommentExpanded ? 'Свернуть' : 'Показать полностью' }}
-      </button>
-    </div>
-    <div
-      v-else
-      class="mx-4 mb-3 px-3 py-2 text-sm text-slate-400 dark:text-slate-500 italic"
-    >
-      Комментарий отсутствует
-    </div>
-
-    <!-- No Answer Badge -->
-    <div v-if="item.no_answer_at" class="mx-4 mb-4 flex items-center gap-1.5 w-fit rounded-full px-3 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 text-[11px] font-bold tracking-wide">
-      <span class="material-icons-round text-[14px]">phone_missed</span>
-      Нет ответа: {{ getRelativeTime(item.no_answer_at) }}
-    </div>
-
-    <!-- Actions footer -->
-    <div v-if="!isArchive" class="flex flex-wrap gap-2 px-4 pb-4">
-      <button
-        v-if="item.source === 'belzakupki'"
-        class="inline-flex items-center justify-center gap-1.5 rounded-lg border border-brand-200 px-3 py-2 text-xs font-semibold text-brand-700 hover:bg-brand-50 dark:border-brand-800 dark:text-brand-300 dark:hover:bg-brand-950/30"
-        title="Проверить данные из закупки перед созданием сделки"
-        @click="emit('review-source', item)"
-      >
-        <span class="material-icons-round text-[16px]">fact_check</span>
-        Проработать
-      </button>
-      <button
-        class="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs md:text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700 active:scale-95 transition-all"
-        title="Перевести в переговоры"
-        @click="emit('qualify', item)"
-      >
-        <span class="material-icons-round text-[16px]">check_circle</span>
-        В переговоры
-      </button>
-
-      <button
-        class="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs md:text-sm font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-900/50 active:scale-95 transition-all"
-        title="Нет ответа (оставить в работе)"
-        @click="emit('no-answer', item)"
-      >
-        <span class="material-icons-round text-[16px]">timer</span>
-        Нет ответа
-      </button>
-
-      <button
-        class="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs md:text-sm font-semibold bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 active:scale-95 transition-all"
-        title="Отмена / В архив"
-        @click="emit('reject', item)"
-      >
-        <span class="material-icons-round text-[16px]">cancel</span>
-        Отказ
-      </button>
-    </div>
-  </div>
+    <p v-if="error" class="card-error" role="alert">{{ error }}<button v-if="expanded" type="button" @click="loadDetails">Повторить</button></p>
+    <LeadRefusalPanel v-if="refusing" :order-id="item.id" :entity-kind="item.entity_kind" :mode="refusalMode" @cancel="refusing = false" @archived="emit('archived', item)" />
+    <div v-if="expanded && detailLoading" class="detail-loading" role="status">Загружаем подробности…</div>
+    <LeadInboxDetails v-else-if="expanded && detail" :item="current" :history="history" :contact-saving="contactSaving" @updated="sourceUpdated" @not-request="refusalMode = 'not_request'; refusing = true; expanded = false" @review-source="emit('review-source', $event)" @no-answer="emit('no-answer', $event)" @mark-unread="markUnread" @link-changed="emit('link-changed')" />
+  </article>
 </template>
+<style scoped>
+.inbox-card {
+  border: 1px solid var(--inbox-border);
+  border-radius: 11px;
+  background: var(--inbox-card);
+  overflow: hidden;
+  box-shadow: 0 1px 2px #101c3010;
+  scroll-margin: 15px;
+}
+.is-unread {
+  border-left: 3px solid var(--inbox-blue);
+}
+.card-body {
+  padding: 19px 21px 0;
+}
+.card-meta {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  font-size: 11px;
+  color: var(--inbox-muted);
+  flex-wrap: wrap;
+}
+.source {
+  font-weight: 600;
+}
+.lead-id {
+  opacity: .75;
+}
+.time {
+  margin-left: auto;
+}
+.headline {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  margin-top: 9px;
+}
+.subject {
+  min-width: 0;
+  flex: 1;
+}
+h2 {
+  margin: 0;
+}
+.title {
+  font-size: 16px;
+  font-weight: 680;
+  line-height: 1.45;
+  text-align: left;
+  letter-spacing: -.18px;
+  overflow-wrap: anywhere;
+}
+.title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.title:hover,a {
+  color: var(--inbox-blue);
+}
+.customer {
+  font-size: 12px;
+  color: var(--inbox-muted);
+  margin: 5px 0 0;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.budget {
+  flex-shrink: 0;
+  text-align: right;
+}
+.budget small {
+  display: block;
+  font-size: 10px;
+  color: var(--inbox-muted);
+  margin-bottom: 4px;
+}
+.budget strong {
+  font-size: 15px;
+}
+.facts {
+  display: flex;
+  gap: 8px 16px;
+  flex-wrap: wrap;
+  margin: 13px 0 10px;
+  font-size: 12px;
+  color: var(--inbox-muted);
+  line-height: 1.5;
+}
+.facts button {
+  color: var(--inbox-blue);
+}
+.deadline {
+  color: #a75414;
+  background: #fff5e7;
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.blurb {
+  font-size: 12px;
+  line-height: 1.65;
+  margin: 10px 0 13px;
+  color: var(--inbox-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.card-footer {
+  padding: 13px 21px 16px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.read-status {
+  font-size: 10px;
+  color: var(--inbox-muted);
+  margin-left: auto;
+}
+.terms-summary {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--inbox-muted);
+  margin: 8px 0 12px;
+  line-height: 1.6;
+}
+.related-requests {
+  padding: 10px 12px;
+  margin: 12px 0;
+  background: var(--inbox-selected);
+  border-left: 2px solid #91acd5;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.related-requests p {
+  margin: 0;
+}
+.decision,.no-answer {
+  font-size: 12px;
+  color: var(--inbox-muted);
+  margin: 12px 0;
+  line-height: 1.6;
+}
+.decision small {
+  display: block;
+  font-size: 11px;
+}
+.no-answer {
+  color: #a75414;
+}
+.card-error,.detail-loading {
+  padding: 14px 21px;
+  font-size: 12px;
+}
+.card-error {
+  color: #b94141;
+}
+.card-error button {
+  text-decoration: underline;
+  margin-left: 10px;
+}
+@media(max-width:760px) {
+  .card-body {
+    padding: 16px 15px 0;
+  }
+  .headline {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .budget {
+    text-align: left;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .budget small {
+    margin: 0;
+  }
+  .title {
+    font-size: 16px;
+  }
+  .card-footer {
+    padding: 12px 15px 14px;
+  }
+  .time {
+    font-size: 10px;
+  }
+  .read-status {
+    font-size: 9px;
+  }
+}
+</style>

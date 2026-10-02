@@ -1,4 +1,5 @@
 import { computed, ref, watch } from 'vue';
+import { commercialTermsApi, mergeCommercialDocumentDefaults } from '../../../services/commercial-terms-api';
 import type { DocumentRoleType } from '../model/document-types';
 import {
   ManagerDocumentSystemService,
@@ -89,6 +90,9 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   let requestId = 0;
   let templateRequestId = 0;
   let versionRequestId = 0;
+  let commercialDefaultsRequestId = 0;
+  let loadedWorkspaceOrderId: number | null = null;
+  let commercialDefaultsBaseline = createDefaultBusinessDocumentTerms(input.workflowType());
   let consumerDefaultsRequestId = 0;
   let consumerDefaultsContext = '';
   let consumerDefaultsScope = '';
@@ -190,8 +194,30 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       }
     }
   };
+  const loadCommercialDefaults = async () => {
+    const orderId = input.orderId();
+    const currentRequest = ++commercialDefaultsRequestId;
+    const proposalId = input.proposalId();
+    const type = documentType.value;
+    const replacementId = replacesDocumentId.value;
+    if (!isBusinessTermsDocumentType(type) || replacementId !== null) return;
+    const baseline = commercialDefaultsBaseline;
+    try {
+      const response = await commercialTermsApi.defaults(orderId);
+      if (currentRequest !== commercialDefaultsRequestId || input.orderId() !== orderId
+        || input.proposalId() !== proposalId || documentType.value !== type
+        || replacesDocumentId.value !== replacementId || !response.business_terms) return;
+      businessTerms.value = mergeCommercialDocumentDefaults(businessTerms.value, baseline, response.business_terms);
+    } catch (error) {
+      if (currentRequest === commercialDefaultsRequestId && input.orderId() === orderId) {
+        input.notify(`Не удалось подставить согласованные условия: ${getApiErrorMessage(error)}`, 'error');
+      }
+    }
+  };
   const resetBusinessTerms = () => {
+    commercialDefaultsRequestId += 1;
     businessTerms.value = createDefaultBusinessDocumentTerms(input.workflowType());
+    commercialDefaultsBaseline = JSON.parse(JSON.stringify(businessTerms.value)) as BusinessDocumentTerms;
   };
   const resetActTerms = () => {
     actTerms.value = createDefaultActTerms();
@@ -356,10 +382,14 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       ? suggestedDocumentRole() : null;
     baseDocumentId.value = null;
     baseCustomerContractId.value = null;
-    resetConsumerTerms();
-    resetBusinessTerms();
-    resetActTerms();
-    resetTransportTerms();
+    if (loadedWorkspaceOrderId !== input.orderId()) {
+      loadedWorkspaceOrderId = input.orderId();
+      resetConsumerTerms();
+      resetBusinessTerms();
+      resetActTerms();
+      resetTransportTerms();
+    }
+    void loadCommercialDefaults();
     try {
       const [entitiesResponse, runtimeResponse] = await Promise.all([
         ManagerDocumentSystemService.listManagerDocumentLegalEntities(),
@@ -381,6 +411,10 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     () => void loadTemplates(),
     { flush: 'sync' },
   );
+  watch([documentType, () => input.proposalId(), replacesDocumentId], () => {
+    commercialDefaultsRequestId += 1;
+    if (loadedWorkspaceOrderId === input.orderId()) void loadCommercialDefaults();
+  }, { flush: 'sync' });
   watch(documentType, (type) => {
     documentRoleType.value = ['contract', 'offer', 'invoice'].includes(type) ? suggestedDocumentRole() : null;
   }, { flush: 'sync' });
