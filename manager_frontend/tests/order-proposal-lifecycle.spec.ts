@@ -6,6 +6,7 @@ import { useOrderProposalLifecycle } from '../src/composables/useOrderProposalLi
 const ordersMock = vi.hoisted(() => ({
   patchManagerOrder: vi.fn(),
   patchManagerOrderProposal: vi.fn(),
+  archiveManagerOrderProposal: vi.fn(),
 }));
 const dialogMock = vi.hoisted(() => ({
   confirmDialog: vi.fn().mockResolvedValue(true),
@@ -69,6 +70,33 @@ afterEach(() => {
 });
 
 describe('useOrderProposalLifecycle', () => {
+  it('loads the remaining ready-to-send proposal after archiving the active one and saves to its ID', async () => {
+    const remaining = { ...proposal, id: 18, status: 'ready_to_send', is_selected: false,
+      product_lines: [{ id: 71, proposal_id: 18, product_id: 44, product_title: 'Кондиционер', quantity: 1, price: 1200 }],
+      service_lines: [{ id: 91, proposal_id: 18, service_title: 'Обслуживание', quantity: 1, price: 150 }] };
+    const initial = { ...order.value, proposals: [proposal, remaining] } as ManagerOrderDetailResponse;
+    const updated = { ...initial, proposals: [
+      { ...proposal, is_archived: true, is_selected: false },
+      { ...remaining, is_selected: true },
+    ] } as ManagerOrderDetailResponse;
+    const localOrder = ref(initial);
+    const { lifecycle, options } = createLifecycle({ order: localOrder, onUpdated: (value) => { localOrder.value = value; } });
+    lifecycle.loadProposalLines(proposal as any, initial);
+    ordersMock.patchManagerOrder.mockResolvedValueOnce(initial).mockResolvedValueOnce(updated);
+    ordersMock.archiveManagerOrderProposal.mockResolvedValueOnce(updated);
+
+    await lifecycle.archiveProposal();
+
+    expect(ordersMock.archiveManagerOrderProposal).toHaveBeenCalledWith(42, 17);
+    expect(lifecycle.activeProposalId.value).toBe(18);
+    expect(lifecycle.activeProposal.value?.id).toBe(18);
+    expect(lifecycle.activeProposalStatus.value).toBe('ready_to_send');
+    expect(lifecycle.activeProposalLocked.value).toBe(false);
+    expect(options.loadLines).toHaveBeenLastCalledWith(remaining.product_lines, remaining.service_lines);
+    await lifecycle.saveCurrentProposalLines();
+    expect(options.buildLinesPayload).toHaveBeenLastCalledWith(18);
+  });
+
   it('loads the selected proposal and saves its lines as one proposal command', async () => {
     const { lifecycle, options } = createLifecycle();
     lifecycle.loadProposalLines(proposal as any, order.value);

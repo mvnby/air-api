@@ -63,6 +63,69 @@ beforeEach(() => {
 });
 
 describe('OrderInstallationEstimatePanel', () => {
+  it('adds standard installation to the remaining ready-to-send proposal after the active proposal is archived', async () => {
+    const wrapper = mountPanel();
+    service.getManagerOrderDetail.mockResolvedValue({ ...order, proposals: [
+      { ...order.proposals[0], is_archived: true },
+      { id: 13, status: 'ready_to_send', is_archived: false, is_selected: true,
+        product_lines: [{ ...product, proposal_id: 13 }] },
+    ] });
+    await wrapper.setProps({ proposalId: 13 });
+    await wrapper.get('[data-testid="installation-standard-add"]').trigger('click');
+    await flushPromises();
+
+    expect(service.previewManagerInstallationEstimate.mock.calls[0][1].installations[0].key).toBe('p:13:71:1');
+    expect(service.attachManagerInstallationEstimate).toHaveBeenCalledWith(31, 8, 13, expect.any(String), { revision: 1, mode: 'collapsed' });
+    expect(wrapper.text()).toContain('Смета прикреплена');
+    wrapper.unmount();
+  });
+
+  it.each(['ready_to_send', 'rejected'])('opens installation settings for an editable %s proposal', async (status) => {
+    service.getManagerOrderDetail.mockResolvedValue({ ...order, proposals: [{ ...order.proposals[0], status }] });
+    const wrapper = mountPanel();
+    await wrapper.get('[data-testid="installation-open"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="installation-product"]').exists()).toBe(true);
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('adds a service-only standard tariff to a ready-to-send proposal', async () => {
+    service.getManagerOrderDetail.mockResolvedValue({ ...order, proposals: [{ ...order.proposals[0], status: 'ready_to_send' }] });
+    service.previewManagerInstallationEstimate.mockResolvedValueOnce({ ...fixed, total: '600' });
+    const wrapper = mountPanel();
+    await (wrapper.vm as any).selectStandardTariff({ code: 'wall.small', title: 'Монтаж настенного кондиционера до 4,2 кВт',
+      price: '600', description: 'Стандарт', route_m: '3', holes_by_type: { shared_pass_through: '1' },
+      product_kind: 'complete_split_system', indoor_type: 'wall', bookRevision: 7 });
+    await flushPromises();
+    expect(service.attachManagerInstallationEstimate).toHaveBeenCalledWith(31, 8, 12, expect.any(String), { revision: 1, mode: 'collapsed' });
+    expect(wrapper.text()).toContain('Смета прикреплена');
+    wrapper.unmount();
+  });
+
+  it.each(['sent', 'approved'])('keeps installation changes blocked for a %s proposal', async (status) => {
+    service.getManagerOrderDetail.mockResolvedValue({ ...order, proposals: [{ ...order.proposals[0], status }] });
+    const wrapper = mountPanel();
+    await wrapper.get('[data-testid="installation-standard-add"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('Верните его в черновик либо создайте копию');
+    expect(service.resolveInstallationStandard).not.toHaveBeenCalled();
+    expect(service.previewManagerInstallationEstimate).not.toHaveBeenCalled();
+    expect(service.attachManagerInstallationEstimate).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it.each(['archived', 'missing'])('does not use a %s active proposal', async (state) => {
+    service.getManagerOrderDetail.mockResolvedValue({ ...order, proposals: state === 'archived'
+      ? [{ ...order.proposals[0], is_archived: true }] : [] });
+    const wrapper = mountPanel();
+    await wrapper.get('[data-testid="installation-standard-add"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('Активное предложение больше недоступно');
+    expect(service.attachManagerInstallationEstimate).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
   it('keeps each selected composition inline and retains independent values when deselected', async () => {
     service.getManagerOrderDetail.mockResolvedValue({ ...order, proposals: [{ ...order.proposals[0],
       product_lines: [{ ...product, quantity: 2 }] }] });

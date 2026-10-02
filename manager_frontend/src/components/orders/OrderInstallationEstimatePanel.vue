@@ -10,6 +10,7 @@ import {
 import { getApiErrorMessage } from '../../utils/api-errors';
 import { managerSession } from '../../services/manager-session';
 import { formatMoney } from './order-utils';
+import { isProposalRevisionLocked } from './proposal-lifecycle';
 import { installationStandardWork, resolveInstallationStandard, type StandardInstallationChoice } from '../../services/installation-estimate-api';
 
 type Mode = 'collapsed' | 'detailed';
@@ -149,7 +150,7 @@ const readableError = (failure: unknown): string => {
     preview_not_found: 'Расчёт не найден. Рассчитайте смету заново.',
     installation_already_attached: 'Монтаж для этого оборудования уже прикреплён к предложению.',
     equipment_not_in_proposal: 'Оборудование изменилось или уже не подходит для отдельного монтажа. Проверьте предложение.',
-    proposal_not_editable: 'Редакция предложения закрыта. Создайте новый черновик предложения.',
+    proposal_not_editable: 'Предложение уже отправлено или принято клиентом. Верните его в черновик либо создайте копию.',
     estimate_already_attached: 'Смета уже прикреплена в другом виде. Обновите заказ.',
     idempotency_key_reused: 'Данные расчёта изменились. Запустите новый расчёт.',
     price_changed: 'Книга цен изменилась. Рассчитайте смету заново и проверьте сумму.',
@@ -261,7 +262,10 @@ const loadProducts = async (scope: ActionScope): Promise<boolean> => {
   const order = await ManagerOrdersService.getManagerOrderDetail(scope.orderId);
   if (!current(scope)) return false;
   const proposal = (order.proposals || []).find((item) => item.id === scope.proposalId && !item.is_archived);
-  if (!proposal || proposal.status !== 'draft') throw new Error('Выберите активный черновик предложения.');
+  if (!proposal) throw new Error('Активное предложение больше недоступно. Обновите заказ.');
+  if (isProposalRevisionLocked(proposal.status)) {
+    throw new Error('Предложение уже отправлено или принято клиентом. Верните его в черновик либо создайте копию.');
+  }
   products.value = proposal.product_lines || [];
   selected.value = selected.value.filter((key) => slots.value.some((slot) => slot.key === key));
   return true;
