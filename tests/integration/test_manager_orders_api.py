@@ -2521,7 +2521,14 @@ async def test_manager_customer_reconciliation_groups_documents_and_payments(asy
     assert data["closing_balance"] == 800
     assert len(data["documents"]) == 1
     assert data["documents"][0]["order_id"] == order_inside.id
-    assert data["documents"][0]["basis"] == "Акт №2, ТН-2 №3"
+    assert data["documents"][0]["basis"] == "Акт · внутр. №2, ТН-2 · внутр. №3"
+    assert data["documents"][0]["amount_source"] == "order_total_unverified"
+    assert data["ready_for_generation"] is False
+    assert any(warning["code"] == "document_source_unverified" for warning in data["warnings"])
+    assert all(
+        document["identity_source"] == "unverified_legacy"
+        for document in data["documents"][0]["documents"]
+    )
     assert len(data["documents"][0]["documents"]) == 2
     assert len(data["payments"]) == 1
     assert data["payments"][0]["payment_document_number"] == "42"
