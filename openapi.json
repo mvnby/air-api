@@ -45369,6 +45369,14 @@
             "type": "integer",
             "title": "Unread Count",
             "default": 0
+          },
+          "source_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Source Counts",
+            "description": "Counts across the selected scope, search and unread filter, before source filtering or pagination."
           }
         },
         "type": "object",

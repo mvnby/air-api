@@ -10,5 +10,9 @@ export type LeadsInboxListResponse = {
     meta: Meta;
     pending_count?: number;
     unread_count?: number;
+    /**
+     * Counts across the selected scope, search and unread filter, before source filtering or pagination.
+     */
+    source_counts?: Record<string, number>;
 };
 
