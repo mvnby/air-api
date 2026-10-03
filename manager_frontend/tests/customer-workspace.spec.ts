@@ -4,6 +4,9 @@ import { ManagerContractsService, ManagerEquipmentService, ManagerService } from
 import { api } from '../src/api';
 import * as uiFeedback from '../src/services/ui-feedback';
 import CustomerProfileView from '../src/views/CustomerProfileView.vue';
+import App from '../src/App.vue';
+import { clearManagerSession } from '../src/services/manager-session';
+import { storefrontSettingsApi } from '../src/features/settings/storefront-settings-api';
 
 const customer = {
   id: 7, name: 'ООО Клиент', type: 'company', phone: '+375291110000',
@@ -19,9 +22,33 @@ function mountProfile(search = '?customerId=7') {
   wrappers.push(wrapper);
   return wrapper;
 }
+async function mountWorkspace(search = '?customerId=7') {
+  window.history.replaceState({}, '', `/manager/customers/profile${search}`);
+  const wrapper = mount(App, {
+    global: { stubs: { UiFeedbackHost: true, CreateOrderModal: true, CustomerIntakeDialog: true } },
+  });
+  wrappers.push(wrapper);
+  await vi.waitFor(() => expect(wrapper.find('.back-link').exists()).toBe(true));
+  await flushPromises();
+  return wrapper;
+}
+
+async function editContact(wrapper: VueWrapper) {
+  const contactEdit = wrapper.findAll('button').find((button) => button.element.closest('.contact-row') && button.text() === 'Изменить');
+  expect(contactEdit).toBeTruthy();
+  await contactEdit!.trigger('click');
+  await wrapper.get('input[name="contact_name"]').setValue('Анна');
+}
 
 beforeEach(() => {
+  clearManagerSession();
+  window.localStorage.clear();
   window.history.pushState({}, '', '/manager/customers');
+  vi.spyOn(ManagerService, 'readUserMe').mockResolvedValue({ username: 'manager', role: 'manager', tenant_id: 1, storefront_id: 1, capabilities: ['crm.manage'] } as never);
+  vi.spyOn(ManagerService, 'listManagerStorefronts').mockResolvedValue({ items: [{ slug: 'mvn', display_name: 'MVN', is_current: true, is_default: true }] } as never);
+  vi.spyOn(storefrontSettingsApi, 'brand').mockResolvedValue({ display_name: 'MVN', logo_url: null, compact_logo_url: null } as never);
+  vi.spyOn(api, 'getLeadsCounter').mockResolvedValue({ count: 0 } as never);
+  vi.spyOn(api, 'getManagerCustomers').mockResolvedValue({ items: [customer], meta: { page: 1, limit: 20, total: 1, pages: 1 } } as never);
   vi.spyOn(api, 'getManagerCustomerDetail').mockResolvedValue(customer as never);
   vi.spyOn(ManagerService, 'getManagerCustomerContacts').mockResolvedValue({ items: [] } as never);
   vi.spyOn(ManagerEquipmentService, 'listManagerEquipment').mockResolvedValue({ items: [], meta: { pages: 1 } } as never);
@@ -33,6 +60,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   wrappers.splice(0).forEach((wrapper) => wrapper.unmount());
+  clearManagerSession();
   vi.restoreAllMocks();
   window.history.pushState({}, '', '/manager/customers');
 });
@@ -57,19 +85,41 @@ describe('CustomerProfileView workspace', () => {
     await vi.waitFor(() => expect(ManagerService.getManagerCustomerReconciliation).toHaveBeenCalledWith(7, expect.any(String), expect.any(String), null));
   });
 
+  it('returns from the profile to the customer list through the App router', async () => {
+    const wrapper = await mountWorkspace();
+    await wrapper.get('.back-link').trigger('click');
+    await vi.waitFor(() => expect(wrapper.find('.customer-name-link').exists()).toBe(true));
+    expect(window.location.pathname).toBe('/manager/customers');
+    expect(wrapper.find('.back-link').exists()).toBe(false);
+    expect(uiFeedback.confirmDialog).not.toHaveBeenCalled();
+  });
+
   it('keeps the profile open when a contact has unsaved changes and leaving is declined', async () => {
-    const wrapper = mountProfile();
-    await flushPromises();
-    // Edit the virtual legacy contact and change a field without saving.
-    const contactEdit = wrapper.findAll('button').find((button) => button.text() === 'Изменить' && button.element.closest('.contact-row'));
-    expect(contactEdit).toBeTruthy();
-    await contactEdit!.trigger('click');
-    await wrapper.get('input[name="contact_name"]').setValue('Анна');
+    const wrapper = await mountWorkspace();
+    await editContact(wrapper);
     await wrapper.get('.back-link').trigger('click');
     await flushPromises();
 
+    expect(uiFeedback.confirmDialog).toHaveBeenCalledTimes(1);
     expect(uiFeedback.confirmDialog).toHaveBeenCalledWith(expect.objectContaining({ title: 'Покинуть карточку?' }));
     expect(window.location.pathname).toBe('/manager/customers/profile');
     expect((wrapper.get('input[name="contact_name"]').element as HTMLInputElement).value).toBe('Анна');
+  });
+
+  it('checks unsaved changes once and returns to the list when leaving is confirmed', async () => {
+    vi.mocked(uiFeedback.confirmDialog).mockResolvedValue(true);
+    const wrapper = await mountWorkspace();
+    await editContact(wrapper);
+    await wrapper.get('.back-link').trigger('click');
+    await vi.waitFor(() => expect(wrapper.find('.customer-name-link').exists()).toBe(true));
+    expect(window.location.pathname).toBe('/manager/customers');
+    expect(uiFeedback.confirmDialog).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves the return destination including list filters', async () => {
+    const wrapper = await mountWorkspace(`?customerId=7&returnTo=${encodeURIComponent('/manager/customers?type=company')}`);
+    await wrapper.get('.back-link').trigger('click');
+    await vi.waitFor(() => expect(wrapper.find('.customer-name-link').exists()).toBe(true));
+    expect(`${window.location.pathname}${window.location.search}`).toBe('/manager/customers?type=company');
   });
 });
