@@ -73,6 +73,11 @@ from schemas_manager_orders import (
     ManagerCustomerReconciliationDocumentResponse,
     ManagerCustomerReconciliationPaymentItem,
     ManagerCustomerReconciliationResponse,
+    ManagerCustomerReconciliationEventRelationPayload,
+    ManagerCustomerReconciliationEventRelationResponse,
+    ManagerLegacyReconciliationConfirmPayload,
+    ManagerLegacyReconciliationConfirmResponse,
+    ManagerLegacyReconciliationReviewResponse,
     ManagerOrderCreatePayload,
     ManagerOrderScenariosResponse,
     ManagerOrderDetailResponse,
@@ -998,7 +1003,100 @@ class ManagerCatalogCustomerItemResponse(BaseModel):
     created_at: Optional[datetime]
     order_count: int
     is_favorite: bool = False
+    is_archived: bool = False
+    primary_contact: Optional["ManagerCustomerContactItemResponse"] = None
+    contact_count: int = 0
     branches: List["ManagerCustomerBranchItemResponse"] = Field(default_factory=list)
+
+
+class ManagerCustomerContactItemResponse(BaseModel):
+    id: Optional[int] = None
+    customer_id: int
+    name: Optional[str] = None
+    role: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    is_primary: bool = False
+    is_active: bool = True
+    is_legacy: bool = False
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class ManagerCustomerContactListResponse(BaseModel):
+    items: List[ManagerCustomerContactItemResponse]
+
+
+class ManagerCustomerContactCreatePayload(BaseModel):
+    name: str = Field(max_length=200)
+    role: Optional[str] = Field(default=None, max_length=120)
+    phone: Optional[str] = Field(default=None, max_length=80)
+    email: Optional[str] = Field(default=None, max_length=254)
+    is_primary: bool = False
+    is_active: bool = True
+
+    @field_validator("name")
+    @classmethod
+    def _validate_contact_name(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Имя контактного лица обязательно")
+        return normalized
+
+    @field_validator("phone")
+    @classmethod
+    def _validate_contact_phone(cls, value: Optional[str]) -> Optional[str]:
+        return validate_optional_phone(value)
+
+    @field_validator("email")
+    @classmethod
+    def _validate_contact_email(cls, value: Optional[str]) -> Optional[str]:
+        return validate_optional_email(value)
+
+
+class ManagerCustomerContactUpdatePayload(BaseModel):
+    name: Optional[str] = Field(default=None, max_length=200)
+    role: Optional[str] = Field(default=None, max_length=120)
+    phone: Optional[str] = Field(default=None, max_length=80)
+    email: Optional[str] = Field(default=None, max_length=254)
+    is_primary: Optional[bool] = None
+    is_active: Optional[bool] = None
+
+    @field_validator("name")
+    @classmethod
+    def _validate_contact_name(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Имя контактного лица обязательно")
+        return normalized
+
+    @field_validator("phone")
+    @classmethod
+    def _validate_contact_phone(cls, value: Optional[str]) -> Optional[str]:
+        return validate_optional_phone(value)
+
+    @field_validator("email")
+    @classmethod
+    def _validate_contact_email(cls, value: Optional[str]) -> Optional[str]:
+        return validate_optional_email(value)
+
+
+class ManagerCustomerContactHistoryItemResponse(BaseModel):
+    id: int
+    contact_id: Optional[int] = None
+    field_name: str
+    old_value: Optional[str] = None
+    new_value: Optional[str] = None
+    author_id: Optional[int] = None
+    author_name: Optional[str] = None
+    changed_at: datetime
+
+
+class ManagerCustomerContactHistoryResponse(BaseModel):
+    items: List[ManagerCustomerContactHistoryItemResponse]
+    meta: "Meta"
 
 
 class ManagerCustomerBranchItemResponse(BaseModel):
@@ -1641,6 +1739,7 @@ class CustomerRequisitesDuplicateCustomer(BaseModel):
     inn: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
+    matched_fields: List[Literal["inn", "phone", "email"]] = Field(default_factory=list)
 
 
 class CustomerRequisitesRecognitionResponse(BaseModel):
@@ -1660,6 +1759,13 @@ class CustomerRequisitesRecognitionResponse(BaseModel):
 class CustomerRequisitesConfirmPayload(BaseModel):
     action: str
     customer_id: Optional[int] = None
+    extracted: Optional[CustomerRequisitesExtractedData] = None
+    selected_fields: Optional[List[Literal[
+        "name", "full_legal_name", "customer_type", "inn", "legal_address",
+        "bank_name", "bic", "iban", "email", "phone", "signer_position",
+        "signer_name", "acting_basis",
+    ]]] = None
+    baseline: Optional[Dict[str, Optional[str]]] = None
 
     @field_validator("action")
     @classmethod
@@ -1694,6 +1800,7 @@ class ManagerCustomerUpdatePayload(BaseModel):
     acting_basis: Optional[str] = None
     signing_mode: Optional[str] = None
     is_favorite: Optional[bool] = None
+    is_archived: Optional[bool] = None
 
     @field_validator("name")
     @classmethod

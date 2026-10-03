@@ -9,5 +9,9 @@ export type ManagerCustomerReconciliationBasisDocument = {
     number: string;
     date: string;
     edit_url?: (string | null);
+    identity_source?: string;
+    amount_source?: (string | null);
+    amount?: (number | null);
+    contract_id?: (number | null);
 };
 

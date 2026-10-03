@@ -26,6 +26,7 @@ from models import (
 )
 from schemas import ManagerOrderUpdatePayload, OrderWorkStageCreatePayload, OrderWorkStageUpdatePayload, PaymentCreatePayload
 from services.order_service import OrderService
+from services.order_projection_service import OrderProjectionService
 from services.staff_task_notification_event_service import (
     StaffTaskNotificationEventService,
 )
@@ -472,6 +473,47 @@ async def test_service_get_orders_for_manager_segment_and_search(db):
 
     all_orders = await OrderService.get_orders_for_manager(db, "all", page=1, limit=20, tenant_scope=TEST_TENANT_SCOPE)
     assert {item["customer"]["name"] for item in all_orders["items"]} == {"Alice", "Acme LLC", "ИП Без УНП"}
+
+
+@pytest.mark.asyncio
+async def test_order_projection_filters_by_customer_within_tenant(sqlite_order_session):
+    first = Customer(tenant_id=1, name="First", phone="111", type=CustomerType.individual)
+    second = Customer(tenant_id=1, name="Second", phone="222", type=CustomerType.individual)
+    foreign = Customer(tenant_id=2, name="Foreign", phone="333", type=CustomerType.individual)
+    sqlite_order_session.add_all([first, second, foreign])
+    await sqlite_order_session.commit()
+    await sqlite_order_session.refresh(first)
+    await sqlite_order_session.refresh(second)
+    await sqlite_order_session.refresh(foreign)
+    orders = [
+        Order(tenant_id=1, storefront_id=1, customer_id=first.id, status=OrderStatus.NEGOTIATION),
+        Order(tenant_id=1, storefront_id=1, customer_id=first.id, status=OrderStatus.EXECUTION),
+        Order(tenant_id=1, storefront_id=1, customer_id=second.id, status=OrderStatus.NEGOTIATION),
+        Order(tenant_id=1, storefront_id=1, customer_id=foreign.id, status=OrderStatus.NEGOTIATION),
+    ]
+    sqlite_order_session.add_all(orders)
+    await sqlite_order_session.commit()
+
+    result = await OrderProjectionService.get_orders_for_manager(
+        sqlite_order_session,
+        customer_segment="all",
+        page=1,
+        limit=100,
+        tenant_scope=TEST_TENANT_SCOPE,
+        customer_id=int(first.id),
+    )
+    assert result["meta"].total == 2
+    assert {item["customer"]["id"] for item in result["items"]} == {first.id}
+
+    foreign_result = await OrderProjectionService.get_orders_for_manager(
+        sqlite_order_session,
+        customer_segment="all",
+        page=1,
+        limit=100,
+        tenant_scope=TEST_TENANT_SCOPE,
+        customer_id=int(foreign.id),
+    )
+    assert foreign_result["meta"].total == 0
 
 
 @pytest.mark.asyncio

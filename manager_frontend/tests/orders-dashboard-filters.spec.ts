@@ -70,6 +70,19 @@ describe('work filters', () => {
 });
 
 describe('dashboard search and completeness', () => {
+  it('keeps the exact customer filter on every page and explicitly clears it', async () => {
+    window.history.replaceState({}, '', '/manager/orders/kanban?segment=all&customerId=42');
+    const getOrders = vi.spyOn(api, 'getManagerOrders').mockResolvedValue(response([order(1)], 2));
+    wrapper = mountDashboard();
+    await flushPromises();
+    expect(getOrders).toHaveBeenCalledTimes(2);
+    for (const [params] of getOrders.mock.calls) expect(params.customerId).toBe(42);
+    expect(wrapper.find('a[href="/manager/customers/profile?customerId=42"]').exists()).toBe(true);
+    await wrapper.findAll('button').find(button => button.text() === 'Все клиенты')!.trigger('click');
+    await flushPromises();
+    expect(getOrders).toHaveBeenLastCalledWith(expect.objectContaining({ customerId: undefined }));
+    expect(window.location.search).not.toContain('customerId');
+  });
   it('shows a retryable load error instead of presenting old rows as a successful empty result', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(api, 'getManagerOrders')

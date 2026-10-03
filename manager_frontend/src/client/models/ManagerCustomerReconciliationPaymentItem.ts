@@ -21,5 +21,6 @@ export type ManagerCustomerReconciliationPaymentItem = {
     payment_document_number?: (string | null);
     payment_document_raw?: (string | null);
     payment_purpose?: (string | null);
+    contract_id?: (number | null);
 };
 

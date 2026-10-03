@@ -19,6 +19,7 @@ export type ManagerCustomerDocumentItem = {
     doc_type: string;
     number: string;
     date: string;
+    identity_source?: string;
     edit_url?: (string | null);
     is_downloadable?: boolean;
 };

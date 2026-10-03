@@ -8,5 +8,6 @@ export type CustomerRequisitesDuplicateCustomer = {
     inn?: (string | null);
     phone?: (string | null);
     email?: (string | null);
+    matched_fields?: Array<'inn' | 'phone' | 'email'>;
 };
 

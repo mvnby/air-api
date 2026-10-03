@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field, ValidationInfo, computed_field, field_validator
@@ -305,6 +305,7 @@ class ManagerCustomerDocumentItem(BaseModel):
     doc_type: str
     number: str
     date: datetime
+    identity_source: str = "unverified_legacy"
     edit_url: Optional[str] = None
     is_downloadable: bool = True
 
@@ -320,6 +321,10 @@ class ManagerCustomerReconciliationBasisDocument(BaseModel):
     number: str
     date: datetime
     edit_url: Optional[str] = None
+    identity_source: str = "unverified_legacy"
+    amount_source: Optional[str] = None
+    amount: Optional[float] = None
+    contract_id: Optional[int] = None
 
 
 class ManagerCustomerReconciliationDocumentItem(BaseModel):
@@ -332,6 +337,8 @@ class ManagerCustomerReconciliationDocumentItem(BaseModel):
     documents: List[ManagerCustomerReconciliationBasisDocument] = Field(
         default_factory=list
     )
+    contract_id: Optional[int] = None
+    amount_source: str = "order_total_unverified"
 
 
 class ManagerCustomerReconciliationPaymentItem(BaseModel):
@@ -352,10 +359,24 @@ class ManagerCustomerReconciliationPaymentItem(BaseModel):
     payment_document_number: Optional[str] = None
     payment_document_raw: Optional[str] = None
     payment_purpose: Optional[str] = None
+    contract_id: Optional[int] = None
+
+
+class ManagerCustomerReconciliationWarning(BaseModel):
+    code: str
+    message: str
+    order_id: Optional[int] = None
+    document_id: Optional[int] = None
+    payment_id: Optional[int] = None
+    related_document_ids: List[int] = Field(default_factory=list)
+    can_review_legacy: bool = False
 
 
 class ManagerCustomerReconciliationResponse(BaseModel):
     customer_id: int
+    contract_id: Optional[int] = None
+    ready_for_generation: bool = False
+    warnings: List[ManagerCustomerReconciliationWarning] = Field(default_factory=list)
     date_from: date
     date_to: date
     opening_balance: float = 0.0
@@ -374,6 +395,47 @@ class ManagerCustomerReconciliationDocumentResponse(BaseModel):
     file_id: str
     edit_url: str
     title: str
+
+
+class ManagerLegacyReconciliationReviewResponse(BaseModel):
+    document_id: int
+    source_file_id: str
+    source_hash: str
+    extracted_text: str
+    proposed_number: Optional[str] = None
+    proposed_date: Optional[date] = None
+    proposed_amount: Optional[float] = None
+    proposed_contract_id: Optional[int] = None
+
+
+class ManagerLegacyReconciliationConfirmPayload(BaseModel):
+    source_hash: str = Field(min_length=64, max_length=64)
+    number: str = Field(min_length=1, max_length=160)
+    date: date
+    amount: float = Field(ge=0)
+    contract_id: Optional[int] = Field(default=None, gt=0)
+    evidence_excerpt: str = Field(min_length=8, max_length=1000)
+
+
+class ManagerLegacyReconciliationConfirmResponse(BaseModel):
+    document_id: int
+    number: str
+    date: date
+    amount: float
+    contract_id: Optional[int] = None
+    source_hash: str
+
+
+class ManagerCustomerReconciliationEventRelationPayload(BaseModel):
+    document_ids: List[int] = Field(min_length=2, max_length=10)
+    relation: Literal["same", "separate"]
+    reason: str = Field(min_length=5, max_length=500)
+
+
+class ManagerCustomerReconciliationEventRelationResponse(BaseModel):
+    document_ids: List[int]
+    relation: Literal["same", "separate"]
+    confirmed_at: datetime
 
 
 class PaymentCreatePayload(BaseModel):

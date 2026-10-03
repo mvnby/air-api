@@ -50,6 +50,7 @@ async def get_manager_orders(
     search: Optional[str] = Query(None),
     overdue_only: bool = Query(False),
     sort: str = Query("created_at_desc"),
+    customer_id: Optional[int] = Query(None, gt=0),
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
@@ -65,6 +66,7 @@ async def get_manager_orders(
             search=search,
             overdue_only=overdue_only,
             sort=sort,
+            customer_id=customer_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -19,6 +19,7 @@ import type { CommonGalleryImageResponse } from '../models/CommonGalleryImageRes
 import type { CustomerRequisitesConfirmPayload } from '../models/CustomerRequisitesConfirmPayload';
 import type { CustomerRequisitesConfirmResponse } from '../models/CustomerRequisitesConfirmResponse';
 import type { CustomerRequisitesRecognitionResponse } from '../models/CustomerRequisitesRecognitionResponse';
+import type { CustomerRequisitesTextPayload } from '../models/CustomerRequisitesTextPayload';
 import type { ManagerActionMessageResponse } from '../models/ManagerActionMessageResponse';
 import type { ManagerAuthStatusResponse } from '../models/ManagerAuthStatusResponse';
 import type { ManagerBulkDeleteProductsResponse } from '../models/ManagerBulkDeleteProductsResponse';
@@ -33,11 +34,21 @@ import type { ManagerCustomerBranchCreatePayload } from '../models/ManagerCustom
 import type { ManagerCustomerBranchItemResponse } from '../models/ManagerCustomerBranchItemResponse';
 import type { ManagerCustomerBranchListResponse } from '../models/ManagerCustomerBranchListResponse';
 import type { ManagerCustomerBranchUpdatePayload } from '../models/ManagerCustomerBranchUpdatePayload';
+import type { ManagerCustomerContactCreatePayload } from '../models/ManagerCustomerContactCreatePayload';
+import type { ManagerCustomerContactHistoryResponse } from '../models/ManagerCustomerContactHistoryResponse';
+import type { ManagerCustomerContactItemResponse } from '../models/ManagerCustomerContactItemResponse';
+import type { ManagerCustomerContactListResponse } from '../models/ManagerCustomerContactListResponse';
+import type { ManagerCustomerContactUpdatePayload } from '../models/ManagerCustomerContactUpdatePayload';
 import type { ManagerCustomerCreatePayload } from '../models/ManagerCustomerCreatePayload';
 import type { ManagerCustomerDocumentListResponse } from '../models/ManagerCustomerDocumentListResponse';
 import type { ManagerCustomerReconciliationDocumentResponse } from '../models/ManagerCustomerReconciliationDocumentResponse';
+import type { ManagerCustomerReconciliationEventRelationPayload } from '../models/ManagerCustomerReconciliationEventRelationPayload';
+import type { ManagerCustomerReconciliationEventRelationResponse } from '../models/ManagerCustomerReconciliationEventRelationResponse';
 import type { ManagerCustomerReconciliationResponse } from '../models/ManagerCustomerReconciliationResponse';
 import type { ManagerCustomerUpdatePayload } from '../models/ManagerCustomerUpdatePayload';
+import type { ManagerLegacyReconciliationConfirmPayload } from '../models/ManagerLegacyReconciliationConfirmPayload';
+import type { ManagerLegacyReconciliationConfirmResponse } from '../models/ManagerLegacyReconciliationConfirmResponse';
+import type { ManagerLegacyReconciliationReviewResponse } from '../models/ManagerLegacyReconciliationReviewResponse';
 import type { ManagerMediaApplySeriesResponse } from '../models/ManagerMediaApplySeriesResponse';
 import type { ManagerMediaBulkAddResponse } from '../models/ManagerMediaBulkAddResponse';
 import type { ManagerMediaBulkDeleteResponse } from '../models/ManagerMediaBulkDeleteResponse';
@@ -194,6 +205,8 @@ export class ManagerService {
      * @param search
      * @param type
      * @param onlyWithOrders
+     * @param onlyFavorites
+     * @param includeArchived
      * @returns ManagerCatalogCustomerListResponse Successful Response
      * @throws ApiError
      */
@@ -203,6 +216,8 @@ export class ManagerService {
         search?: (string | null),
         type?: (string | null),
         onlyWithOrders: boolean = true,
+        onlyFavorites: boolean = false,
+        includeArchived: boolean = false,
     ): CancelablePromise<ManagerCatalogCustomerListResponse> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -213,6 +228,8 @@ export class ManagerService {
                 'search': search,
                 'type': type,
                 'only_with_orders': onlyWithOrders,
+                'only_favorites': onlyFavorites,
+                'include_archived': includeArchived,
             },
             errors: {
                 422: `Validation Error`,
@@ -252,6 +269,25 @@ export class ManagerService {
             url: '/api/manager/customers/requisites/recognize',
             formData: formData,
             mediaType: 'multipart/form-data',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Recognize Customer Requisites Text For Manager
+     * @param requestBody
+     * @returns CustomerRequisitesRecognitionResponse Successful Response
+     * @throws ApiError
+     */
+    public static recognizeManagerCustomerRequisitesText(
+        requestBody: CustomerRequisitesTextPayload,
+    ): CancelablePromise<CustomerRequisitesRecognitionResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/customers/requisites/recognize-text',
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },
@@ -370,6 +406,7 @@ export class ManagerService {
      * @param customerId
      * @param dateFrom
      * @param dateTo
+     * @param contractId
      * @returns ManagerCustomerReconciliationResponse Successful Response
      * @throws ApiError
      */
@@ -377,6 +414,7 @@ export class ManagerService {
         customerId: number,
         dateFrom?: (string | null),
         dateTo?: (string | null),
+        contractId?: (number | null),
     ): CancelablePromise<ManagerCustomerReconciliationResponse> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -387,6 +425,7 @@ export class ManagerService {
             query: {
                 'date_from': dateFrom,
                 'date_to': dateTo,
+                'contract_id': contractId,
             },
             errors: {
                 422: `Validation Error`,
@@ -398,6 +437,7 @@ export class ManagerService {
      * @param customerId
      * @param dateFrom
      * @param dateTo
+     * @param contractId
      * @returns ManagerCustomerReconciliationDocumentResponse Successful Response
      * @throws ApiError
      */
@@ -405,6 +445,7 @@ export class ManagerService {
         customerId: number,
         dateFrom?: (string | null),
         dateTo?: (string | null),
+        contractId?: (number | null),
     ): CancelablePromise<ManagerCustomerReconciliationDocumentResponse> {
         return __request(OpenAPI, {
             method: 'POST',
@@ -415,7 +456,82 @@ export class ManagerService {
             query: {
                 'date_from': dateFrom,
                 'date_to': dateTo,
+                'contract_id': contractId,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Review Customer Reconciliation Legacy Document For Manager
+     * @param customerId
+     * @param documentId
+     * @returns ManagerLegacyReconciliationReviewResponse Successful Response
+     * @throws ApiError
+     */
+    public static reviewManagerCustomerReconciliationLegacyDocument(
+        customerId: number,
+        documentId: number,
+    ): CancelablePromise<ManagerLegacyReconciliationReviewResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/customers/{customer_id}/reconciliation/legacy-documents/{document_id}/review',
+            path: {
+                'customer_id': customerId,
+                'document_id': documentId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Confirm Customer Reconciliation Legacy Document For Manager
+     * @param customerId
+     * @param documentId
+     * @param requestBody
+     * @returns ManagerLegacyReconciliationConfirmResponse Successful Response
+     * @throws ApiError
+     */
+    public static confirmManagerCustomerReconciliationLegacyDocument(
+        customerId: number,
+        documentId: number,
+        requestBody: ManagerLegacyReconciliationConfirmPayload,
+    ): CancelablePromise<ManagerLegacyReconciliationConfirmResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/customers/{customer_id}/reconciliation/legacy-documents/{document_id}/confirm',
+            path: {
+                'customer_id': customerId,
+                'document_id': documentId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Confirm Customer Reconciliation Event Relation For Manager
+     * @param customerId
+     * @param requestBody
+     * @returns ManagerCustomerReconciliationEventRelationResponse Successful Response
+     * @throws ApiError
+     */
+    public static confirmManagerCustomerReconciliationEventRelation(
+        customerId: number,
+        requestBody: ManagerCustomerReconciliationEventRelationPayload,
+    ): CancelablePromise<ManagerCustomerReconciliationEventRelationResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/customers/{customer_id}/reconciliation/event-relation',
+            path: {
+                'customer_id': customerId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },
@@ -509,6 +625,105 @@ export class ManagerService {
             path: {
                 'customer_id': customerId,
                 'branch_id': branchId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Manager Customer Contacts
+     * @param customerId
+     * @returns ManagerCustomerContactListResponse Successful Response
+     * @throws ApiError
+     */
+    public static getManagerCustomerContacts(
+        customerId: number,
+    ): CancelablePromise<ManagerCustomerContactListResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/customers/{customer_id}/contacts',
+            path: {
+                'customer_id': customerId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Manager Customer Contact
+     * @param customerId
+     * @param requestBody
+     * @returns ManagerCustomerContactItemResponse Successful Response
+     * @throws ApiError
+     */
+    public static createManagerCustomerContact(
+        customerId: number,
+        requestBody: ManagerCustomerContactCreatePayload,
+    ): CancelablePromise<ManagerCustomerContactItemResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/customers/{customer_id}/contacts',
+            path: {
+                'customer_id': customerId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Patch Manager Customer Contact
+     * @param customerId
+     * @param contactId
+     * @param requestBody
+     * @returns ManagerCustomerContactItemResponse Successful Response
+     * @throws ApiError
+     */
+    public static patchManagerCustomerContact(
+        customerId: number,
+        contactId: number,
+        requestBody: ManagerCustomerContactUpdatePayload,
+    ): CancelablePromise<ManagerCustomerContactItemResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/manager/customers/{customer_id}/contacts/{contact_id}',
+            path: {
+                'customer_id': customerId,
+                'contact_id': contactId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Manager Customer Contact History
+     * @param customerId
+     * @param page
+     * @param limit
+     * @returns ManagerCustomerContactHistoryResponse Successful Response
+     * @throws ApiError
+     */
+    public static getManagerCustomerContactHistory(
+        customerId: number,
+        page: number = 1,
+        limit: number = 50,
+    ): CancelablePromise<ManagerCustomerContactHistoryResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/customers/{customer_id}/contact-history',
+            path: {
+                'customer_id': customerId,
+            },
+            query: {
+                'page': page,
+                'limit': limit,
             },
             errors: {
                 422: `Validation Error`,

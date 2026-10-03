@@ -113,6 +113,13 @@ async def test_manager_orders_list_segment_filter(async_client, db):
     assert len(all_items) == 3
     assert any(item["customer"] is None for item in all_items)
 
+    customer_orders = await async_client.get(
+        f"/api/manager/orders?segment=all&customer_id={c1.id}", headers=headers
+    )
+    assert customer_orders.status_code == 200
+    assert customer_orders.json()["meta"]["total"] == 1
+    assert [item["customer"]["id"] for item in customer_orders.json()["items"]] == [c1.id]
+
 
 @pytest.mark.asyncio
 async def test_catalog_decision_quick_order_api_can_attach_real_customer_later(async_client, db):
@@ -2678,16 +2685,49 @@ async def test_manager_customer_reconciliation_document_generation(async_client,
     captured = {}
 
     class _FakeGoogleService:
+        def export_file(self, file_id, mime_type="text/plain"):
+            assert file_id == "act-4"
+            assert mime_type == "text/plain"
+            return BytesIO("Акт №4 от 02.03.2026\nИтого 900,00 BYN\nПодписи сторон".encode())
+
         def create_document_from_html(self, title, html):
             captured["title"] = title
             captured["html"] = html
             return {"file_id": "reconciliation-file", "edit_url": "https://docs.google.com/document/d/reconciliation-file/edit"}
 
-    from services import customer_reconciliation_service
+    from services import customer_reconciliation_service, customer_reconciliation_legacy_review
 
     monkeypatch.setattr(customer_reconciliation_service, "get_google_service", lambda: _FakeGoogleService())
+    monkeypatch.setattr(customer_reconciliation_legacy_review, "get_google_service", lambda: _FakeGoogleService())
 
     headers = await _auth_headers(async_client)
+    blocked = await async_client.post(
+        f"/api/manager/customers/{customer.id}/reconciliation/document",
+        params={"date_from": "2026-01-01", "date_to": "2026-12-31"},
+        headers=headers,
+    )
+    assert blocked.status_code == 409, blocked.text
+    act_id = (await db.execute(
+        select(OrderDocument.id).where(OrderDocument.order_id == order.id, OrderDocument.doc_type == "act")
+    )).scalar_one()
+    review = await async_client.post(
+        f"/api/manager/customers/{customer.id}/reconciliation/legacy-documents/{act_id}/review",
+        headers=headers,
+    )
+    assert review.status_code == 200, review.text
+    review_data = review.json()
+    assert review_data["proposed_number"] == "4"
+    assert review_data["proposed_amount"] == 900
+    confirm = await async_client.post(
+        f"/api/manager/customers/{customer.id}/reconciliation/legacy-documents/{review_data['document_id']}/confirm",
+        json={
+            "source_hash": review_data["source_hash"], "number": "4",
+            "date": "2026-03-02", "amount": 900,
+            "evidence_excerpt": "Акт №4 от 02.03.2026",
+        },
+        headers=headers,
+    )
+    assert confirm.status_code == 200, confirm.text
     response = await async_client.post(
         f"/api/manager/customers/{customer.id}/reconciliation/document",
         params={"date_from": "2026-01-01", "date_to": "2026-12-31"},

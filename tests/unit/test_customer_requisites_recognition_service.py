@@ -8,14 +8,15 @@ from googleapiclient.errors import HttpError
 from httplib2 import Response
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from sqlmodel import SQLModel
+from sqlmodel import SQLModel, select
 
-from models import CustomerRequisitesRecognition
+from models import Customer, CustomerContact, CustomerContactHistory, CustomerRequisitesRecognition, CustomerType
 from models.tenancy import TenantScope
 from services.customer_requisites_recognition_service import (
     CustomerRequisitesRecognitionService,
     OcrProviderError,
 )
+from services.customer_requisites_confirmation_service import CustomerRequisitesConflictError
 
 
 TEST_TENANT_SCOPE = TenantScope(
@@ -401,3 +402,210 @@ async def test_recognize_text_creates_recognition_without_file(sqlite_session, m
     assert stored.tenant_id == TEST_TENANT_SCOPE.tenant_id
     assert stored.mime_type == "text/plain"
     assert stored.local_file_path is None
+
+
+@pytest.mark.asyncio
+async def test_corrected_draft_creates_once_and_ignores_unselected_fields(sqlite_session, monkeypatch):
+    async def fake_extract(_raw_text):
+        return {"name": "ООО Новый", "inn": "300063995", "bank_name": "Старый банк", "iban": "invalid"}
+
+    monkeypatch.setattr(CustomerRequisitesRecognitionService, "extract_requisites", fake_extract)
+    recognized = await CustomerRequisitesRecognitionService.recognize_text(
+        sqlite_session, text="ООО Новый УНП 300063995 реквизиты клиента", source="manager",
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+    kwargs = dict(
+        recognition_id=recognized["id"], action="create", customer_id=None,
+        extracted={"name": "ООО Исправленное"},
+        selected_fields=["name", "inn", "customer_type"],
+        baseline=None, tenant_scope=TEST_TENANT_SCOPE,
+    )
+    first = await CustomerRequisitesRecognitionService.confirm(sqlite_session, **kwargs)
+    second = await CustomerRequisitesRecognitionService.confirm(sqlite_session, **kwargs)
+    assert second["customer"]["id"] == first["customer"]["id"]
+    assert first["customer"]["name"] == "ООО Исправленное"
+    assert first["customer"]["bank_name"] is None
+    assert first["customer"]["full_legal_name"] is None
+    assert first["customer"]["type"] == "company"
+
+
+@pytest.mark.asyncio
+async def test_update_selected_fields_checks_baseline_and_preserves_signing(sqlite_session, monkeypatch):
+    existing = Customer(
+        tenant_id=1, name="ООО Действующее", phone="", type=CustomerType.company,
+        signing_mode="power_of_attorney", inn="300063995", bank_name="Старый банк",
+        signer_position="председателя", acting_basis="Доверенности",
+    )
+    sqlite_session.add(existing)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(existing)
+
+    async def fake_extract(_raw_text):
+        return {"name": "ООО Действующее", "inn": "300063995", "bank_name": "Новый банк"}
+
+    monkeypatch.setattr(CustomerRequisitesRecognitionService, "extract_requisites", fake_extract)
+    recognized = await CustomerRequisitesRecognitionService.recognize_text(
+        sqlite_session, text="ООО Действующее УНП 300063995 реквизиты", source="manager",
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+    kwargs = dict(
+        recognition_id=recognized["id"], action="update", customer_id=existing.id,
+        extracted={"bank_name": "Исправленный банк"}, selected_fields=["bank_name"],
+        baseline={"bank_name": "Старый банк"}, tenant_scope=TEST_TENANT_SCOPE,
+    )
+    existing.bank_name = "Правка другого менеджера"
+    await sqlite_session.commit()
+    with pytest.raises(CustomerRequisitesConflictError):
+        await CustomerRequisitesRecognitionService.confirm(sqlite_session, **kwargs)
+    assert existing.bank_name == "Правка другого менеджера"
+
+    kwargs["baseline"] = {"bank_name": "Правка другого менеджера"}
+    confirmed = await CustomerRequisitesRecognitionService.confirm(sqlite_session, **kwargs)
+    assert confirmed["customer"]["bank_name"] == "Исправленный банк"
+    assert confirmed["customer"]["signing_mode"] == "power_of_attorney"
+    assert confirmed["customer"]["signer_position"] == "председателя"
+    assert confirmed["customer"]["acting_basis"] == "Доверенности"
+
+
+@pytest.mark.asyncio
+async def test_phone_match_does_not_implicitly_choose_update_target(sqlite_session, monkeypatch):
+    existing = Customer(
+        tenant_id=1, name="Другая компания", phone="+375291112233",
+        type=CustomerType.company, signing_mode="statutory_body",
+    )
+    sqlite_session.add(existing)
+    await sqlite_session.commit()
+
+    async def fake_extract(_raw_text):
+        return {"name": "ООО Новая", "phone": "+375291112233"}
+
+    monkeypatch.setattr(CustomerRequisitesRecognitionService, "extract_requisites", fake_extract)
+    recognized = await CustomerRequisitesRecognitionService.recognize_text(
+        sqlite_session, text="ООО Новая телефон +375291112233 реквизиты", source="manager",
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+    assert recognized["duplicate_customer"]["id"] == existing.id
+    assert recognized["duplicate_customer"]["matched_fields"] == ["phone"]
+    with pytest.raises(ValueError, match="Не выбран клиент"):
+        await CustomerRequisitesRecognitionService.confirm(
+            sqlite_session, recognition_id=recognized["id"], action="update",
+            tenant_scope=TEST_TENANT_SCOPE,
+        )
+
+
+@pytest.mark.asyncio
+async def test_requisites_phone_update_keeps_primary_contact_in_sync(sqlite_session, monkeypatch):
+    existing = Customer(
+        tenant_id=1, name="ООО Контакт", phone="+375291112233",
+        type=CustomerType.company, signing_mode="statutory_body",
+    )
+    sqlite_session.add(existing)
+    await sqlite_session.flush()
+    primary = CustomerContact(
+        customer_id=existing.id, name="Основной", phone="+375291112233",
+        is_primary=True, is_active=True,
+    )
+    sqlite_session.add(primary)
+    await sqlite_session.commit()
+
+    async def fake_extract(_raw_text):
+        return {"name": "ООО Контакт", "phone": "+375291112244"}
+
+    monkeypatch.setattr(CustomerRequisitesRecognitionService, "extract_requisites", fake_extract)
+    recognized = await CustomerRequisitesRecognitionService.recognize_text(
+        sqlite_session, text="ООО Контакт телефон +375291112244 реквизиты", source="manager",
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+    await CustomerRequisitesRecognitionService.confirm(
+        sqlite_session, recognition_id=recognized["id"], action="update",
+        customer_id=existing.id, extracted={"phone": "+375291112255"},
+        selected_fields=["phone"], baseline={"phone": "+375291112233"},
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+    await sqlite_session.refresh(primary)
+    await sqlite_session.refresh(existing)
+    assert existing.phone == "+375291112255"
+    assert primary.phone == "+375291112255"
+    history = (await sqlite_session.execute(select(CustomerContactHistory))).scalars().all()
+    assert any(row.field_name == "phone" and row.new_value == "+375291112255" for row in history)
+
+
+@pytest.mark.asyncio
+async def test_selected_empty_strings_clear_optional_fields_but_not_name(sqlite_session, monkeypatch):
+    existing = Customer(
+        tenant_id=1, name="ООО Клиент", full_legal_name="ООО Полное",
+        email="old@example.test", phone="+375291112233",
+        type=CustomerType.company, signing_mode="statutory_body",
+    )
+    sqlite_session.add(existing)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(existing)
+
+    async def fake_extract(_raw_text):
+        return {"name": "ООО Клиент", "full_legal_name": "ООО Полное", "email": "old@example.test"}
+
+    monkeypatch.setattr(CustomerRequisitesRecognitionService, "extract_requisites", fake_extract)
+    recognized = await CustomerRequisitesRecognitionService.recognize_text(
+        sqlite_session, text="ООО Клиент, реквизиты и контактные данные", source="manager",
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+    with pytest.raises(ValueError, match="name"):
+        await CustomerRequisitesRecognitionService.confirm(
+            sqlite_session, recognition_id=recognized["id"], action="update",
+            customer_id=existing.id, extracted={"name": ""}, selected_fields=["name"],
+            baseline={"name": "ООО Клиент"}, tenant_scope=TEST_TENANT_SCOPE,
+        )
+
+    result = await CustomerRequisitesRecognitionService.confirm(
+        sqlite_session, recognition_id=recognized["id"], action="update",
+        customer_id=existing.id,
+        extracted={"full_legal_name": "", "email": "", "phone": ""},
+        selected_fields=["full_legal_name", "email", "phone"],
+        baseline={"full_legal_name": "ООО Полное", "email": "old@example.test", "phone": "+375291112233"},
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+    assert result["customer"]["name"] == "ООО Клиент"
+    assert result["customer"]["full_legal_name"] is None
+    assert result["customer"]["email"] is None
+    assert result["customer"]["phone"] == ""
+
+
+@pytest.mark.asyncio
+async def test_explicit_party_type_change_keeps_signing_mode_valid(sqlite_session, monkeypatch):
+    existing = Customer(
+        tenant_id=1, name="Иванов Иван Иванович", phone="",
+        type=CustomerType.individual, signing_mode="self",
+    )
+    sqlite_session.add(existing)
+    await sqlite_session.commit()
+    await sqlite_session.refresh(existing)
+
+    async def fake_extract(_raw_text):
+        return {"name": "ООО Клиент", "customer_type": "company"}
+
+    monkeypatch.setattr(CustomerRequisitesRecognitionService, "extract_requisites", fake_extract)
+    recognized = await CustomerRequisitesRecognitionService.recognize_text(
+        sqlite_session, text="ООО Клиент, юридические реквизиты", source="manager",
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+    result = await CustomerRequisitesRecognitionService.confirm(
+        sqlite_session, recognition_id=recognized["id"], action="update",
+        customer_id=existing.id, extracted={"customer_type": "company"},
+        selected_fields=["customer_type"], baseline={"customer_type": "individual"},
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+    assert result["customer"]["type"] == "company"
+    assert result["customer"]["signing_mode"] == "statutory_body"
+
+
+def test_pdf_over_five_pages_is_rejected_instead_of_partially_read():
+    from pypdf import PdfWriter
+
+    writer = PdfWriter()
+    for _ in range(6):
+        writer.add_blank_page(width=595, height=842)
+    output = BytesIO()
+    writer.write(output)
+
+    with pytest.raises(ValueError, match="больше 5 страниц"):
+        CustomerRequisitesRecognitionService._extract_pdf_text(output.getvalue())

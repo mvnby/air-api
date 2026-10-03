@@ -3,32 +3,26 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, time
 import html
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Optional
 
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import lazyload, selectinload
+from sqlalchemy import func
 from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import Customer, Order, OrderDocument, Payment
+from models import Customer, CustomerContract, Order, Payment
 from models.tenancy import TenantScope
-from services.documents.base import DOC_NAMES
 from services.google_service import get_google_service
-from services.order_financial_eligibility import is_successful_order
+from services.customer_reconciliation_projection import project
+from services.customer_reconciliation_projection import DELIVERY_DOC_TYPES, document_identity
+from services.customer_reconciliation_legacy_review import (
+    LEGACY_META_KEY, LegacyDocumentReviewError, review_legacy_document,
+)
 from services.settings_service import SettingsService
 from services.tenant_scope_service import (
     storefront_scope_clause,
     tenant_scope_clause,
 )
-
-
-DELIVERY_DOC_TYPES = {
-    "act",
-    "tn2",
-    "ttn1",
-    "retail_receipt",
-    "service_act",
-    "maintenance_service_act",
-}
 
 
 @dataclass(frozen=True)
@@ -37,6 +31,12 @@ class _Period:
     date_to: date
     start: datetime
     end: datetime
+
+
+class ReconciliationNotReadyError(ValueError):
+    def __init__(self, warnings: list[Dict[str, Any]]):
+        super().__init__("Есть неподтверждённые суммы или основания: проверьте предупреждения сверки")
+        self.warnings = warnings
 
 
 class CustomerReconciliationService:
@@ -67,69 +67,6 @@ class CustomerReconciliationService:
             start=datetime.combine(start_date, time.min),
             end=datetime.combine(end_date, time.max),
         )
-
-    @staticmethod
-    def _money(value: Optional[float]) -> float:
-        return round(float(value or 0), 2)
-
-    @staticmethod
-    def _doc_label(doc: OrderDocument) -> str:
-        doc_name = DOC_NAMES.get(doc.doc_type, doc.doc_type.upper())
-        return f"{doc_name} №{doc.number}"
-
-    @classmethod
-    def _order_date(cls, order: Order, delivery_docs: Iterable[OrderDocument]) -> datetime:
-        docs = sorted(delivery_docs, key=lambda item: item.date or item.created_at or datetime.min)
-        if docs:
-            return docs[0].date
-        return order.closed_at or order.contract_date or order.created_at
-
-    @classmethod
-    def _order_basis_docs(cls, delivery_docs: Iterable[OrderDocument]) -> list[Dict[str, Any]]:
-        return [
-            {
-                "id": doc.id,
-                "doc_type": doc.doc_type,
-                "doc_type_label": DOC_NAMES.get(doc.doc_type, doc.doc_type.upper()),
-                "number": doc.number,
-                "date": doc.date,
-                "edit_url": doc.google_edit_url,
-            }
-            for doc in sorted(delivery_docs, key=lambda item: (item.date, item.id or 0))
-        ]
-
-    @staticmethod
-    def _payment_payload(
-        payment: Payment,
-        order: Order,
-        *,
-        amount_override: Optional[float] = None,
-        allocated_amount: Optional[float] = None,
-    ) -> Dict[str, Any]:
-        receipt = payment.bank_receipt
-        return {
-            "payment_id": payment.id,
-            "order_id": order.id,
-            "order_title": order.title or f"Заказ #{order.id}",
-            "date": payment.date,
-            "amount": CustomerReconciliationService._money(
-                payment.amount if amount_override is None else amount_override
-            ),
-            "allocated_amount": CustomerReconciliationService._money(
-                payment.amount if allocated_amount is None else allocated_amount
-            ),
-            "currency": payment.currency,
-            "payment_type": payment.type,
-            "comment": payment.comment,
-            "bank_receipt_id": receipt.id if receipt else None,
-            "payer_name": receipt.payer_name if receipt else None,
-            "payer_unp": receipt.payer_unp if receipt else None,
-            "payer_account": receipt.payer_account if receipt else None,
-            "our_account": receipt.our_account if receipt else None,
-            "payment_document_number": receipt.payment_document_number if receipt else None,
-            "payment_document_raw": receipt.payment_document_raw if receipt else None,
-            "payment_purpose": receipt.payment_purpose if receipt else None,
-        }
 
     @staticmethod
     def _format_date(value: date | datetime | str | None) -> str:
@@ -283,6 +220,10 @@ class CustomerReconciliationService:
         customer_title = cls._customer_title(customer)
         company_title = company_requisites.get("company_full_legal_name") or company_requisites.get("company_name") or cls.DEFAULT_COMPANY_NAME
         period = f"{cls._format_date(data.get('date_from'))} - {cls._format_date(data.get('date_to'))}"
+        contract_line = (
+            f"<p><strong>Договор:</strong> №{html.escape(str(data['contract_number']))}</p>"
+            if data.get("contract_number") else ""
+        )
         summary = cls._balance_summary(float(data.get("closing_balance") or 0), company_title)
         html_rows = "\n".join(rows)
         return f"""<!doctype html>
@@ -305,6 +246,7 @@ class CustomerReconciliationService:
 <body>
   <h1>Акт сверки взаимных расчетов</h1>
   <p><strong>Период:</strong> {html.escape(period)}</p>
+  {contract_line}
   <p><strong>Сторона 1:</strong> {html.escape(cls._our_requisites_label(company_requisites))}</p>
   <p><strong>Сторона 2:</strong> {html.escape(cls._customer_requisites(customer))}</p>
   <p>Стороны произвели сверку взаимных расчетов за указанный период и установили следующее:</p>
@@ -355,17 +297,23 @@ class CustomerReconciliationService:
         date_to: Optional[date] = None,
         *,
         tenant_scope: TenantScope,
+        contract_id: Optional[int] = None,
+        verify_sources: bool = False,
     ) -> Optional[Dict[str, Any]]:
         customer = (
             await session.execute(
                 select(Customer).where(
                     Customer.id == customer_id,
                     tenant_scope_clause(Customer, tenant_scope),
-                )
+                ).options(lazyload("*"))
             )
         ).scalars().first()
         if not customer:
             return None
+        if contract_id is not None:
+            contract = await session.get(CustomerContract, contract_id)
+            if contract is None or contract.customer_id != customer_id:
+                raise ValueError("Договор не принадлежит этому контрагенту")
 
         period = cls._period(date_from, date_to)
         query = (
@@ -375,6 +323,7 @@ class CustomerReconciliationService:
                 storefront_scope_clause(Order, tenant_scope),
             )
             .options(
+                lazyload("*"),
                 selectinload(Order.documents),
                 selectinload(Order.payments).selectinload(Payment.bank_receipt),
             )
@@ -383,103 +332,68 @@ class CustomerReconciliationService:
         )
         result = await session.execute(query)
         orders = list(result.unique().scalars().all())
-
-        opening_documents_total = 0.0
-        opening_payments_total = 0.0
-        documents_total = 0.0
-        payments_total = 0.0
-        document_rows: list[Dict[str, Any]] = []
-        payment_rows: list[Dict[str, Any]] = []
-        seen_bank_receipt_ids: set[int] = set()
-        allocated_by_bank_receipt: dict[int, float] = {}
-        eligible_allocated_by_bank_receipt: dict[int, float] = {}
-        for order in orders:
-            for payment in order.payments:
-                if not payment.bank_receipt_id:
-                    continue
-                receipt_id = int(payment.bank_receipt_id)
-                allocated_by_bank_receipt[receipt_id] = cls._money(
-                    allocated_by_bank_receipt.get(receipt_id, 0) + payment.amount
+        receipt_ids = {
+            int(payment.bank_receipt_id)
+            for order in orders for payment in order.payments
+            if payment.bank_receipt_id is not None
+        }
+        receipt_totals: dict[int, float] = {}
+        if receipt_ids:
+            allocations = await session.execute(
+                select(Payment.bank_receipt_id, func.sum(Payment.amount))
+                .join(Order, Order.id == Payment.order_id)
+                .where(
+                    Payment.bank_receipt_id.in_(receipt_ids),
+                    tenant_scope_clause(Order, tenant_scope),
                 )
-                if is_successful_order(order):
-                    eligible_allocated_by_bank_receipt[receipt_id] = cls._money(
-                        eligible_allocated_by_bank_receipt.get(receipt_id, 0)
-                        + payment.amount
-                    )
+                .group_by(Payment.bank_receipt_id)
+            )
+            receipt_totals = {int(receipt_id): float(total) for receipt_id, total in allocations}
 
-        for order in orders:
-            if not is_successful_order(order):
-                continue
-            delivery_docs = [doc for doc in order.documents if doc.doc_type in DELIVERY_DOC_TYPES]
-            order_date = cls._order_date(order, delivery_docs)
-            order_amount = cls._money(order.total_amount)
-
-            if order_amount > 0:
-                if order_date < period.start:
-                    opening_documents_total += order_amount
-                elif order_date <= period.end:
-                    documents_total += order_amount
-                    document_rows.append(
-                        {
-                            "order_id": order.id,
-                            "order_title": order.title or f"Заказ #{order.id}",
-                            "date": order_date,
-                            "amount": order_amount,
-                            "basis": ", ".join(cls._doc_label(doc) for doc in delivery_docs) or f"Заказ #{order.id}",
-                            "delivery_address": order.delivery_address,
-                            "documents": cls._order_basis_docs(delivery_docs),
-                        }
-                    )
-
-            for payment in order.payments:
-                receipt = payment.bank_receipt
-                if receipt and receipt.id:
-                    receipt_id = int(receipt.id)
-                    if receipt_id in seen_bank_receipt_ids:
+        ledger = project(orders, period.start, period.end, contract_id, receipt_totals)
+        if verify_sources and ledger["ready_for_generation"]:
+            for order in orders:
+                superseded_ids = {
+                    doc.replaces_document_id for doc in order.documents
+                    if doc.replaces_document_id is not None
+                    and doc.status in {"issued", "sent", "signed"}
+                }
+                for doc in order.documents:
+                    if (doc.id in superseded_ids or doc.doc_type not in DELIVERY_DOC_TYPES
+                            or doc.status is not None):
                         continue
-                    seen_bank_receipt_ids.add(receipt_id)
-                    allocated_amount = eligible_allocated_by_bank_receipt.get(
-                        receipt_id, 0.0
-                    )
-                    all_allocated = allocated_by_bank_receipt.get(receipt_id, 0.0)
-                    amount = (
-                        cls._money(receipt.amount)
-                        if allocated_amount == all_allocated
-                        else allocated_amount
-                    )
-                else:
-                    amount = cls._money(payment.amount)
-                    allocated_amount = amount
-                if amount <= 0:
-                    continue
-                if payment.date < period.start:
-                    opening_payments_total += amount
-                elif payment.date <= period.end:
-                    payments_total += amount
-                    payment_rows.append(
-                        cls._payment_payload(
-                            payment,
-                            order,
-                            amount_override=amount,
-                            allocated_amount=allocated_amount,
+                    identity = document_identity(doc)
+                    if (identity["identity_source"] != "confirmed_legacy"
+                            or identity["date"] > period.end
+                            or (contract_id is not None and identity["contract_id"] != contract_id)):
+                        continue
+                    try:
+                        review = await review_legacy_document(
+                            session, customer_id, doc.id, tenant_scope,
                         )
-                    )
-
-        opening_balance = cls._money(opening_documents_total - opening_payments_total)
-        documents_total = cls._money(documents_total)
-        payments_total = cls._money(payments_total)
-        closing_balance = cls._money(opening_balance + documents_total - payments_total)
-
+                    except LegacyDocumentReviewError:
+                        review = None
+                    if review is None:
+                        code = "legacy_source_unavailable"
+                        message = "Оригинал недоступен: акт сверки нельзя выпустить"
+                    elif review["source_hash"] != (doc.scope_meta or {}).get(LEGACY_META_KEY, {}).get("source_hash"):
+                        code = "legacy_source_changed"
+                        message = "Оригинал изменился после подтверждения: проверьте его повторно"
+                    else:
+                        continue
+                    ledger["warnings"].append({
+                        "code": code, "message": message,
+                        "order_id": order.id, "document_id": doc.id,
+                        "payment_id": None, "related_document_ids": [],
+                        "can_review_legacy": True,
+                    })
+                    ledger["ready_for_generation"] = False
         return {
             "customer_id": customer_id,
+            "contract_id": contract_id,
             "date_from": period.date_from,
             "date_to": period.date_to,
-            "opening_balance": opening_balance,
-            "documents_total": documents_total,
-            "payments_total": payments_total,
-            "closing_balance": closing_balance,
-            "documents": sorted(document_rows, key=lambda item: (item["date"], item["order_id"])),
-            "payments": sorted(payment_rows, key=lambda item: (item["date"], item["payment_id"] or 0)),
+            **ledger,
         }
 
     @classmethod
@@ -491,13 +405,14 @@ class CustomerReconciliationService:
         date_to: Optional[date] = None,
         *,
         tenant_scope: TenantScope,
+        contract_id: Optional[int] = None,
     ) -> Optional[Dict[str, Any]]:
         customer = (
             await session.execute(
                 select(Customer).where(
                     Customer.id == customer_id,
                     tenant_scope_clause(Customer, tenant_scope),
-                )
+                ).options(lazyload("*"))
             )
         ).scalars().first()
         if not customer:
@@ -508,12 +423,21 @@ class CustomerReconciliationService:
             date_from=date_from,
             date_to=date_to,
             tenant_scope=tenant_scope,
+            contract_id=contract_id,
+            verify_sources=True,
         )
         if data is None:
             return None
+        if not data["ready_for_generation"]:
+            raise ReconciliationNotReadyError(data["warnings"])
+        if contract_id is not None:
+            contract = await session.get(CustomerContract, contract_id)
+            if contract is not None:
+                data["contract_number"] = contract.number
         company_requisites = await cls._company_requisites(session)
         period = f"{cls._format_date(data['date_from'])}-{cls._format_date(data['date_to'])}"
-        title = f"Акт сверки {cls._customer_title(customer)} {period}"
+        contract_part = f" договор №{data['contract_number']}" if data.get("contract_number") else ""
+        title = f"Акт сверки {cls._customer_title(customer)}{contract_part} {period}"
         file_info = get_google_service().create_document_from_html(title, cls._build_html_document(customer, data, company_requisites))
         return {
             "file_id": file_info["file_id"],

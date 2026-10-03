@@ -6633,6 +6633,26 @@
               "default": true,
               "title": "Only With Orders"
             }
+          },
+          {
+            "name": "only_favorites",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Only Favorites"
+            }
+          },
+          {
+            "name": "include_archived",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Archived"
+            }
           }
         ],
         "responses": {
@@ -6715,6 +6735,52 @@
             "multipart/form-data": {
               "schema": {
                 "$ref": "#/components/schemas/Body_recognize_manager_customer_requisites"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerRequisitesRecognitionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/customers/requisites/recognize-text": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Recognize Customer Requisites Text For Manager",
+        "operationId": "recognize_manager_customer_requisites_text",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerRequisitesTextPayload"
               }
             }
           },
@@ -7053,6 +7119,23 @@
               ],
               "title": "Date To"
             }
+          },
+          {
+            "name": "contract_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Contract Id"
+            }
           }
         ],
         "responses": {
@@ -7134,6 +7217,23 @@
               ],
               "title": "Date To"
             }
+          },
+          {
+            "name": "contract_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Contract Id"
+            }
           }
         ],
         "responses": {
@@ -7143,6 +7243,185 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ManagerCustomerReconciliationDocumentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/customers/{customer_id}/reconciliation/legacy-documents/{document_id}/review": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Review Customer Reconciliation Legacy Document For Manager",
+        "operationId": "review_manager_customer_reconciliation_legacy_document",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Customer Id"
+            }
+          },
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerLegacyReconciliationReviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/customers/{customer_id}/reconciliation/legacy-documents/{document_id}/confirm": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Confirm Customer Reconciliation Legacy Document For Manager",
+        "operationId": "confirm_manager_customer_reconciliation_legacy_document",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Customer Id"
+            }
+          },
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerLegacyReconciliationConfirmPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerLegacyReconciliationConfirmResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/customers/{customer_id}/reconciliation/event-relation": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Confirm Customer Reconciliation Event Relation For Manager",
+        "operationId": "confirm_manager_customer_reconciliation_event_relation",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Customer Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerCustomerReconciliationEventRelationPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerCustomerReconciliationEventRelationResponse"
                 }
               }
             }
@@ -7365,6 +7644,244 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ManagerActionMessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/customers/{customer_id}/contacts": {
+      "get": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Get Manager Customer Contacts",
+        "operationId": "get_manager_customer_contacts",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Customer Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerCustomerContactListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Create Manager Customer Contact",
+        "operationId": "create_manager_customer_contact",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Customer Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerCustomerContactCreatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerCustomerContactItemResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/customers/{customer_id}/contacts/{contact_id}": {
+      "patch": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Patch Manager Customer Contact",
+        "operationId": "patch_manager_customer_contact",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Customer Id"
+            }
+          },
+          {
+            "name": "contact_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Contact Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerCustomerContactUpdatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerCustomerContactItemResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/customers/{customer_id}/contact-history": {
+      "get": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Get Manager Customer Contact History",
+        "operationId": "get_manager_customer_contact_history",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Customer Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerCustomerContactHistoryResponse"
                 }
               }
             }
@@ -15582,6 +16099,23 @@
               "type": "string",
               "default": "created_at_desc",
               "title": "Sort"
+            }
+          },
+          {
+            "name": "customer_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Customer Id"
             }
           }
         ],
@@ -37579,6 +38113,66 @@
               }
             ],
             "title": "Customer Id"
+          },
+          "extracted": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CustomerRequisitesExtractedData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "selected_fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "name",
+                    "full_legal_name",
+                    "customer_type",
+                    "inn",
+                    "legal_address",
+                    "bank_name",
+                    "bic",
+                    "iban",
+                    "email",
+                    "phone",
+                    "signer_position",
+                    "signer_name",
+                    "acting_basis"
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Fields"
+          },
+          "baseline": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline"
           }
         },
         "type": "object",
@@ -37652,6 +38246,18 @@
               }
             ],
             "title": "Email"
+          },
+          "matched_fields": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "inn",
+                "phone",
+                "email"
+              ]
+            },
+            "type": "array",
+            "title": "Matched Fields"
           }
         },
         "type": "object",
@@ -37915,6 +38521,21 @@
           "created_at"
         ],
         "title": "CustomerRequisitesRecognitionResponse"
+      },
+      "CustomerRequisitesTextPayload": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 12000,
+            "minLength": 1,
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "CustomerRequisitesTextPayload"
       },
       "DashboardBankReceiptReviewItem": {
         "properties": {
@@ -48008,6 +48629,26 @@
             "title": "Is Favorite",
             "default": false
           },
+          "is_archived": {
+            "type": "boolean",
+            "title": "Is Archived",
+            "default": false
+          },
+          "primary_contact": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerCustomerContactItemResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "contact_count": {
+            "type": "integer",
+            "title": "Contact Count",
+            "default": 0
+          },
           "branches": {
             "items": {
               "$ref": "#/components/schemas/ManagerCustomerBranchItemResponse"
@@ -49537,6 +50178,364 @@
         "type": "object",
         "title": "ManagerCustomerBranchUpdatePayload"
       },
+      "ManagerCustomerContactCreatePayload": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Name"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 254
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "is_primary": {
+            "type": "boolean",
+            "title": "Is Primary",
+            "default": false
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "ManagerCustomerContactCreatePayload"
+      },
+      "ManagerCustomerContactHistoryItemResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "contact_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Id"
+          },
+          "field_name": {
+            "type": "string",
+            "title": "Field Name"
+          },
+          "old_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Old Value"
+          },
+          "new_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New Value"
+          },
+          "author_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author Id"
+          },
+          "author_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author Name"
+          },
+          "changed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Changed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "field_name",
+          "changed_at"
+        ],
+        "title": "ManagerCustomerContactHistoryItemResponse"
+      },
+      "ManagerCustomerContactHistoryResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerCustomerContactHistoryItemResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "meta"
+        ],
+        "title": "ManagerCustomerContactHistoryResponse"
+      },
+      "ManagerCustomerContactItemResponse": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "customer_id": {
+            "type": "integer",
+            "title": "Customer Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "is_primary": {
+            "type": "boolean",
+            "title": "Is Primary",
+            "default": false
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
+          },
+          "is_legacy": {
+            "type": "boolean",
+            "title": "Is Legacy",
+            "default": false
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "customer_id"
+        ],
+        "title": "ManagerCustomerContactItemResponse"
+      },
+      "ManagerCustomerContactListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerCustomerContactItemResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ManagerCustomerContactListResponse"
+      },
+      "ManagerCustomerContactUpdatePayload": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 254
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "is_primary": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Primary"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          }
+        },
+        "type": "object",
+        "title": "ManagerCustomerContactUpdatePayload"
+      },
       "ManagerCustomerContractCreatePayload": {
         "properties": {
           "number": {
@@ -49961,6 +50960,17 @@
               }
             ],
             "title": "Is Favorite"
+          },
+          "is_archived": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Archived"
           }
         },
         "type": "object",
@@ -50108,6 +51118,11 @@
             "format": "date-time",
             "title": "Date"
           },
+          "identity_source": {
+            "type": "string",
+            "title": "Identity Source",
+            "default": "unverified_legacy"
+          },
           "edit_url": {
             "anyOf": [
               {
@@ -50184,6 +51199,44 @@
               }
             ],
             "title": "Edit Url"
+          },
+          "identity_source": {
+            "type": "string",
+            "title": "Identity Source",
+            "default": "unverified_legacy"
+          },
+          "amount_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Source"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "contract_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Id"
           }
         },
         "type": "object",
@@ -50236,6 +51289,22 @@
             },
             "type": "array",
             "title": "Documents"
+          },
+          "contract_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Id"
+          },
+          "amount_source": {
+            "type": "string",
+            "title": "Amount Source",
+            "default": "order_total_unverified"
           }
         },
         "type": "object",
@@ -50270,6 +51339,71 @@
           "title"
         ],
         "title": "ManagerCustomerReconciliationDocumentResponse"
+      },
+      "ManagerCustomerReconciliationEventRelationPayload": {
+        "properties": {
+          "document_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "minItems": 2,
+            "title": "Document Ids"
+          },
+          "relation": {
+            "type": "string",
+            "enum": [
+              "same",
+              "separate"
+            ],
+            "title": "Relation"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 5,
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_ids",
+          "relation",
+          "reason"
+        ],
+        "title": "ManagerCustomerReconciliationEventRelationPayload"
+      },
+      "ManagerCustomerReconciliationEventRelationResponse": {
+        "properties": {
+          "document_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Document Ids"
+          },
+          "relation": {
+            "type": "string",
+            "enum": [
+              "same",
+              "separate"
+            ],
+            "title": "Relation"
+          },
+          "confirmed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Confirmed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_ids",
+          "relation",
+          "confirmed_at"
+        ],
+        "title": "ManagerCustomerReconciliationEventRelationResponse"
       },
       "ManagerCustomerReconciliationPaymentItem": {
         "properties": {
@@ -50410,6 +51544,17 @@
               }
             ],
             "title": "Payment Purpose"
+          },
+          "contract_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Id"
           }
         },
         "type": "object",
@@ -50429,6 +51574,29 @@
           "customer_id": {
             "type": "integer",
             "title": "Customer Id"
+          },
+          "contract_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Id"
+          },
+          "ready_for_generation": {
+            "type": "boolean",
+            "title": "Ready For Generation",
+            "default": false
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerCustomerReconciliationWarning"
+            },
+            "type": "array",
+            "title": "Warnings"
           },
           "date_from": {
             "type": "string",
@@ -50482,6 +51650,69 @@
           "date_to"
         ],
         "title": "ManagerCustomerReconciliationResponse"
+      },
+      "ManagerCustomerReconciliationWarning": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "order_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Id"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "payment_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Id"
+          },
+          "related_document_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Related Document Ids"
+          },
+          "can_review_legacy": {
+            "type": "boolean",
+            "title": "Can Review Legacy",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ManagerCustomerReconciliationWarning"
       },
       "ManagerCustomerUpdatePayload": {
         "properties": {
@@ -50682,6 +51913,17 @@
               }
             ],
             "title": "Is Favorite"
+          },
+          "is_archived": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Archived"
           }
         },
         "type": "object",
@@ -55296,6 +56538,177 @@
         },
         "type": "object",
         "title": "ManagerInstallerUpdatePayload"
+      },
+      "ManagerLegacyReconciliationConfirmPayload": {
+        "properties": {
+          "source_hash": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Source Hash"
+          },
+          "number": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Number"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Amount"
+          },
+          "contract_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Id"
+          },
+          "evidence_excerpt": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 8,
+            "title": "Evidence Excerpt"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_hash",
+          "number",
+          "date",
+          "amount",
+          "evidence_excerpt"
+        ],
+        "title": "ManagerLegacyReconciliationConfirmPayload"
+      },
+      "ManagerLegacyReconciliationConfirmResponse": {
+        "properties": {
+          "document_id": {
+            "type": "integer",
+            "title": "Document Id"
+          },
+          "number": {
+            "type": "string",
+            "title": "Number"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "amount": {
+            "type": "number",
+            "title": "Amount"
+          },
+          "contract_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Id"
+          },
+          "source_hash": {
+            "type": "string",
+            "title": "Source Hash"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "number",
+          "date",
+          "amount",
+          "source_hash"
+        ],
+        "title": "ManagerLegacyReconciliationConfirmResponse"
+      },
+      "ManagerLegacyReconciliationReviewResponse": {
+        "properties": {
+          "document_id": {
+            "type": "integer",
+            "title": "Document Id"
+          },
+          "source_file_id": {
+            "type": "string",
+            "title": "Source File Id"
+          },
+          "source_hash": {
+            "type": "string",
+            "title": "Source Hash"
+          },
+          "extracted_text": {
+            "type": "string",
+            "title": "Extracted Text"
+          },
+          "proposed_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposed Number"
+          },
+          "proposed_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposed Date"
+          },
+          "proposed_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposed Amount"
+          },
+          "proposed_contract_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposed Contract Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "source_file_id",
+          "source_hash",
+          "extracted_text"
+        ],
+        "title": "ManagerLegacyReconciliationReviewResponse"
       },
       "ManagerMediaApplySeriesResponse": {
         "properties": {

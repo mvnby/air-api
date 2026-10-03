@@ -11,5 +11,7 @@ export type ManagerCustomerReconciliationDocumentItem = {
     basis: string;
     delivery_address?: (string | null);
     documents?: Array<ManagerCustomerReconciliationBasisDocument>;
+    contract_id?: (number | null);
+    amount_source?: string;
 };
 

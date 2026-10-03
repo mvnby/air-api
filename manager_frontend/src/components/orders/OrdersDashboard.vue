@@ -30,6 +30,7 @@ const { recoveryRequired } = managerSession;
 
 const toast = ref('');
 const loadError = ref('');
+const customerIdFilter = ref<number | undefined>();
 const setToast = (message: string) => {
   toast.value = message;
   window.setTimeout(() => {
@@ -168,6 +169,7 @@ const loadOrders = async () => {
   try {
     const params = {
       segment: segment.value,
+      customerId: customerIdFilter.value,
       status: statusFilter.value || undefined,
       search: normalizedSearch.value || undefined,
       sort: sort.value,
@@ -423,6 +425,12 @@ const openOrder = async (orderId: number, updateUrl = true) => {
   }
 };
 
+const clearCustomerFilter = () => {
+  customerIdFilter.value = undefined;
+  setQueryParam('customerId', '');
+  void refreshOrders();
+};
+
 const reloadOrder = async (orderId: number) => {
   await openOrder(orderId, false);
   await loadOrders();
@@ -448,6 +456,8 @@ onMounted(async () => {
   restoreCustomerAliases();
   restorePreferences();
   const params = new URLSearchParams(window.location.search);
+  const customerId = Number(params.get('customerId'));
+  if (Number.isSafeInteger(customerId) && customerId > 0) customerIdFilter.value = customerId;
   const searchParam = params.get('search');
   if (searchParam) {
     search.value = searchParam;
@@ -495,6 +505,10 @@ watch(drawerOpen, (isOpen) => {
         @import="openImportPicker" @export="exportSelectedOrders"
         @select-all="selectAllVisible" @clear-selection="clearSelection"
       />
+      <div v-if="customerIdFilter" class="flex items-center gap-3 mb-3 text-sm">
+        <a :href="`/manager/customers/profile?customerId=${customerIdFilter}`" class="text-brand-600">Заказы клиента #{{ customerIdFilter }}</a>
+        <button type="button" class="text-slate-500 underline" @click="clearCustomerFilter">Все клиенты</button>
+      </div>
       <input ref="importFileInput" class="hidden" type="file" accept="application/json,.json" @change="handleImportFile" />
 
       <!-- Toast -->

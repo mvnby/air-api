@@ -21,5 +21,6 @@ export type ManagerCustomerUpdatePayload = {
     acting_basis?: (string | null);
     signing_mode?: (string | null);
     is_favorite?: (boolean | null);
+    is_archived?: (boolean | null);
 };
 

@@ -175,6 +175,7 @@ export type { CustomerRequisitesConfirmResponse } from './models/CustomerRequisi
 export type { CustomerRequisitesDuplicateCustomer } from './models/CustomerRequisitesDuplicateCustomer';
 export type { CustomerRequisitesExtractedData } from './models/CustomerRequisitesExtractedData';
 export type { CustomerRequisitesRecognitionResponse } from './models/CustomerRequisitesRecognitionResponse';
+export type { CustomerRequisitesTextPayload } from './models/CustomerRequisitesTextPayload';
 export type { DashboardBankReceiptReviewItem } from './models/DashboardBankReceiptReviewItem';
 export type { DashboardContractExpiry } from './models/DashboardContractExpiry';
 export type { DashboardFunnelStage } from './models/DashboardFunnelStage';
@@ -338,6 +339,12 @@ export type { ManagerCustomerBranchCreatePayload } from './models/ManagerCustome
 export type { ManagerCustomerBranchItemResponse } from './models/ManagerCustomerBranchItemResponse';
 export type { ManagerCustomerBranchListResponse } from './models/ManagerCustomerBranchListResponse';
 export type { ManagerCustomerBranchUpdatePayload } from './models/ManagerCustomerBranchUpdatePayload';
+export type { ManagerCustomerContactCreatePayload } from './models/ManagerCustomerContactCreatePayload';
+export type { ManagerCustomerContactHistoryItemResponse } from './models/ManagerCustomerContactHistoryItemResponse';
+export type { ManagerCustomerContactHistoryResponse } from './models/ManagerCustomerContactHistoryResponse';
+export type { ManagerCustomerContactItemResponse } from './models/ManagerCustomerContactItemResponse';
+export type { ManagerCustomerContactListResponse } from './models/ManagerCustomerContactListResponse';
+export type { ManagerCustomerContactUpdatePayload } from './models/ManagerCustomerContactUpdatePayload';
 export type { ManagerCustomerContractCreatePayload } from './models/ManagerCustomerContractCreatePayload';
 export type { ManagerCustomerContractItemResponse } from './models/ManagerCustomerContractItemResponse';
 export type { ManagerCustomerContractListResponse } from './models/ManagerCustomerContractListResponse';
@@ -348,8 +355,11 @@ export type { ManagerCustomerDocumentListResponse } from './models/ManagerCustom
 export type { ManagerCustomerReconciliationBasisDocument } from './models/ManagerCustomerReconciliationBasisDocument';
 export type { ManagerCustomerReconciliationDocumentItem } from './models/ManagerCustomerReconciliationDocumentItem';
 export type { ManagerCustomerReconciliationDocumentResponse } from './models/ManagerCustomerReconciliationDocumentResponse';
+export type { ManagerCustomerReconciliationEventRelationPayload } from './models/ManagerCustomerReconciliationEventRelationPayload';
+export type { ManagerCustomerReconciliationEventRelationResponse } from './models/ManagerCustomerReconciliationEventRelationResponse';
 export type { ManagerCustomerReconciliationPaymentItem } from './models/ManagerCustomerReconciliationPaymentItem';
 export type { ManagerCustomerReconciliationResponse } from './models/ManagerCustomerReconciliationResponse';
+export type { ManagerCustomerReconciliationWarning } from './models/ManagerCustomerReconciliationWarning';
 export type { ManagerCustomerUpdatePayload } from './models/ManagerCustomerUpdatePayload';
 export type { ManagerEquipmentComponentCreatePayload } from './models/ManagerEquipmentComponentCreatePayload';
 export type { ManagerEquipmentComponentItemResponse } from './models/ManagerEquipmentComponentItemResponse';
@@ -413,6 +423,9 @@ export type { ManagerInstallerUpdatePayload } from './models/ManagerInstallerUpd
 export type { ManagerInstallEstimateCalculatePayload } from './models/ManagerInstallEstimateCalculatePayload';
 export type { ManagerInstallEstimateResponse } from './models/ManagerInstallEstimateResponse';
 export type { ManagerInstallEstimateSavePayload } from './models/ManagerInstallEstimateSavePayload';
+export type { ManagerLegacyReconciliationConfirmPayload } from './models/ManagerLegacyReconciliationConfirmPayload';
+export type { ManagerLegacyReconciliationConfirmResponse } from './models/ManagerLegacyReconciliationConfirmResponse';
+export type { ManagerLegacyReconciliationReviewResponse } from './models/ManagerLegacyReconciliationReviewResponse';
 export type { ManagerMediaApplySeriesResponse } from './models/ManagerMediaApplySeriesResponse';
 export type { ManagerMediaAssetCropPayload } from './models/ManagerMediaAssetCropPayload';
 export type { ManagerMediaAssetListResponse } from './models/ManagerMediaAssetListResponse';

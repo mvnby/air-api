@@ -59,6 +59,7 @@ export class ManagerOrdersService {
      * @param search
      * @param overdueOnly
      * @param sort
+     * @param customerId
      * @returns ManagerOrderListResponse Successful Response
      * @throws ApiError
      */
@@ -70,6 +71,7 @@ export class ManagerOrdersService {
         search?: (string | null),
         overdueOnly: boolean = false,
         sort: string = 'created_at_desc',
+        customerId?: (number | null),
     ): CancelablePromise<ManagerOrderListResponse> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -82,6 +84,7 @@ export class ManagerOrdersService {
                 'search': search,
                 'overdue_only': overdueOnly,
                 'sort': sort,
+                'customer_id': customerId,
             },
             errors: {
                 422: `Validation Error`,
