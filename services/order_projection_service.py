@@ -257,6 +257,7 @@ class OrderProjectionService:
         search: Optional[str] = None,
         overdue_only: bool = False,
         sort: str = "created_at_desc",
+        customer_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         from schemas import Meta
 
@@ -288,6 +289,10 @@ class OrderProjectionService:
             base_filters.append(is_b2b)
         elif segment == "b2c":
             base_filters.append(or_(Customer.id.is_(None), not_(is_b2b)))
+        if customer_id is not None:
+            if customer_id <= 0:
+                raise ValueError("Customer ID must be positive")
+            base_filters.append(Order.customer_id == customer_id)
 
         base_stmt = (
             select(Order)

@@ -76,6 +76,8 @@ class ManagerCatalogService:
         search: Optional[str],
         customer_type: Optional[str],
         only_with_orders: bool,
+        only_favorites: bool = False,
+        include_archived: bool = False,
         tenant_scope: TenantScope,
     ) -> Dict[str, Any]:
         return await CustomerService.list_for_manager(
@@ -85,6 +87,8 @@ class ManagerCatalogService:
             search=search,
             customer_type=customer_type,
             only_with_orders=only_with_orders,
+            only_favorites=only_favorites,
+            include_archived=include_archived,
             tenant_scope=tenant_scope,
         )
 

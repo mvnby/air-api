@@ -432,6 +432,7 @@ export const api = {
         search?: string;
         overdueOnly?: boolean;
         sort?: string;
+        customerId?: number;
     }) {
         return await ManagerOrdersService.getManagerOrders(
             params.segment,
@@ -441,6 +442,7 @@ export const api = {
             params.search ?? undefined,
             params.overdueOnly ?? false,
             params.sort ?? 'created_at_desc',
+            params.customerId,
         );
     },
 
@@ -834,8 +836,8 @@ export const api = {
         return await ManagerService.getManagerProduct(productId);
     },
 
-    async getManagerCustomers(page = 1, limit = 20, search?: string, type?: string, onlyWithOrders = false) {
-        return await ManagerService.getManagerCustomers(page, limit, search ?? undefined, type ?? undefined, onlyWithOrders);
+    async getManagerCustomers(page = 1, limit = 20, search?: string, type?: string, onlyWithOrders = false, onlyFavorites = false, includeArchived = false) {
+        return await ManagerService.getManagerCustomers(page, limit, search ?? undefined, type ?? undefined, onlyWithOrders, onlyFavorites, includeArchived);
     },
 
     async getManagerCustomerDetail(customerId: number) {

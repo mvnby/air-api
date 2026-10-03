@@ -1,18 +1,24 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue';
-import { Search, Users, ChevronLeft, ChevronRight, Phone, Mail, Plus, Star, UserPlus, X } from 'lucide-vue-next';
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue';
+import { Search, Users, ChevronLeft, ChevronRight, Phone, Mail, Plus, Star, X } from 'lucide-vue-next';
 import { api } from '../api';
 import type { ManagerCatalogCustomerItemResponse } from '../client';
+import { managerSession } from '../services/manager-session';
 import { CUSTOMER_UPDATED_EVENT, type CustomerUpdatedEventPayload } from '../utils/customer-events';
 import CreateOrderModal from '../components/CreateOrderModal.vue';
-import CreateCustomerModal from '../components/customers/CreateCustomerModal.vue';
+import CustomerIntakeDialog from '../components/customers/CustomerIntakeDialog.vue';
 
 // --- State ---
-const customers = ref<ManagerCatalogCustomerItemResponse[]>([]);
+type CustomerListItem = ManagerCatalogCustomerItemResponse & {
+  primary_contact?: { name?: string | null; role?: string | null; phone?: string | null; email?: string | null } | null;
+};
+const customers = ref<CustomerListItem[]>([]);
 const loading = ref(false);
 const searchQuery = ref('');
 const typeFilter = ref('');
 const onlyWithOrders = ref(false);
+const onlyFavorites = ref(false);
+const includeArchived = ref(false);
 const page = ref(1);
 const meta = ref({ total: 0, pages: 1, limit: 20 });
 const loadError = ref('');
@@ -26,9 +32,35 @@ const showCreateCustomer = ref(false);
 const createOrderCustomer = ref<{ id: number; name: string } | null>(null);
 let loadRequestId = 0;
 let isUnmounted = false;
+let isMounted = false;
 let searchTimer: number | undefined;
+const filterStorageKey = computed(() => {
+  const auth = managerSession.auth.value;
+  if (!auth) return '';
+  const user = auth.staff_user_id ? `staff-${auth.staff_user_id}` : `user-${encodeURIComponent(auth.username.trim().toLowerCase())}`;
+  return `manager:customers:v2:${auth.tenant_id}:${user}`;
+});
 
-function sortCustomerItems(items: ManagerCatalogCustomerItemResponse[]) {
+function restoreFilters() {
+  searchQuery.value = '';
+  typeFilter.value = '';
+  onlyWithOrders.value = false;
+  onlyFavorites.value = false;
+  includeArchived.value = false;
+  page.value = 1;
+  if (!filterStorageKey.value) return;
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(filterStorageKey.value) || '{}');
+    if (typeof saved.search === 'string') searchQuery.value = saved.search;
+    if (['', 'company', 'individual_entrepreneur', 'individual'].includes(saved.type)) typeFilter.value = saved.type;
+    onlyWithOrders.value = saved.orders === true;
+    onlyFavorites.value = saved.favorites === true;
+    includeArchived.value = saved.archived === true;
+    if (Number.isInteger(saved.page) && saved.page > 0) page.value = saved.page;
+  } catch { /* The current workspace starts with default filters. */ }
+}
+
+function sortCustomerItems(items: CustomerListItem[]) {
   return [...items].sort((a, b) => {
     const favoriteDiff = Number(Boolean(b.is_favorite)) - Number(Boolean(a.is_favorite));
     if (favoriteDiff !== 0) return favoriteDiff;
@@ -53,6 +85,7 @@ async function toggleFavorite(customer: ManagerCatalogCustomerItemResponse) {
   try {
     const updated = await api.patchManagerCustomer(customer.id, { is_favorite: nextFavorite });
     customers.value = sortCustomerItems(customers.value.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)));
+    if (onlyFavorites.value) void loadCustomers();
     setToast(nextFavorite ? 'Клиент добавлен в избранное' : 'Клиент убран из избранного');
   } catch (e) {
     console.error('Failed to toggle customer favorite', e);
@@ -99,6 +132,8 @@ async function loadCustomers() {
       searchQuery.value || undefined,
       typeFilter.value || undefined,
       onlyWithOrders.value,
+      onlyFavorites.value,
+      includeArchived.value,
     );
     if (isUnmounted || requestId !== loadRequestId) return;
     customers.value = sortCustomerItems(data.items);
@@ -144,6 +179,27 @@ function onTypeChange() {
   void loadCustomers();
 }
 
+function selectType(next: string) {
+  if (typeFilter.value === next) return;
+  typeFilter.value = next;
+  onTypeChange();
+}
+
+function toggleOrders() {
+  onlyWithOrders.value = !onlyWithOrders.value;
+  onTypeChange();
+}
+
+function toggleFavorites() {
+  onlyFavorites.value = !onlyFavorites.value;
+  onTypeChange();
+}
+
+function toggleArchived() {
+  includeArchived.value = !includeArchived.value;
+  onTypeChange();
+}
+
 function goToPage(p: number) {
   if (p < 1 || p > meta.value.pages) return;
   cancelScheduledSearch();
@@ -172,26 +228,33 @@ onMounted(() => {
     }
   }
 
-  const sQuery = sessionStorage.getItem('customers_search');
-  if (sQuery) searchQuery.value = sQuery;
-
-  const sType = sessionStorage.getItem('customers_type');
-  if (sType !== null) typeFilter.value = sType;
-
-  const sOrders = sessionStorage.getItem('customers_orders');
-  if (sOrders) onlyWithOrders.value = sOrders === 'true';
-
-  const sPage = sessionStorage.getItem('customers_page');
-  if (sPage) page.value = Number(sPage) || 1;
-
+  isMounted = true;
+  restoreFilters();
   void loadCustomers();
 });
 
-watch([searchQuery, typeFilter, onlyWithOrders, page], () => {
-  sessionStorage.setItem('customers_search', searchQuery.value);
-  sessionStorage.setItem('customers_type', typeFilter.value);
-  sessionStorage.setItem('customers_orders', String(onlyWithOrders.value));
-  sessionStorage.setItem('customers_page', String(page.value));
+watch([searchQuery, typeFilter, onlyWithOrders, onlyFavorites, includeArchived, page], () => {
+  if (!filterStorageKey.value) return;
+  try {
+    sessionStorage.setItem(filterStorageKey.value, JSON.stringify({
+      search: searchQuery.value, type: typeFilter.value,
+      orders: onlyWithOrders.value, favorites: onlyFavorites.value,
+      archived: includeArchived.value, page: page.value,
+    }));
+  } catch { /* Browsers can disable session storage. */ }
+});
+
+watch(filterStorageKey, () => {
+  if (isUnmounted || !isMounted) return;
+  cancelScheduledSearch();
+  loadRequestId += 1;
+  customers.value = [];
+  meta.value = { total: 0, pages: 1, limit: 20 };
+  hasLoaded.value = false;
+  loadError.value = '';
+  loading.value = false;
+  restoreFilters();
+  if (filterStorageKey.value) void loadCustomers();
 });
 
 const handleCustomerUpdated = (event: Event) => {
@@ -227,67 +290,29 @@ onUnmounted(() => {
 
 <template>
   <div class="customers-view">
-    <!-- Header -->
-    <div class="view-header">
-      <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-3">
-        <span class="material-icons-round text-brand-600 dark:text-brand-400">group</span>
-        Клиенты
-      </h1>
-      <div class="header-controls">
-        <button
-          type="button"
-          data-testid="create-customer"
-          class="inline-flex items-center gap-2 whitespace-nowrap rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-500"
-          @click="showCreateCustomer = true"
-        >
-          <UserPlus :size="17" />
-          Новый клиент
-        </button>
-        <label class="search-box">
-          <Search :size="16" />
-          <input
-            v-model="searchQuery"
-            aria-label="Поиск клиентов по имени, телефону, email или УНП"
-            placeholder="Имя, телефон, email или УНП"
-            @input="scheduleSearch"
-            @keyup.enter="onSearch"
-          />
-          <button
-            v-if="searchQuery"
-            type="button"
-            class="search-clear"
-            aria-label="Очистить поиск"
-            @click="clearSearch"
-          >
-            <X :size="15" />
-          </button>
-        </label>
-        <div class="flex bg-gray-100 dark:bg-slate-700 p-1 rounded-lg">
-          <button
-              @click="typeFilter = ''; onTypeChange()"
-              class="px-3 py-1.5 text-sm rounded-md transition-all"
-              :class="!typeFilter ? 'bg-white dark:bg-slate-600 text-brand-700 dark:text-brand-400 shadow-sm font-medium' : 'text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'"
-          >Все</button>
-          <button
-              @click="typeFilter = 'individual'; onTypeChange()"
-              class="px-3 py-1.5 text-sm rounded-md transition-all"
-              :class="typeFilter === 'individual' ? 'bg-white dark:bg-slate-600 text-brand-700 dark:text-brand-400 shadow-sm font-medium' : 'text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'"
-          >Физ. лица</button>
-          <button
-              @click="typeFilter = 'individual_entrepreneur'; onTypeChange()"
-              class="px-3 py-1.5 text-sm rounded-md transition-all"
-              :class="typeFilter === 'individual_entrepreneur' ? 'bg-white dark:bg-slate-600 text-brand-700 dark:text-brand-400 shadow-sm font-medium' : 'text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'"
-          >ИП</button>
-          <button
-              @click="typeFilter = 'company'; onTypeChange()"
-              class="px-3 py-1.5 text-sm rounded-md transition-all"
-              :class="typeFilter === 'company' ? 'bg-white dark:bg-slate-600 text-brand-700 dark:text-brand-400 shadow-sm font-medium' : 'text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'"
-          >Юр. лица</button>
+    <header class="customers-header">
+      <h1>Клиенты</h1>
+      <button type="button" data-testid="create-customer" class="customers-create" @click="showCreateCustomer = true">Новый клиент</button>
+    </header>
+    <div class="customers-toolbar">
+      <label class="search-box">
+        <Search :size="16" aria-hidden="true" />
+        <input v-model="searchQuery" aria-label="Поиск клиентов по имени, телефону, email или УНП" placeholder="Имя, телефон, email или УНП" @input="scheduleSearch" @keyup.enter="onSearch" />
+        <button v-if="searchQuery" type="button" class="search-clear" aria-label="Очистить поиск" @click="clearSearch"><X :size="15" /></button>
+      </label>
+      <div class="customers-filter-line">
+        <div class="customer-type-segments" role="group" aria-label="Тип клиента">
+          <button v-for="option in [
+            { value: '', label: 'Все' },
+            { value: 'company', label: 'Юрлица' },
+            { value: 'individual_entrepreneur', label: 'ИП' },
+            { value: 'individual', label: 'Физлица' },
+          ]" :key="option.label" type="button" :aria-pressed="typeFilter === option.value" :class="{ active: typeFilter === option.value }" @click="selectType(option.value)">{{ option.label }}</button>
         </div>
-        <label class="inline-flex items-center gap-2 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-700 dark:text-slate-300">
-          <input v-model="onlyWithOrders" type="checkbox" @change="onTypeChange" />
-          Только с заказами
-        </label>
+        <button type="button" class="customer-filter-chip" :class="{ active: onlyFavorites }" :aria-pressed="onlyFavorites" @click="toggleFavorites"><Star :size="14" aria-hidden="true" /> Избранные</button>
+        <button type="button" class="customer-filter-chip" :class="{ active: onlyWithOrders }" :aria-pressed="onlyWithOrders" @click="toggleOrders">С заказами</button>
+        <button type="button" class="customer-filter-chip" :class="{ active: includeArchived }" :aria-pressed="includeArchived" @click="toggleArchived">С архивом</button>
+        <span v-if="hasLoaded && !loading && !loadError" class="customers-count" aria-live="polite">{{ meta.total }}</span>
       </div>
     </div>
 
@@ -318,20 +343,16 @@ onUnmounted(() => {
         <Users :size="64" class="text-gray-300 dark:text-slate-600" />
       </div>
       <h2 class="text-xl font-bold mb-2 text-gray-900 dark:text-white">Клиенты не найдены</h2>
-      <p class="customers-found" aria-live="polite">Найдено: {{ meta.total }}</p>
-      <p v-if="searchQuery || typeFilter" class="text-gray-500 dark:text-slate-400">Попробуйте изменить поисковый запрос "{{ searchQuery }}" или фильтры</p>
-      <p v-else-if="onlyWithOrders" class="text-gray-500 dark:text-slate-400">Нет клиентов с заказами по текущим фильтрам.</p>
+      <p v-if="searchQuery || typeFilter || onlyFavorites || onlyWithOrders || includeArchived" class="text-gray-500 dark:text-slate-400">Попробуйте изменить поиск или фильтры.</p>
       <div v-else class="text-gray-500 dark:text-slate-400">
         <p>Клиентская база пуста.</p>
         <button type="button" class="mt-4 inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-500" @click="showCreateCustomer = true">
-          <UserPlus :size="17" />
           Создать первого клиента
         </button>
       </div>
     </div>
 
     <div v-else class="customers-list-wrap">
-      <p class="customers-found" aria-live="polite">Найдено: {{ meta.total }}</p>
       <table class="customers-list">
         <thead>
           <tr>
@@ -356,25 +377,28 @@ onUnmounted(() => {
                 <span class="type-badge" :class="customer.type">
                   {{ TYPE_MAP[customer.type]?.icon }} {{ TYPE_MAP[customer.type]?.label || customer.type }}
                 </span>
+                <span v-if="customer.is_archived" class="customer-archived-badge">Архив</span>
                 <span v-if="recentlyUpdated[customer.id]" class="updated-badge">обновлено</span>
               </div>
             </td>
             <td data-label="Контакты" class="customer-contacts-cell">
               <div class="customer-contacts">
-                <a v-if="customer.phone" :href="`tel:${customer.phone}`" class="customer-contact-link">
-                  <Phone :size="14" aria-hidden="true" />{{ customer.phone }}
+                <div v-if="customer.primary_contact?.name" class="customer-contact-person"><strong>{{ customer.primary_contact.name }}</strong><span v-if="customer.primary_contact.role"> · {{ customer.primary_contact.role }}</span></div>
+                <a v-if="customer.primary_contact?.phone || customer.phone" :href="`tel:${customer.primary_contact?.phone || customer.phone}`" class="customer-contact-link">
+                  <Phone :size="14" aria-hidden="true" />{{ customer.primary_contact?.phone || customer.phone }}
                 </a>
-                <a v-if="customer.email" :href="`mailto:${customer.email}`" class="customer-contact-link customer-email-link">
-                  <Mail :size="14" aria-hidden="true" />{{ customer.email }}
+                <a v-if="customer.primary_contact?.email || customer.email" :href="`mailto:${customer.primary_contact?.email || customer.email}`" class="customer-contact-link customer-email-link">
+                  <Mail :size="14" aria-hidden="true" />{{ customer.primary_contact?.email || customer.email }}
                 </a>
-                <span v-if="!customer.phone && !customer.email" class="customer-empty">—</span>
+                <span v-if="!customer.primary_contact?.phone && !customer.phone && !customer.primary_contact?.email && !customer.email" class="customer-empty">—</span>
+                <a class="customer-contact-edit" :href="`/manager/customers/profile?customerId=${customer.id}&editContact=1`">Изменить контакт</a>
               </div>
             </td>
             <td data-label="УНП">
               <span v-if="customer.inn" class="customer-inn">{{ customer.inn }}</span>
               <span v-else class="customer-empty">—</span>
             </td>
-            <td data-label="Заказы"><strong>{{ customer.order_count }}</strong></td>
+            <td data-label="Заказы" class="customer-order-count"><strong>{{ customer.order_count }}</strong><span class="customer-order-label"> заказов</span></td>
             <td data-label="Действия" class="customer-actions-cell">
               <div class="customer-actions">
                 <button
@@ -418,8 +442,9 @@ onUnmounted(() => {
       @created="onOrderCreated"
     />
 
-    <CreateCustomerModal
+    <CustomerIntakeDialog
       v-if="showCreateCustomer"
+      data-testid="create-customer-modal"
       @close="showCreateCustomer = false"
       @created="onCustomerCreated"
       @open-existing="openCustomerProfile"

@@ -2,6 +2,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import CustomersView from '../src/views/CustomersView.vue';
 import { api } from '../src/api';
+import { managerSession } from '../src/services/manager-session';
 
 const firstCustomer = {
   id: 1,
@@ -36,12 +37,14 @@ const mountView = () => {
 beforeEach(() => {
   vi.useFakeTimers();
   sessionStorage.clear();
+  managerSession.auth.value = null;
   vi.spyOn(api, 'getManagerCustomers').mockResolvedValue(response());
   vi.spyOn(api, 'patchManagerCustomer').mockResolvedValue({ ...firstCustomer, is_favorite: true });
 });
 
 afterEach(() => {
   for (const wrapper of wrappers.splice(0)) wrapper.unmount();
+  managerSession.auth.value = null;
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
@@ -105,5 +108,73 @@ describe('CustomersView list', () => {
     await retry!.trigger('click');
     await flushPromises();
     expect(wrapper.text()).toContain(firstCustomer.name);
+  });
+
+  it('shows the primary contact and a direct edit link', async () => {
+    vi.mocked(api.getManagerCustomers).mockResolvedValueOnce(response([{
+      ...firstCustomer,
+      primary_contact: { name: 'Анна Иванова', role: 'Закупки', phone: '+375291110000', email: 'anna@example.test' },
+    }]));
+    const wrapper = mountView();
+    await flushPromises();
+
+    expect(wrapper.get('.customer-contact-person').text()).toContain('Анна Иванова · Закупки');
+    expect(wrapper.find('a[href="tel:+375291110000"]').exists()).toBe(true);
+    expect(wrapper.find('a[href="mailto:anna@example.test"]').exists()).toBe(true);
+    expect(wrapper.get('.customer-contact-edit').attributes('href')).toBe('/manager/customers/profile?customerId=1&editContact=1');
+  });
+
+  it('applies compact type and favorite filters to the server request', async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await wrapper.get('.customer-type-segments button:nth-child(2)').trigger('click');
+    await flushPromises();
+    await wrapper.get('.customer-filter-chip').trigger('click');
+    await flushPromises();
+
+    expect(api.getManagerCustomers).toHaveBeenLastCalledWith(1, 20, undefined, 'company', false, true, false);
+    expect(wrapper.get('.customer-filter-chip').attributes('aria-pressed')).toBe('true');
+    expect(wrapper.get('.customers-header').text()).toContain('Новый клиент');
+    expect(wrapper.find('.search-box input').exists()).toBe(true);
+  });
+
+  it('can include archived customers and marks them in the list', async () => {
+    managerSession.auth.value = { tenant_id: 7, staff_user_id: 3, username: 'manager' } as never;
+    vi.mocked(api.getManagerCustomers)
+      .mockResolvedValueOnce(response())
+      .mockResolvedValueOnce(response([{ ...firstCustomer, is_archived: true }]));
+    const wrapper = mountView();
+    await flushPromises();
+    const archiveFilter = wrapper.findAll('.customer-filter-chip').find((button) => button.text() === 'С архивом');
+    expect(archiveFilter).toBeTruthy();
+    await archiveFilter!.trigger('click');
+    await flushPromises();
+
+    expect(api.getManagerCustomers).toHaveBeenLastCalledWith(1, 20, undefined, undefined, false, false, true);
+    expect(wrapper.get('.customer-archived-badge').text()).toBe('Архив');
+    expect(JSON.parse(sessionStorage.getItem('manager:customers:v2:7:staff-3') || '{}').archived).toBe(true);
+  });
+
+  it('keeps saved filters within one manager identity', async () => {
+    managerSession.auth.value = { tenant_id: 7, staff_user_id: 3, username: 'manager' } as never;
+    sessionStorage.setItem('manager:customers:v2:7:staff-3', JSON.stringify({
+      search: 'Анна', type: 'individual', orders: true, favorites: true, page: 2,
+    }));
+    const wrapper = mountView();
+    await flushPromises();
+    expect(api.getManagerCustomers).toHaveBeenLastCalledWith(2, 20, 'Анна', 'individual', true, true, false);
+
+    managerSession.auth.value = { tenant_id: 8, staff_user_id: 3, username: 'manager' } as never;
+    await flushPromises();
+    expect(api.getManagerCustomers).toHaveBeenLastCalledWith(1, 20, undefined, undefined, false, false, false);
+    expect(wrapper.get('.search-box input').element.value).toBe('');
+  });
+
+  it('opens the new intake dialog from the main action', async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await wrapper.get('[data-testid="create-customer"]').trigger('click');
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain('Реквизиты из письма или сообщения');
   });
 });

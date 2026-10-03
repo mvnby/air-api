@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ManagerCustomerBranchItemResponse } from './ManagerCustomerBranchItemResponse';
+import type { ManagerCustomerContactItemResponse } from './ManagerCustomerContactItemResponse';
 export type ManagerCatalogCustomerItemResponse = {
     id: number;
     name: (string | null);
@@ -26,6 +27,9 @@ export type ManagerCatalogCustomerItemResponse = {
     created_at: (string | null);
     order_count: number;
     is_favorite?: boolean;
+    is_archived?: boolean;
+    primary_contact?: (ManagerCustomerContactItemResponse | null);
+    contact_count?: number;
     branches?: Array<ManagerCustomerBranchItemResponse>;
 };
 

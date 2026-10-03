@@ -4,7 +4,7 @@ from sqlalchemy import exists, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models import Customer, CustomerBranch, CustomerType, Order
+from models import Customer, CustomerBranch, CustomerContact, CustomerType, Order
 from models.tenancy import TenantScope
 from services.customer_party import (
     signing_mode_for_customer_type,
@@ -14,6 +14,7 @@ from services.tenant_scope_service import (
     storefront_scope_clause,
     tenant_scope_clause,
 )
+from services.customer_contact_service import CustomerContactService
 
 
 class CustomerService:
@@ -45,6 +46,8 @@ class CustomerService:
         order_count: int,
         last_delivery_address: Optional[str] = None,
         branches: Optional[list[dict[str, Any]]] = None,
+        primary_contact: Optional[dict[str, Any]] = None,
+        contact_count: int = 0,
     ) -> Dict[str, Any]:
         customer_type = (
             customer.type.value
@@ -81,6 +84,8 @@ class CustomerService:
             "is_archived": customer.is_archived,
             "is_favorite": customer.is_favorite,
             "branches": branches or [],
+            "primary_contact": primary_contact,
+            "contact_count": contact_count,
         }
 
     @staticmethod
@@ -150,12 +155,17 @@ class CustomerService:
             customer_id=customer_id,
             tenant_scope=tenant_scope,
         )
+        contact_summary = (await CustomerContactService.summaries(session, [customer]))[
+            int(customer.id or 0)
+        ]
 
         return CustomerService._to_manager_item(
             customer,
             order_count=order_count,
             last_delivery_address=last_delivery_address,
             branches=branches["items"] if branches else [],
+            primary_contact=contact_summary[0],
+            contact_count=contact_summary[1],
         )
 
     @staticmethod
@@ -333,6 +343,8 @@ class CustomerService:
             return None
         if customer.tenant_id is None:
             customer.tenant_id = tenant_scope.tenant_id
+        legacy_phone_before_update = customer.phone
+        legacy_email_before_update = customer.email
 
         defaulted_text_fields = {
             "signer_position": "директора",
@@ -389,6 +401,9 @@ class CustomerService:
         if "is_favorite" in payload and payload["is_favorite"] is not None:
             customer.is_favorite = bool(payload["is_favorite"])
 
+        if "is_archived" in payload and payload["is_archived"] is not None:
+            customer.is_archived = bool(payload["is_archived"])
+
         for field, default_value in defaulted_text_fields.items():
             if field not in payload:
                 continue
@@ -405,6 +420,20 @@ class CustomerService:
                 continue
             trimmed = str(value).strip()
             setattr(customer, field, trimmed or None)
+
+        if (
+            ("phone" in payload or "email" in payload)
+            and (
+                customer.phone != legacy_phone_before_update
+                or customer.email != legacy_email_before_update
+            )
+        ):
+            await CustomerContactService.sync_primary_fields(
+                session,
+                customer,
+                phone=customer.phone,
+                email=customer.email,
+            )
 
         session.add(customer)
         await session.commit()
@@ -432,6 +461,7 @@ class CustomerService:
         customer_type: Optional[str] = None,
         only_with_orders: bool = True,
         include_archived: bool = False,
+        only_favorites: bool = False,
         tenant_scope: TenantScope,
     ) -> Dict[str, Any]:
         customer_scope_clause = tenant_scope_clause(
@@ -443,8 +473,12 @@ class CustomerService:
 
         # Hide archived customers unless explicitly requested
         if not include_archived:
-            stmt = stmt.where(Customer.is_archived == False)
-            count_stmt = count_stmt.where(Customer.is_archived == False)
+            stmt = stmt.where(Customer.is_archived.is_(False))
+            count_stmt = count_stmt.where(Customer.is_archived.is_(False))
+
+        if only_favorites:
+            stmt = stmt.where(Customer.is_favorite.is_(True))
+            count_stmt = count_stmt.where(Customer.is_favorite.is_(True))
 
         if only_with_orders:
             has_orders_clause = exists(
@@ -457,11 +491,35 @@ class CustomerService:
             count_stmt = count_stmt.where(has_orders_clause)
 
         if search:
+            phone_digits = "".join(character for character in search if character.isdigit())
+
+            def phone_digits_expr(column):
+                expression = column
+                for character in (" ", "+", "-", "(", ")", ".", "/"):
+                    expression = func.replace(expression, character, "")
+                return expression
+
+            normalized_phone = phone_digits_expr(Customer.phone)
+            contact_phone = phone_digits_expr(CustomerContact.phone)
             search_clause = or_(
                 Customer.name.ilike(f"%{search}%"),
                 Customer.phone.ilike(f"%{search}%"),
                 Customer.inn.ilike(f"%{search}%"),
                 Customer.email.ilike(f"%{search}%"),
+                Customer.full_legal_name.ilike(f"%{search}%"),
+                exists(
+                    select(CustomerContact.id).where(
+                        CustomerContact.customer_id == Customer.id,
+                        or_(
+                            CustomerContact.name.ilike(f"%{search}%"),
+                            CustomerContact.role.ilike(f"%{search}%"),
+                            CustomerContact.phone.ilike(f"%{search}%"),
+                            CustomerContact.email.ilike(f"%{search}%"),
+                            (contact_phone.contains(phone_digits) if phone_digits else False),
+                        ),
+                    )
+                ),
+                (normalized_phone.contains(phone_digits) if phone_digits else False),
             )
             stmt = stmt.where(search_clause)
             count_stmt = count_stmt.where(search_clause)
@@ -493,10 +551,20 @@ class CustomerService:
             oc_result = await session.execute(oc_stmt)
             order_counts = {int(k): int(v) for k, v in oc_result.all() if k is not None}
 
+        contact_summaries = await CustomerContactService.summaries(session, customers)
+
         items = []
         for customer in customers:
             cid = int(customer.id or 0)
-            items.append(CustomerService._to_manager_item(customer, order_count=order_counts.get(cid, 0)))
+            primary_contact, contact_count = contact_summaries[cid]
+            items.append(
+                CustomerService._to_manager_item(
+                    customer,
+                    order_count=order_counts.get(cid, 0),
+                    primary_contact=primary_contact,
+                    contact_count=contact_count,
+                )
+            )
 
         return {
             "items": items,

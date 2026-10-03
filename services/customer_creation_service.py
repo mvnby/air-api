@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 from sqlmodel import select
 
 from core.input_validation import normalize_phone_digits
@@ -61,12 +62,42 @@ class CustomerCreationService:
         payload: dict[str, Any],
         tenant_scope: TenantScope,
     ) -> dict[str, Any]:
+        customer = await cls.create_record_for_manager(
+            session, payload=payload, tenant_scope=tenant_scope,
+        )
+        await session.commit()
+        await session.refresh(customer)
+        created = await CustomerService.get_for_manager(
+            session=session,
+            customer_id=int(customer.id or 0),
+            tenant_scope=tenant_scope,
+        )
+        if created is None:
+            raise RuntimeError("Созданный клиент не найден")
+        return created
+
+    @classmethod
+    async def create_record_for_manager(
+        cls,
+        session: AsyncSession,
+        *,
+        payload: dict[str, Any],
+        tenant_scope: TenantScope,
+    ) -> Customer:
+        """Validate and flush a customer within the caller's transaction."""
+        if session.get_bind().dialect.name == "postgresql":
+            await session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:lock_key)::bigint)"),
+                {"lock_key": f"customer-create:{tenant_scope.tenant_id}"},
+            )
         name = str(payload.get("name") or "").strip()
         if not name:
             raise ValueError("Имя клиента не может быть пустым")
 
+        type_value = payload.get("type") or CustomerType.individual.value
         customer_type = CustomerType(
-            str(payload.get("type") or CustomerType.individual.value).strip().lower()
+            type_value.value if isinstance(type_value, CustomerType)
+            else str(type_value).strip().lower()
         )
         signing_mode = str(payload.get("signing_mode") or "").strip().lower()
         if not signing_mode:
@@ -120,16 +151,8 @@ class CustomerCreationService:
             is_favorite=bool(payload.get("is_favorite", False)),
         )
         session.add(customer)
-        await session.commit()
-        await session.refresh(customer)
-        created = await CustomerService.get_for_manager(
-            session=session,
-            customer_id=int(customer.id or 0),
-            tenant_scope=tenant_scope,
-        )
-        if created is None:
-            raise RuntimeError("Созданный клиент не найден")
-        return created
+        await session.flush()
+        return customer
 
     @classmethod
     async def _find_duplicate(

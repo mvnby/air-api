@@ -19,6 +19,7 @@ from .customer import (
     CustomerRequisitesRecognition,
     Lead,
 )
+from .customer_contact import CustomerContact, CustomerContactHistory
 from .equipment import CustomerEquipment, EquipmentComponent, EquipmentServiceHistory
 from .brand import Brand, ProductSeries
 from .feature import (
@@ -187,6 +188,8 @@ __all__ = [
     "CommunicationWebsiteCanaryRun",
     "ConsumerInbox",
     "Customer",
+    "CustomerContact",
+    "CustomerContactHistory",
     "CustomerBranch",
     "CustomerContract",
     "CustomerRequisitesRecognition",

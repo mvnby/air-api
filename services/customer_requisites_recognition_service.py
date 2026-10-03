@@ -24,6 +24,7 @@ from sqlmodel import select
 
 from core.config import settings
 from core.input_validation import (
+    normalize_phone_digits,
     validate_optional_bic,
     validate_optional_email,
     validate_optional_iban,
@@ -34,7 +35,7 @@ from models import Customer, CustomerRequisitesRecognition
 from models.tenancy import TenantScope
 from services.customer_party import signing_mode_for_customer_type
 from services.customer_party_classifier import infer_customer_type_from_requisites
-from services.customer_service import CustomerService
+from services.customer_creation_service import CustomerCreationService
 from services.google_vision_error_policy import (
     OcrProviderError,
     google_vision_http_error,
@@ -256,12 +257,14 @@ class CustomerRequisitesRecognitionService:
     def _extract_pdf_text(content: bytes) -> str:
         try:
             from pypdf import PdfReader
-
             reader = PdfReader(BytesIO(content))
-            chunks = []
-            for page in reader.pages[: CustomerRequisitesRecognitionService.MAX_PDF_PAGES]:
-                chunks.append(page.extract_text() or "")
-            return "\n".join(chunks).strip()
+        except Exception:
+            logger.debug("PDF_TEXT_EXTRACTION_FAILED", exc_info=True)
+            return ""
+        if len(reader.pages) > CustomerRequisitesRecognitionService.MAX_PDF_PAGES:
+            raise ValueError("PDF содержит больше 5 страниц; разделите документ")
+        try:
+            return "\n".join(page.extract_text() or "" for page in reader.pages).strip()
         except Exception:
             logger.debug("PDF_TEXT_EXTRACTION_FAILED", exc_info=True)
             return ""
@@ -269,7 +272,7 @@ class CustomerRequisitesRecognitionService:
     @classmethod
     def _ocr_pdf_pages(cls, content: bytes) -> str:
         try:
-            from pdf2image import convert_from_bytes
+            from pdf2image import convert_from_bytes, pdfinfo_from_bytes
         except ImportError as exc:
             raise OcrProviderError(
                 "PDF OCR requires pdf2image dependency",
@@ -277,6 +280,11 @@ class CustomerRequisitesRecognitionService:
                 code="not_configured",
             ) from exc
 
+        page_count = int(pdfinfo_from_bytes(content).get("Pages", 0))
+        if not page_count:
+            raise ValueError("Не удалось определить количество страниц PDF")
+        if page_count > cls.MAX_PDF_PAGES:
+            raise ValueError("PDF содержит больше 5 страниц; разделите документ")
         images = convert_from_bytes(
             content,
             first_page=1,
@@ -427,9 +435,9 @@ class CustomerRequisitesRecognitionService:
             "iban": cls._clean_text(raw.get("iban"), max_length=64),
             "email": cls._clean_text(raw.get("email"), max_length=255),
             "phone_raw": cls._clean_text(raw.get("phone_raw") or raw.get("phone"), max_length=120),
-            "signer_position": cls._normalize_signer_position(raw.get("signer_position")) or "директора",
+            "signer_position": cls._normalize_signer_position(raw.get("signer_position")),
             "signer_name": cls._clean_text(raw.get("signer_name"), max_length=255),
-            "acting_basis": cls._normalize_acting_basis(raw.get("acting_basis")),
+            "acting_basis": cls._normalize_acting_basis(raw.get("acting_basis")) if raw.get("acting_basis") else None,
             "extra": extra,
         }
         data["phone"] = cls.normalize_phone(
@@ -472,31 +480,36 @@ class CustomerRequisitesRecognitionService:
         session: AsyncSession,
         inn: Optional[str],
         *,
+        phone: Optional[str] = None,
+        email: Optional[str] = None,
         tenant_scope: TenantScope,
     ) -> Optional[Customer]:
-        if not inn:
-            return None
-        result = await session.execute(
-            select(Customer)
-            .where(
-                Customer.inn == inn,
-                tenant_scope_clause(Customer, tenant_scope),
-            )
-            .order_by(Customer.id.asc())
-            .limit(1)
+        match = await CustomerCreationService._find_duplicate(
+            session, inn=inn, phone=phone, email=email,
+            tenant_scope=tenant_scope,
         )
-        return result.scalars().first()
+        return match[0] if match else None
 
     @staticmethod
-    def _duplicate_brief(customer: Optional[Customer]) -> Optional[dict[str, Any]]:
+    def _duplicate_brief(
+        customer: Optional[Customer], extracted: dict[str, Any],
+    ) -> Optional[dict[str, Any]]:
         if not customer:
             return None
+        matched_fields = []
+        if extracted.get("inn") and str(customer.inn or "").strip() == extracted["inn"]:
+            matched_fields.append("inn")
+        if extracted.get("phone") and normalize_phone_digits(customer.phone or "") == normalize_phone_digits(extracted["phone"]):
+            matched_fields.append("phone")
+        if extracted.get("email") and str(customer.email or "").strip().casefold() == str(extracted["email"]).strip().casefold():
+            matched_fields.append("email")
         return {
             "id": int(customer.id or 0),
             "name": customer.name,
             "inn": customer.inn,
             "phone": customer.phone,
             "email": customer.email,
+            "matched_fields": matched_fields,
         }
 
     @classmethod
@@ -508,7 +521,7 @@ class CustomerRequisitesRecognitionService:
             "raw_text": recognition.raw_text,
             "extracted": recognition.extracted_json or {},
             "validation_flags": recognition.validation_flags or {},
-            "duplicate_customer": cls._duplicate_brief(duplicate),
+            "duplicate_customer": cls._duplicate_brief(duplicate, recognition.extracted_json or {}),
             "confirmed_customer_id": recognition.confirmed_customer_id,
             "confirmed_action": recognition.confirmed_action,
             "local_file_url": recognition.local_file_url,
@@ -542,6 +555,8 @@ class CustomerRequisitesRecognitionService:
         duplicate = await cls._find_duplicate(
             session,
             extracted.get("inn"),
+            phone=extracted.get("phone") if source == "manager" else None,
+            email=extracted.get("email") if source == "manager" else None,
             tenant_scope=tenant_scope,
         )
         local_path, local_url = cls._store_file(content, filename, mime_type)
@@ -590,6 +605,8 @@ class CustomerRequisitesRecognitionService:
         duplicate = await cls._find_duplicate(
             session,
             extracted.get("inn"),
+            phone=extracted.get("phone") if source == "manager" else None,
+            email=extracted.get("email") if source == "manager" else None,
             tenant_scope=tenant_scope,
         )
 
@@ -650,90 +667,25 @@ class CustomerRequisitesRecognitionService:
         recognition_id: int,
         action: str,
         customer_id: Optional[int] = None,
+        extracted: Optional[dict[str, Any]] = None,
+        selected_fields: Optional[list[str]] = None,
+        baseline: Optional[dict[str, Optional[str]]] = None,
         tenant_scope: TenantScope,
     ) -> dict[str, Any]:
-        recognition = (
-            await session.execute(
-                select(CustomerRequisitesRecognition)
-                .where(
-                    CustomerRequisitesRecognition.id == recognition_id,
-                    tenant_scope_clause(
-                        CustomerRequisitesRecognition,
-                        tenant_scope,
-                    ),
-                )
-                .with_for_update()
-            )
-        ).scalars().first()
-        if not recognition:
-            raise LookupError("Recognition not found")
-        if recognition.tenant_id is None:
-            recognition.tenant_id = tenant_scope.tenant_id
-        if recognition.status == cls.STATUS_CONFIRMED:
-            raise ValueError("Распознавание уже подтверждено")
+        from services.customer_requisites_confirmation_service import (
+            CustomerRequisitesConfirmationService,
+        )
 
-        validation_flags = recognition.validation_flags or {}
-        field_errors = validation_flags.get("field_errors") if isinstance(validation_flags, dict) else {}
-        if field_errors:
-            raise ValueError("Нельзя создать клиента: исправьте ошибки распознавания")
-
-        extracted = recognition.extracted_json or {}
-        payload = cls._customer_payload(extracted, raw_text=recognition.raw_text)
-        normalized_action = str(action or "").strip().lower()
-
-        if normalized_action == "update":
-            target_id = customer_id or recognition.duplicate_customer_id
-            if not target_id:
-                raise ValueError("Не выбран клиент для обновления")
-            customer = (
-                await session.execute(
-                    select(Customer).where(
-                        Customer.id == int(target_id),
-                        tenant_scope_clause(
-                            Customer,
-                            tenant_scope,
-                        ),
-                    )
-                )
-            ).scalars().first()
-            if not customer:
-                raise LookupError("Customer not found")
-            if customer.tenant_id is None:
-                customer.tenant_id = tenant_scope.tenant_id
-            for key, value in payload.items():
-                if value is not None and value != "":
-                    setattr(customer, key, value)
-            session.add(customer)
-            await session.flush()
-        elif normalized_action == "create":
-            customer = Customer(
-                **payload,
-                tenant_id=tenant_scope.tenant_id,
-            )
-            session.add(customer)
-            await session.flush()
-        else:
-            raise ValueError("action must be create or update")
-
-        recognition.status = cls.STATUS_CONFIRMED
-        recognition.confirmed_action = normalized_action
-        recognition.confirmed_customer_id = customer.id
-        recognition.confirmed_at = datetime.now()
-        session.add(recognition)
-        await session.commit()
-        await session.refresh(recognition)
-
-        duplicate = await cls._find_duplicate(
+        return await CustomerRequisitesConfirmationService.confirm(
             session,
-            extracted.get("inn"),
+            recognition_id=recognition_id,
+            action=action,
+            customer_id=customer_id,
+            extracted=extracted,
+            selected_fields=selected_fields,
+            baseline=baseline,
             tenant_scope=tenant_scope,
         )
-        customer_data = await CustomerService.get_for_manager(
-            session=session,
-            customer_id=int(customer.id or 0),
-            tenant_scope=tenant_scope,
-        )
-        return {"recognition": cls._recognition_response(recognition, duplicate), "customer": customer_data}
 
     @classmethod
     async def cancel(
