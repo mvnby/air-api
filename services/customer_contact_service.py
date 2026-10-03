@@ -216,7 +216,7 @@ class CustomerContactService:
                 author_id=author_id,
                 author_name=author_name,
             )
-        customer.phone = contact.phone
+        customer.phone = contact.phone or ""
         customer.email = contact.email
 
     @staticmethod
@@ -275,7 +275,7 @@ class CustomerContactService:
                 )
             contact.is_legacy = False
             contact.updated_at = now
-            customer.phone = contact.phone
+            customer.phone = contact.phone or ""
             customer.email = contact.email
             try:
                 await session.commit()
@@ -316,7 +316,7 @@ class CustomerContactService:
                     author_id=author_id, author_name=author_name,
                 )
         if contact.is_primary:
-            customer.phone = contact.phone
+            customer.phone = contact.phone or ""
             customer.email = contact.email
         try:
             await session.commit()
@@ -401,7 +401,7 @@ class CustomerContactService:
                     author_id=author_id, author_name=author_name,
                 )
         elif old_primary:
-            customer.phone = contact.phone
+            customer.phone = contact.phone or ""
             customer.email = contact.email
         try:
             await session.commit()
