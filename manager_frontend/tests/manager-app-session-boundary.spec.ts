@@ -227,7 +227,7 @@ const mountApp = async (path = '/manager/leads') => {
 
 const expireFromLeadInbox = async () => {
   mocks.getLeadsInbox.mockImplementation(() => rejectedManagerRequest('/api/manager/leads/inbox'));
-  const archiveButton = wrapper!.findAll('button').find((button) => button.text() === 'Архив');
+  const archiveButton = wrapper!.findAll('button').find((button) => button.attributes('aria-label') === 'Архив');
   expect(archiveButton).toBeDefined();
   await archiveButton!.trigger('click');
   await flushPromises();

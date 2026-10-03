@@ -111,6 +111,8 @@ class LeadsInboxListResponse(BaseModel):
     meta: Meta
     pending_count: int = 0
     unread_count: int = 0
+    source_counts: dict[str, int] = Field(default_factory=dict, description=
+        "Counts across the selected scope, search and unread filter, before source filtering or pagination.")
 
 
 class InboxReadPayload(BaseModel):

@@ -10,6 +10,19 @@ export type InboxItem = LeadsInboxItemResponse & Pick<LeadsInboxDetailResponse, 
 export type InboxContactRequest = { item: InboxItem; note?: string; nextFollowupAt?: string };
 export type InboxPage = LeadsInboxListResponse;
 export type InboxRefusalReason = 'profile' | 'region' | 'terms' | 'capacity' | 'unclear' | 'other';
+export type InboxScope = 'active' | 'archive';
+export type InboxSource = '' | 'site' | 'email' | 'belzakupki' | 'phone' | 'bot' | 'manager' | 'referral' | 'other';
+export const inboxSourceOptions: { value: InboxSource; label: string }[] = [
+  { value: '', label: 'Все' },
+  { value: 'site', label: 'Сайт' },
+  { value: 'email', label: 'Почта' },
+  { value: 'belzakupki', label: 'Тендеры' },
+  { value: 'phone', label: 'Телефон' },
+  { value: 'bot', label: 'Бот' },
+  { value: 'manager', label: 'Менеджер' },
+  { value: 'referral', label: 'Рекомендация' },
+  { value: 'other', label: 'Другое' },
+];
 export const inboxChangedEvent = 'manager:inbox-changed';
 export const notifyInboxChanged = () => window.dispatchEvent(new Event(inboxChangedEvent));
 const path = (kind: 'order' | 'lead' = 'order') => `/api/manager/leads/inbox/${kind === 'lead' ? 'raw/' : ''}{order_id}`;

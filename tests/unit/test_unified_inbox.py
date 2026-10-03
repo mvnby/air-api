@@ -32,6 +32,73 @@ async def test_mixed_pagination_personal_read_and_native_identity(db, tenant_sco
 
 
 @pytest.mark.asyncio
+async def test_source_counts_cover_the_queue_before_source_filter_and_pagination(db, tenant_scope):
+    site = Lead(tenant_id=1, storefront_id=1, source='site', request_text='Монтаж')
+    rows = [site,
+        Lead(tenant_id=1, storefront_id=1, source='email', request_text='Монтаж'),
+        Order(tenant_id=1, storefront_id=1, lead_source='email', title='Поставка'),
+        Order(tenant_id=1, storefront_id=1, lead_source='phone', title='Доставка'),
+        Lead(tenant_id=1, storefront_id=1, source='bot', status=LeadStatus.lost, request_text='Монтаж'),
+        Lead(tenant_id=1, storefront_id=1, source='manager', status=LeadStatus.qualified, request_text='Монтаж')]
+    db.add_all(rows)
+    await db.commit()
+    first = await UnifiedInboxService.get_leads_inbox(db, username='a', tenant_scope=tenant_scope, source='email', limit=1)
+    second = await UnifiedInboxService.get_leads_inbox(db, username='a', tenant_scope=tenant_scope, source='email', limit=1, page=2)
+    assert first.total == second.total == 2
+    assert first.source_counts == second.source_counts == {'site': 1, 'email': 2, 'phone': 1}
+    assert len(first.items) == len(second.items) == 1
+    searched = await UnifiedInboxService.get_leads_inbox(db, username='a', tenant_scope=tenant_scope, search='монтаж')
+    assert searched.source_counts == {'site': 1, 'email': 1}
+    await RawLeadInboxService.mutate(db, site.id, username='a', tenant_scope=tenant_scope,
+        action='read', payload=InboxReadPayload(is_read=True))
+    unread = await UnifiedInboxService.get_leads_inbox(db, username='a', tenant_scope=tenant_scope, search='монтаж', unread_only=True)
+    other_reader = await UnifiedInboxService.get_leads_inbox(db, username='b', tenant_scope=tenant_scope, search='монтаж', unread_only=True)
+    assert unread.source_counts == {'email': 1}
+    assert other_reader.source_counts == {'site': 1, 'email': 1}
+    archive = await UnifiedInboxService.get_leads_inbox(db, username='a', tenant_scope=tenant_scope, scope='archive')
+    assert archive.source_counts == {'bot': 1}
+    empty = await UnifiedInboxService.get_leads_inbox(db, username='a', tenant_scope=tenant_scope, search='нет совпадений')
+    assert empty.source_counts == {} and empty.total == 0
+
+
+@pytest.mark.asyncio
+async def test_source_counts_and_other_filter_include_unknown_historical_sources(db, tenant_scope):
+    db.add_all([
+        Order(tenant_id=1, storefront_id=1, lead_source=None),
+        Lead(tenant_id=1, storefront_id=1, source='legacy', request_text='Монтаж'),
+        Lead(tenant_id=1, storefront_id=1, source='other', request_text='Поставка'),
+        Lead(tenant_id=1, storefront_id=1, source='site', request_text='Заявка')])
+    await db.commit()
+    result = await UnifiedInboxService.get_leads_inbox(db, username='a', tenant_scope=tenant_scope, source='other')
+    assert result.source_counts == {'site': 1, 'other': 3}
+    assert result.total == len(result.items) == 3
+
+
+@pytest.mark.asyncio
+async def test_source_counts_keep_tenant_and_storefront_boundaries(db, tenant_scope):
+    from models.tenancy import Storefront, Tenant
+
+    tenant = Tenant(slug='inbox-counts-foreign', display_name='Foreign')
+    db.add(tenant)
+    await db.flush()
+    foreign = Storefront(tenant_id=tenant.id, slug='main', display_name='Foreign')
+    sibling = Storefront(tenant_id=1, slug='inbox-counts-sibling', display_name='Sibling')
+    db.add_all([foreign, sibling])
+    await db.flush()
+    db.add_all([
+        Lead(tenant_id=1, storefront_id=1, source='site', request_text='Своя заявка'),
+        Order(tenant_id=1, storefront_id=1, lead_source='email'),
+        Lead(tenant_id=1, storefront_id=sibling.id, source='site', request_text='Другая витрина'),
+        Order(tenant_id=1, storefront_id=sibling.id, lead_source='email'),
+        Lead(tenant_id=tenant.id, storefront_id=foreign.id, source='phone', request_text='Другой арендатор'),
+        Order(tenant_id=tenant.id, storefront_id=foreign.id, lead_source='bot')])
+    await db.commit()
+    result = await UnifiedInboxService.get_leads_inbox(db, username='a', tenant_scope=tenant_scope)
+    assert result.source_counts == {'site': 1, 'email': 1}
+    assert result.total == 2
+
+
+@pytest.mark.asyncio
 async def test_raw_archive_restore_does_not_create_customer_or_qualify(db, tenant_scope):
     lead = Lead(tenant_id=1, storefront_id=1, source='site', request_text='Монтаж', name='Иван')
     db.add(lead)

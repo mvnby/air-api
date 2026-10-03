@@ -1,11 +1,11 @@
 """A single paginated feed over Order intakes and unqualified Lead intakes."""
 from datetime import datetime, timezone
 
-from sqlalchemy import String, cast, func, literal, or_, union_all
+from sqlalchemy import String, case, cast, func, literal, or_, union_all
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
-from models import Lead, Order
+from models import Lead, LeadSource, Order
 from models.leads_inbox import InboxEvent
 from schemas_common import Meta
 from schemas_leads_inbox import LeadsCounterResponse, LeadsInboxListResponse
@@ -14,6 +14,11 @@ from services.raw_lead_inbox_service import RawLeadInboxService
 
 
 class UnifiedInboxService:
+    @staticmethod
+    def source_column(column):
+        # Historical empty or unknown sources still belong to the visible Other filter.
+        return case((column.in_([source.value for source in LeadSource]), column), else_='other')
+
     @staticmethod
     def raw_search(search):
         text = search.strip().replace('!', '!!').replace('%', '!%').replace('_', '!_')
@@ -39,13 +44,18 @@ class UnifiedInboxService:
         page, limit = max(1, int(page or 1)), min(100, max(1, int(limit or 50)))
         orders = LeadsInboxService.base_statement(username=username, tenant_scope=tenant_scope).where(LeadsInboxService.scope_clause(scope))
         leads = RawLeadInboxService.base_statement(username, tenant_scope).where(RawLeadInboxService.scope_clause(scope))
-        if source is not None:
-            source_value = source.value if hasattr(source, 'value') else source
-            orders, leads = orders.where(Order.lead_source == source_value), leads.where(Lead.source == source_value)
         if search and search.strip():
             orders, leads = orders.where(LeadsInboxService.search_clause(search)), leads.where(cls.raw_search(search))
         if unread_only:
             orders, leads = orders.where(LeadsInboxService.unread_clause()), leads.where(LeadsInboxService.unread_clause())
+        order_source, lead_source = cls.source_column(Order.lead_source), cls.source_column(Lead.source)
+        sources = union_all(orders.with_only_columns(order_source.label('source')),
+                            leads.with_only_columns(lead_source.label('source'))).subquery()
+        source_counts = dict((await session.execute(select(sources.c.source, func.count())
+            .group_by(sources.c.source))).all())
+        if source is not None:
+            source_value = source.value if hasattr(source, 'value') else source
+            orders, leads = orders.where(order_source == source_value), leads.where(lead_source == source_value)
         order_columns = [literal('order').label('kind'), Order.id.label('entity_id'), Order.created_at.label('created_at')]
         lead_columns = [literal('lead').label('kind'), Lead.id.label('entity_id'), Lead.created_at.label('created_at')]
         if sort == 'deadline':
@@ -90,4 +100,4 @@ class UnifiedInboxService:
         counts = await cls.counts(session, username=username, tenant_scope=tenant_scope)
         return LeadsInboxListResponse(items=items, total=total,
             meta=Meta(total=total, page=page, limit=limit, pages=(total + limit - 1) // limit),
-            pending_count=counts.pending_count, unread_count=counts.unread_count)
+            pending_count=counts.pending_count, unread_count=counts.unread_count, source_counts=source_counts)

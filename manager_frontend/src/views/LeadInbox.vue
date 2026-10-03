@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { api } from '../api';
-import { leadInboxApi, notifyInboxChanged, type InboxItem, type InboxContactRequest } from '../services/lead-inbox';
+import { inboxSourceOptions, leadInboxApi, notifyInboxChanged, type InboxItem, type InboxContactRequest, type InboxScope, type InboxSource } from '../services/lead-inbox';
 import { managerSession } from '../services/manager-session';
 import { managerStorefrontSelection, managerStorefrontStorageKey } from '../services/manager-storefront-selection';
 import LeadInboxCard from '../components/leads/LeadInboxCard.vue';
+import LeadInboxToolbar from '../components/leads/LeadInboxToolbar.vue';
 import LeadQualifyModal from '../components/leads/LeadQualifyModal.vue';
 import LeadSourceReviewModal from '../components/leads/LeadSourceReviewModal.vue';
 import { sourceEquipmentPrefillMessage, type SourceAppliedEvent } from '../services/order-source-review';
@@ -13,31 +14,19 @@ import AddressSuggestInput from '../components/ui/AddressSuggestInput.vue';
 import { useBelarusPhoneMask } from '../composables/useBelarusPhoneMask';
 import { useB2BLookup } from '../composables/useB2BLookup';
 
-type Scope = 'active' | 'archive';
-type Source = '' | 'site' | 'email' | 'belzakupki' | 'phone' | 'bot' | 'manager' | 'referral' | 'other';
 const pageLimit = 50;
-const sourceOptions: { value: Source; label: string }[] = [
-  { value: '', label: 'Все источники' },
-  { value: 'site', label: 'Сайт' },
-  { value: 'email', label: 'Почта' },
-  { value: 'belzakupki', label: 'Тендеры' },
-  { value: 'phone', label: 'Телефон' },
-  { value: 'bot', label: 'Бот' },
-  { value: 'manager', label: 'Менеджер' },
-  { value: 'referral', label: 'Рекомендация' },
-  { value: 'other', label: 'Другое' },
-];
 
-const scope = ref<Scope>('active');
+const scope = ref<InboxScope>('active');
 const unreadOnly = ref(false);
 const sort = ref<'newest' | 'deadline'>('deadline');
 const showEmailImport = ref(false);
 const pendingCount = ref(0);
 const unreadCount = ref(0);
+const sourceCounts = ref<Record<string, number>>({});
 const undoTarget = ref<InboxItem | null>(null);
 const restoreSaving = ref(false);
 const contactSaving = ref(false);
-const source = ref<Source>('');
+const source = ref<InboxSource>('');
 const page = ref(1);
 const items = ref<InboxItem[]>([]);
 const total = ref(0);
@@ -69,7 +58,7 @@ const restoreContext = () => {
   try {
     const saved = JSON.parse(window.sessionStorage.getItem(key) || '{}');
     if (saved.scope === 'active' || saved.scope === 'archive') scope.value = saved.scope;
-    if (sourceOptions.some(option => option.value === saved.source)) source.value = saved.source;
+    if (inboxSourceOptions.some(option => option.value === saved.source)) source.value = saved.source;
     if (typeof saved.search === 'string') search.value = appliedSearch.value = saved.search.slice(0, 200);
     if (typeof saved.unreadOnly === 'boolean') unreadOnly.value = saved.unreadOnly;
     if (saved.sort === 'newest' || saved.sort === 'deadline') sort.value = saved.sort;
@@ -189,6 +178,7 @@ const load = async () => {
     items.value = result.items;
     pendingCount.value = result.pending_count ?? (scope.value === 'active' ? nextTotal : pendingCount.value);
     unreadCount.value = result.unread_count ?? result.items.filter(item => item.is_read === false).length;
+    sourceCounts.value = result.source_counts ?? {};
     total.value = nextTotal;
   } catch (e) {
     if (disposed || requestId !== loadRequestId) return;
@@ -333,6 +323,13 @@ const markNoAnswer = async ({ item, note, nextFollowupAt }: InboxContactRequest)
   finally { contactSaving.value = false; }
 };
 const updateItem = (updated: InboxItem) => {
+  const previous = items.value.find(item => item.id === updated.id && (item.entity_kind || 'order') === (updated.entity_kind || 'order'));
+  const wasUnread = previous && (previous.is_read === undefined ? previous.is_new : !previous.is_read);
+  const isUnread = updated.is_read === undefined ? updated.is_new : !updated.is_read;
+  if (unreadOnly.value && previous && wasUnread !== isUnread) {
+    const channel = inboxSourceOptions.some(option => option.value && option.value === updated.source) ? updated.source! : 'other';
+    sourceCounts.value = { ...sourceCounts.value, [channel]: Math.max(0, (sourceCounts.value[channel] ?? 0) + (isUnread ? 1 : -1)) };
+  }
   items.value = items.value.map(item => item.id === updated.id && (item.entity_kind || 'order') === (updated.entity_kind || 'order') ? updated : item);
   // Refresh counts without remounting an opened card.
   const requestId = ++summaryRequestId;
@@ -360,11 +357,6 @@ const restoreItem = async (item: InboxItem) => {
   finally { restoreSaving.value = false; }
 };
 
-const scopeOptions: { value: Scope; label: string }[] = [
-  { value: 'active', label: 'Активные' },
-  { value: 'archive', label: 'Архив' },
-];
-
 const onEmailImported = async () => {
   notifyInboxChanged();
   if (scope.value !== 'active') scope.value = 'active';
@@ -374,22 +366,15 @@ const onEmailImported = async () => {
 
 <template>
   <div class="inbox-workspace">
-    <header class="inbox-header">
-      <div><div class="eyebrow">ПЕРВИЧНЫЙ РАЗБОР</div><h1>Входящие</h1><p>Ожидают решения: {{ pendingCount }} · Непросмотрено: {{ unreadCount }}</p></div>
-      <div class="header-actions"><button type="button" class="inbox-button" :aria-expanded="showEmailImport" @click="showEmailImport = !showEmailImport">Проверить почту</button><button type="button" class="inbox-button" @click="openCreateModal">Создать обращение</button></div>
-    </header>
-    <EmailLeadImportPanel v-if="showEmailImport" @notice="setToast" @imported="onEmailImported" />
-    <section class="inbox-toolbar" aria-label="Фильтры обращений">
-      <div class="toolbar-first">
-        <div class="segments"><button v-for="opt in scopeOptions" :key="opt.value" type="button" :aria-pressed="scope === opt.value" @click="scope = opt.value">{{ opt.label }}</button></div>
-        <label class="inbox-search"><span class="material-icons-round" aria-hidden="true">search</span><span class="sr-only">Поиск по входящим обращениям</span><input v-model="search" type="search" placeholder="Найти обращение или клиента"><button v-if="search" type="button" aria-label="Очистить поиск" @click="search = ''"><span class="material-icons-round" aria-hidden="true">close</span></button></label>
-      </div>
-      <div class="toolbar-second">
-        <div class="channels" aria-label="Источник входящих"><button v-for="option in sourceOptions" :key="option.value" type="button" :aria-pressed="source === option.value" @click="source = option.value">{{ option.value ? option.label : 'Все' }}</button></div>
-        <div class="inbox-filters"><button type="button" :aria-pressed="unreadOnly" @click="unreadOnly = !unreadOnly"><span class="unread-dot" />Непросмотренные</button><select v-model="sort" aria-label="Сортировка входящих"><option value="deadline">Ближайший срок</option><option value="newest">Сначала новые</option></select></div>
-      </div>
-      <p class="result-count" aria-live="polite">{{ loading ? 'Обновляем список…' : `Найдено: ${total}` }}</p>
-    </section>
+    <LeadInboxToolbar
+      v-model:scope="scope" v-model:source="source" v-model:search="search"
+      v-model:unread-only="unreadOnly" v-model:sort="sort"
+      :pending-count="pendingCount" :unread-count="unreadCount" :source-counts="sourceCounts"
+      :total="total" :loading="loading" :show-email-import="showEmailImport"
+      @create="openCreateModal" @toggle-email="showEmailImport = !showEmailImport"
+    >
+      <template #email-import><EmailLeadImportPanel v-if="showEmailImport" @notice="setToast" @imported="onEmailImported" /></template>
+    </LeadInboxToolbar>
 
     <!-- Loading -->
     <div v-if="loading" class="flex items-center gap-3 text-slate-500 dark:text-slate-400 py-12 justify-center">
