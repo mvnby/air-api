@@ -422,3 +422,40 @@ async def test_legacy_customer_patch_syncs_only_the_primary_contact(contact_sess
     assert by_id[primary["id"]].email == "updated@example.com"
     assert by_id[secondary["id"]].phone == "+375299999999"
     assert by_id[secondary["id"]].email == "secondary@example.com"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["first", "create", "promote", "clear"])
+async def test_primary_without_phone_keeps_legacy_customer_phone_nonnull(contact_session, operation):
+    customer = Customer(tenant_id=1, name="Компания", phone="+375291234567", type="company")
+    contact_session.add(customer)
+    await contact_session.commit()
+    scope = TenantScope(tenant_id=1, storefront_id=1)
+    customer_id = int(customer.id)
+    if operation != "first":
+        primary = await CustomerContactService.create_contact(
+            contact_session, customer_id,
+            {"name": "Первый", "phone": customer.phone, "is_primary": True},
+            tenant_scope=scope,
+        )
+    if operation == "clear":
+        result = await CustomerContactService.patch_contact(
+            contact_session, customer_id, int(primary["id"]),
+            {"phone": None, "email": "accountant@example.test"}, tenant_scope=scope,
+        )
+    else:
+        result = await CustomerContactService.create_contact(
+            contact_session, customer_id,
+            {"name": "Бухгалтер", "phone": None, "email": "accountant@example.test", "is_primary": operation != "promote"},
+            tenant_scope=scope,
+        )
+        if operation == "promote":
+            result = await CustomerContactService.patch_contact(
+                contact_session, customer_id, int(result["id"]),
+                {"is_primary": True}, tenant_scope=scope,
+            )
+    await contact_session.refresh(customer)
+    assert result["is_primary"] is True
+    assert result["phone"] is None
+    assert customer.phone == ""
+    assert customer.email == "accountant@example.test"
