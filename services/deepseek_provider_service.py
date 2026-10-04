@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 
 from core.config import settings
+from services.deepseek_connection_service import DeepSeekCredentialError, resolve_deepseek_token
 
 
 MAX_DEEPSEEK_RESPONSE_BYTES = 512_000
@@ -42,11 +43,19 @@ async def request_deepseek_completion(
     model: str | None = None,
     max_tokens: int = MAX_DEEPSEEK_OUTPUT_TOKENS,
     deadline_seconds: float = DEEPSEEK_REQUEST_DEADLINE_SECONDS,
+    token: str | None = None,
 ) -> str:
-    token = settings.DEEPSEEK_TOKEN.strip()
+    if token is None:
+        try:
+            token = await resolve_deepseek_token()
+        except DeepSeekCredentialError as exc:
+            raise DefectActAIProviderError(
+                "DeepSeek credential is unavailable", status=None,
+                retryable=False, code=exc.code,
+            ) from None
     if not token:
         raise DefectActAIProviderError(
-            "DEEPSEEK_TOKEN is not configured",
+            "DeepSeek is disabled or its key is not configured in Manager settings",
             status=None,
             retryable=False,
             code="not_configured",

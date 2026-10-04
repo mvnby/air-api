@@ -35,12 +35,12 @@ describe('platform AI connection', () => {
     await flushPromises();
     expect(wrapper.text()).toContain('Ключ настроен');
     expect(wrapper.get('[data-testid="platform-ai-key"]').attributes('type')).toBe('password');
-    await wrapper.get('button:nth-of-type(2)').trigger('click');
+    await wrapper.get('[data-testid="platform-ai-discover"]').trigger('click');
     await flushPromises();
     expect(wrapper.text()).toContain('cheap-cn');
     expect(wrapper.text()).toContain('не подтверждает поддержку');
     await wrapper.get('[data-testid="platform-ai-model"]').setValue('cheap-cn');
-    await wrapper.get('button:nth-of-type(1)').trigger('click');
+    await wrapper.get('[data-testid="platform-ai-save"]').trigger('click');
     await flushPromises();
     expect(mocks.put).toHaveBeenCalledWith({ key: null, selected_model: 'cheap-cn' });
     expect(wrapper.get('[data-testid="platform-ai-key"]').element).toHaveProperty('value', '');
@@ -50,17 +50,17 @@ describe('platform AI connection', () => {
     mocks.get.mockResolvedValue({ configured: true, enabled: false, selected_model: 'cheap-cn' });
     const wrapper = mountPanel();
     await flushPromises();
-    await wrapper.findAll('button').find(button => button.text().includes('Проверить текстовый запрос'))!.trigger('click');
+    await wrapper.get('[data-testid="platform-ai-test"]').trigger('click');
     await flushPromises();
     expect(mocks.test).toHaveBeenCalledOnce();
-    await wrapper.findAll('button').find(button => button.text() === 'Включить')!.trigger('click');
+    await wrapper.get('[data-testid="platform-ai-toggle"]').trigger('click');
     expect(mocks.put).toHaveBeenCalledWith({ enabled: true });
   });
 
   it('deletes the connection only after confirmation through the shared dialog', async () => {
     const wrapper = mountPanel();
     await flushPromises();
-    const remove = wrapper.findAll('button').find(button => button.text() === 'Удалить ключ')!;
+    const remove = wrapper.get('[data-testid="platform-ai-remove"]');
     mocks.confirm.mockResolvedValueOnce(false);
     await remove.trigger('click');
     await flushPromises();

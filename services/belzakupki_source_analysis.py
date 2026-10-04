@@ -11,6 +11,7 @@ import httpx
 from core.config import settings
 from schemas_belzakupki_enrichment import SourceObjectDraft
 from services.mail_imap_service import MailImapService
+from services.deepseek_connection_service import resolve_deepseek_token
 
 
 def _parse_json(content: str) -> dict[str, Any]:
@@ -35,7 +36,7 @@ async def extract_missing_document_text(*, filename: str, mime_type: str, conten
 
 
 async def analyze_tender_text(raw_text: str) -> tuple[str | None, str | None, list[SourceObjectDraft]]:
-    token = settings.DEEPSEEK_TOKEN.strip()
+    token = await resolve_deepseek_token()
     if not token:
         raise RuntimeError("AI document analysis is not configured")
     prompt = (
@@ -49,7 +50,7 @@ async def analyze_tender_text(raw_text: str) -> tuple[str | None, str | None, li
         "Не выдумывай адреса, модели, количество, цену или клиента. Если не уверен, оставь массив пустым.\n\n"
         f"Текст:\n{raw_text[:24000]}"
     )
-    async with httpx.AsyncClient(timeout=45.0) as client:
+    async with httpx.AsyncClient(timeout=45.0, trust_env=False) as client:
         response = await client.post(
             settings.DEEPSEEK_API_URL,
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},

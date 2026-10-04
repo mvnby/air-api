@@ -7,6 +7,8 @@ from sqlmodel import select
 from models import AnalyticsConnection
 from models.document_drive_connection import DocumentDriveConnection
 from models.platform_ai_connection import PlatformAIConnection
+from models.deepseek_connection import DeepSeekConnection
+from services.deepseek_connection_service import DeepSeekCredentialCipher, DeepSeekCredentialError
 from services.platform_ai_connection_service import PlatformAICredentialCipher
 from services.zaprosu_provider_service import ZaprosuError
 from services.analytics_connection_contracts import AnalyticsConnectionError, AnalyticsCredentialCipher
@@ -16,9 +18,11 @@ from services.document_drive_contracts import DocumentDriveConnectionError, Docu
 async def integration_credential_health(session: AsyncSession) -> dict:
     checked = 0
     unreadable = 0
-    for model in (AnalyticsConnection, DocumentDriveConnection, PlatformAIConnection):
+    for model in (AnalyticsConnection, DocumentDriveConnection, PlatformAIConnection, DeepSeekConnection):
         rows = (await session.execute(select(model))).scalars().all()
         for row in rows:
+            if isinstance(row, DeepSeekConnection) and not row.encrypted_credentials:
+                continue
             checked += 1
             try:
                 if isinstance(row, AnalyticsConnection):
@@ -30,9 +34,11 @@ async def integration_credential_health(session: AsyncSession) -> dict:
                     DocumentDriveCredentialCipher.decrypt(
                         row.encrypted_credentials, tenant_id=row.tenant_id, provider=row.provider,
                     )
+                elif isinstance(row, DeepSeekConnection):
+                    DeepSeekCredentialCipher.decrypt_with_source(row.encrypted_credentials)
                 else:
                     PlatformAICredentialCipher.decrypt_with_source(row.encrypted_credentials)
-            except (AnalyticsConnectionError, DocumentDriveConnectionError, ZaprosuError):
+            except (AnalyticsConnectionError, DocumentDriveConnectionError, ZaprosuError, DeepSeekCredentialError):
                 unreadable += 1
     return {
         "status": "passed" if unreadable == 0 else "failed",

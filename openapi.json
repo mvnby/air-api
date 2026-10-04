@@ -24211,6 +24211,152 @@
         ]
       }
     },
+    "/api/manager/platform-ai/deepseek": {
+      "get": {
+        "tags": [
+          "manager/platform-ai"
+        ],
+        "summary": "Get Deepseek Connection",
+        "operationId": "get_deepseek_connection",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeepseekConnectionStatus"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "manager/platform-ai"
+        ],
+        "summary": "Put Deepseek Connection",
+        "operationId": "put_deepseek_connection",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeepseekConnectionUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeepseekConnectionStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "manager/platform-ai"
+        ],
+        "summary": "Delete Deepseek Connection",
+        "operationId": "delete_deepseek_connection",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeepseekConnectionStatus"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/platform-ai/deepseek/import-environment": {
+      "post": {
+        "tags": [
+          "manager/platform-ai"
+        ],
+        "summary": "Import Deepseek Environment Key",
+        "operationId": "import_deepseek_environment_key",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeepseekConnectionStatus"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/platform-ai/deepseek/test": {
+      "post": {
+        "tags": [
+          "manager/platform-ai"
+        ],
+        "summary": "Test Deepseek Connection",
+        "operationId": "test_deepseek_connection",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeepseekConnectionTest"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/storefront-settings/brand": {
       "get": {
         "tags": [
@@ -39599,6 +39745,82 @@
           "next_followup_date"
         ],
         "title": "DashboardTouchpoint"
+      },
+      "DeepseekConnectionStatus": {
+        "properties": {
+          "configured": {
+            "type": "boolean",
+            "title": "Configured"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "settings",
+              "environment",
+              "none"
+            ],
+            "title": "Source"
+          },
+          "environment_key_available": {
+            "type": "boolean",
+            "title": "Environment Key Available"
+          }
+        },
+        "type": "object",
+        "required": [
+          "configured",
+          "enabled",
+          "source",
+          "environment_key_available"
+        ],
+        "title": "DeepseekConnectionStatus"
+      },
+      "DeepseekConnectionTest": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "title": "DeepseekConnectionTest"
+      },
+      "DeepseekConnectionUpdate": {
+        "properties": {
+          "key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "DeepseekConnectionUpdate"
       },
       "DocumentDriveAuthorizationUrlResponse": {
         "properties": {

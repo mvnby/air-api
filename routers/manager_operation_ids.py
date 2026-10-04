@@ -311,6 +311,11 @@ PUT_PLATFORM_AI_CONNECTION = "put_platform_ai_connection"
 DELETE_PLATFORM_AI_CONNECTION = "delete_platform_ai_connection"
 GET_PLATFORM_AI_MODELS = "get_platform_ai_models"
 TEST_PLATFORM_AI_INFERENCE = "test_platform_ai_inference"
+GET_DEEPSEEK_CONNECTION = "get_deepseek_connection"
+PUT_DEEPSEEK_CONNECTION = "put_deepseek_connection"
+DELETE_DEEPSEEK_CONNECTION = "delete_deepseek_connection"
+IMPORT_DEEPSEEK_ENVIRONMENT_KEY = "import_deepseek_environment_key"
+TEST_DEEPSEEK_CONNECTION = "test_deepseek_connection"
 GET_MANAGER_GOOGLE_AUTH_STATUS = "get_manager_google_auth_status"
 GET_MANAGER_GOOGLE_AUTH_URL = "get_manager_google_auth_url"
 GET_MANAGER_DOCUMENT_DRIVE_STATUS = "get_manager_document_drive_status"
@@ -798,6 +803,11 @@ ALL_MANAGER_OPERATION_IDS = (
     DELETE_PLATFORM_AI_CONNECTION,
     GET_PLATFORM_AI_MODELS,
     TEST_PLATFORM_AI_INFERENCE,
+    GET_DEEPSEEK_CONNECTION,
+    PUT_DEEPSEEK_CONNECTION,
+    DELETE_DEEPSEEK_CONNECTION,
+    IMPORT_DEEPSEEK_ENVIRONMENT_KEY,
+    TEST_DEEPSEEK_CONNECTION,
     GET_FX_RATE,
     SUGGEST_ADDRESS,
     UPDATE_MANAGER_SETTING,

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
-from core.security import get_current_manager_tenant_scope, get_current_username
+from core.security import get_current_manager_tenant_scope, get_current_username, require_system_manager_tenant_scope
 from models.tenancy import TenantScope
 from routers.manager_operation_ids import (
     ADD_MANAGER_ORDER_SOURCE_EQUIPMENT, GET_MANAGER_ORDER_SOURCE_CARD, GET_MANAGER_ORDER_SOURCE_EQUIPMENT,
@@ -95,6 +95,7 @@ async def get_manager_order_source_preview(
 @router.post(
     "/{order_id}/source-analyze", response_model=ManagerOrderSourcePreview,
     operation_id=ANALYZE_MANAGER_ORDER_SOURCE,
+    dependencies=[Depends(require_system_manager_tenant_scope)],
 )
 async def analyze_manager_order_source(
     order_id: int,

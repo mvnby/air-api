@@ -340,11 +340,12 @@ class CustomerRequisitesRecognitionService:
 
     @classmethod
     async def extract_requisites(cls, raw_text: str) -> dict[str, Any]:
-        token = settings.DEEPSEEK_TOKEN.strip()
+        from services.deepseek_connection_service import resolve_deepseek_token
+        token = await resolve_deepseek_token()
         if not token:
-            raise ValueError("DEEPSEEK_TOKEN is not configured")
+            raise ValueError("DeepSeek отключён или ключ не задан в настройках AI-подключения")
 
-        async with httpx.AsyncClient(timeout=45.0) as client:
+        async with httpx.AsyncClient(timeout=45.0, trust_env=False) as client:
             response = await client.post(
                 settings.DEEPSEEK_API_URL,
                 headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},

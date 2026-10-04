@@ -1,4 +1,5 @@
 import json
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -8,6 +9,11 @@ from services.defect_act_ai_service import (
     DefectActAIProviderError,
     DefectActAIService,
 )
+
+
+@pytest.fixture(autouse=True)
+def credential_resolution(monkeypatch):
+    monkeypatch.setattr("services.deepseek_provider_service.resolve_deepseek_token", AsyncMock(return_value="test-token"))
 
 
 class _FakeAsyncClient:

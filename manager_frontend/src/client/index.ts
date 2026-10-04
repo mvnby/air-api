@@ -193,6 +193,9 @@ export type { DashboardSearchDemandProvider } from './models/DashboardSearchDema
 export type { DashboardSearchQuery } from './models/DashboardSearchQuery';
 export type { DashboardStatsResponse } from './models/DashboardStatsResponse';
 export type { DashboardTouchpoint } from './models/DashboardTouchpoint';
+export type { DeepseekConnectionStatus } from './models/DeepseekConnectionStatus';
+export type { DeepseekConnectionTest } from './models/DeepseekConnectionTest';
+export type { DeepseekConnectionUpdate } from './models/DeepseekConnectionUpdate';
 export type { DocumentDriveAuthorizationUrlResponse } from './models/DocumentDriveAuthorizationUrlResponse';
 export type { DocumentDriveStatusResponse } from './models/DocumentDriveStatusResponse';
 export type { DocumentFacsimilePlacementItem } from './models/DocumentFacsimilePlacementItem';

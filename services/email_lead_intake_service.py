@@ -303,11 +303,12 @@ class EmailLeadIntakeService:
 
     @staticmethod
     async def _request_completion(prompt: str) -> str:
-        token = settings.DEEPSEEK_TOKEN.strip()
+        from services.deepseek_connection_service import resolve_deepseek_token
+        token = await resolve_deepseek_token()
         if not token:
-            raise ValueError("DEEPSEEK_TOKEN is not configured")
+            raise ValueError("DeepSeek отключён или ключ не задан в настройках AI-подключения")
 
-        async with httpx.AsyncClient(timeout=45.0) as client:
+        async with httpx.AsyncClient(timeout=45.0, trust_env=False) as client:
             response = await client.post(
                 settings.DEEPSEEK_API_URL,
                 headers={
@@ -328,7 +329,7 @@ class EmailLeadIntakeService:
                 },
             )
             if response.status_code == 401:
-                raise ValueError("DeepSeek отклонил API ключ. Проверьте DEEPSEEK_TOKEN в .env и перезапустите app-контейнер.")
+                raise ValueError("DeepSeek отклонил API ключ. Замените его в настройках AI-подключения.")
             if response.status_code == 403:
                 raise ValueError("DeepSeek запретил доступ для этого API ключа. Проверьте права ключа и баланс аккаунта.")
             if response.status_code >= 400:
