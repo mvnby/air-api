@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
-from core.security import AuthenticatedUser, get_current_auth_context, get_current_manager_tenant_scope
+from core.security import AuthenticatedUser, get_current_auth_context, get_current_manager_tenant_scope, require_system_manager_tenant_scope
 from models.tenancy import TenantScope
 from routers.manager_operation_ids import (
     DOWNLOAD_MANAGER_EMAIL_LEAD_ORIGINAL,
@@ -106,6 +106,7 @@ async def download_manager_email_lead_original(
     "/inbox/{order_id}/email-originals/{position}/review",
     response_model=ContractReviewJobResponse,
     operation_id=REVIEW_MANAGER_EMAIL_LEAD_ORIGINAL,
+    dependencies=[Depends(require_system_manager_tenant_scope)],
 )
 async def review_manager_email_lead_original(
     order_id: int,
@@ -137,6 +138,7 @@ async def review_manager_email_lead_original(
     "/inbox/{order_id}/contract-review/{attachment_id}",
     response_model=ContractReviewJobResponse,
     operation_id=REVIEW_MANAGER_EMAIL_LEAD_CONTRACT,
+    dependencies=[Depends(require_system_manager_tenant_scope)],
 )
 async def review_manager_email_lead_contract(
     order_id: int,

@@ -562,6 +562,8 @@ class Settings(BaseSettings):
         return normalized
 
     # AI integrations
+    # Transitional source only, until the system owner imports it into Manager.
+    # A persisted connection (including disabled/empty) permanently takes priority.
     DEEPSEEK_TOKEN: str = ""
     DEEPSEEK_MODEL: str = "deepseek-v4-flash"
     CONTRACT_REVIEW_MODEL: str = "deepseek-v4-pro"

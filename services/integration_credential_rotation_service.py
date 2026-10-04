@@ -12,6 +12,8 @@ from sqlmodel import select
 
 from core.config import settings
 from models import AnalyticsConnection, DocumentDriveConnection, PlatformAIConnection
+from models.deepseek_connection import DeepSeekConnection
+from services.deepseek_connection_service import DeepSeekCredentialCipher, DeepSeekCredentialError
 from services.platform_ai_connection_service import PlatformAICredentialCipher
 from services.zaprosu_provider_service import ZaprosuError
 from services.analytics_connection_contracts import (
@@ -35,8 +37,8 @@ _MAX_ROWS = 10_000
 
 @dataclass(frozen=True, slots=True)
 class _RotationRecord:
-    domain: Literal["analytics", "document_drive", "platform_ai"]
-    row: AnalyticsConnection | DocumentDriveConnection | PlatformAIConnection
+    domain: Literal["analytics", "document_drive", "platform_ai", "deepseek"]
+    row: AnalyticsConnection | DocumentDriveConnection | PlatformAIConnection | DeepSeekConnection
     source: Literal["active", "retained", "legacy", "unreadable"]
     credentials: dict[str, Any] | str | None
     needs_rewrap: bool
@@ -45,9 +47,9 @@ class _RotationRecord:
         value: dict[str, Any] = {
             "domain": self.domain,
             "id": int(self.row.id or 0),
-            "tenant_id": int(self.row.tenant_id) if not isinstance(self.row, PlatformAIConnection) else None,
-            "provider": str(self.row.provider) if not isinstance(self.row, PlatformAIConnection) else "zaprosu",
-            "status": str(self.row.status) if not isinstance(self.row, PlatformAIConnection) else ("active" if self.row.enabled else "disabled"),
+            "tenant_id": int(self.row.tenant_id) if not isinstance(self.row, (PlatformAIConnection, DeepSeekConnection)) else None,
+            "provider": "deepseek" if isinstance(self.row, DeepSeekConnection) else "zaprosu" if isinstance(self.row, PlatformAIConnection) else str(self.row.provider),
+            "status": ("active" if self.row.enabled else "disabled") if isinstance(self.row, (PlatformAIConnection, DeepSeekConnection)) else str(self.row.status),
             "source": self.source,
             "needs_rewrap": self.needs_rewrap,
             "ciphertext_sha256": hashlib.sha256(
@@ -134,21 +136,37 @@ class IntegrationCredentialRotationService:
         analytics_query = select(AnalyticsConnection).order_by(AnalyticsConnection.id)
         drive_query = select(DocumentDriveConnection).order_by(DocumentDriveConnection.id)
         ai_query = select(PlatformAIConnection).order_by(PlatformAIConnection.id)
+        deepseek_query = select(DeepSeekConnection).where(DeepSeekConnection.encrypted_credentials.is_not(None)).order_by(DeepSeekConnection.id)
         if for_update:
             analytics_query = analytics_query.with_for_update()
             drive_query = drive_query.with_for_update()
             ai_query = ai_query.with_for_update()
+            deepseek_query = deepseek_query.with_for_update()
         analytics_rows = (await session.execute(analytics_query)).scalars().all()
         drive_rows = (await session.execute(drive_query)).scalars().all()
         ai_rows = (await session.execute(ai_query)).scalars().all()
-        if len(analytics_rows) + len(drive_rows) + len(ai_rows) > _MAX_ROWS:
+        deepseek_rows = (await session.execute(deepseek_query)).scalars().all()
+        if len(analytics_rows) + len(drive_rows) + len(ai_rows) + len(deepseek_rows) > _MAX_ROWS:
             raise IntegrationCredentialRotationBlockedError(
                 "Credential row limit exceeded"
             )
         records = [cls._analytics_record(row) for row in analytics_rows]
         records.extend(cls._drive_record(row) for row in drive_rows)
         records.extend(cls._ai_record(row) for row in ai_rows)
+        records.extend(cls._deepseek_record(row) for row in deepseek_rows)
         return records
+
+    @staticmethod
+    def _deepseek_record(row: DeepSeekConnection) -> _RotationRecord:
+        try:
+            key, decrypted = DeepSeekCredentialCipher.decrypt_with_source(row.encrypted_credentials)
+        except DeepSeekCredentialError:
+            return _RotationRecord("deepseek", row, "unreadable", None, False)
+        fingerprint_matches = (
+            decrypted.source == "active"
+            and hmac.compare_digest(row.credentials_fingerprint, DeepSeekCredentialCipher.fingerprint(key))
+        )
+        return _RotationRecord("deepseek", row, decrypted.source, key, not fingerprint_matches)
 
     @staticmethod
     def _ai_record(row: PlatformAIConnection) -> _RotationRecord:
@@ -297,11 +315,12 @@ class IntegrationCredentialRotationService:
                 )
             )
             return
-        if isinstance(record.row, PlatformAIConnection):
+        if isinstance(record.row, (PlatformAIConnection, DeepSeekConnection)):
             if not isinstance(credentials, str):
                 raise IntegrationCredentialRotationBlockedError("Credential row cannot be rewrapped")
-            record.row.encrypted_credentials = PlatformAICredentialCipher.encrypt(credentials)
-            record.row.credentials_fingerprint = PlatformAICredentialCipher.fingerprint(credentials)
+            cipher = DeepSeekCredentialCipher if isinstance(record.row, DeepSeekConnection) else PlatformAICredentialCipher
+            record.row.encrypted_credentials = cipher.encrypt(credentials)
+            record.row.credentials_fingerprint = cipher.fingerprint(credentials)
             return
         record.row.encrypted_credentials = DocumentDriveCredentialCipher.encrypt(
             credentials,

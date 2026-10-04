@@ -159,7 +159,6 @@ SERVICE_DICTIONARY_TENANT_READ_OPERATION_IDS = (
     | frozenset(
         {
         "list_manager_repair_complaint_presets",
-        "generate_manager_repair_act_ai_draft",
         }
     )
 )
@@ -367,6 +366,11 @@ def test_additional_global_surfaces_are_gated_without_widening_exceptions():
 
 
 def test_tenant_crm_routes_and_media_worker_do_not_gain_platform_gate():
+    platform_ai_operations = {
+        "recognize_manager_customer_requisites", "recognize_manager_customer_requisites_text",
+        "review_manager_email_lead_contract", "review_manager_email_lead_original",
+        "analyze_manager_order_source",
+    }
     tenant_routes = _api_routes(
         manager_leads.router,
         manager_orders.router,
@@ -381,7 +385,7 @@ def test_tenant_crm_routes_and_media_worker_do_not_gain_platform_gate():
     ]
     assert tenant_routes
     for route in tenant_routes:
-        assert not _has_direct_dependency(route, require_system_manager_tenant_scope)
+        assert _has_direct_dependency(route, require_system_manager_tenant_scope) == (route.operation_id in platform_ai_operations)
         assert not _has_direct_dependency(route, require_system_owner_access)
 
     worker_routes = _api_routes(manager_media_worker.router)

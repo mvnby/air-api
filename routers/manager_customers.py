@@ -12,7 +12,7 @@ from core.manager_error_codes import (
     CUSTOMER_ALREADY_EXISTS,
     CUSTOMER_NOT_FOUND,
 )
-from core.security import AuthenticatedUser, get_current_auth_context, get_current_manager_tenant_scope
+from core.security import AuthenticatedUser, get_current_auth_context, get_current_manager_tenant_scope, require_system_manager_tenant_scope
 from models.tenancy import TenantScope
 from routers.manager_operation_ids import (
     REVIEW_MANAGER_CUSTOMER_RECONCILIATION_LEGACY_DOCUMENT,
@@ -161,6 +161,7 @@ async def create_customer_for_manager(
     "/customers/requisites/recognize",
     response_model=CustomerRequisitesRecognitionResponse,
     operation_id=RECOGNIZE_MANAGER_CUSTOMER_REQUISITES,
+    dependencies=[Depends(require_system_manager_tenant_scope)],
 )
 async def recognize_customer_requisites_for_manager(
     file: UploadFile = File(...),
@@ -190,6 +191,7 @@ async def recognize_customer_requisites_for_manager(
     "/customers/requisites/recognize-text",
     response_model=CustomerRequisitesRecognitionResponse,
     operation_id=RECOGNIZE_MANAGER_CUSTOMER_REQUISITES_TEXT,
+    dependencies=[Depends(require_system_manager_tenant_scope)],
 )
 async def recognize_customer_requisites_text_for_manager(
     payload: CustomerRequisitesTextPayload,

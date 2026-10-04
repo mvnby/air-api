@@ -1,4 +1,5 @@
 import json
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -7,6 +8,11 @@ from services.deepseek_provider_service import (
     DefectActAIProviderError,
     request_deepseek_completion,
 )
+
+
+@pytest.fixture(autouse=True)
+def credential_resolution(monkeypatch):
+    monkeypatch.setattr("services.deepseek_provider_service.resolve_deepseek_token", AsyncMock(return_value="token"))
 
 
 class _ChunkStream(httpx.AsyncByteStream):

@@ -320,13 +320,13 @@ class BotQuickOrderService:
     async def parse_text(cls, text: str, *, current_draft: dict[str, Any] | None = None) -> dict[str, Any]:
         started = time.perf_counter()
         fallback = cls.parse_text_fallback(text)
-        token = settings.DEEPSEEK_TOKEN.strip()
-        if not token:
-            logger.info("BOT_QUICK_ORDER_PARSE provider=none schema=v2 outcome=fallback reason=disabled elapsed_ms=%d", int((time.perf_counter() - started) * 1000))
-            return await cls.enrich_draft(cls.normalize_draft(fallback))
-
         try:
-            async with httpx.AsyncClient(timeout=12.0) as client:
+            from services.deepseek_connection_service import resolve_deepseek_token
+            token = await resolve_deepseek_token()
+            if not token:
+                logger.info("BOT_QUICK_ORDER_PARSE provider=none schema=v2 outcome=fallback reason=disabled elapsed_ms=%d", int((time.perf_counter() - started) * 1000))
+                return await cls.enrich_draft(cls.normalize_draft(fallback))
+            async with httpx.AsyncClient(timeout=12.0, trust_env=False) as client:
                 response = await client.post(
                     settings.DEEPSEEK_API_URL,
                     headers={"Authorization": f"Bearer {token}"},

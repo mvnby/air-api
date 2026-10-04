@@ -4,6 +4,9 @@
 /* eslint-disable */
 import type { ConnectionStatus } from '../models/ConnectionStatus';
 import type { ConnectionUpdate } from '../models/ConnectionUpdate';
+import type { DeepseekConnectionStatus } from '../models/DeepseekConnectionStatus';
+import type { DeepseekConnectionTest } from '../models/DeepseekConnectionTest';
+import type { DeepseekConnectionUpdate } from '../models/DeepseekConnectionUpdate';
 import type { InferenceTest } from '../models/InferenceTest';
 import type { ModelList } from '../models/ModelList';
 import type { CancelablePromise } from '../core/CancelablePromise';
@@ -71,6 +74,69 @@ export class ManagerPlatformAiService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/manager/platform-ai/test',
+        });
+    }
+    /**
+     * Get Deepseek Connection
+     * @returns DeepseekConnectionStatus Successful Response
+     * @throws ApiError
+     */
+    public static getDeepseekConnection(): CancelablePromise<DeepseekConnectionStatus> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/platform-ai/deepseek',
+        });
+    }
+    /**
+     * Put Deepseek Connection
+     * @param requestBody
+     * @returns DeepseekConnectionStatus Successful Response
+     * @throws ApiError
+     */
+    public static putDeepseekConnection(
+        requestBody: DeepseekConnectionUpdate,
+    ): CancelablePromise<DeepseekConnectionStatus> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/manager/platform-ai/deepseek',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Delete Deepseek Connection
+     * @returns DeepseekConnectionStatus Successful Response
+     * @throws ApiError
+     */
+    public static deleteDeepseekConnection(): CancelablePromise<DeepseekConnectionStatus> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/manager/platform-ai/deepseek',
+        });
+    }
+    /**
+     * Import Deepseek Environment Key
+     * @returns DeepseekConnectionStatus Successful Response
+     * @throws ApiError
+     */
+    public static importDeepseekEnvironmentKey(): CancelablePromise<DeepseekConnectionStatus> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/platform-ai/deepseek/import-environment',
+        });
+    }
+    /**
+     * Test Deepseek Connection
+     * @returns DeepseekConnectionTest Successful Response
+     * @throws ApiError
+     */
+    public static testDeepseekConnection(): CancelablePromise<DeepseekConnectionTest> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/platform-ai/deepseek/test',
         });
     }
 }

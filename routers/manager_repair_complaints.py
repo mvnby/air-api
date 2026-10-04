@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
-from core.security import get_current_username
+from core.security import get_current_username, require_system_manager_tenant_scope
 from routers.manager_operation_ids import (
     CREATE_MANAGER_REPAIR_COMPLAINT_PRESET,
     DELETE_MANAGER_REPAIR_COMPLAINT_PRESET,
@@ -73,6 +73,7 @@ async def create_manager_repair_complaint_preset(
     "/ai-draft",
     response_model=ManagerRepairActAiDraftResponse,
     operation_id=GENERATE_MANAGER_REPAIR_ACT_AI_DRAFT,
+    dependencies=[Depends(require_system_manager_tenant_scope)],
 )
 async def generate_manager_repair_act_ai_draft(payload: ManagerRepairActAiDraftPayload):
     try:

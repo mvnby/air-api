@@ -9,6 +9,7 @@ from models import AnalyticsConnection, DocumentDriveConnection
 from services.analytics_connection_contracts import AnalyticsCredentialCipher
 from services.document_drive_contracts import DocumentDriveCredentialCipher
 from services.integration_credential_rotation_service import IntegrationCredentialRotationService
+from services.deepseek_connection_service import DeepSeekConnectionService, DeepSeekCredentialCipher
 
 
 async def seed_credentials(db, monkeypatch):
@@ -52,6 +53,28 @@ async def test_real_postgres_rewrap_and_contract_reads(db, monkeypatch):
         tenant_id=1, storefront_id=1, provider='yandex_metrika')['oauth_token'] == 'synthetic-token'
     assert DocumentDriveCredentialCipher.decrypt(drive.encrypted_credentials,
         tenant_id=1, provider='google_drive')['refresh_token'] == 'synthetic-refresh'
+
+
+@pytest.mark.asyncio
+async def test_real_postgres_deepseek_key_rewrap_and_disabled_state(db, monkeypatch):
+    legacy = 'synthetic-legacy-auth-key-for-deepseek'
+    monkeypatch.setattr(settings, 'SECRET_KEY', legacy)
+    monkeypatch.setattr(settings, 'INTEGRATION_CREDENTIAL_KEYRING_JSON', '')
+    await DeepSeekConnectionService.save(db, key='synthetic-deepseek-key', enabled=False)
+    row = await DeepSeekConnectionService.get(db)
+    monkeypatch.setattr(settings, 'INTEGRATION_CREDENTIAL_KEYRING_JSON', json.dumps({
+        'active_key_id': 'v1', 'write_mode': 'active',
+        'keys': {'v1': 'synthetic-integration-master-key-0001'}, 'legacy_secret_keys': [legacy],
+    }))
+    plan = await IntegrationCredentialRotationService.plan(db)
+    assert plan['rows'][0]['provider'] == 'deepseek'
+    assert plan['counts']['legacy'] == 1
+    result = await IntegrationCredentialRotationService.execute(db, plan_token=plan['plan_token'])
+    assert result['rewrapped'] == 1
+    await db.commit()
+    assert DeepSeekCredentialCipher.decrypt_with_source(row.encrypted_credentials)[0] == 'synthetic-deepseek-key'
+    assert await DeepSeekConnectionService.resolve_token(db) == ''
+    assert (await IntegrationCredentialRotationService.plan(db))['complete'] is True
 
 
 @pytest.mark.asyncio

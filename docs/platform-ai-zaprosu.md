@@ -3,6 +3,8 @@
 This connection belongs to the system platform. A partner owner cannot read,
 change, test, or spend its key. It does not change existing DeepSeek workflows,
 OCR, the Telegram bot, storefront requests, or the models used by Codex agents.
+DeepSeek credentials are managed separately in the same Manager tab; see
+[DeepSeek settings](deepseek-connection.md).
 
 ## Enter the key in Manager
 

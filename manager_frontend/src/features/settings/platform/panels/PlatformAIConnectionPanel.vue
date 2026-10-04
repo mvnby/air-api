@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue';
 import { ManagerPlatformAiService } from '../../../../client';
 import { confirmDialog } from '../../../../services/ui-feedback';
 import { usePlatformSettingsContext } from '../platform-settings-context';
+import DeepSeekConnectionPanel from './DeepSeekConnectionPanel.vue';
 
 const { activeSettingsTab } = usePlatformSettingsContext();
 type Status = { configured: boolean; enabled: boolean; selected_model: string | null };
@@ -83,7 +84,9 @@ onMounted(() => { void load(); });
 </script>
 
 <template>
-  <section v-show="activeSettingsTab === 'aiConnection'" class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-6" data-testid="platform-ai-connection">
+  <div v-show="activeSettingsTab === 'aiConnection'" class="space-y-5">
+    <DeepSeekConnectionPanel />
+    <section class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-6" data-testid="platform-ai-connection">
     <h2 class="text-lg font-semibold text-gray-900 dark:text-white">ZAPRO.SU — AI-подключение</h2>
     <p class="mt-2 text-sm text-gray-600 dark:text-slate-300">Платформенный ключ доступен только администраторам платформы. Запросы идут через сервер. Другие AI-сценарии сохраняют текущего провайдера, пока не подключены к этому адаптеру явно.</p>
     <p class="mt-3 text-sm font-medium text-gray-800 dark:text-slate-100">{{ status.configured ? 'Ключ настроен' : 'Ключ не настроен' }} · {{ status.enabled ? 'Подключение включено' : 'Подключение отключено' }}</p>
@@ -102,12 +105,13 @@ onMounted(() => { void load(); });
       </label>
     </div>
     <div class="mt-5 flex flex-wrap gap-2">
-      <button type="button" :disabled="busy || (!key && !status.configured)" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50" @click="save">Сохранить</button>
-      <button type="button" :disabled="busy || !status.configured" class="rounded-lg border border-gray-300 px-4 py-2 text-sm dark:border-slate-600 dark:text-white disabled:opacity-50" @click="discover">Проверить подключение и получить модели</button>
-      <button type="button" :disabled="busy || !status.selected_model" class="rounded-lg border border-gray-300 px-4 py-2 text-sm dark:border-slate-600 dark:text-white disabled:opacity-50" @click="testInference">Проверить текстовый запрос</button>
-      <button type="button" :disabled="busy || !status.configured" class="rounded-lg border border-gray-300 px-4 py-2 text-sm dark:border-slate-600 dark:text-white disabled:opacity-50" @click="toggle">{{ status.enabled ? 'Отключить' : 'Включить' }}</button>
-      <button type="button" :disabled="busy || !status.configured" class="rounded-lg px-4 py-2 text-sm text-red-700 dark:text-red-300 disabled:opacity-50" @click="remove">Удалить ключ</button>
+      <button type="button" data-testid="platform-ai-save" :disabled="busy || (!key && !status.configured)" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50" @click="save">Сохранить</button>
+      <button type="button" data-testid="platform-ai-discover" :disabled="busy || !status.configured" class="rounded-lg border border-gray-300 px-4 py-2 text-sm dark:border-slate-600 dark:text-white disabled:opacity-50" @click="discover">Проверить подключение и получить модели</button>
+      <button type="button" data-testid="platform-ai-test" :disabled="busy || !status.selected_model" class="rounded-lg border border-gray-300 px-4 py-2 text-sm dark:border-slate-600 dark:text-white disabled:opacity-50" @click="testInference">Проверить текстовый запрос</button>
+      <button type="button" data-testid="platform-ai-toggle" :disabled="busy || !status.configured" class="rounded-lg border border-gray-300 px-4 py-2 text-sm dark:border-slate-600 dark:text-white disabled:opacity-50" @click="toggle">{{ status.enabled ? 'Отключить' : 'Включить' }}</button>
+      <button type="button" data-testid="platform-ai-remove" :disabled="busy || !status.configured" class="rounded-lg px-4 py-2 text-sm text-red-700 dark:text-red-300 disabled:opacity-50" @click="remove">Удалить ключ</button>
     </div>
     <p class="mt-4 text-xs text-gray-500 dark:text-slate-400">Проверка каталога не подтверждает поддержку текстовых запросов. Текстовая проверка отправляет только фразу «Ответь только словом OK.» и может расходовать баланс.</p>
-  </section>
+    </section>
+  </div>
 </template>
