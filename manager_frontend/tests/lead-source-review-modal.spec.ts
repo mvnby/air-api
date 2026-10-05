@@ -113,6 +113,8 @@ describe('LeadSourceReviewModal', () => {
     sourceApi.preview.mockResolvedValueOnce({ ...preview, existing_customer_id: 17, customer: { ...preview.customer, inn: 'ЗОI l23456' } });
     const wrapper = mount(LeadSourceReviewModal, { props: { open: true, orderId: 41 } });
     await flushPromises();
+    expect(wrapper.text()).toContain('дополнят пустые реквизиты');
+    expect(wrapper.get<HTMLInputElement>('input[placeholder="УНП"]').element.value).toBe('ЗОI l23456');
     await wrapper.findAll('input[type="checkbox"]').at(-1)!.setValue(true);
     await wrapper.get('button.btn-mini').trigger('click');
     expect(sourceApi.apply).toHaveBeenCalledWith(41, expect.objectContaining({
