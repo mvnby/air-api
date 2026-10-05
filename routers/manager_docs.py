@@ -1,5 +1,7 @@
 import logging
 from datetime import datetime
+from pathlib import PurePath
+from urllib.parse import unquote
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from fastapi.responses import StreamingResponse
@@ -309,9 +311,13 @@ async def get_manager_doc_download(
             error_code=DOCUMENT_NOT_FOUND,
         )
 
+    filename = unquote(filename_encoded)
+    media_type = DocumentService.DEFAULT_UPLOAD_MIME_TYPES.get(
+        PurePath(filename).suffix.lower(), "application/pdf"
+    )
     return StreamingResponse(
         pdf_content,
-        media_type="application/pdf",
+        media_type=media_type,
         headers={
             "Content-Disposition": f"attachment; filename*=UTF-8''{filename_encoded}"
         },

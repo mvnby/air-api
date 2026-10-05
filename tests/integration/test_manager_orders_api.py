@@ -2241,6 +2241,13 @@ async def test_manager_doc_download_returns_pdf_bytes(async_client, db, monkeypa
     pdf_bytes = b"%PDF-1.4\n%real pdf bytes\n%%EOF"
 
     class _FakeGoogleService:
+        def get_file_metadata(self, file_id: str):
+            assert file_id == "google-doc-id"
+            return {
+                "name": "Д-2026-001",
+                "mimeType": "application/vnd.google-apps.document",
+            }
+
         def export_file(self, file_id: str, mime_type: str = "application/pdf"):
             assert file_id == "google-doc-id"
             assert mime_type == "application/pdf"

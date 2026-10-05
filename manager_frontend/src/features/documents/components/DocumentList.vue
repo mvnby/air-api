@@ -11,6 +11,8 @@ const props = defineProps<{
   canDelete: boolean;
   accessSummary: string;
   processingDocumentId: number | null;
+  fileAccept?: string;
+  title?: string;
 }>();
 
 const emit = defineEmits<{
@@ -29,7 +31,7 @@ const documentProposalName = (doc: ManagerOrderDocumentItem) => {
 
 <template>
   <div>
-    <p class="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Документы</p>
+    <p class="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{{ title || 'Документы' }}</p>
     <div v-if="documents.length" class="space-y-2">
       <div
         v-for="doc in documents"
@@ -68,7 +70,7 @@ const documentProposalName = (doc: ManagerOrderDocumentItem) => {
             v-if="doc.is_downloadable"
             class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white"
             :disabled="processingDocumentId === doc.id"
-            title="Скачать PDF"
+            title="Скачать файл"
             @click="emit('download', doc)"
           >
             <span class="material-icons-round text-[18px]">download</span>
@@ -79,7 +81,7 @@ const documentProposalName = (doc: ManagerOrderDocumentItem) => {
             title="Добавить файл"
           >
             <span class="material-icons-round text-[18px]">attach_file</span>
-            <input type="file" class="hidden" :accept="DOCUMENT_FILE_ACCEPT" :disabled="processingDocumentId === doc.id" @change="emit('attach', doc, $event)" />
+            <input type="file" class="hidden" :accept="fileAccept || DOCUMENT_FILE_ACCEPT" :disabled="processingDocumentId === doc.id" @change="emit('attach', doc, $event)" />
           </label>
           <button
             v-if="canDelete"

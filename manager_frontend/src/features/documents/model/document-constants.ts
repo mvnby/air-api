@@ -1,6 +1,7 @@
 import type { DocumentRoleType } from './document-types';
 
 export const DOCUMENT_FILE_ACCEPT = '.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+export const EXTERNAL_CONTRACT_FILE_ACCEPT = `${DOCUMENT_FILE_ACCEPT},.jpg,.jpeg,.png,image/jpeg,image/png`;
 export const OPEN_CONTRACT_PREFIX = 'open:';
 export const ORDER_DOCUMENT_PREFIX = 'doc:';
 export const BASE_DOCUMENT_TYPES = new Set(['offer', 'contract', 'invoice']);

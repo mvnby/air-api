@@ -69,10 +69,14 @@ class DocumentService:
         "ttn1": "ТТН1",
     }
     ALLOWED_UPLOAD_EXTENSIONS = {".pdf", ".doc", ".docx"}
+    ALLOWED_EXTERNAL_CONTRACT_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
     DEFAULT_UPLOAD_MIME_TYPES = {
         ".pdf": "application/pdf",
         ".doc": "application/msword",
         ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
     }
 
     @staticmethod
@@ -391,6 +395,27 @@ class DocumentService:
             raise ValueError("Для этого документа нет загруженного файла")
 
         try:
+            import os
+
+            # Customer-provided contracts are source files, not generated
+            # Google Docs. Download their original bytes and keep the name.
+            if document.doc_type == "contract":
+                google_service = get_google_service()
+                metadata = google_service.get_file_metadata(document.google_file_id)
+                mime_type = str(metadata.get("mimeType") or "")
+                if mime_type and not mime_type.startswith("application/vnd.google-apps."):
+                    from urllib.parse import quote
+
+                    filename = str(metadata.get("name") or "").strip()
+                    _, suffix = os.path.splitext(filename)
+                    allowed_extensions = (
+                        DocumentService.ALLOWED_UPLOAD_EXTENSIONS
+                        | DocumentService.ALLOWED_EXTERNAL_CONTRACT_IMAGE_EXTENSIONS
+                    )
+                    if suffix.lower() not in allowed_extensions:
+                        raise ValueError("Формат файла договора не поддерживается")
+                    content = google_service.download_file(document.google_file_id)
+                    return content, quote(filename)
             pdf_content = get_google_service().export_file(document.google_file_id, mime_type='application/pdf')
 
             from urllib.parse import quote
@@ -512,7 +537,9 @@ class DocumentService:
                 os.remove(tmp_path)
 
     @staticmethod
-    def _validate_upload_file(file: object) -> tuple[str, str]:
+    def _validate_upload_file(
+        file: object, *, allow_images: bool = False
+    ) -> tuple[str, str]:
         import os
 
         original_filename = str(getattr(file, "filename", None) or "").strip()
@@ -521,7 +548,15 @@ class DocumentService:
 
         _, suffix = os.path.splitext(original_filename)
         suffix = suffix.lower()
-        if suffix not in DocumentService.ALLOWED_UPLOAD_EXTENSIONS:
+        allowed_extensions = DocumentService.ALLOWED_UPLOAD_EXTENSIONS
+        if allow_images:
+            allowed_extensions = (
+                allowed_extensions
+                | DocumentService.ALLOWED_EXTERNAL_CONTRACT_IMAGE_EXTENSIONS
+            )
+        if suffix not in allowed_extensions:
+            if allow_images:
+                raise ValueError("Поддерживаются PDF, DOC, DOCX, JPG, JPEG и PNG")
             raise ValueError("Поддерживаются только файлы PDF, DOC и DOCX")
         return original_filename, suffix
 
@@ -543,10 +578,14 @@ class DocumentService:
             return tmp.name
 
     @staticmethod
-    async def _upload_document_file(file: object, *, title_prefix: str) -> tuple[str, str]:
+    async def _upload_document_file(
+        file: object, *, title_prefix: str, allow_images: bool = False
+    ) -> tuple[str, str]:
         import os
 
-        original_filename, suffix = DocumentService._validate_upload_file(file)
+        original_filename, suffix = DocumentService._validate_upload_file(
+            file, allow_images=allow_images
+        )
         tmp_path = await DocumentService._save_upload_to_temp(file, suffix)
 
         try:
@@ -584,7 +623,11 @@ class DocumentService:
         await DocumentService.ensure_order_documents_mutable(session, document.order_id)
         previous_file_id = document.google_file_id
         title_prefix = f"{DOC_NAMES.get(document.doc_type, 'Документ')} {document.number}"
-        file_id, edit_url = await DocumentService._upload_document_file(file, title_prefix=title_prefix)
+        file_id, edit_url = await DocumentService._upload_document_file(
+            file,
+            title_prefix=title_prefix,
+            allow_images=document.doc_type == "contract",
+        )
 
         if previous_file_id:
             try:
@@ -605,7 +648,7 @@ class DocumentService:
         *,
         order_id: int,
         number: str,
-        contract_date: datetime,
+        contract_date: Optional[datetime],
         external_url: Optional[str] = None,
         file: object = None,
         tenant_scope: TenantScope,
@@ -624,8 +667,10 @@ class DocumentService:
         cleaned_number = str(number or "").strip()
         if not cleaned_number:
             raise ValueError("Номер договора обязателен")
+        if contract_date is None:
+            raise ValueError("Дата договора обязательна")
 
-        effective_date = contract_date or datetime.now()
+        effective_date = contract_date
         if effective_date.tzinfo is not None:
             effective_date = effective_date.replace(tzinfo=None)
 
@@ -643,9 +688,11 @@ class DocumentService:
             file_id, edit_url = await DocumentService._upload_document_file(
                 file,
                 title_prefix=f"Договор {cleaned_number}",
+                allow_images=True,
             )
 
         doc = OrderDocument(
+            tenant_id=order.tenant_id,
             order_id=order_id,
             doc_type="contract",
             number=cleaned_number,

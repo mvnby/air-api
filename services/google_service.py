@@ -1136,6 +1136,18 @@ class GoogleDocsService:
         except Exception as e:
             raise Exception(f"Google Drive Download Error: {str(e)}")
 
+    def get_file_metadata(self, file_id: str) -> Dict[str, Any]:
+        """Return the Drive name and MIME type for an uploaded source file."""
+        credentials = self._require_credentials()
+        try:
+            drive_service = build('drive', 'v3', credentials=credentials)
+            return drive_service.files().get(
+                fileId=file_id,
+                fields='name,mimeType',
+            ).execute()
+        except Exception as e:
+            raise Exception(f"Google Drive Metadata Error: {str(e)}")
+
     def list_files(self, folder_id: str, limit: int = 20) -> List[Dict[str, Any]]:
         """
         Возвращает список файлов в папке, отсортированный по дате создания (DESC).
