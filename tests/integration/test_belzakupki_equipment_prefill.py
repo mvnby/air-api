@@ -21,8 +21,8 @@ from services.belzakupki_equipment_prefill import BelzakupkiEquipmentPrefillServ
 async def test_review_fills_linked_customer_without_switching_to_another_unp_match(db, monkeypatch):
     detail = json.loads((Path(__file__).parents[1] / "fixtures/tender_customer/464.json").read_text())
     name = detail["customer"]["name"]
-    old = Customer(tenant_id=1, name=name, type=CustomerType.company, inn="300050210", email="old-office@example.test")
-    linked = Customer(tenant_id=1, name=name, full_legal_name=name, type=CustomerType.company, legal_address="Сохранённый адрес")
+    old = Customer(tenant_id=1, name=name, phone="", type=CustomerType.company, inn="300050210", email="old-office@example.test")
+    linked = Customer(tenant_id=1, name=name, phone="", full_legal_name=name, type=CustomerType.company, legal_address="Сохранённый адрес")
     db.add_all([old, linked])
     await db.flush()
     order = Order(tenant_id=1, storefront_id=1, customer_id=linked.id, status=OrderStatus.NEGOTIATION,
