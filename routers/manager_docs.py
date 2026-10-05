@@ -1,5 +1,7 @@
 import logging
+import mimetypes
 from datetime import datetime
+from urllib.parse import unquote
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from fastapi.responses import StreamingResponse
@@ -309,9 +311,11 @@ async def get_manager_doc_download(
             error_code=DOCUMENT_NOT_FOUND,
         )
 
+    filename = unquote(filename_encoded)
+    media_type = mimetypes.guess_type(filename)[0] or "application/pdf"
     return StreamingResponse(
         pdf_content,
-        media_type="application/pdf",
+        media_type=media_type,
         headers={
             "Content-Disposition": f"attachment; filename*=UTF-8''{filename_encoded}"
         },

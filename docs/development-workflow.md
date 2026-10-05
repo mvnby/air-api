@@ -118,6 +118,17 @@ Use this after large catalog imports or when unknown spec keys appear.
 
 The storefront owner uploads private PNG images of the seller's signature and seal under the document legal entity, then sets their page and positions in millimeters for each active native template version. A manager can prepare a separate `signed_pdf` artifact from an issued contract, invoice or offer. The issued PDF remains unchanged; replacing either PNG does not rewrite a prepared copy. The native PDF download and email attachment path use the prepared copy when it exists. Check the final PDF visually before sending it.
 
+### Customer-provided order contracts
+
+In the CRM document workspace, select Contract and use the attachment action
+beside the contract scenario. Save the customer's contract number and date;
+an optional PDF, DOC, DOCX, JPG or PNG can be attached now or later. This records
+a one-time order contract without creating a native draft or assigning our own
+contract number. Native acts and waybills can select that record as their basis.
+Metadata-only registration needs no template or Google connection; source files
+use the existing Google Drive upload storage and download in their original
+format. Closed-order history and tenant access rules still apply.
+
 ## Compose names
 
 `docker-compose.yml` service names include `app`, `db`, `web`, and `bot`

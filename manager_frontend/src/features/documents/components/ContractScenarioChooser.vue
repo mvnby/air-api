@@ -8,13 +8,18 @@ const icon = (value: ContractScenario) => ({
 }[value]);
 
 defineProps<{ modelValue: ContractScenario | null }>();
-const emit = defineEmits<{ 'update:modelValue': [value: ContractScenario] }>();
+const emit = defineEmits<{ 'update:modelValue': [value: ContractScenario]; attachContract: [] }>();
 </script>
 
 <template>
   <section class="contract-section" data-testid="contract-scenario-chooser">
     <div>
-      <h4 class="contract-heading">Сценарий договора</h4>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h4 class="contract-heading">Сценарий договора</h4>
+        <button type="button" class="inline-flex items-center gap-1 text-xs font-semibold text-indigo-700 hover:underline dark:text-indigo-300" data-testid="attach-customer-contract" @click="emit('attachContract')">
+          <span class="material-icons-round text-[16px]">attach_file</span>Прикрепить договор
+        </button>
+      </div>
       <p class="contract-help">Определяет условия и подходящий шаблон. Можно поменять для этого договора.</p>
     </div>
     <div class="mt-3 flex gap-2 overflow-x-auto pb-1">

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
-import { DOCUMENT_ROLE_OPTIONS } from '../model/document-constants';
-import type { ManagerOrderDetailResponse } from '../../../client';
+import { DOCUMENT_ROLE_OPTIONS, EXTERNAL_CONTRACT_FILE_ACCEPT } from '../model/document-constants';
+import { ManagerDocsService, type ManagerOrderDetailResponse, type ManagerOrderDocumentItem } from '../../../client';
 import DocumentSendModal from '../../../components/orders/DocumentSendModal.vue';
 import { getOrderDocumentAccess } from '../../../components/orders/order-document-access';
 import { MANAGER_CAPABILITY, hasManagerCapability } from '../../../manager-capabilities';
@@ -10,6 +10,9 @@ import { useManagedDocumentWorkspace } from '../composables/use-managed-document
 import ConsumerDocumentTermsPanel from './ConsumerDocumentTermsPanel.vue';
 import B2BContractTermsPanel from './B2BContractTermsPanel.vue';
 import ContractScenarioChooser from './ContractScenarioChooser.vue';
+import ExternalContractForm from './ExternalContractForm.vue';
+import DocumentList from './DocumentList.vue';
+import { useDocumentFileActions } from '../composables/use-document-file-actions';
 import ActTermsPanel from './ActTermsPanel.vue';
 import TransportTermsPanel from './TransportTermsPanel.vue';
 import GoogleDocumentEditorActions from './GoogleDocumentEditorActions.vue';
@@ -55,6 +58,9 @@ const proposalId = computed(() => {
 const activeProposal = computed(() => props.order.proposals?.find((item) => item.id === proposalId.value) || null);
 const activeProposalTotalCents = computed(() => proposalLineTotalCents(activeProposal.value));
 const access = computed(() => getOrderDocumentAccess(props.order.status));
+const contractSource = ref<'ours' | 'customer'>('ours');
+const orderDocuments = ref<ManagerOrderDocumentItem[]>([]);
+watch(() => props.order.documents, (documents) => { orderDocuments.value = documents || []; }, { immediate: true });
 const canManageDocumentSettings = computed(() => (
   hasManagerCapability(managerSession.auth.value, MANAGER_CAPABILITY.documentsManage)
 ));
@@ -67,9 +73,30 @@ const workspace = useManagedDocumentWorkspace({
   notify: (message, type = 'success') => emit('toast', { message, type }),
   refresh: () => emit('refresh'),
 });
+const registeringCustomerContract = computed(() => workspace.documentType.value === 'contract' && contractSource.value === 'customer');
 const sendableDocuments = computed(() => workspace.documents.value.filter((document) => (
   ['issued', 'sent', 'signed'].includes(document.status)
 )));
+const nativeDocumentIds = computed(() => new Set(workspace.documents.value.map((document) => document.id)));
+const otherContracts = computed(() => orderDocuments.value.filter((document) => (
+  document.doc_type === 'contract' && !nativeDocumentIds.value.has(document.id)
+)));
+const loadOrderDocuments = async () => {
+  const orderId = props.order.id;
+  const response = await ManagerDocsService.getManagerOrderDocuments(orderId);
+  if (props.order.id === orderId) orderDocuments.value = response.items;
+};
+const processingContractId = ref<number | null>(null);
+const contractFileActions = useDocumentFileActions({
+  orderId: () => props.order.id,
+  access,
+  fileInput: ref(null),
+  isUploading: ref(false),
+  processingDocumentId: processingContractId,
+  loadDocuments: loadOrderDocuments,
+  refresh: () => emit('refresh'),
+  notify: (message, type = 'success') => emit('toast', { message, type }),
+});
 const draftCount = computed(() => workspace.documents.value.filter((document) => document.status === 'draft').length);
 const documentTypes = computed(() => documentAudience.value === 'business'
   ? BUSINESS_NATIVE_DOCUMENT_TYPES : CONSUMER_NATIVE_DOCUMENT_TYPES);
@@ -104,6 +131,7 @@ const formatDate = (value: string | null | undefined) => value
   ? new Date(value.length === 10 ? `${value}T00:00:00` : value).toLocaleDateString('ru-RU')
   : '—';
 const selectedBasisValue = ref('');
+const registeredBasisValue = ref('');
 const basisRequired = computed(() => ['act', 'tn2', 'ttn1'].includes(workspace.documentType.value));
 const basisSupported = computed(() => basisRequired.value || workspace.documentType.value === 'invoice');
 const partyRolesSupported = computed(() => ['contract', 'invoice', 'act', 'offer'].includes(workspace.documentType.value));
@@ -139,7 +167,6 @@ const basisOptions = computed<BasisOption[]>(() => {
     .filter((item) => ['issued', 'sent', 'signed'].includes(item.status))
     .filter((item) => item.doc_type === 'contract' || item.doc_type === 'offer' || (item.doc_type === 'invoice' && item.business_role === 'offer'))
     .sort((a, b) => (a.doc_type === 'contract' ? -1 : 0) - (b.doc_type === 'contract' ? -1 : 0));
-  const nativeIds = new Set(nativeBases.map((item) => item.id));
   for (const document of nativeBases) {
     result.push({
       value: `document:${document.id}`,
@@ -148,8 +175,8 @@ const basisOptions = computed<BasisOption[]>(() => {
       customerContractId: null,
     });
   }
-  for (const document of props.order.documents || []) {
-    if (nativeIds.has(document.id) || !['contract', 'offer'].includes(document.doc_type)) continue;
+  for (const document of orderDocuments.value) {
+    if (nativeDocumentIds.value.has(document.id) || !['contract', 'offer'].includes(document.doc_type)) continue;
     result.push({
       value: `document:${document.id}`,
       label: `${documentTypeName(document.doc_type)} № ${document.number} от ${formatDate(document.date)}`,
@@ -168,7 +195,8 @@ const syncBasis = () => {
     return;
   }
   if (!basisOptions.value.some((item) => item.value === selectedBasisValue.value)) {
-    selectedBasisValue.value = basisOptions.value[0]?.value || '';
+    selectedBasisValue.value = basisOptions.value.find((item) => item.value === registeredBasisValue.value)?.value
+      || basisOptions.value[0]?.value || '';
   }
   const selected = basisOptions.value.find((item) => item.value === selectedBasisValue.value);
   workspace.baseDocumentId.value = selected?.documentId || null;
@@ -188,6 +216,9 @@ const setAudience = (audience: DocumentAudience) => {
 };
 
 watch(() => props.order.id, () => {
+  contractSource.value = 'ours';
+  selectedBasisValue.value = '';
+  registeredBasisValue.value = '';
   const audience: DocumentAudience = customerIsConsumer.value ? 'consumer' : 'business';
   documentAudience.value = audience;
   workspace.documentType.value = audience === 'consumer'
@@ -195,6 +226,12 @@ watch(() => props.order.id, () => {
     : 'offer';
   void workspace.loadWorkspace();
 }, { immediate: true });
+const onExternalContractRegistered = (document: ManagerOrderDocumentItem) => {
+  orderDocuments.value = [...orderDocuments.value.filter((item) => item.id !== document.id), document];
+  registeredBasisValue.value = `document:${document.id}`;
+  contractSource.value = 'ours';
+  emit('refresh');
+};
 watch(() => props.workflowType, (next, previous) => {
   if (!previous || !next || next === previous) return;
   if (workspace.businessTerms.value.contract_scenario === contractScenarioForWorkflow(previous)) {
@@ -330,13 +367,13 @@ defineExpose({
     </div>
 
     <template v-else>
-      <div v-if="!workspace.legalEntities.value.length" class="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+      <div v-if="!workspace.legalEntities.value.length && !registeringCustomerContract" class="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
         <strong>Нужно один раз заполнить реквизиты.</strong>
         <button v-if="canManageDocumentSettings" class="ml-2 underline underline-offset-2" type="button" @click="openSettings">Открыть настройки</button>
         <span v-else class="ml-1">Обратитесь к владельцу аккаунта.</span>
       </div>
 
-      <div v-if="access.canCreate && workspace.legalEntities.value.length" ref="formRef" class="mt-4 rounded-xl bg-slate-50 p-4 dark:bg-slate-800/60">
+      <div v-if="access.canCreate" ref="formRef" class="mt-4 rounded-xl bg-slate-50 p-4 dark:bg-slate-800/60">
         <div v-if="workspace.replacesDocumentId.value" class="mb-4 flex items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
           <span>Готовим замену для документа CRM #{{ workspace.replacesDocumentId.value }}</span>
           <button class="font-bold" type="button" @click="workspace.replacesDocumentId.value = null">Отменить</button>
@@ -365,83 +402,112 @@ defineExpose({
             <span class="material-icons-round text-[23px]">{{ documentTypeIcon(type.value) }}</span>{{ type.label }}
           </button>
         </div>
-        <ContractScenarioChooser v-if="workspace.documentType.value === 'contract'" :model-value="workspace.businessTerms.value.contract_scenario" @update:model-value="setContractScenario" />
-        <details class="mt-3 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900" data-testid="native-document-options">
-          <summary class="cursor-pointer text-sm font-semibold text-slate-700 dark:text-slate-200">Шаблон и реквизиты <span class="font-normal text-slate-500">· {{ workspace.templates.value.find((item) => item.id === workspace.selectedTemplateId.value)?.name || 'не выбран' }}</span></summary>
-          <div class="mt-3 grid gap-3 sm:grid-cols-3">
-            <label class="native-field"><span>Шаблон</span><select v-model="workspace.selectedTemplateId.value" class="native-input" data-testid="native-document-template"><option v-for="template in workspace.templates.value" :key="template.id" :value="template.id">{{ template.name }}</option></select></label>
-            <label class="native-field"><span>Дата документа</span><input v-model="workspace.issueDate.value" class="native-input" data-testid="native-document-issue-date" type="date" /></label>
-            <label class="native-field"><span>Город документа</span><input v-model="workspace.issueCity.value" class="native-input" data-testid="native-document-issue-city" placeholder="Витебск" /></label>
+        <button v-if="registeringCustomerContract" type="button" class="mt-3 text-xs font-semibold text-brand-700 hover:underline dark:text-brand-300" data-testid="cancel-external-contract" @click="contractSource = 'ours'">← К нашему договору</button>
+        <button v-else-if="workspace.documentType.value === 'contract' && !workspace.legalEntities.value.length" type="button" class="mt-3 text-xs font-semibold text-brand-700 hover:underline" data-testid="attach-customer-contract" @click="contractSource = 'customer'">Прикрепить договор</button>
+        <ExternalContractForm
+          v-if="registeringCustomerContract"
+          :key="order.id"
+          :order-id="order.id"
+          :can-create="access.canCreate"
+          :access-summary="access.summary"
+          @registered="onExternalContractRegistered"
+          @toast="emit('toast', $event)"
+        />
+        <template v-else-if="workspace.legalEntities.value.length">
+          <ContractScenarioChooser v-if="workspace.documentType.value === 'contract'" :model-value="workspace.businessTerms.value.contract_scenario" @update:model-value="setContractScenario" @attach-contract="contractSource = 'customer'" />
+          <details class="mt-3 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900" data-testid="native-document-options">
+            <summary class="cursor-pointer text-sm font-semibold text-slate-700 dark:text-slate-200">Шаблон и реквизиты <span class="font-normal text-slate-500">· {{ workspace.templates.value.find((item) => item.id === workspace.selectedTemplateId.value)?.name || 'не выбран' }}</span></summary>
+            <div class="mt-3 grid gap-3 sm:grid-cols-3">
+              <label class="native-field"><span>Шаблон</span><select v-model="workspace.selectedTemplateId.value" class="native-input" data-testid="native-document-template"><option v-for="template in workspace.templates.value" :key="template.id" :value="template.id">{{ template.name }}</option></select></label>
+              <label class="native-field"><span>Дата документа</span><input v-model="workspace.issueDate.value" class="native-input" data-testid="native-document-issue-date" type="date" /></label>
+              <label class="native-field"><span>Город документа</span><input v-model="workspace.issueCity.value" class="native-input" data-testid="native-document-issue-city" placeholder="Витебск" /></label>
+            </div>
+          </details>
+
+          <div v-if="customerWarnings.length || audienceMismatchWarning" class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" data-testid="native-customer-readiness-warning">
+            <p v-if="audienceMismatchWarning">{{ audienceMismatchWarning }}</p>
+            <p v-if="customerWarnings.length">Для полного документа в карточке клиента не хватает: {{ customerWarnings.join(', ') }}.</p>
+            <button class="mt-1 font-semibold underline underline-offset-2" type="button" @click="openCustomerProfile">Открыть карточку клиента</button>
           </div>
-        </details>
 
-        <div v-if="customerWarnings.length || audienceMismatchWarning" class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" data-testid="native-customer-readiness-warning">
-          <p v-if="audienceMismatchWarning">{{ audienceMismatchWarning }}</p>
-          <p v-if="customerWarnings.length">Для полного документа в карточке клиента не хватает: {{ customerWarnings.join(', ') }}.</p>
-          <button class="mt-1 font-semibold underline underline-offset-2" type="button" @click="openCustomerProfile">Открыть карточку клиента</button>
-        </div>
+          <label v-if="basisSupported" class="native-field mt-4">
+            <span>Документ-основание</span>
+            <select v-model="selectedBasisValue" class="native-input" data-testid="native-document-basis">
+              <option value="" :disabled="basisRequired">{{ basisRequired ? 'Выберите договор, счёт-оферту или КП' : 'Автоматически' }}</option>
+              <option v-for="basis in basisOptions" :key="basis.value" :value="basis.value">{{ basis.label }}</option>
+            </select>
+            <span class="font-normal text-slate-500">Первым предлагается договор. Обычный счёт на оплату основанием не считается.</span>
+          </label>
 
-        <label v-if="basisSupported" class="native-field mt-4">
-          <span>Документ-основание</span>
-          <select v-model="selectedBasisValue" class="native-input" data-testid="native-document-basis">
-            <option value="" :disabled="basisRequired">{{ basisRequired ? 'Выберите договор, счёт-оферту или КП' : 'Автоматически' }}</option>
-            <option v-for="basis in basisOptions" :key="basis.value" :value="basis.value">{{ basis.label }}</option>
-          </select>
-          <span class="font-normal text-slate-500">Первым предлагается договор. Обычный счёт на оплату основанием не считается.</span>
-        </label>
+          <label v-if="partyRolesSupported" class="native-field mt-4">
+            <span>Названия сторон</span>
+            <select v-model="workspace.documentRoleType.value" class="native-input" data-testid="native-document-party-roles">
+              <option :value="null">{{ ['act', 'invoice'].includes(workspace.documentType.value) ? 'Как в договоре (по умолчанию)' : 'По шаблону / настройкам заказа' }}</option>
+              <option v-for="option in DOCUMENT_ROLE_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
+            </select>
+            <span class="font-normal text-slate-500">Названия заменяются во всём документе с сохранением падежей. Для акта и счёта берутся из выбранного основания; без него — из настроек заказа или шаблона.</span>
+          </label>
 
-        <label v-if="partyRolesSupported" class="native-field mt-4">
-          <span>Названия сторон</span>
-          <select v-model="workspace.documentRoleType.value" class="native-input" data-testid="native-document-party-roles">
-            <option :value="null">{{ ['act', 'invoice'].includes(workspace.documentType.value) ? 'Как в договоре (по умолчанию)' : 'По шаблону / настройкам заказа' }}</option>
-            <option v-for="option in DOCUMENT_ROLE_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
-          </select>
-          <span class="font-normal text-slate-500">Названия заменяются во всём документе с сохранением падежей. Для акта и счёта берутся из выбранного основания; без него — из настроек заказа или шаблона.</span>
-        </label>
-
-        <div v-if="workspace.documentType.value === 'invoice'" class="mt-4">
-          <span class="text-xs font-bold text-slate-500">Роль счёта</span>
-          <div class="mt-1.5 inline-flex rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-900" data-testid="invoice-role-toggle">
-            <button type="button" class="rounded-lg px-3 py-1.5 text-sm font-semibold transition" :class="workspace.businessRole.value === 'payment_request' ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-300'" @click="workspace.businessRole.value = 'payment_request'">Документ для оплаты</button>
-            <button type="button" class="rounded-lg px-3 py-1.5 text-sm font-semibold transition" :class="workspace.businessRole.value === 'offer' ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-300'" @click="workspace.businessRole.value = 'offer'">Счёт-оферта</button>
+          <div v-if="workspace.documentType.value === 'invoice'" class="mt-4">
+            <span class="text-xs font-bold text-slate-500">Роль счёта</span>
+            <div class="mt-1.5 inline-flex rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-900" data-testid="invoice-role-toggle">
+              <button type="button" class="rounded-lg px-3 py-1.5 text-sm font-semibold transition" :class="workspace.businessRole.value === 'payment_request' ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-300'" @click="workspace.businessRole.value = 'payment_request'">Документ для оплаты</button>
+              <button type="button" class="rounded-lg px-3 py-1.5 text-sm font-semibold transition" :class="workspace.businessRole.value === 'offer' ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-300'" @click="workspace.businessRole.value = 'offer'">Счёт-оферта</button>
+            </div>
+            <p class="mt-1.5 text-xs text-slate-500">{{ workspace.businessRole.value === 'payment_request' ? 'После появления договора закрывающие документы будут ссылаться на договор.' : 'Оферта может сама стать основанием сделки.' }}</p>
           </div>
-          <p class="mt-1.5 text-xs text-slate-500">{{ workspace.businessRole.value === 'payment_request' ? 'После появления договора закрывающие документы будут ссылаться на договор.' : 'Оферта может сама стать основанием сделки.' }}</p>
-        </div>
-        <ConsumerDocumentTermsPanel
-          v-if="isConsumerDocument"
-          :document-type="workspace.documentType.value"
-          :terms="workspace.consumerTerms.value"
-          :proposal-total-cents="activeProposalTotalCents"
-          @update-terms="workspace.updateConsumerTerms"
-        />
-        <B2BContractTermsPanel
-          v-if="isBusinessTermsDocument"
-          :document-type="workspace.documentType.value"
-          :terms="workspace.businessTerms.value"
-          :order-conditions="order.additional_conditions"
-          @update-terms="workspace.businessTerms.value = $event"
-        />
-        <ActTermsPanel
-          v-if="workspace.documentType.value === 'act'"
-          :terms="workspace.actTerms.value"
-          @update-terms="workspace.actTerms.value = $event"
-        />
-        <TransportTermsPanel
-          v-if="['tn2', 'ttn1'].includes(workspace.documentType.value)"
-          :document-type="workspace.documentType.value"
-          :terms="workspace.transportTerms.value"
-          @update-terms="workspace.transportTerms.value = $event"
-        />
-        <p v-if="workspace.draftBlockedReason.value && !workspace.hasInstallationTwoStagesError.value" class="mt-3 text-xs font-semibold text-amber-700 dark:text-amber-300" data-testid="native-draft-blocked-reason">{{ workspace.draftBlockedReason.value }}. <button v-if="canManageDocumentSettings" class="underline" type="button" @click="openSettings">Исправить в настройках</button></p>
-        <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4 dark:border-slate-700">
-          <span class="text-xs text-slate-500">Черновик можно проверить до присвоения номера.</span>
-          <button class="inline-flex h-10 items-center justify-center rounded-xl bg-brand-600 px-5 text-sm font-bold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50" type="button" data-testid="create-native-draft" data-order-usage="document_create" :disabled="preparingDraft || workspace.busy.value || Boolean(workspace.draftBlockedReason.value)" :title="workspace.draftBlockedReason.value" @click="createDraft">Создать черновик</button>
-        </div>
+          <ConsumerDocumentTermsPanel
+            v-if="isConsumerDocument"
+            :document-type="workspace.documentType.value"
+            :terms="workspace.consumerTerms.value"
+            :proposal-total-cents="activeProposalTotalCents"
+            @update-terms="workspace.updateConsumerTerms"
+          />
+          <B2BContractTermsPanel
+            v-if="isBusinessTermsDocument"
+            :document-type="workspace.documentType.value"
+            :terms="workspace.businessTerms.value"
+            :order-conditions="order.additional_conditions"
+            @update-terms="workspace.businessTerms.value = $event"
+          />
+          <ActTermsPanel
+            v-if="workspace.documentType.value === 'act'"
+            :terms="workspace.actTerms.value"
+            @update-terms="workspace.actTerms.value = $event"
+          />
+          <TransportTermsPanel
+            v-if="['tn2', 'ttn1'].includes(workspace.documentType.value)"
+            :document-type="workspace.documentType.value"
+            :terms="workspace.transportTerms.value"
+            @update-terms="workspace.transportTerms.value = $event"
+          />
+          <p v-if="workspace.draftBlockedReason.value && !workspace.hasInstallationTwoStagesError.value" class="mt-3 text-xs font-semibold text-amber-700 dark:text-amber-300" data-testid="native-draft-blocked-reason">{{ workspace.draftBlockedReason.value }}. <button v-if="canManageDocumentSettings" class="underline" type="button" @click="openSettings">Исправить в настройках</button></p>
+          <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4 dark:border-slate-700">
+            <span class="text-xs text-slate-500">Черновик можно проверить до присвоения номера.</span>
+            <button class="inline-flex h-10 items-center justify-center rounded-xl bg-brand-600 px-5 text-sm font-bold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50" type="button" data-testid="create-native-draft" data-order-usage="document_create" :disabled="preparingDraft || workspace.busy.value || Boolean(workspace.draftBlockedReason.value)" :title="workspace.draftBlockedReason.value" @click="createDraft">Создать черновик</button>
+          </div>
+        </template>
       </div>
 
       <p v-else-if="!access.canCreate" class="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-500 dark:bg-slate-800">{{ access.summary }}</p>
 
-      <div v-if="workspace.issueBlockedReason.value" class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" data-testid="pdf-runtime-warning">
+      <div v-if="otherContracts.length" class="mt-5" data-testid="saved-order-contracts">
+        <DocumentList
+          title="Сохранённые договоры"
+          :documents="otherContracts"
+          :can-create="false"
+          :can-replace="access.canReplace"
+          :can-delete="access.canDelete"
+          :access-summary="access.summary"
+          :processing-document-id="processingContractId"
+          :file-accept="EXTERNAL_CONTRACT_FILE_ACCEPT"
+          @download="contractFileActions.downloadDocument"
+          @attach="contractFileActions.handleAttachDocumentFile"
+          @delete="contractFileActions.deleteDocument"
+        />
+      </div>
+
+      <div v-if="workspace.issueBlockedReason.value && !registeringCustomerContract" class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" data-testid="pdf-runtime-warning">
         <strong>Выпуск временно недоступен:</strong> {{ workspace.issueBlockedReason.value }}. Черновики создавать можно; официальный номер не будет занят до успешного выпуска.
       </div>
       <p v-if="sendableDocuments.length && !canSendNativeEmail" class="mt-4 text-xs text-slate-500" data-testid="native-email-unavailable">

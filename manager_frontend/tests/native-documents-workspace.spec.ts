@@ -2,6 +2,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ManagerDocumentSystemService,
+  ManagerDocsService,
   type ManagerOrderDetailResponse,
 } from '../src/client';
 import NativeDocumentsWorkspace from '../src/features/documents/components/NativeDocumentsWorkspace.vue';
@@ -181,6 +182,103 @@ const mountWorkspace = async (beforeGenerate?: (type: string) => unknown | Promi
 };
 
 describe('NativeDocumentsWorkspace', () => {
+  it('keeps customer contract registration behind one compact attachment action', async () => {
+    const wrapper = await mountWorkspace();
+    await wrapper.get('[data-testid="native-document-type-contract"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="external-contract-form"]').exists()).toBe(false);
+    const chooser = wrapper.get('[data-testid="contract-scenario-chooser"]');
+    expect(chooser.get('[data-testid="attach-customer-contract"]').text()).toContain('Прикрепить договор');
+
+    await chooser.get('[data-testid="attach-customer-contract"]').trigger('click');
+    expect(wrapper.find('[data-testid="external-contract-form"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="native-document-options"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="create-native-draft"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="b2b-contract-terms-panel"]').exists()).toBe(false);
+    await wrapper.get('[data-testid="cancel-external-contract"]').trigger('click');
+    expect(wrapper.find('[data-testid="create-native-draft"]').exists()).toBe(true);
+  });
+
+  it('registers only customer contract metadata and uses it for the next native act', async () => {
+    const document = { id: 905, doc_type: 'contract', number: '260930', date: '2026-09-30T00:00:00', is_downloadable: false };
+    const register = vi.spyOn(ManagerDocsService, 'registerManagerExternalContract').mockResolvedValue(document);
+    const wrapper = await mountWorkspace();
+    await wrapper.get('[data-testid="native-document-type-contract"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="attach-customer-contract"]').trigger('click');
+    await wrapper.get('[data-testid="external-contract-number"]').setValue(' 260930 ');
+    await wrapper.get('[data-testid="external-contract-date"]').setValue('2026-09-30');
+    await wrapper.get('[data-testid="external-contract-form"]').trigger('submit');
+    await flushPromises();
+
+    expect(register).toHaveBeenCalledWith(42, {
+      number: '260930', contract_date: '2026-09-30T00:00:00', external_url: undefined, file: undefined,
+    });
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).not.toHaveBeenCalled();
+    expect(wrapper.get('[data-testid="saved-order-contracts"]').text()).toContain('260930');
+    expect(wrapper.emitted('refresh')).toHaveLength(1);
+    await wrapper.get('[data-testid="native-document-type-act"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get<HTMLSelectElement>('[data-testid="native-document-basis"]').element.value).toBe('document:905');
+    await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
+    await flushPromises();
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenCalledWith(
+      42, expect.objectContaining({ document_type: 'act', base_document_id: 905, base_customer_contract_id: null }),
+    );
+  });
+
+  it('allows a photo and prevents duplicate customer contract submissions', async () => {
+    const pending = deferred<never>();
+    const register = vi.spyOn(ManagerDocsService, 'registerManagerExternalContract').mockReturnValue(pending.promise as never);
+    const wrapper = await mountWorkspace();
+    await wrapper.get('[data-testid="native-document-type-contract"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="attach-customer-contract"]').trigger('click');
+    await wrapper.get('[data-testid="external-contract-number"]').setValue('260930');
+    await wrapper.get('[data-testid="external-contract-date"]').setValue('2026-09-30');
+    const file = new File(['photo'], 'contract.jpg', { type: 'image/jpeg' });
+    const input = wrapper.get<HTMLInputElement>('[data-testid="external-contract-file"]');
+    expect(input.attributes('accept')).toContain('image/jpeg');
+    Object.defineProperty(input.element, 'files', { value: [file] });
+    await input.trigger('change');
+    await wrapper.get('[data-testid="external-contract-form"]').trigger('submit');
+    await wrapper.get('[data-testid="external-contract-form"]').trigger('submit');
+    expect(register).toHaveBeenCalledTimes(1);
+    expect(register).toHaveBeenCalledWith(42, expect.objectContaining({ file }));
+    expect(wrapper.get('[data-testid="save-external-contract"]').attributes('disabled')).toBeDefined();
+  });
+
+  it('allows metadata registration without legal entity templates and keeps failed data', async () => {
+    vi.mocked(ManagerDocumentSystemService.listManagerDocumentLegalEntities).mockResolvedValue({ items: [] });
+    const register = vi.spyOn(ManagerDocsService, 'registerManagerExternalContract').mockRejectedValue(new Error('Временно недоступно'));
+    const wrapper = await mountWorkspace();
+    await wrapper.get('[data-testid="native-document-type-contract"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="attach-customer-contract"]').trigger('click');
+    await wrapper.get('[data-testid="external-contract-form"]').trigger('submit');
+    expect(register).not.toHaveBeenCalled();
+    await wrapper.get('[data-testid="external-contract-number"]').setValue('260930');
+    await wrapper.get('[data-testid="external-contract-date"]').setValue('2026-09-30');
+    await wrapper.get('[data-testid="external-contract-form"]').trigger('submit');
+    await flushPromises();
+    expect(wrapper.get<HTMLInputElement>('[data-testid="external-contract-number"]').element.value).toBe('260930');
+    expect(wrapper.get('[data-testid="external-contract-form"]').exists()).toBe(true);
+    expect(wrapper.emitted('refresh')).toBeUndefined();
+  });
+
+  it('does not offer native draft or void contracts as external act bases', async () => {
+    const draft = { id: 906, order_id: 42, legal_entity_id: 5, doc_type: 'contract', status: 'draft', provider: 'native', display_number: 'draft', date: NOW, created_at: NOW, artifacts: [] };
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({ items: [draft as never] });
+    const wrapper = await mountWorkspace(undefined, {
+      ...baseOrder, customer_contract_id: null, customer_contract: null,
+      documents: [{ id: 906, doc_type: 'contract', number: 'draft', date: NOW }],
+    });
+    await wrapper.get('[data-testid="native-document-type-act"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="native-document-basis"]').text()).not.toContain('draft');
+    expect(wrapper.find('[data-testid="saved-order-contracts"]').exists()).toBe(false);
+  });
+
   it('loads templates once when the default legal entity is selected', async () => {
     await mountWorkspace();
 
