@@ -1,17 +1,57 @@
 from unittest.mock import AsyncMock
+import json
+from pathlib import Path
 
 import pytest
 from sqlmodel import select
 
 from models import (
-    Brand, LeadSource, Order, OrderProductLink, OrderProposal, OrderStatus, Product,
+    Brand, Customer, LeadSource, Order, OrderProductLink, OrderProposal, OrderStatus, Product,
     Storefront, Tenant, TenantCatalogGrant, TenantOffer,
 )
 from models.supplier import ProductLocalStock, ProductSupplierMapping, Supplier, SupplierOffer
 from models.tenancy import TenantScope
+from models.common import CustomerType
 from schemas_belzakupki_enrichment import ManagerOrderSourceApply, SourceEquipmentDraft, SourceObjectDraft
 from services.belzakupki_enrichment_service import BelzakupkiEnrichmentService
 from services.belzakupki_equipment_prefill import BelzakupkiEquipmentPrefillService
+
+
+@pytest.mark.asyncio
+async def test_review_fills_linked_customer_without_switching_to_another_unp_match(db, monkeypatch):
+    detail = json.loads((Path(__file__).parents[1] / "fixtures/tender_customer/464.json").read_text())
+    name = detail["customer"]["name"]
+    old = Customer(tenant_id=1, name=name, type=CustomerType.company, inn="300050210", email="old-office@example.test")
+    linked = Customer(tenant_id=1, name=name, full_legal_name=name, type=CustomerType.company, legal_address="Сохранённый адрес")
+    db.add_all([old, linked])
+    await db.flush()
+    order = Order(tenant_id=1, storefront_id=1, customer_id=linked.id, status=OrderStatus.NEGOTIATION,
+                  lead_source=LeadSource.BELZAKUPKI, workflow_type="maintenance",
+                  technical_meta={"service_type": "maintenance", "belzakupki": {
+                      "source": "goszakupki_by", "external_tender_id": "3722135",
+                  }})
+    db.add(order)
+    await db.commit()
+    monkeypatch.setattr(BelzakupkiEnrichmentService, "_detail", AsyncMock(return_value=detail))
+    monkeypatch.setattr("services.belzakupki_customer_service.fetch_registry_data", AsyncMock(return_value={}))
+    scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
+    preview = await BelzakupkiEnrichmentService.preview(db, order_id=order.id, scope=scope)
+    assert preview.existing_customer_id == linked.id
+    assert any(f"№{old.id}" in warning for warning in preview.warnings)
+    result = await BelzakupkiEnrichmentService.apply(
+        db, order_id=order.id, scope=scope, username="test",
+        payload=ManagerOrderSourceApply(customer_action="existing", customer_id=linked.id,
+                                       customer=preview.customer, objects=[], document_ids=[]),
+    )
+    await db.refresh(linked)
+    await db.refresh(order)
+    await db.refresh(old)
+    assert result.customer_id == order.customer_id == linked.id
+    assert linked.inn == "300050210" and linked.email == "marketing@vokb.vitebsk.by"
+    assert linked.iban == "BY35BLBB36040300050210001001" and linked.bic == "BLBBBY2X"
+    assert linked.legal_address == "Сохранённый адрес"
+    assert old.email == "old-office@example.test"
+    assert order.technical_meta["belzakupki"]["enrichment"]["submission"]["method"] == "email"
 
 
 async def _products(db):

@@ -74,6 +74,9 @@ source draft reviewable with a warning. Documented branches remain separate
 choices, with their own UNP and bank account. Existing customer fields are filled
 only when missing and the reviewed party identity matches; staff values remain
 authoritative. Contacts retain their purpose and supporting document text.
+A matching customer already linked to the order takes precedence over other
+UNP matches. Other matching cards produce a warning; historical orders are not
+relinked or customers merged by source review.
 
 The submission marker distinguishes an explicitly stated email destination from
 submission through an electronic platform. A generic contact email, a deadline,
