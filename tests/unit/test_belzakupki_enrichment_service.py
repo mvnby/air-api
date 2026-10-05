@@ -161,6 +161,30 @@ async def test_preview_uses_exact_tenant_unp_and_does_not_write(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("linked_inn,display_name", [
+    (None, "ОАО Заказчик"), ("123456789", "ОАО Заказчик"), (None, "Заказчик"),
+])
+async def test_preview_prefers_matching_linked_customer_over_another_unp_card(monkeypatch, linked_inn, display_name):
+    order = _order()
+    order.customer_id = 501
+    linked = Customer(id=501, tenant_id=1, name=display_name, full_legal_name="ОАО Заказчик", inn=linked_inn)
+    matches = [SimpleNamespace(id=83)] + ([linked] if linked_inn else [])
+    monkeypatch.setattr(BelzakupkiEnrichmentService, "_order", AsyncMock(return_value=order))
+    monkeypatch.setattr(BelzakupkiEnrichmentService, "_detail", AsyncMock(return_value=_detail()))
+    monkeypatch.setattr("services.belzakupki_enrichment_service.TenantEntityAccessService.get_customer", AsyncMock(return_value=linked))
+    session = MagicMock()
+    session.execute = AsyncMock(return_value=MagicMock())
+    session.execute.return_value.scalars.return_value.all.return_value = matches
+    session.commit = AsyncMock()
+    preview = await BelzakupkiEnrichmentService.preview(session, order_id=455, scope=TenantScope(tenant_id=1, storefront_id=1))
+    assert preview.existing_customer_id == 501
+    assert any("№83" in warning for warning in preview.warnings)
+    assert not any("выберите нужного вручную" in warning for warning in preview.warnings)
+    assert order.customer_id == 501 and linked.inn == linked_inn
+    session.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_analyze_reads_missing_doc_text_and_returns_ai_draft(monkeypatch):
     order = _order()
     monkeypatch.setattr(BelzakupkiEnrichmentService, "_order", AsyncMock(return_value=order))

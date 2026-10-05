@@ -230,18 +230,27 @@ class BelzakupkiEnrichmentService:
                 Customer.tenant_id == scope.tenant_id, Customer.inn == inn,
             ))).scalars().all()
         existing_customer_id = int(matches[0].id) if len(matches) == 1 else None
-        if order.customer_id and existing_customer_id is None:
+        if order.customer_id:
             current_customer = await TenantEntityAccessService.get_customer(session, order.customer_id, tenant_scope=scope)
             if current_customer is not None:
                 name_key = lambda value: "".join(char for char in str(value or "").casefold() if char.isalnum())
-                if current_customer.inn == inn and inn or (
-                    not current_customer.inn and name_key(current_customer.name) == name_key(customer.name)
+                source_name = name_key(customer.name)
+                if (inn and current_customer.inn == inn) or (
+                    not current_customer.inn and source_name and source_name in {
+                        name_key(current_customer.name), name_key(current_customer.full_legal_name),
+                    }
                 ):
                     existing_customer_id = int(current_customer.id)
+                    other_ids = [str(match.id) for match in matches if match.id != current_customer.id]
+                    if other_ids:
+                        evidence.warnings.append(
+                            f"Есть другие карточки с этим УНП: №{', №'.join(other_ids)}. "
+                            "Для дополнения выбран текущий клиент заказа; проверьте дубли отдельно."
+                        )
         warnings: list[str] = list(evidence.warnings)
         if not inn:
             warnings.append("УНП заказчика не найден; выберите клиента вручную или проверьте данные перед созданием.")
-        elif len(matches) > 1:
+        elif len(matches) > 1 and existing_customer_id is None:
             warnings.append("Найдено несколько клиентов с тем же УНП; выберите нужного вручную.")
         objects = _objects_from_text(raw)
         if not objects:
