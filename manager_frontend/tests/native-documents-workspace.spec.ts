@@ -248,6 +248,35 @@ describe('NativeDocumentsWorkspace', () => {
     expect(wrapper.get('[data-testid="save-external-contract"]').attributes('disabled')).toBeDefined();
   });
 
+  it.each(['offer', 'contract'])('prefers a saved customer contract over an older native %s after reopening', async (documentType) => {
+    const nativeDocument = { id: 904, order_id: 42, legal_entity_id: 5, doc_type: documentType, status: 'issued', provider: 'native', display_number: 'OLD', date: NOW, created_at: NOW, artifacts: [] };
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({ items: [nativeDocument as never] });
+    const order = {
+      ...baseOrder, customer_contract_id: null, customer_contract: null,
+      documents: [
+        { id: 904, doc_type: documentType, number: 'OLD', date: NOW },
+        { id: 905, doc_type: 'contract', number: '260930', date: '2026-09-30T00:00:00', is_downloadable: false },
+      ],
+    };
+    const wrapper = await mountWorkspace(undefined, order);
+    await wrapper.get('[data-testid="native-document-type-act"]').trigger('click');
+    await flushPromises();
+    const basis = wrapper.get<HTMLSelectElement>('[data-testid="native-document-basis"]');
+    expect(basis.element.value).toBe('document:905');
+    await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
+    await flushPromises();
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenLastCalledWith(
+      42, expect.objectContaining({ base_document_id: 905, base_customer_contract_id: null }),
+    );
+
+    await basis.setValue('document:904');
+    await wrapper.setProps({ order: { ...order, documents: [...order.documents,
+      { id: 907, doc_type: 'contract', number: 'ANOTHER', date: NOW },
+    ] } });
+    await flushPromises();
+    expect(basis.element.value).toBe('document:904');
+  });
+
   it('allows metadata registration without legal entity templates and keeps failed data', async () => {
     vi.mocked(ManagerDocumentSystemService.listManagerDocumentLegalEntities).mockResolvedValue({ items: [] });
     const register = vi.spyOn(ManagerDocsService, 'registerManagerExternalContract').mockRejectedValue(new Error('Временно недоступно'));

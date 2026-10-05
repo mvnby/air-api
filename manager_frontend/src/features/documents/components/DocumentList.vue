@@ -43,9 +43,9 @@ const documentProposalName = (doc: ManagerOrderDocumentItem) => {
             <span class="material-icons-round text-[19px]">description</span>
           </div>
           <div class="min-w-0">
-            <p class="truncate text-sm font-medium text-slate-900 dark:text-white">{{ doc.number || doc.doc_type }}</p>
+            <p class="truncate text-sm font-medium text-slate-900 dark:text-white">{{ doc.number || documentTypeLabel(doc.doc_type) }}</p>
             <p class="truncate text-xs text-slate-500 dark:text-slate-400">
-              {{ new Date(doc.date).toLocaleDateString('ru-RU') }} · <span class="uppercase">{{ doc.doc_type }}</span>
+              {{ new Date(doc.date).toLocaleDateString('ru-RU') }} · <span class="uppercase">{{ documentTypeLabel(doc.doc_type) }}</span>
               <span v-if="documentProposalName(doc)"> · {{ documentProposalName(doc) }}</span>
             </p>
             <p v-if="doc.base_document_number" class="truncate text-[11px] text-slate-400 dark:text-slate-500">
