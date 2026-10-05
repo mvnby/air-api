@@ -269,6 +269,11 @@ export type { InstallationResolveResponse } from './models/InstallationResolveRe
 export type { InstallationSelectedWork } from './models/InstallationSelectedWork';
 export type { InstallationSiteApproval } from './models/InstallationSiteApproval';
 export type { InstallationWorkSummary } from './models/InstallationWorkSummary';
+export type { JevShadowItem } from './models/JevShadowItem';
+export type { JevShadowReport } from './models/JevShadowReport';
+export type { JevStatus } from './models/JevStatus';
+export type { JevTest } from './models/JevTest';
+export type { JevUpdate } from './models/JevUpdate';
 export type { LeadCreatePayload } from './models/LeadCreatePayload';
 export type { LeadListResponse } from './models/LeadListResponse';
 export type { LeadLossPayload } from './models/LeadLossPayload';

@@ -2,6 +2,7 @@ import hashlib
 import json
 import mimetypes
 import re
+import time
 from dataclasses import dataclass, field
 from email.utils import parsedate_to_datetime
 from typing import Any, Dict, Optional
@@ -441,6 +442,7 @@ class EmailLeadIntakeService:
         if not is_candidate:
             return EmailLeadProcessResult(status="filtered", is_candidate=False, reason="keyword_filter")
 
+        classification_started = time.monotonic()
         classification = await EmailLeadIntakeService.classify_email(
             sender_email=sender_email,
             sender_name=sender_name,
@@ -448,6 +450,16 @@ class EmailLeadIntakeService:
             raw_body=raw_body,
             email_date_raw=email_date_raw,
         )
+        if not dry_run:
+            from services.jev_shadow_service import JevShadowService
+            await JevShadowService.enqueue(
+                tenant_scope=tenant_scope, source="email", identity=fingerprint,
+                subject=EmailLeadIntakeService.normalize_text(subject, max_length=500),
+                body=EmailLeadIntakeService.normalize_text(raw_body, max_length=5000),
+                primary_provider="deepseek", primary_model_requested=settings.DEEPSEEK_MODEL,
+                primary_is_relevant=bool(classification.get("is_potential_order")),
+                primary_duration_ms=round((time.monotonic() - classification_started) * 1000),
+            )
         if not bool(classification.get("is_potential_order")):
             return EmailLeadProcessResult(
                 status="rejected",

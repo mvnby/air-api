@@ -316,6 +316,11 @@ PUT_DEEPSEEK_CONNECTION = "put_deepseek_connection"
 DELETE_DEEPSEEK_CONNECTION = "delete_deepseek_connection"
 IMPORT_DEEPSEEK_ENVIRONMENT_KEY = "import_deepseek_environment_key"
 TEST_DEEPSEEK_CONNECTION = "test_deepseek_connection"
+GET_JEV_CONNECTION = "get_jev_connection"
+PUT_JEV_CONNECTION = "put_jev_connection"
+DELETE_JEV_CONNECTION = "delete_jev_connection"
+TEST_JEV_CONNECTION = "test_jev_connection"
+GET_JEV_SHADOW_REPORT = "get_jev_shadow_report"
 GET_MANAGER_GOOGLE_AUTH_STATUS = "get_manager_google_auth_status"
 GET_MANAGER_GOOGLE_AUTH_URL = "get_manager_google_auth_url"
 GET_MANAGER_DOCUMENT_DRIVE_STATUS = "get_manager_document_drive_status"
@@ -808,6 +813,11 @@ ALL_MANAGER_OPERATION_IDS = (
     DELETE_DEEPSEEK_CONNECTION,
     IMPORT_DEEPSEEK_ENVIRONMENT_KEY,
     TEST_DEEPSEEK_CONNECTION,
+    GET_JEV_CONNECTION,
+    PUT_JEV_CONNECTION,
+    DELETE_JEV_CONNECTION,
+    TEST_JEV_CONNECTION,
+    GET_JEV_SHADOW_REPORT,
     GET_FX_RATE,
     SUGGEST_ADDRESS,
     UPDATE_MANAGER_SETTING,
