@@ -1,6 +1,6 @@
 import logging
-import mimetypes
 from datetime import datetime
+from pathlib import PurePath
 from urllib.parse import unquote
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
@@ -312,7 +312,9 @@ async def get_manager_doc_download(
         )
 
     filename = unquote(filename_encoded)
-    media_type = mimetypes.guess_type(filename)[0] or "application/pdf"
+    media_type = DocumentService.DEFAULT_UPLOAD_MIME_TYPES.get(
+        PurePath(filename).suffix.lower(), "application/pdf"
+    )
     return StreamingResponse(
         pdf_content,
         media_type=media_type,
