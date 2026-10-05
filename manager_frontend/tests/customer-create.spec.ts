@@ -47,6 +47,26 @@ afterEach(() => {
 });
 
 describe('CreateCustomerModal', () => {
+  it('normalizes a pasted OCR UNP and rejects a number with an extra character', async () => {
+    const lookup = vi.spyOn(api, 'getCompanyByUnp').mockResolvedValue({ row: { vnaimp: 'ООО Заказчик' } });
+    const wrapper = mountModal();
+    await wrapper.findAll('button').find((button) => button.text().includes('Юрлицо'))!.trigger('click');
+    await wrapper.get('[data-testid="customer-name"]').setValue('ООО Заказчик');
+    const unp = wrapper.get('input[placeholder="123456789"]');
+    await unp.setValue('З00 2З0 565');
+    await unp.trigger('blur');
+    await flushPromises();
+    expect(lookup).toHaveBeenCalledWith('300230565');
+    lookup.mockClear();
+    await unp.setValue('300230565X');
+    await unp.trigger('blur');
+    await wrapper.get('[data-testid="submit-customer"]').trigger('click');
+    await flushPromises();
+    expect(lookup).not.toHaveBeenCalled();
+    expect(api.createManagerCustomer).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('УНП должен содержать 9 цифр');
+  });
+
   it('requires a company type for MEDO instead of silently creating an individual', async () => {
     const wrapper = mountModal();
     await wrapper.get('[data-testid="customer-name"]').setValue('Частное торговое унитарное предприятие "МЭДО"');

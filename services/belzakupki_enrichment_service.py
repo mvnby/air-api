@@ -375,6 +375,17 @@ class BelzakupkiEnrichmentService:
             for field in ("name", "type", "legal_address"):
                 if getattr(preview.customer, field):
                     setattr(refreshed.customer, field, getattr(preview.customer, field))
+            for field in ("name", "type", "inn", "legal_address"):
+                key = f"customer.{field}"
+                if key in preview.field_sources:
+                    refreshed.field_sources[key] = preview.field_sources[key]
+            previous_parties = {item.inn: item for item in preview.related_customers}
+            for candidate in refreshed.related_customers:
+                previous_party = previous_parties.get(candidate.inn)
+                if previous_party is not None:
+                    for field in ("name", "type", "legal_address"):
+                        if getattr(previous_party, field):
+                            setattr(candidate, field, getattr(previous_party, field))
         preview.customer = refreshed.customer
         preview.contacts = refreshed.contacts
         preview.related_customers = refreshed.related_customers

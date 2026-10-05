@@ -275,7 +275,7 @@ const uploadFacsimile = async (kind: 'signature' | 'seal', event: Event) => {
         <label class="settings-field">
           <span>УНП</span>
           <span class="relative">
-            <input v-model="unp" data-testid="seller-unp" class="settings-input pr-10" inputmode="numeric" maxlength="9" @input="onUnpInput" @blur="onUnpBlur" />
+            <input v-model="unp" data-testid="seller-unp" class="settings-input pr-10" inputmode="numeric" maxlength="30" @input="onUnpInput" @blur="onUnpBlur" />
             <span v-if="isEgrLoading" class="material-icons-round absolute right-3 top-2.5 animate-spin text-[18px] text-brand-600">progress_activity</span>
           </span>
           <span v-if="egrError" class="font-normal text-red-600">{{ egrError }}</span>
