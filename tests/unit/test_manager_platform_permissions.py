@@ -29,6 +29,7 @@ from routers import (
     manager_equipment,
     manager_features,
     manager_google_auth,
+    manager_jev,
     manager_leads,
     manager_mdv_catalog,
     manager_media_cleanup,
@@ -195,6 +196,7 @@ ADDITIONAL_TENANT_OPERATION_IDS = SERVICE_ESTIMATE_TENANT_OPERATION_IDS | frozen
 INFRASTRUCTURE_ROUTERS = (
     manager_settings.router,
     manager_platform_ai.router,
+    manager_jev.router,
     manager_backups.router,
     manager_google_auth.router,
 )
