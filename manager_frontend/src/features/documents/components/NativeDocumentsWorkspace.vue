@@ -126,6 +126,7 @@ type BasisOption = {
   label: string;
   documentId: number | null;
   customerContractId: number | null;
+  isContract: boolean;
 };
 const formatDate = (value: string | null | undefined) => value
   ? new Date(value.length === 10 ? `${value}T00:00:00` : value).toLocaleDateString('ru-RU')
@@ -160,19 +161,20 @@ const basisOptions = computed<BasisOption[]>(() => {
       label: `Договор № ${contract.number} от ${formatDate(contract.valid_from)}`,
       documentId: null,
       customerContractId: contract.id,
+      isContract: true,
     });
   }
 
   const nativeBases = workspace.documents.value
     .filter((item) => ['issued', 'sent', 'signed'].includes(item.status))
-    .filter((item) => item.doc_type === 'contract' || item.doc_type === 'offer' || (item.doc_type === 'invoice' && item.business_role === 'offer'))
-    .sort((a, b) => (a.doc_type === 'contract' ? -1 : 0) - (b.doc_type === 'contract' ? -1 : 0));
+    .filter((item) => item.doc_type === 'contract' || item.doc_type === 'offer' || (item.doc_type === 'invoice' && item.business_role === 'offer'));
   for (const document of nativeBases) {
     result.push({
       value: `document:${document.id}`,
       label: `${officialDocumentTitle(document)} от ${formatDate(document.official_date || document.date)}`,
       documentId: document.id,
       customerContractId: null,
+      isContract: document.doc_type === 'contract',
     });
   }
   for (const document of orderDocuments.value) {
@@ -182,9 +184,14 @@ const basisOptions = computed<BasisOption[]>(() => {
       label: `${documentTypeName(document.doc_type)} № ${document.number} от ${formatDate(document.date)}`,
       documentId: document.id,
       customerContractId: null,
+      isContract: document.doc_type === 'contract',
     });
   }
-  return result;
+  const priority = (item: BasisOption) => item.customerContractId ? 0 : item.isContract ? 1 : 2;
+  // Order document IDs follow registration order, including customer-prepared contracts.
+  return result.sort((a, b) => priority(a) - priority(b) || (
+    a.isContract && !a.customerContractId ? (b.documentId || 0) - (a.documentId || 0) : 0
+  ));
 });
 
 const syncBasis = () => {
