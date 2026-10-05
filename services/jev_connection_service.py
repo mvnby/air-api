@@ -54,7 +54,9 @@ class JevCredentialCipher:
 class JevConnectionService:
     @staticmethod
     async def get(session: AsyncSession, *, for_update=False):
-        return await session.get(JevConnection, 1, with_for_update=for_update)
+        # A probe releases the transaction during inference. Refresh its cached
+        # row when locking again so concurrent spend and a UTC rollover survive.
+        return await session.get(JevConnection, 1, with_for_update=for_update, populate_existing=for_update)
 
     @staticmethod
     def public(row):

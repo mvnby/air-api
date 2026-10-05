@@ -257,3 +257,48 @@ async def test_connection_probe_counts_budget_and_validated_response_is_success(
         with pytest.raises(JevCredentialError, match="budget_exhausted"):
             await Connection.test(session)
     provider.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_connection_probe_preserves_worker_spend_during_inference(factory, monkeypatch):
+    await enable(factory)
+    await enqueue()
+    worker = AsyncMock(return_value=result())
+    monkeypatch.setattr("services.jev_shadow_service.classify_jev", worker)
+
+    async def probe(**kwargs):
+        assert await Shadow.process_one()
+        return result(input_tokens=2000)
+
+    monkeypatch.setattr("services.jev_provider_service.classify_jev", probe)
+    async with factory() as session:
+        assert (await Connection.test(session))["ok"] is True
+    async with factory() as session:
+        row = await Connection.get(session)
+        assert row.daily_requests == 2
+        assert row.budget_used_usd == Decimal("0.00012600")
+    worker.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_connection_probe_does_not_refund_a_new_budget_day(factory, monkeypatch):
+    await enable(factory)
+    next_day = datetime.now(timezone.utc).date() + timedelta(days=1)
+
+    async def probe(**kwargs):
+        async with factory() as session:
+            row = await Connection.get(session, for_update=True)
+            row.budget_day = next_day
+            row.daily_requests = 0
+            row.budget_used_usd = Decimal("0")
+            session.add(row)
+            await session.commit()
+        return result()
+
+    monkeypatch.setattr("services.jev_provider_service.classify_jev", probe)
+    async with factory() as session:
+        assert (await Connection.test(session))["ok"] is True
+    async with factory() as session:
+        row = await Connection.get(session)
+        assert row.budget_day == next_day and row.daily_requests == 0
+        assert row.budget_used_usd == Decimal("0")
