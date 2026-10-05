@@ -1,6 +1,7 @@
 import pytest
 
 from core.input_validation import (
+    normalize_unp,
     validate_optional_bic,
     validate_optional_email,
     validate_optional_iban,
@@ -37,6 +38,12 @@ def test_validate_optional_email_normalizes_and_rejects():
 
 def test_validate_optional_unp_accepts_9_digits_only():
     assert validate_optional_unp(" 300149331 ") == "300149331"
+    assert validate_optional_unp("З002З0565") == "300230565"
+    assert validate_optional_unp("3O02І0565") == "300210565"
+    assert normalize_unp("1234567890") == "1234567890"
+    for bad in ("1234567890", "12345678A", "12345678/9", "٣٠٠٢٣٠٥٦٥"):
+        with pytest.raises(ValueError):
+            validate_optional_unp(bad)
     with pytest.raises(ValueError):
         validate_optional_unp("12345")
 

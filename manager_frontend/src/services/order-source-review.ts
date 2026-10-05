@@ -13,6 +13,24 @@ export type SourceCustomer = {
   phone?: string | null;
   email?: string | null;
   legal_address?: string | null;
+  bank_name?: string | null;
+  bic?: string | null;
+  iban?: string | null;
+};
+
+export type SourceContact = {
+  email: string;
+  purpose: 'submission' | 'general' | 'other';
+  source: string;
+  evidence: string;
+};
+
+export type SourceSubmission = {
+  method: 'email' | 'platform' | 'unknown';
+  email?: string | null;
+  url?: string | null;
+  source?: string | null;
+  evidence?: string | null;
 };
 
 export type SourceObject = {
@@ -35,6 +53,9 @@ export type OrderSourcePreview = {
   deadline_at?: string | null;
   estimated_value?: number | null;
   customer: SourceCustomer;
+  contacts?: SourceContact[];
+  related_customers?: SourceCustomer[];
+  submission?: SourceSubmission;
   existing_customer_id?: number | null;
   current_scenario?: SourceScenario | null;
   suggested_scenario?: SourceScenario | null;
@@ -81,6 +102,7 @@ export type SourceEquipmentPreview = {
 export type SourceCard = {
   order_id: number; source: string; external_id: string; title?: string | null; source_url?: string | null;
   work_summary?: string | null; equipment_details?: string | null;
+  submission?: SourceSubmission | null;
   objects: SourceObject[]; originals: Array<{ attachment_id: number; name: string; document_id?: string | null; mime_type: string }>;
   equipment_prefill?: SourceEquipmentPrefillResult | null;
   installation_facts: Array<{ text: string; source: string; needs_review: boolean; is_excerpt?: boolean }>;
@@ -122,6 +144,7 @@ export type OrderSourceApplyPayload = {
   document_ids?: string[];
   analysis_source?: 'source' | 'ai' | 'reviewed';
   analyzed_document_ids?: string[];
+  submission?: SourceSubmission;
 };
 
 export type OrderSourceApplyResult = {

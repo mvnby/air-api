@@ -1,7 +1,10 @@
 """Manager review contract for Belzakupki source enrichment."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator
 from schemas_commercial_terms import ManagerCommercialTermsResponse
+from core.input_validation import validate_optional_unp, validate_optional_email, validate_optional_iban, validate_optional_bic
 
 
 class SourceCustomerDraft(BaseModel):
@@ -11,6 +14,33 @@ class SourceCustomerDraft(BaseModel):
     phone: str | None = Field(default=None, max_length=80)
     email: str | None = Field(default=None, max_length=255)
     legal_address: str | None = Field(default=None, max_length=500)
+    bank_name: str | None = Field(default=None, max_length=500)
+    bic: str | None = Field(default=None, max_length=11)
+    iban: str | None = Field(default=None, max_length=34)
+
+    @field_validator("inn", "email", "iban", "bic")
+    @classmethod
+    def normalize_requisites(cls, value: str | None, info) -> str | None:
+        validators = {
+            "inn": validate_optional_unp, "email": validate_optional_email,
+            "iban": validate_optional_iban, "bic": validate_optional_bic,
+        }
+        return validators[info.field_name](value)
+
+
+class SourceContactDraft(BaseModel):
+    email: str = Field(max_length=255)
+    purpose: Literal["submission", "general", "other"] = "other"
+    source: str = Field(default="", max_length=255)
+    evidence: str = Field(default="", max_length=1000)
+
+
+class SourceSubmissionDraft(BaseModel):
+    method: Literal["email", "platform", "unknown"] = "unknown"
+    email: str | None = Field(default=None, max_length=255)
+    url: str | None = Field(default=None, max_length=2048)
+    source: str | None = Field(default=None, max_length=255)
+    evidence: str | None = Field(default=None, max_length=1000)
 
 
 class SourceEquipmentDraft(BaseModel):
@@ -93,6 +123,7 @@ class ManagerOrderSourceCard(BaseModel):
     external_id: str
     title: str | None = None
     source_url: str | None = None
+    submission: SourceSubmissionDraft = Field(default_factory=SourceSubmissionDraft)
     work_summary: str | None = None
     equipment_details: str | None = None
     objects: list[SourceObjectDraft] = Field(default_factory=list)
@@ -126,6 +157,9 @@ class ManagerOrderSourcePreview(BaseModel):
     deadline_at: str | None = None
     estimated_value: float | None = None
     customer: SourceCustomerDraft
+    contacts: list[SourceContactDraft] = Field(default_factory=list)
+    related_customers: list[SourceCustomerDraft] = Field(default_factory=list)
+    submission: SourceSubmissionDraft = Field(default_factory=SourceSubmissionDraft)
     existing_customer_id: int | None = None
     current_scenario: SourceScenarioDraft | None = None
     suggested_scenario: SourceScenarioDraft | None = None
@@ -148,6 +182,7 @@ class ManagerOrderSourceApply(BaseModel):
     customer_action: str
     customer_id: int | None = None
     customer: SourceCustomerDraft | None = None
+    submission: SourceSubmissionDraft | None = None
     workflow_type: str | None = None
     service_type: str | None = None
     work_summary: str | None = Field(default=None, max_length=10000)
@@ -183,6 +218,7 @@ class ManagerOrderSourceApplyResult(BaseModel):
 class ManagerOrderSourceEnrichment(BaseModel):
     source: str
     external_id: str
+    submission: SourceSubmissionDraft = Field(default_factory=SourceSubmissionDraft)
     work_summary: str | None = None
     equipment_details: str | None = None
     objects: list[SourceObjectDraft] = Field(default_factory=list)

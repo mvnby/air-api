@@ -12,6 +12,7 @@ from models.tenancy import TenantScope
 from schemas_belzakupki_enrichment import (
     ManagerOrderSourceCard, ManagerOrderSourceEquipmentAdd, ManagerOrderSourceEquipmentPreview,
     SourceEquipmentCandidateItem, SourceObjectDraft, SourceOriginalFile, SourceEquipmentPrefillResult,
+    SourceSubmissionDraft,
 )
 from services.belzakupki_enrichment_service import BelzakupkiEnrichmentService, _source_identity, _text
 from services.belzakupki_equipment_prefill import BelzakupkiEquipmentPrefillService
@@ -50,6 +51,7 @@ class BelzakupkiSourceEquipmentService:
                      and (row.source_meta or {}).get("source") == source]
         return ManagerOrderSourceCard(
             order_id=order_id, source=source, external_id=external_id,
+            submission=SourceSubmissionDraft.model_validate((meta.get("enrichment") or {}).get("submission") or {}),
             title=_text(tender.get("title"), 1000), source_url=_text(tender.get("source_url"), 2048),
             work_summary=_text((meta.get("enrichment") or {}).get("work_summary"), 10000),
             equipment_details=_text((meta.get("enrichment") or {}).get("equipment_details"), 10000),

@@ -13,6 +13,8 @@ from schemas_belzakupki_enrichment import SourceObjectDraft
 from services.mail_imap_service import MailImapService
 from services.deepseek_connection_service import resolve_deepseek_token
 
+MAX_TENDER_TEXT_CHARS = 180000
+
 
 def _parse_json(content: str) -> dict[str, Any]:
     cleaned = content.strip()
@@ -30,12 +32,14 @@ async def extract_missing_document_text(*, filename: str, mime_type: str, conten
         return None, "Документ слишком велик для анализа."
     result = await asyncio.to_thread(
         MailImapService._extract_attachment_text_result,
-        filename, mime_type, content, max_chars=24000,
+        filename, mime_type, content, max_chars=100000,
     )
     return result.text or None, result.diagnostic or None
 
 
 async def analyze_tender_text(raw_text: str) -> tuple[str | None, str | None, list[SourceObjectDraft]]:
+    if len(raw_text) > MAX_TENDER_TEXT_CHARS:
+        raise ValueError("Выбранные документы превышают лимит анализа. Выберите меньше файлов; текст не будет обрезан.")
     token = await resolve_deepseek_token()
     if not token:
         raise RuntimeError("AI document analysis is not configured")
@@ -48,7 +52,7 @@ async def analyze_tender_text(raw_text: str) -> tuple[str | None, str | None, li
         "В equipment_details сохрани явно указанные кабинеты/помещения, длины трасс/коммуникаций, "
         "электропитание и условия монтажа. Не распределяй их между моделями или объектами, если связь не указана прямо. "
         "Не выдумывай адреса, модели, количество, цену или клиента. Если не уверен, оставь массив пустым.\n\n"
-        f"Текст:\n{raw_text[:24000]}"
+        f"Текст:\n{raw_text}"
     )
     async with httpx.AsyncClient(timeout=45.0, trust_env=False) as client:
         response = await client.post(

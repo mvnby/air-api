@@ -19,6 +19,11 @@ from services.belzakupki_enrichment_service import (
 from services.belzakupki_import_service import BelzakupkiImportService
 
 
+@pytest.fixture(autouse=True)
+def mock_registry(monkeypatch):
+    monkeypatch.setattr("services.belzakupki_customer_service.fetch_registry_data", AsyncMock(return_value={}))
+
+
 EXCERPT_455 = (
     "Описание предмета государственной закупки: Техническое обслуживание кондиционеров, "
     "расположенных по адресу: г. Витебск, ул. Суворова, д.42/13 (1-й этаж): "
@@ -244,7 +249,7 @@ async def test_apply_links_customer_two_branches_and_original_once(monkeypatch):
     monkeypatch.setattr(BelzakupkiEnrichmentService, "_order", AsyncMock(return_value=order))
     monkeypatch.setattr(BelzakupkiEnrichmentService, "_detail", AsyncMock(return_value=_detail()))
     monkeypatch.setattr(
-        "services.belzakupki_enrichment_service.CustomerCreationService._find_duplicate",
+        "services.belzakupki_customer_service.CustomerCreationService._find_duplicate",
         AsyncMock(return_value=None),
     )
     document = AsyncMock(return_value=(b"original-word-bytes", "task.doc", "application/msword"))
@@ -354,7 +359,7 @@ async def test_create_rejects_existing_tenant_customer_by_phone_without_unp(monk
     duplicate = Customer(id=77, tenant_id=1, name="ОАО Заказчик", phone="+375212210029")
     checker = AsyncMock(return_value=(duplicate, ("phone",)))
     monkeypatch.setattr(
-        "services.belzakupki_enrichment_service.CustomerCreationService._find_duplicate",
+        "services.belzakupki_customer_service.CustomerCreationService._find_duplicate",
         checker,
     )
 

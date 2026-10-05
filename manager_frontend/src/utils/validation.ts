@@ -20,7 +20,7 @@ export function validateOptionalEmail(value: string): string {
 export function validateOptionalByUnp(value: string): string {
   const unp = normalizeUnp(value || '');
   if (!unp) return '';
-  return unp.length === 9 ? '' : 'УНП должен содержать 9 цифр';
+  return /^\d{9}$/.test(unp) ? '' : 'УНП должен содержать 9 цифр';
 }
 
 function ibanChecksumValid(iban: string): boolean {

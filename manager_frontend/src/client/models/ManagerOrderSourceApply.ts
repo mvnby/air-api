@@ -4,10 +4,12 @@
 /* eslint-disable */
 import type { SourceCustomerDraft } from './SourceCustomerDraft';
 import type { SourceObjectDraft } from './SourceObjectDraft';
+import type { SourceSubmissionDraft } from './SourceSubmissionDraft';
 export type ManagerOrderSourceApply = {
     customer_action: string;
     customer_id?: (number | null);
     customer?: (SourceCustomerDraft | null);
+    submission?: (SourceSubmissionDraft | null);
     workflow_type?: (string | null);
     service_type?: (string | null);
     work_summary?: (string | null);

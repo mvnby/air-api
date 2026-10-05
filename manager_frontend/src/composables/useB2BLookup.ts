@@ -16,7 +16,7 @@ export function useB2BLookup() {
      */
     async function lookupCompany(unp: string) {
         const normalized = normalizeUnp(unp);
-        if (normalized.length !== 9) return null;
+        if (!/^\d{9}$/.test(normalized)) return null;
 
         isEgrLoading.value = true;
         egrError.value = '';

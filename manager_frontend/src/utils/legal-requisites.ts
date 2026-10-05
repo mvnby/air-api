@@ -13,7 +13,16 @@ type BankResponse = {
   bic?: string;
 };
 
-export const normalizeUnp = (value: string): string => value.replace(/\D/g, '').slice(0, 9);
+const UNP_OCR_CONFUSABLES: Record<string, string> = {
+  З: '3', з: '3', O: '0', o: '0', О: '0', о: '0', I: '1', i: '1', L: '1', l: '1', І: '1', і: '1',
+};
+
+// Keep unexpected characters and extra digits visible so validation can reject
+// the value instead of silently turning an OCR paste into another company's UNP.
+export const normalizeUnp = (value: string): string => (value || '')
+  .normalize('NFKC')
+  .replace(/[\s-]+/g, '')
+  .replace(/[ЗзOoОоIiLlІі]/g, (character) => UNP_OCR_CONFUSABLES[character] || character);
 
 const IBAN_CONFUSABLES: Record<string, string> = {
   А: 'A', В: 'B', Е: 'E', К: 'K', М: 'M', Н: 'H', О: 'O', Р: 'P',

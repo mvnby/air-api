@@ -9,8 +9,10 @@ import {
   type SourceCustomer,
   type SourceObject,
   type SourceAppliedEvent,
+  type SourceContact, type SourceSubmission,
   type SourceCommandHook, type SourceCommandEndHook, downloadSourceOriginal,
 } from '../../services/order-source-review';
+import { normalizeUnp } from '../../utils/legal-requisites';
 import CustomerSearchSelect from '../customers/CustomerSearchSelect.vue';
 import type { ManagerCatalogCustomerItemResponse } from '../../client';
 import type { OrderScenarioOption } from '../orders/OrderScenarioSelector.vue';
@@ -26,6 +28,10 @@ const applying = ref(false);
 const error = ref('');
 const customerAction = ref<'existing' | 'create' | 'skip'>('create');
 const customer = ref<SourceCustomer>({});
+const contacts = ref<SourceContact[]>([]);
+const relatedCustomers = ref<SourceCustomer[]>([]);
+const relatedCustomerSelected = ref(false);
+const submission = ref<SourceSubmission>({ method: 'unknown' });
 const workSummary = ref('');
 const equipmentDetails = ref('');
 const objects = ref<SourceObject[]>([]);
@@ -62,7 +68,13 @@ const prefillWarnings = computed(() => (preview.value?.equipment_prefill?.warnin
 const hasCustomerSelection = computed(() => customerAction.value === 'skip'
   || (customerAction.value === 'existing' && Boolean(selectedExistingCustomer.value?.id))
   || (customerAction.value === 'create' && Boolean(customer.value.name?.trim())));
-const canApply = computed(() => confirmed.value && !loading.value && !analyzing.value && !applying.value && Boolean(selectedScenario.value) && hasCustomerSelection.value && (!isNewLead.value || customerAction.value !== 'skip'));
+const willSendCustomerDraft = computed(() => customerAction.value === 'create'
+  || (customerAction.value === 'existing' && selectedExistingCustomer.value?.id === preview.value?.existing_customer_id));
+const customerInnError = computed(() => {
+  if (!willSendCustomerDraft.value || !customer.value.inn?.trim()) return '';
+  return /^\d{9}$/.test(normalizeUnp(customer.value.inn)) ? '' : 'УНП должен содержать ровно 9 цифр';
+});
+const canApply = computed(() => confirmed.value && !loading.value && !analyzing.value && !applying.value && Boolean(selectedScenario.value) && hasCustomerSelection.value && !customerInnError.value && (!isNewLead.value || customerAction.value !== 'skip'));
 const chooseScenario = () => { scenarioChangedByManager.value = true; confirmed.value = false; };
 const safeSourceUrl = computed(() => {
   const value = preview.value?.source_url;
@@ -72,12 +84,52 @@ const safeSourceUrl = computed(() => {
     return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : null;
   } catch { return null; }
 });
+const safeSubmissionUrl = computed(() => {
+  const value = submission.value.url;
+  if (!value) return null;
+  try { const url = new URL(value); return ['http:', 'https:'].includes(url.protocol) ? url.href : null; }
+  catch { return null; }
+});
+const submissionLabel = computed(() => submission.value.method === 'email' ? 'Подача по email'
+  : submission.value.method === 'platform' ? 'Подача через ЭТП' : 'Способ подачи требует уточнения');
+const purposeLabel = (purpose: SourceContact['purpose']) => purpose === 'submission' ? 'Для подачи'
+  : purpose === 'general' ? 'Общий контакт' : 'Другой контакт';
 const safeDocumentUrl = (value: string) => (
   value.startsWith(`/api/manager/orders/${props.orderId}/source-documents/`) ? value : null
 );
 const documentExcerpt = (value: string) => value.length > 1_200 ? `${value.slice(0, 1_200)}…` : value;
 const sourceFor = (key: string) => fieldSources.value[key] || 'Добавлено менеджером';
 const markCustomerChanged = (key: string) => { fieldSources.value[key] = 'Исправлено менеджером'; confirmed.value = false; };
+const refreshCustomerSources = (sourceLabels: Record<string, string>, value: SourceCustomer, fallback?: string) => {
+  fieldSources.value = Object.fromEntries(Object.entries(fieldSources.value).filter(([key]) => !key.startsWith('customer.')));
+  for (const key of ['name', 'inn', 'type', 'phone', 'email', 'legal_address', 'bank_name', 'bic', 'iban'] as const) {
+    const fieldKey = `customer.${key}`;
+    if (sourceLabels[fieldKey]) fieldSources.value[fieldKey] = sourceLabels[fieldKey];
+    else if (fallback && value[key]) fieldSources.value[fieldKey] = fallback;
+  }
+};
+const selectCustomerDraft = (value: SourceCustomer, existing = false, related = false) => {
+  relatedCustomerSelected.value = related;
+  customer.value = { ...value };
+  refreshCustomerSources(related ? {} : preview.value?.field_sources || {}, value, related ? 'Данные филиала из источника' : undefined);
+  customerAction.value = existing ? 'existing' : 'create';
+  selectedExistingCustomer.value = existing && preview.value?.existing_customer_id
+    ? { id: preview.value.existing_customer_id, name: value.name || `Клиент #${preview.value.existing_customer_id}` } as ManagerCatalogCustomerItemResponse
+    : null;
+  confirmed.value = false;
+};
+const selectRelatedCustomer = (value: SourceCustomer) => {
+  selectCustomerDraft(value, false, true);
+};
+const selectMainCustomer = () => {
+  if (!preview.value) return;
+  selectCustomerDraft(preview.value.customer, Boolean(preview.value.existing_customer_id));
+  contacts.value = preview.value.contacts?.map((contact) => ({ ...contact })) || [];
+};
+const chooseContactEmail = (contact: SourceContact) => {
+  customer.value.email = contact.email;
+  markCustomerChanged('customer.email');
+};
 const markDraftChanged = (key?: string) => {
   draftsChanged.value = true; analysisOverwriteConfirmed.value = false; confirmed.value = false;
   if (key) fieldSources.value[key] = 'Исправлено менеджером';
@@ -105,18 +157,36 @@ const analyze = async () => {
   try {
     const analyzed = await orderSourceReviewApi.analyze(orderId, selectedDocumentIds.value);
     if (!sameScope(orderId, version)) return;
+    const customerKeys = ['name', 'inn', 'type', 'phone', 'email', 'legal_address', 'bank_name', 'bic', 'iban'] as const;
+    for (const key of relatedCustomerSelected.value ? [] : customerKeys) {
+      const fieldKey = `customer.${key}`;
+      const current = customer.value[key];
+      const extracted = analyzed.customer?.[key];
+      if (fieldSources.value[fieldKey] !== 'Исправлено менеджером'
+        && (!current || !String(current).trim()) && extracted != null && String(extracted).trim()) {
+        (customer.value as Record<string, unknown>)[key] = extracted;
+      }
+    }
+    contacts.value = analyzed.contacts?.map((contact) => ({ ...contact })) || [];
+    relatedCustomers.value = analyzed.related_customers?.map((candidate) => ({ ...candidate })) || [];
+    submission.value = { ...(analyzed.submission || { method: 'unknown' }) };
     workSummary.value = analyzed.work_summary || '';
     equipmentDetails.value = analyzed.equipment_details || '';
     objects.value = analyzed.objects.map((item) => ({ ...item, equipment: item.equipment.map((equipment) => ({ ...equipment })) }));
     draftsChanged.value = false;
     analysisOverwriteConfirmed.value = false;
     confirmed.value = false;
-    preview.value = { ...preview.value!, warnings: analyzed.warnings };
+    preview.value = { ...preview.value!, customer: analyzed.customer, contacts: analyzed.contacts,
+      related_customers: analyzed.related_customers, submission: analyzed.submission,
+      field_sources: analyzed.field_sources, warnings: analyzed.warnings };
     preview.value.suggested_scenario = analyzed.suggested_scenario;
     if (isNewLead.value && !scenarioChangedByManager.value) {
       scenarioKey.value = analyzed.suggested_scenario ? keyForScenario(analyzed.suggested_scenario) : '';
     }
-    fieldSources.value = { ...analyzed.field_sources };
+    fieldSources.value = { ...analyzed.field_sources, ...Object.fromEntries(
+      Object.entries(fieldSources.value).filter(([key, source]) => source === 'Исправлено менеджером'
+        || (relatedCustomerSelected.value && key.startsWith('customer.'))),
+    ) };
     analysisSource.value = analyzed.analysis_source || 'ai';
     analyzedDocumentIds.value = analyzed.analyzed_document_ids || [...selectedDocumentIds.value];
   } catch (reason) { if (sameScope(orderId, version)) error.value = getApiErrorMessage(reason); }
@@ -124,12 +194,16 @@ const analyze = async () => {
 };
 
 const resetFromPreview = (value: OrderSourcePreview) => {
+  relatedCustomerSelected.value = false;
   preview.value = value;
   customerAction.value = value.existing_customer_id ? 'existing' : 'create';
   selectedExistingCustomer.value = value.existing_customer_id
     ? { id: value.existing_customer_id, name: value.customer.name || `Клиент #${value.existing_customer_id}` } as ManagerCatalogCustomerItemResponse
     : null;
   customer.value = { ...value.customer };
+  contacts.value = value.contacts?.map((contact) => ({ ...contact })) || [];
+  relatedCustomers.value = value.related_customers?.map((candidate) => ({ ...candidate })) || [];
+  submission.value = { ...(value.submission || { method: 'unknown' }) };
   scenarioKey.value = isNewLead.value
     ? (value.suggested_scenario ? keyForScenario(value.suggested_scenario) : '')
     : (value.current_scenario ? keyForScenario(value.current_scenario) : '');
@@ -170,6 +244,10 @@ const load = async () => {
 };
 
 const apply = async () => {
+  if (customerInnError.value) {
+    error.value = customerInnError.value;
+    return;
+  }
   if (!canApply.value) return;
   const chosenScenario = selectedScenario.value!;
   const payload: OrderSourceApplyPayload = {
@@ -191,9 +269,12 @@ const apply = async () => {
     document_ids: selectedDocumentIds.value,
     analysis_source: analysisSource.value,
     analyzed_document_ids: analyzedDocumentIds.value,
+    submission: { ...submission.value },
   };
   if (customerAction.value === 'existing' && selectedExistingCustomer.value?.id) payload.customer_id = selectedExistingCustomer.value.id;
-  if (customerAction.value === 'create') payload.customer = { ...customer.value };
+  if (willSendCustomerDraft.value) {
+    payload.customer = { ...customer.value, inn: customer.value.inn ? normalizeUnp(customer.value.inn) : customer.value.inn };
+  }
   applying.value = true;
   error.value = '';
   const orderId = props.orderId;
@@ -228,7 +309,10 @@ watch(() => [props.open, props.orderId] as const, ([open]) => {
   <div v-if="open" class="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4" @click.self="close">
     <section class="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-slate-900" role="dialog" aria-modal="true" aria-label="Проработка источника">
       <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 dark:border-slate-700">
-        <div><h2 class="text-lg font-bold">Проработка источника</h2><p v-if="preview" class="mt-1 text-xs text-slate-500">{{ preview.source_code }} · {{ preview.external_id || 'без номера' }}</p></div>
+        <div><h2 class="text-lg font-bold">Проработка источника</h2><p v-if="preview" class="mt-1 text-xs text-slate-500">{{ preview.source_code }} · {{ preview.external_id || 'без номера' }}</p>
+          <p v-if="preview" class="mt-1 text-xs font-semibold text-slate-700">{{ submissionLabel }}<span v-if="submission.method === 'email' && submission.email"> · {{ submission.email }}</span><a v-else-if="submission.method === 'platform' && safeSubmissionUrl" :href="safeSubmissionUrl" target="_blank" rel="noopener noreferrer" class="ml-1 text-brand-700 underline">Открыть ЭТП</a></p>
+          <p v-if="submission.source || submission.evidence" class="mt-1 max-w-xl text-xs text-slate-500">{{ [submission.source, submission.evidence].filter(Boolean).join(' · ') }}</p>
+        </div>
         <button type="button" class="icon-action" aria-label="Закрыть" :disabled="applying" @click="close">×</button>
       </header>
       <div class="min-h-0 overflow-y-auto p-5">
@@ -256,19 +340,33 @@ watch(() => [props.open, props.orderId] as const, ([open]) => {
           <p v-if="selectedScenario?.workflow_type === 'sales_installation'" class="mt-2 text-xs text-slate-500">При сохранении полные модели с единственным точным совпадением и достаточным наличием добавятся в черновик по текущей цене каталога. Количество по объектам суммируется; остальные позиции останутся для ручного подбора. Остаток не резервируется. Монтаж добавляется отдельно в предложении.</p>
 
           <section class="mt-4"><h3 class="text-sm font-semibold">Клиент</h3>
+            <div class="mt-2 flex flex-wrap gap-2">
+              <button type="button" class="btn-mini-outline text-xs" @click="selectMainCustomer">Основной заказчик · {{ preview.customer.name || 'без названия' }}</button>
+              <button v-for="(candidate, index) in relatedCustomers" :key="`related-${index}`" type="button" class="btn-mini-outline text-xs" @click="selectRelatedCustomer(candidate)">{{ candidate.name || 'Связанный заказчик' }}{{ candidate.inn ? ` · УНП ${candidate.inn}` : '' }}</button>
+            </div>
+            <div v-if="contacts.length" class="mt-3 space-y-2" aria-label="Контакты из источника">
+              <div v-for="(contact, index) in contacts" :key="`${contact.email}-${index}`" class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs dark:bg-slate-800">
+                <span><strong>{{ purposeLabel(contact.purpose) }}:</strong> {{ contact.email }}<span class="block text-slate-500">{{ contact.source }} · {{ contact.evidence }}</span></span>
+                <button type="button" class="font-semibold text-brand-700 underline" @click="chooseContactEmail(contact)">Использовать как email клиента</button>
+              </div>
+            </div>
             <div class="mt-2 flex gap-2 text-sm">
               <button type="button" class="btn-mini-outline" :class="customerAction === 'existing' ? 'border-brand-500 text-brand-700' : ''" @click="customerAction = 'existing'">Выбрать существующего</button>
               <button type="button" class="btn-mini-outline" :class="customerAction === 'create' ? 'border-brand-500 text-brand-700' : ''" @click="customerAction = 'create'">Создать клиента</button>
               <button v-if="!isNewLead" type="button" class="btn-mini-outline" :class="customerAction === 'skip' ? 'border-brand-500 text-brand-700' : ''" @click="customerAction = 'skip'">Не менять клиента</button>
             </div>
             <div v-if="customerAction === 'existing'" class="mt-2"><p v-if="preview.existing_customer_id" class="mb-2 text-sm text-slate-600">Найден клиент #{{ preview.existing_customer_id }}. Можно выбрать другого.</p><CustomerSearchSelect v-model="selectedExistingCustomer" result-test-id-prefix="source-customer" /></div>
+            <p v-if="customerAction === 'existing' && customerInnError" role="alert" class="mt-2 text-xs text-red-700">УНП черновика: {{ customerInnError }}.</p>
             <div v-if="customerAction === 'create'" class="mt-2 grid gap-2 sm:grid-cols-2">
               <label class="text-xs sm:col-span-2">Название · {{ sourceFor('customer.name') }}<input v-model="customer.name" class="field-input mt-1" placeholder="Название или имя" @input="markCustomerChanged('customer.name')" /></label>
               <label class="text-xs">Тип · {{ sourceFor('customer.type') }}<select v-model="customer.type" class="field-input mt-1" @change="markCustomerChanged('customer.type')"><option value="individual">Физлицо</option><option value="individual_entrepreneur">ИП</option><option value="company">Юрлицо</option></select></label>
-              <label class="text-xs">УНП · {{ sourceFor('customer.inn') }}<input v-model="customer.inn" class="field-input mt-1" placeholder="УНП" @input="markCustomerChanged('customer.inn')" /></label>
+              <label class="text-xs">УНП · {{ sourceFor('customer.inn') }}<input v-model="customer.inn" class="field-input mt-1" :aria-invalid="Boolean(customerInnError)" aria-describedby="source-customer-inn-error" placeholder="УНП" @input="markCustomerChanged('customer.inn')" @blur="customer.inn = customer.inn ? normalizeUnp(customer.inn) : customer.inn" /><span v-if="customerInnError" id="source-customer-inn-error" class="mt-1 block text-red-700" role="alert">{{ customerInnError }}.</span></label>
               <label class="text-xs">Email · {{ sourceFor('customer.email') }}<input v-model="customer.email" class="field-input mt-1" placeholder="Email" @input="markCustomerChanged('customer.email')" /></label>
               <label class="text-xs">Телефон · {{ sourceFor('customer.phone') }}<input v-model="customer.phone" class="field-input mt-1" placeholder="Телефон" @input="markCustomerChanged('customer.phone')" /></label>
               <label class="text-xs sm:col-span-2">Юридический адрес · {{ sourceFor('customer.legal_address') }}<input v-model="customer.legal_address" class="field-input mt-1" placeholder="Юридический адрес" @input="markCustomerChanged('customer.legal_address')" /></label>
+              <label class="text-xs sm:col-span-2">Банк · {{ sourceFor('customer.bank_name') }}<input v-model="customer.bank_name" class="field-input mt-1" placeholder="Название банка" @input="markCustomerChanged('customer.bank_name')" /></label>
+              <label class="text-xs">БИК · {{ sourceFor('customer.bic') }}<input v-model="customer.bic" class="field-input mt-1" placeholder="БИК" @input="markCustomerChanged('customer.bic')" /></label>
+              <label class="text-xs">IBAN · {{ sourceFor('customer.iban') }}<input v-model="customer.iban" class="field-input mt-1" placeholder="BY…" @input="markCustomerChanged('customer.iban')" /></label>
             </div>
           </section>
 

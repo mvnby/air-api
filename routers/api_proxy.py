@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from core.security import get_current_username
 from schemas import AddressSuggestResponse
 from services.address_suggest_service import AddressSuggestService
+from services.belarus_registry_service import fetch_registry_data
 
 router = APIRouter(tags=["api"])
 logger = logging.getLogger(__name__)
@@ -44,13 +45,10 @@ async def get_all_banks():
 
 
 async def _fetch_egr_data(unp: str) -> dict:
-    url = f"http://grp.nalog.gov.by/api/grp-public/data?unp={unp}&type=json&charset=UTF-8"
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.get(url, timeout=10.0)
-            return response.json()
-        except Exception as e:
-            return {"error": str(e)}
+    try:
+        return await fetch_registry_data(unp)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="УНП должен содержать 9 цифр") from None
 
 
 def _normalize_bank_search_query(search: str) -> tuple[str, str | None]:

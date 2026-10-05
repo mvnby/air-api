@@ -12,12 +12,10 @@ from zipfile import BadZipFile, ZipFile
 import httpx
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select, text
+from sqlmodel import select
 
 from core.config import settings
-from core.input_validation import normalize_phone_digits
 from models import Customer, CustomerBranch, LeadSource, Order, OrderAttachmentLink, OrderStatus, ServiceAttachment
-from models.common import CustomerType
 from models.tenancy import TenantScope
 from schemas_belzakupki_enrichment import (
     ManagerOrderSourceApply,
@@ -30,8 +28,8 @@ from schemas_belzakupki_enrichment import (
     SourceObjectDraft,
     SourceScenarioDraft,
 )
-from services.customer_party_classifier import infer_customer_type_from_requisites
-from services.customer_creation_service import CustomerAlreadyExistsError, CustomerCreationService
+from services.belzakupki_customer_evidence import extract_customer_evidence
+from services.belzakupki_customer_service import enrich_registry, apply_reviewed_customer
 from services.commercial_terms_extraction import extract_commercial_terms
 from services.order_commercial_terms_service import commercial_terms_response, store_source_terms
 from services.belzakupki_source_analysis import analyze_tender_text, extract_missing_document_text
@@ -219,41 +217,28 @@ class BelzakupkiEnrichmentService:
         order = await cls._order(session, order_id, scope)
         data = await cls._detail(order)
         source, external_id = _source_identity(order)
-        source_customer = data.get("customer") if isinstance(data.get("customer"), dict) else {}
-        contacts = source_customer.get("contacts") if isinstance(source_customer.get("contacts"), dict) else {}
         raw = "\n".join(filter(None, [_text(data.get("description"), 30000)] + [
             _text(doc.get("extracted_text"), 100000) for doc in cls._documents(data)
         ]))
-        name = _text(source_customer.get("name") or data.get("customer_name"), 500)
-        source_inn = _unp(source_customer.get("unp"))
-        inn = source_inn or _customer_unp_from_document(raw, name)
-        contact_phone = str(contacts.get("phone") or "")
-        match = _PHONE.search(contact_phone)
-        phone = match.group(0) if match else None
-        email = _text(contacts.get("email"), 255)
-        source_phone = bool(phone)
-        source_email = bool(email)
-        if not phone:
-            match = _PHONE.search(raw)
-            phone = match.group(0) if match else None
-        if not email:
-            emails = {match.group(0).lower() for match in _EMAIL.finditer(raw)}
-            email = next(iter(emails)) if len(emails) == 1 else None
-        party_type = infer_customer_type_from_requisites({"name": name, "inn": inn})
-        if party_type == CustomerType.individual and name and not re.search(
-            r"\b\w+(?:ович|евич|овна|евна|ична|авіч|евіч|аўна)\b", name, re.I,
-        ):
-            party_type = CustomerType.company
-        customer = SourceCustomerDraft(
-            name=name, inn=inn, type=party_type.value, phone=phone, email=email,
-            legal_address=_text(source_customer.get("legal_address"), 500),
-        )
+        evidence = extract_customer_evidence(data)
+        await enrich_registry(evidence)
+        customer = evidence.customer
+        inn = customer.inn
         matches = []
         if inn:
             matches = (await session.execute(select(Customer).where(
                 Customer.tenant_id == scope.tenant_id, Customer.inn == inn,
             ))).scalars().all()
-        warnings: list[str] = []
+        existing_customer_id = int(matches[0].id) if len(matches) == 1 else None
+        if order.customer_id and existing_customer_id is None:
+            current_customer = await TenantEntityAccessService.get_customer(session, order.customer_id, tenant_scope=scope)
+            if current_customer is not None:
+                name_key = lambda value: "".join(char for char in str(value or "").casefold() if char.isalnum())
+                if current_customer.inn == inn and inn or (
+                    not current_customer.inn and name_key(current_customer.name) == name_key(customer.name)
+                ):
+                    existing_customer_id = int(current_customer.id)
+        warnings: list[str] = list(evidence.warnings)
         if not inn:
             warnings.append("УНП заказчика не найден; выберите клиента вручную или проверьте данные перед созданием.")
         elif len(matches) > 1:
@@ -305,18 +290,7 @@ class BelzakupkiEnrichmentService:
         current_scenario = _scenario_draft(current_workflow, current_service) if current_workflow else None
         suggested = infer_scenario_from_task(_text(data.get("title"), 1000)) or infer_scenario_from_task(summary)
         suggested_scenario = _scenario_draft(suggested.workflow_type, suggested.service_type) if suggested else None
-        field_sources = {
-            "customer.name": "Карточка закупки",
-            "customer.type": "Определено по реквизитам заказчика",
-        }
-        if inn:
-            field_sources["customer.inn"] = "Карточка закупки" if source_inn else "Текст документа"
-        if phone:
-            field_sources["customer.phone"] = "Карточка закупки" if source_phone else "Текст документа"
-        if email:
-            field_sources["customer.email"] = "Карточка закупки" if source_email else "Текст документа"
-        if customer.legal_address:
-            field_sources["customer.legal_address"] = "Карточка закупки"
+        field_sources = dict(evidence.field_sources)
         draft_source = "Ранее подтверждено менеджером" if reviewed else "Текст документа"
         if summary:
             field_sources["work_summary"] = draft_source if reviewed or not data.get("description") else "Описание закупки"
@@ -339,7 +313,9 @@ class BelzakupkiEnrichmentService:
             order_id=order_id, source_code=source, external_id=external_id,
             source_url=_text(data.get("source_url"), 2048), title=_text(data.get("title"), 1000),
             deadline_at=_text(data.get("deadline_at"), 80), estimated_value=_amount(data.get("estimated_value")),
-            customer=customer, existing_customer_id=int(matches[0].id) if len(matches) == 1 else None,
+            customer=customer, existing_customer_id=existing_customer_id,
+            contacts=evidence.contacts, related_customers=evidence.related_customers,
+            submission=evidence.submission,
             current_scenario=current_scenario, suggested_scenario=suggested_scenario,
             work_summary=summary, equipment_details=equipment_details, objects=objects,
             documents=documents, field_sources=field_sources, warnings=warnings,
@@ -362,7 +338,7 @@ class BelzakupkiEnrichmentService:
         for document_id in selected:
             doc = documents[document_id]
             extracted = doc.extracted_text
-            if not extracted:
+            if not extracted or doc.extracted_text_truncated:
                 content, filename, mime_type = await cls.document(
                     session, order_id=order_id, document_id=document_id, scope=scope,
                 )
@@ -373,12 +349,42 @@ class BelzakupkiEnrichmentService:
                     preview.warnings.append(f"{doc.name}: {diagnostic}")
                 if extracted:
                     doc.extracted_text = extracted
-                    doc.extracted_text_truncated = len(extracted) >= 24000
+                    doc.extracted_text_truncated = len(extracted) >= 100000
             if extracted:
-                texts.append(f"Документ {doc.name}:\n{extracted[:24000]}")
+                if doc.extracted_text_truncated:
+                    raise ValueError(f"Текст документа «{doc.name}» обрезан. Проверьте оригинал перед анализом.")
+                texts.append(f"Документ {doc.name}:\n{extracted}")
         if not texts:
             preview.warnings.append("Выбранные документы не содержат доступного текста для анализа.")
             return preview
+        refreshed = extract_customer_evidence({
+            "customer": {
+                "name": preview.customer.name, "unp": preview.customer.inn,
+                "legal_address": preview.customer.legal_address,
+                "contacts": {"phone": preview.customer.phone, "email": preview.customer.email},
+            },
+            "source_url": preview.source_url,
+            "documents": [doc.model_dump() for doc in preview.documents],
+        })
+        if refreshed.customer.inn != preview.customer.inn or any(
+            candidate.inn not in {item.inn for item in preview.related_customers}
+            for candidate in refreshed.related_customers
+        ):
+            await enrich_registry(refreshed)
+        else:
+            for field in ("name", "type", "legal_address"):
+                if getattr(preview.customer, field):
+                    setattr(refreshed.customer, field, getattr(preview.customer, field))
+        preview.customer = refreshed.customer
+        preview.contacts = refreshed.contacts
+        preview.related_customers = refreshed.related_customers
+        preview.submission = refreshed.submission
+        preview.field_sources.update(refreshed.field_sources)
+        preview.warnings = list(dict.fromkeys([*preview.warnings, *refreshed.warnings]))
+        if preview.customer.inn:
+            preview.warnings = [warning for warning in preview.warnings if not warning.startswith("УНП заказчика не найден;")]
+        if all(doc.extracted_text for doc in preview.documents):
+            preview.warnings = [warning for warning in preview.warnings if not warning.startswith("Не все документы имеют извлечённый текст.")]
         work_summary, equipment_details, objects = await analyze_tender_text("\n\n".join(texts))
         if work_summary:
             preview.work_summary = work_summary
@@ -467,56 +473,11 @@ class BelzakupkiEnrichmentService:
             )
             selected_scenario = (workflow_type, service_type)
         applied: list[str] = []
-        customer = None
-        draft = payload.customer
-        if payload.customer_action == "existing":
-            if payload.customer_id is None:
-                raise ValueError("customer_id is required")
-            customer = await TenantEntityAccessService.get_customer(session, payload.customer_id, tenant_scope=scope)
-            if customer is None:
-                raise ValueError("Customer not found")
-            source_unp = _unp((detail.get("customer") or {}).get("unp"))
-            if source_unp and customer.inn != source_unp:
-                raise ValueError("Customer UNP does not match source UNP")
-        elif payload.customer_action == "create":
-            if draft is None or not _text(draft.name, 500):
-                raise ValueError("Customer name is required")
-            if draft.inn:
-                if _unp(draft.inn) != draft.inn:
-                    raise ValueError("Customer UNP must contain exactly nine digits")
-            lock_identity = draft.inn or normalize_phone_digits(draft.phone or "") or str(draft.email or "").strip().lower()
-            if lock_identity:
-                await session.execute(
-                    text("SELECT pg_advisory_xact_lock(hashtext(:lock_key)::bigint)"),
-                    {"lock_key": f"belzakupki-customer:{scope.tenant_id}:{lock_identity}"},
-                )
-            duplicate = await CustomerCreationService._find_duplicate(
-                session, phone=draft.phone, email=draft.email, inn=draft.inn,
-                tenant_scope=scope,
-            )
-            if duplicate is not None:
-                existing, matched_fields = duplicate
-                raise CustomerAlreadyExistsError(
-                    customer_id=int(existing.id or 0), customer_name=existing.name,
-                    matched_fields=matched_fields,
-                )
-            source_unp = _unp((detail.get("customer") or {}).get("unp"))
-            if source_unp and draft.inn != source_unp:
-                raise ValueError("Customer UNP does not match source UNP")
-            try:
-                party_type = CustomerType(draft.type)
-            except ValueError as exc:
-                raise ValueError("Invalid customer type") from exc
-            customer = Customer(
-                tenant_id=scope.tenant_id, name=draft.name.strip(), phone=draft.phone or "",
-                email=draft.email, type=party_type, inn=draft.inn,
-                full_legal_name=draft.name if party_type == CustomerType.company else None,
-                legal_address=draft.legal_address,
-                signing_mode="statutory_body" if party_type == CustomerType.company else "self",
-            )
-            session.add(customer)
-            await session.flush()
-            applied.append("customer_created")
+        evidence = extract_customer_evidence(detail)
+        customer = await apply_reviewed_customer(
+            session, order=order, scope=scope, payload=payload,
+            evidence=evidence, applied=applied,
+        )
         if customer is not None:
             if order.customer_id and order.customer_id != customer.id:
                 raise ValueError("Order already has another customer")
@@ -569,6 +530,11 @@ class BelzakupkiEnrichmentService:
             applied.append("customer_branch_id")
         enrichment = {
             "source": source, "external_id": external_id,
+            "submission": (
+                evidence.submission.model_dump() if "submission" in fields_set
+                else previous.get("submission") or evidence.submission.model_dump()
+            ),
+            "contacts": [item.model_dump() for item in evidence.contacts],
             "work_summary": (
                 _text(payload.work_summary, 10000) if "work_summary" in fields_set
                 else previous.get("work_summary")

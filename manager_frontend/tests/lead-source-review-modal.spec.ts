@@ -11,6 +11,9 @@ const preview = {
   order_id: 41,
   source_code: 'belzakupki', external_id: 'T-12', source_url: 'https://example.test/tender', title: 'Поставка',
   customer: { name: 'ООО Заказчик', inn: '123456789', type: 'company', email: 'office@example.test' },
+  contacts: [{ email: 'tender@example.test', purpose: 'submission' as const, source: 'Письмо', evidence: 'Направить предложения на tender@example.test' }],
+  related_customers: [{ name: 'Филиал', inn: '987654321', type: 'company' as const, email: 'branch@example.test', bank_name: 'Банк филиала', bic: 'BIC-F', iban: 'BY-F' }],
+  submission: { method: 'email' as const, email: 'tender@example.test', source: 'Документ', evidence: 'Предложения направить по email' },
   existing_customer_id: null, work_summary: 'Обслуживание кондиционеров', equipment_details: '2 блока',
   current_scenario: { workflow_type: 'sales_installation', service_type: 'turnkey', label: 'Продажа + монтаж' },
   suggested_scenario: { workflow_type: 'maintenance', service_type: 'maintenance', label: 'Обслуживание' },
@@ -38,6 +41,8 @@ describe('LeadSourceReviewModal', () => {
     const wrapper = mount(LeadSourceReviewModal, { props: { open: true, orderId: 41, leadStatus: 'new_lead' } });
     await flushPromises();
     expect(wrapper.text()).toContain('ТЗ.pdf');
+    expect(wrapper.text()).toContain('Подача по email · tender@example.test');
+    expect(wrapper.text()).toContain('Направить предложения на tender@example.test');
     expect(wrapper.get<HTMLSelectElement>('select[aria-label="Сценарий заказа"]').element.value).toBe('maintenance:maintenance');
     expect(wrapper.find('input[placeholder*="Цен"]').exists()).toBe(false);
     expect(wrapper.get('button.btn-mini').attributes('disabled')).toBeDefined();
@@ -50,6 +55,109 @@ describe('LeadSourceReviewModal', () => {
       document_ids: ['doc-1'], objects: [{ address: 'Минск, Ленина, 1', equipment: [{ brand: 'Daikin', model: 'A1', quantity: 2 }] }],
     }));
     expect(wrapper.emitted('applied')?.[0]?.[0]).toEqual(expect.objectContaining({ orderId: 41, customerId: 9 }));
+  });
+
+  it('shows explicit platform and unknown submission states with their evidence', async () => {
+    sourceApi.preview.mockResolvedValueOnce({ ...preview, submission: { method: 'platform', url: 'https://etp.example.test/t/1', source: 'Документ', evidence: 'Подача через электронную площадку' } });
+    const platform = mount(LeadSourceReviewModal, { props: { open: true, orderId: 41 } });
+    await flushPromises();
+    expect(platform.text()).toContain('Подача через ЭТП');
+    expect(platform.get('a[href="https://etp.example.test/t/1"]').text()).toContain('Открыть ЭТП');
+    expect(platform.text()).toContain('Подача через электронную площадку');
+    platform.unmount();
+
+    sourceApi.preview.mockResolvedValueOnce({ ...preview, submission: { method: 'unknown', evidence: 'В документах не найдено указаний' } });
+    const unknown = mount(LeadSourceReviewModal, { props: { open: true, orderId: 41 } });
+    await flushPromises();
+    expect(unknown.text()).toContain('Способ подачи требует уточнения');
+    expect(unknown.text()).toContain('В документах не найдено указаний');
+  });
+
+  it('selects a related branch as a complete draft and applies only that branch UNP and bank', async () => {
+    const wrapper = mount(LeadSourceReviewModal, { props: { open: true, orderId: 41, leadStatus: 'new_lead' } });
+    await flushPromises();
+    await wrapper.get('input[placeholder="Название или имя"]').setValue('Вручную исправлено');
+    await wrapper.findAll('button').find((button) => button.text().includes('Филиал'))!.trigger('click');
+    expect((wrapper.get('input[placeholder="Название или имя"]').element as HTMLInputElement).value).toBe('Филиал');
+    expect((wrapper.get('input[placeholder="Название банка"]').element as HTMLInputElement).value).toBe('Банк филиала');
+    expect((wrapper.get('input[placeholder="Email"]').element as HTMLInputElement).value).toBe('branch@example.test');
+    expect(wrapper.text()).toContain('tender@example.test');
+    expect(wrapper.text()).toContain('Название · Данные филиала из источника');
+    await wrapper.findAll('button').find((button) => button.text().includes('Основной заказчик'))!.trigger('click');
+    expect(wrapper.text()).toContain('Название · Карточка закупки');
+    await wrapper.findAll('button').find((button) => button.text().includes('Филиал'))!.trigger('click');
+    await wrapper.findAll('input[type="checkbox"]').at(-1)!.setValue(true);
+    await wrapper.get('button.btn-mini').trigger('click');
+    expect(sourceApi.apply).toHaveBeenCalledWith(41, expect.objectContaining({
+      customer_action: 'create',
+      customer: expect.objectContaining({ name: 'Филиал', inn: '987654321', bank_name: 'Банк филиала', bic: 'BIC-F', iban: 'BY-F', email: 'branch@example.test' }),
+      submission: preview.submission,
+    }));
+  });
+
+  it('keeps the selected branch separate when AI refreshes the parent requisites', async () => {
+    sourceApi.analyze.mockResolvedValueOnce({ ...preview, customer: { ...preview.customer, phone: '+375291234567' } });
+    const wrapper = mount(LeadSourceReviewModal, { props: { open: true, orderId: 41, leadStatus: 'new_lead' } });
+    await flushPromises();
+    await wrapper.findAll('button').find((button) => button.text().includes('Филиал'))!.trigger('click');
+    await wrapper.findAll('button').find((button) => button.text() === 'Обработать ИИ')!.trigger('click');
+    await flushPromises();
+    expect((wrapper.get('input[placeholder="Телефон"]').element as HTMLInputElement).value).toBe('');
+    expect((wrapper.get('input[placeholder="УНП"]').element as HTMLInputElement).value).toBe('987654321');
+    expect(wrapper.text()).toContain('Название · Данные филиала из источника');
+    await wrapper.findAll('button').find((button) => button.text().includes('Основной заказчик'))!.trigger('click');
+    expect((wrapper.get('input[placeholder="Телефон"]').element as HTMLInputElement).value).toBe('+375291234567');
+  });
+
+  it('sends customer draft fields alongside an existing match and normalizes OCR UNP characters', async () => {
+    sourceApi.preview.mockResolvedValueOnce({ ...preview, existing_customer_id: 17, customer: { ...preview.customer, inn: 'ЗОI l23456' } });
+    const wrapper = mount(LeadSourceReviewModal, { props: { open: true, orderId: 41 } });
+    await flushPromises();
+    await wrapper.findAll('input[type="checkbox"]').at(-1)!.setValue(true);
+    await wrapper.get('button.btn-mini').trigger('click');
+    expect(sourceApi.apply).toHaveBeenCalledWith(41, expect.objectContaining({
+      customer_action: 'existing', customer_id: 17,
+      customer: expect.objectContaining({ inn: '301123456' }),
+    }));
+  });
+
+  it.each(['ЗОI l2345', '12345X789'])('blocks apply when a submitted draft has invalid UNP %s', async (inn) => {
+    sourceApi.preview.mockResolvedValueOnce({ ...preview, customer: { ...preview.customer, inn } });
+    const wrapper = mount(LeadSourceReviewModal, { props: { open: true, orderId: 41, leadStatus: 'new_lead' } });
+    await flushPromises();
+    expect(wrapper.text()).toContain('УНП должен содержать ровно 9 цифр');
+    await wrapper.findAll('input[type="checkbox"]').at(-1)!.setValue(true);
+    expect(wrapper.get('button.btn-mini').attributes('disabled')).toBeDefined();
+    expect(sourceApi.apply).not.toHaveBeenCalled();
+  });
+
+  it('copies a contact email into the draft only after an explicit selection', async () => {
+    const wrapper = mount(LeadSourceReviewModal, { props: { open: true, orderId: 41, leadStatus: 'new_lead' } });
+    await flushPromises();
+    expect((wrapper.get('input[placeholder="Email"]').element as HTMLInputElement).value).toBe('office@example.test');
+    await wrapper.findAll('button').find((button) => button.text() === 'Использовать как email клиента')!.trigger('click');
+    expect((wrapper.get('input[placeholder="Email"]').element as HTMLInputElement).value).toBe('tender@example.test');
+  });
+
+  it('fills only empty customer fields from refreshed analysis and keeps manager edits', async () => {
+    sourceApi.analyze.mockResolvedValueOnce({
+      ...preview, customer: { ...preview.customer, name: 'Извлечённое имя', email: 'new@example.test', bank_name: 'Новый банк' },
+      contacts: [{ email: 'new@example.test', purpose: 'general', source: 'Новый файл', evidence: 'Контакт' }],
+      related_customers: [{ name: 'Новый филиал', inn: '555555555', bank_name: 'Банк 2' }],
+      submission: { method: 'platform', url: 'https://etp.example.test', evidence: 'Новый анализ' },
+    });
+    const wrapper = mount(LeadSourceReviewModal, { props: { open: true, orderId: 41, leadStatus: 'new_lead' } });
+    await flushPromises();
+    await wrapper.get('input[placeholder="Название или имя"]').setValue('Вручную исправлено');
+    await wrapper.get('input[placeholder="Название банка"]').setValue('Банк менеджера');
+    await wrapper.findAll('button').find((button) => button.text() === 'Обработать ИИ')!.trigger('click');
+    await flushPromises();
+    expect((wrapper.get('input[placeholder="Название или имя"]').element as HTMLInputElement).value).toBe('Вручную исправлено');
+    expect((wrapper.get('input[placeholder="Название банка"]').element as HTMLInputElement).value).toBe('Банк менеджера');
+    expect((wrapper.get('input[placeholder="Email"]').element as HTMLInputElement).value).toBe('office@example.test');
+    expect(wrapper.text()).toContain('Подача через ЭТП');
+    expect(wrapper.text()).toContain('new@example.test');
+    expect(wrapper.text()).toContain('Новый филиал');
   });
 
   it('does not offer skip for a new lead', async () => {

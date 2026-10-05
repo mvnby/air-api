@@ -9,5 +9,8 @@ export type SourceCustomerDraft = {
     phone?: (string | null);
     email?: (string | null);
     legal_address?: (string | null);
+    bank_name?: (string | null);
+    bic?: (string | null);
+    iban?: (string | null);
 };
 
