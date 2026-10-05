@@ -1,4 +1,6 @@
 from io import BytesIO
+import json
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from zipfile import ZipFile
@@ -17,6 +19,11 @@ from services.belzakupki_enrichment_service import (
     _source_identity,
 )
 from services.belzakupki_import_service import BelzakupkiImportService
+
+
+@pytest.fixture(autouse=True)
+def mock_registry(monkeypatch):
+    monkeypatch.setattr("services.belzakupki_customer_service.fetch_registry_data", AsyncMock(return_value={}))
 
 
 EXCERPT_455 = (
@@ -192,6 +199,30 @@ async def test_analyze_reads_missing_doc_text_and_returns_ai_draft(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_analysis_keeps_registry_verified_branch_name_and_address(monkeypatch):
+    detail = json.loads((Path(__file__).parents[1] / "fixtures/tender_customer/466.json").read_text())
+    async def registry(unp):
+        return {"row": {"vunp": unp, "vnaimp": detail["customer"]["name"] if unp == "300582165" else "Канонический филиал",
+                        "vpadres": "Адрес заказчика" if unp == "300582165" else "Адрес филиала"}}
+    monkeypatch.setattr("services.belzakupki_customer_service.fetch_registry_data", registry)
+    monkeypatch.setattr(BelzakupkiEnrichmentService, "_order", AsyncMock(return_value=_order()))
+    monkeypatch.setattr(BelzakupkiEnrichmentService, "_detail", AsyncMock(return_value=detail))
+    monkeypatch.setattr("services.belzakupki_enrichment_service.analyze_tender_text", AsyncMock(return_value=(None, None, [])))
+    session = MagicMock()
+    session.execute = AsyncMock()
+    session.execute.return_value = MagicMock()
+    session.execute.return_value.scalars.return_value.all.return_value = []
+    preview = await BelzakupkiEnrichmentService.analyze(
+        session, order_id=466, scope=TenantScope(tenant_id=1, storefront_id=1),
+        payload=ManagerOrderSourceAnalyze(document_ids=[str(detail["documents"][0]["id"])]),
+    )
+    assert preview.related_customers[0].name == "Канонический филиал"
+    assert preview.related_customers[0].legal_address == "Адрес филиала"
+    assert preview.related_customers[0].iban == "BY43BLBB30120300230565001001"
+    assert preview.field_sources["customer.name"] == "Проверено по УНП в реестре"
+
+
+@pytest.mark.asyncio
 async def test_replay_preserves_reviewed_work_and_objects_when_omitted(monkeypatch):
     order = _order()
     order.status = OrderStatus.NEGOTIATION
@@ -244,7 +275,7 @@ async def test_apply_links_customer_two_branches_and_original_once(monkeypatch):
     monkeypatch.setattr(BelzakupkiEnrichmentService, "_order", AsyncMock(return_value=order))
     monkeypatch.setattr(BelzakupkiEnrichmentService, "_detail", AsyncMock(return_value=_detail()))
     monkeypatch.setattr(
-        "services.belzakupki_enrichment_service.CustomerCreationService._find_duplicate",
+        "services.belzakupki_customer_service.CustomerCreationService._find_duplicate",
         AsyncMock(return_value=None),
     )
     document = AsyncMock(return_value=(b"original-word-bytes", "task.doc", "application/msword"))
@@ -354,7 +385,7 @@ async def test_create_rejects_existing_tenant_customer_by_phone_without_unp(monk
     duplicate = Customer(id=77, tenant_id=1, name="ОАО Заказчик", phone="+375212210029")
     checker = AsyncMock(return_value=(duplicate, ("phone",)))
     monkeypatch.setattr(
-        "services.belzakupki_enrichment_service.CustomerCreationService._find_duplicate",
+        "services.belzakupki_customer_service.CustomerCreationService._find_duplicate",
         checker,
     )
 

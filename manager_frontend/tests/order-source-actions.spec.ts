@@ -25,6 +25,7 @@ describe('Order source actions', () => {
       objects: [{ address: '', equipment: preview.items.map(({ brand, model, quantity }) => ({ brand, model, quantity })) }],
       originals: [{ attachment_id: 126, name: 'Техническое задание.pdf', mime_type: 'application/pdf' }],
       installation_facts: [{ text: 'Длина коммуникаций: 5 м, 8 м, 10 м', source: 'reviewed_equipment_details', needs_review: true }],
+      submission: { method: 'email', email: 'offers@example.test', source: 'Техническое задание', evidence: 'Предложения направить на offers@example.test' },
       work_summary: 'Условия и сроки поставки сохранены полностью',
     });
     api.originalAccess.mockResolvedValue({ url: 'https://signed.test/original' });
@@ -89,6 +90,8 @@ describe('Order source actions', () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
     const wrapper = mount(OrderRequestSourceCard, { props: { orderId: 461 } }); await flushPromises();
     expect(wrapper.text()).toContain('14 шт.'); expect(wrapper.text()).not.toContain('Техническое задание.pdf');
+    expect(wrapper.text()).toContain('Подача по email · offers@example.test');
+    expect(wrapper.text()).toContain('Предложения направить на offers@example.test');
     await wrapper.get('button[aria-expanded]').trigger('click');
     expect(wrapper.findAll('th').map((th) => th.text())).toEqual(['Модель', 'Шт.']);
     expect(wrapper.text()).toContain('Длина коммуникаций: 5 м, 8 м, 10 м');

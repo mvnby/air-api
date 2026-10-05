@@ -69,7 +69,7 @@ async function save() {
       <div v-if="editing" class="space-y-3 mb-4">
         <label class="field-label">Название или ФИО<input v-model="form.name" :class="fieldClass('name')" required /></label>
         <div class="flex gap-1 rounded-lg bg-[var(--mv-bg)] p-1" aria-label="Тип клиента"><button v-for="type in (['individual', 'individual_entrepreneur', 'company'] as const)" :key="type" type="button" class="flex-1 rounded px-2 py-1.5 text-xs" :class="form.type === type ? 'bg-[var(--mv-surface)] text-brand-600 font-semibold' : 'muted'" :aria-pressed="form.type === type" @click="setType(type)">{{ customerPartyLabel(type) }}</button></div>
-        <label v-if="form.type !== 'individual'" class="field-label">УНП<input v-model="form.inn" :class="fieldClass('inn')" inputmode="numeric" maxlength="9" @blur="onInnBlur" /><span v-if="isEgrLoading">Проверяем УНП…</span></label>
+        <label v-if="form.type !== 'individual'" class="field-label">УНП<input v-model="form.inn" :class="fieldClass('inn')" inputmode="numeric" maxlength="30" @blur="onInnBlur" /><span v-if="isEgrLoading">Проверяем УНП…</span></label>
         <label v-if="form.type !== 'individual' && form.kpp" class="field-label">КПП<input v-model="form.kpp" :class="fieldClass('kpp')" /></label>
         <AddressSuggestInput v-if="form.type === 'individual'" v-model="form.actual_address" placeholder="Адрес объекта / доставки" :input-class="fieldClass('actual_address')" :error="serverErrors.actual_address" />
       </div>

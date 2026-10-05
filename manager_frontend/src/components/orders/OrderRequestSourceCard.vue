@@ -17,6 +17,12 @@ const safeSourceUrl = computed(() => {
   try { const url = new URL(card.value?.source_url || ''); return ['http:', 'https:'].includes(url.protocol) ? url.href : null; }
   catch { return null; }
 });
+const safeSubmissionUrl = computed(() => {
+  try { const url = new URL(card.value?.submission?.url || ''); return ['http:', 'https:'].includes(url.protocol) ? url.href : null; }
+  catch { return null; }
+});
+const submissionLabel = computed(() => card.value?.submission?.method === 'email' ? 'Подача по email'
+  : card.value?.submission?.method === 'platform' ? 'Подача через ЭТП' : 'Способ подачи требует уточнения');
 const load = async () => {
   const orderId = props.orderId; const version = ++loadVersion;
   loading.value = true; error.value = '';
@@ -53,6 +59,10 @@ watch(() => props.sourceEnrichment, () => { void load(); });
         <span v-if="card" class="block text-xs text-slate-500">{{ unitCount }} шт. · {{ card.originals.length }} {{ card.originals.length === 1 ? 'файл' : 'файла' }} · {{ expanded ? 'Свернуть' : 'Подробности' }}</span>
       </button>
       <button type="button" class="shrink-0 text-xs font-semibold text-brand-700" @click="review">Проработать</button>
+    </div>
+    <div v-if="card" class="mt-2 text-xs">
+      <p class="font-semibold text-slate-700">{{ submissionLabel }}<span v-if="card.submission?.method === 'email' && card.submission.email"> · {{ card.submission.email }}</span><a v-else-if="card.submission?.method === 'platform' && safeSubmissionUrl" :href="safeSubmissionUrl" target="_blank" rel="noopener noreferrer" class="ml-1 text-brand-700 underline">Открыть ЭТП</a></p>
+      <p v-if="card.submission?.source || card.submission?.evidence" class="mt-1 text-slate-500">{{ [card.submission.source, card.submission.evidence].filter(Boolean).join(' · ') }}</p>
     </div>
     <p v-if="loading" class="mt-2 text-xs text-slate-500">Загружаем заявку…</p>
     <p v-if="error" role="alert" class="mt-2 break-words text-xs text-red-700">{{ error }} <button type="button" class="underline" @click="load">Повторить</button></p>

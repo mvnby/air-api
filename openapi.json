@@ -60329,6 +60329,16 @@
               }
             ]
           },
+          "submission": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceSubmissionDraft"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "workflow_type": {
             "anyOf": [
               {
@@ -60514,6 +60524,9 @@
             ],
             "title": "Source Url"
           },
+          "submission": {
+            "$ref": "#/components/schemas/SourceSubmissionDraft"
+          },
           "work_summary": {
             "anyOf": [
               {
@@ -60585,6 +60598,9 @@
           "external_id": {
             "type": "string",
             "title": "External Id"
+          },
+          "submission": {
+            "$ref": "#/components/schemas/SourceSubmissionDraft"
           },
           "work_summary": {
             "anyOf": [
@@ -60827,6 +60843,23 @@
           },
           "customer": {
             "$ref": "#/components/schemas/SourceCustomerDraft"
+          },
+          "contacts": {
+            "items": {
+              "$ref": "#/components/schemas/SourceContactDraft"
+            },
+            "type": "array",
+            "title": "Contacts"
+          },
+          "related_customers": {
+            "items": {
+              "$ref": "#/components/schemas/SourceCustomerDraft"
+            },
+            "type": "array",
+            "title": "Related Customers"
+          },
+          "submission": {
+            "$ref": "#/components/schemas/SourceSubmissionDraft"
           },
           "existing_customer_id": {
             "anyOf": [
@@ -76788,6 +76821,42 @@
         ],
         "title": "ServiceResponse"
       },
+      "SourceContactDraft": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "Email"
+          },
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "submission",
+              "general",
+              "other"
+            ],
+            "title": "Purpose",
+            "default": "other"
+          },
+          "source": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "Source",
+            "default": ""
+          },
+          "evidence": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Evidence",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "title": "SourceContactDraft"
+      },
       "SourceCustomerDraft": {
         "properties": {
           "name": {
@@ -76855,6 +76924,42 @@
               }
             ],
             "title": "Legal Address"
+          },
+          "bank_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bank Name"
+          },
+          "bic": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 11
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bic"
+          },
+          "iban": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 34
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iban"
           }
         },
         "type": "object",
@@ -77283,6 +77388,70 @@
           "label"
         ],
         "title": "SourceScenarioDraft"
+      },
+      "SourceSubmissionDraft": {
+        "properties": {
+          "method": {
+            "type": "string",
+            "enum": [
+              "email",
+              "platform",
+              "unknown"
+            ],
+            "title": "Method",
+            "default": "unknown"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence"
+          }
+        },
+        "type": "object",
+        "title": "SourceSubmissionDraft"
       },
       "SpecRegistryItemResponse": {
         "properties": {

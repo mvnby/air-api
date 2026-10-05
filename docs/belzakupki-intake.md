@@ -66,6 +66,29 @@ procurement title or AI work summary; ambiguous text requires a manual choice.
 The manager can change the suggestion before saving. It does not set a proposal
 price from the procurement's estimated value.
 
+Customer drafts carry source-backed requisites. The collector reads the buyer
+UNP and address
+from explicitly labelled rows, excluding platform operator details. The preview
+checks the UNP against the existing public registry lookup; an outage leaves the
+source draft reviewable with a warning. Documented branches remain separate
+choices, with their own UNP and bank account. Existing customer fields are filled
+only when missing and the reviewed party identity matches; staff values remain
+authoritative. Contacts retain their purpose and supporting document text.
+
+The submission marker distinguishes an explicitly stated email destination from
+submission through an electronic platform. A generic contact email, a deadline,
+or the procurement amount does not establish a submission channel. Missing or
+conflicting instructions show that the method needs clarification. Confirmation
+stores the marker and contact evidence in order source metadata.
+
+UNP input and OCR use the same numeric-field rules: known lookalikes such as
+`З` → `3` are normalized, while unknown characters and identifiers longer than
+nine digits are rejected. These replacements never apply to email or names.
+Bank identifiers use their existing separate validation. AI input includes all
+selected extracted texts up to a shared 180,000-character limit; exceeding the
+limit fails explicitly rather than silently dropping later documents. A source
+document with truncated text must be re-extracted or reviewed manually.
+
 Applying reviewed data links an existing tenant customer or creates a customer
 with the chosen party type, then saves source work details and distinct object
 addresses. A new lead advances to negotiation only after a customer is linked

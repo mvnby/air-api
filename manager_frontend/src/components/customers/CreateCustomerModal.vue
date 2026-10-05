@@ -205,7 +205,7 @@ watch(
             <div v-if="business" class="space-y-4 rounded-xl border border-slate-700/60 bg-slate-900/35 p-4">
               <div class="relative">
                 <label class="mb-2 block text-sm font-medium text-slate-300">УНП <span class="font-normal text-slate-500">— подставим реквизиты автоматически</span></label>
-                <input v-model="form.inn" type="text" inputmode="numeric" maxlength="9" :disabled="saving" :class="inputClass('inn')" placeholder="123456789" @blur="handleInnBlur" />
+                <input v-model="form.inn" type="text" inputmode="numeric" maxlength="30" :disabled="saving" :class="inputClass('inn')" placeholder="123456789" @blur="handleInnBlur" />
                 <span v-if="isEgrLoading" class="material-icons-round absolute bottom-3 right-3 animate-spin text-sm text-brand-400">refresh</span>
                 <span v-if="serverErrors.inn" class="mt-1 block text-xs text-red-300">{{ serverErrors.inn }}</span>
                 <span v-else-if="egrError" class="mt-1 block text-xs text-amber-300">{{ egrError }}</span>

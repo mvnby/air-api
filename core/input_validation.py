@@ -14,6 +14,7 @@ _PHONE_PATTERN = re.compile(r"^\+?[\d\s().-]+$")
 _BIC_PATTERN = re.compile(r"^[A-Z0-9]{8,11}$")
 _IBAN_BY_PATTERN = re.compile(r"^BY\d{2}[A-Z0-9]{24}$")
 _IBAN_CONFUSABLES = str.maketrans("АВЕКМНОРСТУХІ", "ABEKMHOPCTYXI")
+_UNP_CONFUSABLES = str.maketrans("ЗзОоOoІіIiLl", "330000111111")
 _CONTROL_OR_SPACE_PATTERN = re.compile(r"[\x00-\x20\x7f]")
 _PUBLIC_MANUAL_RELATIVE_PREFIXES = ("/media/",)
 
@@ -75,7 +76,10 @@ def validate_optional_email(value: Optional[str]) -> Optional[str]:
 
 
 def normalize_unp(value: str) -> str:
-    return re.sub(r"\D", "", value or "")[:9]
+    # UNP is numeric. Only these OCR lookalikes are safe to correct in this
+    # field; preserve every other character so validation can reject it.
+    normalized = unicodedata.normalize("NFKC", value or "").translate(_UNP_CONFUSABLES)
+    return re.sub(r"[\s-]+", "", normalized)
 
 
 def validate_optional_unp(value: Optional[str]) -> Optional[str]:
@@ -83,7 +87,7 @@ def validate_optional_unp(value: Optional[str]) -> Optional[str]:
     if not cleaned:
         return None
     normalized = normalize_unp(cleaned)
-    if len(normalized) != 9:
+    if not re.fullmatch(r"[0-9]{9}", normalized):
         raise ValueError(UNP_ERROR)
     return normalized
 

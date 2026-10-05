@@ -725,6 +725,7 @@ export type { RepairDiagnosticLeadResponse } from './models/RepairDiagnosticLead
 export type { ServiceCatalogCounts } from './models/ServiceCatalogCounts';
 export type { ServiceDirectionSetting } from './models/ServiceDirectionSetting';
 export type { ServiceResponse } from './models/ServiceResponse';
+export type { SourceContactDraft } from './models/SourceContactDraft';
 export type { SourceCustomerDraft } from './models/SourceCustomerDraft';
 export type { SourceDocumentPreview } from './models/SourceDocumentPreview';
 export type { SourceEquipmentCandidateItem } from './models/SourceEquipmentCandidateItem';
@@ -735,6 +736,7 @@ export type { SourceInstallationFact } from './models/SourceInstallationFact';
 export type { SourceObjectDraft } from './models/SourceObjectDraft';
 export type { SourceOriginalFile } from './models/SourceOriginalFile';
 export type { SourceScenarioDraft } from './models/SourceScenarioDraft';
+export type { SourceSubmissionDraft } from './models/SourceSubmissionDraft';
 export type { SpecRegistryItemResponse } from './models/SpecRegistryItemResponse';
 export type { SpecRegistryResponse } from './models/SpecRegistryResponse';
 export type { SpecsKeysResponse } from './models/SpecsKeysResponse';
