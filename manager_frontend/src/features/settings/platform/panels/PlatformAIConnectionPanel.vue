@@ -4,6 +4,7 @@ import { ManagerPlatformAiService } from '../../../../client';
 import { confirmDialog } from '../../../../services/ui-feedback';
 import { usePlatformSettingsContext } from '../platform-settings-context';
 import DeepSeekConnectionPanel from './DeepSeekConnectionPanel.vue';
+import JevConnectionPanel from './JevConnectionPanel.vue';
 
 const { activeSettingsTab } = usePlatformSettingsContext();
 type Status = { configured: boolean; enabled: boolean; selected_model: string | null };
@@ -86,6 +87,7 @@ onMounted(() => { void load(); });
 <template>
   <div v-show="activeSettingsTab === 'aiConnection'" class="space-y-5">
     <DeepSeekConnectionPanel />
+    <JevConnectionPanel />
     <section class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-6" data-testid="platform-ai-connection">
     <h2 class="text-lg font-semibold text-gray-900 dark:text-white">ZAPRO.SU — AI-подключение</h2>
     <p class="mt-2 text-sm text-gray-600 dark:text-slate-300">Платформенный ключ доступен только администраторам платформы. Запросы идут через сервер. Другие AI-сценарии сохраняют текущего провайдера, пока не подключены к этому адаптеру явно.</p>

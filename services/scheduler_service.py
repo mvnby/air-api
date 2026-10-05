@@ -194,6 +194,7 @@ class SchedulerService:
 
         # Pull one bounded Belzakupki opportunity page for the explicitly scoped inbox.
         tasks.append(asyncio.create_task(self._belzakupki_import_loop()))
+        tasks.append(asyncio.create_task(self._jev_shadow_loop()))
 
         try:
             # Keep the main loop alive.
@@ -204,6 +205,16 @@ class SchedulerService:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
             raise
+
+    async def _jev_shadow_loop(self):
+        from services.jev_shadow_service import JevShadowService
+
+        while True:
+            try:
+                await JevShadowService.process_batch()
+            except Exception:
+                logger.warning("JEV_SHADOW worker_failed")
+            await asyncio.sleep(30)
 
     async def _price_sync_loop(self, interval_hours: int):
         while True:

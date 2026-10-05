@@ -8,6 +8,8 @@ from models import AnalyticsConnection
 from models.document_drive_connection import DocumentDriveConnection
 from models.platform_ai_connection import PlatformAIConnection
 from models.deepseek_connection import DeepSeekConnection
+from models.jev_shadow import JevConnection
+from services.jev_connection_service import JevCredentialCipher, JevCredentialError
 from services.deepseek_connection_service import DeepSeekCredentialCipher, DeepSeekCredentialError
 from services.platform_ai_connection_service import PlatformAICredentialCipher
 from services.zaprosu_provider_service import ZaprosuError
@@ -18,10 +20,10 @@ from services.document_drive_contracts import DocumentDriveConnectionError, Docu
 async def integration_credential_health(session: AsyncSession) -> dict:
     checked = 0
     unreadable = 0
-    for model in (AnalyticsConnection, DocumentDriveConnection, PlatformAIConnection, DeepSeekConnection):
+    for model in (AnalyticsConnection, DocumentDriveConnection, PlatformAIConnection, DeepSeekConnection, JevConnection):
         rows = (await session.execute(select(model))).scalars().all()
         for row in rows:
-            if isinstance(row, DeepSeekConnection) and not row.encrypted_credentials:
+            if isinstance(row, (DeepSeekConnection, JevConnection)) and not row.encrypted_credentials:
                 continue
             checked += 1
             try:
@@ -36,9 +38,11 @@ async def integration_credential_health(session: AsyncSession) -> dict:
                     )
                 elif isinstance(row, DeepSeekConnection):
                     DeepSeekCredentialCipher.decrypt_with_source(row.encrypted_credentials)
+                elif isinstance(row, JevConnection):
+                    JevCredentialCipher.decrypt_with_source(row.encrypted_credentials)
                 else:
                     PlatformAICredentialCipher.decrypt_with_source(row.encrypted_credentials)
-            except (AnalyticsConnectionError, DocumentDriveConnectionError, ZaprosuError, DeepSeekCredentialError):
+            except (AnalyticsConnectionError, DocumentDriveConnectionError, ZaprosuError, DeepSeekCredentialError, JevCredentialError):
                 unreadable += 1
     return {
         "status": "passed" if unreadable == 0 else "failed",

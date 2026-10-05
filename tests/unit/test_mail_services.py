@@ -54,12 +54,13 @@ PJCBBY2X;="BY44PJCB30120493741000000933";="17";;420,00;420,00;22.05.2026;OTHR 19
 
 
 @pytest.fixture
-async def sqlite_session(tmp_path: Path):
+async def sqlite_session(tmp_path: Path, monkeypatch):
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'mail_services.db'}", echo=False)
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
 
     session_factory = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+    monkeypatch.setattr("services.jev_shadow_service.async_session_maker", session_factory)
     async with session_factory() as session:
         yield session
 

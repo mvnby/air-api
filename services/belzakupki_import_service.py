@@ -438,6 +438,9 @@ class BelzakupkiImportService:
             checkpoint.cursor = next_cursor
             checkpoint.updated_at = datetime.now(timezone.utc)
             session.add(checkpoint)
+        # Observe the committed page, including rejected rows with durable IDs.
+        from services.jev_shadow_service import JevShadowService
+        await JevShadowService.enqueue_tenders(tenant_scope=tenant_scope, items=items)
         return result
 
     @classmethod

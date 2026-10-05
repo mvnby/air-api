@@ -24357,6 +24357,206 @@
         ]
       }
     },
+    "/api/manager/platform-ai/jev": {
+      "get": {
+        "tags": [
+          "manager/platform-ai"
+        ],
+        "summary": "Get Jev Connection",
+        "operationId": "get_jev_connection",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JevStatus"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "manager/platform-ai"
+        ],
+        "summary": "Put Jev Connection",
+        "operationId": "put_jev_connection",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JevUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JevStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "manager/platform-ai"
+        ],
+        "summary": "Delete Jev Connection",
+        "operationId": "delete_jev_connection",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JevStatus"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/platform-ai/jev/test": {
+      "post": {
+        "tags": [
+          "manager/platform-ai"
+        ],
+        "summary": "Test Jev Connection",
+        "operationId": "test_jev_connection",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JevTest"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/platform-ai/jev/shadow": {
+      "get": {
+        "tags": [
+          "manager/platform-ai"
+        ],
+        "summary": "Get Jev Shadow Report",
+        "operationId": "get_jev_shadow_report",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "email",
+                    "belzakupki"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          },
+          {
+            "name": "disagreements_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Disagreements Only"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JevShadowReport"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/storefront-settings/brand": {
       "get": {
         "tags": [
@@ -44482,6 +44682,381 @@
           "selected_extras"
         ],
         "title": "InstallationWorkSummary"
+      },
+      "JevShadowItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "email",
+              "belzakupki"
+            ],
+            "title": "Source"
+          },
+          "subject": {
+            "type": "string",
+            "title": "Subject"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "completed",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "primary_provider": {
+            "type": "string",
+            "title": "Primary Provider"
+          },
+          "primary_model_requested": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Model Requested"
+          },
+          "primary_is_relevant": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Is Relevant"
+          },
+          "primary_duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Duration Ms"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "kind_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind Confidence"
+          },
+          "hvac_probability": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hvac Probability"
+          },
+          "jev_is_relevant": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jev Is Relevant"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "input_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Tokens"
+          },
+          "estimated_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Usd"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "source",
+          "subject",
+          "state",
+          "created_at",
+          "status",
+          "primary_provider",
+          "primary_model_requested",
+          "primary_is_relevant",
+          "primary_duration_ms",
+          "model",
+          "kind",
+          "kind_confidence",
+          "hvac_probability",
+          "jev_is_relevant",
+          "duration_ms",
+          "input_tokens",
+          "estimated_usd",
+          "error_code"
+        ],
+        "title": "JevShadowItem"
+      },
+      "JevShadowReport": {
+        "properties": {
+          "queued": {
+            "type": "integer",
+            "title": "Queued"
+          },
+          "running": {
+            "type": "integer",
+            "title": "Running"
+          },
+          "completed": {
+            "type": "integer",
+            "title": "Completed"
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed"
+          },
+          "comparable": {
+            "type": "integer",
+            "title": "Comparable"
+          },
+          "agreements": {
+            "type": "integer",
+            "title": "Agreements"
+          },
+          "disagreements": {
+            "type": "integer",
+            "title": "Disagreements"
+          },
+          "estimated_usd": {
+            "type": "number",
+            "title": "Estimated Usd"
+          },
+          "input_tokens": {
+            "type": "integer",
+            "title": "Input Tokens"
+          },
+          "median_duration_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Duration Ms"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/JevShadowItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "queued",
+          "running",
+          "completed",
+          "failed",
+          "comparable",
+          "agreements",
+          "disagreements",
+          "estimated_usd",
+          "input_tokens",
+          "median_duration_ms",
+          "items"
+        ],
+        "title": "JevShadowReport"
+      },
+      "JevStatus": {
+        "properties": {
+          "configured": {
+            "type": "boolean",
+            "title": "Configured"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "daily_budget_usd": {
+            "type": "number",
+            "title": "Daily Budget Usd"
+          },
+          "max_daily_requests": {
+            "type": "integer",
+            "title": "Max Daily Requests"
+          },
+          "today_requests": {
+            "type": "integer",
+            "title": "Today Requests"
+          },
+          "today_budget_used_usd": {
+            "type": "number",
+            "title": "Today Budget Used Usd"
+          }
+        },
+        "type": "object",
+        "required": [
+          "configured",
+          "enabled",
+          "model",
+          "daily_budget_usd",
+          "max_daily_requests",
+          "today_requests",
+          "today_budget_used_usd"
+        ],
+        "title": "JevStatus"
+      },
+      "JevTest": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok",
+          "model"
+        ],
+        "title": "JevTest"
+      },
+      "JevUpdate": {
+        "properties": {
+          "key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "daily_budget_usd": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 5.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daily Budget Usd"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "JevUpdate"
       },
       "LeadCreatePayload": {
         "properties": {
