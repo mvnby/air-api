@@ -668,28 +668,6 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     }
   };
 
-  const prepareFacsimilePdf = async (document: ManagedDocumentItem) => {
-    busy.value = true;
-    try {
-      const path = `/api/manager/document-system/documents/${encodeURIComponent(String(document.id))}/facsimile-pdf`;
-      const token = typeof OpenAPI.TOKEN === 'function'
-        ? await OpenAPI.TOKEN({ method: 'POST', url: path })
-        : OpenAPI.TOKEN;
-      const response = await fetch(`${OpenAPI.BASE}${path}`, {
-        method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        credentials: OpenAPI.WITH_CREDENTIALS ? OpenAPI.CREDENTIALS : 'same-origin',
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null);
-        throw new Error(payload?.detail?.message || payload?.detail || `Ошибка запроса (${response.status})`);
-      }
-      await loadDocuments(); input.refresh();
-      input.notify('Создан отдельный PDF с подписью и печатью. Исходный PDF сохранён.');
-    } catch (error) {
-      input.notify(`Не удалось подготовить PDF: ${getApiErrorMessage(error)}`, 'error');
-    } finally { busy.value = false; }
-  };
-
   return {
     actTerms,
     baseCustomerContractId,
@@ -711,7 +689,6 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     issueCity,
     issueDate,
     previewDraft,
-    prepareFacsimilePdf,
     legalEntities,
     hasInstallationTwoStagesError: computed(() => Boolean(installationTwoStagesError.value)),
     loading,

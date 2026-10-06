@@ -116,7 +116,9 @@ Use this after large catalog imports or when unknown spec keys appear.
 
 ### Native signed PDF copies
 
-The storefront owner uploads private PNG images of the seller's signature and seal under the document legal entity, then sets their page and positions in millimeters for each active native template version. A manager can prepare a separate `signed_pdf` artifact from an issued contract, invoice or offer. The issued PDF remains unchanged; replacing either PNG does not rewrite a prepared copy. The native PDF download and email attachment path use the prepared copy when it exists. Check the final PDF visually before sending it.
+The storefront owner uploads private PNG images of the seller's signature and seal under the document legal entity. On a ready native document, the manager opens “Подготовить PDF с подписью и печатью”, places the images directly on the actual PDF pages, and saves a separate `signed_pdf` artifact. Page clicks, mouse/touch dragging, proportional resizing, zoom and keyboard adjustments are supported; signature and seal may be placed on different pages. No numeric coordinates or DOCX markers are needed. Legacy template placements are only initial suggestions; without them, the editor starts on the last page.
+
+The editor uses authenticated, uncached PNG previews rendered by the image's existing Poppler tools. Preview and overlay share the PDF's displayed crop and rotation geometry. Saving validates the source PDF checksum, current PNG IDs and expected signed-copy ID, so a stale edit cannot replace another manager's copy. An issued document's placement can be changed before sending: earlier bytes stay immutable, a new authoritative copy is selected, and the actor, assets and placement are audited. Existing sent/signed copies and closed-order history cannot be replaced. The issued source PDF remains unchanged; replacing either PNG does not automatically rewrite prepared copies. The native PDF download and email attachment path use the current prepared copy when it exists. Check the final PDF visually before sending it.
 
 ### Customer-provided order contracts
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from hashlib import sha256
 from io import BytesIO
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, UploadFile, Response, Path
 from PIL import Image
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
@@ -13,16 +13,21 @@ from core.manager_api_errors import manager_http_error
 from core.security import AuthenticatedUser, require_manager_access
 from models import DocumentFacsimileAsset, DocumentLegalEntity, DocumentTemplate, DocumentTemplateFacsimilePlacement, DocumentTemplateVersion
 from modules.documents.application.facsimile_pdf import FacsimilePdfError, FacsimilePdfService, MAX_FACSIMILE_BYTES
+from modules.documents.application.facsimile_preview import FacsimilePreviewService
 from modules.documents.infrastructure.artifact_storage import PrivateDocumentArtifactStorage
 from routers.manager_permission_policy import ManagerPermissionRoute
 from routers.manager_operation_ids import (
     GET_MANAGER_DOCUMENT_FACSIMILE_PLACEMENT,
     PREPARE_MANAGER_DOCUMENT_FACSIMILE_PDF,
+    GET_MANAGER_DOCUMENT_FACSIMILE_PREVIEW,
+    GET_MANAGER_DOCUMENT_FACSIMILE_PREVIEW_PAGE,
+    GET_MANAGER_DOCUMENT_FACSIMILE_PREVIEW_ASSET,
     UPLOAD_MANAGER_DOCUMENT_FACSIMILE,
     UPSERT_MANAGER_DOCUMENT_FACSIMILE_PLACEMENT,
 )
 from services.private_attachment_storage_service import VariantScopedPrivateAttachmentStorage, get_private_attachment_storage
 from .schemas import DocumentFacsimilePlacementItem, DocumentFacsimilePlacementPayload
+from .facsimile_schemas import DocumentFacsimilePdfPayload, DocumentFacsimilePreviewResponse
 
 router = APIRouter(prefix="/api/manager/document-system", tags=["manager-document-system"], dependencies=[Depends(require_manager_access)], route_class=ManagerPermissionRoute)
 MAX_FACSIMILE_PIXELS = 20_000_000
@@ -56,12 +61,65 @@ async def upload_facsimile(legal_entity_id: int, kind: str, file: UploadFile = F
 
 
 @router.post("/documents/{document_id}/facsimile-pdf", operation_id=PREPARE_MANAGER_DOCUMENT_FACSIMILE_PDF)
-async def prepare_facsimile_pdf(document_id: int, session: AsyncSession = Depends(get_session), auth: AuthenticatedUser = Depends(require_manager_access)):
+async def prepare_facsimile_pdf(document_id: int, payload: DocumentFacsimilePdfPayload | None = None,
+                                session: AsyncSession = Depends(get_session), auth: AuthenticatedUser = Depends(require_manager_access)):
     try:
-        row = await FacsimilePdfService.prepare(session, tenant_scope=auth.tenant_scope(), document_id=document_id, artifact_storage=PrivateDocumentArtifactStorage(get_private_attachment_storage()))
+        row = await FacsimilePdfService.prepare(
+            session, tenant_scope=auth.tenant_scope(), document_id=document_id,
+            artifact_storage=PrivateDocumentArtifactStorage(get_private_attachment_storage()),
+            placement=payload, actor_username=auth.username, actor_staff_user_id=auth.staff_user_id,
+        )
     except FacsimilePdfError as exc:
         raise manager_http_error(status_code=409, endpoint=PREPARE_MANAGER_DOCUMENT_FACSIMILE_PDF, error_code="document_facsimile_pdf_unavailable", message=str(exc)) from exc
     return {"id": row.id, "kind": row.kind, "filename": row.filename}
+
+
+@router.get("/documents/{document_id}/facsimile-preview", response_model=DocumentFacsimilePreviewResponse,
+            operation_id=GET_MANAGER_DOCUMENT_FACSIMILE_PREVIEW)
+async def get_facsimile_preview(document_id: int, response: Response, session: AsyncSession = Depends(get_session),
+                               auth: AuthenticatedUser = Depends(require_manager_access)):
+    response.headers["Cache-Control"] = "private, no-store"
+    try:
+        return await FacsimilePreviewService.describe(session, tenant_scope=auth.tenant_scope(), document_id=document_id)
+    except FacsimilePdfError as exc:
+        raise _preview_error(GET_MANAGER_DOCUMENT_FACSIMILE_PREVIEW, exc) from exc
+
+
+@router.get("/documents/{document_id}/facsimile-preview/pages/{page_number}", response_class=Response,
+            responses={200: {"content": {"image/png": {}}}}, operation_id=GET_MANAGER_DOCUMENT_FACSIMILE_PREVIEW_PAGE)
+async def get_facsimile_preview_page(document_id: int, page_number: int = Path(ge=1, le=100),
+                                    session: AsyncSession = Depends(get_session), auth: AuthenticatedUser = Depends(require_manager_access)):
+    try:
+        content = await FacsimilePreviewService.page(
+            session, tenant_scope=auth.tenant_scope(), document_id=document_id, page_number=page_number,
+        )
+    except FacsimilePdfError as exc:
+        raise _preview_error(GET_MANAGER_DOCUMENT_FACSIMILE_PREVIEW_PAGE, exc) from exc
+    return _private_png(content)
+
+
+@router.get("/documents/{document_id}/facsimile-preview/assets/{asset_id}", response_class=Response,
+            responses={200: {"content": {"image/png": {}}}}, operation_id=GET_MANAGER_DOCUMENT_FACSIMILE_PREVIEW_ASSET)
+async def get_facsimile_preview_asset(document_id: int, asset_id: str = Path(pattern=r"^[0-9a-f]{32}$"),
+                                     session: AsyncSession = Depends(get_session), auth: AuthenticatedUser = Depends(require_manager_access)):
+    try:
+        content = await FacsimilePreviewService.asset(
+            session, tenant_scope=auth.tenant_scope(), document_id=document_id, asset_id=asset_id,
+        )
+    except FacsimilePdfError as exc:
+        raise _preview_error(GET_MANAGER_DOCUMENT_FACSIMILE_PREVIEW_ASSET, exc) from exc
+    return _private_png(content)
+
+
+def _preview_error(endpoint: str, exc: FacsimilePdfError):
+    return manager_http_error(status_code=409, endpoint=endpoint,
+                              error_code="document_facsimile_preview_unavailable", message=str(exc))
+
+
+def _private_png(content: bytes) -> Response:
+    return Response(content=content, media_type="image/png", headers={
+        "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff",
+    })
 
 
 @router.put("/templates/{template_id}/versions/{version_id}/facsimile-placement", response_model=DocumentFacsimilePlacementItem, operation_id=UPSERT_MANAGER_DOCUMENT_FACSIMILE_PLACEMENT)
