@@ -485,12 +485,14 @@ class NativeDocxRenderer:
         following = list(run)[list(run).index(node) + 1:]
         self._set_text(node, prefix)
         position = parent.index(run) + 1
-        for part in parse_line_text(value):
+        parts = parse_line_text(value)
+        has_emphasis = any(part.bold or part.italic for part in parts)
+        for part in parts:
             formatted = OxmlElement("w:r")
             if properties is not None:
                 formatted.append(deepcopy(properties))
             for enabled, tag in ((part.bold, "w:b"), (part.italic, "w:i")):
-                if enabled:
+                if enabled or has_emphasis:
                     props = formatted.find(qn("w:rPr"))
                     if props is None:
                         props = OxmlElement("w:rPr")
@@ -498,7 +500,10 @@ class NativeDocxRenderer:
                     existing = props.find(qn(tag))
                     if existing is not None:
                         props.remove(existing)
-                    props.append(OxmlElement(tag))
+                    emphasis = OxmlElement(tag)
+                    if not enabled:
+                        emphasis.set(qn("w:val"), "0")
+                    props.append(emphasis)
             text = OxmlElement("w:t")
             formatted.append(text)
             self._set_text(text, part.text)

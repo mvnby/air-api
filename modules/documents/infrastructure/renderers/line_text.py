@@ -37,6 +37,13 @@ def google_line_text_requests(value: str, index: int) -> list[dict]:
     """Google Docs offsets count UTF-16 units, including astral characters."""
     runs = parse_line_text(value.replace("\r\n", "\n").replace("\r", "\n"))
     requests = [{"insertText": {"location": {"index": index}, "text": "".join(run.text for run in runs)}}]
+    if any(run.bold or run.italic for run in runs):
+        end = index + sum(len(run.text.encode("utf-16-le")) // 2 for run in runs)
+        requests.append({"updateTextStyle": {
+            "range": {"startIndex": index, "endIndex": end},
+            "textStyle": {"bold": False, "italic": False},
+            "fields": "bold,italic",
+        }})
     for run in runs:
         end = index + len(run.text.encode("utf-16-le")) // 2
         style = {}

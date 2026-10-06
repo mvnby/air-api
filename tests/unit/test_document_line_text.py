@@ -31,6 +31,7 @@ def test_docx_line_emphasis_preserves_template_style_split_fields_and_suffix():
     cells[0].text = '{{ lines }}{{ line.number }}'
     paragraph = cells[1].paragraphs[0]
     paragraph.add_run('До {{ line.').font.name = 'Arial'
+    paragraph.runs[0].bold = True
     paragraph.add_run('title }} после {{ line.number }}').italic = True
     source = BytesIO()
     document.save(source)
@@ -46,6 +47,9 @@ def test_docx_line_emphasis_preserves_template_style_split_fields_and_suffix():
     assert next(run for run in paragraph.runs if run.text == 'Работы:').bold is True
     assert next(run for run in paragraph.runs if run.text == 'Работы:').font.name == 'Arial'
     assert next(run for run in paragraph.runs if run.text == 'Осмотр').italic is True
+    plain = next(run for run in paragraph.runs if '<b>literal</b>' in run.text)
+    assert plain.bold is False
+    assert plain.italic is False
     assert len(list(paragraph._p.iter(qn('w:br')))) == 1
     assert next(run for run in paragraph.runs if ' после 1' in run.text).italic is True
 
@@ -54,6 +58,10 @@ def test_google_emphasis_offsets_count_utf16_and_keep_html_literal():
     requests = google_line_text_requests('🔧 **Осмотр**\r\n*<b>текст</b>*', 12)
     assert requests[0]['insertText'] == {'location': {'index': 12}, 'text': '🔧 Осмотр\n<b>текст</b>'}
     assert requests[1]['updateTextStyle'] == {
+        'range': {'startIndex': 12, 'endIndex': 34},
+        'textStyle': {'bold': False, 'italic': False}, 'fields': 'bold,italic',
+    }
+    assert requests[2]['updateTextStyle'] == {
         'range': {'startIndex': 15, 'endIndex': 21}, 'textStyle': {'bold': True}, 'fields': 'bold',
     }
-    assert requests[2]['updateTextStyle']['range'] == {'startIndex': 22, 'endIndex': 34}
+    assert requests[3]['updateTextStyle']['range'] == {'startIndex': 22, 'endIndex': 34}
