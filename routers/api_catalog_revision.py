@@ -29,6 +29,17 @@ async def get_catalog_revision(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
+    """
+    Read the contextual catalog and storefront revisions used in cache keys. Returns
+    X-Catalog-Revision, X-Storefront-Catalog-Revision and a weak ETag, with private
+    revalidation headers and Vary: X-MVN-Storefront-Host. This handler returns the revision
+    body; it does not implement conditional 304 responses.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     payload = await CatalogRevisionService.get_contextual(
         session,
         tenant_scope=tenant_scope,

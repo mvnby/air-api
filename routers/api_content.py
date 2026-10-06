@@ -31,13 +31,29 @@ router = APIRouter(
 
 @router.get("/v1/content/articles", response_model=List[ArticleResponse])
 async def get_articles(session: AsyncSession = Depends(get_session)):
-    """Get list of published articles ordered by creation date (newest first)."""
+    """
+    List published articles, newest first. Articles are shared content: this handler does
+    not apply tenant filtering to the article service.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     return await ArticleService.get_all_published(session)
 
 
 @router.get("/v1/content/articles/{slug}", response_model=ArticleResponse)
 async def get_article(slug: str, session: AsyncSession = Depends(get_session)):
-    """Get article details by slug. Returns 404 if not found or not published."""
+    """
+    Read one published shared article by slug. Missing or unpublished content returns 404;
+    the article query is not tenant-scoped.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     article = await ArticleService.get_by_slug(session, slug)
     if not article:
         raise HTTPException(status_code=404, detail=f"Article with slug '{slug}' not found")
@@ -50,7 +66,15 @@ async def get_services(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
-    """Get list of all available services."""
+    """
+    Return storefront-visible service content through the installation pricing bridge, with
+    private/no-store response headers.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     response.headers.update(private_storefront_response_headers())
     return await PublicInstallationPricingBridgeService.visible_content_services(
         session, tenant_scope,
@@ -62,7 +86,14 @@ async def get_public_brands(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
-    """Get published brands that have at least one published product."""
+    """
+    List published brands with products visible in the resolved storefront catalog.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     return await ContentApiService.get_public_brands(
         session,
         tenant_scope=tenant_scope,
@@ -79,7 +110,15 @@ async def get_public_brand(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
-    """Get a published brand by slug if it has published products."""
+    """
+    Read a published brand by slug when it has products visible in this storefront. Missing
+    or unavailable brands return 404.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     brand = await ContentApiService.get_public_brand_by_slug(
         session,
         slug,
@@ -101,7 +140,15 @@ async def get_public_brand_series(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
-    """Get one published series and its public product cards."""
+    """
+    Read a published brand series and its storefront-visible product cards. Missing or
+    unavailable series return 404.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     payload = await PublicSeriesPageService.get_by_slugs(
         session,
         brand_slug=brand_slug,
@@ -123,7 +170,16 @@ async def get_service_options(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
-    """Get rich installation options."""
+    """
+    Read legacy service options for the requested category in this storefront. Returns 409
+    book_preview_required when the published price-book contract replaces that category; use
+    the installation preview contract instead.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     response.headers.update(private_storefront_response_headers())
     if not await PublicInstallationPricingBridgeService.legacy_option_category_available(
         session, tenant_scope, category,
@@ -143,7 +199,15 @@ async def get_installation_rates(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
-    """Get all installation rates."""
+    """
+    Read legacy installation rates for this storefront. Disabled installation returns an
+    empty list; an authoritative published price book returns 409 book_preview_required.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     if not await StorefrontSettingsService.is_service_enabled(
         session,
         tenant_scope=tenant_scope,
@@ -163,8 +227,13 @@ async def get_global_config(
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
     """
-    Get the public storefront configuration as a key-value dictionary.
-    Example: {"phone": "+37529...", "email": "..."}
+    Return the public key/value configuration for the resolved storefront, not private
+    platform settings.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
     """
     return await ContentApiService.get_global_config_map(
         session,

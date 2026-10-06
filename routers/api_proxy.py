@@ -92,7 +92,11 @@ async def proxy_egr(
     unp: str,
     username: str = Depends(get_current_username),
 ):
-    """Proxy for Belarus EGR (Ministry of Taxes) API."""
+    """
+    Look up Belarus registry requisites by a nine-digit UNP. Requires Manager
+    authentication; invalid UNP returns 422. Data comes from the shared external registry,
+    not tenant CRM records.
+    """
     return await _fetch_egr_data(unp)
 
 
@@ -101,7 +105,12 @@ async def find_bank(
     search: str = Query(None, description="BIC код или IBAN"),
     username: str = Depends(get_current_username),
 ):
-    """Find bank in NBRB reference by BIC/IBAN."""
+    """
+    Read the shared NBRB bank reference, optionally matching BIC or Belarus IBAN. Requires
+    Manager authentication. Without search returns the bank list; a miss is an error object
+    with HTTP 200. Reference data uses a 72-hour in-process cache and can fall back to
+    cached data on fetch exceptions.
+    """
     if not search:
         return await get_all_banks()
 
@@ -117,13 +126,21 @@ async def find_bank(
 
 @router.get("/v1/proxy/egr")
 async def public_proxy_egr(unp: str):
-    """Public proxy for Belarus EGR (Ministry of Taxes) API."""
+    """
+    Public Belarus registry lookup by a nine-digit UNP (422 for invalid format). No Manager
+    token or storefront signature is required: this is an explicit gateway exception. Reads
+    shared external registry data, not tenant records.
+    """
     return await _fetch_egr_data(unp)
 
 
 @router.get("/v1/proxy/bank")
 async def public_find_bank(search: str = Query(None, description="BIC код или IBAN")):
-    """Public proxy to find bank details by IBAN/BIC."""
+    """
+    Public bank lookup by BIC or Belarus IBAN. No Manager token or storefront signature is
+    required: this is an explicit gateway exception. Empty search returns []; a miss returns
+    an error object with HTTP 200. Uses the shared cached NBRB reference.
+    """
     if not search:
         return []
 
@@ -139,6 +156,11 @@ async def public_find_bank(search: str = Query(None, description="BIC код и�
 
 @router.get("/v1/address-suggest", response_model=AddressSuggestResponse, operation_id="public_address_suggest")
 async def public_address_suggest(q: str = Query(..., min_length=2)):
+    """
+    Public address suggestions for a query of at least two characters. No Manager token or
+    storefront signature is required: this is an explicit gateway exception. Returns an
+    empty items list when suggestions are disabled or the upstream HTTP request fails.
+    """
     try:
         items = await AddressSuggestService.suggest(q)
     except RuntimeError as exc:

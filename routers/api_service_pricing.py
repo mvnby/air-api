@@ -53,7 +53,16 @@ async def get_public_installation_pricing_config(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
-    """Tell the storefront which pricing contract is currently authoritative."""
+    """
+    Tell the storefront which installation pricing contract is authoritative. Response uses
+    private/no-store headers; read this before choosing legacy calculation or price-book
+    preview.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     response.headers.update(private_storefront_response_headers())
     return await PublicInstallationPricingBridgeService.config(session, tenant_scope)
 
@@ -69,6 +78,16 @@ async def resolve_public_installation_tariff(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
+    """
+    Resolve a tariff using the storefront installation price book. Disabled installation is
+    reported as status=unavailable with service_direction_not_enabled, rather than 404. Does
+    not create an order.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     response.headers.update(private_storefront_response_headers())
     if not await StorefrontSettingsService.is_service_enabled(
         session, tenant_scope=tenant_scope, service_kind="installation"
@@ -91,6 +110,21 @@ async def preview_public_installation_estimate(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
+    """
+    Calculate a price-book installation preview and, outside read-only demo scope, persist
+    its receipt using the required Idempotency-Key. Public callers cannot approve site
+    access: approved_site_access returns 422. Disabled installation returns
+    status=unavailable. A persistent preview replays the same input/key for its 30-minute
+    receipt lifetime; another input with that key returns 409 idempotency_key_reused. A
+    price-book revision mismatch returns 409 price_changed. Receipt
+    contention/unavailability can return 503 with Retry-After: 1; retain the same input/key
+    for a retry. Preview is not acceptance or order creation.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     response.headers.update(private_storefront_response_headers())
     if payload.approved_site_access:
         raise HTTPException(status_code=422, detail={"code": "site_access_approval_manager_only"})
@@ -153,6 +187,16 @@ async def list_public_service_tariffs(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
+    """
+    List active service tariffs and active rules for this storefront and service direction.
+    Disabled direction returns 404; installation backed by a published price book returns
+    409 book_preview_required.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     await _require_enabled(
         session,
         tenant_scope=tenant_scope,
@@ -181,6 +225,17 @@ async def calculate_public_service_tariff(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
+    """
+    Calculate a legacy active tariff within this storefront without creating an order.
+    Disabled service direction returns 404; installation with a published price book returns
+    409 book_preview_required. Tariff access and active status are checked by the tariff
+    service.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     tariff = await TariffsService.get_tariff_by_id(
         session,
         payload.tariff_id,

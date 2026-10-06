@@ -36,6 +36,12 @@ import { request as __request } from '../core/request';
 export class InternalBotV1Service {
     /**
      * Get Internal Bot Api Health
+     * Check that the authenticated bot API is reachable and report its v1 contract marker.
+     * Does not check a Telegram actor or database readiness.
+     *
+     * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+     * checks are separate. See [bot
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
      * @returns BotApiHealthResponse Successful Response
      * @throws ApiError
      */
@@ -47,6 +53,13 @@ export class InternalBotV1Service {
     }
     /**
      * Get Internal Bot Staff Context
+     * Resolve the active staff context of a Telegram identity, including Manager/executor
+     * roles and legacy installer linkage. A non-staff identity is represented by
+     * is_staff=false rather than a business permission grant.
+     *
+     * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+     * checks are separate. See [bot
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
      * @param telegramId
      * @returns BotStaffContextResponse Successful Response
      * @throws ApiError
@@ -67,6 +80,12 @@ export class InternalBotV1Service {
     }
     /**
      * Search Internal Bot Catalog
+     * Search the shared product catalog for an active staff Telegram actor (403 otherwise).
+     * Returns internal bot product projections, not storefront-only catalog cards.
+     *
+     * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+     * checks are separate. See [bot
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
      * @param requestBody
      * @returns BotCatalogSearchResponse Successful Response
      * @throws ApiError
@@ -86,6 +105,12 @@ export class InternalBotV1Service {
     }
     /**
      * Get Internal Bot Catalog Product
+     * Read one shared catalog product for an active staff Telegram actor (403 otherwise). A
+     * missing product is product=null in a successful lookup response, not 404.
+     *
+     * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+     * checks are separate. See [bot
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
      * @param productId
      * @param telegramId
      * @returns BotCatalogProductLookupResponse Successful Response
@@ -111,6 +136,13 @@ export class InternalBotV1Service {
     }
     /**
      * List Internal Bot My Tasks
+     * Read work stages assigned to the actor’s linked installer in the system tenant, with
+     * optional date/status filters. Active staff access is required (403 otherwise); staff
+     * without an installer linkage receive an empty list.
+     *
+     * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+     * checks are separate. See [bot
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
      * @param requestBody
      * @returns BotTaskListResponse Successful Response
      * @throws ApiError
@@ -130,6 +162,14 @@ export class InternalBotV1Service {
     }
     /**
      * Update Internal Bot Task Status
+     * Set the status of a stage assigned to the actor’s installer in the system tenant.
+     * Missing/inaccessible/unassigned stage returns 403; an invalid state transition returns
+     * 409. changed reports whether a transition occurred; this is not a generic idempotency
+     * receipt.
+     *
+     * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+     * checks are separate. See [bot
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
      * @param stageId
      * @param requestBody
      * @returns BotTaskStatusUpdateResponse Successful Response
@@ -154,6 +194,13 @@ export class InternalBotV1Service {
     }
     /**
      * Save Internal Bot Task Report
+     * Save a normalized installer report on the actor’s assigned stage in the system tenant.
+     * Missing/inaccessible stage returns 403. Repeating the same normalized report returns
+     * changed=false.
+     *
+     * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+     * checks are separate. See [bot
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
      * @param stageId
      * @param requestBody
      * @returns BotTaskReportSaveResponse Successful Response
@@ -178,6 +225,13 @@ export class InternalBotV1Service {
     }
     /**
      * Attach Internal Bot Task Stage File
+     * Attach a nonempty file of at most 10 MB to the actor’s assigned stage in the system
+     * tenant. Inaccessible stage returns 403, empty content 422 and oversize content 413.
+     * file_id provides attachment deduplication; inspect already_attached on retries.
+     *
+     * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+     * checks are separate. See [bot
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
      * @param stageId
      * @param formData
      * @returns BotTaskAttachmentResponse Successful Response
@@ -202,6 +256,12 @@ export class InternalBotV1Service {
     }
     /**
      * Parse Internal Bot Quick Order
+     * Parse text into an editable quick-order draft for an active Manager Telegram actor (403
+     * otherwise). Does not create an order or start a durable draft session.
+     *
+     * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+     * checks are separate. See [bot
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
      * @param requestBody
      * @returns BotQuickOrderParseResponse Successful Response
      * @throws ApiError
@@ -221,6 +281,13 @@ export class InternalBotV1Service {
     }
     /**
      * Start Internal Bot Quick Order Draft
+     * Start a durable quick-order draft owned by the active Manager Telegram actor in the
+     * system tenant. The response supplies draft_id and version for subsequent edits. Access
+     * denial returns 403, service draft conflicts 409 and invalid draft input 422.
+     *
+     * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+     * checks are separate. See [bot
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
      * @param requestBody
      * @returns BotQuickOrderDraftSessionResponse Successful Response
      * @throws ApiError
@@ -240,6 +307,13 @@ export class InternalBotV1Service {
     }
     /**
      * Search Internal Bot Quick Order Customers
+     * Search customer candidates in the system tenant for an active Manager Telegram actor.
+     * Access denial returns 403; invalid search input returns 422. Search does not create or
+     * modify a customer.
+     *
+     * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+     * checks are separate. See [bot
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
      * @param requestBody
      * @returns BotQuickOrderCustomerSearchResponse Successful Response
      * @throws ApiError
@@ -259,6 +333,13 @@ export class InternalBotV1Service {
     }
     /**
      * Get Internal Bot Quick Order Draft
+     * Read a durable draft belonging to the active Manager Telegram actor. Access denial
+     * returns 403; unavailable draft returns 404. Read version before issuing an edit or
+     * action.
+     *
+     * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+     * checks are separate. See [bot
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
      * @param draftId
      * @param telegramId
      * @returns BotQuickOrderDraftSessionResponse Successful Response
@@ -284,6 +365,13 @@ export class InternalBotV1Service {
     }
     /**
      * Patch Internal Bot Quick Order Draft
+     * Patch the actor’s active durable draft, checking expected_version and incrementing its
+     * version. Requires active Manager access (403); missing draft returns 404, stale/inactive
+     * draft 409 and invalid changes 422. On conflict reread the draft before editing.
+     *
+     * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+     * checks are separate. See [bot
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
      * @param draftId
      * @param requestBody
      * @returns BotQuickOrderDraftSessionResponse Successful Response
@@ -308,6 +396,13 @@ export class InternalBotV1Service {
     }
     /**
      * Cancel Internal Bot Quick Order Draft
+     * Cancel the actor’s active durable draft using expected_version. Requires active Manager
+     * access (403); missing draft returns 404, stale or inactive draft 409 and invalid input
+     * 422. Cancellation increments version.
+     *
+     * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+     * checks are separate. See [bot
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
      * @param draftId
      * @param requestBody
      * @returns BotQuickOrderDraftSessionResponse Successful Response
@@ -332,6 +427,14 @@ export class InternalBotV1Service {
     }
     /**
      * Create Internal Bot Quick Order From Draft
+     * Create an order from the Manager actor’s durable draft in the system tenant. Active
+     * drafts require expected_version; stale/inactive drafts return 409 and missing drafts
+     * 404. A retry after successful creation returns the recorded order/customer with
+     * created=false, using a draft-derived idempotency key.
+     *
+     * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+     * checks are separate. See [bot
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
      * @param draftId
      * @param requestBody
      * @returns BotQuickOrderCreateResponse Successful Response
@@ -356,6 +459,14 @@ export class InternalBotV1Service {
     }
     /**
      * Create Internal Bot Quick Order
+     * Create a system-tenant order from a submitted quick-order draft for an active Manager
+     * Telegram actor (403 otherwise). Uses the supplied idempotency_key; retain it when
+     * repeating the same creation. Service validation errors return 422; inspect created and
+     * the returned order/customer IDs.
+     *
+     * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+     * checks are separate. See [bot
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
      * @param requestBody
      * @returns BotQuickOrderCreateResponse Successful Response
      * @throws ApiError
@@ -375,6 +486,13 @@ export class InternalBotV1Service {
     }
     /**
      * Recognize Internal Bot Customer Requisites Text
+     * Recognize customer requisites from text for an active Manager Telegram actor in the
+     * system tenant. Returns a recognition for explicit follow-up action; OCR alone does not
+     * confirm customer creation. Access denial returns 403 and invalid content 422.
+     *
+     * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+     * checks are separate. See [bot
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
      * @param requestBody
      * @returns BotCustomerRequisitesRecognitionResponse Successful Response
      * @throws ApiError
@@ -394,7 +512,14 @@ export class InternalBotV1Service {
     }
     /**
      * Recognize Internal Bot Customer Requisites File
-     * Recognize customer requisites from JPG, PNG, WEBP, PDF, DOC, or DOCX (up to 10 MB).
+     * Recognize customer requisites from JPG, PNG, WEBP, PDF, DOC or DOCX, at most 10 MB, for
+     * an active Manager Telegram actor in the system tenant. Oversize returns 413,
+     * invalid/unsupported content 422, denied access 403. Returns a recognition for a later
+     * explicit action.
+     *
+     * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+     * checks are separate. See [bot
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
      * @param formData
      * @returns BotCustomerRequisitesRecognitionResponse Successful Response
      * @throws ApiError
@@ -414,6 +539,14 @@ export class InternalBotV1Service {
     }
     /**
      * Apply Internal Bot Customer Requisites Action
+     * Apply the selected action to an existing requisites recognition in the system tenant for
+     * its authorized Manager actor. Access denial returns 403, missing recognition 404,
+     * conflicting action/state 409 and invalid input 422. Returns recognition, customer and
+     * changed so clients can reconcile the action.
+     *
+     * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+     * checks are separate. See [bot
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
      * @param recognitionId
      * @param requestBody
      * @returns BotCustomerRequisitesActionResponse Successful Response

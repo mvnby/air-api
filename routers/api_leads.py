@@ -126,6 +126,18 @@ async def create_public_contact_lead(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
+    """
+    Create a website contact lead in the resolved storefront. For required keys, unsigned
+    compatibility, conflicting payloads (409) and retries after 503 with Retry-After, see
+    [public write
+    idempotency](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#public-write-idempotency).
+    Retain the same key and content when retrying.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     try:
         return await WebsiteLeadService.create_contact_lead(
             session,
@@ -174,6 +186,19 @@ async def create_installation_estimate_lead(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
+    """
+    Create an installation estimate lead with categorized image uploads. Idempotency-Key is
+    required; upload/content validation can return 400 and model validation 422. For
+    required keys, unsigned compatibility, conflicting payloads (409) and retries after 503
+    with Retry-After, see [public write
+    idempotency](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#public-write-idempotency).
+    Retain the same key and content when retrying.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     try:
         uploads = await InstallationEstimateLeadService.collect_uploads(
             {
@@ -230,6 +255,18 @@ async def create_product_availability_lead(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
+    """
+    Create a storefront product availability inquiry. A product unavailable to that
+    storefront returns 404. For required keys, unsigned compatibility, conflicting payloads
+    (409) and retries after 503 with Retry-After, see [public write
+    idempotency](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#public-write-idempotency).
+    Retain the same key and content when retrying.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     try:
         return await WebsiteLeadService.create_product_availability_lead(
             session,
@@ -277,6 +314,19 @@ async def create_repair_diagnostic_lead(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
+    """
+    Create a repair diagnostic lead from multipart JSON payload and categorized uploads.
+    Malformed payload/images/limits return 400 or 422 according to validation stage. For
+    required keys, unsigned compatibility, conflicting payloads (409) and retries after 503
+    with Retry-After, see [public write
+    idempotency](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#public-write-idempotency).
+    Retain the same key and content when retrying.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     try:
         parsed_payload = RepairDiagnosticService.parse_payload(payload)
         uploads = await RepairDiagnosticService.collect_uploads(

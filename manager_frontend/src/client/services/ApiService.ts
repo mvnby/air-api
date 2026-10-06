@@ -49,7 +49,13 @@ import { request as __request } from '../core/request';
 export class ApiService {
     /**
      * Search Products
-     * Search products with fuzzy matching.
+     * Search storefront-visible products using fuzzy matching and optional inverter filtering.
+     * Uses public tenant resolution; does not expose the unrestricted Manager catalog.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @param q
      * @param isInverter
      * @returns PublicProductSearchResponse Successful Response
@@ -73,6 +79,8 @@ export class ApiService {
     }
     /**
      * Get Filterable Tags
+     * Read the shared filterable tag dictionary for authenticated Manager workflows. Requires
+     * get_current_username; this legacy /api/admin path is not a supplier integration surface.
      * @returns any Successful Response
      * @throws ApiError
      */
@@ -84,6 +92,9 @@ export class ApiService {
     }
     /**
      * Admin Search Products
+     * Search shared products by query and optional tag IDs for authenticated Manager
+     * workflows. Requires get_current_username; this legacy helper does not use the storefront
+     * catalog projection.
      * @param q
      * @param tagIds
      * @returns any Successful Response
@@ -107,6 +118,8 @@ export class ApiService {
     }
     /**
      * Admin Search Services
+     * Search shared services by query for authenticated Manager workflows. Requires
+     * get_current_username; this helper is not a public service tariff calculation.
      * @param q
      * @returns any Successful Response
      * @throws ApiError
@@ -127,7 +140,8 @@ export class ApiService {
     }
     /**
      * Health Check
-     * Check API and database availability.
+     * Check API and database availability without business-data access. No Manager or bot
+     * token is required. Use /api/ready as the separate traffic-readiness check.
      * @returns any Successful Response
      * @throws ApiError
      */
@@ -139,7 +153,9 @@ export class ApiService {
     }
     /**
      * Readiness Check
-     * Check whether this API node should receive public traffic.
+     * Check whether this API node can receive public traffic, including database and scheduler
+     * runtime readiness. Returns the readiness service status and body (including non-success
+     * status when unready); no Manager or bot token is required.
      * @returns any Successful Response
      * @throws ApiError
      */
@@ -151,6 +167,15 @@ export class ApiService {
     }
     /**
      * Get Catalog Revision
+     * Read the contextual catalog and storefront revisions used in cache keys. Returns
+     * X-Catalog-Revision, X-Storefront-Catalog-Revision and a weak ETag, with private
+     * revalidation headers and Vary: X-MVN-Storefront-Host. This handler returns the revision
+     * body; it does not implement conditional 304 responses.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @returns CatalogRevisionResponse Successful Response
      * @throws ApiError
      */
@@ -162,7 +187,13 @@ export class ApiService {
     }
     /**
      * Get Articles
-     * Get list of published articles ordered by creation date (newest first).
+     * List published articles, newest first. Articles are shared content: this handler does
+     * not apply tenant filtering to the article service.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @returns ArticleResponse Successful Response
      * @throws ApiError
      */
@@ -174,7 +205,13 @@ export class ApiService {
     }
     /**
      * Get Article
-     * Get article details by slug. Returns 404 if not found or not published.
+     * Read one published shared article by slug. Missing or unpublished content returns 404;
+     * the article query is not tenant-scoped.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @param slug
      * @returns ArticleResponse Successful Response
      * @throws ApiError
@@ -195,7 +232,13 @@ export class ApiService {
     }
     /**
      * Get Services
-     * Get list of all available services.
+     * Return storefront-visible service content through the installation pricing bridge, with
+     * private/no-store response headers.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @returns ServiceResponse Successful Response
      * @throws ApiError
      */
@@ -207,7 +250,12 @@ export class ApiService {
     }
     /**
      * Get Public Brands
-     * Get published brands that have at least one published product.
+     * List published brands with products visible in the resolved storefront catalog.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @returns PublicBrandResponse Successful Response
      * @throws ApiError
      */
@@ -219,7 +267,13 @@ export class ApiService {
     }
     /**
      * Get Public Brand
-     * Get a published brand by slug if it has published products.
+     * Read a published brand by slug when it has products visible in this storefront. Missing
+     * or unavailable brands return 404.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @param slug
      * @returns PublicBrandDetailResponse Successful Response
      * @throws ApiError
@@ -240,7 +294,13 @@ export class ApiService {
     }
     /**
      * Get Public Brand Series
-     * Get one published series and its public product cards.
+     * Read a published brand series and its storefront-visible product cards. Missing or
+     * unavailable series return 404.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @param brandSlug
      * @param seriesSlug
      * @returns PublicSeriesPageResponse Successful Response
@@ -264,7 +324,14 @@ export class ApiService {
     }
     /**
      * Get Service Options
-     * Get rich installation options.
+     * Read legacy service options for the requested category in this storefront. Returns 409
+     * book_preview_required when the published price-book contract replaces that category; use
+     * the installation preview contract instead.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @param category
      * @returns ServiceResponse Successful Response
      * @throws ApiError
@@ -285,7 +352,13 @@ export class ApiService {
     }
     /**
      * Get Installation Rates
-     * Get all installation rates.
+     * Read legacy installation rates for this storefront. Disabled installation returns an
+     * empty list; an authoritative published price book returns 409 book_preview_required.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @returns any Successful Response
      * @throws ApiError
      */
@@ -297,8 +370,13 @@ export class ApiService {
     }
     /**
      * Get Global Config
-     * Get the public storefront configuration as a key-value dictionary.
-     * Example: {"phone": "+37529...", "email": "..."}
+     * Return the public key/value configuration for the resolved storefront, not private
+     * platform settings.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @returns any Successful Response
      * @throws ApiError
      */
@@ -310,6 +388,16 @@ export class ApiService {
     }
     /**
      * Create Public Contact Lead
+     * Create a website contact lead in the resolved storefront. For required keys, unsigned
+     * compatibility, conflicting payloads (409) and retries after 503 with Retry-After, see
+     * [public write
+     * idempotency](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#public-write-idempotency).
+     * Retain the same key and content when retrying.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @param requestBody
      * @param idempotencyKey
      * @returns PublicContactLeadResponse Successful Response
@@ -339,6 +427,17 @@ export class ApiService {
     }
     /**
      * Create Installation Estimate Lead
+     * Create an installation estimate lead with categorized image uploads. Idempotency-Key is
+     * required; upload/content validation can return 400 and model validation 422. For
+     * required keys, unsigned compatibility, conflicting payloads (409) and retries after 503
+     * with Retry-After, see [public write
+     * idempotency](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#public-write-idempotency).
+     * Retain the same key and content when retrying.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @param idempotencyKey
      * @param formData
      * @returns InstallationEstimateLeadResponse Successful Response
@@ -368,6 +467,16 @@ export class ApiService {
     }
     /**
      * Create Product Availability Lead
+     * Create a storefront product availability inquiry. A product unavailable to that
+     * storefront returns 404. For required keys, unsigned compatibility, conflicting payloads
+     * (409) and retries after 503 with Retry-After, see [public write
+     * idempotency](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#public-write-idempotency).
+     * Retain the same key and content when retrying.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @param requestBody
      * @param idempotencyKey
      * @returns ProductAvailabilityLeadResponse Successful Response
@@ -397,6 +506,17 @@ export class ApiService {
     }
     /**
      * Create Repair Diagnostic Lead
+     * Create a repair diagnostic lead from multipart JSON payload and categorized uploads.
+     * Malformed payload/images/limits return 400 or 422 according to validation stage. For
+     * required keys, unsigned compatibility, conflicting payloads (409) and retries after 503
+     * with Retry-After, see [public write
+     * idempotency](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#public-write-idempotency).
+     * Retain the same key and content when retrying.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @param formData
      * @param idempotencyKey
      * @returns RepairDiagnosticLeadResponse Successful Response
@@ -426,8 +546,18 @@ export class ApiService {
     }
     /**
      * Create Order
-     * Create a new order from website.
-     * Accepts customer information and cart items.
+     * Create an order from the resolved storefront cart and customer details. The server
+     * verifies pricing and installation acceptance; pricing conflicts return 409. Installation
+     * acceptance requires exactly one submitted Idempotency-Key even for unsigned
+     * compatibility clients. For required keys, unsigned compatibility, conflicting payloads
+     * (409) and retries after 503 with Retry-After, see [public write
+     * idempotency](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#public-write-idempotency).
+     * Retain the same key and content when retrying.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @param requestBody
      * @param idempotencyKey
      * @returns OrderResponse Successful Response
@@ -457,6 +587,13 @@ export class ApiService {
     }
     /**
      * Get Public Spec Keys
+     * List specification keys available in the resolved storefront catalog, for building
+     * supported filters.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @returns SpecsKeysResponse Successful Response
      * @throws ApiError
      */
@@ -468,6 +605,13 @@ export class ApiService {
     }
     /**
      * Get Public Spec Registry
+     * Return the shared canonical specification registry and aliases; this dictionary is
+     * global rather than a tenant product listing.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @returns SpecRegistryResponse Successful Response
      * @throws ApiError
      */
@@ -479,6 +623,13 @@ export class ApiService {
     }
     /**
      * Get Filters Config
+     * Return filter choices derived from the resolved storefront catalog; use these choices
+     * when constructing product queries.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @returns FiltersConfigResponse Successful Response
      * @throws ApiError
      */
@@ -490,6 +641,10 @@ export class ApiService {
     }
     /**
      * Generate Product Description
+     * Generate product description text from shared product tags/specifications without saving
+     * it. A missing product is returned as description error text with HTTP success, not 404.
+     * Requires Manager authentication via get_current_username; operates on the shared product
+     * catalog, outside the public storefront read contract.
      * @param productId
      * @returns any Successful Response
      * @throws ApiError
@@ -510,6 +665,15 @@ export class ApiService {
     }
     /**
      * Get Catalog
+     * Return a filtered, sorted storefront product page, with public prices, supply metrics,
+     * features and warranty projection. /v1/catalog is an alias of /v1/products with a
+     * distinct operation ID. page starts at 1 and limit is 1–100; the service rejects
+     * out-of-range values with 400. Response meta describes the filtered result set.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @param page
      * @param limit
      * @param sort
@@ -575,6 +739,15 @@ export class ApiService {
     }
     /**
      * Get Catalog
+     * Return a filtered, sorted storefront product page, with public prices, supply metrics,
+     * features and warranty projection. /v1/catalog is an alias of /v1/products with a
+     * distinct operation ID. page starts at 1 and limit is 1–100; the service rejects
+     * out-of-range values with 400. Response meta describes the filtered result set.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @param page
      * @param limit
      * @param sort
@@ -640,6 +813,13 @@ export class ApiService {
     }
     /**
      * Get Vitebsk Featured Products
+     * Return up to six featured storefront product projections with public supply, feature and
+     * warranty information.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @returns ProductResponse Successful Response
      * @throws ApiError
      */
@@ -651,6 +831,12 @@ export class ApiService {
     }
     /**
      * Get Product Series Navigation
+     * Return the series navigation visible in the resolved storefront catalog.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @returns ProductSeriesNavigationResponse Successful Response
      * @throws ApiError
      */
@@ -662,6 +848,14 @@ export class ApiService {
     }
     /**
      * Get Product By Identifier
+     * Resolve one storefront-visible product by identifier and include its visible series
+     * siblings. A missing or unavailable product returns 404; this does not expose a product
+     * from another storefront.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @param identifier
      * @returns ProductResponse Successful Response
      * @throws ApiError
@@ -682,7 +876,9 @@ export class ApiService {
     }
     /**
      * Proxy Egr
-     * Proxy for Belarus EGR (Ministry of Taxes) API.
+     * Look up Belarus registry requisites by a nine-digit UNP. Requires Manager
+     * authentication; invalid UNP returns 422. Data comes from the shared external registry,
+     * not tenant CRM records.
      * @param unp
      * @returns any Successful Response
      * @throws ApiError
@@ -703,7 +899,10 @@ export class ApiService {
     }
     /**
      * Find Bank
-     * Find bank in NBRB reference by BIC/IBAN.
+     * Read the shared NBRB bank reference, optionally matching BIC or Belarus IBAN. Requires
+     * Manager authentication. Without search returns the bank list; a miss is an error object
+     * with HTTP 200. Reference data uses a 72-hour in-process cache and can fall back to
+     * cached data on fetch exceptions.
      * @param search BIC код или IBAN
      * @returns any Successful Response
      * @throws ApiError
@@ -724,7 +923,9 @@ export class ApiService {
     }
     /**
      * Public Proxy Egr
-     * Public proxy for Belarus EGR (Ministry of Taxes) API.
+     * Public Belarus registry lookup by a nine-digit UNP (422 for invalid format). No Manager
+     * token or storefront signature is required: this is an explicit gateway exception. Reads
+     * shared external registry data, not tenant records.
      * @param unp
      * @returns any Successful Response
      * @throws ApiError
@@ -745,7 +946,9 @@ export class ApiService {
     }
     /**
      * Public Find Bank
-     * Public proxy to find bank details by IBAN/BIC.
+     * Public bank lookup by BIC or Belarus IBAN. No Manager token or storefront signature is
+     * required: this is an explicit gateway exception. Empty search returns []; a miss returns
+     * an error object with HTTP 200. Uses the shared cached NBRB reference.
      * @param search BIC код или IBAN
      * @returns any Successful Response
      * @throws ApiError
@@ -766,6 +969,9 @@ export class ApiService {
     }
     /**
      * Public Address Suggest
+     * Public address suggestions for a query of at least two characters. No Manager token or
+     * storefront signature is required: this is an explicit gateway exception. Returns an
+     * empty items list when suggestions are disabled or the upstream HTTP request fails.
      * @param q
      * @returns AddressSuggestResponse Successful Response
      * @throws ApiError
@@ -786,6 +992,14 @@ export class ApiService {
     }
     /**
      * Get Public Product Collection Placement
+     * Resolve published product collections for a storefront surface and slot. Keys are
+     * lowercased before resolution; the result contains the placement projection rather than
+     * editable collection definitions.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @param surfaceKey
      * @param slotKey
      * @returns PublicProductCollectionPlacementResponse Successful Response
@@ -809,6 +1023,14 @@ export class ApiService {
     }
     /**
      * Get Public Storefront Context
+     * Resolve public tenant/storefront identity, locale, currency and hostname from the
+     * current storefront scope. Returns 404 when that storefront is unavailable; the caller
+     * cannot select an arbitrary tenant in the body.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @returns PublicStorefrontContextResponse Successful Response
      * @throws ApiError
      */
@@ -820,6 +1042,13 @@ export class ApiService {
     }
     /**
      * Get Public Storefront Settings
+     * Read settings for the storefront selected by public tenant resolution, including its
+     * configured service availability.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @returns StorefrontSettingsResponse Successful Response
      * @throws ApiError
      */
@@ -831,7 +1060,14 @@ export class ApiService {
     }
     /**
      * Get Public Installation Pricing Config
-     * Tell the storefront which pricing contract is currently authoritative.
+     * Tell the storefront which installation pricing contract is authoritative. Response uses
+     * private/no-store headers; read this before choosing legacy calculation or price-book
+     * preview.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @returns InstallationPricingConfigResponse Successful Response
      * @throws ApiError
      */
@@ -843,6 +1079,14 @@ export class ApiService {
     }
     /**
      * Resolve Public Installation Tariff
+     * Resolve a tariff using the storefront installation price book. Disabled installation is
+     * reported as status=unavailable with service_direction_not_enabled, rather than 404. Does
+     * not create an order.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @param requestBody
      * @returns InstallationResolveResponse Successful Response
      * @throws ApiError
@@ -862,6 +1106,19 @@ export class ApiService {
     }
     /**
      * Preview Public Installation Estimate
+     * Calculate a price-book installation preview and, outside read-only demo scope, persist
+     * its receipt using the required Idempotency-Key. Public callers cannot approve site
+     * access: approved_site_access returns 422. Disabled installation returns
+     * status=unavailable. A persistent preview replays the same input/key for its 30-minute
+     * receipt lifetime; another input with that key returns 409 idempotency_key_reused. A
+     * price-book revision mismatch returns 409 price_changed. Receipt
+     * contention/unavailability can return 503 with Retry-After: 1; retain the same input/key
+     * for a retry. Preview is not acceptance or order creation.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @param idempotencyKey
      * @param requestBody
      * @returns InstallationPreviewResponse Successful Response
@@ -886,6 +1143,14 @@ export class ApiService {
     }
     /**
      * List Public Service Tariffs
+     * List active service tariffs and active rules for this storefront and service direction.
+     * Disabled direction returns 404; installation backed by a published price book returns
+     * 409 book_preview_required.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @param serviceKind
      * @returns PublicServiceTariffListResponse Successful Response
      * @throws ApiError
@@ -906,6 +1171,15 @@ export class ApiService {
     }
     /**
      * Calculate Public Service Tariff
+     * Calculate a legacy active tariff within this storefront without creating an order.
+     * Disabled service direction returns 404; installation with a published price book returns
+     * 409 book_preview_required. Tariff access and active status are checked by the tariff
+     * service.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @param requestBody
      * @returns ManagerInstallEstimateResponse Successful Response
      * @throws ApiError
@@ -925,6 +1199,9 @@ export class ApiService {
     }
     /**
      * Get Yandex Business Feed
+     * Return the shared Yandex Business price-list XML generated by the feed service. No
+     * Manager token or storefront signature is required: this is an explicit public gateway
+     * exception. Response is application/xml, not JSON or a tenant-selected catalog page.
      * @returns string Successful Response
      * @throws ApiError
      */
@@ -936,6 +1213,13 @@ export class ApiService {
     }
     /**
      * List Public Multi Split Options
+     * List storefront-visible indoor or outdoor units for multi-split selection, with public
+     * prices and pagination; limit is at most 100.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @param kind
      * @param page
      * @param limit
@@ -962,6 +1246,14 @@ export class ApiService {
     }
     /**
      * Preview Public Multi Split
+     * Validate a multi-split selection server-side in the resolved storefront and return its
+     * public price projection without creating a lead. Invalid or incompatible selection
+     * returns 422.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @param requestBody
      * @returns MultiSplitPreviewResponse Successful Response
      * @throws ApiError
@@ -981,6 +1273,17 @@ export class ApiService {
     }
     /**
      * Create Public Multi Split Lead
+     * Validate a multi-split selection and create a lead in this storefront. Idempotency-Key
+     * is required; invalid selection or intake values return 422. For required keys, unsigned
+     * compatibility, conflicting payloads (409) and retries after 503 with Retry-After, see
+     * [public write
+     * idempotency](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#public-write-idempotency).
+     * Retain the same key and content when retrying.
+     *
+     * Access and scope: storefront context is resolved by the public gateway; tenant-aware
+     * operations use that storefront. Signed headers are verified outside OpenAPI. See
+     * [storefront
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
      * @param idempotencyKey
      * @param requestBody
      * @returns MultiSplitLeadResponse Successful Response

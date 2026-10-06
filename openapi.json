@@ -1,7 +1,8 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "FastAPI",
+    "title": "Kitlane / MVN HTTP API",
+    "description": "HTTP operations for the public storefront, authenticated Manager, internal staff bot and connector OAuth. Each surface has its own access and data-scope rules; a listed route is not a public partner API. See the [API guide](https://github.com/mvnby/air-api/blob/main/docs/api/README.md).\n\nStorefront HMAC headers are checked by middleware and are not represented as an OpenAPI security scheme; see the [signed request contract](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md). The optional /api/connector/mcp ASGI transport is outside this schema; MCP clients discover tools through tools/list. See the [connector contract](https://github.com/mvnby/air-api/blob/main/docs/chatgpt-connector.md).\n\ninfo.version is the existing schema metadata value, not a business API compatibility promise. The storefront and bot use v1 URL prefixes; Manager URLs have no version prefix. Check the deployed release and the specific consumer contract when assessing compatibility.",
     "version": "0.1.0"
   },
   "paths": {
@@ -109,6 +110,7 @@
           "internal bot v1"
         ],
         "summary": "Get Internal Bot Api Health",
+        "description": "Check that the authenticated bot API is reachable and report its v1 contract marker.\nDoes not check a Telegram actor or database readiness.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "get_internal_bot_api_health_v1",
         "responses": {
           "200": {
@@ -135,6 +137,7 @@
           "internal bot v1"
         ],
         "summary": "Get Internal Bot Staff Context",
+        "description": "Resolve the active staff context of a Telegram identity, including Manager/executor\nroles and legacy installer linkage. A non-staff identity is represented by\nis_staff=false rather than a business permission grant.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "get_internal_bot_staff_context_v1",
         "security": [
           {
@@ -183,6 +186,7 @@
           "internal bot v1"
         ],
         "summary": "Search Internal Bot Catalog",
+        "description": "Search the shared product catalog for an active staff Telegram actor (403 otherwise).\nReturns internal bot product projections, not storefront-only catalog cards.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "search_internal_bot_catalog_v1",
         "requestBody": {
           "content": {
@@ -229,6 +233,7 @@
           "internal bot v1"
         ],
         "summary": "Get Internal Bot Catalog Product",
+        "description": "Read one shared catalog product for an active staff Telegram actor (403 otherwise). A\nmissing product is product=null in a successful lookup response, not 404.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "get_internal_bot_catalog_product_v1",
         "security": [
           {
@@ -287,6 +292,7 @@
           "internal bot v1"
         ],
         "summary": "List Internal Bot My Tasks",
+        "description": "Read work stages assigned to the actor\u2019s linked installer in the system tenant, with\noptional date/status filters. Active staff access is required (403 otherwise); staff\nwithout an installer linkage receive an empty list.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "list_internal_bot_my_tasks_v1",
         "requestBody": {
           "content": {
@@ -333,6 +339,7 @@
           "internal bot v1"
         ],
         "summary": "Update Internal Bot Task Status",
+        "description": "Set the status of a stage assigned to the actor\u2019s installer in the system tenant.\nMissing/inaccessible/unassigned stage returns 403; an invalid state transition returns\n409. changed reports whether a transition occurred; this is not a generic idempotency\nreceipt.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "update_internal_bot_task_status_v1",
         "security": [
           {
@@ -391,6 +398,7 @@
           "internal bot v1"
         ],
         "summary": "Save Internal Bot Task Report",
+        "description": "Save a normalized installer report on the actor\u2019s assigned stage in the system tenant.\nMissing/inaccessible stage returns 403. Repeating the same normalized report returns\nchanged=false.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "save_internal_bot_task_report_v1",
         "security": [
           {
@@ -449,6 +457,7 @@
           "internal bot v1"
         ],
         "summary": "Attach Internal Bot Task Stage File",
+        "description": "Attach a nonempty file of at most 10 MB to the actor\u2019s assigned stage in the system\ntenant. Inaccessible stage returns 403, empty content 422 and oversize content 413.\nfile_id provides attachment deduplication; inspect already_attached on retries.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "attach_internal_bot_task_stage_file_v1",
         "security": [
           {
@@ -507,6 +516,7 @@
           "internal bot v1"
         ],
         "summary": "Parse Internal Bot Quick Order",
+        "description": "Parse text into an editable quick-order draft for an active Manager Telegram actor (403\notherwise). Does not create an order or start a durable draft session.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "parse_internal_bot_quick_order_v1",
         "requestBody": {
           "content": {
@@ -553,6 +563,7 @@
           "internal bot v1"
         ],
         "summary": "Start Internal Bot Quick Order Draft",
+        "description": "Start a durable quick-order draft owned by the active Manager Telegram actor in the\nsystem tenant. The response supplies draft_id and version for subsequent edits. Access\ndenial returns 403, service draft conflicts 409 and invalid draft input 422.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "start_internal_bot_quick_order_draft_v1",
         "requestBody": {
           "content": {
@@ -599,6 +610,7 @@
           "internal bot v1"
         ],
         "summary": "Search Internal Bot Quick Order Customers",
+        "description": "Search customer candidates in the system tenant for an active Manager Telegram actor.\nAccess denial returns 403; invalid search input returns 422. Search does not create or\nmodify a customer.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "search_internal_bot_quick_order_customers_v1",
         "requestBody": {
           "content": {
@@ -645,6 +657,7 @@
           "internal bot v1"
         ],
         "summary": "Get Internal Bot Quick Order Draft",
+        "description": "Read a durable draft belonging to the active Manager Telegram actor. Access denial\nreturns 403; unavailable draft returns 404. Read version before issuing an edit or\naction.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "get_internal_bot_quick_order_draft_v1",
         "security": [
           {
@@ -700,6 +713,7 @@
           "internal bot v1"
         ],
         "summary": "Patch Internal Bot Quick Order Draft",
+        "description": "Patch the actor\u2019s active durable draft, checking expected_version and incrementing its\nversion. Requires active Manager access (403); missing draft returns 404, stale/inactive\ndraft 409 and invalid changes 422. On conflict reread the draft before editing.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "patch_internal_bot_quick_order_draft_v1",
         "security": [
           {
@@ -757,6 +771,7 @@
           "internal bot v1"
         ],
         "summary": "Cancel Internal Bot Quick Order Draft",
+        "description": "Cancel the actor\u2019s active durable draft using expected_version. Requires active Manager\naccess (403); missing draft returns 404, stale or inactive draft 409 and invalid input\n422. Cancellation increments version.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "cancel_internal_bot_quick_order_draft_v1",
         "security": [
           {
@@ -814,6 +829,7 @@
           "internal bot v1"
         ],
         "summary": "Create Internal Bot Quick Order From Draft",
+        "description": "Create an order from the Manager actor\u2019s durable draft in the system tenant. Active\ndrafts require expected_version; stale/inactive drafts return 409 and missing drafts\n404. A retry after successful creation returns the recorded order/customer with\ncreated=false, using a draft-derived idempotency key.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "create_internal_bot_quick_order_from_draft_v1",
         "security": [
           {
@@ -871,6 +887,7 @@
           "internal bot v1"
         ],
         "summary": "Create Internal Bot Quick Order",
+        "description": "Create a system-tenant order from a submitted quick-order draft for an active Manager\nTelegram actor (403 otherwise). Uses the supplied idempotency_key; retain it when\nrepeating the same creation. Service validation errors return 422; inspect created and\nthe returned order/customer IDs.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "create_internal_bot_quick_order_v1",
         "requestBody": {
           "content": {
@@ -917,6 +934,7 @@
           "internal bot v1"
         ],
         "summary": "Recognize Internal Bot Customer Requisites Text",
+        "description": "Recognize customer requisites from text for an active Manager Telegram actor in the\nsystem tenant. Returns a recognition for explicit follow-up action; OCR alone does not\nconfirm customer creation. Access denial returns 403 and invalid content 422.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "recognize_internal_bot_customer_requisites_text_v1",
         "requestBody": {
           "content": {
@@ -963,7 +981,7 @@
           "internal bot v1"
         ],
         "summary": "Recognize Internal Bot Customer Requisites File",
-        "description": "Recognize customer requisites from JPG, PNG, WEBP, PDF, DOC, or DOCX (up to 10 MB).",
+        "description": "Recognize customer requisites from JPG, PNG, WEBP, PDF, DOC or DOCX, at most 10 MB, for\nan active Manager Telegram actor in the system tenant. Oversize returns 413,\ninvalid/unsupported content 422, denied access 403. Returns a recognition for a later\nexplicit action.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "recognize_internal_bot_customer_requisites_file_v1",
         "requestBody": {
           "content": {
@@ -1010,6 +1028,7 @@
           "internal bot v1"
         ],
         "summary": "Apply Internal Bot Customer Requisites Action",
+        "description": "Apply the selected action to an existing requisites recognition in the system tenant for\nits authorized Manager actor. Access denial returns 403, missing recognition 404,\nconflicting action/state 409 and invalid input 422. Returns recognition, customer and\nchanged so clients can reconcile the action.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "apply_internal_bot_customer_requisites_action_v1",
         "security": [
           {
@@ -1068,6 +1087,7 @@
           "internal bot v1 media"
         ],
         "summary": "List Recent Orders",
+        "description": "List recent system-tenant orders for an active Manager Telegram actor (403 otherwise).\nUses the requested response bound; it is not a storefront catalog or a general tenant\nselector.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "list_internal_bot_recent_orders_v1",
         "requestBody": {
           "content": {
@@ -1114,6 +1134,7 @@
           "internal bot v1 media"
         ],
         "summary": "Attach Order File",
+        "description": "Attach a nonempty file (at most 10 MB) to an accessible system-tenant order. Requires\nactive staff; Managers can attach beyond their own assigned execution. Access denial\nreturns 403 and unavailable order 404. Empty/oversize uploads return 422/413. file_id\ndeduplicates attachments; inspect already_attached.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "attach_internal_bot_order_file_v1",
         "security": [
           {
@@ -1172,6 +1193,7 @@
           "internal bot v1 media"
         ],
         "summary": "List Repair Nameplate Orders",
+        "description": "List repair orders in the system tenant available to the staff actor under repair-order\naccess rules. Managers may access beyond assigned execution; non-staff return 403.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "list_internal_bot_repair_nameplate_orders_v1",
         "requestBody": {
           "content": {
@@ -1218,6 +1240,7 @@
           "internal bot v1 media"
         ],
         "summary": "Recognize Repair Nameplate",
+        "description": "Recognize an equipment nameplate for a repair order accessible to the staff actor in the\nsystem tenant. Does not apply the recognized data. Non-staff return 403, unavailable\norder 404, empty/oversize upload 422/413; file must be at most 10 MB.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "recognize_internal_bot_repair_nameplate_v1",
         "requestBody": {
           "content": {
@@ -1264,6 +1287,7 @@
           "internal bot v1 media"
         ],
         "summary": "Apply Repair Nameplate",
+        "description": "Apply submitted recognition data and attach its file to an accessible repair order in\nthe system tenant. Requires active staff with order access (403/404 otherwise).\nextracted_json and validation_json must be JSON objects; invalid JSON/empty file returns\n422 and file above 10 MB returns 413. Telegram file_id participates in attachment\nreconciliation.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "apply_internal_bot_repair_nameplate_v1",
         "requestBody": {
           "content": {
@@ -1310,6 +1334,7 @@
           "internal bot v1 media"
         ],
         "summary": "List Warranty Nameplate Orders",
+        "description": "List warranty orders available to the staff actor in the system tenant and return the\nservice\u2019s execution/Manager scope marker. Non-staff return 403; access is checked before\nlisting.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "list_internal_bot_warranty_nameplate_orders_v1",
         "requestBody": {
           "content": {
@@ -1356,6 +1381,7 @@
           "internal bot v1 media"
         ],
         "summary": "Recognize Warranty Nameplate",
+        "description": "Recognize the selected indoor/outdoor unit nameplate for an accessible warranty order in\nthe system tenant, without applying it. Requires active staff (403); unavailable order\nreturns 404. Empty/oversize upload returns 422/413; file must be at most 10 MB.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "recognize_internal_bot_warranty_nameplate_v1",
         "requestBody": {
           "content": {
@@ -1402,6 +1428,7 @@
           "internal bot v1 media"
         ],
         "summary": "Apply Warranty Nameplate",
+        "description": "Apply submitted indoor/outdoor nameplate data and attach its file to an accessible\nwarranty order in the system tenant. Requires active staff (403); unavailable order\nreturns 404. JSON object parsing and empty file validation return 422; file above 10 MB\nreturns 413. Telegram file_id is passed to the attachment workflow.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "apply_internal_bot_warranty_nameplate_v1",
         "requestBody": {
           "content": {
@@ -1448,6 +1475,7 @@
           "internal bot v1 staff notifications"
         ],
         "summary": "Claim Staff Notification",
+        "description": "Claim the next eligible staff-bot Telegram outbox delivery for a worker, recovering\nexpired leases and materializing pending outbox events. Returns notification=null when\nnone is claimable. The service checks recipient/stage freshness; this endpoint uses\nworker identity, not a caller Telegram actor.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "claim_internal_bot_staff_notification_v1",
         "requestBody": {
           "content": {
@@ -1494,6 +1522,7 @@
           "internal bot v1 staff notifications"
         ],
         "summary": "Renew Staff Notification",
+        "description": "Extend a claimed staff notification lease using the worker identity and lease token.\nMissing delivery returns 404; a lost/mismatched lease returns 409. This does not send or\nacknowledge the Telegram message.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "renew_internal_bot_staff_notification_v1",
         "security": [
           {
@@ -1551,6 +1580,7 @@
           "internal bot v1 staff notifications"
         ],
         "summary": "Ack Staff Notification",
+        "description": "Record successful Telegram delivery under the current worker lease and supplied provider\nresult. Missing delivery returns 404; lost/mismatched lease returns 409. The caller\nperforms delivery; this HTTP operation updates outbox state.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "ack_internal_bot_staff_notification_v1",
         "security": [
           {
@@ -1608,6 +1638,7 @@
           "internal bot v1 staff notifications"
         ],
         "summary": "Nack Staff Notification",
+        "description": "Record a failed staff Telegram delivery under the current worker lease, applying the\ndelivery service retry/failure decision. Missing delivery returns 404; lost/mismatched\nlease returns 409. Inspect returned status/next_attempt_at rather than assuming\nimmediate retry.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "nack_internal_bot_staff_notification_v1",
         "security": [
           {
@@ -1665,6 +1696,7 @@
           "internal bot v1 operations"
         ],
         "summary": "Build Catalog Selection",
+        "description": "Build a product selection from the Manager actor\u2019s text query using the shared catalog.\nActive Manager access is required (403); invalid selection input returns 422. This read\ndoes not create an order.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "build_internal_bot_catalog_selection_v1",
         "requestBody": {
           "content": {
@@ -1711,6 +1743,7 @@
           "internal bot v1 operations"
         ],
         "summary": "Get Curated Catalog",
+        "description": "Read curated shared catalog products by area, inverter choice and tags for an active\nstaff actor (403 otherwise). Invalid selection input returns 422; response is bounded by\nlimit.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "get_internal_bot_curated_catalog_v1",
         "requestBody": {
           "content": {
@@ -1757,6 +1790,7 @@
           "internal bot v1 operations"
         ],
         "summary": "Update Catalog Product Price",
+        "description": "Set an absolute shared product price for an active Manager actor (403 otherwise).\nReturns changed from the product service; invalid values return 422. It does not change\na tenant-specific storefront offer price.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "update_internal_bot_catalog_product_price_v1",
         "security": [
           {
@@ -1815,6 +1849,7 @@
           "internal bot v1 operations"
         ],
         "summary": "Delete Catalog Product",
+        "description": "Delete a shared product for an active Manager actor (403 otherwise), returning the\nproduct service changed result. Invalid service input returns 422; this is a catalog\nmutation, not a storefront unpublish operation.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "delete_internal_bot_catalog_product_v1",
         "security": [
           {
@@ -1873,6 +1908,7 @@
           "internal bot v1 operations"
         ],
         "summary": "Build Repair Comment Draft",
+        "description": "Build a diagnostic repair draft from comment text for a system-tenant repair order\naccessible to the active staff actor. Does not apply the draft. Non-staff return 403,\nunavailable order 404 and invalid input 422.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "build_internal_bot_repair_comment_draft_v1",
         "requestBody": {
           "content": {
@@ -1919,6 +1955,7 @@
           "internal bot v1 operations"
         ],
         "summary": "Build Repair Preset Draft",
+        "description": "Build a diagnostic repair draft from a fault preset for an accessible system-tenant\nrepair order. Requires active staff (403); unavailable order returns 404 and invalid\ninput 422. The draft must be applied separately.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "build_internal_bot_repair_preset_draft_v1",
         "requestBody": {
           "content": {
@@ -1965,6 +2002,7 @@
           "internal bot v1 operations"
         ],
         "summary": "Apply Repair Context",
+        "description": "Apply diagnostic draft metadata and raw comment to an accessible system-tenant repair\norder, carrying optional Telegram provenance. Requires active staff (403); unavailable\norder returns 404 and invalid input 422. This action persists repair context.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "apply_internal_bot_repair_context_v1",
         "requestBody": {
           "content": {
@@ -2011,6 +2049,7 @@
           "internal bot v1 runtime"
         ],
         "summary": "Get Fsm State",
+        "description": "Read durable bot FSM state by service storage_key; missing state is state=null/data={}.\nThis service primitive does not authorize a Telegram actor and is not a tenant CRM read.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "get_internal_bot_fsm_state_v1",
         "requestBody": {
           "content": {
@@ -2057,6 +2096,7 @@
           "internal bot v1 runtime"
         ],
         "summary": "Update Fsm State",
+        "description": "Update the service-owned FSM row under storage_key. write_state and write_data choose\nwhich parts to replace; data is replaced, not merged. Empty state/data removes the row.\nNo Telegram actor check or caller-supplied version precondition is provided.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "update_internal_bot_fsm_state_v1",
         "requestBody": {
           "content": {
@@ -2103,6 +2143,7 @@
           "internal bot v1 runtime"
         ],
         "summary": "Acquire Runtime Lease",
+        "description": "Acquire or extend a service process lease by name and owner_id. A different owner with a\nnonexpired lease yields acquired=false rather than 409; same owner or expired lease can\nbe acquired for ttl_seconds. This primitive does not authorize a Telegram actor.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "acquire_internal_bot_runtime_lease_v1",
         "requestBody": {
           "content": {
@@ -2149,6 +2190,7 @@
           "internal bot v1 runtime"
         ],
         "summary": "Renew Runtime Lease",
+        "description": "Use the same acquire-or-extend semantics as /runtime-leases/acquire. If absent or\nexpired the lease can be acquired; it is not restricted to renewing an existing row. A\ndifferent live owner yields acquired=false. No Telegram actor check is performed.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "renew_internal_bot_runtime_lease_v1",
         "requestBody": {
           "content": {
@@ -2195,6 +2237,7 @@
           "internal bot v1 runtime"
         ],
         "summary": "Release Runtime Lease",
+        "description": "Release a service process lease only when its owner_id matches. Missing lease or another\nowner returns acquired=false; a successful release returns acquired=true. No Telegram\nactor check is performed.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "release_internal_bot_runtime_lease_v1",
         "requestBody": {
           "content": {
@@ -2241,6 +2284,7 @@
           "internal bot v1 voice"
         ],
         "summary": "Parse Internal Bot Voice Quick Order",
+        "description": "Transcribe a voice upload and parse an editable quick-order draft for an active Manager\nTelegram actor (403 otherwise); no order is created. Audio is limited to 180 seconds and\n8 MB; empty/invalid audio returns 422 and oversize file 413. Disabled transcription or\nunavailable audio tooling returns 503, provider failure 502 and provider timeout 504.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "parse_internal_bot_voice_quick_order_v1",
         "requestBody": {
           "content": {
@@ -2288,7 +2332,7 @@
           "api"
         ],
         "summary": "Search Products",
-        "description": "Search products with fuzzy matching.",
+        "description": "Search storefront-visible products using fuzzy matching and optional inverter filtering.\nUses public tenant resolution; does not expose the unrestricted Manager catalog.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "search_products_api_products_search_get",
         "parameters": [
           {
@@ -2341,6 +2385,7 @@
           "api"
         ],
         "summary": "Get Filterable Tags",
+        "description": "Read the shared filterable tag dictionary for authenticated Manager workflows. Requires\nget_current_username; this legacy /api/admin path is not a supplier integration surface.",
         "operationId": "get_filterable_tags_api_admin_tags_filterable_get",
         "responses": {
           "200": {
@@ -2366,6 +2411,7 @@
           "api"
         ],
         "summary": "Admin Search Products",
+        "description": "Search shared products by query and optional tag IDs for authenticated Manager\nworkflows. Requires get_current_username; this legacy helper does not use the storefront\ncatalog projection.",
         "operationId": "admin_search_products_api_admin_products_search_get",
         "security": [
           {
@@ -2425,6 +2471,7 @@
           "api"
         ],
         "summary": "Admin Search Services",
+        "description": "Search shared services by query for authenticated Manager workflows. Requires\nget_current_username; this helper is not a public service tariff calculation.",
         "operationId": "admin_search_services_api_admin_services_search_get",
         "security": [
           {
@@ -2472,7 +2519,7 @@
           "api"
         ],
         "summary": "Health Check",
-        "description": "Check API and database availability.",
+        "description": "Check API and database availability without business-data access. No Manager or bot\ntoken is required. Use /api/ready as the separate traffic-readiness check.",
         "operationId": "health_check_api_health_get",
         "responses": {
           "200": {
@@ -2493,7 +2540,7 @@
           "api"
         ],
         "summary": "Readiness Check",
-        "description": "Check whether this API node should receive public traffic.",
+        "description": "Check whether this API node can receive public traffic, including database and scheduler\nruntime readiness. Returns the readiness service status and body (including non-success\nstatus when unready); no Manager or bot token is required.",
         "operationId": "readiness_check_api_ready_get",
         "responses": {
           "200": {
@@ -2514,6 +2561,7 @@
           "api"
         ],
         "summary": "Get Catalog Revision",
+        "description": "Read the contextual catalog and storefront revisions used in cache keys. Returns\nX-Catalog-Revision, X-Storefront-Catalog-Revision and a weak ETag, with private\nrevalidation headers and Vary: X-MVN-Storefront-Host. This handler returns the revision\nbody; it does not implement conditional 304 responses.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "get_catalog_revision",
         "responses": {
           "200": {
@@ -2536,7 +2584,7 @@
           "api"
         ],
         "summary": "Get Articles",
-        "description": "Get list of published articles ordered by creation date (newest first).",
+        "description": "List published articles, newest first. Articles are shared content: this handler does\nnot apply tenant filtering to the article service.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "get_articles_api_v1_content_articles_get",
         "responses": {
           "200": {
@@ -2563,7 +2611,7 @@
           "api"
         ],
         "summary": "Get Article",
-        "description": "Get article details by slug. Returns 404 if not found or not published.",
+        "description": "Read one published shared article by slug. Missing or unpublished content returns 404;\nthe article query is not tenant-scoped.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "get_article_api_v1_content_articles__slug__get",
         "parameters": [
           {
@@ -2607,7 +2655,7 @@
           "api"
         ],
         "summary": "Get Services",
-        "description": "Get list of all available services.",
+        "description": "Return storefront-visible service content through the installation pricing bridge, with\nprivate/no-store response headers.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "get_services_api_v1_content_services_get",
         "responses": {
           "200": {
@@ -2634,7 +2682,7 @@
           "api"
         ],
         "summary": "Get Public Brands",
-        "description": "Get published brands that have at least one published product.",
+        "description": "List published brands with products visible in the resolved storefront catalog.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "get_public_brands",
         "responses": {
           "200": {
@@ -2661,7 +2709,7 @@
           "api"
         ],
         "summary": "Get Public Brand",
-        "description": "Get a published brand by slug if it has published products.",
+        "description": "Read a published brand by slug when it has products visible in this storefront. Missing\nor unavailable brands return 404.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "get_public_brand",
         "parameters": [
           {
@@ -2705,7 +2753,7 @@
           "api"
         ],
         "summary": "Get Public Brand Series",
-        "description": "Get one published series and its public product cards.",
+        "description": "Read a published brand series and its storefront-visible product cards. Missing or\nunavailable series return 404.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "get_public_brand_series",
         "parameters": [
           {
@@ -2758,7 +2806,7 @@
           "api"
         ],
         "summary": "Get Service Options",
-        "description": "Get rich installation options.",
+        "description": "Read legacy service options for the requested category in this storefront. Returns 409\nbook_preview_required when the published price-book contract replaces that category; use\nthe installation preview contract instead.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "get_service_options_api_v1_services_options_get",
         "parameters": [
           {
@@ -2807,7 +2855,7 @@
           "api"
         ],
         "summary": "Get Installation Rates",
-        "description": "Get all installation rates.",
+        "description": "Read legacy installation rates for this storefront. Disabled installation returns an\nempty list; an authoritative published price book returns 409 book_preview_required.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "get_installation_rates_api_v1_installation_rates_get",
         "responses": {
           "200": {
@@ -2828,7 +2876,7 @@
           "api"
         ],
         "summary": "Get Global Config",
-        "description": "Get the public storefront configuration as a key-value dictionary.\nExample: {\"phone\": \"+37529...\", \"email\": \"...\"}",
+        "description": "Return the public key/value configuration for the resolved storefront, not private\nplatform settings.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "get_config",
         "responses": {
           "200": {
@@ -2849,6 +2897,7 @@
           "api"
         ],
         "summary": "Create Public Contact Lead",
+        "description": "Create a website contact lead in the resolved storefront. For required keys, unsigned\ncompatibility, conflicting payloads (409) and retries after 503 with Retry-After, see\n[public write\nidempotency](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#public-write-idempotency).\nRetain the same key and content when retrying.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "create_public_contact_lead",
         "parameters": [
           {
@@ -2967,6 +3016,7 @@
           "api"
         ],
         "summary": "Create Installation Estimate Lead",
+        "description": "Create an installation estimate lead with categorized image uploads. Idempotency-Key is\nrequired; upload/content validation can return 400 and model validation 422. For\nrequired keys, unsigned compatibility, conflicting payloads (409) and retries after 503\nwith Retry-After, see [public write\nidempotency](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#public-write-idempotency).\nRetain the same key and content when retrying.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "create_installation_estimate_lead",
         "parameters": [
           {
@@ -3078,6 +3128,7 @@
           "api"
         ],
         "summary": "Create Product Availability Lead",
+        "description": "Create a storefront product availability inquiry. A product unavailable to that\nstorefront returns 404. For required keys, unsigned compatibility, conflicting payloads\n(409) and retries after 503 with Retry-After, see [public write\nidempotency](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#public-write-idempotency).\nRetain the same key and content when retrying.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "create_product_availability_lead",
         "parameters": [
           {
@@ -3196,6 +3247,7 @@
           "api"
         ],
         "summary": "Create Repair Diagnostic Lead",
+        "description": "Create a repair diagnostic lead from multipart JSON payload and categorized uploads.\nMalformed payload/images/limits return 400 or 422 according to validation stage. For\nrequired keys, unsigned compatibility, conflicting payloads (409) and retries after 503\nwith Retry-After, see [public write\nidempotency](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#public-write-idempotency).\nRetain the same key and content when retrying.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "create_repair_diagnostic_lead",
         "parameters": [
           {
@@ -3314,7 +3366,7 @@
           "api"
         ],
         "summary": "Create Order",
-        "description": "Create a new order from website.\nAccepts customer information and cart items.",
+        "description": "Create an order from the resolved storefront cart and customer details. The server\nverifies pricing and installation acceptance; pricing conflicts return 409. Installation\nacceptance requires exactly one submitted Idempotency-Key even for unsigned\ncompatibility clients. For required keys, unsigned compatibility, conflicting payloads\n(409) and retries after 503 with Retry-After, see [public write\nidempotency](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#public-write-idempotency).\nRetain the same key and content when retrying.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "create_order",
         "parameters": [
           {
@@ -3444,6 +3496,7 @@
           "api"
         ],
         "summary": "Get Public Spec Keys",
+        "description": "List specification keys available in the resolved storefront catalog, for building\nsupported filters.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "get_public_spec_keys",
         "responses": {
           "200": {
@@ -3466,6 +3519,7 @@
           "api"
         ],
         "summary": "Get Public Spec Registry",
+        "description": "Return the shared canonical specification registry and aliases; this dictionary is\nglobal rather than a tenant product listing.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "get_public_spec_registry",
         "responses": {
           "200": {
@@ -3488,6 +3542,7 @@
           "api"
         ],
         "summary": "Get Filters Config",
+        "description": "Return filter choices derived from the resolved storefront catalog; use these choices\nwhen constructing product queries.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "get_filters_config",
         "responses": {
           "200": {
@@ -3510,6 +3565,7 @@
           "api"
         ],
         "summary": "Generate Product Description",
+        "description": "Generate product description text from shared product tags/specifications without saving\nit. A missing product is returned as description error text with HTTP success, not 404.\nRequires Manager authentication via get_current_username; operates on the shared product\ncatalog, outside the public storefront read contract.",
         "operationId": "generate_product_description_api_products__product_id__generate_description_post",
         "security": [
           {
@@ -3556,6 +3612,7 @@
           "api"
         ],
         "summary": "Get Catalog",
+        "description": "Return a filtered, sorted storefront product page, with public prices, supply metrics,\nfeatures and warranty projection. /v1/catalog is an alias of /v1/products with a\ndistinct operation ID. page starts at 1 and limit is 1\u2013100; the service rejects\nout-of-range values with 400. Response meta describes the filtered result set.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "get_products_v1",
         "parameters": [
           {
@@ -3846,6 +3903,7 @@
           "api"
         ],
         "summary": "Get Catalog",
+        "description": "Return a filtered, sorted storefront product page, with public prices, supply metrics,\nfeatures and warranty projection. /v1/catalog is an alias of /v1/products with a\ndistinct operation ID. page starts at 1 and limit is 1\u2013100; the service rejects\nout-of-range values with 400. Response meta describes the filtered result set.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "get_products",
         "parameters": [
           {
@@ -4136,6 +4194,7 @@
           "api"
         ],
         "summary": "Get Vitebsk Featured Products",
+        "description": "Return up to six featured storefront product projections with public supply, feature and\nwarranty information.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "get_vitebsk_featured_products",
         "responses": {
           "200": {
@@ -4162,6 +4221,7 @@
           "api"
         ],
         "summary": "Get Product Series Navigation",
+        "description": "Return the series navigation visible in the resolved storefront catalog.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "get_product_series_navigation",
         "responses": {
           "200": {
@@ -4184,6 +4244,7 @@
           "api"
         ],
         "summary": "Get Product By Identifier",
+        "description": "Resolve one storefront-visible product by identifier and include its visible series\nsiblings. A missing or unavailable product returns 404; this does not expose a product\nfrom another storefront.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "get_product",
         "parameters": [
           {
@@ -4227,7 +4288,7 @@
           "api"
         ],
         "summary": "Proxy Egr",
-        "description": "Proxy for Belarus EGR (Ministry of Taxes) API.",
+        "description": "Look up Belarus registry requisites by a nine-digit UNP. Requires Manager\nauthentication; invalid UNP returns 422. Data comes from the shared external registry,\nnot tenant CRM records.",
         "operationId": "proxy_egr_api_admin_proxy_egr_get",
         "security": [
           {
@@ -4274,7 +4335,7 @@
           "api"
         ],
         "summary": "Find Bank",
-        "description": "Find bank in NBRB reference by BIC/IBAN.",
+        "description": "Read the shared NBRB bank reference, optionally matching BIC or Belarus IBAN. Requires\nManager authentication. Without search returns the bank list; a miss is an error object\nwith HTTP 200. Reference data uses a 72-hour in-process cache and can fall back to\ncached data on fetch exceptions.",
         "operationId": "find_bank_api_admin_proxy_bank_get",
         "security": [
           {
@@ -4323,7 +4384,7 @@
           "api"
         ],
         "summary": "Public Proxy Egr",
-        "description": "Public proxy for Belarus EGR (Ministry of Taxes) API.",
+        "description": "Public Belarus registry lookup by a nine-digit UNP (422 for invalid format). No Manager\ntoken or storefront signature is required: this is an explicit gateway exception. Reads\nshared external registry data, not tenant records.",
         "operationId": "public_proxy_egr_api_v1_proxy_egr_get",
         "parameters": [
           {
@@ -4365,7 +4426,7 @@
           "api"
         ],
         "summary": "Public Find Bank",
-        "description": "Public proxy to find bank details by IBAN/BIC.",
+        "description": "Public bank lookup by BIC or Belarus IBAN. No Manager token or storefront signature is\nrequired: this is an explicit gateway exception. Empty search returns []; a miss returns\nan error object with HTTP 200. Uses the shared cached NBRB reference.",
         "operationId": "public_find_bank_api_v1_proxy_bank_get",
         "parameters": [
           {
@@ -4409,6 +4470,7 @@
           "api"
         ],
         "summary": "Public Address Suggest",
+        "description": "Public address suggestions for a query of at least two characters. No Manager token or\nstorefront signature is required: this is an explicit gateway exception. Returns an\nempty items list when suggestions are disabled or the upstream HTTP request fails.",
         "operationId": "public_address_suggest",
         "parameters": [
           {
@@ -4453,6 +4515,7 @@
           "api"
         ],
         "summary": "Get Public Product Collection Placement",
+        "description": "Resolve published product collections for a storefront surface and slot. Keys are\nlowercased before resolution; the result contains the placement projection rather than\neditable collection definitions.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "get_public_product_collection_placement",
         "parameters": [
           {
@@ -4509,6 +4572,7 @@
           "api"
         ],
         "summary": "Get Public Storefront Context",
+        "description": "Resolve public tenant/storefront identity, locale, currency and hostname from the\ncurrent storefront scope. Returns 404 when that storefront is unavailable; the caller\ncannot select an arbitrary tenant in the body.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "get_public_storefront_context",
         "responses": {
           "200": {
@@ -4531,6 +4595,7 @@
           "storefront-settings"
         ],
         "summary": "Get Public Storefront Settings",
+        "description": "Read settings for the storefront selected by public tenant resolution, including its\nconfigured service availability.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "get_public_storefront_settings",
         "responses": {
           "200": {
@@ -4553,7 +4618,7 @@
           "api/service-pricing"
         ],
         "summary": "Get Public Installation Pricing Config",
-        "description": "Tell the storefront which pricing contract is currently authoritative.",
+        "description": "Tell the storefront which installation pricing contract is authoritative. Response uses\nprivate/no-store headers; read this before choosing legacy calculation or price-book\npreview.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "get_public_installation_pricing_config",
         "responses": {
           "200": {
@@ -4576,6 +4641,7 @@
           "api/service-pricing"
         ],
         "summary": "Resolve Public Installation Tariff",
+        "description": "Resolve a tariff using the storefront installation price book. Disabled installation is\nreported as status=unavailable with service_direction_not_enabled, rather than 404. Does\nnot create an order.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "resolve_public_installation_tariff",
         "requestBody": {
           "content": {
@@ -4618,6 +4684,7 @@
           "api/service-pricing"
         ],
         "summary": "Preview Public Installation Estimate",
+        "description": "Calculate a price-book installation preview and, outside read-only demo scope, persist\nits receipt using the required Idempotency-Key. Public callers cannot approve site\naccess: approved_site_access returns 422. Disabled installation returns\nstatus=unavailable. A persistent preview replays the same input/key for its 30-minute\nreceipt lifetime; another input with that key returns 409 idempotency_key_reused. A\nprice-book revision mismatch returns 409 price_changed. Receipt\ncontention/unavailability can return 503 with Retry-After: 1; retain the same input/key\nfor a retry. Preview is not acceptance or order creation.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "preview_public_installation_estimate",
         "parameters": [
           {
@@ -4671,6 +4738,7 @@
           "api/service-pricing"
         ],
         "summary": "List Public Service Tariffs",
+        "description": "List active service tariffs and active rules for this storefront and service direction.\nDisabled direction returns 404; installation backed by a published price book returns\n409 book_preview_required.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "list_public_service_tariffs",
         "parameters": [
           {
@@ -4713,6 +4781,7 @@
           "api/service-pricing"
         ],
         "summary": "Calculate Public Service Tariff",
+        "description": "Calculate a legacy active tariff within this storefront without creating an order.\nDisabled service direction returns 404; installation with a published price book returns\n409 book_preview_required. Tariff access and active status are checked by the tariff\nservice.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "calculate_public_service_tariff",
         "requestBody": {
           "content": {
@@ -4755,6 +4824,7 @@
           "api"
         ],
         "summary": "Get Yandex Business Feed",
+        "description": "Return the shared Yandex Business price-list XML generated by the feed service. No\nManager token or storefront signature is required: this is an explicit public gateway\nexception. Response is application/xml, not JSON or a tenant-selected catalog page.",
         "operationId": "get_yandex_business_feed",
         "responses": {
           "200": {
@@ -4777,6 +4847,7 @@
           "multi-split"
         ],
         "summary": "List Public Multi Split Options",
+        "description": "List storefront-visible indoor or outdoor units for multi-split selection, with public\nprices and pagination; limit is at most 100.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "list_public_multi_split_options",
         "parameters": [
           {
@@ -4847,6 +4918,7 @@
           "multi-split"
         ],
         "summary": "Preview Public Multi Split",
+        "description": "Validate a multi-split selection server-side in the resolved storefront and return its\npublic price projection without creating a lead. Invalid or incompatible selection\nreturns 422.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "preview_public_multi_split",
         "requestBody": {
           "content": {
@@ -4889,6 +4961,7 @@
           "multi-split"
         ],
         "summary": "Create Public Multi Split Lead",
+        "description": "Validate a multi-split selection and create a lead in this storefront. Idempotency-Key\nis required; invalid selection or intake values return 422. For required keys, unsigned\ncompatibility, conflicting payloads (409) and retries after 503 with Retry-After, see\n[public write\nidempotency](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#public-write-idempotency).\nRetain the same key and content when retrying.\n\nAccess and scope: storefront context is resolved by the public gateway; tenant-aware\noperations use that storefront. Signed headers are verified outside OpenAPI. See\n[storefront\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).",
         "operationId": "create_public_multi_split_lead",
         "parameters": [
           {
@@ -27340,6 +27413,7 @@
           "manager"
         ],
         "summary": "List Suppliers",
+        "description": "List supplier profiles in the shared platform directory; this endpoint has no page/limit\nparameters.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "list_suppliers",
         "responses": {
           "200": {
@@ -27364,6 +27438,7 @@
           "manager"
         ],
         "summary": "Create Supplier",
+        "description": "Create a supplier profile, normalizing its code and optional Google spreadsheet\nreference. This does not create a partner account or fetch its offers. Invalid\nconfiguration returns 400; POST has no client idempotency receipt.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "create_supplier",
         "requestBody": {
           "content": {
@@ -27410,6 +27485,7 @@
           "manager"
         ],
         "summary": "Patch Supplier",
+        "description": "Update only submitted supplier profile fields and normalize code/spreadsheet changes.\nMissing supplier returns 404; invalid configuration returns 400.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "patch_supplier",
         "security": [
           {
@@ -27465,6 +27541,7 @@
           "manager"
         ],
         "summary": "Delete Supplier",
+        "description": "Delete a shared supplier and its supply requests/lines, contacts, warehouses, mappings,\noffers, sync runs and price sources. Missing supplier returns 404, including a repeat\nafter successful deletion. This removes the supplier\u2019s related platform data, not just\nits profile.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "delete_supplier",
         "security": [
           {
@@ -27512,6 +27589,7 @@
           "manager"
         ],
         "summary": "List Supplier Contacts",
+        "description": "List contacts belonging to one supplier. Missing supplier returns 404.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "list_supplier_contacts",
         "security": [
           {
@@ -27557,6 +27635,7 @@
           "manager"
         ],
         "summary": "Create Supplier Contact",
+        "description": "Create a contact under the selected supplier. Invalid supplier/contact configuration\nreturns 400; no client idempotency receipt is provided.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "create_supplier_contact",
         "security": [
           {
@@ -27614,6 +27693,7 @@
           "manager"
         ],
         "summary": "Patch Supplier Contact",
+        "description": "Patch submitted contact fields under the specified supplier. A contact outside that\nsupplier or missing contact returns 404; invalid values return 400.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "patch_supplier_contact",
         "security": [
           {
@@ -27678,6 +27758,7 @@
           "manager"
         ],
         "summary": "Delete Supplier Contact",
+        "description": "Delete a contact under the specified supplier. Missing contact or wrong supplier returns\n404, including a repeat after successful deletion.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "delete_supplier_contact",
         "security": [
           {
@@ -27734,6 +27815,7 @@
           "manager"
         ],
         "summary": "List Supplier Warehouses",
+        "description": "List warehouse profiles belonging to a supplier. Missing supplier returns 404.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "list_supplier_warehouses",
         "security": [
           {
@@ -27779,6 +27861,7 @@
           "manager"
         ],
         "summary": "Create Supplier Warehouse",
+        "description": "Create a warehouse profile under a supplier. Invalid supplier/warehouse configuration\nreturns 400; no client idempotency receipt is provided.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "create_supplier_warehouse",
         "security": [
           {
@@ -27836,6 +27919,7 @@
           "manager"
         ],
         "summary": "Patch Supplier Warehouse",
+        "description": "Patch submitted warehouse fields under its supplier. Missing warehouse or wrong supplier\nreturns 404; invalid values return 400.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "patch_supplier_warehouse",
         "security": [
           {
@@ -27900,6 +27984,7 @@
           "manager"
         ],
         "summary": "Delete Supplier Warehouse",
+        "description": "Delete a warehouse under its supplier. Missing warehouse or wrong supplier returns 404,\nincluding a repeat after deletion.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "delete_supplier_warehouse",
         "security": [
           {
@@ -27956,6 +28041,7 @@
           "manager"
         ],
         "summary": "List Supplier Sheets",
+        "description": "Read Google spreadsheet tab metadata from the selected supplier\u2019s configured\nspreadsheet. Missing supplier/spreadsheet configuration or upstream read failure returns\n400; this is an external read, not an offer sync.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "list_supplier_sheets",
         "security": [
           {
@@ -28003,6 +28089,7 @@
           "manager"
         ],
         "summary": "List Supplier Sources",
+        "description": "List shared supplier price-source configurations, including supplier names. This\nendpoint does not paginate or sync source contents.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "list_supplier_sources",
         "responses": {
           "200": {
@@ -28027,6 +28114,7 @@
           "manager"
         ],
         "summary": "Create Supplier Source",
+        "description": "Create a price-source configuration after verifying the supplier spreadsheet and sheet\ntab. A missing supplier, unconfigured spreadsheet or invalid sheet returns 400. Saving\ndoes not perform an offer sync.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "create_supplier_source",
         "requestBody": {
           "content": {
@@ -28073,6 +28161,7 @@
           "manager"
         ],
         "summary": "Patch Supplier Source",
+        "description": "Patch submitted source configuration fields; supplier/sheet changes are checked against\navailable tabs. Missing source returns 404; invalid configuration returns 400. Saving\ndoes not perform an offer sync.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "patch_supplier_source",
         "security": [
           {
@@ -28128,6 +28217,7 @@
           "manager"
         ],
         "summary": "Delete Supplier Source",
+        "description": "Delete a source and deactivate its offers and corresponding mappings. Missing source\nreturns 404, including a repeat after deletion; deleting is not merely hiding its\nconfiguration.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "delete_supplier_source",
         "security": [
           {
@@ -28175,6 +28265,7 @@
           "manager"
         ],
         "summary": "Analyze Supplier Source",
+        "description": "Read source spreadsheet rows and analyze their column mapping without importing offers.\nThis existing endpoint accepts limit 1\u2013200 (default 50). Missing source or missing\nspreadsheet configuration raises 404; other read/analysis failures return 400.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "analyze_supplier_source",
         "security": [
           {
@@ -28234,6 +28325,7 @@
           "manager"
         ],
         "summary": "Sync Supplier Source",
+        "description": "Run source synchronization now and return its recorded run result. Sync updates supplier\noffers and can deactivate offers missing from the source. Inspect run status/error even\non HTTP success; source-processing failures can be captured in the run. Unknown source\nreturns 404; adapter exceptions can return 400. A repeat starts another run, not a\nreceipt replay.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "sync_supplier_source",
         "security": [
           {
@@ -28281,6 +28373,7 @@
           "manager"
         ],
         "summary": "Sync All Supplier Sources",
+        "description": "Synchronize active configured sources and return run results. Inspect each run\nstatus/error; a repeat runs synchronization again. Unhandled orchestration failure\nreturns 400.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "sync_all_supplier_sources",
         "responses": {
           "200": {
@@ -28311,6 +28404,7 @@
           "manager"
         ],
         "summary": "List Unmapped Supplier Offers",
+        "description": "Page active offers without an active product mapping, optionally filtered by supplier,\nsource and query. limit is 1\u2013100; meta describes the filtered set.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "list_unmapped_supplier_offers",
         "security": [
           {
@@ -28421,6 +28515,7 @@
           "manager"
         ],
         "summary": "List Supplier Source Url Import Candidates",
+        "description": "Find active unmapped offers with a source URL not already represented by a product.\nNormalized URLs are deduplicated. This existing endpoint accepts limit 1\u2013200, default\n100; total is the returned candidate count, not an exhaustive paginated total.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "list_supplier_source_url_import_candidates",
         "security": [
           {
@@ -28503,6 +28598,7 @@
           "manager"
         ],
         "summary": "Start Supplier Source Url Import",
+        "description": "Start a catalog import job from trimmed, deduplicated URLs and return its job\nID/status/stage. Empty URLs return 400. It starts a job rather than waiting for all\nproducts; this is not a supplier push endpoint.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "start_supplier_source_url_import",
         "requestBody": {
           "content": {
@@ -28549,6 +28645,7 @@
           "manager"
         ],
         "summary": "Suggest Supplier Offers",
+        "description": "Return product match suggestions for submitted supplier-offer identifiers. Suggestions\ndo not create or replace mappings; the per-offer bound is supplied in the request model.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "suggest_supplier_offers",
         "requestBody": {
           "content": {
@@ -28595,6 +28692,7 @@
           "manager"
         ],
         "summary": "Create Supplier Mapping",
+        "description": "Create an active product mapping for a supplier/external_id offer key, recording the\ncurrent Manager actor. Missing product/offer, inactive offer or an already-mapped key\nreturns 400. A repeated POST is not an idempotent replay.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "create_supplier_mapping",
         "requestBody": {
           "content": {
@@ -28641,6 +28739,7 @@
           "manager"
         ],
         "summary": "Create Supplier Mappings Bulk",
+        "description": "Create product mappings item by item. With skip_conflicts=true, skipped items and their\nerrors are returned beside counts. This is not atomic: earlier created mappings may\nremain when a later item fails; inspect the result before retrying a batch.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "bulk_create_supplier_mappings",
         "requestBody": {
           "content": {
@@ -28687,6 +28786,7 @@
           "manager"
         ],
         "summary": "Delete Supplier Mapping",
+        "description": "Delete a supplier-to-product mapping. Missing mapping returns 404, including a repeat\nafter successful deletion.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "delete_supplier_mapping",
         "security": [
           {
@@ -28732,6 +28832,7 @@
           "manager"
         ],
         "summary": "Get Product Supplier Offers",
+        "description": "Read supplier offers linked by active mappings to the selected shared product, including\ninactive offers. Returns an empty list when no linked offers exist; it does not\nseparately validate product existence. This is platform purchase information, not a\npublic storefront price list.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "get_product_supplier_offers",
         "security": [
           {
@@ -28779,6 +28880,7 @@
           "manager"
         ],
         "summary": "Upsert Product Local Stock",
+        "description": "Set the selected product\u2019s local Vitebsk stock quantity and record the actor. Missing\nproduct returns 404. This sets an absolute quantity rather than incrementing stock.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "upsert_product_local_stock",
         "security": [
           {
@@ -28836,6 +28938,7 @@
           "manager"
         ],
         "summary": "List Supply Requests",
+        "description": "Page supply requests filtered by status, supplier, warehouse, source type or order.\nlimit is 1\u2013100; invalid business filters return 400.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "list_supply_requests",
         "security": [
           {
@@ -28975,6 +29078,7 @@
           "manager"
         ],
         "summary": "Create Supply Request",
+        "description": "Create a supply request from explicit lines and supplier/warehouse context. Invalid\ncombinations return 400. No Idempotency-Key receipt is provided; reconcile creation\nbefore repeating a lost response.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "create_supply_request",
         "security": [
           {
@@ -29021,6 +29125,7 @@
           "manager"
         ],
         "summary": "Create Supply Request From Order Lines",
+        "description": "Create supply requests from selected order lines, checking the order in the\nauthenticated Manager scope. Invalid or unavailable selections return 400; resulting\nsupply records remain platform-managed.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "create_supply_request_from_order_lines",
         "requestBody": {
           "content": {
@@ -29067,6 +29172,7 @@
           "manager"
         ],
         "summary": "Create Stock Supply Request",
+        "description": "Create stock replenishment supply requests from submitted items. Invalid\nsupplier/product/warehouse context returns 400; no client idempotency receipt is\nprovided.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "create_stock_supply_request",
         "requestBody": {
           "content": {
@@ -29113,6 +29219,7 @@
           "manager"
         ],
         "summary": "Patch Supply Request",
+        "description": "Patch submitted supply-request fields, validating its state and business relationships.\nService validation failures, including missing request, return 400.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "patch_supply_request",
         "security": [
           {
@@ -29170,6 +29277,7 @@
           "manager"
         ],
         "summary": "Patch Supply Request Line",
+        "description": "Patch submitted fields of a supply-request line and validate its request context.\nService validation failures, including missing line, return 400.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "patch_supply_request_line",
         "security": [
           {
@@ -29227,6 +29335,7 @@
           "manager"
         ],
         "summary": "Generate Supply Request Supplier Message",
+        "description": "Generate supplier message text for a supply request. mark_sent records a snapshot/time\nand advances the request/active lines to awaiting_reply (reserve) or ordered; this\nhandler returns text and does not send it to the supplier. Invalid request/state returns\n400.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "generate_supply_request_supplier_message",
         "security": [
           {
@@ -29284,6 +29393,7 @@
           "manager"
         ],
         "summary": "Generate Supply Logistics Message",
+        "description": "Generate logistics message text for selected supply requests. mark_sent records a\nsnapshot/time and can advance ordered/awaiting_reply/reserved requests and active lines\nto ready_for_pickup; this handler does not deliver the message. Invalid selection/state\nreturns 400.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "generate_supply_logistics_message",
         "requestBody": {
           "content": {
@@ -29330,6 +29440,7 @@
           "manager"
         ],
         "summary": "List Product Supplier Offer Candidates",
+        "description": "Page offer candidates for a product within the required supplier and optional\nsource/query. Defaults to active offers; include_inactive includes inactive candidates.\nEach row reports free/current/conflict/inactive mapping status. limit is 1\u2013100. Missing\nproduct returns 404.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "list_product_supplier_offer_candidates",
         "security": [
           {
@@ -29458,6 +29569,7 @@
           "manager"
         ],
         "summary": "Put Supplier Offer Mapping",
+        "description": "Map an active offer to a product. Replacing another active mapping requires\nreplace_existing plus both expected_mapping_id and expected_product_id; concurrent\nchanges or a conflicting mapping return 409. Read candidates again before resolving a\nconflict. Mapping to the already-current product returns the existing mapping. Missing\noffer/product returns 404; inactive offer returns 400. This does not accept a generic\nIdempotency-Key.\n\nAccess and scope: system-tenant Manager access is required; these are platform-global\nsupplier/supply records, not a supplier self-service API. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)\nand [supplier\nboundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).",
         "operationId": "put_supplier_offer_mapping",
         "security": [
           {
@@ -31077,6 +31189,7 @@
           "connector-auth"
         ],
         "summary": "Authorization Metadata",
+        "description": "Publish OAuth authorization-server discovery for the configured issuer, supported\ngrants/scopes and PKCE S256. No Manager session is required; this does not dynamically\nregister clients.\n\nSee [connector access and\nscopes](https://github.com/mvnby/air-api/blob/main/docs/chatgpt-connector.md#\u0430\u0434\u0440\u0435\u0441-\u0438-\u0434\u043e\u0441\u0442\u0443\u043f).\nMCP transport and tools/list are outside this HTTP schema.",
         "operationId": "connector_oauth_metadata",
         "responses": {
           "200": {
@@ -31096,6 +31209,7 @@
           "connector-auth"
         ],
         "summary": "Protected Resource Metadata",
+        "description": "Publish OAuth protected-resource discovery for the exact MCP resource. Available at both\nwell-known paths without a Manager session. OAuth metadata is not the MCP tools catalog.\n\nSee [connector access and\nscopes](https://github.com/mvnby/air-api/blob/main/docs/chatgpt-connector.md#\u0430\u0434\u0440\u0435\u0441-\u0438-\u0434\u043e\u0441\u0442\u0443\u043f).\nMCP transport and tools/list are outside this HTTP schema.",
         "operationId": "connector_oauth_resource_path_metadata",
         "responses": {
           "200": {
@@ -31115,6 +31229,7 @@
           "connector-auth"
         ],
         "summary": "Protected Resource Metadata",
+        "description": "Publish OAuth protected-resource discovery for the exact MCP resource. Available at both\nwell-known paths without a Manager session. OAuth metadata is not the MCP tools catalog.\n\nSee [connector access and\nscopes](https://github.com/mvnby/air-api/blob/main/docs/chatgpt-connector.md#\u0430\u0434\u0440\u0435\u0441-\u0438-\u0434\u043e\u0441\u0442\u0443\u043f).\nMCP transport and tools/list are outside this HTTP schema.",
         "operationId": "connector_oauth_resource_metadata",
         "responses": {
           "200": {
@@ -31134,6 +31249,7 @@
           "connector-auth"
         ],
         "summary": "Authorize",
+        "description": "Start a one-time OAuth consent bound to the current authenticated Manager session and\nrender an HTML consent page. Requires the registered client/callback, exact resource,\nscopes and PKCE S256; duplicate query parameters are rejected. Missing login returns an\nHTML 401; OAuth errors use error/error_description and no-store headers.\n\nSee [connector access and\nscopes](https://github.com/mvnby/air-api/blob/main/docs/chatgpt-connector.md#\u0430\u0434\u0440\u0435\u0441-\u0438-\u0434\u043e\u0441\u0442\u0443\u043f).\nMCP transport and tools/list are outside this HTTP schema.",
         "operationId": "connector_oauth_authorize",
         "responses": {
           "200": {
@@ -31153,6 +31269,7 @@
           "connector-auth"
         ],
         "summary": "Consent",
+        "description": "Finish the durable consent using explicit allow/deny, consent_id and its one-time CSRF\ntoken bound to the same live Manager session. Accepts application/x-www-form-urlencoded\nup to 8192 bytes; duplicate parameters are rejected. Success redirects with 303 to the\nregistered callback; OAuth errors use error/error_description. Do not blindly replay a\nconsumed consent.\n\nSee [connector access and\nscopes](https://github.com/mvnby/air-api/blob/main/docs/chatgpt-connector.md#\u0430\u0434\u0440\u0435\u0441-\u0438-\u0434\u043e\u0441\u0442\u0443\u043f).\nMCP transport and tools/list are outside this HTTP schema.",
         "operationId": "connector_oauth_consent",
         "responses": {
           "200": {
@@ -31177,6 +31294,7 @@
           "connector-auth"
         ],
         "summary": "Token",
+        "description": "Exchange an authorization code with PKCE or rotate a refresh token for the registered\npublic client and exact MCP resource. Accepts application/x-www-form-urlencoded up to\n8192 bytes; duplicate fields, Authorization/client_secret and unsupported grants are\nrejected. No Manager JWT is used here. Refresh reuse revokes the grant; after losing a\nrefresh response do not treat the old token as safely replayable. OAuth errors use\nerror/error_description; responses are no-store.\n\nSee [connector access and\nscopes](https://github.com/mvnby/air-api/blob/main/docs/chatgpt-connector.md#\u0430\u0434\u0440\u0435\u0441-\u0438-\u0434\u043e\u0441\u0442\u0443\u043f).\nMCP transport and tools/list are outside this HTTP schema.",
         "operationId": "connector_oauth_token",
         "responses": {
           "200": {
@@ -31198,6 +31316,7 @@
           "connector-auth"
         ],
         "summary": "Revoke",
+        "description": "Revoke a connector access/refresh token using its registered client_id. Accepts\napplication/x-www-form-urlencoded up to 8192 bytes; duplicate fields are rejected.\nSuccess has an empty 200 body and no-store headers. No Manager JWT is used for this\ntoken endpoint; errors use OAuth error/error_description.\n\nSee [connector access and\nscopes](https://github.com/mvnby/air-api/blob/main/docs/chatgpt-connector.md#\u0430\u0434\u0440\u0435\u0441-\u0438-\u0434\u043e\u0441\u0442\u0443\u043f).\nMCP transport and tools/list are outside this HTTP schema.",
         "operationId": "connector_oauth_revoke",
         "responses": {
           "200": {
@@ -31217,6 +31336,7 @@
           "connector-auth"
         ],
         "summary": "Grants",
+        "description": "List OAuth grants belonging to the current authenticated Manager actor and return a\nsession-bound CSRF token for profile revocation. Response is no-store; does not list\nother users\u2019 grants.\n\nSee [connector access and\nscopes](https://github.com/mvnby/air-api/blob/main/docs/chatgpt-connector.md#\u0430\u0434\u0440\u0435\u0441-\u0438-\u0434\u043e\u0441\u0442\u0443\u043f).\nMCP transport and tools/list are outside this HTTP schema.",
         "operationId": "manager_connector_grants",
         "responses": {
           "200": {
@@ -31243,6 +31363,7 @@
           "connector-auth"
         ],
         "summary": "Manager Revoke",
+        "description": "Revoke the current Manager actor\u2019s grant using X-CSRF-Token bound to that Manager\ncredential. Requires live Manager access and grant ownership; success is 204 with no\nbody/no-store headers. OAuth policy errors use error/error_description. Removing a\nclient plugin alone does not invoke this revocation.\n\nSee [connector access and\nscopes](https://github.com/mvnby/air-api/blob/main/docs/chatgpt-connector.md#\u0430\u0434\u0440\u0435\u0441-\u0438-\u0434\u043e\u0441\u0442\u0443\u043f).\nMCP transport and tools/list are outside this HTTP schema.",
         "operationId": "manager_connector_revoke",
         "security": [
           {

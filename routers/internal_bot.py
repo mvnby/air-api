@@ -79,6 +79,14 @@ router = APIRouter(
     operation_id="get_internal_bot_api_health_v1",
 )
 async def get_internal_bot_api_health() -> BotApiHealthResponse:
+    """
+    Check that the authenticated bot API is reachable and report its v1 contract marker.
+    Does not check a Telegram actor or database readiness.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     return BotApiHealthResponse()
 
 
@@ -91,6 +99,15 @@ async def get_internal_bot_staff_context(
     telegram_id: int = Path(ge=1),
     session: AsyncSession = Depends(get_session),
 ) -> BotStaffContextResponse:
+    """
+    Resolve the active staff context of a Telegram identity, including Manager/executor
+    roles and legacy installer linkage. A non-staff identity is represented by
+    is_staff=false rather than a business permission grant.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     context = await BotAccessService.get_context(session, telegram_id)
     return BotStaffContextResponse(
         telegram_id=context.telegram_id,
@@ -113,6 +130,14 @@ async def search_internal_bot_catalog(
     payload: BotCatalogSearchRequest,
     session: AsyncSession = Depends(get_session),
 ) -> BotCatalogSearchResponse:
+    """
+    Search the shared product catalog for an active staff Telegram actor (403 otherwise).
+    Returns internal bot product projections, not storefront-only catalog cards.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     try:
         products = await BotCatalogService.search_for_staff(
             session,
@@ -137,6 +162,14 @@ async def get_internal_bot_catalog_product(
     telegram_id: int = Query(ge=1),
     session: AsyncSession = Depends(get_session),
 ) -> BotCatalogProductLookupResponse:
+    """
+    Read one shared catalog product for an active staff Telegram actor (403 otherwise). A
+    missing product is product=null in a successful lookup response, not 404.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     try:
         product = await BotCatalogService.get_product_for_staff(
             session,
@@ -160,6 +193,15 @@ async def list_internal_bot_my_tasks(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_system_tenant_scope),
 ) -> BotTaskListResponse:
+    """
+    Read work stages assigned to the actor’s linked installer in the system tenant, with
+    optional date/status filters. Active staff access is required (403 otherwise); staff
+    without an installer linkage receive an empty list.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     try:
         tasks = await BotTaskReadService.list_for_staff(
             session,
@@ -188,6 +230,16 @@ async def update_internal_bot_task_status(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_system_tenant_scope),
 ) -> BotTaskStatusUpdateResponse:
+    """
+    Set the status of a stage assigned to the actor’s installer in the system tenant.
+    Missing/inaccessible/unassigned stage returns 403; an invalid state transition returns
+    409. changed reports whether a transition occurred; this is not a generic idempotency
+    receipt.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     try:
         result = await BotTaskMutationService.update_stage_status(
             session,
@@ -218,6 +270,15 @@ async def save_internal_bot_task_report(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_system_tenant_scope),
 ) -> BotTaskReportSaveResponse:
+    """
+    Save a normalized installer report on the actor’s assigned stage in the system tenant.
+    Missing/inaccessible stage returns 403. Repeating the same normalized report returns
+    changed=false.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     try:
         result = await BotTaskMutationService.save_stage_report(
             session,
@@ -249,6 +310,15 @@ async def attach_internal_bot_task_stage_file(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_system_tenant_scope),
 ) -> BotTaskAttachmentResponse:
+    """
+    Attach a nonempty file of at most 10 MB to the actor’s assigned stage in the system
+    tenant. Inaccessible stage returns 403, empty content 422 and oversize content 413.
+    file_id provides attachment deduplication; inspect already_attached on retries.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     content, filename, mime_type = await read_bot_upload(file)
     try:
         result = await BotTaskMutationService.attach_stage_attachment(
@@ -286,6 +356,14 @@ async def parse_internal_bot_quick_order(
     payload: BotQuickOrderParseRequest,
     session: AsyncSession = Depends(get_session),
 ) -> BotQuickOrderParseResponse:
+    """
+    Parse text into an editable quick-order draft for an active Manager Telegram actor (403
+    otherwise). Does not create an order or start a durable draft session.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     try:
         draft = await BotQuickOrderApiService.parse_for_manager(
             session,
@@ -312,6 +390,15 @@ def _draft_error(exc: Exception) -> HTTPException:
 async def start_internal_bot_quick_order_draft(
     payload: BotQuickOrderDraftStartRequest, session: AsyncSession = Depends(get_session)
 ) -> BotQuickOrderDraftSessionResponse:
+    """
+    Start a durable quick-order draft owned by the active Manager Telegram actor in the
+    system tenant. The response supplies draft_id and version for subsequent edits. Access
+    denial returns 403, service draft conflicts 409 and invalid draft input 422.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     try:
         result = await BotQuickOrderDraftService.start(session, **payload.model_dump())
     except (BotQuickOrderAccessDeniedError, BotQuickOrderDraftNotFoundError,
@@ -325,6 +412,15 @@ async def start_internal_bot_quick_order_draft(
 async def search_internal_bot_quick_order_customers(
     payload: BotQuickOrderCustomerSearchRequest, session: AsyncSession = Depends(get_session)
 ) -> BotQuickOrderCustomerSearchResponse:
+    """
+    Search customer candidates in the system tenant for an active Manager Telegram actor.
+    Access denial returns 403; invalid search input returns 422. Search does not create or
+    modify a customer.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     try:
         result = await BotQuickOrderDraftService.search_customers(session, **payload.model_dump())
     except (BotQuickOrderAccessDeniedError, ValueError) as exc:
@@ -337,6 +433,15 @@ async def search_internal_bot_quick_order_customers(
 async def get_internal_bot_quick_order_draft(
     draft_id: str, telegram_id: int = Query(ge=1), session: AsyncSession = Depends(get_session)
 ) -> BotQuickOrderDraftSessionResponse:
+    """
+    Read a durable draft belonging to the active Manager Telegram actor. Access denial
+    returns 403; unavailable draft returns 404. Read version before issuing an edit or
+    action.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     try:
         result = await BotQuickOrderDraftService.get(session, telegram_id=telegram_id, draft_id=draft_id)
     except (BotQuickOrderAccessDeniedError, BotQuickOrderDraftNotFoundError) as exc:
@@ -350,6 +455,15 @@ async def patch_internal_bot_quick_order_draft(
     draft_id: str, payload: BotQuickOrderDraftPatchRequest,
     session: AsyncSession = Depends(get_session)
 ) -> BotQuickOrderDraftSessionResponse:
+    """
+    Patch the actor’s active durable draft, checking expected_version and incrementing its
+    version. Requires active Manager access (403); missing draft returns 404, stale/inactive
+    draft 409 and invalid changes 422. On conflict reread the draft before editing.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     try:
         result = await BotQuickOrderDraftService.patch(session, draft_id=draft_id, **payload.model_dump())
     except (BotQuickOrderAccessDeniedError, BotQuickOrderDraftNotFoundError,
@@ -364,6 +478,15 @@ async def cancel_internal_bot_quick_order_draft(
     draft_id: str, payload: BotQuickOrderDraftActionRequest,
     session: AsyncSession = Depends(get_session)
 ) -> BotQuickOrderDraftSessionResponse:
+    """
+    Cancel the actor’s active durable draft using expected_version. Requires active Manager
+    access (403); missing draft returns 404, stale or inactive draft 409 and invalid input
+    422. Cancellation increments version.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     try:
         result = await BotQuickOrderDraftService.cancel(session, draft_id=draft_id, **payload.model_dump())
     except (BotQuickOrderAccessDeniedError, BotQuickOrderDraftNotFoundError,
@@ -378,6 +501,16 @@ async def create_internal_bot_quick_order_from_draft(
     draft_id: str, payload: BotQuickOrderDraftActionRequest,
     session: AsyncSession = Depends(get_session)
 ) -> BotQuickOrderCreateResponse:
+    """
+    Create an order from the Manager actor’s durable draft in the system tenant. Active
+    drafts require expected_version; stale/inactive drafts return 409 and missing drafts
+    404. A retry after successful creation returns the recorded order/customer with
+    created=false, using a draft-derived idempotency key.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     try:
         result = await BotQuickOrderDraftService.create(session, draft_id=draft_id, **payload.model_dump())
     except (BotQuickOrderAccessDeniedError, BotQuickOrderDraftNotFoundError,
@@ -395,6 +528,16 @@ async def create_internal_bot_quick_order(
     payload: BotQuickOrderCreateRequest,
     session: AsyncSession = Depends(get_session),
 ) -> BotQuickOrderCreateResponse:
+    """
+    Create a system-tenant order from a submitted quick-order draft for an active Manager
+    Telegram actor (403 otherwise). Uses the supplied idempotency_key; retain it when
+    repeating the same creation. Service validation errors return 422; inspect created and
+    the returned order/customer IDs.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     try:
         result = await BotQuickOrderApiService.create_for_manager(
             session,
@@ -423,6 +566,15 @@ async def recognize_internal_bot_customer_requisites_text(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_system_tenant_scope),
 ) -> BotCustomerRequisitesRecognitionResponse:
+    """
+    Recognize customer requisites from text for an active Manager Telegram actor in the
+    system tenant. Returns a recognition for explicit follow-up action; OCR alone does not
+    confirm customer creation. Access denial returns 403 and invalid content 422.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     try:
         recognition = await BotCustomerRequisitesApiService.recognize_text_for_manager(
             session,
@@ -443,10 +595,6 @@ async def recognize_internal_bot_customer_requisites_text(
     "/customers/requisites/recognize-file",
     response_model=BotCustomerRequisitesRecognitionResponse,
     operation_id="recognize_internal_bot_customer_requisites_file_v1",
-    description=(
-        "Recognize customer requisites from JPG, PNG, WEBP, PDF, DOC, or DOCX "
-        "(up to 10 MB)."
-    ),
 )
 async def recognize_internal_bot_customer_requisites_file(
     telegram_id: int = Form(ge=1),
@@ -456,6 +604,16 @@ async def recognize_internal_bot_customer_requisites_file(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_system_tenant_scope),
 ) -> BotCustomerRequisitesRecognitionResponse:
+    """
+    Recognize customer requisites from JPG, PNG, WEBP, PDF, DOC or DOCX, at most 10 MB, for
+    an active Manager Telegram actor in the system tenant. Oversize returns 413,
+    invalid/unsupported content 422, denied access 403. Returns a recognition for a later
+    explicit action.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     max_bytes = CustomerRequisitesRecognitionService.MAX_FILE_SIZE_BYTES
     content = await file.read(max_bytes + 1)
     await file.close()
@@ -493,6 +651,16 @@ async def apply_internal_bot_customer_requisites_action(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_system_tenant_scope),
 ) -> BotCustomerRequisitesActionResponse:
+    """
+    Apply the selected action to an existing requisites recognition in the system tenant for
+    its authorized Manager actor. Access denial returns 403, missing recognition 404,
+    conflicting action/state 409 and invalid input 422. Returns recognition, customer and
+    changed so clients can reconcile the action.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     try:
         result = await BotCustomerRequisitesApiService.apply_action_for_manager(
             session,

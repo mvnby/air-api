@@ -16,4 +16,13 @@ async def get_public_storefront_settings(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
+    """
+    Read settings for the storefront selected by public tenant resolution, including its
+    configured service availability.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     return await StorefrontSettingsService.get_settings(session, tenant_scope=tenant_scope)

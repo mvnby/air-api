@@ -39,6 +39,15 @@ async def get_public_spec_keys(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
+    """
+    List specification keys available in the resolved storefront catalog, for building
+    supported filters.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     payload = await PublicCatalogService.get_public_spec_keys(
         session,
         tenant_scope=tenant_scope,
@@ -53,6 +62,15 @@ async def get_public_spec_keys(
     dependencies=_PUBLIC_STOREFRONT_DEPENDENCIES,
 )
 async def get_public_spec_registry():
+    """
+    Return the shared canonical specification registry and aliases; this dictionary is
+    global rather than a tenant product listing.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     payload = ProductService.get_specs_registry()
     return SpecRegistryResponse(**payload)
 
@@ -67,6 +85,15 @@ async def get_filters_config(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
+    """
+    Return filter choices derived from the resolved storefront catalog; use these choices
+    when constructing product queries.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     return await PublicCatalogService.get_filters_config(
         session,
         tenant_scope=tenant_scope,
@@ -79,6 +106,12 @@ async def generate_product_description(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
+    """
+    Generate product description text from shared product tags/specifications without saving
+    it. A missing product is returned as description error text with HTTP success, not 404.
+    Requires Manager authentication via get_current_username; operates on the shared product
+    catalog, outside the public storefront read contract.
+    """
     text = await DescriptionGeneratorService.generate(session, product_id)
     return {"description": text}
 
@@ -121,6 +154,17 @@ async def get_catalog(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
+    """
+    Return a filtered, sorted storefront product page, with public prices, supply metrics,
+    features and warranty projection. /v1/catalog is an alias of /v1/products with a
+    distinct operation ID. page starts at 1 and limit is 1–100; the service rejects
+    out-of-range values with 400. Response meta describes the filtered result set.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     try:
         ProductService.validate_public_pagination(page, limit)
     except ValueError as exc:
@@ -174,6 +218,15 @@ async def get_vitebsk_featured_products(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
+    """
+    Return up to six featured storefront product projections with public supply, feature and
+    warranty information.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     projections = await PublicCatalogService.get_vitebsk_featured_products(
         session,
         tenant_scope=tenant_scope,
@@ -203,6 +256,14 @@ async def get_product_series_navigation(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
+    """
+    Return the series navigation visible in the resolved storefront catalog.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     return await PublicCatalogService.get_series_navigation(
         session,
         tenant_scope=tenant_scope,
@@ -220,6 +281,16 @@ async def get_product_by_identifier(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
+    """
+    Resolve one storefront-visible product by identifier and include its visible series
+    siblings. A missing or unavailable product returns 404; this does not expose a product
+    from another storefront.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     page = await PublicCatalogService.get_product_page(
         session,
         tenant_scope=tenant_scope,

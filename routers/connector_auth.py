@@ -102,6 +102,15 @@ async def _form(request: Request) -> dict[str, str]:
     "/.well-known/oauth-authorization-server", operation_id="connector_oauth_metadata"
 )
 async def authorization_metadata():
+    """
+    Publish OAuth authorization-server discovery for the configured issuer, supported
+    grants/scopes and PKCE S256. No Manager session is required; this does not dynamically
+    register clients.
+
+    See [connector access and
+    scopes](https://github.com/mvnby/air-api/blob/main/docs/chatgpt-connector.md#адрес-и-доступ).
+    MCP transport and tools/list are outside this HTTP schema.
+    """
     base = issuer()
     return {
         "issuer": base,
@@ -128,6 +137,14 @@ async def authorization_metadata():
     operation_id="connector_oauth_resource_path_metadata",
 )
 async def protected_resource_metadata():
+    """
+    Publish OAuth protected-resource discovery for the exact MCP resource. Available at both
+    well-known paths without a Manager session. OAuth metadata is not the MCP tools catalog.
+
+    See [connector access and
+    scopes](https://github.com/mvnby/air-api/blob/main/docs/chatgpt-connector.md#адрес-и-доступ).
+    MCP transport and tools/list are outside this HTTP schema.
+    """
     return connector_resource_metadata()
 
 
@@ -137,6 +154,16 @@ async def protected_resource_metadata():
     response_class=HTMLResponse,
 )
 async def authorize(request: Request, session: AsyncSession = Depends(get_session)):
+    """
+    Start a one-time OAuth consent bound to the current authenticated Manager session and
+    render an HTML consent page. Requires the registered client/callback, exact resource,
+    scopes and PKCE S256; duplicate query parameters are rejected. Missing login returns an
+    HTML 401; OAuth errors use error/error_description and no-store headers.
+
+    See [connector access and
+    scopes](https://github.com/mvnby/air-api/blob/main/docs/chatgpt-connector.md#адрес-и-доступ).
+    MCP transport and tools/list are outside this HTTP schema.
+    """
     try:
         # Reject parameter pollution before any state or consent is created.
         params = request.query_params
@@ -192,6 +219,17 @@ async def consent(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ):
+    """
+    Finish the durable consent using explicit allow/deny, consent_id and its one-time CSRF
+    token bound to the same live Manager session. Accepts application/x-www-form-urlencoded
+    up to 8192 bytes; duplicate parameters are rejected. Success redirects with 303 to the
+    registered callback; OAuth errors use error/error_description. Do not blindly replay a
+    consumed consent.
+
+    See [connector access and
+    scopes](https://github.com/mvnby/air-api/blob/main/docs/chatgpt-connector.md#адрес-и-доступ).
+    MCP transport and tools/list are outside this HTTP schema.
+    """
     try:
         form = await _form(request)
         nonce = form.get("csrf_token", "")
@@ -222,6 +260,18 @@ async def consent(
     response_model=ConnectorTokenResponse,
 )
 async def token(request: Request, session: AsyncSession = Depends(get_session)):
+    """
+    Exchange an authorization code with PKCE or rotate a refresh token for the registered
+    public client and exact MCP resource. Accepts application/x-www-form-urlencoded up to
+    8192 bytes; duplicate fields, Authorization/client_secret and unsupported grants are
+    rejected. No Manager JWT is used here. Refresh reuse revokes the grant; after losing a
+    refresh response do not treat the old token as safely replayable. OAuth errors use
+    error/error_description; responses are no-store.
+
+    See [connector access and
+    scopes](https://github.com/mvnby/air-api/blob/main/docs/chatgpt-connector.md#адрес-и-доступ).
+    MCP transport and tools/list are outside this HTTP schema.
+    """
     try:
         form = await _form(request)
         if request.headers.get("authorization") or form.get("client_secret"):
@@ -258,6 +308,16 @@ async def token(request: Request, session: AsyncSession = Depends(get_session)):
 
 @router.post("/api/connector/oauth/revoke", operation_id="connector_oauth_revoke")
 async def revoke(request: Request, session: AsyncSession = Depends(get_session)):
+    """
+    Revoke a connector access/refresh token using its registered client_id. Accepts
+    application/x-www-form-urlencoded up to 8192 bytes; duplicate fields are rejected.
+    Success has an empty 200 body and no-store headers. No Manager JWT is used for this
+    token endpoint; errors use OAuth error/error_description.
+
+    See [connector access and
+    scopes](https://github.com/mvnby/air-api/blob/main/docs/chatgpt-connector.md#адрес-и-доступ).
+    MCP transport and tools/list are outside this HTTP schema.
+    """
     try:
         form = await _form(request)
         await ConnectorAuthService.revoke_token(
@@ -279,6 +339,15 @@ async def grants(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ):
+    """
+    List OAuth grants belonging to the current authenticated Manager actor and return a
+    session-bound CSRF token for profile revocation. Response is no-store; does not list
+    other users’ grants.
+
+    See [connector access and
+    scopes](https://github.com/mvnby/air-api/blob/main/docs/chatgpt-connector.md#адрес-и-доступ).
+    MCP transport and tools/list are outside this HTTP schema.
+    """
     try:
         items = await ConnectorAuthService.list_grants(session, auth)
         return JSONResponse(
@@ -301,6 +370,16 @@ async def manager_revoke(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ):
+    """
+    Revoke the current Manager actor’s grant using X-CSRF-Token bound to that Manager
+    credential. Requires live Manager access and grant ownership; success is 204 with no
+    body/no-store headers. OAuth policy errors use error/error_description. Removing a
+    client plugin alone does not invoke this revocation.
+
+    See [connector access and
+    scopes](https://github.com/mvnby/air-api/blob/main/docs/chatgpt-connector.md#адрес-и-доступ).
+    MCP transport and tools/list are outside this HTTP schema.
+    """
     try:
         validate_csrf(request.headers.get("X-CSRF-Token", ""), _credential(request))
         await ConnectorAuthService.revoke_grant(session, auth, grant_id)

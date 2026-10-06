@@ -43,6 +43,16 @@ async def claim_staff_notification(
     payload: BotStaffNotificationClaimRequest,
     session: AsyncSession = Depends(get_session),
 ) -> BotStaffNotificationClaimResponse:
+    """
+    Claim the next eligible staff-bot Telegram outbox delivery for a worker, recovering
+    expired leases and materializing pending outbox events. Returns notification=null when
+    none is claimable. The service checks recipient/stage freshness; this endpoint uses
+    worker identity, not a caller Telegram actor.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     notification = await BotStaffNotificationApiService.claim(
         session,
         **payload.model_dump(),
@@ -66,6 +76,15 @@ async def renew_staff_notification(
     payload: BotStaffNotificationRenewRequest,
     session: AsyncSession = Depends(get_session),
 ) -> BotStaffNotificationMutationResponse:
+    """
+    Extend a claimed staff notification lease using the worker identity and lease token.
+    Missing delivery returns 404; a lost/mismatched lease returns 409. This does not send or
+    acknowledge the Telegram message.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     try:
         result = await BotStaffNotificationApiService.renew(
             session,
@@ -87,6 +106,15 @@ async def ack_staff_notification(
     payload: BotStaffNotificationAckRequest,
     session: AsyncSession = Depends(get_session),
 ) -> BotStaffNotificationMutationResponse:
+    """
+    Record successful Telegram delivery under the current worker lease and supplied provider
+    result. Missing delivery returns 404; lost/mismatched lease returns 409. The caller
+    performs delivery; this HTTP operation updates outbox state.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     try:
         result = await BotStaffNotificationApiService.ack(
             session,
@@ -108,6 +136,16 @@ async def nack_staff_notification(
     payload: BotStaffNotificationNackRequest,
     session: AsyncSession = Depends(get_session),
 ) -> BotStaffNotificationMutationResponse:
+    """
+    Record a failed staff Telegram delivery under the current worker lease, applying the
+    delivery service retry/failure decision. Missing delivery returns 404; lost/mismatched
+    lease returns 409. Inspect returned status/next_attempt_at rather than assuming
+    immediate retry.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     try:
         result = await BotStaffNotificationApiService.nack(
             session,

@@ -19,6 +19,13 @@ import { request as __request } from '../core/request';
 export class InternalBotV1OperationsService {
     /**
      * Build Catalog Selection
+     * Build a product selection from the Manager actor’s text query using the shared catalog.
+     * Active Manager access is required (403); invalid selection input returns 422. This read
+     * does not create an order.
+     *
+     * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+     * checks are separate. See [bot
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
      * @param requestBody
      * @returns BotProductSelectionResponse Successful Response
      * @throws ApiError
@@ -38,6 +45,13 @@ export class InternalBotV1OperationsService {
     }
     /**
      * Get Curated Catalog
+     * Read curated shared catalog products by area, inverter choice and tags for an active
+     * staff actor (403 otherwise). Invalid selection input returns 422; response is bounded by
+     * limit.
+     *
+     * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+     * checks are separate. See [bot
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
      * @param requestBody
      * @returns BotCuratedProductsResponse Successful Response
      * @throws ApiError
@@ -57,6 +71,13 @@ export class InternalBotV1OperationsService {
     }
     /**
      * Update Catalog Product Price
+     * Set an absolute shared product price for an active Manager actor (403 otherwise).
+     * Returns changed from the product service; invalid values return 422. It does not change
+     * a tenant-specific storefront offer price.
+     *
+     * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+     * checks are separate. See [bot
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
      * @param productId
      * @param requestBody
      * @returns BotProductMutationResponse Successful Response
@@ -81,6 +102,13 @@ export class InternalBotV1OperationsService {
     }
     /**
      * Delete Catalog Product
+     * Delete a shared product for an active Manager actor (403 otherwise), returning the
+     * product service changed result. Invalid service input returns 422; this is a catalog
+     * mutation, not a storefront unpublish operation.
+     *
+     * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+     * checks are separate. See [bot
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
      * @param productId
      * @param requestBody
      * @returns BotProductMutationResponse Successful Response
@@ -105,6 +133,13 @@ export class InternalBotV1OperationsService {
     }
     /**
      * Build Repair Comment Draft
+     * Build a diagnostic repair draft from comment text for a system-tenant repair order
+     * accessible to the active staff actor. Does not apply the draft. Non-staff return 403,
+     * unavailable order 404 and invalid input 422.
+     *
+     * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+     * checks are separate. See [bot
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
      * @param requestBody
      * @returns BotRepairDraftResponse Successful Response
      * @throws ApiError
@@ -124,6 +159,13 @@ export class InternalBotV1OperationsService {
     }
     /**
      * Build Repair Preset Draft
+     * Build a diagnostic repair draft from a fault preset for an accessible system-tenant
+     * repair order. Requires active staff (403); unavailable order returns 404 and invalid
+     * input 422. The draft must be applied separately.
+     *
+     * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+     * checks are separate. See [bot
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
      * @param requestBody
      * @returns BotRepairDraftResponse Successful Response
      * @throws ApiError
@@ -143,6 +185,13 @@ export class InternalBotV1OperationsService {
     }
     /**
      * Apply Repair Context
+     * Apply diagnostic draft metadata and raw comment to an accessible system-tenant repair
+     * order, carrying optional Telegram provenance. Requires active staff (403); unavailable
+     * order returns 404 and invalid input 422. This action persists repair context.
+     *
+     * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+     * checks are separate. See [bot
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
      * @param requestBody
      * @returns BotRepairApplyResponse Successful Response
      * @throws ApiError

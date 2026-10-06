@@ -14,8 +14,13 @@ request/response в [OpenAPI](../../openapi.json) или MCP `tools/list` ост
 | `GET /api/manager/products/{product_id}/supplier-offer-candidates` | Внутренняя Manager-операция: `supplier_id` обязателен, `page ≥ 1`, `limit` от 1 до 100, по умолчанию 50; см. [роутер](../../routers/manager_supplier_mapping.py). |
 
 Некоторые Manager-списки вообще не принимают `page/limit`, другие имеют
-эти параметры. Если маршрут принимает `limit`, проект ограничивает его 100;
-нельзя добавлять `page` к любому URL по аналогии. Проверьте параметры и
+эти параметры. Для новых Manager-списков правило проекта — `limit ≤ 100`,
+но два существующих маршрута поставок принимают до 200: анализ источника
+`GET /api/manager/supplier-sources/{source_id}/analysis` и кандидаты импорта
+`GET /api/manager/supplier-offers/source-url-import-candidates`. У второго
+`total` означает число возвращённых кандидатов, а не весь объём поиска.
+Ограничения проверяйте у конкретной операции; нельзя добавлять `page` к любому
+URL по аналогии. Проверьте параметры и
 response model выбранной операции. Даже если OpenAPI показывает `page`/`limit`
 публичного каталога как обычные integer без диапазона, фактический сервис
 проверяет его отдельно; это известный пробел схемы, а не другое правило API.

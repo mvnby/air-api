@@ -26,6 +26,16 @@ async def get_public_storefront_context(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ) -> PublicStorefrontContextResponse:
+    """
+    Resolve public tenant/storefront identity, locale, currency and hostname from the
+    current storefront scope. Returns 404 when that storefront is unavailable; the caller
+    cannot select an arbitrary tenant in the body.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     context = await StorefrontContextService.resolve_by_scope(
         session,
         tenant_id=tenant_scope.tenant_id,

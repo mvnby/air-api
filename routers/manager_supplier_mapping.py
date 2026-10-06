@@ -48,6 +48,18 @@ async def list_product_supplier_offer_candidates(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Page offer candidates for a product within the required supplier and optional
+    source/query. Defaults to active offers; include_inactive includes inactive candidates.
+    Each row reports free/current/conflict/inactive mapping status. limit is 1–100. Missing
+    product returns 404.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     try:
         return await SupplierOfferMappingService.list_candidates(
             session,
@@ -79,6 +91,20 @@ async def put_supplier_offer_mapping(
     session: AsyncSession = Depends(get_session),
     user: str = Depends(get_current_username),
 ):
+    """
+    Map an active offer to a product. Replacing another active mapping requires
+    replace_existing plus both expected_mapping_id and expected_product_id; concurrent
+    changes or a conflicting mapping return 409. Read candidates again before resolving a
+    conflict. Mapping to the already-current product returns the existing mapping. Missing
+    offer/product returns 404; inactive offer returns 400. This does not accept a generic
+    Idempotency-Key.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     try:
         return await SupplierOfferMappingService.put_mapping(
             session,
