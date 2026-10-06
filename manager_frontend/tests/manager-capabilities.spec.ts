@@ -83,6 +83,7 @@ describe('tenant manager capabilities', () => {
       '/manager/orders/kanban',
       '/manager/catalog-decision',
       '/manager/calendar',
+      '/manager/tasks',
       '/manager/customers',
       '/manager/equipment',
       '/manager/products',
@@ -108,6 +109,7 @@ describe('tenant manager capabilities', () => {
       .map(item => item.label);
     expect(visibleLabels).toEqual([
       'Главная',
+      'Поручения',
       'Входящие',
       'Заказы',
       'Подбор оборудования',

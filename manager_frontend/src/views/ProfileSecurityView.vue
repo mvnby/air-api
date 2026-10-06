@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue';
 import { Check, Clipboard, Eye, EyeOff, KeyRound, Loader2, RefreshCw, UserRound } from 'lucide-vue-next';
 
 import { ManagerService } from '../client';
+import ConnectorConnections from '../components/ConnectorConnections.vue';
 import { clearManagerSession, managerSession } from '../services/manager-session';
 import { managerStorefrontSelection } from '../services/manager-storefront-selection';
 import {
@@ -201,5 +202,6 @@ const submit = async () => {
         </button>
       </form>
     </div>
+    <ConnectorConnections v-if="account?.staff_user_id && account?.auth_source !== 'legacy'" />
   </section>
 </template>

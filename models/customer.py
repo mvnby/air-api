@@ -249,6 +249,9 @@ class Lead(SQLModel, table=True):
     request_text: str = Field(default="")
     source_message_id: Optional[str] = Field(default=None, index=True)
     source_fingerprint: Optional[str] = Field(default=None, index=True)
+    intake_event_key: Optional[str] = Field(default=None, index=True, unique=True)
+    intake_meta: Optional[dict] = Field(default=None, sa_column=Column(JSON, nullable=True))
+    version: int = Field(default=1, sa_column=Column(Integer, nullable=False, server_default="1"))
 
     next_followup_date: Optional[datetime] = None
     archived_at: Optional[datetime] = Field(default=None, index=True)

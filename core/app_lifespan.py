@@ -491,7 +491,12 @@ async def app_lifespan(app: FastAPI):
     _start_scheduler_supervisor(app)
 
     try:
-        yield
+        connector = getattr(app.state, "connector_mcp", None)
+        if connector is None:
+            yield
+        else:
+            async with connector.lifespan():
+                yield
     finally:
         await _stop_scheduler_supervisor(app)
         logger.info("Stopping Application...")

@@ -143,6 +143,7 @@ class LeadCommandService:
                     explicit_segment_hint,
                 )
 
+            lead.version += 1
             session.add(lead)
             await session.flush()
 
@@ -181,6 +182,7 @@ class LeadCommandService:
                 )
             )
             lead.next_followup_date = None
+            lead.version += 1
             session.add(lead)
             await session.flush()
 

@@ -101,11 +101,14 @@ class TenantEntityAccessService:
         *,
         tenant_scope: TenantScope,
         for_update: bool = False,
+        populate_existing: bool = False,
     ) -> Lead | None:
         statement = select(Lead).where(
             Lead.id == int(lead_id),
             cls.lead_clause(tenant_scope),
         )
+        if populate_existing:
+            statement = statement.execution_options(populate_existing=True)
         if for_update:
             statement = statement.with_for_update()
         return (await session.execute(statement)).scalars().first()

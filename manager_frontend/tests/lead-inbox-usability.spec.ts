@@ -24,7 +24,10 @@ vi.mock('../src/composables/useB2BLookup', () => ({
   useB2BLookup: () => ({ lookupCompany: vi.fn(), isEgrLoading: { value: false } }),
 }));
 vi.mock('../src/components/leads/LeadInboxCard.vue', () => ({
-  default: { name: 'LeadInboxCard', props: ['item'], template: '<article data-testid="inbox-item">{{ item.customer_name }}</article>' },
+  default: { name: 'LeadInboxCard', props: ['item', 'quickIncoming'], emits: ['edit-incoming', 'updated'], template: '<article data-testid="inbox-item">{{ item.customer_name }}<button v-if="quickIncoming" data-testid="edit-incoming" @click="$emit(\'edit-incoming\')">Исправить</button></article>' },
+}));
+vi.mock('../src/components/leads/QuickIncomingCapture.vue', () => ({
+  default: { name: 'QuickIncomingCapture', props: ['leadId'], emits: ['close', 'saved'], template: '<section data-testid="quick-incoming">{{ leadId || \'new\' }}</section>' },
 }));
 vi.mock('../src/components/leads/LeadQualifyModal.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('../src/components/leads/EmailLeadImportPanel.vue', () => ({ default: { template: '<div />' } }));
@@ -58,7 +61,11 @@ describe('LeadInbox usability', () => {
     mocks.getLeadsInbox.mockImplementation((scope: string) => Promise.resolve(response(scope === 'active' ? [activeItem] : [archiveItem])));
   });
 
-  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    window.history.replaceState({}, '', '/manager/leads');
+  });
 
   it('searches on the server and switches scope directly', async () => {
     mocks.getLeadsInbox.mockImplementation((scope: string, _page: number, _limit: number, search?: string) => Promise.resolve(
@@ -235,18 +242,33 @@ describe('LeadInbox usability', () => {
     wrapper.unmount();
   });
 
-  it('opens an existing negotiation returned by order creation', async () => {
-    mocks.createManagerOrder.mockResolvedValue({ id: 73, status: 'negotiation' });
-    const pushState = vi.spyOn(window.history, 'pushState');
+  it('opens compact persistent incoming capture instead of creating an order', async () => {
     const wrapper = mount(LeadInbox);
     await flushPromises();
     await wrapper.findAll('button').find((button) => button.text().includes('Создать обращение'))!.trigger('click');
-    await wrapper.get('textarea').setValue('Нужна консультация');
-    await wrapper.findAll('button').filter((button) => button.text().includes('Создать обращение'))[1].trigger('click');
-    await flushPromises();
-    expect(pushState).toHaveBeenCalledWith({}, '', '/manager/orders/kanban?orderId=73');
-    expect(wrapper.text()).toContain('уже в переговорах');
+    expect(wrapper.get('[data-testid="quick-incoming"]').text()).toBe('new');
+    expect(mocks.createManagerOrder).not.toHaveBeenCalled();
     wrapper.unmount();
+  });
+
+  it('opens a quick incoming card for correction with its lead id', async () => {
+    mocks.getLeadsInbox.mockResolvedValue(response([{ ...activeItem, id: 55, entity_kind: 'lead', intake_state: 'needs_contact' }]));
+    const wrapper = mount(LeadInbox);
+    await flushPromises();
+    await wrapper.get('[data-testid="edit-incoming"]').trigger('click');
+    expect(wrapper.get('[data-testid="quick-incoming"]').text()).toBe('55');
+    expect(window.location.search).toContain('incomingId=55');
+    wrapper.unmount();
+    window.history.replaceState({}, '', '/manager/leads');
+  });
+
+  it('opens a correction directly from an incomingId deep link', async () => {
+    window.history.replaceState({}, '', '/manager/leads?incomingId=77');
+    const wrapper = mount(LeadInbox);
+    await flushPromises();
+    expect(wrapper.get('[data-testid="quick-incoming"]').text()).toBe('77');
+    wrapper.unmount();
+    window.history.replaceState({}, '', '/manager/leads');
   });
   it('does not let an older personal counter overwrite the newest read decision', async () => {
     let resolveOld: ((value: { pending_count: number; unread_count: number; count: number }) => void) | undefined;
