@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -86,6 +87,8 @@ def inspect_changes(base: str, head: str, merge_base: bool = False) -> dict[str,
         resolved_head = resolve_commit(head)
         if merge_base:
             resolved_base = git("merge-base", resolved_base, resolved_head).decode("ascii").strip()
+        else:
+            git("merge-base", "--is-ancestor", resolved_base, resolved_head)
         entries = parse_name_status(
             git("diff", "--name-status", "--no-renames", "-z", resolved_base, resolved_head, "--")
         )
@@ -123,15 +126,42 @@ def inspect_changes(base: str, head: str, merge_base: bool = False) -> dict[str,
         }
 
 
+def previous_push_verified(repository: str, branch: str, sha: str) -> bool:
+    """A docs push must not cancel and bypass its predecessor's unverified code."""
+    if not repository or branch not in {"main", "master"} or not re.fullmatch(r"[0-9a-f]{40}", sha):
+        return False
+    try:
+        response = subprocess.run(
+            ["gh", "run", "list", "--repo", repository, "--workflow", "ci.yml",
+             "--branch", branch, "--event", "push", "--commit", sha,
+             "--status", "success", "--limit", "1",
+             "--json", "headSha,headBranch,event,status,conclusion"],
+            capture_output=True, text=True, check=True, timeout=30,
+        )
+        rows = json.loads(response.stdout)
+        return isinstance(rows, list) and len(rows) == 1 and rows[0] == {
+            "headSha": sha, "headBranch": branch, "event": "push",
+            "status": "completed", "conclusion": "success",
+        }
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return False
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base")
     parser.add_argument("--head")
     parser.add_argument("--merge-base", action="store_true")
+    parser.add_argument("--verify-previous-push", action="store_true")
     parser.add_argument("--output-json", required=True)
     parser.add_argument("--github-output")
     args = parser.parse_args()
     result = inspect_changes(args.base, args.head, args.merge_base)
+    if args.verify_previous_push and result["docs_only"] and not previous_push_verified(
+        os.environ.get("GITHUB_REPOSITORY", ""), os.environ.get("GITHUB_REF_NAME", ""), result["base"]
+    ):
+        result["docs_only"] = False
+        result["reason"] = "previous push has no confirmed successful CI; full CI covers pending code"
     output = Path(args.output_json)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")

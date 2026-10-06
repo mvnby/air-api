@@ -61,6 +61,7 @@ def test_deploy_runs_only_after_successful_ci_for_the_exact_sha():
     assert workflow["concurrency"] == {
         "group": "production-release",
         "cancel-in-progress": "false",
+        "queue": "max",
     }
     assert "github.event.workflow_run.conclusion == 'success'" in release_gate["if"]
     resolve = _step(release_gate, "Resolve tested release SHA")["run"]

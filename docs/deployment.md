@@ -293,7 +293,11 @@ result does not authorize a manual production release.
 ### Deployment Steps
 
 1. **release-gate:** Resolves the tested `main` SHA and serializes production
-   releases through the `production-release` concurrency group.
+   releases through the `production-release` concurrency group. Its `queue: max`
+   retains up to 100 pending workflows, including documentation no-ops, so a
+   documentation run cannot replace an already queued code release. Queue order
+   follows entry into the group, not Git ancestry; see
+   [GitHub concurrency](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency).
 2. **backend deployment:** Publishes one immutable `backend@sha256:<digest>`.
    Physical mode deploys `production-api` then the fenced standby. After the
    guarded Patroni cutover, role-aware mode probes both nodes, migrates only on

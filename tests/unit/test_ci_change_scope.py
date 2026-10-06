@@ -1,8 +1,12 @@
 import subprocess
+import json
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
-from scripts.ci.change_scope import inspect_changes
+import pytest
+
+from scripts.ci.change_scope import inspect_changes, main, previous_push_verified
 
 
 def git(repo: Path, *args: str) -> str:
@@ -27,6 +31,67 @@ def commit(repo: Path, message: str = "change") -> str:
     git(repo, "add", "-A")
     git(repo, "commit", "-qm", message)
     return git(repo, "rev-parse", "HEAD")
+
+
+@pytest.mark.parametrize("verified", [True, False])
+def test_docs_push_cannot_bypass_pending_predecessor_code(tmp_path, monkeypatch, verified):
+    repo, _ = repository(tmp_path, monkeypatch)
+    (repo / "app.py").write_text("new_feature = True\n")
+    code_sha = commit(repo, "feature still in CI")
+    (repo / "README.md").write_text("# Documentation\n")
+    docs_sha = commit(repo, "documentation after feature")
+    monkeypatch.setenv("GITHUB_REPOSITORY", "example/api")
+    monkeypatch.setenv("GITHUB_REF_NAME", "main")
+
+    def verify(repository_name, branch, sha):
+        assert (repository_name, branch, sha) == ("example/api", "main", code_sha)
+        return verified
+
+    monkeypatch.setattr("scripts.ci.change_scope.previous_push_verified", verify)
+    manifest = tmp_path / "scope.json"
+    output = tmp_path / "github-output"
+    monkeypatch.setattr(sys, "argv", ["change_scope.py", "--base", code_sha, "--head", docs_sha,
+                                     "--verify-previous-push", "--output-json", str(manifest),
+                                     "--github-output", str(output)])
+    assert main() == 0
+    result = json.loads(manifest.read_text())
+    assert result["docs_only"] is verified
+    assert result["markdown_paths"] == ["README.md"]
+    assert output.read_text() == f"docs_only={str(verified).lower()}\n"
+
+
+@pytest.mark.parametrize("branch", ["main", "master"])
+def test_previous_push_lookup_requires_exact_successful_commit(monkeypatch, branch):
+    sha = "a" * 40
+    def run(args, **kwargs):
+        assert args[args.index("--repo") + 1] == "example/api"
+        assert args[args.index("--branch") + 1] == branch
+        assert args[args.index("--commit") + 1] == sha
+        assert args[args.index("--workflow") + 1] == "ci.yml"
+        assert args[args.index("--event") + 1] == "push"
+        assert kwargs["check"] and kwargs["timeout"] == 30
+        return SimpleNamespace(stdout=json.dumps([{"headSha": sha, "headBranch": branch,
+                                                 "event": "push", "status": "completed", "conclusion": "success"}]))
+    monkeypatch.setattr(subprocess, "run", run)
+    assert previous_push_verified("example/api", branch, sha)
+
+
+@pytest.mark.parametrize("response", [
+    "[]", "null", "{}", "invalid json", '[{"headSha":"wrong"}]',
+    json.dumps([{"headSha":"a" * 40, "headBranch":"main", "event":"pull_request", "status":"completed", "conclusion":"success"}]),
+    json.dumps([{"headSha":"a" * 40, "headBranch":"main", "event":"push", "status":"in_progress", "conclusion":None}]),
+])
+def test_unconfirmed_predecessor_requires_full_ci(monkeypatch, response):
+    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: SimpleNamespace(stdout=response))
+    assert not previous_push_verified("example/api", "main", "a" * 40)
+
+
+@pytest.mark.parametrize("error", [OSError("missing gh"), subprocess.CalledProcessError(1, "gh"), subprocess.TimeoutExpired("gh", 30)])
+def test_lookup_failure_requires_full_ci(monkeypatch, error):
+    def fail(*args, **kwargs):
+        raise error
+    monkeypatch.setattr(subprocess, "run", fail)
+    assert not previous_push_verified("example/api", "main", "a" * 40)
 
 
 def test_docs_allowlist_includes_requested_paths(tmp_path, monkeypatch):
