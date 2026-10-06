@@ -10,6 +10,13 @@ catalog is available in **Settings → Documents → DOCX templates** and throug
 `GET /api/manager/document-system/placeholder-catalog`; do not maintain a
 second hand-written field list in this file.
 
+Product/service titles and client descriptions support `**bold**`, `*italic*`
+and line breaks in the Manager preview and generated line tables. Native
+`{{ line.title }}` runs and the standard Google Docs name column render this
+emphasis; native PDF conversion retains the DOCX formatting. HTML, links and
+unmatched emphasis markers remain literal text. Other placeholder values
+keep their existing plain-text behavior. Previously issued files stay unchanged.
+
 Templates are owned by one tenant and one seller legal entity. Uploading a
 changed Word file creates an immutable draft version. Activating it retires the
 previous active version without modifying documents that were already issued.

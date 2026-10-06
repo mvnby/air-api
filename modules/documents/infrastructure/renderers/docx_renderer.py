@@ -26,6 +26,7 @@ from .contracts import (
 from .docx_party_roles import replace_party_role_words
 from .docx_conditions import DocxConditionProcessor, iter_section_story_areas
 from .docx_form_fields import flatten_legacy_form_fields
+from .line_text import parse_line_text
 
 
 _PLACEHOLDER_PATTERN = re.compile(r"{{\s*([a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*)\s*}}")
@@ -448,6 +449,18 @@ class NativeDocxRenderer:
             start_node, start_offset = self._locate(positions, match.start())
             end_node, end_offset = self._locate(positions, match.end(), is_end=True)
             replacement = values[field]
+            if field == "line.title":
+                start_text = nodes[start_node].text or ""
+                end_text = nodes[end_node].text or ""
+                if start_node != end_node:
+                    for index in range(start_node + 1, end_node):
+                        self._set_text(nodes[index], "")
+                    self._set_text(nodes[end_node], end_text[end_offset:])
+                self._insert_line_text(
+                    nodes[start_node], start_text[:start_offset], replacement,
+                    end_text[end_offset:] if start_node == end_node else "",
+                )
+                continue
             if start_node == end_node:
                 text = nodes[start_node].text or ""
                 self._set_text(
@@ -463,6 +476,43 @@ class NativeDocxRenderer:
                 for index in range(start_node + 1, end_node):
                     self._set_text(nodes[index], "")
                 self._set_text(nodes[end_node], end_text[end_offset:])
+
+    def _insert_line_text(self, node, prefix: str, value: str, suffix: str) -> None:
+        """Split a template run while retaining its font and surrounding content."""
+        run = node.getparent()
+        parent = run.getparent()
+        properties = run.find(qn("w:rPr"))
+        following = list(run)[list(run).index(node) + 1:]
+        self._set_text(node, prefix)
+        position = parent.index(run) + 1
+        for part in parse_line_text(value):
+            formatted = OxmlElement("w:r")
+            if properties is not None:
+                formatted.append(deepcopy(properties))
+            for enabled, tag in ((part.bold, "w:b"), (part.italic, "w:i")):
+                if enabled:
+                    props = formatted.find(qn("w:rPr"))
+                    if props is None:
+                        props = OxmlElement("w:rPr")
+                        formatted.insert(0, props)
+                    existing = props.find(qn(tag))
+                    if existing is not None:
+                        props.remove(existing)
+                    props.append(OxmlElement(tag))
+            text = OxmlElement("w:t")
+            formatted.append(text)
+            self._set_text(text, part.text)
+            parent.insert(position, formatted)
+            position += 1
+        tail = OxmlElement("w:r")
+        if properties is not None:
+            tail.append(deepcopy(properties))
+        text = OxmlElement("w:t")
+        tail.append(text)
+        self._set_text(text, suffix)
+        for child in following:
+            tail.append(child)
+        parent.insert(position, tail)
 
     @staticmethod
     def _set_text(node, value: str) -> None:

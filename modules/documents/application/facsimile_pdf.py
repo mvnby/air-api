@@ -51,7 +51,10 @@ class FacsimilePdfService:
             DocumentTemplateFacsimilePlacement.template_version_id == document.template_version_id
         ))).scalar_one_or_none()
         if placement is None:
-            raise FacsimilePdfError("Для версии шаблона не задано размещение подписи и печати")
+            raise FacsimilePdfError(
+                "Для версии шаблона этого документа не задано размещение подписи и печати. "
+                "В настройках документов откройте шаблон и сохраните координаты для этой версии."
+            )
         assets = list((await session.execute(select(DocumentFacsimileAsset).where(
             DocumentFacsimileAsset.tenant_id == tenant_scope.tenant_id,
             DocumentFacsimileAsset.legal_entity_id == document.legal_entity_id,
