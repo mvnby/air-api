@@ -48,9 +48,9 @@ const forwardAttach = (document: ManagerOrderDocumentItem, event: Event) => emit
         <button v-if="access.canUpload" class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-slate-700 px-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-600 disabled:opacity-50" :disabled="uploading || !!processingId || generating" @click="emit('upload')"><span class="material-icons-round text-[18px]" :class="uploading ? 'animate-spin' : ''">{{ uploading ? 'loop' : 'upload_file' }}</span>Загрузить</button>
       </div>
     </div>
-    <OrderEmailHistory class="mb-4" :order-id="order.id" :refresh-key="emailHistoryRefreshKey" @toast="emit('toast', $event.message, $event.type || 'success')" />
     <div class="flex flex-col gap-3">
       <DocumentList :documents="documents" :proposals="order.proposals || []" :can-create="access.canCreate" :can-replace="access.canReplace" :can-delete="access.canDelete" :access-summary="access.summary" :processing-document-id="processingId" @create="emit('create')" @download="emit('download', $event)" @attach="forwardAttach" @delete="emit('delete', $event)" />
+      <OrderEmailHistory :order-id="order.id" :refresh-key="emailHistoryRefreshKey" @toast="emit('toast', $event.message, $event.type || 'success')" />
       <DocumentGenerationForm :customer="order.customer" />
     </div>
   </section>

@@ -23,6 +23,7 @@ from services.google_oauth_redirect import (
     LOCAL_GOOGLE_OAUTH_REDIRECT_URI,
     resolve_google_oauth_redirect_uri,
 )
+from modules.documents.infrastructure.renderers.line_text import google_line_text_requests
 
 logger = logging.getLogger(__name__)
 
@@ -862,7 +863,13 @@ class GoogleDocsService:
                 last_elem = content[-1]
                 idx = (last_elem.get('endIndex') - 1) if 'paragraph' in last_elem else (cells[c_idx].get('endIndex') - 1)
                 
-                fill_reqs.append({'insertText': {'location': {'index': idx}, 'text': text}})
+                if c_idx == 1:
+                    # Standard document tables put the product/service title here.
+                    # Apply styles before inserting earlier cells, so Docs shifts
+                    # the formatted ranges together with their text.
+                    fill_reqs.extend(google_line_text_requests(text, idx))
+                else:
+                    fill_reqs.append({'insertText': {'location': {'index': idx}, 'text': text}})
         
         if fill_reqs: docs_service.documents().batchUpdate(documentId=doc_id, body={'requests': fill_reqs}).execute()
 

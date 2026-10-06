@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LineFormattedText from './LineFormattedText.vue';
 import { computed, ref, watch } from 'vue';
 import type { ProductLine, ProductOption } from './order-editor-types';
 import { formatMoney } from './order-utils';
@@ -223,8 +224,8 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
         </template>
         <div v-else class="grid grid-cols-3 gap-3 px-3 py-2.5 text-sm md:items-center md:gap-2" :class="visibleCosts ? 'md:grid-cols-[minmax(0,1fr)_3.5rem_6rem_6.5rem_6rem_4.5rem]' : 'md:grid-cols-[minmax(0,1fr)_3.5rem_6rem_6.5rem_4.5rem]'">
           <div class="col-span-3 min-w-0 md:col-auto">
-            <p class="break-words text-sm font-semibold text-gray-900 dark:text-slate-100">{{ line.product_query || 'Новый товар' }}</p>
-            <p v-if="line.client_description" class="mt-0.5 whitespace-pre-wrap break-words text-xs font-normal leading-relaxed text-gray-500 dark:text-slate-400">{{ line.client_description }}</p>
+            <p class="break-words text-sm font-semibold text-gray-900 dark:text-slate-100"><LineFormattedText :text="line.product_query || 'Новый товар'" /></p>
+            <p v-if="line.client_description" class="mt-0.5 whitespace-pre-wrap break-words text-xs font-normal leading-relaxed text-gray-500 dark:text-slate-400"><LineFormattedText :text="line.client_description" /></p>
           </div>
           <p class="flex flex-col gap-1 md:block md:text-center"><span class="text-xs text-gray-500 md:hidden">Кол-во</span><span class="font-medium text-gray-700 dark:text-slate-300">{{ line.quantity }}</span></p>
           <p class="flex flex-col gap-1 md:block md:text-right"><span class="text-xs text-gray-500 md:hidden">Цена</span><span class="font-medium text-gray-700 dark:text-slate-300">{{ formatMoney(line.price) }}</span>

@@ -31,13 +31,13 @@ MAX_FACSIMILE_PIXELS = 20_000_000
 @router.post("/legal-entities/{legal_entity_id}/facsimiles/{kind}", operation_id=UPLOAD_MANAGER_DOCUMENT_FACSIMILE)
 async def upload_facsimile(legal_entity_id: int, kind: str, file: UploadFile = File(...), session: AsyncSession = Depends(get_session), auth: AuthenticatedUser = Depends(require_manager_access)):
     if kind not in {"signature", "seal"}:
-        raise manager_http_error(400, "upload_manager_document_facsimile", "document_facsimile_kind_invalid", "Допустимы только signature и seal")
+        raise manager_http_error(status_code=400, endpoint=UPLOAD_MANAGER_DOCUMENT_FACSIMILE, error_code="document_facsimile_kind_invalid", message="Допустимы только signature и seal")
     entity = (await session.execute(select(DocumentLegalEntity).where(DocumentLegalEntity.id == legal_entity_id, DocumentLegalEntity.tenant_id == auth.tenant_id))).scalar_one_or_none()
     if entity is None:
-        raise manager_http_error(404, "upload_manager_document_facsimile", "document_legal_entity_not_found", "Юридическое лицо не найдено")
+        raise manager_http_error(status_code=404, endpoint=UPLOAD_MANAGER_DOCUMENT_FACSIMILE, error_code="document_legal_entity_not_found", message="Юридическое лицо не найдено")
     content = await file.read(MAX_FACSIMILE_BYTES + 1)
     if len(content) > MAX_FACSIMILE_BYTES or not content:
-        raise manager_http_error(400, "upload_manager_document_facsimile", "document_facsimile_file_invalid", "PNG не должен быть пустым или больше 5 МБ")
+        raise manager_http_error(status_code=400, endpoint=UPLOAD_MANAGER_DOCUMENT_FACSIMILE, error_code="document_facsimile_file_invalid", message="PNG не должен быть пустым или больше 5 МБ")
     try:
         with Image.open(BytesIO(content)) as image:
             if image.format != "PNG" or image.width < 1 or image.height < 1:
@@ -46,7 +46,7 @@ async def upload_facsimile(legal_entity_id: int, kind: str, file: UploadFile = F
                 raise ValueError()
             image.load()
     except Exception:
-        raise manager_http_error(400, "upload_manager_document_facsimile", "document_facsimile_file_invalid", "Загрузите корректный PNG до 20 млн пикселей")
+        raise manager_http_error(status_code=400, endpoint=UPLOAD_MANAGER_DOCUMENT_FACSIMILE, error_code="document_facsimile_file_invalid", message="Загрузите корректный PNG до 20 млн пикселей")
     storage = get_private_attachment_storage()
     stored = await VariantScopedPrivateAttachmentStorage(storage, variant_scope="document-facsimiles").save(content=content, content_hash=sha256(content).hexdigest(), extension="png", content_type="image/png", variant=f"tenant-{auth.tenant_id}-legal-entity-{legal_entity_id}-{kind}")
     await session.execute(DocumentFacsimileAsset.__table__.update().where(DocumentFacsimileAsset.tenant_id == auth.tenant_id, DocumentFacsimileAsset.legal_entity_id == legal_entity_id, DocumentFacsimileAsset.kind == kind, DocumentFacsimileAsset.is_current.is_(True)).values(is_current=False))
@@ -60,7 +60,7 @@ async def prepare_facsimile_pdf(document_id: int, session: AsyncSession = Depend
     try:
         row = await FacsimilePdfService.prepare(session, tenant_scope=auth.tenant_scope(), document_id=document_id, artifact_storage=PrivateDocumentArtifactStorage(get_private_attachment_storage()))
     except FacsimilePdfError as exc:
-        raise manager_http_error(409, "prepare_manager_document_facsimile_pdf", "document_facsimile_pdf_unavailable", str(exc)) from exc
+        raise manager_http_error(status_code=409, endpoint=PREPARE_MANAGER_DOCUMENT_FACSIMILE_PDF, error_code="document_facsimile_pdf_unavailable", message=str(exc)) from exc
     return {"id": row.id, "kind": row.kind, "filename": row.filename}
 
 
@@ -71,7 +71,7 @@ async def upsert_placement(template_id: int, version_id: int, payload: DocumentF
         DocumentTemplate.tenant_id == auth.tenant_id,
     ))).scalar_one_or_none()
     if version is None:
-        raise manager_http_error(404, "upsert_manager_document_facsimile_placement", "native_template_version_not_found", "Версия шаблона не найдена")
+        raise manager_http_error(status_code=404, endpoint=UPSERT_MANAGER_DOCUMENT_FACSIMILE_PLACEMENT, error_code="native_template_version_not_found", message="Версия шаблона не найдена")
     row = (await session.execute(select(DocumentTemplateFacsimilePlacement).where(DocumentTemplateFacsimilePlacement.template_version_id == version_id))).scalar_one_or_none()
     values = payload.model_dump()
     if row is None:
@@ -91,5 +91,5 @@ async def get_placement(template_id: int, version_id: int, session: AsyncSession
         DocumentTemplate.tenant_id == auth.tenant_id,
     ))).scalar_one_or_none()
     if row is None:
-        raise manager_http_error(404, "get_manager_document_facsimile_placement", "document_facsimile_placement_not_found", "Размещение для версии шаблона не задано")
+        raise manager_http_error(status_code=404, endpoint=GET_MANAGER_DOCUMENT_FACSIMILE_PLACEMENT, error_code="document_facsimile_placement_not_found", message="Размещение для версии шаблона не задано")
     return DocumentFacsimilePlacementItem(template_version_id=version_id, page_number=row.page_number, signature_x_mm=row.signature_x_mm, signature_y_mm=row.signature_y_mm, signature_width_mm=row.signature_width_mm, seal_x_mm=row.seal_x_mm, seal_y_mm=row.seal_y_mm, seal_width_mm=row.seal_width_mm)

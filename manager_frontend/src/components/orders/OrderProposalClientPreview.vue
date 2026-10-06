@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LineFormattedText from './LineFormattedText.vue';
 import { computed } from 'vue';
 import type { ProductLine, ServiceLine } from './order-editor-types';
 import { formatMoney } from './order-utils';
@@ -35,7 +36,7 @@ const rows = computed(() => [
       <span>Наименование и состав</span><span class="text-right">Кол-во</span><span class="text-right">Цена</span><span class="text-right">Сумма</span>
     </div>
     <div v-for="(row, index) in rows" :key="index" class="grid gap-3 border-b border-slate-100 py-3 md:grid-cols-[minmax(0,1fr)_3.5rem_6rem_6.5rem] md:items-center">
-      <div class="min-w-0"><h3 class="break-words text-sm font-semibold">{{ row.title }}</h3><p v-if="row.description" class="mt-1 whitespace-pre-line break-words text-xs leading-relaxed text-slate-500">{{ row.description }}</p></div>
+      <div class="min-w-0"><h3 class="break-words text-sm font-semibold"><LineFormattedText :text="row.title" /></h3><p v-if="row.description" class="mt-1 whitespace-pre-line break-words text-xs leading-relaxed text-slate-500"><LineFormattedText :text="row.description" /></p></div>
       <span class="text-sm tabular-nums md:text-right"><span class="md:hidden">Количество: </span>{{ row.quantity }} <span class="text-xs text-slate-500">{{ row.unit }}</span></span>
       <span class="whitespace-nowrap text-sm tabular-nums md:text-right"><span class="md:hidden">Цена: </span>{{ formatMoney(row.price) }}</span>
       <span class="whitespace-nowrap text-sm font-semibold tabular-nums md:text-right"><span class="md:hidden">Сумма: </span>{{ formatMoney(row.quantity * row.price) }}</span>

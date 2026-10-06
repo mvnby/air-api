@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LineFormattedText from './LineFormattedText.vue';
 import { computed, ref } from 'vue';
 import OrderServiceTitleInput from './OrderServiceTitleInput.vue';
 import OrderServiceInstallationCalculator from './OrderServiceInstallationCalculator.vue';
@@ -131,8 +132,8 @@ const updatePreferredMode = (mode: ServiceDescriptionMode) => {
           <div v-else class="divide-y divide-gray-100">
             <div v-for="(display, displayIndex) in displayLines(line)" :key="`compact-service-${index}-${displayIndex}`" class="grid grid-cols-3 items-center gap-2 px-3 py-2.5" :class="compactShowCosts ? 'md:grid-cols-[minmax(0,1fr)_3.5rem_6rem_6.5rem_6rem_4.5rem]' : 'md:grid-cols-[minmax(0,1fr)_3.5rem_6rem_6.5rem_4.5rem]'" :data-testid="`compact-service-row-${index}-${displayIndex}`">
               <div class="col-span-3 min-w-0 md:col-auto">
-                <p class="break-words text-sm font-semibold leading-snug text-slate-900 dark:text-slate-100">{{ display.title || 'Новая услуга' }}</p>
-                <p v-if="display.description" class="break-words text-xs font-normal leading-relaxed text-slate-500 dark:text-slate-400">{{ display.description }}</p>
+                <p class="break-words text-sm font-semibold leading-snug text-slate-900 dark:text-slate-100"><LineFormattedText :text="display.title || 'Новая услуга'" /></p>
+                <p v-if="display.description" class="break-words text-xs font-normal leading-relaxed text-slate-500 dark:text-slate-400"><LineFormattedText :text="display.description" /></p>
                 <span v-if="line.installation_estimate_revision_id" class="text-[11px] font-medium text-slate-500">По расчёту</span>
               </div>
               <span class="text-left text-xs text-slate-600 dark:text-slate-300 md:text-center"><span class="mb-1 block font-medium text-slate-500 md:hidden">Кол-во</span>{{ display.quantity }}</span>
@@ -153,8 +154,8 @@ const updatePreferredMode = (mode: ServiceDescriptionMode) => {
         <div v-if="editingIndex !== index || line.installation_estimate_revision_id" class="flex min-w-0 items-start gap-3">
           <div class="min-w-0 flex-1">
             <div v-for="(display, displayIndex) in displayLines(line)" :key="displayIndex" :class="displayIndex ? 'mt-3' : ''">
-            <p class="break-words text-sm font-semibold leading-snug text-slate-900 dark:text-slate-100">{{ display.title || 'Новая услуга' }}</p>
-            <p v-if="display.description" class="mt-1 break-words text-xs font-normal leading-relaxed text-slate-500">{{ display.description }}</p>
+            <p class="break-words text-sm font-semibold leading-snug text-slate-900 dark:text-slate-100"><LineFormattedText :text="display.title || 'Новая услуга'" /></p>
+            <p v-if="display.description" class="mt-1 break-words text-xs font-normal leading-relaxed text-slate-500"><LineFormattedText :text="display.description" /></p>
             <div class="mt-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
               <span>{{ display.quantity }} × {{ formatMoney(display.price) }} <span v-if="line.installation_estimate_revision_id" class="ml-1 text-slate-500">По расчёту</span></span>
               <span class="font-semibold text-slate-800 dark:text-slate-200">{{ formatMoney(display.quantity * display.price) }}</span>

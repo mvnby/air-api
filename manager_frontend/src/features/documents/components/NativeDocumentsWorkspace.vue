@@ -374,6 +374,87 @@ defineExpose({
     </div>
 
     <template v-else>
+      <div v-if="workspace.issueBlockedReason.value && !registeringCustomerContract" class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" data-testid="pdf-runtime-warning">
+        <strong>Выпуск временно недоступен:</strong> {{ workspace.issueBlockedReason.value }}. Черновики создавать можно; официальный номер не будет занят до успешного выпуска.
+      </div>
+      <p v-if="sendableDocuments.length && !canSendNativeEmail" class="mt-4 text-xs text-slate-500" data-testid="native-email-unavailable">
+        Отправка из CRM появится после подключения почты вашей организации. PDF уже можно скачать и отправить вручную.
+      </p>
+
+      <h4 v-if="workspace.documents.value.length" class="mt-5 text-sm font-bold text-slate-800 dark:text-white">{{ draftCount ? 'Проверьте черновик и выпустите' : 'Готовые документы' }}</h4>
+      <div class="mt-3 space-y-3">
+        <article v-for="document in workspace.documents.value" :key="document.id" class="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <h4 class="font-bold text-slate-900 dark:text-white">{{ document.status === 'draft' ? `${documentTypeName(document.doc_type)} · номер ещё не присвоен` : officialDocumentTitle(document) }}</h4>
+                <span class="rounded-full px-2 py-0.5 text-[11px] font-bold" :class="managedDocumentStatusClass(document.status)">{{ managedDocumentStatus(document.status) }}</span>
+                <span v-if="document.business_role === 'offer'" class="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-bold text-violet-800">Счёт-оферта</span>
+              </div>
+              <p class="mt-1 text-xs text-slate-500">от {{ formatDate(document.official_date || document.date) }} · CRM: <span class="font-mono">{{ document.internal_reference || `#${document.id}` }}</span></p>
+              <p v-if="document.replaces_document_id" class="mt-1 text-xs font-semibold text-blue-600">Заменяет CRM-документ #{{ document.replaces_document_id }}</p>
+              <p v-if="document.void_reason" class="mt-1 text-xs text-rose-600">Причина: {{ document.void_reason }}</p>
+            </div>
+
+            <div class="flex flex-wrap gap-2 sm:justify-end">
+              <button v-if="document.status === 'draft'" class="native-action" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id) || Boolean(workspace.issueBlockedReason.value)" @click="workspace.previewDraft(document)">
+                <span class="material-icons-round text-[17px]">visibility</span>Предпросмотр
+              </button>
+              <button v-for="artifact in document.artifacts" :key="artifact.id" class="native-action" type="button" @click="workspace.downloadArtifact(artifact.id, artifact.filename)">
+                <span class="material-icons-round text-[17px]">download</span>{{ artifactName(artifact.kind) }}
+              </button>
+              <button v-if="['issued', 'sent', 'signed'].includes(document.status) && access.canCreate && !document.artifacts?.some((item) => item.kind === 'signed_pdf')" class="native-action" type="button" :disabled="workspace.busy.value" @click="workspace.prepareFacsimilePdf(document)">
+                <span class="material-icons-round text-[17px]">draw</span>Подготовить PDF с подписью и печатью
+              </button>
+              <GoogleDocumentEditorActions
+                v-if="document.status === 'draft' && access.canCreate && googleEditor.connected.value"
+                :session="googleEditor.getSession(googleTarget(document.id))"
+                :busy="googleEditor.isBusy(googleTarget(document.id))"
+                @open="googleEditor.open(googleTarget(document.id))"
+                @sync="syncGoogleDocument(document.id)"
+              />
+              <button v-if="document.status === 'draft' && access.canCreate" class="native-action-primary" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id) || Boolean(workspace.issueBlockedReason.value)" :title="workspace.issueBlockedReason.value" @click="issueDocument(document)">Выпустить</button>
+              <button v-if="document.status === 'draft' && !document.official_number && !document.artifacts?.length && access.canCreate" class="native-action-danger" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id)" @click="workspace.deleteDraft(document)">Удалить черновик</button>
+              <button v-if="['issued', 'sent', 'signed'].includes(document.status) && access.canReplace" class="native-action" type="button" @click="prepareReplacement(document)">Создать исправленную редакцию</button>
+              <button v-if="['issued', 'sent', 'signed'].includes(document.status) && access.canReplace" class="native-action-danger" type="button" @click="workspace.requestVoid(document)">Аннулировать</button>
+            </div>
+          </div>
+
+          <form v-if="workspace.voidTarget.value?.id === document.id" class="mt-3 flex flex-col gap-2 rounded-lg bg-rose-50 p-3 sm:flex-row sm:items-end" @submit.prevent="workspace.voidDocument">
+            <label class="native-field flex-1"><span>Причина аннулирования</span><input v-model="workspace.voidReason.value" class="native-input" placeholder="Ошибка в реквизитах" /></label>
+            <button class="native-action-danger h-10" type="submit" :disabled="workspace.busy.value || !workspace.voidReason.value.trim()">Подтвердить</button>
+            <button class="native-action h-10" type="button" @click="workspace.voidTarget.value = null">Отмена</button>
+          </form>
+          <p v-if="document.status === 'void'" class="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+            Аннулированный номер и сформированные файлы сохранены в истории. Повторно этот номер не используется.
+          </p>
+        </article>
+
+        <div v-if="!workspace.documents.value.length" class="rounded-xl border border-dashed border-slate-300 p-8 text-center dark:border-slate-700">
+          <span class="material-icons-round text-4xl text-slate-300">description</span>
+          <p class="mt-2 text-sm font-semibold text-slate-600 dark:text-slate-300">Внутренних документов пока нет</p>
+          <p class="mt-1 text-xs text-slate-500">Начните с коммерческого предложения или счёта. Договор можно выбрать отдельно.</p>
+        </div>
+      </div>
+      <div v-if="access.canSend && sendableDocuments.length && canSendNativeEmail" class="mt-4 flex justify-end border-t border-slate-100 pt-4 dark:border-slate-800">
+        <button class="inline-flex h-10 items-center gap-2 rounded-xl bg-brand-600 px-5 text-sm font-bold text-white hover:bg-brand-700" type="button" data-testid="native-document-email" @click="sendOpen = true"><span class="material-icons-round text-[18px]">send</span>Отправить письмо с документом</button>
+      </div>
+      <div v-if="otherContracts.length" class="mt-5" data-testid="saved-order-contracts">
+        <DocumentList
+          title="Сохранённые договоры"
+          :documents="otherContracts"
+          :can-create="false"
+          :can-replace="access.canReplace"
+          :can-delete="access.canDelete"
+          :access-summary="access.summary"
+          :processing-document-id="processingContractId"
+          :file-accept="EXTERNAL_CONTRACT_FILE_ACCEPT"
+          @download="contractFileActions.downloadDocument"
+          @attach="contractFileActions.handleAttachDocumentFile"
+          @delete="contractFileActions.deleteDocument"
+        />
+      </div>
+
       <div v-if="!workspace.legalEntities.value.length && !registeringCustomerContract" class="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
         <strong>Нужно один раз заполнить реквизиты.</strong>
         <button v-if="canManageDocumentSettings" class="ml-2 underline underline-offset-2" type="button" @click="openSettings">Открыть настройки</button>
@@ -395,7 +476,7 @@ defineExpose({
         </div>
 
         <div class="flex items-center justify-between gap-3">
-          <h4 class="text-sm font-bold text-slate-800 dark:text-white">1. Выберите документ</h4>
+          <h4 class="text-sm font-bold text-slate-800 dark:text-white">Выберите документ</h4>
           <details class="relative" data-testid="native-document-more">
             <summary class="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-brand-700 dark:border-slate-700 dark:bg-slate-900" aria-label="Дополнительные настройки документов"><span class="material-icons-round">more_horiz</span></summary>
             <div class="absolute right-0 z-20 mt-1 w-64 rounded-xl border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-700 dark:bg-slate-900">
@@ -498,87 +579,6 @@ defineExpose({
 
       <p v-else-if="!access.canCreate" class="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-500 dark:bg-slate-800">{{ access.summary }}</p>
 
-      <div v-if="otherContracts.length" class="mt-5" data-testid="saved-order-contracts">
-        <DocumentList
-          title="Сохранённые договоры"
-          :documents="otherContracts"
-          :can-create="false"
-          :can-replace="access.canReplace"
-          :can-delete="access.canDelete"
-          :access-summary="access.summary"
-          :processing-document-id="processingContractId"
-          :file-accept="EXTERNAL_CONTRACT_FILE_ACCEPT"
-          @download="contractFileActions.downloadDocument"
-          @attach="contractFileActions.handleAttachDocumentFile"
-          @delete="contractFileActions.deleteDocument"
-        />
-      </div>
-
-      <div v-if="workspace.issueBlockedReason.value && !registeringCustomerContract" class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" data-testid="pdf-runtime-warning">
-        <strong>Выпуск временно недоступен:</strong> {{ workspace.issueBlockedReason.value }}. Черновики создавать можно; официальный номер не будет занят до успешного выпуска.
-      </div>
-      <p v-if="sendableDocuments.length && !canSendNativeEmail" class="mt-4 text-xs text-slate-500" data-testid="native-email-unavailable">
-        Отправка из CRM появится после подключения почты вашей организации. PDF уже можно скачать и отправить вручную.
-      </p>
-
-      <h4 v-if="workspace.documents.value.length" class="mt-5 text-sm font-bold text-slate-800 dark:text-white">{{ draftCount ? '2. Проверьте черновик и выпустите' : 'Готовые документы' }}</h4>
-      <div class="mt-3 space-y-3">
-        <article v-for="document in workspace.documents.value" :key="document.id" class="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div class="min-w-0">
-              <div class="flex flex-wrap items-center gap-2">
-                <h4 class="font-bold text-slate-900 dark:text-white">{{ document.status === 'draft' ? `${documentTypeName(document.doc_type)} · номер ещё не присвоен` : officialDocumentTitle(document) }}</h4>
-                <span class="rounded-full px-2 py-0.5 text-[11px] font-bold" :class="managedDocumentStatusClass(document.status)">{{ managedDocumentStatus(document.status) }}</span>
-                <span v-if="document.business_role === 'offer'" class="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-bold text-violet-800">Счёт-оферта</span>
-              </div>
-              <p class="mt-1 text-xs text-slate-500">от {{ formatDate(document.official_date || document.date) }} · CRM: <span class="font-mono">{{ document.internal_reference || `#${document.id}` }}</span></p>
-              <p v-if="document.replaces_document_id" class="mt-1 text-xs font-semibold text-blue-600">Заменяет CRM-документ #{{ document.replaces_document_id }}</p>
-              <p v-if="document.void_reason" class="mt-1 text-xs text-rose-600">Причина: {{ document.void_reason }}</p>
-            </div>
-
-            <div class="flex flex-wrap gap-2 sm:justify-end">
-              <button v-if="document.status === 'draft'" class="native-action" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id) || Boolean(workspace.issueBlockedReason.value)" @click="workspace.previewDraft(document)">
-                <span class="material-icons-round text-[17px]">visibility</span>Предпросмотр
-              </button>
-              <button v-for="artifact in document.artifacts" :key="artifact.id" class="native-action" type="button" @click="workspace.downloadArtifact(artifact.id, artifact.filename)">
-                <span class="material-icons-round text-[17px]">download</span>{{ artifactName(artifact.kind) }}
-              </button>
-              <button v-if="['issued', 'sent', 'signed'].includes(document.status) && access.canCreate && !document.artifacts?.some((item) => item.kind === 'signed_pdf')" class="native-action" type="button" :disabled="workspace.busy.value" @click="workspace.prepareFacsimilePdf(document)">
-                <span class="material-icons-round text-[17px]">draw</span>Подготовить PDF с подписью и печатью
-              </button>
-              <GoogleDocumentEditorActions
-                v-if="document.status === 'draft' && access.canCreate && googleEditor.connected.value"
-                :session="googleEditor.getSession(googleTarget(document.id))"
-                :busy="googleEditor.isBusy(googleTarget(document.id))"
-                @open="googleEditor.open(googleTarget(document.id))"
-                @sync="syncGoogleDocument(document.id)"
-              />
-              <button v-if="document.status === 'draft' && access.canCreate" class="native-action-primary" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id) || Boolean(workspace.issueBlockedReason.value)" :title="workspace.issueBlockedReason.value" @click="issueDocument(document)">Выпустить</button>
-              <button v-if="document.status === 'draft' && !document.official_number && !document.artifacts?.length && access.canCreate" class="native-action-danger" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id)" @click="workspace.deleteDraft(document)">Удалить черновик</button>
-              <button v-if="['issued', 'sent', 'signed'].includes(document.status) && access.canReplace" class="native-action" type="button" @click="prepareReplacement(document)">Создать исправленную редакцию</button>
-              <button v-if="['issued', 'sent', 'signed'].includes(document.status) && access.canReplace" class="native-action-danger" type="button" @click="workspace.requestVoid(document)">Аннулировать</button>
-            </div>
-          </div>
-
-          <form v-if="workspace.voidTarget.value?.id === document.id" class="mt-3 flex flex-col gap-2 rounded-lg bg-rose-50 p-3 sm:flex-row sm:items-end" @submit.prevent="workspace.voidDocument">
-            <label class="native-field flex-1"><span>Причина аннулирования</span><input v-model="workspace.voidReason.value" class="native-input" placeholder="Ошибка в реквизитах" /></label>
-            <button class="native-action-danger h-10" type="submit" :disabled="workspace.busy.value || !workspace.voidReason.value.trim()">Подтвердить</button>
-            <button class="native-action h-10" type="button" @click="workspace.voidTarget.value = null">Отмена</button>
-          </form>
-          <p v-if="document.status === 'void'" class="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-            Аннулированный номер и сформированные файлы сохранены в истории. Повторно этот номер не используется.
-          </p>
-        </article>
-
-        <div v-if="!workspace.documents.value.length" class="rounded-xl border border-dashed border-slate-300 p-8 text-center dark:border-slate-700">
-          <span class="material-icons-round text-4xl text-slate-300">description</span>
-          <p class="mt-2 text-sm font-semibold text-slate-600 dark:text-slate-300">Внутренних документов пока нет</p>
-          <p class="mt-1 text-xs text-slate-500">Начните с коммерческого предложения или счёта. Договор можно выбрать отдельно.</p>
-        </div>
-      </div>
-      <div v-if="access.canSend && sendableDocuments.length && canSendNativeEmail" class="mt-4 flex justify-end border-t border-slate-100 pt-4 dark:border-slate-800">
-        <button class="inline-flex h-10 items-center gap-2 rounded-xl bg-brand-600 px-5 text-sm font-bold text-white hover:bg-brand-700" type="button" data-testid="native-document-email" @click="sendOpen = true"><span class="material-icons-round text-[18px]">send</span>Отправить письмо с документом</button>
-      </div>
     </template>
   </section>
 </template>
