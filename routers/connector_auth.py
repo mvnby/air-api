@@ -1,13 +1,12 @@
 """OAuth HTTP adapter and an explicit Manager-authenticated consent screen."""
 
 import html
-import hmac
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.config import settings
 from core.database import get_session
 from core.connector_security import connector_resource_metadata
 from core.security import (
@@ -27,7 +26,6 @@ from services.connector_auth_policy import (
 from services.connector_auth_service import ConnectorAuthService
 
 router = APIRouter(tags=["connector-auth"])
-CONSENT_COOKIE = "kitlane_connector_consent"
 NO_CACHE = {
     "Cache-Control": "no-store",
     "Pragma": "no-cache",
@@ -38,6 +36,41 @@ HTML_HEADERS = {
     "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'",
     "X-Frame-Options": "DENY",
 }
+
+
+def _consent_headers(redirect_uri: str) -> dict[str, str]:
+    # Only the exact registered redirect from durable consent may reach here.
+    # Chromium also applies form-action to the POST's cross-origin redirect.
+    try:
+        # urlsplit strips some controls, so validate the original value too.
+        if any(
+            ord(character) <= 32 or ord(character) == 127 for character in redirect_uri
+        ):
+            raise ValueError
+        parsed = urlsplit(redirect_uri)
+        callback = parsed._replace(query="", fragment="").geturl()
+        _ = parsed.port  # Reject malformed or out-of-range configured ports.
+        if (
+            parsed.scheme not in {"https", "http"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.netloc.endswith(":")
+            or any(
+                character.isspace() or character in ";'\"*," for character in callback
+            )
+        ):
+            raise ValueError
+    except ValueError:
+        raise ConnectorAuthError(
+            "server_error", "Invalid configured callback", 500
+        ) from None
+    return {
+        **HTML_HEADERS,
+        "Content-Security-Policy": (
+            "default-src 'none'; style-src 'unsafe-inline'; "
+            f"form-action 'self' {callback}; frame-ancestors 'none'"
+        ),
+    }
 
 
 def _credential(request: Request) -> str:
@@ -129,6 +162,7 @@ async def authorize(request: Request, session: AsyncSession = Depends(get_sessio
         company_name, storefront_name = await ConnectorAuthService.consent_labels(
             session, pending
         )
+        headers = _consent_headers(pending.redirect_uri)
     except HTTPException as exc:
         if exc.status_code == 401:
             return HTMLResponse(
@@ -149,17 +183,7 @@ async def authorize(request: Request, session: AsyncSession = Depends(get_sessio
         f"<li>{html.escape(labels[scope])}</li>" for scope in pending.scopes
     )
     content = f'''<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Подключить Kitlane</title><body><h1>Подключить Kitlane к ChatGPT</h1><p>Пользователь: {html.escape(auth.display_name or auth.username)}.</p><p>Компания: {html.escape(company_name)}. Витрина: {html.escape(storefront_name)}.</p><ul>{capabilities}</ul><p>Доступ действует 30 дней. Отозвать его можно в Manager.</p><form method="post" action="/api/connector/oauth/authorize"><input type="hidden" name="consent_id" value="{html.escape(pending.id, quote=True)}"><input type="hidden" name="csrf_token" value="{html.escape(nonce, quote=True)}"><button name="decision" value="allow">Подключить</button> <button name="decision" value="deny">Отмена</button></form></body></html>'''
-    response = HTMLResponse(content, headers=HTML_HEADERS)
-    response.set_cookie(
-        CONSENT_COOKIE,
-        nonce,
-        max_age=600,
-        httponly=True,
-        secure=settings.is_production,
-        samesite="lax",
-        path="/api/connector/oauth/authorize",
-    )
-    return response
+    return HTMLResponse(content, headers=headers)
 
 
 @router.post("/api/connector/oauth/authorize", operation_id="connector_oauth_consent")
@@ -171,14 +195,13 @@ async def consent(
     try:
         form = await _form(request)
         nonce = form.get("csrf_token", "")
-        if not nonce or not hmac.compare_digest(
-            nonce, request.cookies.get(CONSENT_COOKIE, "")
-        ):
-            raise ConnectorAuthError("invalid_request", "Consent CSRF mismatch", 403)
         if form.get("decision") not in {"allow", "deny"}:
             raise ConnectorAuthError(
                 "invalid_request", "Explicit consent decision required"
             )
+        # The one-time synchronizer token is validated against durable consent,
+        # its Manager session and live actor. A shared cookie would let another
+        # open consent page replace this page's nonce.
         url = await ConnectorAuthService.finish_consent(
             session,
             auth,
@@ -190,15 +213,7 @@ async def consent(
     except ConnectorAuthError as exc:
         await session.rollback()
         return _error(exc)
-    response = RedirectResponse(url, status_code=303, headers=NO_CACHE)
-    response.delete_cookie(
-        CONSENT_COOKIE,
-        path="/api/connector/oauth/authorize",
-        secure=settings.is_production,
-        httponly=True,
-        samesite="lax",
-    )
-    return response
+    return RedirectResponse(url, status_code=303, headers=NO_CACHE)
 
 
 @router.post(
