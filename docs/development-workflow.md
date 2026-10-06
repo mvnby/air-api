@@ -66,7 +66,10 @@ other path, mixed change, empty or unknown diff, deletion, rename, file-type or
 mode change, or classification error selects full CI. Full CI builds and tests
 Manager, checks migrations and API-client freshness, and runs unit and
 integration suites with four workers. Pull requests compare against their merge
-base; pushes classify the exact pushed revision.
+base; pushes classify the exact pushed revision. A documentation-only push also
+requires successful push CI for the exact preceding commit on that branch.
+If that result is missing, still running or cannot be confirmed, the latest
+commit runs full CI: a docs merge must not cancel and bypass pending code checks.
 
 ## Verification by change
 
