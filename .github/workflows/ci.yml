@@ -17,7 +17,38 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      docs_only: ${{ steps.scope.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Classify complete change set
+        id: scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          args=()
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            args+=(--merge-base)
+          fi
+          python3 scripts/ci/change_scope.py \
+            --base "$BASE_SHA" --head "$HEAD_SHA" "${args[@]}" \
+            --output-json "$RUNNER_TEMP/change-scope.json" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Check changed documentation
+        run: python3 scripts/ci/check_documentation.py --changes-json "$RUNNER_TEMP/change-scope.json"
+
   manager-dist:
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -46,6 +77,8 @@ jobs:
           overwrite: true
 
   manager:
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -65,7 +98,8 @@ jobs:
           npm run test:components
 
   backend-contracts:
-    needs: manager-dist
+    needs: [changes, manager-dist]
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -195,8 +229,9 @@ jobs:
         run: docker compose down -v --remove-orphans
 
   python-tests:
-    name: pytest-${{ matrix.suite }}
-    needs: manager-dist
+    name: pytest-${{ matrix.suite || 'skipped' }}
+    needs: [changes, manager-dist]
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -284,15 +319,13 @@ jobs:
             -e PYTEST_SUITE="${suite}" \
             "${app_image}" \
             sh -ec '
-              apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends openssh-client
+              apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends openssh-client git
               export TEST_DATABASE_URL="postgresql+asyncpg://${POSTGRES_USER:-mvnadmin}:${POSTGRES_PASSWORD:-securepass}@db_test:5432/air_conditioners_test"
-              if [ "${PYTEST_SUITE}" = "integration" ]; then
-                EXPECT_XDIST_DATABASE_ISOLATION=1 \
-                  pytest -q -n 2 --dist load \
-                    tests/integration/test_postgres_worker_database_isolation.py
-              fi
+              EXPECT_XDIST_DATABASE_ISOLATION=1 \
+                pytest -q -n 4 --dist load \
+                  tests/integration/test_postgres_worker_database_isolation.py
               set +e
-              pytest -q -n 2 --dist loadscope \
+              pytest -q -n 4 --dist loadscope \
                 --tb=short --durations=25 --durations-min=1.0 \
                 --junitxml=/test-results/results.xml \
                 "tests/${PYTEST_SUITE}"
@@ -316,23 +349,33 @@ jobs:
 
   test:
     if: always()
-    needs: [manager-dist, manager, backend-contracts, python-tests]
+    needs: [changes, manager-dist, manager, backend-contracts, python-tests]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Require Every CI Lane
+      - name: Require Every Selected CI Lane
         env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
           MANAGER_DIST_RESULT: ${{ needs.manager-dist.result }}
           MANAGER_RESULT: ${{ needs.manager.result }}
           BACKEND_CONTRACTS_RESULT: ${{ needs.backend-contracts.result }}
           PYTHON_TESTS_RESULT: ${{ needs.python-tests.result }}
         run: |
+          set -euo pipefail
+          test "${CHANGES_RESULT}" = "success"
+          case "${DOCS_ONLY}" in
+            true) expected=skipped ;;
+            false) expected=success ;;
+            *) echo "::error::Missing or invalid change classification"; exit 1 ;;
+          esac
           printf '%s\n' \
             "manager-dist=${MANAGER_DIST_RESULT}" \
             "manager=${MANAGER_RESULT}" \
             "backend-contracts=${BACKEND_CONTRACTS_RESULT}" \
             "python-tests=${PYTHON_TESTS_RESULT}"
-          test "${MANAGER_DIST_RESULT}" = "success"
-          test "${MANAGER_RESULT}" = "success"
-          test "${BACKEND_CONTRACTS_RESULT}" = "success"
-          test "${PYTHON_TESTS_RESULT}" = "success"
+          test "${MANAGER_DIST_RESULT}" = "${expected}"
+          test "${MANAGER_RESULT}" = "${expected}"
+          test "${BACKEND_CONTRACTS_RESULT}" = "${expected}"
+          test "${PYTHON_TESTS_RESULT}" = "${expected}"
+          echo "CI passed: docs_only=${DOCS_ONLY}" >> "$GITHUB_STEP_SUMMARY"

@@ -72,8 +72,9 @@ code and live state before treating them as present-day facts or authorization.
   regeneration, a Manager build and changed generated artifacts in the commit;
   commands live in [verification](docs/development-workflow.md#verification-by-change).
 - PostgreSQL tests require a separate physical DB per process/worker. Never use
-  a production base URL; the base DB name must contain `test`. Keep broad suites
-  serial until the worker-isolation proof and CI timing evidence justify xdist.
+  a production base URL; the base DB name must contain `test`. CI proves worker
+  isolation before parallel suites; use [the test procedure](docs/development-workflow.md#backend-tests)
+  before changing concurrency or starting broad local suites.
 - Production runs from images, not a git checkout. Data operations start
   report-only/dry-run. Cleanup requires explicit authorization; do not execute
   backfills, provisioning or grants without the linked procedure's review gates.

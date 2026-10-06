@@ -267,9 +267,17 @@ curl -fsS http://127.0.0.1:8000/api/health
 
 ### Release Trigger
 
-The normal path is automatic: a successful `CI (Test & Lint)` run on `main`
-starts `deploy.yml` for that exact commit. Failed or cancelled CI never starts a
-production release.
+The normal path is automatic: a successful `CI (Test & Lint)` push run on `main`
+starts `deploy.yml`. The release gate verifies the source repository, event,
+branch, exact SHA and completed job results. Failed or cancelled CI never
+starts a production release.
+
+An allowlisted documentation-only change runs changed-Markdown checks and the
+required `test` gate while application lanes are skipped. The release gate
+accepts that exact result and completes without building an image or deploying.
+Other changes require all application lanes to succeed. See
+[CI routes](development-workflow.md#ci-routes) and the
+[Git workflow](git-workflow.md#после-merge).
 
 For a manual replay:
 
@@ -279,7 +287,8 @@ For a manual replay:
 4. Run the API workflow.
 
 The release gate rejects a manual commit unless that exact SHA already has a
-successful CI run.
+successful main-push CI run with all application lanes passed. A documentation-only
+result does not authorize a manual production release.
 
 ### Deployment Steps
 

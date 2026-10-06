@@ -1,5 +1,8 @@
 from pathlib import Path
+import os
+import subprocess
 
+import pytest
 import yaml
 
 
@@ -30,6 +33,7 @@ def test_ci_parallelizes_isolated_lanes_behind_required_test_gate():
     jobs = workflow["jobs"]
 
     assert set(jobs) == {
+        "changes",
         "manager-dist",
         "manager",
         "backend-contracts",
@@ -41,11 +45,17 @@ def test_ci_parallelizes_isolated_lanes_behind_required_test_gate():
         "matrix": {"suite": ["unit", "integration"]},
     }
     assert jobs["python-tests"]["timeout-minutes"] == "${{ matrix.suite == 'unit' && 75 || 60 }}"
-    assert "needs" not in jobs["manager-dist"]
-    assert "needs" not in jobs["manager"]
-    assert jobs["backend-contracts"]["needs"] == "manager-dist"
-    assert jobs["python-tests"]["needs"] == "manager-dist"
+    assert jobs["changes"]["outputs"] == {"docs_only": "${{ steps.scope.outputs.docs_only }}"}
+    checkout = jobs["changes"]["steps"][0]
+    assert checkout["with"] == {"fetch-depth": 0, "persist-credentials": False}
+    assert jobs["manager-dist"]["needs"] == "changes"
+    assert jobs["manager"]["needs"] == "changes"
+    assert jobs["backend-contracts"]["needs"] == ["changes", "manager-dist"]
+    assert jobs["python-tests"]["needs"] == ["changes", "manager-dist"]
+    for name in ("manager-dist", "manager", "backend-contracts", "python-tests"):
+        assert jobs[name]["if"] == "needs.changes.outputs.docs_only != 'true'"
     assert jobs["test"]["needs"] == [
+        "changes",
         "manager-dist",
         "manager",
         "backend-contracts",
@@ -55,24 +65,54 @@ def test_ci_parallelizes_isolated_lanes_behind_required_test_gate():
     assert jobs["test"]["timeout-minutes"] == 5
     gate = jobs["test"]["steps"][0]
     assert gate["env"] == {
+        "CHANGES_RESULT": "${{ needs.changes.result }}",
+        "DOCS_ONLY": "${{ needs.changes.outputs.docs_only }}",
         "MANAGER_DIST_RESULT": "${{ needs.manager-dist.result }}",
         "MANAGER_RESULT": "${{ needs.manager.result }}",
         "BACKEND_CONTRACTS_RESULT": "${{ needs.backend-contracts.result }}",
         "PYTHON_TESTS_RESULT": "${{ needs.python-tests.result }}",
     }
-    for result in gate["env"]:
-        assert f'test "${{{result}}}" = "success"' in gate["run"]
+
+
+@pytest.mark.parametrize("docs_only,changes,lane_result,passed", [
+    ("true", "success", "skipped", True),
+    ("false", "success", "success", True),
+    ("false", "success", "skipped", False),
+    ("true", "success", "success", False),
+    ("true", "failure", "skipped", False),
+    ("true", "cancelled", "skipped", False),
+    ("", "success", "success", False),
+    ("invalid", "success", "success", False),
+    ("false", "success", "failure", False),
+    ("false", "success", "cancelled", False),
+])
+def test_required_gate_executes_fail_closed(tmp_path, docs_only, changes, lane_result, passed):
+    gate = yaml.safe_load(CI_WORKFLOW.read_text())["jobs"]["test"]["steps"][0]
+    env = {**os.environ, **{name: lane_result for name in gate["env"]},
+           "CHANGES_RESULT": changes, "DOCS_ONLY": docs_only,
+           "GITHUB_STEP_SUMMARY": str(tmp_path / "summary")}
+    result = subprocess.run(["bash", "-c", gate["run"]], env=env, capture_output=True, text=True)
+    assert (result.returncode == 0) is passed, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("lane", ["MANAGER_DIST_RESULT", "MANAGER_RESULT", "BACKEND_CONTRACTS_RESULT", "PYTHON_TESTS_RESULT"])
+def test_required_gate_rejects_one_failed_lane(tmp_path, lane):
+    gate = yaml.safe_load(CI_WORKFLOW.read_text())["jobs"]["test"]["steps"][0]
+    env = {**os.environ, **{name: "success" for name in gate["env"]},
+           "DOCS_ONLY": "false", lane: "failure",
+           "GITHUB_STEP_SUMMARY": str(tmp_path / "summary")}
+    assert subprocess.run(["bash", "-c", gate["run"]], env=env, capture_output=True).returncode != 0
 
 
 def test_ci_keeps_full_coverage_with_compact_diagnostic_output():
     workflow = CI_WORKFLOW.read_text(encoding="utf-8")
 
     assert "suite: [unit, integration]" in workflow
-    assert "pytest -q -n 2 --dist loadscope" in workflow
+    assert "pytest -q -n 4 --dist loadscope" in workflow
     assert "--tb=short --durations=25 --durations-min=1.0" in workflow
     assert '"tests/${PYTEST_SUITE}"' in workflow
     assert "EXPECT_XDIST_DATABASE_ISOLATION=1" in workflow
-    assert "pytest -q -n 2 --dist load \\" in workflow
+    assert "pytest -q -n 4 --dist load \\" in workflow
     assert "test_postgres_worker_database_isolation.py" in workflow
     assert "--junitxml=/test-results/results.xml" in workflow
     assert "pytest_status=$?" in workflow

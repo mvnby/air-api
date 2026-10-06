@@ -64,8 +64,17 @@ def test_deploy_runs_only_after_successful_ci_for_the_exact_sha():
     }
     assert "github.event.workflow_run.conclusion == 'success'" in release_gate["if"]
     resolve = _step(release_gate, "Resolve tested release SHA")["run"]
-    assert 'deploy_sha="${{ github.event.workflow_run.head_sha }}"' in resolve
+    assert 'deploy_sha="${TRIGGER_SHA}"' in resolve
+    assert _step(release_gate, "Resolve tested release SHA")["env"]["TRIGGER_SHA"] == "${{ github.event.workflow_run.head_sha }}"
+    assert "--event push" in resolve
     assert "No successful CI run found" in resolve
+    assert "filter=latest&per_page=100" in resolve
+    scope = _step(release_gate, "Validate CI and select release scope")
+    assert "scripts/ci/release_scope.py" in scope["run"]
+    assert "--manual" in scope["run"]
+    assert release_gate["outputs"]["deployment_needed"] == "${{ steps.scope.outputs.deployment_needed }}"
+    for name in ("deploy-backend", "deploy-backend-patroni", "backend-release"):
+        assert "needs.release-gate.outputs.deployment_needed == 'true'" in workflow["jobs"][name]["if"]
 
 
 def test_release_jobs_use_immutable_tested_sha_and_protected_environments():
