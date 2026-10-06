@@ -1,20 +1,31 @@
-# AGENTS Guide
+# MVN / Kitlane agent guide
+
+## Working contract
+
+- Define the requested outcome and a check that proves it; use a short plan only
+  for multi-step or risky work. A requested fix includes in-scope edits and tests;
+  honor existing authorization. Analysis-only requests stop at findings.
+- Inspect the branch and working tree; preserve unrelated work. Fix the cause,
+  keep the change cohesive, and review the diff before publishing.
+- After verified changes: commit, push, PR, green CI, then squash merge per
+  [Git workflow](docs/git-workflow.md). Verify any triggered deployment and its
+  smoke checks before claiming completion; never push directly to `main`.
 
 ## Boundaries
 
 - Backend: FastAPI + SQLModel. `routers/` handles HTTP, `services/` owns
   business logic, and `crud/` owns persistence; no direct DB business logic in routers.
+  Keep blocking I/O off the async event loop.
 - Internal product workflows belong in `manager_frontend/` + `routers/manager_*`.
   SQLAdmin is removed; never reintroduce legacy `/admin` workflows.
-- Public storefront source, UI, assets, tests and deployment belong in the
-  separate `mvnby/mvn-web` repository. It consumes this API over HTTP only.
+- Public storefront UI, assets, tests and deployment belong in `mvnby/mvn-web`;
+  it consumes this API over HTTP only.
 - Active staff Telegram polling is deployed from `mvnby/mvn-telegram-bot`;
   this API owns business rules and the internal bot contract.
 - Reuse `services/spec_normalizer.py`; add spec definitions/aliases to
   `services/spec_registry.py`, from which the normalizer derives `KEY_MAP`.
-- Keep changes focused and modules cohesive. About 700 lines or mixed
-  responsibilities is a signal to assess cohesion, not an automatic refactor.
-  Split when needed for the current task; propose other improvements separately.
+- About 700 lines or mixed responsibilities is a signal to assess cohesion.
+  Split when needed for this task; propose unrelated refactors separately.
 - Manager list endpoints require `limit <= 100`.
 
 ## Read by task
@@ -24,6 +35,7 @@ not a checklist of documents to read. Open only the relevant procedure:
 
 | Task | Required entry point |
 | --- | --- |
+| Multi-step planning, repeated failures, delegation or improving agent instructions | [Agent workflow](docs/agent-workflow.md), relevant section |
 | Local setup, backend/Manager tests, imports/specs, leads or API client changes | [Development workflow](docs/development-workflow.md), relevant section |
 | Commit, PR, CI or merge | [Git workflow](docs/git-workflow.md) |
 | Production data operation | [Production data operations](docs/production-data-operations.md), then the matching runbook |
@@ -36,54 +48,29 @@ code and live state before treating them as present-day facts or authorization.
 
 ## Efficient execution
 
-- Locate filenames/symbols with scoped `rg --files` / `rg -n`, then read bounded
-  sections. Avoid dumping whole large modules, documents, API schemas or logs.
-- For ordinary source searches, skip dependencies, caches, build output,
-  `outputs/`, `.codex-tmp/`, lockfiles, `openapi.json` and generated
-  `manager_frontend/src/client/`. Open them explicitly when the task needs them;
-  these search defaults do not exempt generated artifacts from verification.
-- Search within this checkout and the relevant domain. Do not inventory sibling
-  worktrees, old task logs or all documentation unless the task requires it.
-- Batch independent reads/checks and retain their results; repeat a check only
-  after a relevant change, failure, or unresolved concern.
-- While CI, deployment or another agent runs, use a bounded watcher/wait facility
-  and return concise changed status, failure details or completion. Avoid tight
-  sleep-and-query loops that repeatedly wake the model with unchanged results.
-  Keep the user informed without re-fetching the same logs for each update.
-- Do not remove required tests, release gates or final runtime verification to
-  save tokens. A new independent task may start fresh with a short handoff;
-  keep related implementation and validation together.
-- Honor authorization already given: a requested fix includes in-scope edits
-  and relevant local checks. Do not ask again for an approved step; clarify
-  ambiguous scope or actions outside it. Analysis-only requests stop at findings.
-
-## Delegation and effort
-
-- Choose the least expensive model/effort that reliably fits the task. Recommend
-  a cheaper or stronger setting when the user's choice is materially mismatched.
-- Terra `low`/`medium`: inventory, documentation, focused checks and small fixes;
-  Terra `medium`/`high`: routine implementation/tests and bounded refactors;
-  Astra `high`: a starting point for general development; Sol or Astra
-  `high`/`xhigh`: difficult architecture, concurrency, migrations, HA and security.
-  Honor an explicit model choice; compare completion time, usage and rework
-  before adopting a cheaper setting. Reserve higher effort for demonstrated need.
-- This is standing authorization to delegate safe, independent, in-scope work
-  only when it costs less than doing it locally. Keep small or tightly coupled
-  tasks with one agent; do not create a reviewer for every trivial edit.
-- Before worthwhile delegation, say: «Дружища, давай это сделает отдельный агент
-  и с пониженными весами». Send the goal, boundaries, paths and acceptance checks,
-  not full conversation history unless necessary.
-- The primary agent owns integration, validation, publication and the final
-  report; a subagent's result is evidence, not automatic approval.
+- Use scoped `rg --files` / `rg -n`, then bounded reads in the relevant domain.
+  Skip dependencies, caches, build output, `outputs/`, `.codex-tmp/`, lockfiles,
+  `openapi.json` and generated `manager_frontend/src/client/` in ordinary searches;
+  inspect them when relevant. Do not scan sibling worktrees or old chats by default.
+- Batch independent reads/checks and retain results. Repeat only after a relevant
+  change, failure or unresolved concern; diagnose repeated failure before retrying.
+- Use bounded waits for CI/deploy/agents and concise status changes. Do not reload
+  unchanged logs or repeatedly wake the model to poll. Preserve required gates.
+- Choose the least expensive adequate model/effort; honor explicit user choices.
+  Standing delegation authorization covers safe, independent, in-scope work only
+  when it saves total cost, including review. Keep small/coupled tasks with one agent;
+  use the [delegation procedure](docs/agent-workflow.md#delegation-and-effort).
+- Keep related implementation and validation together. For a necessary handoff,
+  record decisions, changed files, checks and the next action, not the transcript.
 
 ## Verification and production gates
 
 - Run checks appropriate to the changed behavior. Documentation-only edits need
   link/Markdown checks and review of moved instructions, not local application
   builds or database tests. Required CI still applies before merge.
-- When API routes, operation IDs or schemas change, regenerate OpenAPI with
-  `python3 scripts/legacy/extract_openapi.py`, then run `npm run gen:api` and
-  `npm run build` in `manager_frontend/`; commit changed generated artifacts.
+- API route/operation ID/schema changes require OpenAPI and Manager client
+  regeneration, a Manager build and changed generated artifacts in the commit;
+  commands live in [verification](docs/development-workflow.md#verification-by-change).
 - PostgreSQL tests require a separate physical DB per process/worker. Never use
   a production base URL; the base DB name must contain `test`. Keep broad suites
   serial until the worker-isolation proof and CI timing evidence justify xdist.
@@ -96,5 +83,3 @@ code and live state before treating them as present-day facts or authorization.
   `mvn-api-nl` and `mvn-api-by` are display names only.
 - A deployment is successful only after `/api/health`,
   `/api/v1/products?limit=5` and `/api/v1/filters/config` smoke checks pass.
-- After verified changes: commit, push, and open a PR. Follow the Git workflow's
-  green-CI gate before merging; never push changes directly to `main`.

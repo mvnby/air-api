@@ -1,45 +1,22 @@
-## Summary
+## Problem and result
 
-- What changed:
-- Why:
-
-## Scope
-
-- [ ] Backend
-- [ ] Manager frontend (`manager_frontend/`)
-- [ ] Infra/CI/CD
-- [ ] DB migration
+<!-- Explain the concrete trigger and resulting behavior. Keep scope to one task. -->
 
 ## Validation
 
-- Local checks run:
-  - [ ] `pytest -q` (or targeted tests)
-  - [ ] `cd manager_frontend && npm run build` (if touched)
-- Manual checks:
-  - [ ] Main user flow verified
-  - [ ] No visible regressions in touched areas
+<!-- List checks actually run and their results; explain relevant gaps.
+For docs-only changes: local links, Markdown/code blocks, preserved rules and
+git diff --check. Application/DB tests are not required locally for prose alone.
+For API changes: follow docs/development-workflow.md#verification-by-change.
+Required CI must pass for this revision before merge. -->
 
-## Legacy Admin Check
+## Risk and release
 
-- [ ] This PR changes `admin/*` (legacy SQLAdmin)
-- [ ] If yes, justification provided (why compat fix is needed and why not manager-first)
+<!-- State material risks, migration/data steps and rollback when applicable.
+Production data operations require docs/production-data-operations.md gates.
+Write "No special release steps" when none are needed. -->
 
-## Deployment Notes
+## Evidence (when relevant)
 
-- [ ] No special deploy steps
-- [ ] Requires Alembic migration
-- [ ] Requires post-deploy script/manual data operation
-
-If special steps required, describe exact commands:
-
-```bash
-# Example
-# docker compose exec app alembic upgrade head
-```
-
-## Risk and Rollback
-
-- Risk level: Low / Medium / High
-- Rollback plan:
-
-## Screenshots / Logs (optional)
+<!-- Screenshots for visible UI changes; concise logs or runtime evidence for
+behavior that tests alone do not prove. Omit this section if it adds no evidence. -->

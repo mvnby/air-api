@@ -17,9 +17,13 @@ Run from repo root unless noted.
 
 ### Backend Tests
 
-- Run all tests (local venv): `pytest`
-- Run unit tests only: `pytest tests/unit -q`
-- Run integration tests only: `pytest tests/integration -q`
+- Start with the relevant existing test file(s), using the project environment:
+  `scripts/test_local.sh --host tests/unit/test_public_warranty_projection.py -q`
+  is an example; replace the path with tests for the changed behavior.
+- Use `scripts/test_local.sh --docker <pytest args>` for an already running local
+  app container, or `pytest <paths> -q` in the configured local venv.
+- Broaden to `pytest tests/unit -q`, `pytest tests/integration -q` or `pytest`
+  when shared dependencies, failures or unresolved risk justify it.
 - Prove physical PostgreSQL isolation for two future pytest workers:
   `pytest -q -n 2 --dist load tests/integration/test_postgres_worker_database_isolation.py`
 
@@ -36,21 +40,58 @@ PostgreSQL test policy:
 
 Run from `manager_frontend/`:
 
-- Install deps: `npm install`
+- Install locked deps when missing or the lockfile changed: `npm ci`
 - Dev server: `npm run dev`
 - Build: `npm run build`
 - Preview build: `npm run preview`
 - Regenerate API client from backend OpenAPI: `npm run gen:api`
   - Note: this project uses `--useUnionTypes` in codegen to avoid TS enum re-export issues.
+- Run relevant component specs directly, for example:
+  `npx vitest run --environment jsdom tests/customer-create.spec.ts`.
+- Existing broader checks: `npm run test:components`, `npm run test:ui-logic`.
+
+## Verification by change
+
+Choose checks for the behavior and boundaries touched; this is not a requirement
+to run every row. Required [CI](../.github/workflows/ci.yml) still applies before
+merge, including for documentation. Do not rerun successful local checks unless
+the relevant code/environment changed or a failure/unresolved concern warrants it.
+
+| Change | Local evidence |
+| --- | --- |
+| Markdown/instructions only | Review local link targets/anchors, fenced code blocks and preserved rules; run `git diff --check`. No local application build or DB suite is needed. |
+| Backend behavior | Relevant unit/integration tests; cover changed contracts and failure cases. Use a separate physical PostgreSQL DB per process. |
+| Manager UI | Relevant component/UI-logic checks, `npm run build` and inspection of the affected user flow; use browser evidence for visible behavior. |
+| API route, operation ID or schema | Relevant backend checks, regenerate OpenAPI and client as below, build Manager and commit changed generated artifacts. |
+| Migration, production or HA | Relevant contract checks plus the rollout/rollback and runtime checks in the matching runbook; data mutations also require production-data gates. |
+
+For documentation, verify every changed local link resolves from the containing
+file and each fragment names an existing heading. Inspect code-fence balance and
+commands, and compare moved instructions for retained constraints. There is no
+dedicated Markdown/link checker in current CI; state what was actually checked.
+
+For any API contract change (not just `schemas.py`), run from the repository root:
+
+```bash
+python3 scripts/legacy/extract_openapi.py
+cd manager_frontend
+npm run gen:api
+npm run build
+```
+
+Review and commit changed `openapi.json` and `manager_frontend/src/client/` files.
+`scripts/sync_manager_api_client.sh` wraps extraction and generation; it does not
+perform the required Manager build. The pre-commit hook is a convenience and may
+not detect every contract dependency, so it does not replace this obligation.
 
 ## Domain workflows
 
 ### 1) Product Import Workflow
 
 1. Confirm source parser exists in `parsers/` and is wired in `services/importer_service.py`.
-2. Import product(s) through the importer path (API/admin flow that calls `ImporterService`).
+2. Import product(s) through the importer path (Manager/API flow that calls `ImporterService`).
 3. Ensure imported specs are normalized through `normalize_specs(...)` in `services/importer_service.py`.
-4. Verify created product data (tags, `main_image`, `specs`, `source_url`) in admin/API.
+4. Verify created product data (tags, `main_image`, `specs`, `source_url`) in Manager/API.
 
 ### 2) Specs Normalization Workflow (New/Updated Keys)
 
@@ -67,13 +108,12 @@ Use this after large catalog imports or when unknown spec keys appear.
 
 ### 3) Safe Change Verification Workflow
 
-1. Run scoped tests for touched area (`pytest ...`).
-2. If API routes, operation IDs, or schemas in `schemas.py` were changed, run:
-   - `python3 scripts/legacy/extract_openapi.py && cd manager_frontend && npm run gen:api`
-3. If specs/import were changed, verify affected fixtures/local test data with:
+1. Follow [verification by change](#verification-by-change), including API
+   generation/build when a contract changes.
+2. If specs/import were changed, verify affected fixtures/local test data with:
    - `python3 scripts/analyze_spec_keys.py`
    - `python3 scripts/normalize_legacy.py` (or Docker equivalent)
-4. Confirm no obvious regressions in import and public API behavior (no duplicate/product corruption).
+3. Confirm no obvious regressions in import and public API behavior (no duplicate/product corruption).
 
 ### 4) Manager App Workflow
 
@@ -86,10 +126,7 @@ Use this after large catalog imports or when unknown spec keys appear.
 3. Future direction:
    - keep expanding manager entities and flows in the Vue-based reactive UX.
 4. When API contracts change:
-   - update backend schemas/routes,
-   - regenerate OpenAPI (`python3 scripts/legacy/extract_openapi.py`),
-   - refresh typed client with `npm run gen:api` in `manager_frontend/`,
-   - commit generated artifacts (`openapi.json`, `manager_frontend/src/client/*`) when changed,
+   - update backend schemas/routes and follow [verification by change](#verification-by-change),
    - verify the user flows affected by the changed contract; include photo/spec
      bulk-edit flows when their contracts or shared dependencies are affected.
 5. Legacy admin freeze:
