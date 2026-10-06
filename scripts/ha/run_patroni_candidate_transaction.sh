@@ -593,10 +593,9 @@ stage_candidate_compose
 require_pitr_attested_candidate
 CANDIDATE_CHECKSUM="$(cksum < "${CANDIDATE_FILE}")"
 trap shared_belzakupki_guard_cleanup_candidate_transaction EXIT
-sync_bot_voice_env_locked
 if [[ "${OPERATION}" == "migrate" ]]; then
-  trap shared_belzakupki_guard_cleanup_candidate_transaction EXIT
   shared_belzakupki_guard_prepare_with_signal_recovery
+  sync_bot_voice_env_locked
   API_DEPLOY_LOCK_FD="${DEPLOY_LOCK_FD}" \
     API_COMPOSE_FILE="$(basename "${CANDIDATE_FILE}")" bash "${MIGRATION_SCRIPT}"
   shared_belzakupki_guard_restore
@@ -614,6 +613,9 @@ require_unchanged_db_contract
 resolve_previous_backend_image
 patroni_communications_capture_release_fence
 patroni_communications_capture_previous
+# Arm runtime rollback only after the shared-host guard succeeds.
+shared_belzakupki_guard_prepare_with_signal_recovery
+sync_bot_voice_env_locked
 patroni_role_assets_backup
 trap reconcile_failed_deploy EXIT
 transaction stage
@@ -622,8 +624,6 @@ patroni_communications_detect_candidate_support
 patroni_role_assets_install
 capture_proxy_runtime_state
 stage_proxy_files
-
-shared_belzakupki_guard_prepare_with_signal_recovery
 
 API_COMPOSE_FILE="$(basename "${CANDIDATE_FILE}")" \
   API_DEPLOY_LOCK_FD="${DEPLOY_LOCK_FD}" \
