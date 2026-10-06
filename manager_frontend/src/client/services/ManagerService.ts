@@ -1837,6 +1837,14 @@ export class ManagerService {
     }
     /**
      * List Suppliers
+     * List supplier profiles in the shared platform directory; this endpoint has no page/limit
+     * parameters.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @returns SupplierListResponse Successful Response
      * @throws ApiError
      */
@@ -1848,6 +1856,15 @@ export class ManagerService {
     }
     /**
      * Create Supplier
+     * Create a supplier profile, normalizing its code and optional Google spreadsheet
+     * reference. This does not create a partner account or fetch its offers. Invalid
+     * configuration returns 400; POST has no client idempotency receipt.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param requestBody
      * @returns SupplierResponse Successful Response
      * @throws ApiError
@@ -1867,6 +1884,14 @@ export class ManagerService {
     }
     /**
      * Patch Supplier
+     * Update only submitted supplier profile fields and normalize code/spreadsheet changes.
+     * Missing supplier returns 404; invalid configuration returns 400.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param supplierId
      * @param requestBody
      * @returns SupplierResponse Successful Response
@@ -1891,6 +1916,16 @@ export class ManagerService {
     }
     /**
      * Delete Supplier
+     * Delete a shared supplier and its supply requests/lines, contacts, warehouses, mappings,
+     * offers, sync runs and price sources. Missing supplier returns 404, including a repeat
+     * after successful deletion. This removes the supplier’s related platform data, not just
+     * its profile.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param supplierId
      * @returns ManagerActionMessageResponse Successful Response
      * @throws ApiError
@@ -1911,6 +1946,13 @@ export class ManagerService {
     }
     /**
      * List Supplier Contacts
+     * List contacts belonging to one supplier. Missing supplier returns 404.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param supplierId
      * @returns SupplierContactListResponse Successful Response
      * @throws ApiError
@@ -1931,6 +1973,14 @@ export class ManagerService {
     }
     /**
      * Create Supplier Contact
+     * Create a contact under the selected supplier. Invalid supplier/contact configuration
+     * returns 400; no client idempotency receipt is provided.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param supplierId
      * @param requestBody
      * @returns SupplierContactResponse Successful Response
@@ -1955,6 +2005,14 @@ export class ManagerService {
     }
     /**
      * Patch Supplier Contact
+     * Patch submitted contact fields under the specified supplier. A contact outside that
+     * supplier or missing contact returns 404; invalid values return 400.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param supplierId
      * @param contactId
      * @param requestBody
@@ -1982,6 +2040,14 @@ export class ManagerService {
     }
     /**
      * Delete Supplier Contact
+     * Delete a contact under the specified supplier. Missing contact or wrong supplier returns
+     * 404, including a repeat after successful deletion.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param supplierId
      * @param contactId
      * @returns ManagerActionMessageResponse Successful Response
@@ -2005,6 +2071,13 @@ export class ManagerService {
     }
     /**
      * List Supplier Warehouses
+     * List warehouse profiles belonging to a supplier. Missing supplier returns 404.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param supplierId
      * @returns SupplierWarehouseListResponse Successful Response
      * @throws ApiError
@@ -2025,6 +2098,14 @@ export class ManagerService {
     }
     /**
      * Create Supplier Warehouse
+     * Create a warehouse profile under a supplier. Invalid supplier/warehouse configuration
+     * returns 400; no client idempotency receipt is provided.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param supplierId
      * @param requestBody
      * @returns SupplierWarehouseResponse Successful Response
@@ -2049,6 +2130,14 @@ export class ManagerService {
     }
     /**
      * Patch Supplier Warehouse
+     * Patch submitted warehouse fields under its supplier. Missing warehouse or wrong supplier
+     * returns 404; invalid values return 400.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param supplierId
      * @param warehouseId
      * @param requestBody
@@ -2076,6 +2165,14 @@ export class ManagerService {
     }
     /**
      * Delete Supplier Warehouse
+     * Delete a warehouse under its supplier. Missing warehouse or wrong supplier returns 404,
+     * including a repeat after deletion.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param supplierId
      * @param warehouseId
      * @returns ManagerActionMessageResponse Successful Response
@@ -2099,6 +2196,15 @@ export class ManagerService {
     }
     /**
      * List Supplier Sheets
+     * Read Google spreadsheet tab metadata from the selected supplier’s configured
+     * spreadsheet. Missing supplier/spreadsheet configuration or upstream read failure returns
+     * 400; this is an external read, not an offer sync.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param supplierId
      * @returns SupplierSheetTabListResponse Successful Response
      * @throws ApiError
@@ -2119,6 +2225,14 @@ export class ManagerService {
     }
     /**
      * List Supplier Sources
+     * List shared supplier price-source configurations, including supplier names. This
+     * endpoint does not paginate or sync source contents.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @returns SupplierPriceSourceListResponse Successful Response
      * @throws ApiError
      */
@@ -2130,6 +2244,15 @@ export class ManagerService {
     }
     /**
      * Create Supplier Source
+     * Create a price-source configuration after verifying the supplier spreadsheet and sheet
+     * tab. A missing supplier, unconfigured spreadsheet or invalid sheet returns 400. Saving
+     * does not perform an offer sync.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param requestBody
      * @returns SupplierPriceSourceResponse Successful Response
      * @throws ApiError
@@ -2149,6 +2272,15 @@ export class ManagerService {
     }
     /**
      * Patch Supplier Source
+     * Patch submitted source configuration fields; supplier/sheet changes are checked against
+     * available tabs. Missing source returns 404; invalid configuration returns 400. Saving
+     * does not perform an offer sync.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param sourceId
      * @param requestBody
      * @returns SupplierPriceSourceResponse Successful Response
@@ -2173,6 +2305,15 @@ export class ManagerService {
     }
     /**
      * Delete Supplier Source
+     * Delete a source and deactivate its offers and corresponding mappings. Missing source
+     * returns 404, including a repeat after deletion; deleting is not merely hiding its
+     * configuration.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param sourceId
      * @returns ManagerActionMessageResponse Successful Response
      * @throws ApiError
@@ -2193,6 +2334,15 @@ export class ManagerService {
     }
     /**
      * Analyze Supplier Source
+     * Read source spreadsheet rows and analyze their column mapping without importing offers.
+     * This existing endpoint accepts limit 1–200 (default 50). Missing source or missing
+     * spreadsheet configuration raises 404; other read/analysis failures return 400.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param sourceId
      * @param limit
      * @returns SupplierSourceAnalysisResponse Successful Response
@@ -2218,6 +2368,17 @@ export class ManagerService {
     }
     /**
      * Sync Supplier Source
+     * Run source synchronization now and return its recorded run result. Sync updates supplier
+     * offers and can deactivate offers missing from the source. Inspect run status/error even
+     * on HTTP success; source-processing failures can be captured in the run. Unknown source
+     * returns 404; adapter exceptions can return 400. A repeat starts another run, not a
+     * receipt replay.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param sourceId
      * @returns SupplierSyncRunResponse Successful Response
      * @throws ApiError
@@ -2238,6 +2399,15 @@ export class ManagerService {
     }
     /**
      * Sync All Supplier Sources
+     * Synchronize active configured sources and return run results. Inspect each run
+     * status/error; a repeat runs synchronization again. Unhandled orchestration failure
+     * returns 400.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @returns SupplierSyncRunResponse Successful Response
      * @throws ApiError
      */
@@ -2249,6 +2419,14 @@ export class ManagerService {
     }
     /**
      * List Unmapped Supplier Offers
+     * Page active offers without an active product mapping, optionally filtered by supplier,
+     * source and query. limit is 1–100; meta describes the filtered set.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param page
      * @param limit
      * @param supplierId
@@ -2281,6 +2459,15 @@ export class ManagerService {
     }
     /**
      * List Supplier Source Url Import Candidates
+     * Find active unmapped offers with a source URL not already represented by a product.
+     * Normalized URLs are deduplicated. This existing endpoint accepts limit 1–200, default
+     * 100; total is the returned candidate count, not an exhaustive paginated total.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param limit
      * @param supplierId
      * @param sourceId
@@ -2307,6 +2494,15 @@ export class ManagerService {
     }
     /**
      * Start Supplier Source Url Import
+     * Start a catalog import job from trimmed, deduplicated URLs and return its job
+     * ID/status/stage. Empty URLs return 400. It starts a job rather than waiting for all
+     * products; this is not a supplier push endpoint.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param requestBody
      * @returns CatalogImportJobStartResponse Successful Response
      * @throws ApiError
@@ -2326,6 +2522,14 @@ export class ManagerService {
     }
     /**
      * Suggest Supplier Offers
+     * Return product match suggestions for submitted supplier-offer identifiers. Suggestions
+     * do not create or replace mappings; the per-offer bound is supplied in the request model.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param requestBody
      * @returns SupplierOfferSuggestionsResponse Successful Response
      * @throws ApiError
@@ -2345,6 +2549,15 @@ export class ManagerService {
     }
     /**
      * Create Supplier Mapping
+     * Create an active product mapping for a supplier/external_id offer key, recording the
+     * current Manager actor. Missing product/offer, inactive offer or an already-mapped key
+     * returns 400. A repeated POST is not an idempotent replay.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param requestBody
      * @returns SupplierMappingResponse Successful Response
      * @throws ApiError
@@ -2364,6 +2577,15 @@ export class ManagerService {
     }
     /**
      * Create Supplier Mappings Bulk
+     * Create product mappings item by item. With skip_conflicts=true, skipped items and their
+     * errors are returned beside counts. This is not atomic: earlier created mappings may
+     * remain when a later item fails; inspect the result before retrying a batch.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param requestBody
      * @returns SupplierMappingBulkCreateResponse Successful Response
      * @throws ApiError
@@ -2383,6 +2605,14 @@ export class ManagerService {
     }
     /**
      * Delete Supplier Mapping
+     * Delete a supplier-to-product mapping. Missing mapping returns 404, including a repeat
+     * after successful deletion.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param mappingId
      * @returns any Successful Response
      * @throws ApiError
@@ -2403,6 +2633,16 @@ export class ManagerService {
     }
     /**
      * Get Product Supplier Offers
+     * Read supplier offers linked by active mappings to the selected shared product, including
+     * inactive offers. Returns an empty list when no linked offers exist; it does not
+     * separately validate product existence. This is platform purchase information, not a
+     * public storefront price list.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param productId
      * @returns SupplierOfferListResponse Successful Response
      * @throws ApiError
@@ -2423,6 +2663,14 @@ export class ManagerService {
     }
     /**
      * Upsert Product Local Stock
+     * Set the selected product’s local Vitebsk stock quantity and record the actor. Missing
+     * product returns 404. This sets an absolute quantity rather than incrementing stock.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param productId
      * @param requestBody
      * @returns ProductLocalStockResponse Successful Response
@@ -2447,6 +2695,14 @@ export class ManagerService {
     }
     /**
      * List Supply Requests
+     * Page supply requests filtered by status, supplier, warehouse, source type or order.
+     * limit is 1–100; invalid business filters return 400.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param page
      * @param limit
      * @param status
@@ -2485,6 +2741,15 @@ export class ManagerService {
     }
     /**
      * Create Supply Request
+     * Create a supply request from explicit lines and supplier/warehouse context. Invalid
+     * combinations return 400. No Idempotency-Key receipt is provided; reconcile creation
+     * before repeating a lost response.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param requestBody
      * @returns SupplyRequestCreateResponse Successful Response
      * @throws ApiError
@@ -2504,6 +2769,15 @@ export class ManagerService {
     }
     /**
      * Create Supply Request From Order Lines
+     * Create supply requests from selected order lines, checking the order in the
+     * authenticated Manager scope. Invalid or unavailable selections return 400; resulting
+     * supply records remain platform-managed.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param requestBody
      * @returns SupplyRequestCreateResponse Successful Response
      * @throws ApiError
@@ -2523,6 +2797,15 @@ export class ManagerService {
     }
     /**
      * Create Stock Supply Request
+     * Create stock replenishment supply requests from submitted items. Invalid
+     * supplier/product/warehouse context returns 400; no client idempotency receipt is
+     * provided.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param requestBody
      * @returns SupplyRequestCreateResponse Successful Response
      * @throws ApiError
@@ -2542,6 +2825,14 @@ export class ManagerService {
     }
     /**
      * Patch Supply Request
+     * Patch submitted supply-request fields, validating its state and business relationships.
+     * Service validation failures, including missing request, return 400.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param requestId
      * @param requestBody
      * @returns SupplyRequestResponse Successful Response
@@ -2566,6 +2857,14 @@ export class ManagerService {
     }
     /**
      * Patch Supply Request Line
+     * Patch submitted fields of a supply-request line and validate its request context.
+     * Service validation failures, including missing line, return 400.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param lineId
      * @param requestBody
      * @returns SupplyRequestResponse Successful Response
@@ -2590,6 +2889,16 @@ export class ManagerService {
     }
     /**
      * Generate Supply Request Supplier Message
+     * Generate supplier message text for a supply request. mark_sent records a snapshot/time
+     * and advances the request/active lines to awaiting_reply (reserve) or ordered; this
+     * handler returns text and does not send it to the supplier. Invalid request/state returns
+     * 400.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param requestId
      * @param requestBody
      * @returns SupplyMessageResponse Successful Response
@@ -2614,6 +2923,16 @@ export class ManagerService {
     }
     /**
      * Generate Supply Logistics Message
+     * Generate logistics message text for selected supply requests. mark_sent records a
+     * snapshot/time and can advance ordered/awaiting_reply/reserved requests and active lines
+     * to ready_for_pickup; this handler does not deliver the message. Invalid selection/state
+     * returns 400.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param requestBody
      * @returns SupplyMessageResponse Successful Response
      * @throws ApiError
@@ -2633,6 +2952,16 @@ export class ManagerService {
     }
     /**
      * List Product Supplier Offer Candidates
+     * Page offer candidates for a product within the required supplier and optional
+     * source/query. Defaults to active offers; include_inactive includes inactive candidates.
+     * Each row reports free/current/conflict/inactive mapping status. limit is 1–100. Missing
+     * product returns 404.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param productId
      * @param supplierId
      * @param sourceId
@@ -2673,6 +3002,18 @@ export class ManagerService {
     }
     /**
      * Put Supplier Offer Mapping
+     * Map an active offer to a product. Replacing another active mapping requires
+     * replace_existing plus both expected_mapping_id and expected_product_id; concurrent
+     * changes or a conflicting mapping return 409. Read candidates again before resolving a
+     * conflict. Mapping to the already-current product returns the existing mapping. Missing
+     * offer/product returns 404; inactive offer returns 400. This does not accept a generic
+     * Idempotency-Key.
+     *
+     * Access and scope: system-tenant Manager access is required; these are platform-global
+     * supplier/supply records, not a supplier self-service API. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+     * and [supplier
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
      * @param offerId
      * @param requestBody
      * @returns SupplierOfferMappingResponse Successful Response

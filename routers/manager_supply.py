@@ -110,6 +110,16 @@ async def list_suppliers(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    List supplier profiles in the shared platform directory; this endpoint has no page/limit
+    parameters.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     return await SupplierCatalogService.list_suppliers(session)
 
 
@@ -119,6 +129,17 @@ async def create_supplier(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Create a supplier profile, normalizing its code and optional Google spreadsheet
+    reference. This does not create a partner account or fetch its offers. Invalid
+    configuration returns 400; POST has no client idempotency receipt.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     try:
         return await SupplierCatalogService.create_supplier(session, payload.model_dump())
     except Exception as exc:
@@ -137,6 +158,16 @@ async def patch_supplier(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Update only submitted supplier profile fields and normalize code/spreadsheet changes.
+    Missing supplier returns 404; invalid configuration returns 400.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     try:
         result = await SupplierCatalogService.update_supplier(
             session, supplier_id, payload.model_dump(exclude_unset=True)
@@ -168,6 +199,18 @@ async def delete_supplier(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Delete a shared supplier and its supply requests/lines, contacts, warehouses, mappings,
+    offers, sync runs and price sources. Missing supplier returns 404, including a repeat
+    after successful deletion. This removes the supplier’s related platform data, not just
+    its profile.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     ok = await SupplierCatalogService.delete_supplier(session, supplier_id)
     if not ok:
         raise manager_http_error(
@@ -189,6 +232,15 @@ async def list_supplier_contacts(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    List contacts belonging to one supplier. Missing supplier returns 404.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     try:
         return await SupplierProfileService.list_contacts(session, supplier_id)
     except ValueError as exc:
@@ -211,6 +263,16 @@ async def create_supplier_contact(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Create a contact under the selected supplier. Invalid supplier/contact configuration
+    returns 400; no client idempotency receipt is provided.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     try:
         return await SupplierProfileService.create_contact(session, supplier_id, payload.model_dump())
     except ValueError as exc:
@@ -234,6 +296,16 @@ async def patch_supplier_contact(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Patch submitted contact fields under the specified supplier. A contact outside that
+    supplier or missing contact returns 404; invalid values return 400.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     try:
         result = await SupplierProfileService.update_contact(
             session,
@@ -269,6 +341,16 @@ async def delete_supplier_contact(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Delete a contact under the specified supplier. Missing contact or wrong supplier returns
+    404, including a repeat after successful deletion.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     ok = await SupplierProfileService.delete_contact(session, supplier_id, contact_id)
     if not ok:
         raise manager_http_error(
@@ -290,6 +372,15 @@ async def list_supplier_warehouses(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    List warehouse profiles belonging to a supplier. Missing supplier returns 404.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     try:
         return await SupplierProfileService.list_warehouses(session, supplier_id)
     except ValueError as exc:
@@ -312,6 +403,16 @@ async def create_supplier_warehouse(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Create a warehouse profile under a supplier. Invalid supplier/warehouse configuration
+    returns 400; no client idempotency receipt is provided.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     try:
         return await SupplierProfileService.create_warehouse(session, supplier_id, payload.model_dump())
     except ValueError as exc:
@@ -335,6 +436,16 @@ async def patch_supplier_warehouse(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Patch submitted warehouse fields under its supplier. Missing warehouse or wrong supplier
+    returns 404; invalid values return 400.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     try:
         result = await SupplierProfileService.update_warehouse(
             session,
@@ -370,6 +481,16 @@ async def delete_supplier_warehouse(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Delete a warehouse under its supplier. Missing warehouse or wrong supplier returns 404,
+    including a repeat after deletion.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     ok = await SupplierProfileService.delete_warehouse(session, supplier_id, warehouse_id)
     if not ok:
         raise manager_http_error(
@@ -387,6 +508,17 @@ async def list_supplier_sheets(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Read Google spreadsheet tab metadata from the selected supplier’s configured
+    spreadsheet. Missing supplier/spreadsheet configuration or upstream read failure returns
+    400; this is an external read, not an offer sync.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     try:
         items = await SupplierCatalogService.list_supplier_sheets(session, supplier_id)
         return {"items": items}
@@ -411,6 +543,16 @@ async def list_supplier_sources(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    List shared supplier price-source configurations, including supplier names. This
+    endpoint does not paginate or sync source contents.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     return await SupplierCatalogService.list_sources(session)
 
 
@@ -420,6 +562,17 @@ async def create_supplier_source(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Create a price-source configuration after verifying the supplier spreadsheet and sheet
+    tab. A missing supplier, unconfigured spreadsheet or invalid sheet returns 400. Saving
+    does not perform an offer sync.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     try:
         return await SupplierCatalogService.create_source(session, payload.model_dump())
     except Exception as exc:
@@ -442,6 +595,17 @@ async def patch_supplier_source(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Patch submitted source configuration fields; supplier/sheet changes are checked against
+    available tabs. Missing source returns 404; invalid configuration returns 400. Saving
+    does not perform an offer sync.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     try:
         result = await SupplierCatalogService.update_source(
             session, source_id, payload.model_dump(exclude_unset=True)
@@ -473,6 +637,17 @@ async def delete_supplier_source(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Delete a source and deactivate its offers and corresponding mappings. Missing source
+    returns 404, including a repeat after deletion; deleting is not merely hiding its
+    configuration.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     ok = await SupplierCatalogService.delete_source(session, source_id)
     if not ok:
         raise manager_http_error(
@@ -495,6 +670,17 @@ async def analyze_supplier_source(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Read source spreadsheet rows and analyze their column mapping without importing offers.
+    This existing endpoint accepts limit 1–200 (default 50). Missing source or missing
+    spreadsheet configuration raises 404; other read/analysis failures return 400.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     try:
         return await SupplierCatalogService.analyze_source(session, source_id, limit=limit)
     except ValueError as exc:
@@ -523,6 +709,19 @@ async def sync_supplier_source(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Run source synchronization now and return its recorded run result. Sync updates supplier
+    offers and can deactivate offers missing from the source. Inspect run status/error even
+    on HTTP success; source-processing failures can be captured in the run. Unknown source
+    returns 404; adapter exceptions can return 400. A repeat starts another run, not a
+    receipt replay.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     try:
         return await SupplierSyncService.sync_source_by_id(session, source_id)
     except ValueError as exc:
@@ -550,6 +749,17 @@ async def sync_all_supplier_sources(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Synchronize active configured sources and return run results. Inspect each run
+    status/error; a repeat runs synchronization again. Unhandled orchestration failure
+    returns 400.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     try:
         return await SupplierSyncService.sync_all_active_sources(session)
     except Exception as exc:
@@ -575,6 +785,16 @@ async def list_unmapped_supplier_offers(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Page active offers without an active product mapping, optionally filtered by supplier,
+    source and query. limit is 1–100; meta describes the filtered set.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     return await SupplierMappingService.list_unmapped(
         session=session,
         supplier_id=supplier_id,
@@ -597,6 +817,17 @@ async def list_supplier_source_url_import_candidates(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Find active unmapped offers with a source URL not already represented by a product.
+    Normalized URLs are deduplicated. This existing endpoint accepts limit 1–200, default
+    100; total is the returned candidate count, not an exhaustive paginated total.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     return await SupplierMappingService.list_source_url_import_candidates(
         session=session,
         supplier_id=supplier_id,
@@ -614,6 +845,17 @@ async def start_supplier_source_url_import(
     payload: SupplierSourceUrlImportPayload,
     _user: str = Depends(get_current_username),
 ):
+    """
+    Start a catalog import job from trimmed, deduplicated URLs and return its job
+    ID/status/stage. Empty URLs return 400. It starts a job rather than waiting for all
+    products; this is not a supplier push endpoint.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     urls = [url.strip() for url in payload.urls if url.strip()]
     if not urls:
         raise manager_http_error(
@@ -644,6 +886,16 @@ async def suggest_supplier_offers(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Return product match suggestions for submitted supplier-offer identifiers. Suggestions
+    do not create or replace mappings; the per-offer bound is supplied in the request model.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     return await SupplierMappingService.suggest_for_offers(
         session=session,
         items=[i.model_dump() for i in payload.items],
@@ -661,6 +913,17 @@ async def create_supplier_mapping(
     session: AsyncSession = Depends(get_session),
     user: str = Depends(get_current_username),
 ):
+    """
+    Create an active product mapping for a supplier/external_id offer key, recording the
+    current Manager actor. Missing product/offer, inactive offer or an already-mapped key
+    returns 400. A repeated POST is not an idempotent replay.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     try:
         return await SupplierMappingService.create_mapping(
             session=session,
@@ -688,6 +951,17 @@ async def create_supplier_mappings_bulk(
     session: AsyncSession = Depends(get_session),
     user: str = Depends(get_current_username),
 ):
+    """
+    Create product mappings item by item. With skip_conflicts=true, skipped items and their
+    errors are returned beside counts. This is not atomic: earlier created mappings may
+    remain when a later item fails; inspect the result before retrying a batch.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     return await SupplierMappingService.create_bulk_mappings(
         session=session,
         items=[i.model_dump() for i in payload.items],
@@ -702,6 +976,16 @@ async def delete_supplier_mapping(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Delete a supplier-to-product mapping. Missing mapping returns 404, including a repeat
+    after successful deletion.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     ok = await SupplierMappingService.delete_mapping(session, mapping_id)
     if not ok:
         raise manager_http_error(
@@ -723,6 +1007,18 @@ async def get_product_supplier_offers(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Read supplier offers linked by active mappings to the selected shared product, including
+    inactive offers. Returns an empty list when no linked offers exist; it does not
+    separately validate product existence. This is platform purchase information, not a
+    public storefront price list.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     return await SupplierMappingService.list_product_offers(session, product_id)
 
 
@@ -737,6 +1033,16 @@ async def upsert_product_local_stock(
     session: AsyncSession = Depends(get_session),
     user: str = Depends(get_current_username),
 ):
+    """
+    Set the selected product’s local Vitebsk stock quantity and record the actor. Missing
+    product returns 404. This sets an absolute quantity rather than incrementing stock.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     try:
         return await SupplierMappingService.upsert_vitebsk_stock(
             session=session,
@@ -769,6 +1075,16 @@ async def list_supply_requests(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Page supply requests filtered by status, supplier, warehouse, source type or order.
+    limit is 1–100; invalid business filters return 400.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     try:
         return await SupplyRequestService.list_requests(
             session,
@@ -799,6 +1115,17 @@ async def create_supply_request(
     session: AsyncSession = Depends(get_session),
     user: str = Depends(get_current_username),
 ):
+    """
+    Create a supply request from explicit lines and supplier/warehouse context. Invalid
+    combinations return 400. No Idempotency-Key receipt is provided; reconcile creation
+    before repeating a lost response.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     try:
         return await SupplyRequestService.create_request(session, payload.model_dump(), created_by=user)
     except ValueError as exc:
@@ -820,6 +1147,17 @@ async def create_supply_request_from_order_lines(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ):
+    """
+    Create supply requests from selected order lines, checking the order in the
+    authenticated Manager scope. Invalid or unavailable selections return 400; resulting
+    supply records remain platform-managed.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     try:
         return await SupplyRequestService.create_from_order_lines(
             session,
@@ -846,6 +1184,17 @@ async def create_stock_supply_request(
     session: AsyncSession = Depends(get_session),
     user: str = Depends(get_current_username),
 ):
+    """
+    Create stock replenishment supply requests from submitted items. Invalid
+    supplier/product/warehouse context returns 400; no client idempotency receipt is
+    provided.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     try:
         return await SupplyRequestService.create_stock_requests(session, payload.model_dump(), created_by=user)
     except ValueError as exc:
@@ -868,6 +1217,16 @@ async def patch_supply_request(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Patch submitted supply-request fields, validating its state and business relationships.
+    Service validation failures, including missing request, return 400.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     try:
         return await SupplyRequestService.update_request(
             session,
@@ -894,6 +1253,16 @@ async def patch_supply_request_line(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Patch submitted fields of a supply-request line and validate its request context.
+    Service validation failures, including missing line, return 400.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     try:
         return await SupplyRequestService.update_line(
             session,
@@ -920,6 +1289,18 @@ async def generate_supply_request_supplier_message(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Generate supplier message text for a supply request. mark_sent records a snapshot/time
+    and advances the request/active lines to awaiting_reply (reserve) or ordered; this
+    handler returns text and does not send it to the supplier. Invalid request/state returns
+    400.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     try:
         return await SupplyRequestService.generate_supplier_message(
             session,
@@ -945,6 +1326,18 @@ async def generate_supply_logistics_message(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Generate logistics message text for selected supply requests. mark_sent records a
+    snapshot/time and can advance ordered/awaiting_reply/reserved requests and active lines
+    to ready_for_pickup; this handler does not deliver the message. Invalid selection/state
+    returns 400.
+
+    Access and scope: system-tenant Manager access is required; these are platform-global
+    supplier/supply records, not a supplier self-service API. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager)
+    and [supplier
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/api/supplier-integration-boundary.md).
+    """
     try:
         return await SupplyRequestService.generate_logistics_message(
             session,

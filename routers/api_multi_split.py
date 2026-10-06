@@ -25,6 +25,15 @@ async def list_public_multi_split_options(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
+    """
+    List storefront-visible indoor or outdoor units for multi-split selection, with public
+    prices and pagination; limit is at most 100.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     return await MultiSplitConfigurationService.list_options(
         session, tenant_scope=tenant_scope, kind=kind, page=page, limit=limit,
     )
@@ -36,6 +45,16 @@ async def preview_public_multi_split(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
+    """
+    Validate a multi-split selection server-side in the resolved storefront and return its
+    public price projection without creating a lead. Invalid or incompatible selection
+    returns 422.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     try:
         preview = await MultiSplitConfigurationService.preview(
             session, tenant_scope=tenant_scope, request=payload,
@@ -57,6 +76,19 @@ async def create_public_multi_split_lead(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
+    """
+    Validate a multi-split selection and create a lead in this storefront. Idempotency-Key
+    is required; invalid selection or intake values return 422. For required keys, unsigned
+    compatibility, conflicting payloads (409) and retries after 503 with Retry-After, see
+    [public write
+    idempotency](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#public-write-idempotency).
+    Retain the same key and content when retrying.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     try:
         return await MultiSplitLeadService.create(
             session, tenant_scope=tenant_scope, payload=payload, idempotency_key=idempotency_key,

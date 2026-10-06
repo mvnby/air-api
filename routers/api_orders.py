@@ -88,8 +88,18 @@ async def create_order(
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
     """
-    Create a new order from website.
-    Accepts customer information and cart items.
+    Create an order from the resolved storefront cart and customer details. The server
+    verifies pricing and installation acceptance; pricing conflicts return 409. Installation
+    acceptance requires exactly one submitted Idempotency-Key even for unsigned
+    compatibility clients. For required keys, unsigned compatibility, conflicting payloads
+    (409) and retries after 503 with Retry-After, see [public write
+    idempotency](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#public-write-idempotency).
+    Retain the same key and content when retrying.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
     """
     key_headers = [value for name, value in request.scope.get("headers", ())
                    if name.lower() == b"idempotency-key"]

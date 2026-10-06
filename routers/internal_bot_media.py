@@ -42,6 +42,15 @@ async def list_recent_orders(
     payload: BotOrderListRequest,
     session: AsyncSession = Depends(get_session),
 ) -> BotOrderListResponse:
+    """
+    List recent system-tenant orders for an active Manager Telegram actor (403 otherwise).
+    Uses the requested response bound; it is not a storefront catalog or a general tenant
+    selector.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     try:
         orders = await BotMediaApiService.list_recent_orders(
             session, telegram_id=payload.telegram_id, limit=payload.limit
@@ -67,6 +76,16 @@ async def attach_order_file(
     file: UploadFile = File(),
     session: AsyncSession = Depends(get_session),
 ) -> BotOrderAttachmentResponse:
+    """
+    Attach a nonempty file (at most 10 MB) to an accessible system-tenant order. Requires
+    active staff; Managers can attach beyond their own assigned execution. Access denial
+    returns 403 and unavailable order 404. Empty/oversize uploads return 422/413. file_id
+    deduplicates attachments; inspect already_attached.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     content, filename, mime_type = await read_bot_upload(file)
     try:
         result = await BotMediaApiService.attach_to_order(
@@ -99,6 +118,14 @@ async def list_repair_nameplate_orders(
     payload: BotOrderListRequest,
     session: AsyncSession = Depends(get_session),
 ) -> BotOrderListResponse:
+    """
+    List repair orders in the system tenant available to the staff actor under repair-order
+    access rules. Managers may access beyond assigned execution; non-staff return 403.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     try:
         orders = await BotMediaApiService.list_repair_orders(
             session, telegram_id=payload.telegram_id, limit=payload.limit
@@ -121,6 +148,15 @@ async def recognize_repair_nameplate(
     file: UploadFile = File(),
     session: AsyncSession = Depends(get_session),
 ) -> BotNameplateRecognitionResponse:
+    """
+    Recognize an equipment nameplate for a repair order accessible to the staff actor in the
+    system tenant. Does not apply the recognized data. Non-staff return 403, unavailable
+    order 404, empty/oversize upload 422/413; file must be at most 10 MB.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     content, filename, mime_type = await read_bot_upload(file)
     try:
         result = await BotMediaApiService.recognize_repair_nameplate(
@@ -155,6 +191,17 @@ async def apply_repair_nameplate(
     file: UploadFile = File(),
     session: AsyncSession = Depends(get_session),
 ) -> BotNameplateApplyResponse:
+    """
+    Apply submitted recognition data and attach its file to an accessible repair order in
+    the system tenant. Requires active staff with order access (403/404 otherwise).
+    extracted_json and validation_json must be JSON objects; invalid JSON/empty file returns
+    422 and file above 10 MB returns 413. Telegram file_id participates in attachment
+    reconciliation.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     content, filename, mime_type = await read_bot_upload(file)
     try:
         result = await BotMediaApiService.apply_repair_nameplate(
@@ -187,6 +234,15 @@ async def list_warranty_nameplate_orders(
     payload: BotOrderListRequest,
     session: AsyncSession = Depends(get_session),
 ) -> BotOrderListResponse:
+    """
+    List warranty orders available to the staff actor in the system tenant and return the
+    service’s execution/Manager scope marker. Non-staff return 403; access is checked before
+    listing.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     try:
         result = await BotMediaApiService.list_warranty_orders(
             session, telegram_id=payload.telegram_id, limit=payload.limit
@@ -211,6 +267,15 @@ async def recognize_warranty_nameplate(
     file: UploadFile = File(),
     session: AsyncSession = Depends(get_session),
 ) -> BotNameplateRecognitionResponse:
+    """
+    Recognize the selected indoor/outdoor unit nameplate for an accessible warranty order in
+    the system tenant, without applying it. Requires active staff (403); unavailable order
+    returns 404. Empty/oversize upload returns 422/413; file must be at most 10 MB.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     content, filename, mime_type = await read_bot_upload(file)
     try:
         result = await BotMediaApiService.recognize_warranty_nameplate(
@@ -247,6 +312,16 @@ async def apply_warranty_nameplate(
     file: UploadFile = File(),
     session: AsyncSession = Depends(get_session),
 ) -> BotNameplateApplyResponse:
+    """
+    Apply submitted indoor/outdoor nameplate data and attach its file to an accessible
+    warranty order in the system tenant. Requires active staff (403); unavailable order
+    returns 404. JSON object parsing and empty file validation return 422; file above 10 MB
+    returns 413. Telegram file_id is passed to the attachment workflow.
+
+    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
+    checks are separate. See [bot
+    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+    """
     content, filename, mime_type = await read_bot_upload(file)
     try:
         result = await BotMediaApiService.apply_warranty_nameplate(

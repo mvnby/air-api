@@ -25,6 +25,16 @@ async def get_public_product_collection_placement(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_public_tenant_scope),
 ):
+    """
+    Resolve published product collections for a storefront surface and slot. Keys are
+    lowercased before resolution; the result contains the placement projection rather than
+    editable collection definitions.
+
+    Access and scope: storefront context is resolved by the public gateway; tenant-aware
+    operations use that storefront. Signed headers are verified outside OpenAPI. See
+    [storefront
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/storefront-context-contract.md#resolution-and-compatibility).
+    """
     return await ProductCollectionResolver.resolve_placement(
         session,
         surface_key=surface_key.lower(),
