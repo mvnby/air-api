@@ -58,12 +58,19 @@ class RawLeadInboxService:
         lines = [line.strip() for line in lead.request_text.splitlines() if line.strip()]
         subject = next((line for line in lines if line != 'Заявка с сайта' and not line.startswith('Адрес/район:')), None)
         location = next((line.partition(':')[2].strip() for line in lines if line.startswith('Адрес/район:')), None)
+        meta = lead.intake_meta or {}
+        location = meta.get('address_text') or meta.get('region_text') or location
+        missing = ([] if lead.phone or lead.email else ['contact']) + ([] if meta.get('address_text') else ['address'])
+        intake_state = ('needs_contact' if 'contact' in missing else 'needs_details' if missing else 'ready_for_review') if lead.intake_event_key else None
         return LeadsInboxItemResponse(id=lead.id, entity_kind='lead', status=str(lead.status.value if hasattr(lead.status, 'value') else lead.status),
             is_new=not is_read and archive is None, is_read=is_read, read_at=read.read_at if read else None,
             title=(subject or 'Обращение с сайта')[:180], summary=lead.request_text[:400], comment=lead.request_text,
             customer_name=lead.company_name or lead.name, phone=lead.phone, email=lead.email, customer_inn=lead.inn,
             customer_full_legal_name=lead.company_name, location=location, customer_delivery_address=location,
-            source=lead.source, created_at=lead.created_at, source_created_at=lead.created_at,
+            source=lead.source, created_at=lead.created_at, source_created_at=meta.get('source_occurred_at') or lead.created_at,
+            intake_state=intake_state, intake_version=lead.version if intake_state else None,
+            requested_time_text=meta.get('requested_time_text'), requested_at=meta.get('requested_at'),
+            missing_fields=missing if intake_state else [],
             next_followup_at=(lead.next_followup_date.replace(tzinfo=timezone.utc)
                 if lead.next_followup_date and lead.next_followup_date.tzinfo is None else lead.next_followup_date),
             archive=archive)
@@ -84,7 +91,7 @@ class RawLeadInboxService:
                 InboxEvent.tenant_id == tenant_scope.tenant_id, InboxEvent.storefront_id == tenant_scope.storefront_id,
                 InboxEvent.kind == 'no_answer'))).one()
         item.no_answer_count, item.no_answer_at = count, last_attempt
-        return LeadsInboxDetailResponse(**item.model_dump(),
+        return LeadsInboxDetailResponse(**item.model_dump(), original_text=(row[0].intake_meta or {}).get('original_text', row[0].request_text),
             history=[LeadsInboxHistoryResponse.model_validate(event) for event in events])
 
     @classmethod
@@ -147,5 +154,8 @@ class RawLeadInboxService:
                 session.add(InboxEvent(**identity, kind='no_answer', actor=username, note=payload.note, next_followup_at=when))
             else:
                 raise ValueError('Неизвестное действие')
+            if action != 'read':
+                lead.version += 1
+                session.add(lead)
             await session.flush()
         return await cls.detail(session, lead_id, username=username, tenant_scope=tenant_scope)

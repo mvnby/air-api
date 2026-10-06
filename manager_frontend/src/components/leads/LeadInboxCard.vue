@@ -3,12 +3,13 @@ import { computed, ref, watch } from 'vue';
 import { leadInboxApi, notifyInboxChanged, type InboxItem, type InboxHistory, type InboxContactRequest } from '../../services/lead-inbox';
 import LeadInboxDetails from './LeadInboxDetails.vue';
 import LeadRefusalPanel from './LeadRefusalPanel.vue';
-const props = defineProps<{ item: InboxItem; isArchive?: boolean; contactSaving?: boolean }>();
+const props = defineProps<{ item: InboxItem; isArchive?: boolean; contactSaving?: boolean; quickIncoming?: boolean }>();
 const emit = defineEmits<{
   (e: 'qualify', item: InboxItem): void; (e: 'no-answer', request: InboxContactRequest): void;
   (e: 'review-source', item: InboxItem): void; (e: 'link-changed'): void;
   (e: 'updated', item: InboxItem): void; (e: 'archived', item: InboxItem): void;
   (e: 'restore', item: InboxItem): void; (e: 'details-closed'): void;
+  (e: 'edit-incoming'): void;
 }>();
 const expanded = ref(false);
 const refusing = ref(false);
@@ -31,6 +32,14 @@ const date = (value: string) => { const parsed = new Date(value); return Number.
 const displayDate = computed(() => props.item.source_created_at || props.item.created_at);
 const deadline = computed(() => props.item.deadline_at || props.item.tender?.deadline_at);
 const budget = computed(() => props.item.budget_amount == null ? null : new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(props.item.budget_amount));
+const missingFieldNames: Record<string, string> = { name: 'имя', phone: 'телефон', email: 'email', address_text: 'адрес', region_text: 'регион', requested_time_text: 'желаемое время' };
+const visibleMissingFields = computed(() => (props.item.missing_fields || []).map(field => missingFieldNames[field] || field));
+const intakeLabel = computed(() => {
+  if (props.item.intake_state === 'ready_for_review') return 'Готово к проверке';
+  if (visibleMissingFields.value.includes('адрес') || visibleMissingFields.value.includes('регион')) return 'Нужно уточнить адрес';
+  if (props.item.intake_state === 'needs_contact') return 'Нужен контакт';
+  return 'Нужно уточнить детали';
+});
 const setRead = async (isRead: boolean) => {
   if (readSaving.value) return;
   readSaving.value = true; error.value = '';
@@ -64,6 +73,11 @@ const markUnread = async () => { await setRead(false); if (!error.value) expande
       <div class="headline"><div class="subject"><h2><button type="button" class="title" :title="title" :aria-expanded="expanded" :aria-controls="regionId" @click="toggleDetails">{{ title }}</button></h2><p class="customer">{{ customer }}<span v-if="item.customer_type === 'individual_entrepreneur'"> · ИП</span><span v-if="item.customer_inn"> · УНП {{ item.customer_inn }}</span></p></div><div v-if="budget !== null" class="budget"><small>Бюджет</small><strong>{{ budget }} {{ item.budget_currency || '' }}</strong></div></div>
       <div v-if="deadline || item.auto_archive_at || item.location || item.quantity != null || item.attachment_count" class="facts"><span v-if="deadline" class="deadline">{{ item.source_kind === 'tender' || item.source === 'belzakupki' ? 'Срок подачи' : 'Срок' }}: {{ date(deadline) }}</span><span v-if="!isArchive && item.auto_archive_at">В архив автоматически: {{ date(item.auto_archive_at) }}</span><span v-if="item.quantity != null">{{ item.quantity }} ед.</span><span v-if="item.location">{{ item.location }}</span><button v-if="item.attachment_count && item.entity_kind !== 'lead'" type="button" :aria-expanded="expanded" :aria-controls="`lead-attachments-${item.id}`" :aria-label="`Показать вложения обращения: ${item.attachment_count}`" @click="toggleDetails">Вложения: {{ item.attachment_count }}</button></div>
       <p v-if="summary" class="blurb">{{ summary }}</p>
+      <div v-if="quickIncoming" class="quick-intake" data-testid="quick-incoming-state">
+        <strong>{{ intakeLabel }}</strong><span v-if="visibleMissingFields.length">Не указано: {{ visibleMissingFields.join(', ') }}</span>
+        <p v-if="item.requested_time_text">Пожелание клиента по времени: «{{ item.requested_time_text }}» · это не запись</p>
+        <p v-if="item.intake_state !== 'ready_for_review'">Следующий шаг: <a href="/manager/tasks">создайте поручение на уточнение</a>.</p>
+      </div>
       <p v-if="item.commercial_terms_summary?.length" class="terms-summary">{{ item.commercial_terms_summary.join(' · ') }}</p>
       <div v-if="item.related_requests?.length" class="related-requests"><p v-for="related in item.related_requests" :key="related.order_id"><strong>Эта закупка уже встречалась:</strong> <a :href="`/manager/orders/kanban?orderId=${related.order_id}`">#{{ related.order_id }} {{ related.title }}</a><span v-if="related.outcome"> · {{ outcomes[related.outcome] || related.outcome }}</span><span v-if="related.reason"> · {{ reasons[related.reason] || related.reason }}</span><span v-if="related.note"> · {{ related.note }}</span></p></div>
       <p v-if="item.no_answer_at" class="no-answer">Нет ответа: {{ date(item.no_answer_at) }}<span v-if="item.no_answer_count && item.no_answer_count > 1"> · Попыток: {{ item.no_answer_count }}</span><span v-if="item.next_followup_at"> · Следующий контакт: {{ date(item.next_followup_at) }}</span></p>
@@ -73,6 +87,7 @@ const markUnread = async () => { await setRead(false); if (!error.value) expande
     <div class="card-footer">
       <template v-if="!isArchive"><button type="button" class="inbox-button primary" title="Перевести в переговоры" @click="emit('qualify', item)">В переговоры</button><button type="button" class="inbox-button" :aria-expanded="refusing" @click="refusalMode = 'refusal'; refusing = !refusing; expanded = false">Не брать</button></template>
       <button v-else-if="!item.linked_order_id" type="button" class="inbox-button" @click="emit('restore', item)">Вернуть в работу</button>
+      <button v-if="quickIncoming" type="button" class="inbox-button" @click="emit('edit-incoming')">Исправить</button>
       <button type="button" class="inbox-button subtle" :aria-expanded="expanded" :aria-controls="regionId" @click="toggleDetails">{{ expanded ? 'Скрыть подробности' : 'Подробнее' }}</button>
       <span class="read-status">{{ unread ? 'Не просмотрено' : 'Просмотрено' }}</span>
     </div>
@@ -144,6 +159,24 @@ h2 {
 }
 .title:hover,a {
   color: var(--inbox-blue);
+}
+.quick-intake {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  margin-top: 10px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--inbox-blue) 7%, transparent);
+  font-size: 12px;
+  color: var(--inbox-muted);
+}
+.quick-intake strong {
+  color: var(--inbox-blue);
+}
+.quick-intake p {
+  flex-basis: 100%;
+  margin: 0;
 }
 .customer {
   font-size: 12px;

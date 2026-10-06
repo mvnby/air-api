@@ -11,6 +11,7 @@ import {
   Home,
   Image as ImageIcon,
   Link2,
+  ListTodo,
   Mail,
   Package,
   GalleryVerticalEnd,
@@ -44,6 +45,7 @@ export type NavSection = {
 
 export const coreNavItems: NavItem[] = [
   { path: '/manager', label: 'Главная', icon: Home, match: 'exact' },
+  { path: '/manager/tasks', label: 'Поручения', icon: ListTodo, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.crmManage },
   { path: '/manager/leads', label: 'Входящие', icon: UserPlus, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.crmManage },
   { path: '/manager/orders/kanban', label: 'Заказы', icon: ShoppingCart, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.crmManage },
   { path: '/manager/catalog-decision', label: 'Подбор оборудования', icon: Calculator, match: 'exact', requiredCapability: MANAGER_CAPABILITY.crmManage },

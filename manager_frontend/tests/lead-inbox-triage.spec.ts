@@ -28,6 +28,16 @@ describe('Incoming decisions and personal read state', () => {
     expect(mocks.detail).not.toHaveBeenCalled();
     wrapper.unmount();
   });
+  it('shows quick intake gaps, customer wished time and the explicit task next step', () => {
+    const wrapper = mount(LeadInboxCard, { props: { item: { ...lead, intake_state: 'needs_details', missing_fields: ['address_text'], requested_time_text: 'в пятницу после 16:00' }, quickIncoming: true } });
+    const state = wrapper.get('[data-testid="quick-incoming-state"]');
+    expect(state.text()).toContain('Нужно уточнить адрес');
+    expect(state.text()).toContain('Не указано: адрес');
+    expect(state.text()).toContain('Пожелание клиента по времени: «в пятницу после 16:00» · это не запись');
+    expect(state.get('a').attributes('href')).toBe('/manager/tasks');
+    expect(state.get('a').text()).toBe('создайте поручение на уточнение');
+    wrapper.unmount();
+  });
   it('marks only explicitly opened details read and can mark them unread again', async () => {
     const wrapper = mount(LeadInboxCard, { props: { item: lead } });
     await wrapper.get('button.title').trigger('click'); await flushPromises();

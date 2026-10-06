@@ -1,0 +1,20 @@
+{
+  "name": "kitlane-personal",
+  "plugins": [
+    {
+      "name": "kitlane",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "interface": {
+        "displayName": "Kitlane"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

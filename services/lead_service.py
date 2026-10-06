@@ -527,6 +527,7 @@ class LeadService:
 
         lead.status = LeadStatus.qualified
         lead.converted_order_id = order.id
+        lead.version += 1
         lead.segment_hint = LeadService._normalize_segment_hint(
             inn=inn,
             explicit_hint=(

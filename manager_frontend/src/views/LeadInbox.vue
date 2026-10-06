@@ -8,11 +8,9 @@ import LeadInboxCard from '../components/leads/LeadInboxCard.vue';
 import LeadInboxToolbar from '../components/leads/LeadInboxToolbar.vue';
 import LeadQualifyModal from '../components/leads/LeadQualifyModal.vue';
 import LeadSourceReviewModal from '../components/leads/LeadSourceReviewModal.vue';
+import QuickIncomingCapture from '../components/leads/QuickIncomingCapture.vue';
 import { sourceEquipmentPrefillMessage, type SourceAppliedEvent } from '../services/order-source-review';
 import EmailLeadImportPanel from '../components/leads/EmailLeadImportPanel.vue';
-import AddressSuggestInput from '../components/ui/AddressSuggestInput.vue';
-import { useBelarusPhoneMask } from '../composables/useBelarusPhoneMask';
-import { useB2BLookup } from '../composables/useB2BLookup';
 
 const pageLimit = 50;
 
@@ -70,90 +68,8 @@ const restoreContext = () => {
 const qualifyTarget = ref<InboxItem | null>(null);
 const sourceReviewTarget = ref<InboxItem | null>(null);
 
-// Create Lead modal
-const showCreateModal = ref(false);
-const createSaving = ref(false);
-const createForm = ref({
-  source: 'manager',
-  request_text: '',
-  name: '',
-  phone: '',
-  service_type: '',
-  isCompany: false,
-  inn: '',
-  fullLegalName: '',
-  target_date: '',
-  address: '',
-});
-
-const { lookupCompany, isEgrLoading } = useB2BLookup();
-
-const createPhoneInputRef = ref<HTMLInputElement | null>(null);
-const phoneModelRef = ref('');
-
-const { unmaskedValue: createPhoneUnmasked } = useBelarusPhoneMask(createPhoneInputRef, phoneModelRef);
-
-// Customer Search in Create Modal
-const searchTimeout = ref<number | null>(null);
-const foundCustomers = ref<any[]>([]);
-const existingCustomerId = ref<number | null>(null);
-let customerSearchRequestId = 0;
-
-const searchCustomer = async () => {
-  const requestId = ++customerSearchRequestId;
-  if (existingCustomerId.value) return; 
-
-  const query = phoneModelRef.value.replace(/\D/g, '').length >= 3 ? phoneModelRef.value : createForm.value.name;
-  
-  if (!query || query.length < 3) {
-    foundCustomers.value = [];
-    return;
-  }
-
-  try {
-    const res = await api.getManagerCustomers(1, 4, query);
-    if (requestId !== customerSearchRequestId) return;
-    foundCustomers.value = res.items || [];
-  } catch (e) {
-    if (requestId !== customerSearchRequestId) return;
-    console.error('Customer search failed', e);
-    foundCustomers.value = [];
-  }
-};
-
-const onSearchInput = () => {
-  if (existingCustomerId.value) {
-     existingCustomerId.value = null;
-  }
-  if (searchTimeout.value) clearTimeout(searchTimeout.value);
-  searchTimeout.value = window.setTimeout(searchCustomer, 400);
-};
-
-const selectCustomer = (c: any) => {
-  customerSearchRequestId += 1;
-  existingCustomerId.value = c.id;
-  createForm.value.name = c.name || c.full_legal_name || '';
-  phoneModelRef.value = c.phone || c.inn || '';
-  foundCustomers.value = [];
-};
-
-const clearSelectedCustomer = () => {
-  customerSearchRequestId += 1;
-  existingCustomerId.value = null;
-  createForm.value.name = '';
-  phoneModelRef.value = '';
-  foundCustomers.value = [];
-};
-
-watch(phoneModelRef, (val) => {
-  createForm.value.phone = val;
-});
-
-watch(() => createForm.value.phone, (val) => {
-  if (phoneModelRef.value !== val) {
-    phoneModelRef.value = val;
-  }
-});
+const showIncomingCapture = ref(false);
+const editingIncomingId = ref<number | null>(null);
 
 const setToast = (msg: string) => {
   undoTarget.value = null;
@@ -191,6 +107,11 @@ const load = async () => {
 
 onMounted(async () => {
   restoreContext();
+  const deepLinkedId = Number(new URLSearchParams(window.location.search).get('incomingId'));
+  if (Number.isSafeInteger(deepLinkedId) && deepLinkedId > 0) {
+    editingIncomingId.value = deepLinkedId;
+    showIncomingCapture.value = true;
+  }
   await nextTick();
   ready = true;
   await load();
@@ -218,76 +139,41 @@ onBeforeUnmount(() => {
   disposed = true;
   ready = false;
   loadRequestId += 1;
-  customerSearchRequestId += 1;
-  if (searchTimeout.value) clearTimeout(searchTimeout.value);
   if (inboxSearchTimeout) clearTimeout(inboxSearchTimeout);
 });
 
-// ── Create Lead ───────────────────────────────────────────────────────────────
+const clearIncomingDeepLink = () => {
+  const url = new URL(window.location.href);
+  url.searchParams.delete('incomingId');
+  window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+};
+const closeIncomingCapture = () => {
+  showIncomingCapture.value = false;
+  editingIncomingId.value = null;
+  clearIncomingDeepLink();
+};
 const openCreateModal = () => {
-  Object.assign(createForm.value, { 
-    source: 'manager', 
-    request_text: '', 
-    name: '', 
-    phone: '', 
-    service_type: '',
-    isCompany: false,
-    inn: '',
-    fullLegalName: '',
-    target_date: '',
-    address: '',
-  });
-  phoneModelRef.value = '';
-  existingCustomerId.value = null;
-  foundCustomers.value = [];
-  showCreateModal.value = true;
+  editingIncomingId.value = null;
+  clearIncomingDeepLink();
+  showIncomingCapture.value = true;
 };
-
-const submitCreateLead = async () => {
-    if (!createForm.value.request_text?.trim()) {
-        setToast('Заполните поле «Запрос»');
-        return;
-    }
-    createSaving.value = true;
-    try {
-        const created = await api.createManagerOrder({
-            customer_id: existingCustomerId.value || undefined,
-            source: createForm.value.source,
-            request_text: createForm.value.request_text,
-            name: createForm.value.name || undefined,
-            phone: createPhoneUnmasked.value || undefined,
-            service_type: createForm.value.service_type || undefined,
-            customer_type: createForm.value.isCompany ? 'company' : 'individual',
-            customer_inn: createForm.value.isCompany ? (createForm.value.inn || undefined) : undefined,
-            customer_full_legal_name: createForm.value.isCompany ? (createForm.value.fullLegalName || createForm.value.name || undefined) : undefined,
-            address: createForm.value.service_type === 'maintenance' && createForm.value.address ? createForm.value.address : undefined,
-            target_date: createForm.value.service_type === 'maintenance' && createForm.value.target_date ? new Date(createForm.value.target_date).toISOString() : undefined,
-        });
-        showCreateModal.value = false;
-        notifyInboxChanged();
-        if (created.status === 'new_lead') {
-          setToast(`Обращение #${created.id} создано`);
-          await load();
-        } else {
-          setToast(`Обращение #${created.id} уже в переговорах, открываем карточку`);
-          window.history.pushState({}, '', `/manager/orders/kanban?orderId=${created.id}`);
-          window.dispatchEvent(new PopStateEvent('popstate'));
-        }
-    } catch (e: any) {
-        console.error(e);
-        setToast(`Ошибка: ${e?.message ?? 'Не удалось создать обращение'}`);
-    } finally {
-        createSaving.value = false;
-    }
+const openIncomingEdit = (item: InboxItem) => {
+  editingIncomingId.value = item.id;
+  const url = new URL(window.location.href);
+  url.searchParams.set('incomingId', String(item.id));
+  window.history.pushState({}, '', `${url.pathname}${url.search}${url.hash}`);
+  showIncomingCapture.value = true;
 };
-
-const onCreateInnBlur = async () => {
-    if (!createForm.value.inn || createForm.value.inn.length !== 9) return;
-    const data = await lookupCompany(createForm.value.inn);
-    if (data) {
-        if (!createForm.value.fullLegalName) createForm.value.fullLegalName = data.fullLegalName || '';
-        if (!createForm.value.name) createForm.value.name = data.fullLegalName || '';
-    }
+const isQuickIncoming = (item: InboxItem) => Boolean(
+  item.entity_kind === 'lead'
+  && (item as InboxItem & { intake_state?: string | null }).intake_state,
+);
+const incomingSaved = async (incoming: { lead_id: number }) => {
+  const wasEditing = Boolean(editingIncomingId.value);
+  closeIncomingCapture();
+  notifyInboxChanged();
+  setToast(wasEditing ? `Входящее #${incoming.lead_id} исправлено` : `Входящее #${incoming.lead_id} сохранено`);
+  await load();
 };
 
 // ── Qualify ───────────────────────────────────────────────────────────────────
@@ -406,6 +292,7 @@ const onEmailImported = async () => {
         :item="item"
         :is-archive="scope === 'archive'"
         :contact-saving="contactSaving"
+        :quick-incoming="scope !== 'archive' && !item.linked_order_id && isQuickIncoming(item)"
         @qualify="qualifyTarget = $event"
         @review-source="sourceReviewTarget = $event"
         @link-changed="notifyInboxChanged(); load()"
@@ -414,6 +301,7 @@ const onEmailImported = async () => {
         @archived="archived"
         @restore="restoreItem"
         @no-answer="markNoAnswer($event)"
+        @edit-incoming="openIncomingEdit(item)"
       />
     </div>
 
@@ -450,178 +338,19 @@ const onEmailImported = async () => {
       @applied="handleSourceApplied"
     />
 
-    <!-- ── Create Lead Modal ───────────────────────────── -->
+    <!-- ── Quick incoming capture ──────────────────────── -->
     <div
-      v-if="showCreateModal"
+      v-if="showIncomingCapture"
       class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-      @click.self="showCreateModal = false"
+      @click.self="closeIncomingCapture"
     >
-      <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
-        <h2 class="text-lg font-bold flex items-center gap-2">
-          <span class="material-icons-round text-brand-500">person_add</span>
-          Новое обращение
-        </h2>
+      <QuickIncomingCapture
+        :key="editingIncomingId || 'new'"
+        :lead-id="editingIncomingId"
+        @close="closeIncomingCapture"
+        @saved="incomingSaved"
+      />
 
-        <div class="space-y-3 relative">
-          <!-- Selected Customer Banner -->
-          <div v-if="existingCustomerId" class="bg-brand-50 dark:bg-brand-900/30 border border-brand-200 dark:border-brand-800 text-brand-800 dark:text-brand-300 px-3 py-2 rounded-xl flex items-center justify-between text-sm col-span-full">
-            <div class="flex items-center gap-2">
-              <span class="material-icons-round text-brand-500 text-lg">check_circle</span>
-              <span>Привязан клиент: <strong>{{ createForm.name || phoneModelRef || 'Без имени' }}</strong></span>
-            </div>
-            <button @click="clearSelectedCustomer" class="text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-200 p-1 rounded-md hover:bg-brand-100 dark:hover:bg-brand-800 transition-colors" title="Отвязать клиента">
-              <span class="material-icons-round text-[16px]">close</span>
-            </button>
-          </div>
-
-          <!-- Client Type Selection -->
-          <div class="flex gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl w-fit mx-auto col-span-full">
-            <button 
-              class="px-5 py-1.5 rounded-lg text-xs font-semibold transition-all"
-              :class="!createForm.isCompany ? 'bg-white dark:bg-slate-700 shadow-sm text-brand-700 dark:text-brand-400' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'"
-              @click="createForm.isCompany = false"
-            >
-              👤 Физ. лицо
-            </button>
-            <button 
-              class="px-5 py-1.5 rounded-lg text-xs font-semibold transition-all"
-              :class="createForm.isCompany ? 'bg-white dark:bg-slate-700 shadow-sm text-brand-700 dark:text-brand-400' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'"
-              @click="createForm.isCompany = true"
-            >
-              🏢 Юр. лицо
-            </button>
-          </div>
-
-          <div v-if="createForm.isCompany" class="col-span-full grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div class="relative">
-              <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">УНП</label>
-              <input
-                v-model="createForm.inn"
-                @blur="onCreateInnBlur"
-                type="text"
-                placeholder="9 цифр"
-                class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
-              <div v-if="isEgrLoading" class="absolute right-3 top-7">
-                <span class="material-icons-round animate-spin text-brand-500 text-sm">refresh</span>
-              </div>
-            </div>
-            <div>
-              <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">Юр. Название</label>
-              <input
-                v-model="createForm.fullLegalName"
-                type="text"
-                placeholder="Полное название"
-                class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">Имя / Компания</label>
-            <input
-              v-model="createForm.name"
-              @input="onSearchInput"
-              type="text"
-              placeholder="Иванов Иван / МастерВоздуха"
-              class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
-          </div>
-          <div class="relative">
-            <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">Телефон</label>
-            <input
-              ref="createPhoneInputRef"
-              v-model="phoneModelRef"
-              @input="onSearchInput"
-              type="text"
-              placeholder="+375 (29) 000-00-00 или +7 916 000-00-00"
-              class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
-
-            <!-- Autocomplete Dropdown -->
-            <div v-if="foundCustomers.length > 0 && !existingCustomerId" class="absolute z-10 w-full left-0 top-[100%] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl shadow-lg mt-1 max-h-48 overflow-y-auto">
-              <button
-                v-for="c in foundCustomers"
-                :key="c.id"
-                @click="selectCustomer(c)"
-                class="w-full text-left px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-700 border-b border-slate-100 dark:border-slate-700 last:border-0"
-              >
-                <div class="text-sm font-semibold text-slate-800 dark:text-white">{{ c.name || c.full_legal_name || 'Без имени' }}</div>
-                <div class="text-xs text-slate-500 dark:text-slate-400">{{ c.phone || c.inn || 'Нет данных' }} <span class="text-[10px] ml-1 opacity-50">{{ c.type === 'company' ? 'Юр. лицо' : 'Физ. лицо' }}</span></div>
-              </button>
-            </div>
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">Источник</label>
-            <select
-              v-model="createForm.source"
-              class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-            >
-              <option value="manager">Менеджер (звонок/офис)</option>
-              <option value="phone">Входящий звонок</option>
-              <option value="site">Сайт</option>
-              <option value="other">Другое</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">Суть задачи</label>
-            <select
-              v-model="createForm.service_type"
-              class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-            >
-              <option value="">— Не указано —</option>
-              <option value="turnkey">📦 Покупка + Монтаж</option>
-              <option value="install_only">🔧 Только монтаж</option>
-              <option value="pre_install">🧱 Закладка трассы (Ремонт)</option>
-              <option value="maintenance">❄️ Сервис / ТО</option>
-              <option value="repair">🛠 Ремонт</option>
-              <option value="dismantling">🏗️ Демонтаж</option>
-            </select>
-          </div>
-          <template v-if="createForm.service_type === 'maintenance'">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 col-span-full">
-              <div>
-                <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">Дата и время ТО</label>
-                <input
-                  v-model="createForm.target_date"
-                  type="datetime-local"
-                  class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                />
-              </div>
-              <AddressSuggestInput
-                v-model="createForm.address"
-                label="Адрес объекта"
-                placeholder="г. Минск, ул. ..."
-                input-class="bg-white text-sm dark:bg-slate-700"
-              />
-            </div>
-          </template>
-          <div>
-            <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">Запрос <span class="text-red-400">*</span></label>
-            <textarea
-              v-model="createForm.request_text"
-              rows="3"
-              placeholder="Нужен монтаж кондиционера в квартиру, Минск..."
-              class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
-            />
-          </div>
-        </div>
-
-        <div class="flex gap-3 pt-1">
-          <button
-            class="flex-1 py-2.5 rounded-xl font-semibold text-sm transition-all"
-            :class="createSaving ? 'bg-brand-400 text-white cursor-not-allowed' : 'bg-brand-600 text-white hover:bg-brand-700'"
-            :disabled="createSaving"
-            @click="submitCreateLead"
-          >
-            {{ createSaving ? 'Сохранение...' : '✅ Создать обращение' }}
-          </button>
-          <button
-            class="flex-1 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-sm hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
-            @click="showCreateModal = false"
-          >Отмена</button>
-        </div>
-      </div>
     </div>
 
   </div>

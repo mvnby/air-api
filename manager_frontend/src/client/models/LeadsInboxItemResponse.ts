@@ -46,5 +46,10 @@ export type LeadsInboxItemResponse = {
     attachment_count?: number;
     tender?: (LeadsInboxTenderResponse | null);
     commercial_terms_summary?: Array<string>;
+    intake_state?: ('needs_contact' | 'needs_details' | 'ready_for_review' | null);
+    intake_version?: (number | null);
+    requested_time_text?: (string | null);
+    requested_at?: (string | null);
+    missing_fields?: Array<string>;
 };
 

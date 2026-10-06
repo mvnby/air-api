@@ -39,6 +39,12 @@ from .yandex_business import YandexBusinessFeedSettings
 from .auth_security import AuthLoginThrottle
 from .analytics_connection import AnalyticsConnection
 from .leads_inbox import InboxReadState, InboxTriageState, InboxEvent
+from .command_audit import CommandAuditEvent
+from .personal_task import PersonalTask
+from .connector_auth import (
+    ConnectorGrant, ConnectorConsent, ConnectorAuthorizationCode,
+    ConnectorToken, ConnectorAuthEvent,
+)
 from .order_workspace_usage import OrderWorkspaceUsageDaily
 from .catalog_workspace_usage import CatalogWorkspaceUsageDaily
 from .document_drive_connection import DocumentDriveConnection

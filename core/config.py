@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     BOT_API_BASE_URL: str = "http://app:8000/api/internal/bot/v1"
     BOT_API_TIMEOUT_SECONDS: float = 5.0
     MANAGER_BASE_URL: str = "https://api.mvn.by/manager"
+    CONNECTOR_PUBLIC_BASE_URL: str = "https://api.mvn.by"
+    CONNECTOR_ENABLED: bool = True
+    CONNECTOR_REDIRECT_URIS: list[str] = [
+        "https://chatgpt.com/connector_platform_oauth_redirect"
+    ]
     BOT_TASK_TIMEZONE: str = "Europe/Minsk"
     BOT_VOICE_TRANSCRIPTION_ENABLED: bool = False
     BOT_VOICE_TRANSCRIPTION_API_URL: str = (

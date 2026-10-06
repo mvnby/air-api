@@ -97,6 +97,11 @@ class LeadsInboxItemResponse(BaseModel):
     attachment_count: int = 0
     tender: LeadsInboxTenderResponse | None = None
     commercial_terms_summary: list[str] = Field(default_factory=list)
+    intake_state: Literal["needs_contact", "needs_details", "ready_for_review"] | None = None
+    intake_version: int | None = None
+    requested_time_text: str | None = None
+    requested_at: datetime | None = None
+    missing_fields: list[str] = Field(default_factory=list)
 
 
 class LeadsInboxDetailResponse(LeadsInboxItemResponse):
