@@ -30,6 +30,20 @@ def test_full_and_docs_only_release_decisions():
     assert deployment_needed(*evidence(True), REPOSITORY, SHA) is False
 
 
+@pytest.mark.parametrize("conclusion,accepted", [("skipped", True), ("success", False), ("failure", False)])
+def test_actual_github_unexpanded_matrix_name(conclusion, accepted):
+    run, pages = evidence(True)
+    job = next(job for job in pages[0]["jobs"] if job["name"] == "pytest-skipped")
+    # Actual Jobs API response from docs-only run 37527932570, not an evaluated expression.
+    job["name"] = "pytest-${{ (matrix.suite || 'skipped') }}"
+    job["conclusion"] = conclusion
+    if accepted:
+        assert deployment_needed(run, pages, REPOSITORY, SHA) is False
+    else:
+        with pytest.raises(ValueError):
+            deployment_needed(run, pages, REPOSITORY, SHA)
+
+
 def test_full_legacy_run_can_be_replayed_but_cannot_skip_checks():
     run, pages = evidence()
     pages[0]["jobs"] = [job for job in pages[0]["jobs"] if job["name"] != "changes"]
