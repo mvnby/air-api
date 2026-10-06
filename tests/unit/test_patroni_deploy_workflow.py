@@ -17,9 +17,9 @@ def _step(job: dict, name: str) -> dict:
 def test_main_release_selects_exactly_one_physical_or_patroni_path():
     jobs = _workflow(".github/workflows/deploy.yml")["jobs"]
 
-    assert jobs["deploy-backend"]["if"] == "${{ vars.API_DB_HA_MODE != 'patroni' }}"
+    assert jobs["deploy-backend"]["if"] == "${{ needs.release-gate.outputs.deployment_needed == 'true' && vars.API_DB_HA_MODE != 'patroni' }}"
     patroni = jobs["deploy-backend-patroni"]
-    assert patroni["if"] == "${{ vars.API_DB_HA_MODE == 'patroni' }}"
+    assert patroni["if"] == "${{ needs.release-gate.outputs.deployment_needed == 'true' && vars.API_DB_HA_MODE == 'patroni' }}"
     assert patroni["uses"] == "./.github/workflows/deploy-api-patroni.yml"
     assert patroni["with"]["deploy_sha"] == "${{ needs.release-gate.outputs.deploy_sha }}"
     gate = jobs["backend-release"]

@@ -99,20 +99,26 @@ token/usage data, retries, rework and escaped regressions. Missing usage data st
 unknown. Shorter instructions are measurable; lower total task cost is a hypothesis
 until checked. A faster run that omits required checks is not an improvement.
 
+For CI changes, compare queue time, setup and test execution separately. Retain
+timings and suite counts in the PR; use comparable runs before attributing a
+speedup or changing runner providers.
+
 Review instruction changes against these representative cases:
 
 | Case | Expected behavior |
 | --- | --- |
-| Markdown-only fix | Focused link/Markdown review; normal PR/CI gate; no local DB/build ritual |
+| Markdown-only fix | Changed-Markdown CI check and required gate; no local DB/build ritual |
 | API contract change | Scoped backend checks, regenerated OpenAPI/client, Manager build, required CI |
 | Read-only production diagnosis | Fresh observations; no unrequested cleanup, backfill or grants |
 | Failed check or long CI wait | Diagnose the failure or use a bounded watcher; no unchanged retry loop |
 
 These are review scenarios, not automated coverage. Current executable gates live
-in [CI](../.github/workflows/ci.yml), tests and release scripts. CI checks Manager
-build/components, API-client freshness, migrations and backend suites; this does
-not mean every architectural instruction is mechanically enforced. CI currently
-has no dedicated Markdown/link gate, so documentation review remains explicit.
+in [CI](../.github/workflows/ci.yml), tests and release scripts. CI always checks
+changed Markdown links, anchors, references and fences, then selects either the
+narrow documentation route or the full Manager build/components, API-client,
+migration and backend-test lanes. The required `test` gate verifies the expected
+lane results in either route; it does not mean every architectural instruction
+is mechanically enforced. See [CI routes](development-workflow.md#ci-routes).
 
 ## Sources and scope
 

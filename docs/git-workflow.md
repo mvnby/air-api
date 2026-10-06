@@ -28,7 +28,8 @@ git switch -c korotov/short-task-name origin/main
 Выберите проверки из
 [verification by change](development-workflow.md#verification-by-change).
 Там находятся команды тестов и генерации API-клиента. Локальные проверки
-выбираются по изменению; обязательная CI-матрица сохраняется.
+выбираются по изменению; обязательный CI gate выбирает документационный маршрут
+или все application-проверки по полному diff.
 
 Для API-изменений можно один раз подключить существующий hook:
 
@@ -72,10 +73,17 @@ git commit -m "Docs: clarify agent workflow"
 
 ## После merge
 
-Проверьте CI для merge-коммита и статус вызванного им deployment.
-Текущий [deploy workflow](../.github/workflows/deploy.yml) запускается после
-успешного CI на `main`, в том числе для изменения документации. Если в будущем
-триггеры изменятся, сверяйте фактический run, а не предполагайте выпуск.
+Проверьте CI для merge-коммита и результат release gate. После успешного CI на
+`main` [deploy workflow](../.github/workflows/deploy.yml) проверяет точный SHA
+и результаты доверенного push-run. Для документационного маршрута CI проверяет
+изменённый Markdown и обязательный gate, а release gate успешно завершает run
+без сборки образа и production deployment. Изменения вне узкого allowlist
+проходят полный application CI и обычный выпуск.
+
+Ручной запуск deployment требует полный application CI для того же SHA;
+документационный run не даёт права на ручной выпуск. При изменении правил CI,
+deploy workflow или скриптов классификации перепроверьте фактические jobs и
+точную ревизию, а не предполагайте, что одного зелёного PR достаточно.
 
 Для запущенного deployment выполните итоговую проверку по
 [процедуре деплоя](deployment.md): `/api/health`,

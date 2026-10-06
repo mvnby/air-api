@@ -24,8 +24,8 @@ Run from repo root unless noted.
   app container, or `pytest <paths> -q` in the configured local venv.
 - Broaden to `pytest tests/unit -q`, `pytest tests/integration -q` or `pytest`
   when shared dependencies, failures or unresolved risk justify it.
-- Prove physical PostgreSQL isolation for two future pytest workers:
-  `pytest -q -n 2 --dist load tests/integration/test_postgres_worker_database_isolation.py`
+- Prove physical PostgreSQL isolation for four pytest workers:
+  `EXPECT_XDIST_DATABASE_ISOLATION=1 pytest -q -n 4 --dist load tests/integration/test_postgres_worker_database_isolation.py`
 
 PostgreSQL test policy:
 
@@ -33,8 +33,9 @@ PostgreSQL test policy:
   database from `TEST_DATABASE_URL`.
 - Do not point `PYTEST_BASE_DATABASE_URL` at a production database. The test
   bootstrap rejects base database names without a `test` marker.
-- Keep broad unit/integration suites serial until worker-isolation proof and
-  timing evidence are green in CI; enable xdist per suite as a separate change.
+- CI runs both broad suites with four xdist workers after the four-worker
+  database-isolation proof passes. Each worker owns a separate physical test DB.
+  A speedup is not established until comparable post-change CI timings are available.
 
 ### Manager Frontend (Vue)
 
@@ -50,12 +51,30 @@ Run from `manager_frontend/`:
   `npx vitest run --environment jsdom tests/customer-create.spec.ts`.
 - Existing broader checks: `npm run test:components`, `npm run test:ui-logic`.
 
+## CI routes
+
+Every pull request and push to `main` or `master` runs the CI workflow. The
+`changes` job always classifies the complete diff and checks every changed
+Markdown file's local links, heading anchors, reference links and fenced code.
+The required `test` gate always runs: it verifies that every selected lane
+passed, or that every application lane was skipped on the documentation route.
+
+The documentation-only route is limited to added or modified regular,
+non-executable Markdown files under `docs/`, plus `README.md`, `AGENTS.md`,
+`.github/copilot-instructions.md` and `.github/pull_request_template.md`. Any
+other path, mixed change, empty or unknown diff, deletion, rename, file-type or
+mode change, or classification error selects full CI. Full CI builds and tests
+Manager, checks migrations and API-client freshness, and runs unit and
+integration suites with four workers. Pull requests compare against their merge
+base; pushes classify the exact pushed revision.
+
 ## Verification by change
 
 Choose checks for the behavior and boundaries touched; this is not a requirement
-to run every row. Required [CI](../.github/workflows/ci.yml) still applies before
-merge, including for documentation. Do not rerun successful local checks unless
-the relevant code/environment changed or a failure/unresolved concern warrants it.
+to run every row. The required [CI](../.github/workflows/ci.yml) gate applies
+before merge. Documentation-only changes use the checked Markdown route above;
+other changes run all application lanes. Do not rerun successful local checks
+unless the relevant code/environment changed or a failure/unresolved concern warrants it.
 
 | Change | Local evidence |
 | --- | --- |
@@ -67,8 +86,9 @@ the relevant code/environment changed or a failure/unresolved concern warrants i
 
 For documentation, verify every changed local link resolves from the containing
 file and each fragment names an existing heading. Inspect code-fence balance and
-commands, and compare moved instructions for retained constraints. There is no
-dedicated Markdown/link checker in current CI; state what was actually checked.
+commands, and compare moved instructions for retained constraints. CI checks
+changed local links, anchors, reference links and fenced-code balance; it does
+not fetch external links or verify that prose and commands are correct.
 
 For any API contract change (not just `schemas.py`), run from the repository root:
 
