@@ -98,3 +98,90 @@ async def test_invalid_facsimile_upload_returns_400(facsimile_client, kind, cont
 
     assert response.status_code == 400
     assert response.json()['detail']['error_code'] == code
+
+
+def _visual_payload(**changes):
+    return {
+        'source_checksum_sha256': 'a' * 64, 'expected_signed_artifact_id': None,
+        'signature_asset_id': 'b' * 32, 'seal_asset_id': 'c' * 32,
+        'signature': {'page_number': 1, 'x_mm': 20, 'y_mm': 30, 'width_mm': 45},
+        'seal': {'page_number': 2, 'x_mm': 80, 'y_mm': 40, 'width_mm': 35},
+        **changes,
+    }
+
+
+@pytest.mark.asyncio
+async def test_visual_preparation_receives_positions_and_actor(facsimile_client, monkeypatch):
+    client, _ = facsimile_client
+    prepare = AsyncMock(return_value=SimpleNamespace(id='copy', kind='signed_pdf', filename='copy.pdf'))
+    monkeypatch.setattr(facsimiles.FacsimilePdfService, 'prepare', prepare)
+
+    response = await client.post(f'{BASE}/documents/741/facsimile-pdf', json=_visual_payload())
+
+    assert response.status_code == 200
+    values = prepare.await_args.kwargs
+    assert values['placement'].signature.page_number == 1
+    assert values['placement'].seal.page_number == 2
+    assert values['placement'].source_checksum_sha256 == 'a' * 64
+    assert values['actor_username'] == 'tenant-owner'
+    assert values['tenant_scope'].storefront_id == 71
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('change', [
+    {'signature': {'page_number': 1, 'x_mm': -1, 'y_mm': 1, 'width_mm': 45}},
+    {'seal': {'page_number': 101, 'x_mm': 1, 'y_mm': 1, 'width_mm': 35}},
+    {'source_checksum_sha256': 'invalid'},
+    {'unexpected': True},
+])
+async def test_visual_preparation_rejects_invalid_input(facsimile_client, change):
+    client, _ = facsimile_client
+    response = await client.post(f'{BASE}/documents/741/facsimile-pdf', json=_visual_payload(**change))
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_preview_returns_private_metadata(facsimile_client, monkeypatch):
+    client, _ = facsimile_client
+    response_data = {
+        'document_id': 741, 'source_checksum_sha256': 'a' * 64,
+        'signed_artifact_id': None, 'can_save': True,
+        'pages': [{'page_number': 1, 'width_mm': 210, 'height_mm': 297}],
+        'signature': {'asset_id': 'b' * 32, 'width_px': 100, 'height_px': 50},
+        'seal': {'asset_id': 'c' * 32, 'width_px': 100, 'height_px': 100},
+        'placement': {kind: _visual_payload()[kind] for kind in ('signature', 'seal')},
+    }
+    describe = AsyncMock(return_value=response_data)
+    monkeypatch.setattr(facsimiles.FacsimilePreviewService, 'describe', describe)
+
+    response = await client.get(f'{BASE}/documents/741/facsimile-preview')
+
+    assert response.status_code == 200
+    assert response.json() == response_data
+    assert response.headers['cache-control'] == 'private, no-store'
+    assert describe.await_args.kwargs['tenant_scope'].tenant_id == 21
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('suffix,method', [('pages/1', 'page'), ('assets/' + 'b' * 32, 'asset')])
+async def test_preview_pngs_are_authenticated_and_not_cached(facsimile_client, monkeypatch, suffix, method):
+    client, _ = facsimile_client
+    handler = AsyncMock(return_value=b'private-png')
+    monkeypatch.setattr(facsimiles.FacsimilePreviewService, method, handler)
+    response = await client.get(f'{BASE}/documents/741/facsimile-preview/{suffix}')
+    assert response.status_code == 200
+    assert response.content == b'private-png'
+    assert response.headers['content-type'] == 'image/png'
+    assert response.headers['cache-control'] == 'private, no-store'
+    assert response.headers['x-content-type-options'] == 'nosniff'
+    assert handler.await_args.kwargs['tenant_scope'].storefront_id == 71
+
+
+@pytest.mark.asyncio
+async def test_preview_conflicts_explain_missing_assets(facsimile_client, monkeypatch):
+    client, _ = facsimile_client
+    monkeypatch.setattr(facsimiles.FacsimilePreviewService, 'describe',
+                        AsyncMock(side_effect=FacsimilePdfError('Загрузите PNG подписи и печати')))
+    response = await client.get(f'{BASE}/documents/741/facsimile-preview')
+    assert response.status_code == 409
+    assert response.json()['detail']['message'] == 'Загрузите PNG подписи и печати'

@@ -12,6 +12,8 @@ import B2BContractTermsPanel from './B2BContractTermsPanel.vue';
 import ContractScenarioChooser from './ContractScenarioChooser.vue';
 import ExternalContractForm from './ExternalContractForm.vue';
 import DocumentList from './DocumentList.vue';
+import FacsimilePdfEditor from './FacsimilePdfEditor.vue';
+import { canEditDocumentFacsimile } from '../model/facsimile-placement';
 import { useDocumentFileActions } from '../composables/use-document-file-actions';
 import ActTermsPanel from './ActTermsPanel.vue';
 import TransportTermsPanel from './TransportTermsPanel.vue';
@@ -45,6 +47,9 @@ const emit = defineEmits<{
 
 const formRef = ref<HTMLElement | null>(null);
 const sendOpen = ref(false);
+const facsimileTarget = ref<{ id: number; title: string } | null>(null);
+watch(() => props.order.id, () => { facsimileTarget.value = null; });
+watch(() => props.order.status, () => { if (!getOrderDocumentAccess(props.order.status).canCreate) facsimileTarget.value = null; });
 const preparingDraft = ref(false);
 type BeforeGenerateResult = boolean | void | { proceed?: boolean; mutated?: boolean };
 type DocumentAudience = 'business' | 'consumer';
@@ -73,6 +78,12 @@ const workspace = useManagedDocumentWorkspace({
   notify: (message, type = 'success') => emit('toast', { message, type }),
   refresh: () => emit('refresh'),
 });
+const facsimileSaved = async () => {
+  facsimileTarget.value = null;
+  await workspace.loadDocuments();
+  emit('refresh');
+  emit('toast', { message: 'PDF с подписью и печатью сохранён.', type: 'success' });
+};
 const registeringCustomerContract = computed(() => workspace.documentType.value === 'contract' && contractSource.value === 'customer');
 const sendableDocuments = computed(() => workspace.documents.value.filter((document) => (
   ['issued', 'sent', 'signed'].includes(document.status)
@@ -403,8 +414,8 @@ defineExpose({
               <button v-for="artifact in document.artifacts" :key="artifact.id" class="native-action" type="button" @click="workspace.downloadArtifact(artifact.id, artifact.filename)">
                 <span class="material-icons-round text-[17px]">download</span>{{ artifactName(artifact.kind) }}
               </button>
-              <button v-if="['issued', 'sent', 'signed'].includes(document.status) && access.canCreate && !document.artifacts?.some((item) => item.kind === 'signed_pdf')" class="native-action" type="button" :disabled="workspace.busy.value" @click="workspace.prepareFacsimilePdf(document)">
-                <span class="material-icons-round text-[17px]">draw</span>Подготовить PDF с подписью и печатью
+              <button v-if="access.canCreate && canEditDocumentFacsimile(document)" class="native-action" type="button" :disabled="workspace.busy.value" @click="facsimileTarget = { id: document.id, title: officialDocumentTitle(document) }">
+                <span class="material-icons-round text-[17px]">draw</span>{{ document.artifacts?.some((item) => item.kind === 'signed_pdf') ? 'Изменить размещение' : 'Подготовить PDF с подписью и печатью' }}
               </button>
               <GoogleDocumentEditorActions
                 v-if="document.status === 'draft' && access.canCreate && googleEditor.connected.value"
@@ -580,6 +591,7 @@ defineExpose({
       <p v-else-if="!access.canCreate" class="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-500 dark:bg-slate-800">{{ access.summary }}</p>
 
     </template>
+    <FacsimilePdfEditor v-if="facsimileTarget" :document-id="facsimileTarget.id" :title="facsimileTarget.title" @close="facsimileTarget = null" @saved="facsimileSaved" />
   </section>
 </template>
 

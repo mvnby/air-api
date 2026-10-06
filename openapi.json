@@ -14215,6 +14215,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DocumentFacsimilePdfPayload"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -14222,6 +14239,160 @@
               "application/json": {
                 "schema": {}
               }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/document-system/documents/{document_id}/facsimile-preview": {
+      "get": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Get Facsimile Preview",
+        "operationId": "get_manager_document_facsimile_preview",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentFacsimilePreviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/document-system/documents/{document_id}/facsimile-preview/pages/{page_number}": {
+      "get": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Get Facsimile Preview Page",
+        "operationId": "get_manager_document_facsimile_preview_page",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "page_number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "image/png": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/document-system/documents/{document_id}/facsimile-preview/assets/{asset_id}": {
+      "get": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Get Facsimile Preview Asset",
+        "operationId": "get_manager_document_facsimile_preview_asset",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$",
+              "title": "Asset Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "image/png": {}
             }
           },
           "422": {
@@ -40111,6 +40282,53 @@
         ],
         "title": "DocumentDriveStatusResponse"
       },
+      "DocumentFacsimilePdfPayload": {
+        "properties": {
+          "signature": {
+            "$ref": "#/components/schemas/FacsimileImagePlacement"
+          },
+          "seal": {
+            "$ref": "#/components/schemas/FacsimileImagePlacement"
+          },
+          "source_checksum_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Source Checksum Sha256"
+          },
+          "expected_signed_artifact_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{32}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Signed Artifact Id"
+          },
+          "signature_asset_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$",
+            "title": "Signature Asset Id"
+          },
+          "seal_asset_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$",
+            "title": "Seal Asset Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "signature",
+          "seal",
+          "source_checksum_sha256",
+          "signature_asset_id",
+          "seal_asset_id"
+        ],
+        "title": "DocumentFacsimilePdfPayload"
+      },
       "DocumentFacsimilePlacementItem": {
         "properties": {
           "page_number": {
@@ -40231,6 +40449,61 @@
           "seal_width_mm"
         ],
         "title": "DocumentFacsimilePlacementPayload"
+      },
+      "DocumentFacsimilePreviewResponse": {
+        "properties": {
+          "document_id": {
+            "type": "integer",
+            "title": "Document Id"
+          },
+          "source_checksum_sha256": {
+            "type": "string",
+            "title": "Source Checksum Sha256"
+          },
+          "signed_artifact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signed Artifact Id"
+          },
+          "can_save": {
+            "type": "boolean",
+            "title": "Can Save"
+          },
+          "pages": {
+            "items": {
+              "$ref": "#/components/schemas/FacsimilePreviewPage"
+            },
+            "type": "array",
+            "title": "Pages"
+          },
+          "signature": {
+            "$ref": "#/components/schemas/FacsimilePreviewAsset"
+          },
+          "seal": {
+            "$ref": "#/components/schemas/FacsimilePreviewAsset"
+          },
+          "placement": {
+            "$ref": "#/components/schemas/FacsimilePlacement"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "source_checksum_sha256",
+          "signed_artifact_id",
+          "can_save",
+          "pages",
+          "signature",
+          "seal",
+          "placement"
+        ],
+        "title": "DocumentFacsimilePreviewResponse"
       },
       "DocumentLegalEntityCreatePayload": {
         "properties": {
@@ -41783,6 +42056,106 @@
           "base_checksum_sha256"
         ],
         "title": "ExternalEditSessionItem"
+      },
+      "FacsimileImagePlacement": {
+        "properties": {
+          "page_number": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Page Number"
+          },
+          "x_mm": {
+            "type": "number",
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "X Mm"
+          },
+          "y_mm": {
+            "type": "number",
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Y Mm"
+          },
+          "width_mm": {
+            "type": "number",
+            "maximum": 500.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Width Mm"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "page_number",
+          "x_mm",
+          "y_mm",
+          "width_mm"
+        ],
+        "title": "FacsimileImagePlacement"
+      },
+      "FacsimilePlacement": {
+        "properties": {
+          "signature": {
+            "$ref": "#/components/schemas/FacsimileImagePlacement"
+          },
+          "seal": {
+            "$ref": "#/components/schemas/FacsimileImagePlacement"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "signature",
+          "seal"
+        ],
+        "title": "FacsimilePlacement"
+      },
+      "FacsimilePreviewAsset": {
+        "properties": {
+          "asset_id": {
+            "type": "string",
+            "title": "Asset Id"
+          },
+          "width_px": {
+            "type": "integer",
+            "title": "Width Px"
+          },
+          "height_px": {
+            "type": "integer",
+            "title": "Height Px"
+          }
+        },
+        "type": "object",
+        "required": [
+          "asset_id",
+          "width_px",
+          "height_px"
+        ],
+        "title": "FacsimilePreviewAsset"
+      },
+      "FacsimilePreviewPage": {
+        "properties": {
+          "page_number": {
+            "type": "integer",
+            "title": "Page Number"
+          },
+          "width_mm": {
+            "type": "number",
+            "title": "Width Mm"
+          },
+          "height_mm": {
+            "type": "number",
+            "title": "Height Mm"
+          }
+        },
+        "type": "object",
+        "required": [
+          "page_number",
+          "width_mm",
+          "height_mm"
+        ],
+        "title": "FacsimilePreviewPage"
       },
       "FeatureCategoryResponse": {
         "properties": {

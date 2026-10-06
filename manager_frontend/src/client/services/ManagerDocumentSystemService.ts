@@ -8,8 +8,10 @@ import type { ConditionPresetItem } from '../models/ConditionPresetItem';
 import type { ConditionPresetList } from '../models/ConditionPresetList';
 import type { ConditionPresetPayload } from '../models/ConditionPresetPayload';
 import type { ConsumerEquipmentDefaultsResponse } from '../models/ConsumerEquipmentDefaultsResponse';
+import type { DocumentFacsimilePdfPayload } from '../models/DocumentFacsimilePdfPayload';
 import type { DocumentFacsimilePlacementItem } from '../models/DocumentFacsimilePlacementItem';
 import type { DocumentFacsimilePlacementPayload } from '../models/DocumentFacsimilePlacementPayload';
+import type { DocumentFacsimilePreviewResponse } from '../models/DocumentFacsimilePreviewResponse';
 import type { DocumentLegalEntityCreatePayload } from '../models/DocumentLegalEntityCreatePayload';
 import type { DocumentLegalEntityItem } from '../models/DocumentLegalEntityItem';
 import type { DocumentLegalEntityListResponse } from '../models/DocumentLegalEntityListResponse';
@@ -150,17 +152,87 @@ export class ManagerDocumentSystemService {
     /**
      * Prepare Facsimile Pdf
      * @param documentId
+     * @param requestBody
      * @returns any Successful Response
      * @throws ApiError
      */
     public static prepareManagerDocumentFacsimilePdf(
         documentId: number,
+        requestBody?: (DocumentFacsimilePdfPayload | null),
     ): CancelablePromise<any> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/manager/document-system/documents/{document_id}/facsimile-pdf',
             path: {
                 'document_id': documentId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Facsimile Preview
+     * @param documentId
+     * @returns DocumentFacsimilePreviewResponse Successful Response
+     * @throws ApiError
+     */
+    public static getManagerDocumentFacsimilePreview(
+        documentId: number,
+    ): CancelablePromise<DocumentFacsimilePreviewResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/document-system/documents/{document_id}/facsimile-preview',
+            path: {
+                'document_id': documentId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Facsimile Preview Page
+     * @param documentId
+     * @param pageNumber
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static getManagerDocumentFacsimilePreviewPage(
+        documentId: number,
+        pageNumber: number,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/document-system/documents/{document_id}/facsimile-preview/pages/{page_number}',
+            path: {
+                'document_id': documentId,
+                'page_number': pageNumber,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Facsimile Preview Asset
+     * @param documentId
+     * @param assetId
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static getManagerDocumentFacsimilePreviewAsset(
+        documentId: number,
+        assetId: string,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/document-system/documents/{document_id}/facsimile-preview/assets/{asset_id}',
+            path: {
+                'document_id': documentId,
+                'asset_id': assetId,
             },
             errors: {
                 422: `Validation Error`,

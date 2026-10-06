@@ -1,8 +1,8 @@
-"""Prepare immutable PDF copies with a seller's signature and seal images."""
+"""Prepare immutable PDF copies from a checked visual placement."""
 
 from __future__ import annotations
 
-from hashlib import sha256
+import asyncio
 from io import BytesIO
 
 from pypdf import PdfReader, PdfWriter
@@ -11,123 +11,132 @@ from reportlab.pdfgen.canvas import Canvas
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models import (
-    DocumentArtifact,
-    DocumentFacsimileAsset,
-    DocumentTemplateFacsimilePlacement,
-    OrderDocument,
-)
+from core.request_context import current_request_id
+from models import DocumentArtifact, DocumentTemplateFacsimilePlacement, TenantAuditEvent
 from models.tenancy import TenantScope
-from modules.documents.application.artifact_helpers import artifact_row, stored_artifact
-from modules.documents.infrastructure.artifact_storage import DocumentArtifactStorage, PrivateDocumentArtifactStorage
-from services.private_attachment_storage_service import VariantScopedPrivateAttachmentStorage, get_private_attachment_storage
+from modules.documents.application.artifact_helpers import artifact_row
+from modules.documents.application.facsimile_context import (
+    MAX_FACSIMILE_BYTES, MM_TO_POINTS, FacsimilePdfError, load_context,
+    normalized_reader, read_asset, read_pdf,
+)
+from modules.documents.domain.facsimiles import FacsimileImagePlacement, FacsimilePdfPlacement, FacsimilePlacement
+from modules.documents.infrastructure.artifact_storage import DocumentArtifactStorage
 
-
-MM_TO_POINTS = 72 / 25.4
-MAX_FACSIMILE_BYTES = 5 * 1024 * 1024
-
-
-class FacsimilePdfError(ValueError):
-    pass
+FACSIMILE_AUDIT_ACTION = "document.facsimile_pdf.prepared"
 
 
 class FacsimilePdfService:
     @classmethod
     async def prepare(cls, session: AsyncSession, *, tenant_scope: TenantScope, document_id: int,
-                      artifact_storage: DocumentArtifactStorage) -> DocumentArtifact:
-        document = (await session.execute(select(OrderDocument).where(
-            OrderDocument.id == document_id, OrderDocument.tenant_id == tenant_scope.tenant_id
-        ).with_for_update())).scalar_one_or_none()
-        if document is None or not document.template_version_id or document.status not in {"issued", "sent", "signed"}:
-            raise FacsimilePdfError("Подготовить PDF можно только для выпущенного нативного документа")
-        existing = (await session.execute(select(DocumentArtifact).where(
-            DocumentArtifact.order_document_id == document_id,
-            DocumentArtifact.tenant_id == tenant_scope.tenant_id,
-            DocumentArtifact.kind == "signed_pdf", DocumentArtifact.is_authoritative.is_(True),
-        ))).scalar_one_or_none()
-        if existing is not None:
-            return existing
-        placement = (await session.execute(select(DocumentTemplateFacsimilePlacement).where(
-            DocumentTemplateFacsimilePlacement.template_version_id == document.template_version_id
-        ))).scalar_one_or_none()
+                      artifact_storage: DocumentArtifactStorage,
+                      placement: FacsimilePdfPlacement | None = None,
+                      actor_username: str | None = None,
+                      actor_staff_user_id: int | None = None) -> DocumentArtifact:
+        context = await load_context(session, tenant_scope=tenant_scope, document_id=document_id, for_update=True)
+        if context.order.status == "closed":
+            raise FacsimilePdfError("Заказ завершён: документы доступны только для просмотра и повторной отправки")
         if placement is None:
-            raise FacsimilePdfError(
-                "Для версии шаблона этого документа не задано размещение подписи и печати. "
-                "В настройках документов откройте шаблон и сохраните координаты для этой версии."
-            )
-        assets = list((await session.execute(select(DocumentFacsimileAsset).where(
-            DocumentFacsimileAsset.tenant_id == tenant_scope.tenant_id,
-            DocumentFacsimileAsset.legal_entity_id == document.legal_entity_id,
-            DocumentFacsimileAsset.is_current.is_(True),
-        ))).scalars())
-        by_kind = {item.kind: item for item in assets}
-        if set(by_kind) != {"signature", "seal"}:
-            raise FacsimilePdfError("Загрузите текущие PNG подписи и печати для юридического лица")
-        base = (await session.execute(select(DocumentArtifact).where(
-            DocumentArtifact.order_document_id == document_id, DocumentArtifact.tenant_id == tenant_scope.tenant_id,
-            DocumentArtifact.kind == "pdf", DocumentArtifact.is_authoritative.is_(True),
-        ))).scalar_one_or_none()
-        if base is None:
-            raise FacsimilePdfError("У документа отсутствует выпускной PDF")
-        base_storage = PrivateDocumentArtifactStorage(get_private_attachment_storage(base.provider))
-        base_pdf = await base_storage.read(stored_artifact(base))
-        signature = await _read_asset(by_kind["signature"])
-        seal = await _read_asset(by_kind["seal"])
-        content = _overlay(base_pdf, signature, seal, placement)
+            if context.signed is not None:
+                return context.signed
+            legacy = (await session.execute(select(DocumentTemplateFacsimilePlacement).where(
+                DocumentTemplateFacsimilePlacement.template_version_id == context.document.template_version_id
+            ))).scalar_one_or_none()
+            if legacy is None:
+                raise FacsimilePdfError("Откройте предпросмотр документа и разместите подпись и печать на странице")
+            positions = legacy_placement(legacy)
+        else:
+            if not context.can_save:
+                raise FacsimilePdfError("PDF отправленного или подписанного документа менять нельзя. Создайте исправленную редакцию")
+            signed_id = context.signed.id if context.signed else None
+            if placement.expected_signed_artifact_id != signed_id:
+                raise FacsimilePdfError("Копия PDF уже изменилась. Откройте предпросмотр заново")
+            if placement.source_checksum_sha256 != context.base.checksum_sha256 or (
+                placement.signature_asset_id != context.assets["signature"].id
+                or placement.seal_asset_id != context.assets["seal"].id
+            ):
+                raise FacsimilePdfError("PDF, подпись или печать изменились. Откройте предпросмотр заново")
+            positions = FacsimilePlacement(signature=placement.signature, seal=placement.seal)
+        base_pdf = await read_pdf(context.base)
+        signature = await read_asset(context.assets["signature"])
+        seal = await read_asset(context.assets["seal"])
+        content = await asyncio.to_thread(_overlay, base_pdf, signature, seal, positions)
         stored = await artifact_storage.save(
             tenant_id=tenant_scope.tenant_id, document_id=document_id, kind="signed_pdf",
-            filename=base.filename.removesuffix(".pdf") + "-с-подписью-и-печатью.pdf",
+            filename=context.base.filename.removesuffix(".pdf") + "-с-подписью-и-печатью.pdf",
             content_type="application/pdf", content=content,
         )
+        previous_id = context.signed.id if context.signed else None
+        if context.signed is not None:
+            # Retain immutable previous bytes; only the current download selection changes.
+            context.signed.is_authoritative = False
+            session.add(context.signed)
+            await session.flush()
         row = artifact_row(stored)
         session.add(row)
+        if actor_username:
+            session.add(TenantAuditEvent(
+                tenant_id=tenant_scope.tenant_id, storefront_id=tenant_scope.storefront_id,
+                actor_username=actor_username, actor_staff_user_id=actor_staff_user_id,
+                action=FACSIMILE_AUDIT_ACTION, entity_type="order_document", entity_id=document_id,
+                request_id=current_request_id(), change_set={
+                    "artifact_id": row.id, "previous_artifact_id": previous_id,
+                    "source_checksum_sha256": context.base.checksum_sha256,
+                    "signature_asset_id": context.assets["signature"].id,
+                    "seal_asset_id": context.assets["seal"].id,
+                    "placement": positions.model_dump(),
+                },
+            ))
         await session.commit()
         await session.refresh(row)
         return row
 
 
+def legacy_placement(placement) -> FacsimilePlacement:
+    return FacsimilePlacement(**{
+        kind: FacsimileImagePlacement(
+            page_number=placement.page_number,
+            x_mm=getattr(placement, f"{kind}_x_mm"),
+            y_mm=getattr(placement, f"{kind}_y_mm"),
+            width_mm=getattr(placement, f"{kind}_width_mm"),
+        ) for kind in ("signature", "seal")
+    })
+
+
 def _overlay(pdf: bytes, signature: bytes, seal: bytes, placement) -> bytes:
-    reader = PdfReader(BytesIO(pdf))
-    index = placement.page_number - 1
-    if index < 0 or index >= len(reader.pages):
-        raise FacsimilePdfError("В шаблоне указана страница, которой нет в PDF")
-    page = reader.pages[index]
-    width, height = float(page.mediabox.width), float(page.mediabox.height)
-    layer = BytesIO()
-    canvas = Canvas(layer, pagesize=(width, height))
-    # API coordinates are measured from the top-left to match the document preview.
-    for image, x, y, image_width in (
-        (signature, placement.signature_x_mm, placement.signature_y_mm, placement.signature_width_mm),
-        (seal, placement.seal_x_mm, placement.seal_y_mm, placement.seal_width_mm),
-    ):
+    reader = normalized_reader(pdf)
+    positions = placement if isinstance(placement, FacsimilePlacement) else legacy_placement(placement)
+    layers: dict[int, Canvas] = {}
+    buffers: dict[int, BytesIO] = {}
+    for kind, image in (("signature", signature), ("seal", seal)):
+        position = getattr(positions, kind)
+        index = position.page_number - 1
+        if index < 0 or index >= len(reader.pages):
+            raise FacsimilePdfError("Указана страница, которой нет в PDF")
+        page = reader.pages[index]
+        width, height = float(page.cropbox.width), float(page.cropbox.height)
         try:
             reader_image = ImageReader(BytesIO(image))
             px_width, px_height = reader_image.getSize()
         except Exception as exc:
             raise FacsimilePdfError("PNG подписи или печати повреждён") from exc
-        draw_width = image_width * MM_TO_POINTS
+        draw_width = position.width_mm * MM_TO_POINTS
         draw_height = draw_width * px_height / px_width
-        x_points = x * MM_TO_POINTS
-        y_points = y * MM_TO_POINTS
-        if x_points + draw_width > width or y_points + draw_height > height:
+        x_points, y_points = position.x_mm * MM_TO_POINTS, position.y_mm * MM_TO_POINTS
+        if x_points + draw_width > width + 0.001 or y_points + draw_height > height + 0.001:
             raise FacsimilePdfError("Подпись или печать выходит за границы страницы PDF")
-        canvas.drawImage(reader_image, x_points, height - y_points - draw_height,
-                         width=draw_width, height=draw_height, mask="auto")
-    canvas.save()
-    layer.seek(0)
-    page.merge_page(PdfReader(layer).pages[0])
+        if index not in layers:
+            buffers[index] = BytesIO()
+            layers[index] = Canvas(buffers[index], pagesize=(width, height))
+        layers[index].drawImage(reader_image, x_points, height - y_points - draw_height,
+                               width=draw_width, height=draw_height, mask="auto")
+    for index, canvas in layers.items():
+        canvas.save()
+        layer = PdfReader(BytesIO(buffers[index].getvalue())).pages[0]
+        page = reader.pages[index]
+        page.merge_translated_page(layer, float(page.cropbox.left), float(page.cropbox.bottom))
     writer = PdfWriter()
-    for source_page in reader.pages:
-        writer.add_page(source_page)
+    for page in reader.pages:
+        writer.add_page(page)
     result = BytesIO()
     writer.write(result)
     return result.getvalue()
-
-
-async def _read_asset(asset: DocumentFacsimileAsset) -> bytes:
-    storage = get_private_attachment_storage(asset.provider)
-    scoped = VariantScopedPrivateAttachmentStorage(storage, variant_scope="document-facsimiles")
-    content = await scoped.read(asset.storage_key)
-    if sha256(content).hexdigest() != asset.checksum_sha256 or len(content) != asset.size_bytes:
-        raise FacsimilePdfError("PNG подписи или печати повреждён")
-    return content
