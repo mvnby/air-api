@@ -108,6 +108,12 @@ and names for `belzakupki-scheduler-1` and `belzakupki-worker-1`, then sends
 for each process to drain. It never sends `SIGKILL`, runs `docker compose down`,
 or touches Kitlane Caddy, API, or database containers. A drain timeout aborts
 the CRM release before its migration/image work begins.
+For a Patroni release, this guard also precedes installed runtime assets and
+the full deployment rollback handler: a failed drain only cleans up the owned
+candidate and restores the recorded Belzakupki state. If a later rollback
+recreates the active API container, canonical reconciliation validates and
+reloads an already-running container nginx before its HTTP health check;
+it does not start a previously stopped or absent proxy.
 
 The guard records the pre-release state in
 `/opt/belzakupki/.air-api-deploy-suspension` and restores only services that

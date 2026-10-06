@@ -14,6 +14,8 @@ RECONCILE_BACKEND_IMAGE="${API_RECONCILE_BACKEND_IMAGE:-}"
 COMMUNICATIONS_WORKER_SERVICE="${API_COMMUNICATIONS_WORKER_SERVICE:-communications-worker}"
 RECONCILE_OPERATION="${API_RECONCILE_OPERATION:-reconcile}"
 EXPECTED_ROLE="${API_EXPECTED_PATRONI_ROLE:-}"
+PROXY_MODE="${API_PROXY_MODE:-host_nginx}"
+PROXY_SERVICE="${API_PROXY_SERVICE:-api-proxy}"
 EXPECTED_COMMUNICATIONS_WORKER_PROFILE="${API_COMMUNICATIONS_WORKER_EXPECTED_PROFILE:-}"
 COMMUNICATIONS_WORKER_RELEASE_HELPER="${COMMUNICATIONS_WORKER_RELEASE_HELPER:-${SCRIPT_DIR}/ha/communications_worker_release_contract.sh}"
 
@@ -122,6 +124,19 @@ for service in "${resolved_services[@]}"; do
 done
 if [[ "${#app_services[@]}" -gt 0 ]]; then
   "${COMPOSE[@]}" up -d --no-deps --force-recreate "${app_services[@]}"
+  if [[ "${PROXY_MODE}" == "container_nginx" ]]; then
+    # Recreating the app can change its IP. Refresh the existing nginx process
+    # before probing HTTP, without starting a previously stopped/absent proxy.
+    proxy_ids="$("${COMPOSE[@]}" ps --status running -q "${PROXY_SERVICE}")"
+    if [[ -n "${proxy_ids}" ]]; then
+      [[ "${proxy_ids}" != *$'\n'* ]] || {
+        echo "canonical container proxy runtime is ambiguous" >&2
+        exit 1
+      }
+      "${COMPOSE[@]}" exec -T "${PROXY_SERVICE}" nginx -t
+      "${COMPOSE[@]}" exec -T "${PROXY_SERVICE}" nginx -s reload
+    fi
+  fi
 fi
 if [[ "${requested_communications_worker}" == "true" ]]; then
   communications_worker_start_controlled \
