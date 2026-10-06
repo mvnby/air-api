@@ -35,6 +35,10 @@ def deployment_needed(run: dict, pages: list[dict], repository: str, sha: str) -
     for page in pages:
         for job in page["jobs"]:
             name = job["name"]
+            # GitHub does not evaluate the name expression when the job-level
+            # condition skips the matrix. This spelling comes from its Jobs API.
+            if name == "pytest-${{ (matrix.suite || 'skipped') }}":
+                name = "pytest-skipped"
             if name not in required:
                 continue
             if name in jobs:
