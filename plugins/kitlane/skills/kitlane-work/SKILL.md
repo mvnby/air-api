@@ -35,6 +35,9 @@ due date/reminder. Read `get_task` before update, complete or reopen and pass it
 current `expected_version`. Read `get_incoming` before updating an incoming
 request and preserve its original source text. On a version conflict, refresh
 the record and resolve the conflict with the user before changing it.
+Omit unchanged optional incoming fields; send `null` only when the user asks to
+clear a field. A changed time wish replaces the previous date suggestion using
+the saved source time. Provide `requested_at` only for a supported explicit date.
 
 Choose a unique `idempotency_key` for each intended write (16–128 characters,
 letters/digits/period/underscore/colon/hyphen). Keep that key and the identical

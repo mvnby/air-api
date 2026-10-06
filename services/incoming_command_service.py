@@ -98,6 +98,46 @@ class IncomingCommandService:
         fields["field_sources"] = sources
         return phone, fields
 
+    @classmethod
+    def _updated_meta(cls, payload, meta, source_time):
+        """Omitted fields retain their values; explicit null clears them."""
+        changes = payload.model_dump(mode="json", exclude_unset=True)
+        updated = dict(meta)
+        sources = dict(meta.get("field_sources", {}))
+        for key in (
+            "name",
+            "phone",
+            "email",
+            "region_text",
+            "address_text",
+            "requested_time_text",
+            "requested_at",
+        ):
+            if key not in changes:
+                continue
+            if key not in {"name", "phone", "email"}:
+                updated[key] = changes[key]
+            if changes[key]:
+                sources[key] = "provided"
+            else:
+                sources.pop(key, None)
+        if "requested_at" in changes:
+            updated["date_precision"] = "datetime" if payload.requested_at else None
+        elif "requested_time_text" in changes:
+            # A changed wish invalidates the old suggestion. Reinterpret it only
+            # against the retained source clock, never against processing time.
+            updated["requested_at"] = None
+            updated["date_precision"] = None
+            sources.pop("requested_at", None)
+            if payload.requested_time_text and source_time is not None:
+                _, inferred = cls._fields(payload, source_time)
+                updated["requested_at"] = inferred["requested_at"]
+                updated["date_precision"] = inferred["date_precision"]
+                if inferred["requested_at"]:
+                    sources["requested_at"] = "text"
+        updated["field_sources"] = sources
+        return updated
+
     @staticmethod
     def _response(lead: Lead) -> IncomingResponse:
         meta = lead.intake_meta or {}
@@ -230,7 +270,11 @@ class IncomingCommandService:
         # apply a correction to another request.
         async def operation():
             lead = await TenantEntityAccessService.get_lead(
-                session, lead_id, tenant_scope=actor.tenant_scope, for_update=True, populate_existing=True
+                session,
+                lead_id,
+                tenant_scope=actor.tenant_scope,
+                for_update=True,
+                populate_existing=True,
             )
             if not lead or not lead.intake_meta:
                 raise LookupError("Incoming request not found")
@@ -258,14 +302,11 @@ class IncomingCommandService:
                 if meta.get("source_occurred_at")
                 else None
             )
-            phone, fields = cls._fields(payload, source_time)
-            lead.name, lead.phone, lead.email, lead.request_text = (
-                payload.name,
-                phone,
-                payload.email,
-                payload.request_text,
-            )
-            lead.intake_meta = {**meta, **fields}
+            for key in ("name", "phone", "email"):
+                if key in payload.model_fields_set:
+                    setattr(lead, key, getattr(payload, key))
+            lead.request_text = payload.request_text
+            lead.intake_meta = cls._updated_meta(payload, meta, source_time)
             lead.version += 1
             session.add(lead)
             await session.flush()
@@ -281,7 +322,10 @@ class IncomingCommandService:
             actor=actor,
             command_name="incoming.update",
             idempotency_key=idempotency_key,
-            payload={"lead_id": lead_id, **payload.model_dump(mode="json")},
+            payload={
+                "lead_id": lead_id,
+                **payload.model_dump(mode="json", exclude_unset=True),
+            },
             response_model=IncomingResponse,
             operation=operation,
         )

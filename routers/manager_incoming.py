@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.command_actor import CommandActor, get_command_idempotency_key
 from core.database import get_session
 from core.security import AuthenticatedUser, get_current_auth_context
+from routers import manager_operation_ids as operation_ids
 from schemas_incoming import (
     IncomingCreatePayload,
     IncomingListResponse,
@@ -61,7 +62,7 @@ async def mutation(call, response: Response):
     "",
     response_model=IncomingResponse,
     status_code=201,
-    operation_id="create_manager_incoming",
+    operation_id=operation_ids.CREATE_MANAGER_INCOMING,
 )
 async def create_incoming(
     payload: IncomingCreatePayload,
@@ -79,7 +80,9 @@ async def create_incoming(
 
 
 @router.get(
-    "", response_model=IncomingListResponse, operation_id="list_manager_incoming"
+    "",
+    response_model=IncomingListResponse,
+    operation_id=operation_ids.LIST_MANAGER_INCOMING,
 )
 async def list_incoming(
     limit: int = Query(30, ge=1, le=100),
@@ -93,7 +96,9 @@ async def list_incoming(
 
 
 @router.get(
-    "/{lead_id}", response_model=IncomingResponse, operation_id="get_manager_incoming"
+    "/{lead_id}",
+    response_model=IncomingResponse,
+    operation_id=operation_ids.GET_MANAGER_INCOMING,
 )
 async def get_incoming(
     lead_id: int,
@@ -111,7 +116,7 @@ async def get_incoming(
 @router.patch(
     "/{lead_id}",
     response_model=IncomingResponse,
-    operation_id="update_manager_incoming",
+    operation_id=operation_ids.UPDATE_MANAGER_INCOMING,
 )
 async def update_incoming(
     lead_id: int,

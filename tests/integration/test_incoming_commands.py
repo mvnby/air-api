@@ -278,6 +278,116 @@ async def test_other_scope_cannot_read_or_correct_incoming(db):
 
 
 @pytest.mark.asyncio
+async def test_partial_correction_preserves_known_fields_and_explicit_null_clears(db):
+    actor = await _actor(db)
+    first = await _create(
+        db,
+        actor,
+        request_text="Первоначальный запрос",
+        name="Иван",
+        phone="+375291234567",
+        email="client@example.test",
+        region_text="Минск",
+        address_text="ул. Тестовая 10",
+        requested_time_text="завтра в 15:00",
+        source_occurred_at=datetime(2026, 1, 1, 8, tzinfo=timezone.utc),
+    )
+    lead = await db.get(Lead, first.value.lead_id)
+    original_meta = dict(lead.intake_meta)
+    payload = IncomingUpdatePayload(
+        expected_version=first.value.version,
+        request_text="Уточнён только текст, другой телефон в заметке +375299999999",
+    )
+    corrected = await IncomingCommandService.update(
+        db,
+        actor=actor,
+        lead_id=first.value.lead_id,
+        payload=payload,
+        idempotency_key="incoming-partial-correction1",
+    )
+    before = first.value.model_dump(exclude={"version", "request_text"})
+    assert corrected.value.model_dump(exclude={"version", "request_text"}) == before
+    assert (await db.get(Lead, first.value.lead_id)).intake_meta == original_meta
+    replay = await IncomingCommandService.update(
+        db,
+        actor=actor,
+        lead_id=first.value.lead_id,
+        payload=payload,
+        idempotency_key="incoming-partial-correction1",
+    )
+    assert replay.replayed and replay.value == corrected.value
+    # Omission and explicit null have different effects, so cannot share a key.
+    with pytest.raises(PublicWriteIdempotencyConflict):
+        await IncomingCommandService.update(
+            db,
+            actor=actor,
+            lead_id=first.value.lead_id,
+            payload=payload.model_copy(update={"phone": None}),
+            idempotency_key="incoming-partial-correction1",
+        )
+    cleared = await IncomingCommandService.update(
+        db,
+        actor=actor,
+        lead_id=first.value.lead_id,
+        payload=IncomingUpdatePayload(
+            expected_version=corrected.value.version,
+            request_text=corrected.value.request_text,
+            phone=None,
+            address_text=None,
+            requested_at=None,
+        ),
+        idempotency_key="incoming-explicit-clear-0001",
+    )
+    assert cleared.value.phone is None and cleared.value.address_text is None
+    assert cleared.value.requested_at is None and cleared.value.date_precision is None
+    assert cleared.value.email == first.value.email
+    assert cleared.value.requested_time_text == first.value.requested_time_text
+    assert "phone" not in cleared.value.field_sources
+    assert "address_text" not in cleared.value.field_sources
+    assert "requested_at" not in cleared.value.field_sources
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source_known", [True, False])
+async def test_changed_time_wish_replaces_suggestion_using_retained_source(
+    db, source_known
+):
+    actor = await _actor(db)
+    first = await _create(
+        db,
+        actor,
+        request_text="Монтаж завтра",
+        requested_time_text="завтра",
+        requested_at=datetime(2026, 1, 2, 8, tzinfo=timezone.utc),
+        source_occurred_at=(
+            datetime(2026, 1, 1, 8, tzinfo=timezone.utc) if source_known else None
+        ),
+    )
+    current = first.value
+    for index, wish in enumerate(["послезавтра в 15:00", "когда получится", None]):
+        corrected = await IncomingCommandService.update(
+            db,
+            actor=actor,
+            lead_id=first.value.lead_id,
+            payload=IncomingUpdatePayload(
+                expected_version=current.version,
+                request_text=current.request_text,
+                requested_time_text=wish,
+            ),
+            idempotency_key=f"incoming-changed-time-000{index}",
+        )
+        current = corrected.value
+        assert current.source_occurred_at == first.value.source_occurred_at
+        if index == 0 and source_known:
+            assert current.requested_at.isoformat() == "2026-01-03T15:00:00+03:00"
+            assert current.date_precision == "datetime"
+            assert current.field_sources["requested_at"] == "text"
+        else:
+            assert current.requested_at is None and current.date_precision is None
+            assert "requested_at" not in current.field_sources
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("terminal", ["archived", "triage_archived", "converted"])
 async def test_archived_or_converted_incoming_cannot_be_corrected(db, terminal):
     actor = await _actor(db)

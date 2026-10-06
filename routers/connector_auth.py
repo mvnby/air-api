@@ -15,6 +15,7 @@ from core.security import (
     get_current_auth_context,
     require_manager_access,
 )
+from routers import manager_operation_ids as operation_ids
 from schemas_connector_auth import ConnectorGrantListResponse, ConnectorTokenResponse
 from services.connector_auth_policy import (
     SCOPES,
@@ -255,7 +256,7 @@ async def revoke(request: Request, session: AsyncSession = Depends(get_session))
 
 @router.get(
     "/api/manager/connector/grants",
-    operation_id="manager_connector_grants",
+    operation_id=operation_ids.MANAGER_CONNECTOR_GRANTS,
     response_model=ConnectorGrantListResponse,
 )
 async def grants(
@@ -277,7 +278,7 @@ async def grants(
 
 @router.post(
     "/api/manager/connector/grants/{grant_id}/revoke",
-    operation_id="manager_connector_revoke",
+    operation_id=operation_ids.MANAGER_CONNECTOR_REVOKE,
 )
 async def manager_revoke(
     grant_id: int,

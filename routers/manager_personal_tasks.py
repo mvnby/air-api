@@ -11,6 +11,7 @@ from core.command_actor import (
 )
 from core.database import get_session
 from core.security import AuthenticatedUser, get_current_auth_context
+from routers import manager_operation_ids as operation_ids
 from schemas_personal_tasks import (
     PersonalTaskAssigneeListResponse,
     PersonalTaskCreatePayload,
@@ -33,7 +34,9 @@ from services.public_write_idempotency_service import (
 )
 
 
-router = APIRouter(prefix="/api/manager/personal-tasks", tags=["manager-personal-tasks"])
+router = APIRouter(
+    prefix="/api/manager/personal-tasks", tags=["manager-personal-tasks"]
+)
 
 
 def _http_error(exc: Exception) -> HTTPException:
@@ -108,7 +111,7 @@ async def _run_command(
 @router.get(
     "",
     response_model=PersonalTaskListResponse,
-    operation_id="list_manager_personal_tasks",
+    operation_id=operation_ids.LIST_MANAGER_PERSONAL_TASKS,
 )
 async def list_manager_personal_tasks(
     task_filter: PersonalTaskListFilter = Query("active", alias="filter"),
@@ -130,7 +133,7 @@ async def list_manager_personal_tasks(
 @router.get(
     "/assignees",
     response_model=PersonalTaskAssigneeListResponse,
-    operation_id="list_manager_personal_task_assignees",
+    operation_id=operation_ids.LIST_MANAGER_PERSONAL_TASK_ASSIGNEES,
 )
 async def list_manager_personal_task_assignees(
     limit: int = Query(100, ge=1, le=100),
@@ -147,7 +150,7 @@ async def list_manager_personal_task_assignees(
 @router.get(
     "/{task_id}",
     response_model=PersonalTaskResponse,
-    operation_id="get_manager_personal_task",
+    operation_id=operation_ids.GET_MANAGER_PERSONAL_TASK,
 )
 async def get_manager_personal_task(
     task_id: int,
@@ -168,7 +171,7 @@ async def get_manager_personal_task(
     "",
     response_model=PersonalTaskResponse,
     status_code=status.HTTP_201_CREATED,
-    operation_id="create_manager_personal_task",
+    operation_id=operation_ids.CREATE_MANAGER_PERSONAL_TASK,
 )
 async def create_manager_personal_task(
     payload: PersonalTaskCreatePayload,
@@ -192,7 +195,7 @@ async def create_manager_personal_task(
 @router.patch(
     "/{task_id}",
     response_model=PersonalTaskResponse,
-    operation_id="patch_manager_personal_task",
+    operation_id=operation_ids.PATCH_MANAGER_PERSONAL_TASK,
 )
 async def patch_manager_personal_task(
     task_id: int,
@@ -246,19 +249,19 @@ router.add_api_route(
     _status_route("complete"),
     methods=["POST"],
     response_model=PersonalTaskResponse,
-    operation_id="complete_manager_personal_task",
+    operation_id=operation_ids.COMPLETE_MANAGER_PERSONAL_TASK,
 )
 router.add_api_route(
     "/{task_id}/reopen",
     _status_route("reopen"),
     methods=["POST"],
     response_model=PersonalTaskResponse,
-    operation_id="reopen_manager_personal_task",
+    operation_id=operation_ids.REOPEN_MANAGER_PERSONAL_TASK,
 )
 router.add_api_route(
     "/{task_id}/cancel",
     _status_route("cancel"),
     methods=["POST"],
     response_model=PersonalTaskResponse,
-    operation_id="cancel_manager_personal_task",
+    operation_id=operation_ids.CANCEL_MANAGER_PERSONAL_TASK,
 )
