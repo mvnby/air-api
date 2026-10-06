@@ -37,6 +37,7 @@ not a checklist of documents to read. Open only the relevant procedure:
 | --- | --- |
 | Multi-step planning, repeated failures, delegation or improving agent instructions | [Agent workflow](docs/agent-workflow.md), relevant section |
 | Local setup, backend/Manager tests, imports/specs, leads or API client changes | [Development workflow](docs/development-workflow.md), relevant section |
+| API consumers, authentication, MCP or planning supplier integration | [API guide](docs/api/README.md), then the relevant domain contract |
 | Commit, PR, CI or merge | [Git workflow](docs/git-workflow.md) |
 | Production data operation | [Production data operations](docs/production-data-operations.md), then the matching runbook |
 | Deployment / HA / database topology | [Deployment](docs/deployment.md) / [API HA](docs/api-ha-runbook.md), relevant procedure; production data gates also apply to mutations |
