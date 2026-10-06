@@ -594,7 +594,6 @@ require_pitr_attested_candidate
 CANDIDATE_CHECKSUM="$(cksum < "${CANDIDATE_FILE}")"
 trap shared_belzakupki_guard_cleanup_candidate_transaction EXIT
 if [[ "${OPERATION}" == "migrate" ]]; then
-  trap shared_belzakupki_guard_cleanup_candidate_transaction EXIT
   shared_belzakupki_guard_prepare_with_signal_recovery
   sync_bot_voice_env_locked
   API_DEPLOY_LOCK_FD="${DEPLOY_LOCK_FD}" \
@@ -614,8 +613,7 @@ require_unchanged_db_contract
 resolve_previous_backend_image
 patroni_communications_capture_release_fence
 patroni_communications_capture_previous
-# A failed graceful drain must only clean up its candidate and suspension.
-# Do not arm runtime rollback or change installed assets before this succeeds.
+# Arm runtime rollback only after the shared-host guard succeeds.
 shared_belzakupki_guard_prepare_with_signal_recovery
 sync_bot_voice_env_locked
 patroni_role_assets_backup
