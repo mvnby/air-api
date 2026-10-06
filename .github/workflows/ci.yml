@@ -20,6 +20,9 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
     outputs:
       docs_only: ${{ steps.scope.outputs.docs_only }}
     steps:
@@ -31,12 +34,15 @@ jobs:
       - name: Classify complete change set
         id: scope
         env:
+          GH_TOKEN: ${{ github.token }}
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           args=()
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
             args+=(--merge-base)
+          elif [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            args+=(--verify-previous-push)
           fi
           python3 scripts/ci/change_scope.py \
             --base "$BASE_SHA" --head "$HEAD_SHA" "${args[@]}" \
