@@ -283,7 +283,9 @@ const prepareReplacement = (document: Parameters<typeof workspace.prepareReplace
   syncBasis();
   requestAnimationFrame(() => formRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
 };
-const artifactName = (kind: string) => kind === 'pdf' ? 'PDF' : kind === 'rendered_docx' ? 'DOCX' : kind;
+const artifactName = (kind: string) => ({
+  pdf: 'PDF', rendered_docx: 'DOCX', source_docx: 'Исходный DOCX', signed_pdf: 'PDF с подписью и печатью',
+}[kind] || kind);
 const googleTarget = (documentId: number): GoogleDocumentEditTarget => ({
   kind: 'managed-document',
   documentId,
