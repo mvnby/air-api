@@ -237,6 +237,8 @@ def _calculate(
         if {item.key for item in group} != expected_keys:
             raise ValueError(f"backup artifacts missing or unmanifested: {backup_id}")
         for entry in manifest.files:
+            if entry.name.endswith(".tar.gz") and entry.size_bytes == 0:
+                raise ValueError(f"empty required backup archive: {entry.key}")
             obj = by_key[entry.key]
             if obj.size_bytes != entry.size_bytes:
                 raise ValueError(f"listed artifact size mismatch: {entry.key}")

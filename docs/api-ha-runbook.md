@@ -645,7 +645,8 @@ The fixture builder is in
 
 All backup artifacts must appear in the complete listing and match their
 manifest's size and digest metadata, including streamed WAL/tablespace files
-when listed. Outer and PostgreSQL manifests and histories are read and digest
+when listed. A zero-byte tar archive blocks planning even when its HEAD digest
+identity matches the manifest. Outer and PostgreSQL manifests and histories are read and digest
 verified. Full tar/WAL bodies are not downloaded or checksum-verified here; that
 and actual recovery still require the existing physical restore drill. Legacy
 v0, unsupported versions, orphaned uploads, identity changes, missing artifacts,

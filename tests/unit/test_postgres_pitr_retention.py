@@ -597,3 +597,19 @@ def test_current_uploader_manifest_and_idempotent_retry_are_accepted(tmp_path, m
     assert report["status"] == "planned", report
     assert report["evidence"]["retained_backup_ids"] == ["anchor", "current-upload", "inside"]
     capsys.readouterr()
+
+
+@pytest.mark.parametrize("archive_name", ["base.tar.gz", "pg_wal.tar.gz"])
+def test_empty_required_archive_cannot_supply_retention_anchor(archive_name):
+    payload = fixture_payload()
+    key = f"{PREFIX}basebackups/anchor/{archive_name}"
+    empty = record(key, b"")
+    index = next(i for i, r in enumerate(payload["objects"]) if r["key"] == key)
+    payload["objects"][index] = empty
+
+    def replace_entry(m):
+        entry = next(e for e in m["files"] if e["key"] == key)
+        entry.update(size_bytes=0, sha256=empty["sha256"])
+
+    change_manifest(payload, "anchor", replace_entry)
+    blocked(run(payload))
