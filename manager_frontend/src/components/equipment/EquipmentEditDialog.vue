@@ -5,6 +5,7 @@ import { ManagerEquipmentService, type ManagerEquipmentDetailResponse } from '..
 import { useDialogA11y } from '../../composables/useDialogA11y';
 import { getApiErrorMessage } from '../../utils/api-errors';
 import { equipmentLocation, equipmentTitle, formatEquipmentDate, phoneHref, serviceContactPhone } from './registry';
+import MaintenanceObservationsPanel from '../maintenance-observations/MaintenanceObservationsPanel.vue';
 import { equipmentWarrantySummary } from './equipmentWarrantySummary';
 import {
   addCalendarMonths, equipmentEditError, equipmentEditForm, equipmentEditPayload, maintenancePreview,
@@ -176,6 +177,7 @@ const save = async () => {
               <label class="edit-label sm:col-span-2">Заметки<textarea v-model="form.notes" rows="2" class="edit-input" /></label>
             </div>
           </fieldset>
+          <MaintenanceObservationsPanel v-if="equipment" :key="equipment.id" class="mt-4" :equipment-id="equipment.id" />
           </div>
 
           <footer class="shrink-0 space-y-2 border-t border-gray-200 bg-white px-5 py-3 dark:border-slate-700 dark:bg-slate-800">

@@ -17,6 +17,7 @@ from routers import manager_dashboard
 from routers import manager_docs
 from routers import manager_document_drive
 from routers import manager_equipment
+from routers import manager_maintenance_observations
 from routers import manager_equipment_links
 from routers import manager_google_auth
 from routers import manager_features
@@ -79,6 +80,7 @@ router.include_router(manager_commercial_terms.router)
 router.include_router(manager_order_usage.router)
 router.include_router(manager_catalog_usage.router)
 router.include_router(manager_equipment.router)
+router.include_router(manager_maintenance_observations.router)
 router.include_router(manager_equipment_links.router)
 router.include_router(manager_repair_complaints.router)
 router.include_router(manager_leads.router)

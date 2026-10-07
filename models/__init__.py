@@ -21,6 +21,9 @@ from .customer import (
 )
 from .customer_contact import CustomerContact, CustomerContactHistory
 from .equipment import CustomerEquipment, EquipmentComponent, EquipmentServiceHistory
+from .maintenance_observation import (
+    MaintenanceObservation, MaintenanceObservationRevision, MaintenanceObservationPhoto,
+)
 from .brand import Brand, ProductSeries
 from .feature import (
     Feature,
@@ -217,6 +220,9 @@ __all__ = [
     "DocumentTemplateActLink",
     "DocumentTemplateCustomerLink",
     "CustomerEquipment",
+    "MaintenanceObservation",
+    "MaintenanceObservationRevision",
+    "MaintenanceObservationPhoto",
     "EquipmentComponent",
     "EquipmentAttachmentLink",
     "EquipmentMaintenanceReminder",
