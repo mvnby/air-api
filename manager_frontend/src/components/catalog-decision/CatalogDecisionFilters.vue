@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
 import type { CatalogDecisionFilters as FilterState } from '../../services/catalog-decision-api';
-import BynSymbol from './BynSymbol.vue';
+import BynSymbol from '../money/BynSymbol.vue';
 import EquipmentTypeIcon from './EquipmentTypeIcon.vue';
 
 type RangeName = 'cooling' | 'retail';

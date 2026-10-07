@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MoneyAmount from '../components/money/MoneyAmount.vue';
 import { computed, onMounted, ref } from 'vue';
 import { Loader2, Search } from 'lucide-vue-next';
 
@@ -114,7 +115,7 @@ onMounted(() => {
             </div>
             <div class="text-right">
               <div v-if="item.effective_price !== null && item.effective_price !== undefined" class="font-semibold text-gray-900">
-                {{ item.effective_price.toLocaleString('ru-BY') }} BYN
+                <MoneyAmount :value="item.effective_price" :formatted-value="item.effective_price.toLocaleString('ru-BY')" />
               </div>
               <span
                 class="mt-1 inline-flex rounded-full px-2 py-1 text-xs font-semibold"

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import OrderMoney from './OrderMoney.vue';
 import LineFormattedText from './LineFormattedText.vue';
 import { computed, ref, watch } from 'vue';
 import type { ProductLine, ProductOption } from './order-editor-types';
@@ -158,7 +159,7 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
               >
                 <p class="truncate font-medium text-gray-900 dark:text-slate-100">{{ item.title }}</p>
                 <p class="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-gray-500 dark:text-slate-300">
-                  <span>{{ formatMoney(item.price) }}</span><span>·</span><span>{{ item.is_inverter ? 'Инвертор' : 'On/Off' }}</span><span>·</span>
+                  <span><OrderMoney :value="item.price" /></span><span>·</span><span>{{ item.is_inverter ? 'Инвертор' : 'On/Off' }}</span><span>·</span>
                   <template v-if="item.vitebsk_qty > 0 || item.minsk_qty > 0">
                     <span v-if="item.vitebsk_qty > 0" class="rounded bg-emerald-50 px-1 font-medium text-emerald-600">Вит: {{ item.vitebsk_qty }}</span>
                     <span v-if="item.minsk_qty > 0" class="rounded bg-blue-50 px-1 font-medium text-blue-500">Минск: {{ item.minsk_qty }}</span>
@@ -185,7 +186,7 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
           </label>
           <div class="col-span-3 space-y-1 md:col-span-2">
             <span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Итого</span>
-            <div class="rounded-lg bg-gray-50 px-2 py-1.5 md:px-3 md:py-2"><p class="whitespace-nowrap text-sm font-semibold leading-tight text-gray-900 md:text-base">{{ formatMoney(lineTotal(line)) }}</p></div>
+            <div class="rounded-lg bg-gray-50 px-2 py-1.5 md:px-3 md:py-2"><p class="whitespace-nowrap text-sm font-semibold leading-tight text-gray-900 md:text-base"><OrderMoney :value="lineTotal(line)" /></p></div>
           </div>
           <label class="col-span-6 min-w-0 space-y-1 md:col-span-12">
             <span class="flex items-center justify-between gap-2 px-1 text-xs font-medium text-gray-500">
@@ -210,7 +211,7 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
             />
           </label>
           <p v-if="isPriceDifferent(line)" class="col-span-6 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-700 md:col-span-12">
-            Цена строки отличается от каталожной ({{ formatMoney(catalogPrice(line.product_id) || 0) }}).
+            Цена строки отличается от каталожной (<OrderMoney :value="catalogPrice(line.product_id) || 0" />).
           </p>
           <div v-if="canManagePlatform" class="col-span-6 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-2 md:col-span-12">
             <span v-if="supplyBadgeForLine(line)" class="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-1 text-xs font-semibold text-brand-700">
@@ -228,7 +229,7 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
             <p v-if="line.client_description" class="mt-0.5 whitespace-pre-wrap break-words text-xs font-normal leading-relaxed text-gray-500 dark:text-slate-400"><LineFormattedText :text="line.client_description" /></p>
           </div>
           <p class="flex flex-col gap-1 md:block md:text-center"><span class="text-xs text-gray-500 md:hidden">Кол-во</span><span class="font-medium text-gray-700 dark:text-slate-300">{{ line.quantity }}</span></p>
-          <p class="flex flex-col gap-1 md:block md:text-right"><span class="text-xs text-gray-500 md:hidden">Цена</span><span class="font-medium text-gray-700 dark:text-slate-300">{{ formatMoney(line.price) }}</span>
+          <p class="flex flex-col gap-1 md:block md:text-right"><span class="text-xs text-gray-500 md:hidden">Цена</span><span class="font-medium text-gray-700 dark:text-slate-300"><OrderMoney :value="line.price" /></span>
             <span
               v-if="priceAdjustment(line)"
               data-testid="product-price-adjustment"
@@ -239,8 +240,8 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
               :title="priceAdjustment(line)?.details"
             >{{ priceAdjustment(line)?.direction === 'discount' ? '↓' : '↑' }} {{ priceAdjustment(line)?.description }} {{ priceAdjustment(line)?.percentLabel }}</span>
           </p>
-          <p class="flex flex-col gap-1 md:block md:text-right"><span class="text-xs text-gray-500 md:hidden">Итого</span><span class="font-semibold text-gray-900 dark:text-slate-100">{{ formatMoney(lineTotal(line)) }}</span></p>
-          <p v-if="visibleCosts" class="col-span-2 flex flex-col gap-1 md:col-auto md:block md:text-right"><span class="text-xs text-gray-500 md:hidden">Себест.</span><span class="font-medium text-gray-700 dark:text-slate-300">{{ formatMoney(line.cost) }}</span></p>
+          <p class="flex flex-col gap-1 md:block md:text-right"><span class="text-xs text-gray-500 md:hidden">Итого</span><span class="font-semibold text-gray-900 dark:text-slate-100"><OrderMoney :value="lineTotal(line)" /></span></p>
+          <p v-if="visibleCosts" class="col-span-2 flex flex-col gap-1 md:col-auto md:block md:text-right"><span class="text-xs text-gray-500 md:hidden">Себест.</span><span class="font-medium text-gray-700 dark:text-slate-300"><OrderMoney :value="line.cost" /></span></p>
           <div class="flex justify-end gap-1 md:justify-center" :class="visibleCosts ? 'md:col-auto' : 'col-span-3 md:col-auto'">
             <button type="button" data-order-usage="order_product_edit" class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-brand-700 hover:bg-brand-50" :aria-label="`Редактировать товар #${index + 1}`" title="Редактировать" @click="editLine(line)">✎</button>
             <button type="button" data-order-usage="order_product_remove" class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-red-600 hover:bg-red-50" :aria-label="`Удалить товар #${index + 1}`" title="Удалить" @click="emit('remove', index)">×</button>

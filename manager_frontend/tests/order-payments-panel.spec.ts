@@ -111,6 +111,19 @@ afterEach(() => {
 });
 
 describe('OrderPaymentsPanel', () => {
+  it('uses the BYN sign for local payments and retains fixed USD/EUR amounts', async () => {
+    const wrapper = mountPanel([
+      { ...payment, amount: 0 },
+      { ...payment, id: 802, currency: 'USD', amount: 10 },
+      { ...payment, id: 803, currency: 'EUR', amount: 10.12 },
+    ]);
+    await flushPromises();
+    expect(wrapper.text()).toContain('0 BYN');
+    expect(wrapper.text()).toContain('10.00 USD');
+    expect(wrapper.text()).toContain('10.12 EUR');
+    expect(wrapper.find('svg[viewBox="0 0 360.67 446.4"]').exists()).toBe(true);
+  });
+
   it('omits margin from the payment summary in a read-only demo', async () => {
     managerSession.auth.value = { demo_read_only: true } as any;
     const wrapper = mountPanel();

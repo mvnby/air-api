@@ -60,6 +60,18 @@ describe('product management list', () => {
     expect((vi.mocked(catalogManagementApi.list).mock.calls[0]![0] as any).isPublished).toBeUndefined();
   });
 
+  it('shows the official sign while preserving raw price and fixed cost precision', async () => {
+    vi.mocked(catalogManagementApi.list).mockResolvedValue(result([{
+      ...product, price: 10.234, min_cost_byn: 0, recommended_price_byn: null, margin_abs_preview: -0.01,
+    }]));
+    const view = await start();
+    expect(view.text()).toContain('10.234 BYN');
+    expect(view.text()).toContain('Себестоимость: 0.00 BYN');
+    expect(view.text()).toContain('РРЦ: —');
+    expect(view.text()).toContain('Маржа: -0.01 BYN');
+    expect(view.find('svg[viewBox="0 0 360.67 446.4"]').exists()).toBe(true);
+  });
+
   it('does not let a stale list response replace newer filter results', async () => {
     vi.mocked(catalogManagementApi.list).mockResolvedValueOnce(result([product]));
     const view = await start();

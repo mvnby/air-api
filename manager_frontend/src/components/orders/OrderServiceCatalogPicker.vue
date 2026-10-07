@@ -1,11 +1,13 @@
 <script setup lang="ts">
+import OrderMoney from './OrderMoney.vue';
+import MoneyAmount from '../money/MoneyAmount.vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import { api } from '../../api';
 import type { ManagerInstallEstimateResponse, ManagerOrderServiceLinePayload, ManagerQuickTariffResponse, ManagerTariffResponse, ManagerTariffRuleResponse, ManagerTariffServiceKind } from '../../client';
 import { getApiErrorMessage } from '../../utils/api-errors';
 import type { OrderWorkflowType } from './order-workspace';
 import { orderedServiceKinds, preferredServiceKind, serviceCategories } from './service-catalog-order';
-import { formatMoney } from './order-utils';
+import { formatMoneyAmount } from './order-utils';
 import { listInstallationStandardTariffs } from '../../services/installation-estimate-api';
 import type { ManagerInstallationStandardTariff } from '../../client';
 import { standardServiceChoice } from './service-installation-choices';
@@ -196,15 +198,15 @@ onMounted(() => { void Promise.all([load(), loadBookState()]); });
         <label class="text-xs">Скидка, BYN<input v-model.number="discount" type="number" min="0" step="0.01" class="field-input mt-1" /></label>
       </div>
       <div v-if="manualRules.length" class="mt-3 grid gap-2 sm:grid-cols-2">
-        <label v-for="rule in manualRules" :key="rule.id" class="text-xs">{{ rule.name }} · {{ formatMoney(rule.unit_price) }} BYN/{{ rule.unit }}
+        <label v-for="rule in manualRules" :key="rule.id" class="text-xs">{{ rule.name }} · <OrderMoney :value="rule.unit_price" />/{{ rule.unit }}
           <input v-model.number="ruleInputs[rule.id]" type="number" min="0" :step="rule.rule_type === 'fixed_once' ? 1 : 0.1" class="field-input mt-1" />
         </label>
       </div>
       <div class="mt-3 flex flex-wrap items-center gap-2">
         <button type="button" class="btn-mini" :disabled="busy" @click="calculate">{{ busy ? 'Считаю…' : 'Рассчитать смету' }}</button>
-        <span v-if="calculation" class="text-sm font-semibold">{{ formatMoney(calculation.total) }} {{ calculation.currency }}</span>
+        <span v-if="calculation" class="text-sm font-semibold"><MoneyAmount :value="calculation.total" :formatted-value="formatMoneyAmount(calculation.total)" :currency="calculation.currency" /></span>
       </div>
-      <ul v-if="calculation" class="mt-2 list-inside list-disc text-xs text-slate-600"><li v-for="(line, index) in calculation.lines" :key="index">{{ line.name }} · {{ formatMoney(line.line_total) }} BYN</li></ul>
+      <ul v-if="calculation" class="mt-2 list-inside list-disc text-xs text-slate-600"><li v-for="(line, index) in calculation.lines" :key="index">{{ line.name }} · <OrderMoney :value="line.line_total" /></li></ul>
       <button v-if="calculation" type="button" class="btn-mini mt-3" :disabled="busy" @click="saveAndAdd">Сохранить смету и добавить в заказ</button>
     </template>
     <template v-else>
@@ -222,13 +224,13 @@ onMounted(() => { void Promise.all([load(), loadBookState()]); });
           <div v-for="tariff in visibleStandards" :key="tariff.code" class="rounded-lg border border-slate-200 bg-white p-2.5" data-testid="installation-standard-tariff">
             <p class="text-sm font-semibold text-slate-900">{{ tariff.title }}</p>
             <p class="mt-1 text-xs font-normal text-slate-500">{{ tariff.description }}</p>
-            <div class="mt-2 flex items-center justify-between gap-2"><span class="text-sm">{{ formatMoney(Number(tariff.price)) }} BYN</span><button type="button" class="btn-mini" @click="emit('choose', standardServiceChoice(tariff))">Добавить</button></div>
+            <div class="mt-2 flex items-center justify-between gap-2"><span class="text-sm"><OrderMoney :value="Number(tariff.price)" /></span><button type="button" class="btn-mini" @click="emit('choose', standardServiceChoice(tariff))">Добавить</button></div>
           </div>
         </template>
         <div v-for="tariff in visibleTariffs" :key="tariff.id" class="rounded-lg border border-slate-200 bg-white p-2.5">
           <p class="text-sm font-semibold text-slate-900">{{ tariff.short_name || tariff.selector_label }}</p>
           <p v-if="tariff.full_description" class="mt-0.5 line-clamp-2 text-xs text-slate-500">{{ tariff.full_description }}</p>
-          <div class="mt-2 flex flex-wrap items-center gap-2 text-xs"><span>{{ formatMoney(tariff.base_price) }} BYN</span><span v-if="tariff.power_range">· {{ tariff.power_range }}</span></div>
+          <div class="mt-2 flex flex-wrap items-center gap-2 text-xs"><span><OrderMoney :value="tariff.base_price" /></span><span v-if="tariff.power_range">· {{ tariff.power_range }}</span></div>
           <div class="mt-2 flex gap-2"><button type="button" class="btn-mini h-8 px-2 text-xs" @click="choose(tariff)">Добавить</button><button type="button" class="btn-mini-outline h-8 px-2 text-xs" @click="startEstimate(tariff)">Собрать смету</button></div>
         </div>
         <p v-if="!visibleTariffs.length && !(kind === 'installation' && visibleStandards.length)" class="text-xs text-slate-500">По этому запросу услуг нет.</p>
