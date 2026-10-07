@@ -52,3 +52,115 @@ Manager подтверждает только `fixed` preview для выбра�
 `InstallationRate` и старые строки сохраняются для истории. Они не становятся вторым редактируемым источником новой цены. После публикации книги защита публичных читателей закрывает старые installation rates, options, typed tariff list/calculate и старый checkout структурированным `409 book_preview_required`; смешанный `/api/v1/content/services` убирает только installation/installation_option, сохраняя остальные категории. Старый Manager-редактор rates закрыт после публикации. Совместимый адаптер, который молча сопоставляет старый `installation_rate_id` с новой книгой, не выбран. Исторические заказы, сметы и выпущенные документы продолжают читаться из своих снимков.
 
 Первое применение сетки завершено 25 сентября 2026 года. Для будущей корректировки нужны сверка реальных старых и новых сумм каждого затронутого tenant, [новый reviewed plan и atomic apply](installation-grid-rollout.md) на точном production-образе. План фиксирует строки, правила, опубликованные цены, новые тарифы, список партнёров и доказательства готовности; несовпадение перед apply останавливает операцию. После apply проверяются новая ревизия книги и smoke-запросы каждого scope. Уже принятые расчёты и документы не пересчитываются.
+
+## Ограниченная приёмка 7 октября 2026 года
+
+Проверенная backend-ревизия:
+[`74d9dcb0bb9e84882af0e8236e65bd53199020c8`](https://github.com/mvnby/air-api/commit/74d9dcb0bb9e84882af0e8236e65bd53199020c8).
+Это повторная приёмка двух оставшихся backend-сценариев из
+[выпуска 25 сентября](installation-grid-release-2026-09-25.md), с учётом
+более поздних [редактируемых строк](https://github.com/mvnby/air-api/pull/1066),
+[упрощённого добавления услуг](https://github.com/mvnby/air-api/pull/1068) и
+[форматирования документных строк](https://github.com/mvnby/air-api/pull/1081).
+Перед merge ветка обновлена до
+[`f47b922e59ba43536ab0925adde9f497d9057a8f`](https://github.com/mvnby/air-api/commit/f47b922e59ba43536ab0925adde9f497d9057a8f)
+с соседним alias fix: повторно прошли три сквозных сценария и 17 проверок
+монтажного профиля (20 passed). Миграции и generated contracts в соседнем
+изменении не затронуты.
+Новых дефектов в проверенном объёме не найдено; код, HTTP-контракт, опубликованные
+тарифы и production-данные не изменялись.
+
+### Среда и повторяемые проверки
+
+Все write-сценарии выполнены в отдельном временном локальном PostgreSQL 17.
+Базовый stem — `mvn_test_tariff_accept955`; штатный test bootstrap создавал
+для каждого процесса собственную физическую базу с суффиксом run/worker и
+удалял её после проверки. Общий `.env` и основная рабочая копия не изменялись.
+SQLite-проверка первоначального копирования партнёру дополняет PostgreSQL
+приёмку публикации и снимков, но не заменяет её.
+
+Прошли 93 существующие проверки: 37 для подтверждения, прикрепления, checkout,
+строк документов и копирования; 56 для нативного контекста документа,
+preview receipts, resolver и legacy guards. Воспроизведение из корня
+проверенной ревизии после запуска своей локальной тестовой PostgreSQL:
+
+```bash
+# Укажите только свой локальный PostgreSQL; имя базы обязано содержать test.
+export PYTEST_BASE_DATABASE_URL=postgresql+asyncpg://accept955@127.0.0.1:55495/mvn_test_tariff_accept955
+PYTHONPATH=tests:. python -m pytest --import-mode=importlib -q \
+  tests/integration/test_installation_price_book.py \
+  tests/integration/test_installation_estimate_confirmation.py \
+  tests/integration/test_public_installation_checkout.py \
+  tests/integration/test_order_document_proposal_scope.py \
+  tests/integration/test_installation_commercial_edits_api.py \
+  tests/unit/test_installation_grid_partner_copy.py \
+  tests/unit/test_installation_document_scope.py \
+  tests/unit/test_installation_estimate_confirmation.py
+PYTHONPATH=tests:. python -m pytest --import-mode=importlib -q \
+  tests/integration/test_document_context_builder.py \
+  tests/unit/test_installation_preview_receipt.py \
+  tests/unit/test_installation_pricing_bridge.py \
+  tests/unit/test_installation_price_book.py
+```
+
+`importlib` нужен для совместного запуска unit/integration файлов с одинаковым
+именем; `PYTHONPATH=tests:.` сохраняет импорт PostgreSQL test bootstrap.
+Ни один URL из этих команд не является production URL.
+
+### Дополнительные сквозные сценарии
+
+Дополнительно исполнены три локальных сценария на существующих fixtures:
+два способа прикрепления сметы к нативному документу и публикация основной
+компании/партнёра в обе стороны. Для повторения используйте следующие входы и
+проверки в изолированной базе; значения здесь — тестовые, не новый прайс.
+
+| Сценарий и существующий fixture | Шаги и полученное доказательство |
+| --- | --- |
+| Смета → выбранное КП → документ, `test_managed_document_lifecycle._seed` и `test_public_installation_checkout._entry` | Один настенный комплект 2,5 кВт с трубами 1/4 и 3/8; база 500,00; трасса 6 м при включённых 3 м и ставке 10,25; два алмазных отверстия при одном включённом и ставке 50,00; выбранные поставка/монтаж насоса 80,00/20,00; equipment-bundle скидка 0,01. `Book.preview` → `Confirm.confirm` → `Confirm.attach` дали 680,75 − 0,01 = **680,74 BYN**. Товар 1500,00, сумма заказа и документа **2180,74 BYN**. |
+| Свёрнутое и подробное прикрепление | Отдельно повторены `collapsed` и `detailed`. В первом варианте одна услуга 680,74; во втором пять строк с net-суммами того же итога. Указанные трасса, отверстия и насос сохранены; услуга 999,00 из альтернативного предложения исключена. `DocumentContextSelection` без явного proposal выбрал отмеченное КП. Прикреплённые строки не дублировались. |
+| Новая книга между draft и issue документа | `ManagedDocumentService.create_draft` сохраняет строки и итог; затем добавлен fixture опубликованной книги revision 2 с базой 900,00, после чего вызван `issue`. В сохранённом документе и прочитанных обратно таблицах настоящего `rendered_docx` остались прежние строки и **2180,74**. Принятая `InstallationEstimateRevision` сохранила исходный `price_book_id`, revision 1, полный snapshot и скидку 0,01. |
+| Независимость основной компании и партнёра, `test_installation_price_book._draft` | Системный scope основной компании и отдельный tenant/storefront партнёра: опубликованы revision 1 с базами 500,00/700,00; подтверждены и прикреплены сметы **580,75/780,75**. Изменение черновика не меняло resolve до публикации. Публикация основной базы 550,00 не изменила партнёрскую книгу; затем публикация партнёрской базы 760,00 не изменила основную. Новые resolve/preview совпали по `price_book_id`, revision 2 и суммам **630,75/840,75**. |
+| История и scope после обеих публикаций | Старые опубликованные entries остались 500,00/700,00; обе принятые revision 1, их snapshots и строки КП остались **580,75/780,75**. Повтор прежнего idempotency key вернул прежний preview. Чужой tenant не прочитал ни принятую ревизию, ни preview token: `404`. Одинаковые ключи двух scopes не смешали результаты. |
+
+Нативный сценарий проверяет сохранённый snapshot и фактические DOCX-строки.
+PDF-конвертер в fixture заменён `FakePdfConverter`: эти результаты **не**
+доказывают вёрстку реального PDF или содержимое production-документа.
+Публичный HTTP resolve/preview, отключённое направление и `private, no-store`
+проверены существующим
+`test_public_resolve_preview_hide_disabled_direction_and_cache_privately`;
+двусторонняя проверка выше использует тот же сервис расчёта напрямую.
+Прежний preview после смены своей книги требует нового согласия при confirm;
+принятая смета и документ из её сохранённых строк не пересчитываются.
+
+### Runtime и фактический остаток #955
+
+7 октября в 13:20 (Минск) публичные `/api/health`,
+`/api/v1/products?limit=5` и `/api/v1/filters/config` ответили `200` с непустым
+JSON. Штатный
+[image deployment проверенной backend-ревизии](https://github.com/mvnby/air-api/actions/runs/37603376181)
+завершился успешно. Smoke подтверждает доступность API, но не заменяет
+проверку конкретного заказа.
+
+Именной Kitlane-контекст для основной компании доступен. Его опубликованный
+`get_order` возвращает только краткую сводку; строки КП, принятую смету и
+содержимое документа этот контракт не предоставляет. Поэтому приёмка на
+**реальном рабочем объекте остаётся открытой**. Привилегированный DB/SSH-доступ
+не подменял именные права; production-заказ, смета, документ и тариф для
+приёмки не создавались и не редактировались. Следующий шаг — с именными
+Manager-правами read-only сопоставить существующие принятую ревизию, выбранное
+КП и выпущенный документ; приватные контакты и содержимое документа в общий
+отчёт не включать.
+
+Самостоятельность партнёрской книги и денежная цепочка доказаны в указанной
+изолированной среде. Master [#955](https://github.com/mvnby/air-api/issues/955)
+остаётся открытой также из-за исходного критерия окончательного удаления
+legacy: backend всё ещё содержит `InstallationRate` и защищённые старые
+читатели. В web есть
+[выпущенный переход на книги](https://github.com/mvnby/mvn-web/pull/130), но на
+проверенном web main
+[`59a02c426b058230c89b6a0a64ad394edb9f6e30`](https://github.com/mvnby/mvn-web/commit/59a02c426b058230c89b6a0a64ad394edb9f6e30)
+файл `src/utils/installation-pricing.js` всё ещё содержит
+`matchProductInstallationRate` для legacy-пути. Аудит всех оставшихся читателей,
+безопасное удаление и полная приёмка storefront/checkout здесь не выполнялись.
+Перенос G-35/RF-V40P, партнёрский accepted checkout и новые production-публикации
+не входят в этот результат.
