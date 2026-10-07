@@ -613,3 +613,37 @@ def test_empty_required_archive_cannot_supply_retention_anchor(archive_name):
 
     change_manifest(payload, "anchor", replace_entry)
     blocked(run(payload))
+
+
+@pytest.mark.parametrize("ancestor_switch", ["0/4800000", "0/4000000"])
+def test_anchor_after_failover_retains_ancestor_fork_and_divergent_segments(ancestor_switch):
+    payload = failover_payload()
+    history3 = f"1\t{ancestor_switch}\tpromoted\n".encode()
+    key3 = f"{PREFIX}wal/00000003/00000003.history"
+    key5 = f"{PREFIX}wal/00000005/00000005.history"
+    payload["objects"] = [
+        r
+        for r in payload["objects"]
+        if r["key"] not in (key3, key5, wal_key(3, 4))
+        and r["key"] != wal_key(5, 6)
+        and "/basebackups/inside/" not in r["key"]
+    ]
+    payload["objects"] += [
+        record(key3, history3),
+        segment(3, 4, header_timeline=1 if ancestor_switch == "0/4800000" else 3),
+        record(key5, history3 + b"3\t0/6000000\tpromoted\n"),
+        segment(5, 6),
+        *backup("leaf-anchor", "2026-09-29T10:00:00Z", 6, timeline=5, source="zakup"),
+        *backup("inside", "2026-10-05T09:00:00Z", 7, timeline=5, source="zakup"),
+    ]
+    report = run(payload, required_end_wal=wal_name(5, 7))
+    assert report["status"] == "planned", report
+    assert report["evidence"]["anchor_backup_id"] == "leaf-anchor"
+    candidates = {r["key"] for r in report["candidates"]}
+    assert {wal_key(1, 1), wal_key(1, 2), wal_key(1, 3), wal_key(3, 4), wal_key(3, 5)} <= candidates
+    # Segment 4 contains the ancestor switch; segment 5 is beyond that switch.
+    # Neither belongs to a fully proven ancestor interval, even though both
+    # positions precede the leaf anchor's segment number 6.
+    assert wal_key(1, 4) not in candidates
+    assert wal_key(1, 5) not in candidates
+    assert wal_key(5, 6) not in candidates
