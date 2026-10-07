@@ -253,7 +253,8 @@ export class ManagerOrdersService {
      * Hard-delete an accessible scoped order together with
      * proposal/line/stage/executor/payment/document rows, enqueueing provider document
      * cleanup. Bank receipt and outgoing-email histories are detached for audit rather than
-     * removed. Missing order/service validation returns 400; unexpected deletion failure 500.
+     * removed. Saved maintenance observations prevent deletion with 409 before any cleanup.
+     * Missing order/service validation returns 400; unexpected deletion failure 500.
      * No closed-order document lock is applied by this order-delete command; repeat after
      * deletion is not receipt replay.
      *

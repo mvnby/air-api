@@ -16804,7 +16804,7 @@
           "manager-orders"
         ],
         "summary": "Delete Manager Order",
-        "description": "Hard-delete an accessible scoped order together with\nproposal/line/stage/executor/payment/document rows, enqueueing provider document\ncleanup. Bank receipt and outgoing-email histories are detached for audit rather than\nremoved. Missing order/service validation returns 400; unexpected deletion failure 500.\nNo closed-order document lock is applied by this order-delete command; repeat after\ndeletion is not receipt replay.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Hard-delete an accessible scoped order together with\nproposal/line/stage/executor/payment/document rows, enqueueing provider document\ncleanup. Bank receipt and outgoing-email histories are detached for audit rather than\nremoved. Saved maintenance observations prevent deletion with 409 before any cleanup.\nMissing order/service validation returns 400; unexpected deletion failure 500.\nNo closed-order document lock is applied by this order-delete command; repeat after\ndeletion is not receipt replay.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "delete_manager_order",
         "security": [
           {
@@ -27594,7 +27594,7 @@
           "manager-service-attachments"
         ],
         "summary": "Patch Manager Service Attachment",
-        "description": "Update attachment/link metadata without replacing its file bytes. order_id is required\nto change category, caption or equipment/component/history association; missing context\nor invalid relationships returns 400. Missing/archived or inaccessible attachment\nreturns 404. Shared metadata changes require all active links to be owned by the\ncaller\u2019s scope; per-order link edits update the corresponding equipment context.\n\nAccess and scope: Manager access is required; active attachment links must pass order\ntenant/storefront or equipment customer-tenant ownership checks. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [private service\nattachments](https://github.com/mvnby/air-api/blob/main/docs/service-attachments.md).",
+        "description": "Update attachment/link metadata without replacing its file bytes. order_id is required\nto change category, caption or equipment/component/history association; missing context\nor invalid relationships returns 400. Missing/archived or inaccessible attachment\nreturns 404. Shared metadata changes require all active links to be owned by the\ncaller\u2019s scope; per-order link edits update the corresponding equipment context.\nObservation-owned photos reject independent equipment/component/history edits with\n400: their equipment association is managed through the maintenance observation.\n\nAccess and scope: Manager access is required; active attachment links must pass order\ntenant/storefront or equipment customer-tenant ownership checks. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [private service\nattachments](https://github.com/mvnby/air-api/blob/main/docs/service-attachments.md).",
         "operationId": "patch_manager_service_attachment",
         "security": [
           {
@@ -50586,6 +50586,17 @@
           "version": {
             "type": "integer",
             "title": "Version"
+          },
+          "equipment_link_state": {
+            "type": "string",
+            "enum": [
+              "unlinked",
+              "current",
+              "moved",
+              "archived"
+            ],
+            "title": "Equipment Link State",
+            "default": "unlinked"
           },
           "revisions": {
             "items": {

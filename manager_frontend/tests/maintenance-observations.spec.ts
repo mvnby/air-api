@@ -108,3 +108,17 @@ describe('maintenance observations', () => {
     expect(wrapper.text()).not.toContain('#1085 ·');
   });
 });
+
+it.each(['moved', 'archived'])('shows %s historical equipment and permits clearing the link', async (state) => {
+  api.listManagerOrderMaintenanceObservations.mockResolvedValue({items:[finding({equipment_id:17})],total:1});
+  api.getManagerMaintenanceObservation.mockResolvedValue(finding({equipment_id:17,equipment_link_state:state}));
+  const wrapper=panel();
+  await wrapper.get('[data-testid="observations-toggle"]').trigger('click'); await flushPromises();
+  await wrapper.findAll('button').find(b=>b.text().includes('#1085 ·'))!.trigger('click'); await flushPromises();
+  expect(wrapper.text()).toContain(state==='moved' ? 'перенесено на другой объект' : 'архивировано');
+  await wrapper.findAll('button').find(b=>b.text()==='Уточнить замечание')!.trigger('click'); await flushPromises();
+  expect(wrapper.get('[data-testid="equipment-id"]').text()).toContain('историческая связь');
+  await wrapper.get('[data-testid="equipment-id"]').setValue('Пока неизвестно');
+  await wrapper.get('[data-testid="observation-save"]').trigger('click'); await flushPromises();
+  expect(api.updateManagerMaintenanceObservation.mock.calls[0]![1].equipment_id).toBeNull();
+});

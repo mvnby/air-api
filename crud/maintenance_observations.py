@@ -22,8 +22,7 @@ class MaintenanceObservationDAO:
                        (Order.customer_id.is_(None)) | tenant_scope_clause(current_customer, scope),
                        MaintenanceObservation.customer_branch_id.is_(None) | (CustomerBranch.customer_id == MaintenanceObservation.customer_id),
                        MaintenanceObservation.equipment_id.is_(None) | (
-                           (CustomerEquipment.customer_id == MaintenanceObservation.customer_id)
-                           & CustomerEquipment.customer_branch_id.is_not_distinct_from(MaintenanceObservation.customer_branch_id))))
+                           (CustomerEquipment.customer_id == MaintenanceObservation.customer_id))))
 
     @classmethod
     async def get(cls, session, observation_id, scope, *, lock=False):

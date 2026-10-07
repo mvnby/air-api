@@ -46,7 +46,7 @@ from schemas import (
 )
 from services.document_service import DocumentService, OrderDocumentsLockedError
 from services.order_create_command_service import OrderCreateCommandService
-from services.order_delete_command_service import OrderDeleteCommandService
+from services.order_delete_command_service import OrderDeleteCommandService, OrderHasMaintenanceObservations
 from services.order_payment_command_service import OrderPaymentCommandService
 from services.order_proposal_command_service import OrderProposalCommandService
 from services.order_service import OrderService
@@ -722,7 +722,8 @@ async def delete_manager_order(
     Hard-delete an accessible scoped order together with
     proposal/line/stage/executor/payment/document rows, enqueueing provider document
     cleanup. Bank receipt and outgoing-email histories are detached for audit rather than
-    removed. Missing order/service validation returns 400; unexpected deletion failure 500.
+    removed. Saved maintenance observations prevent deletion with 409 before any cleanup.
+    Missing order/service validation returns 400; unexpected deletion failure 500.
     No closed-order document lock is applied by this order-delete command; repeat after
     deletion is not receipt replay.
 
@@ -736,6 +737,13 @@ async def delete_manager_order(
             tenant_scope=tenant_scope,
         )
         return {"ok": True}
+    except OrderHasMaintenanceObservations as exc:
+        raise manager_http_error(
+            status_code=409,
+            endpoint=DELETE_MANAGER_ORDER,
+            error_code=BAD_REQUEST,
+            message=str(exc),
+        ) from exc
     except ValueError as exc:
         raise manager_http_error(
             status_code=400,

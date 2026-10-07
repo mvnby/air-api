@@ -181,6 +181,8 @@ async def patch_manager_service_attachment(
     or invalid relationships returns 400. Missing/archived or inaccessible attachment
     returns 404. Shared metadata changes require all active links to be owned by the
     caller’s scope; per-order link edits update the corresponding equipment context.
+    Observation-owned photos reject independent equipment/component/history edits with
+    400: their equipment association is managed through the maintenance observation.
 
     Access and scope: Manager access is required; active attachment links must pass order
     tenant/storefront or equipment customer-tenant ownership checks. See [Manager
