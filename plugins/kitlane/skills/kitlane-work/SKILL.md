@@ -30,6 +30,13 @@ returns several matches, show the compact list with stable IDs and ask which
 one the user means. If no record matches, keep the task unlinked. Use
 `get_customer` or `get_order` to verify an explicit ID when necessary.
 
+For an explicit incoming clarification instruction, pass
+`clarification_requested=true` with `create_incoming` or `update_incoming`.
+This requires both incoming-write and task-write scopes. Use the returned
+`clarification_task_id`; do not create a second task for that same clarification.
+An absent address alone does not authorize a task. Preserve `call_before_visit`
+as an agreement; a customer wish is neither a confirmed visit nor a task deadline.
+
 Create personal tasks when requested, with confirmed links and only the stated
 due date/reminder. Read `get_task` before update, complete or reopen and pass its
 current `expected_version`. Read `get_incoming` before updating an incoming

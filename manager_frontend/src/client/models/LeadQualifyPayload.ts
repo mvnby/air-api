@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type LeadQualifyPayload = {
+    expected_version?: (number | null);
     customer_id?: (number | null);
     customer_branch_id?: (number | null);
     name?: (string | null);

@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { IncomingOrderContext } from './IncomingOrderContext';
 import type { ManagerInstallerResponse } from './ManagerInstallerResponse';
 import type { ManagerOrderDocumentItem } from './ManagerOrderDocumentItem';
 import type { ManagerOrderSourceEnrichment } from './ManagerOrderSourceEnrichment';
@@ -67,6 +68,7 @@ export type ManagerOrderDetailResponse = {
     execution_status_changed_at?: (string | null);
     total_payments?: number;
     balance_due?: number;
+    incoming_context?: (IncomingOrderContext | null);
     source_enrichment?: (ManagerOrderSourceEnrichment | null);
     contact_name?: (string | null);
     contact_phone?: (string | null);

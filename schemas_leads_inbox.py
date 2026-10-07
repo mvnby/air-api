@@ -101,6 +101,9 @@ class LeadsInboxItemResponse(BaseModel):
     intake_version: int | None = None
     requested_time_text: str | None = None
     requested_at: datetime | None = None
+    date_precision: Literal["date", "datetime"] | None = None
+    call_before_visit: bool | None = None
+    clarification_task_id: int | None = None
     missing_fields: list[str] = Field(default_factory=list)
 
 

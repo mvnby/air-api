@@ -66,6 +66,10 @@ export const newPersonalTaskCommandKey = (): string => {
 
 const base = '/api/manager/personal-tasks';
 
+export const getPersonalTask = (taskId: number): Promise<PersonalTask> => request(OpenAPI, {
+  method: 'GET', url: `${base}/${taskId}`,
+});
+
 export const listPersonalTasks = (
   filter: PersonalTaskFilter,
   limit = 100,

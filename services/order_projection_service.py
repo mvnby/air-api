@@ -452,6 +452,7 @@ class OrderProjectionService:
         belzakupki_meta = meta.get("belzakupki") if isinstance(meta.get("belzakupki"), dict) else {}
         enrichment = belzakupki_meta.get("enrichment")
         data["source_enrichment"] = enrichment if isinstance(enrichment, dict) else None
+        data["incoming_context"] = meta.get("incoming_intake")
         raw_requested_date = meta.get("requested_date")
         try:
             data["requested_date"] = date.fromisoformat(str(raw_requested_date)[:10]) if raw_requested_date else None

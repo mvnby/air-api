@@ -2,7 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type IncomingCreatePayload = {
+export type IncomingOrderContext = {
     request_text: string;
     name?: (string | null);
     phone?: (string | null);
@@ -19,8 +19,14 @@ export type IncomingCreatePayload = {
      * Explicit instruction to save one linked clarification task. On creation, omission also recognizes standalone positive address/call instructions; false disables that text inference. MCP requires task-write scope when a task is requested.
      */
     clarification_requested?: (boolean | null);
+    lead_id: number;
+    lead_version: number;
+    original_text: string;
     source_occurred_at?: (string | null);
-    source_timezone?: string;
-    source_event_id?: (string | null);
+    source_timezone: string;
+    date_precision?: ('date' | 'datetime' | null);
+    field_sources?: Record<string, string>;
+    clarification_task_id?: (number | null);
+    agreement_status?: string;
 };
 

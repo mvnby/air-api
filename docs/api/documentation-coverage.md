@@ -15,8 +15,8 @@
 [подпись/повторы витрины](../storefront-context-contract.md),
 [бот](../bot-service-boundary.md), [OAuth/MCP](../chatgpt-connector.md).
 
-[Точная инвентаризация](operation-inventory.json) содержит **571 операцию**:
-568 с путями `/api/*` и 3 well-known OAuth discovery. Строка включает метод и
+[Точная инвентаризация](operation-inventory.json) содержит **572 операции**:
+569 с путями `/api/*` и 3 well-known OAuth discovery. Строка включает метод и
 полный путь, operation ID, наличие description в исходном baseline и номер
 этапа проверки; записи сгруппированы по фактическому исходному файлу endpoint.
 В формате `schema=2` поле `description_before` сохраняет исторический факт,
@@ -29,6 +29,12 @@ MCP ASGI `/api/connector/mcp` и `tools/list` не входят в HTTP OpenAPI 
 [границы интеграции](supplier-integration-boundary.md).
 
 ## Выполненные этапы
+
+После исходного аудита добавлена операция связанного уточнения
+`POST /api/manager/incoming/{lead_id}/clarification` (этап 4, #1084):
+проверены actor/tenant, версия, безопасный повтор и отсутствие планирования выезда.
+Текущий перечень содержит 572 описанные операции; исторические числа этапов 1–3
+ниже относятся к исходному baseline.
 
 Первый этап пересмотрел **139 HTTP-операций** в 22 исходных модулях: всю
 публичную поверхность и существующие helpers её компоновщика (47), поставки и

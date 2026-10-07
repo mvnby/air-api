@@ -24,6 +24,7 @@ const email = ref('');
 const address = ref('');
 const region = ref('');
 const requestedTime = ref('');
+const callBeforeVisit = ref<boolean | null>(null);
 const originalRequestedTime = ref('');
 const requestedAt = ref<string | null>(null);
 const requestedDatePrecision = ref<'date' | 'datetime' | null>(null);
@@ -56,6 +57,7 @@ const createPayload = computed<IncomingCreatePayload>(() => ({
   address_text: optional(address.value),
   region_text: optional(region.value),
   requested_time_text: optional(requestedTime.value),
+  call_before_visit: callBeforeVisit.value,
   requested_at: requestedAt.value,
   source_occurred_at: sourceOccurredAt.value,
   source_timezone: 'Europe/Minsk',
@@ -70,6 +72,7 @@ const updatePayload = computed<IncomingUpdatePayload>(() => {
     address_text: optional(address.value),
     region_text: optional(region.value),
     requested_time_text: wishedTime,
+    call_before_visit: callBeforeVisit.value,
     ...(wishedTime === null || requestedTime.value === originalRequestedTime.value
       ? { requested_at: requestedAt.value }
       : {}),
@@ -106,6 +109,7 @@ const fill = (incoming: IncomingResponse) => {
   email.value = incoming.email || '';
   address.value = incoming.address_text || '';
   region.value = incoming.region_text || '';
+  callBeforeVisit.value = incoming.call_before_visit ?? null;
   originalRequestedTime.value = incoming.requested_time_text || '';
   requestedTime.value = originalRequestedTime.value;
   requestedAt.value = incoming.requested_at || null;
@@ -204,6 +208,7 @@ const reloadActual = async () => {
           <label><span class="mb-1 block text-xs text-slate-500">Регион</span><input v-model="region" maxlength="300" class="w-full rounded-lg border border-slate-300 px-3 py-2 dark:border-slate-600 dark:bg-slate-900" /></label>
           <label class="sm:col-span-2"><span class="mb-1 block text-xs text-slate-500">Адрес</span><input v-model="address" maxlength="500" class="w-full rounded-lg border border-slate-300 px-3 py-2 dark:border-slate-600 dark:bg-slate-900" /></label>
           <label class="sm:col-span-2"><span class="mb-1 block text-xs text-slate-500">Желаемое время словами</span><input v-model="requestedTime" data-testid="incoming-requested-time" maxlength="300" placeholder="Например: в пятницу после 16:00" class="w-full rounded-lg border border-slate-300 px-3 py-2 dark:border-slate-600 dark:bg-slate-900" /></label>
+          <label class="sm:col-span-2"><input v-model="callBeforeVisit" type="checkbox" data-testid="incoming-call-before-visit" /> Созвониться перед выездом</label>
           <div v-if="requestedAt" class="sm:col-span-2 flex items-center gap-2 text-xs text-slate-500"><span data-testid="incoming-requested-at">Распознано: {{ formatRequestedAt(requestedAt) }}</span><button type="button" class="underline" @click="requestedAt = null; requestedDatePrecision = null">Сбросить дату</button></div>
         </div>
       </details>

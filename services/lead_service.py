@@ -32,6 +32,11 @@ from services.customer_party import (
 from services.tenant_entity_access_service import TenantEntityAccessService
 from services.order_service import OrderService
 from services.order_scenarios import WORKFLOW_LABELS, resolve_scenario
+from services.incoming_agreements import qualification_context
+
+
+class LeadVersionConflict(ValueError):
+    pass
 
 
 class LeadService:
@@ -345,6 +350,7 @@ class LeadService:
             lead_id,
             tenant_scope=tenant_scope,
             for_update=True,
+            populate_existing=True,
         )
         if not lead:
             return None
@@ -378,6 +384,12 @@ class LeadService:
                 "order_id": int(converted_order.id),
                 "order_created": False,
             }
+
+        expected_version = getattr(payload, "expected_version", None)
+        if (lead.intake_meta and expected_version != lead.version) or (
+            expected_version is not None and expected_version != lead.version
+        ):
+            raise LeadVersionConflict("Incoming request has changed; reload its current version")
 
         name = LeadService._clean_optional(payload.name) or LeadService._clean_optional(lead.name)
         phone = LeadService._clean_optional(payload.phone) or LeadService._clean_optional(lead.phone)
@@ -495,6 +507,8 @@ class LeadService:
                 raise ValueError("Selected customer branch does not belong to selected customer")
 
         order_delivery_address = LeadService._clean_optional(payload.delivery_address)
+        if not order_delivery_address and lead.intake_meta:
+            order_delivery_address = lead.intake_meta.get("address_text")
         if not order_delivery_address and selected_branch:
             order_delivery_address = selected_branch.delivery_address
 
@@ -513,7 +527,10 @@ class LeadService:
             title=order_title,
             delivery_address=order_delivery_address,
             workflow_type=workflow_type or "sales_installation",
-            technical_meta={"service_type": service_type} if service_type else {},
+            technical_meta={
+                **({"service_type": service_type} if service_type else {}),
+                **({"incoming_intake": qualification_context(lead)} if lead.intake_meta else {}),
+            },
             status_changed_at=datetime.now(),
         )
         if workflow_type == "repair":
