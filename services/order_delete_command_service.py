@@ -15,11 +15,16 @@ from models.order import (
     OutgoingEmail,
     Payment,
 )
+from models.maintenance_observation import MaintenanceObservation
 from services.command_transaction import command_transaction
 from services.document_service import DocumentService
 from services.order_document_cleanup_service import OrderDocumentCleanupService
 from services.tenant_entity_access_service import TenantEntityAccessService
 from services.tenant_scope_service import TenantScope
+
+
+class OrderHasMaintenanceObservations(Exception):
+    """The source order is immutable provenance and cannot be hard-deleted."""
 
 
 class OrderDeleteCommandService:
@@ -39,6 +44,16 @@ class OrderDeleteCommandService:
             )
             if not order:
                 raise ValueError(f"Order {order_id} not found")
+
+            # Serialize with observation creation on the same order lock. Refuse
+            # before document cleanup, audit detachment or dependent-row writes.
+            if await session.scalar(sa.select(MaintenanceObservation.id).where(
+                MaintenanceObservation.source_order_id == order_id
+            ).limit(1)) is not None:
+                raise OrderHasMaintenanceObservations(
+                    "Нельзя удалить исходный заказ: сохранены замечания ТО. "
+                    "Заказ необходим для сохранения их истории."
+                )
 
             documents = await DocumentService.list_order_documents(
                 session,

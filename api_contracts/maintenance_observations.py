@@ -1,6 +1,7 @@
 """Manager commands for factual maintenance findings; no document/work transitions."""
 from datetime import datetime, timezone
 from uuid import UUID
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -57,6 +58,7 @@ class MaintenanceObservationRevisionItem(BaseModel):
 
 
 class MaintenanceObservationDetail(MaintenanceObservationItem):
+    equipment_link_state: Literal["unlinked", "current", "moved", "archived"] = "unlinked"
     revisions: list[MaintenanceObservationRevisionItem] = Field(default_factory=list)
     photos: list[ManagerServiceAttachmentItemResponse] = Field(default_factory=list)
 

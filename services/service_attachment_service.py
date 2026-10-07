@@ -18,6 +18,7 @@ from models import (
     Customer,
     CustomerEquipment,
     EquipmentAttachmentLink,
+    MaintenanceObservationPhoto,
     Order,
     OrderAttachmentLink,
     ServiceAttachment,
@@ -447,6 +448,9 @@ class ServiceAttachmentService:
             .join(EquipmentAttachmentLink, EquipmentAttachmentLink.attachment_id == ServiceAttachment.id)
             .where(
                 EquipmentAttachmentLink.equipment_id == equipment_id,
+                ~select(MaintenanceObservationPhoto.id).where(
+                    MaintenanceObservationPhoto.attachment_id == ServiceAttachment.id
+                ).exists(),
                 EquipmentAttachmentLink.archived_at.is_(None),
                 ServiceAttachment.archived_at.is_(None),
             )
@@ -552,6 +556,11 @@ class ServiceAttachmentService:
             tenant_scope=tenant_scope,
         ):
             return None
+        if {"equipment_id", "component_id", "service_history_id"}.intersection(payload):
+            if await session.scalar(select(MaintenanceObservationPhoto.id).where(
+                MaintenanceObservationPhoto.attachment_id == attachment_id
+            ).limit(1)) is not None:
+                raise ValueError("Привязка фото управляется замечанием ТО. Измените оборудование в замечании.")
         if "category" in payload:
             if not link:
                 raise ValueError("order_id is required to change attachment category")

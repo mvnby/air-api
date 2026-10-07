@@ -323,7 +323,7 @@ const saveEdit = async () => {
     const updated = await serviceAttachmentsApi.update(props.orderId, attachmentId, {
       category: editCategory.value,
       caption: editCaption.value.trim() || null,
-      ...(props.equipmentOptions.length ? {
+      ...(props.equipmentOptions.length && item.source !== 'manager_maintenance' ? {
         equipment_id: editEquipmentId.value,
         component_id: editComponentId.value,
       } : {}),
@@ -599,14 +599,15 @@ defineExpose({ refresh, expand });
             Подпись
             <input v-model="editCaption" class="field-input h-10 text-sm" placeholder="Что изображено или приложено" />
           </label>
-          <label class="field-label">
+          <p v-if="editingItem.source === 'manager_maintenance'" class="text-sm text-slate-600 dark:text-slate-300">Привязка фото управляется замечанием ТО. Измените оборудование в замечании.</p>
+          <label v-else class="field-label">
             Связать с оборудованием
             <select v-model="editEquipmentId" class="field-input h-10 text-sm" @change="editComponentId = null">
               <option :value="null">Без привязки к оборудованию</option>
               <option v-for="equipment in equipmentOptions" :key="equipment.id" :value="equipment.id">{{ equipment.label }}</option>
             </select>
           </label>
-          <label v-if="editEquipmentId && editComponents.length" class="field-label">
+          <label v-if="editingItem.source !== 'manager_maintenance' && editEquipmentId && editComponents.length" class="field-label">
             Блок
             <select v-model="editComponentId" class="field-input h-10 text-sm">
               <option :value="null">Вся система</option>

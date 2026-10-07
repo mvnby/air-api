@@ -41,6 +41,10 @@ const photoItems = computed<ServiceAttachmentItem[]>(() => (detail.value?.photos
   ...p, file_kind: p.file_kind || 'image', category: p.category || 'defect', mime_type: p.mime_type || 'application/octet-stream', size_bytes: p.size_bytes ?? 0, source: p.source || 'manager_maintenance', processing_status: p.processing_status || 'ready', preview_available: Boolean(p.preview_available), id: p.id ?? null, caption: p.caption ?? null, transcript: p.transcript ?? null,
   processing_error: p.processing_error ?? null, captured_at: p.captured_at ?? null,
 })));
+const equipmentStateLabel = computed(() => detail.value?.equipment_link_state === 'archived'
+  ? 'Оборудование архивировано; историческая связь сохранена.'
+  : detail.value?.equipment_link_state === 'moved'
+    ? 'Оборудование перенесено на другой объект; замечание относится к исходному объекту.' : '');
 const dateLabel = (value: string) => new Date(`${value}${/Z$|[+-]\d\d:\d\d$/.test(value) ? '' : 'Z'}`).toLocaleString('ru-RU');
 const localNow = () => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16); };
 const content = () => ({ equipment_id: form.value.equipment_id, equipment_description: form.value.equipment_description.trim(), facts: form.value.facts.trim(), recommendation: form.value.recommendation.trim() });
@@ -175,13 +179,14 @@ onBeforeUnmount(() => { requestVersion++; });
           <p class="text-xs text-gray-500">ТО #{{ detail.source_order_id }} · {{ detail.created_by }} · {{ dateLabel(detail.created_at) }} · Версия {{ detail.version }}</p>
           <div><p class="text-xs font-semibold text-gray-500">Исходный комментарий</p><p class="whitespace-pre-wrap break-words text-sm text-gray-800 dark:text-slate-200">{{ detail.original_comment }}</p></div>
         </template>
+        <p v-if="equipmentStateLabel" role="status" class="text-sm text-amber-700 dark:text-amber-300">{{ equipmentStateLabel }} Связь можно сохранить, убрать или уточнить.</p>
         <fieldset v-if="editing" :disabled="locked" class="space-y-3">
           <label v-if="!detail" class="observation-label">Дата обнаружения<input :form="formOwner" v-model="form.observed_at" data-testid="observed-at" type="datetime-local" required class="observation-input" /></label>
           <label v-if="!detail" class="observation-label">Исходный комментарий<textarea :form="formOwner" v-model="form.original_comment" data-testid="original-comment" rows="2" maxlength="10000" required class="observation-input" /></label>
           <label class="observation-label">Блок или место проблемы<input :form="formOwner" v-model="form.equipment_description" data-testid="equipment-description" maxlength="2000" required class="observation-input" placeholder="Например, наружный блок у входа" /></label>
           <label class="observation-label">Оборудование (необязательно)<select :form="formOwner" v-model="form.equipment_id" data-testid="equipment-id" class="observation-input" :disabled="equipmentLoading">
             <option :value="null">Пока неизвестно</option>
-            <option v-if="form.equipment_id && !equipment.some((e) => e.id === form.equipment_id)" :value="form.equipment_id">Оборудование #{{ form.equipment_id }}</option>
+            <option v-if="form.equipment_id && !equipment.some((e) => e.id === form.equipment_id)" :value="form.equipment_id">Оборудование #{{ form.equipment_id }} (историческая связь)</option>
             <option v-for="item in equipment" :key="item.id" :value="item.id">{{ item.display_name || [item.brand, item.model].filter(Boolean).join(' ') || `Оборудование #${item.id}` }}</option>
           </select></label>
           <label class="observation-label">Подтверждённые факты<textarea :form="formOwner" v-model="form.facts" data-testid="facts" rows="3" maxlength="10000" required class="observation-input" placeholder="Что обнаружено при осмотре" /></label>

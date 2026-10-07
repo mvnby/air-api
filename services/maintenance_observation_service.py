@@ -4,13 +4,14 @@ from hashlib import sha256
 import json
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
 from api_contracts.maintenance_observations import (
     CreateMaintenanceObservation, MaintenanceObservationContent, MaintenanceObservationDetail,
     MaintenanceObservationItem, UpdateMaintenanceObservation,
 )
 from crud.maintenance_observations import MaintenanceObservationDAO as DAO
-from models import CustomerBranch
+from models import CustomerBranch, EquipmentAttachmentLink, OrderAttachmentLink
 from models.maintenance_observation import MaintenanceObservation, MaintenanceObservationPhoto, MaintenanceObservationRevision
 from models.tenancy import TenantScope
 from services.service_attachment_service import ServiceAttachmentService
@@ -31,7 +32,7 @@ def command_hash(payload: dict) -> str:
 
 class MaintenanceObservationService:
     @staticmethod
-    async def validate_context(session, *, customer_id, branch_id, equipment_id, scope, allow_archived=False):
+    async def validate_context(session, *, customer_id, branch_id, equipment_id, scope, allow_archived=False, allow_historical_site=False):
         customer = await Access.get_customer(session, customer_id, tenant_scope=scope)
         if customer is None:
             raise ObservationNotFound("Customer not found")
@@ -45,8 +46,9 @@ class MaintenanceObservationService:
                 raise ValueError("Equipment not found")
             if equipment.customer_id != customer_id:
                 raise ValueError("Equipment does not belong to the observation customer")
-            # Known objects must match exactly; unknown equipment remains unlinked.
-            if equipment.customer_branch_id != branch_id:
+            # New links must match the saved site; retained historical links may
+            # point to equipment relocated within the same authorized customer.
+            if equipment.customer_branch_id != branch_id and not allow_historical_site:
                 raise ValueError("Equipment does not belong to the observation object")
 
     @classmethod
@@ -104,9 +106,24 @@ class MaintenanceObservationService:
             raise ObservationConflict("Замечание уже изменено. Откройте актуальную версию перед сохранением.")
         await cls.validate_context(session, customer_id=observation.customer_id, branch_id=observation.customer_branch_id,
                                    equipment_id=payload.equipment_id, scope=scope,
-                                   allow_archived=payload.equipment_id == observation.equipment_id)
+                                   allow_archived=payload.equipment_id == observation.equipment_id,
+                                   allow_historical_site=payload.equipment_id == observation.equipment_id)
         for field, value in payload.model_dump(exclude={"expected_version"}).items():
             setattr(observation, field, value)
+        # Retire independent links left by the formerly unrestricted generic
+        # editor. Only this observation's photos on its source order are owned
+        # here; no bulk repair or foreign order link is touched.
+        legacy_links = (await session.execute(
+            select(EquipmentAttachmentLink)
+            .join(MaintenanceObservationPhoto, MaintenanceObservationPhoto.attachment_id == EquipmentAttachmentLink.attachment_id)
+            .join(OrderAttachmentLink, OrderAttachmentLink.id == EquipmentAttachmentLink.order_attachment_link_id)
+            .where(MaintenanceObservationPhoto.observation_id == observation_id,
+                   OrderAttachmentLink.order_id == observation.source_order_id,
+                   EquipmentAttachmentLink.archived_at.is_(None))
+        )).scalars().all()
+        for link in legacy_links:
+            link.archived_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            session.add(link)
         observation.version += 1
         observation.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         observation.updated_by = actor
@@ -131,6 +148,11 @@ class MaintenanceObservationService:
         order_files = await ServiceAttachmentService.list_order_attachments(session, order_id=observation.source_order_id, tenant_scope=scope)
         ids = {link.attachment_id for link in links}
         data["photos"] = [item for item in (order_files or {}).get("items", []) if item["id"] in ids]
+        equipment = await Access.get_equipment(session, observation.equipment_id, tenant_scope=scope) if observation.equipment_id else None
+        data["equipment_link_state"] = (
+            "unlinked" if equipment is None else "archived" if equipment.is_archived
+            else "moved" if equipment.customer_branch_id != observation.customer_branch_id else "current"
+        )
         data["revisions"] = await DAO.revisions(session, observation.id)
         return MaintenanceObservationDetail.model_validate(data)
 

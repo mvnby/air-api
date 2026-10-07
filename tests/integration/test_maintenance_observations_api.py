@@ -189,6 +189,7 @@ async def test_tenant_storefront_role_and_entity_links(async_client, db, tmp_pat
     assert own.status_code == 201, own.text
     assert (await async_client.get(detail_url, headers=foreign_headers)).status_code == 404
     assert (await async_client.get(f'/api/manager/service-attachments/{attachment_id}/access', headers=foreign_headers)).status_code == 404
+    assert (await async_client.patch(f'/api/manager/service-attachments/{attachment_id}', headers=foreign_headers, json={'order_id': finding['source_order_id'], 'equipment_id': None})).status_code == 404
     assert (await async_client.get(f'/api/manager/equipment/{invalid_equipment_ids[0]}/maintenance-observations', headers=headers)).status_code == 404
     assert (await async_client.patch(detail_url, headers=foreign_headers, json={**{k: finding[k] for k in ('equipment_id', 'equipment_description', 'facts', 'recommendation')}, 'expected_version': 1})).status_code == 404
     assert (await async_client.post(detail_url+'/photos', headers=foreign_headers, data={'command_key': str(uuid4())}, files={'file': ('x.png', image_bytes(), 'image/png')})).status_code == 404
@@ -248,3 +249,173 @@ async def test_simultaneous_create_update_and_photo_commands(db_engine, tmp_path
         current = await Service.get(session, a.id, scope)
         assert current.facts == winner.facts
         assert (await session.get(Order, order_id)).status == OrderStatus.CLOSED
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('with_documents', [False, True])
+async def test_source_order_delete_conflict_before_cleanup(async_client, db, with_documents):
+    from models import IntegrationOutboxEvent
+    headers = await login(async_client)
+    order, _, event = await context(db)
+    order_id, customer_id = order.id, order.customer_id
+    await db.delete(event); await db.commit()
+    finding = (await async_client.post(f'/api/manager/orders/{order_id}/maintenance-observations', headers=headers, json=payload())).json()
+    if with_documents:
+        db.add(OrderDocument(order_id=order_id, tenant_id=1, doc_type='act', number='KEEP-1108', google_file_id='keep-1108'))
+        await db.commit()
+    order_before = order.model_dump()
+    before = [(row.id, row.model_dump()) for row in (await db.execute(select(OrderDocument))).scalars()]
+    response = await async_client.delete(f'/api/manager/orders/{order_id}', headers=headers)
+    assert response.status_code == 409, response.text
+    assert 'замечания ТО' in response.json()['detail']['message']
+    await db.refresh(order)
+    assert order.model_dump() == order_before
+    assert await db.get(MaintenanceObservation, finding['id']) is not None
+    assert [(row.id, row.model_dump()) for row in (await db.execute(select(OrderDocument))).scalars()] == before
+    assert await db.scalar(select(func.count()).select_from(IntegrationOutboxEvent)) == 0
+    clean = Order(tenant_id=1, storefront_id=1, customer_id=customer_id, workflow_type='maintenance')
+    db.add(clean); await db.commit(); clean_id = clean.id
+    deleted = await async_client.delete(f'/api/manager/orders/{clean_id}', headers=headers)
+    assert deleted.status_code == 200, deleted.text
+    assert await db.get(Order, clean_id) is None
+
+
+@pytest.mark.asyncio
+async def test_relocated_and_archived_equipment_keeps_historical_observation(async_client, db):
+    headers = await login(async_client)
+    order, equipment, _ = await context(db)
+    order_id, equipment_id, original_branch, customer_id = order.id, equipment.id, order.customer_branch_id, order.customer_id
+    site = CustomerBranch(customer_id=customer_id, name='New site', delivery_address='Local second site')
+    replacement = CustomerEquipment(customer_id=customer_id, customer_branch_id=original_branch, display_name='Replacement')
+    db.add_all([site,replacement]); await db.commit(); site_id, replacement_id = site.id, replacement.id
+    source_url=f'/api/manager/orders/{order_id}/maintenance-observations'
+    created = await async_client.post(source_url, headers=headers, json=payload(equipment_id=equipment_id))
+    assert created.status_code == 201
+    finding=created.json(); detail_url=f"/api/manager/maintenance-observations/{finding['id']}"
+    moved=await async_client.patch(f'/api/manager/equipment/{equipment_id}', headers=headers, json={'customer_branch_id':site_id})
+    assert moved.status_code == 200, moved.text
+    assert (await async_client.get(source_url,headers=headers)).json()['total'] == 1
+    detail=await async_client.get(detail_url,headers=headers)
+    assert detail.status_code == 200 and detail.json()['equipment_link_state'] == 'moved'
+    assert detail.json()['customer_branch_id'] == original_branch
+    edit={k:finding[k] for k in ('equipment_id','equipment_description','facts','recommendation')}
+    preserved=await async_client.patch(detail_url,headers=headers,json={**edit,'expected_version':1,'facts':'Уточнение на исходном объекте.'})
+    assert preserved.status_code == 200, preserved.text
+    archived=await async_client.patch(f'/api/manager/equipment/{equipment_id}',headers=headers,json={'is_archived':True})
+    assert archived.status_code == 200, archived.text
+    assert (await async_client.get(detail_url,headers=headers)).json()['equipment_link_state'] == 'archived'
+    kept=await async_client.patch(detail_url,headers=headers,json={**edit,'expected_version':2})
+    assert kept.status_code == 200
+    cleared=await async_client.patch(detail_url,headers=headers,json={**edit,'equipment_id':None,'expected_version':3})
+    assert cleared.status_code == 200 and cleared.json()['equipment_link_state'] == 'unlinked'
+    # A new link still requires an active equipment on the immutable source site.
+    bad=await async_client.patch(detail_url,headers=headers,json={**edit,'expected_version':4})
+    assert bad.status_code == 400
+    rebound=await async_client.patch(detail_url,headers=headers,json={**edit,'equipment_id':replacement_id,'expected_version':4})
+    assert rebound.status_code == 200 and rebound.json()['equipment_link_state'] == 'current'
+    async def foreign_scope():
+        return AuthenticatedUser(username='other',auth_source='user',role='manager',tenant_id=999,storefront_id=999)
+    app.dependency_overrides[get_current_auth_context]=foreign_scope
+    try:
+        assert (await async_client.get(detail_url)).status_code == 404
+        assert (await async_client.get(source_url)).status_code == 404
+        assert (await async_client.patch(detail_url,json={**edit,'equipment_id':None,'expected_version':5})).status_code == 404
+    finally:
+        app.dependency_overrides.pop(get_current_auth_context)
+    other_store = Storefront(tenant_id=1, slug='history-other-store', display_name='Other storefront', status='active')
+    db.add(other_store); await db.commit(); other_store_id=other_store.id
+    async def wrong_storefront():
+        return AuthenticatedUser(username='other',auth_source='user',role='manager',tenant_id=1,storefront_id=other_store_id)
+    app.dependency_overrides[get_current_auth_context]=wrong_storefront
+    try:
+        assert (await async_client.get(detail_url)).status_code == 404
+        assert (await async_client.get(source_url)).status_code == 404
+        assert (await async_client.patch(detail_url,json={**edit,'equipment_id':None,'expected_version':5})).status_code == 404
+    finally:
+        app.dependency_overrides.pop(get_current_auth_context)
+
+
+@pytest.mark.asyncio
+async def test_observation_photo_rejects_generic_link_but_ordinary_photo_retains_editor(async_client, db, tmp_path, monkeypatch):
+    from models import EquipmentAttachmentLink, OrderAttachmentLink
+    monkeypatch.setattr(settings,'SERVICE_ATTACHMENT_LOCAL_DIR',str(tmp_path))
+    headers=await login(async_client)
+    order,equipment,_=await context(db)
+    order_id,equipment_id,customer_id,branch_id=order.id,equipment.id,order.customer_id,order.customer_branch_id
+    other=CustomerEquipment(customer_id=customer_id,customer_branch_id=branch_id,display_name='Other block')
+    db.add(other); await db.commit(); other_id=other.id
+    finding=(await async_client.post(f'/api/manager/orders/{order_id}/maintenance-observations',headers=headers,json=payload(equipment_id=equipment_id))).json()
+    detail_url=f"/api/manager/maintenance-observations/{finding['id']}"
+    photo=await async_client.post(detail_url+'/photos',headers=headers,data={'command_key':str(uuid4())},files={'file':('private.png',image_bytes(),'image/png')})
+    assert photo.status_code == 201; photo_id=photo.json()['id']
+    photo_url=f'/api/manager/service-attachments/{photo_id}'
+    for change in ({'equipment_id':equipment_id},{'equipment_id':None},{'component_id':None},{'service_history_id':None}):
+        denied=await async_client.patch(photo_url,headers=headers,json={'order_id':order_id,'caption':'must not apply',**change})
+        assert denied.status_code == 400, denied.text
+    caption=await async_client.patch(photo_url,headers=headers,json={'order_id':order_id,'caption':'Описание фото'})
+    assert caption.status_code == 200
+    # Simulate an independent link written by the already released editor.
+    order_link=await db.scalar(select(OrderAttachmentLink).where(OrderAttachmentLink.attachment_id==photo_id))
+    stale_link=EquipmentAttachmentLink(equipment_id=equipment_id,attachment_id=photo_id,order_attachment_link_id=order_link.id)
+    db.add(stale_link); await db.commit(); stale_id=stale_link.id
+    stale_list=await async_client.get(f'/api/manager/equipment/{equipment_id}/attachments',headers=headers)
+    assert photo_id not in [item['id'] for item in stale_list.json()['items']]
+    moved=await async_client.patch(detail_url,headers=headers,json={**{k:finding[k] for k in ('equipment_description','facts','recommendation')},'equipment_id':other_id,'expected_version':1})
+    assert moved.status_code == 200
+    await db.refresh(stale_link); assert stale_link.archived_at is not None
+    assert [photo['id'] for photo in moved.json()['photos']] == [photo_id]
+    assert await db.scalar(select(func.count()).select_from(EquipmentAttachmentLink).where(EquipmentAttachmentLink.attachment_id==photo_id,EquipmentAttachmentLink.archived_at.is_(None))) == 0
+    for target in (equipment_id,other_id):
+        listed=await async_client.get(f'/api/manager/equipment/{target}/attachments',headers=headers)
+        assert listed.status_code == 200
+        assert photo_id not in [item['id'] for item in listed.json()['items']]
+    ordinary=await async_client.post(f'/api/manager/orders/{order_id}/attachments',headers=headers,files={'file':('ordinary.png',image_bytes(),'image/png')})
+    assert ordinary.status_code == 201; ordinary_id=ordinary.json()['id']
+    linked=await async_client.patch(f'/api/manager/service-attachments/{ordinary_id}',headers=headers,json={'order_id':order_id,'equipment_id':equipment_id})
+    assert linked.status_code == 200 and linked.json()['equipment_id']==equipment_id
+    relinked=await async_client.patch(f'/api/manager/service-attachments/{ordinary_id}',headers=headers,json={'order_id':order_id,'equipment_id':other_id})
+    assert relinked.status_code == 200 and relinked.json()['equipment_id']==other_id
+    cleared=await async_client.patch(f'/api/manager/service-attachments/{ordinary_id}',headers=headers,json={'order_id':order_id,'equipment_id':None})
+    assert cleared.status_code == 200 and cleared.json()['equipment_id'] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('first', ['create','delete'])
+async def test_create_observation_and_delete_serialize_on_source_order(db_engine, first):
+    from sqlalchemy.orm import sessionmaker
+    from services.order_delete_command_service import OrderDeleteCommandService, OrderHasMaintenanceObservations
+    from services.tenant_entity_access_service import TenantEntityAccessService
+    factory=sessionmaker(db_engine,class_=AsyncSession,expire_on_commit=False)
+    scope=TenantScope(1,1)
+    async with factory() as seed:
+        customer=Customer(tenant_id=1,name='Concurrent delete owner',phone='+375291108111')
+        seed.add(customer); await seed.flush()
+        order=Order(tenant_id=1,storefront_id=1,customer_id=customer.id,workflow_type='maintenance')
+        seed.add(order); await seed.commit(); order_id=order.id
+    async with factory() as owner:
+        await TenantEntityAccessService.get_order(owner,order_id,tenant_scope=scope,for_update=True)
+        async def competing():
+            async with factory() as session:
+                try:
+                    if first=='create':
+                        await OrderDeleteCommandService.delete_order(session,order_id,tenant_scope=scope)
+                        return 'deleted'
+                    await Service.create(session,order_id=order_id,payload=CreateMaintenanceObservation(**payload()),actor='test',scope=scope)
+                    return 'created'
+                except OrderHasMaintenanceObservations:
+                    return 'conflict'
+                except Exception as exc:
+                    from services.maintenance_observation_service import ObservationNotFound
+                    if isinstance(exc,ObservationNotFound): return 'not_found'
+                    raise
+        waiting=asyncio.create_task(competing())
+        await asyncio.sleep(0.1)
+        assert not waiting.done(), 'competitor must wait for source order lock'
+        if first=='create':
+            await Service.create(owner,order_id=order_id,payload=CreateMaintenanceObservation(**payload()),actor='test',scope=scope)
+        else:
+            await OrderDeleteCommandService.delete_order(owner,order_id,tenant_scope=scope)
+        assert await asyncio.wait_for(waiting,5) == ('conflict' if first=='create' else 'not_found')
+    async with factory() as check:
+        assert (await check.get(Order,order_id) is not None) == (first=='create')
+        assert await check.scalar(select(func.count()).select_from(MaintenanceObservation).where(MaintenanceObservation.source_order_id==order_id)) == (1 if first=='create' else 0)
