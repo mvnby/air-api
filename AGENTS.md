@@ -81,7 +81,9 @@ code and live state before treating them as present-day facts or authorization.
   backfills, provisioning or grants without the linked procedure's review gates.
 - Tenant-scope backfill execution is retired after contract migration. Shared
   grants remain system-owned; an empty offer set never means share-all.
-- Keep internal Patroni names/SSH aliases/paths `mvn-api` and `zakup` unchanged;
-  `mvn-api-nl` and `mvn-api-by` are display names only.
+- Use operator SSH aliases `mvn-api-nl` (Netherlands API), `mvn-api-by`
+  (Belarus API), and `mvn` (storefront host); see
+  [SSH access](docs/deployment.md#ssh-access). Internal Patroni names, CLI node
+  selectors and paths still use `mvn-api` and `zakup`.
 - A deployment is successful only after `/api/health`,
   `/api/v1/products?limit=5` and `/api/v1/filters/config` smoke checks pass.

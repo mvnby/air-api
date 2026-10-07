@@ -5,6 +5,12 @@ API health from anywhere, then optionally checks the host over SSH when a truste
 runner has access. The checks are read-only and are designed not to print env
 values, private keys, tokens, database passwords, or Google credentials.
 
+Operator SSH aliases are listed in [SSH access](deployment.md#ssh-access):
+`mvn-api-nl` is the Netherlands API node, `mvn-api-by` is the Belarus API node,
+and `mvn` is the storefront host. The examples below use the Netherlands node
+and its `/opt/air-api` path; select the current primary and matching runtime
+settings for role-dependent checks.
+
 ## What Is Checked
 
 `scripts/check_api_vps_health.sh` always checks these public endpoints:
@@ -41,7 +47,7 @@ bash scripts/check_api_vps_health.sh --public-only
 Full check from a machine that can SSH to the API VPS:
 
 ```bash
-API_SSH_HOST=mvn-api \
+API_SSH_HOST=mvn-api-nl \
 API_SSH_USER=root \
 bash scripts/check_api_vps_health.sh
 ```
@@ -58,7 +64,7 @@ bash scripts/check_api_vps_health.sh
 Tighter or looser backup threshold:
 
 ```bash
-API_SSH_HOST=mvn-api \
+API_SSH_HOST=mvn-api-nl \
 API_SSH_USER=root \
 BACKUP_MAX_AGE_HOURS=48 \
 bash scripts/check_api_vps_health.sh
@@ -67,7 +73,7 @@ bash scripts/check_api_vps_health.sh
 Temporarily skip backup freshness during a known Google Drive auth incident:
 
 ```bash
-API_SSH_HOST=mvn-api \
+API_SSH_HOST=mvn-api-nl \
 API_SSH_USER=root \
 CHECK_BACKUPS=false \
 bash scripts/check_api_vps_health.sh
@@ -77,7 +83,7 @@ Backup freshness can also be inspected manually on the VPS without exposing
 Drive secrets:
 
 ```bash
-ssh mvn-api
+ssh mvn-api-nl
 cd /opt/air-api
 docker compose -f docker-compose.prod.yml exec -T app python3 - <<'PY'
 from datetime import datetime, timezone
@@ -109,7 +115,7 @@ Public check every 5 minutes from any small external box:
 Full hourly check from a trusted runner with SSH access:
 
 ```cron
-7 * * * * cd /path/to/air-api && API_SSH_HOST=mvn-api API_SSH_USER=root bash scripts/check_api_vps_health.sh >> /var/log/mvn-api-vps-health.log 2>&1
+7 * * * * cd /path/to/air-api && API_SSH_HOST=mvn-api-nl API_SSH_USER=root bash scripts/check_api_vps_health.sh >> /var/log/mvn-api-vps-health.log 2>&1
 ```
 
 Cron can route failures through `MAILTO`, a local MTA, or a webhook wrapper. Keep
@@ -149,7 +155,7 @@ dumps, private keys, Drive folder IDs, tokens, or database connection strings.
 Public `/api/health` fails:
 
 ```bash
-ssh mvn-api
+ssh mvn-api-nl
 cd /opt/air-api
 docker compose -f docker-compose.prod.yml ps
 docker compose -f docker-compose.prod.yml logs --tail=120 app
@@ -159,7 +165,7 @@ systemctl status nginx --no-pager
 Products or filters config fail while health is green:
 
 ```bash
-ssh mvn-api
+ssh mvn-api-nl
 cd /opt/air-api
 docker compose -f docker-compose.prod.yml logs --tail=120 app
 docker compose -f docker-compose.prod.yml exec -T db sh -lc 'pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
@@ -168,7 +174,7 @@ docker compose -f docker-compose.prod.yml exec -T db sh -lc 'pg_isready -h 127.0
 SSH host checks fail:
 
 ```bash
-ssh -o BatchMode=yes mvn-api true
+ssh -o BatchMode=yes mvn-api-nl true
 ```
 
 If SSH fails only from GitHub Actions, treat it as network/firewall/key reachability
@@ -177,7 +183,7 @@ first, not as an API application failure.
 Disk or inode usage is critical:
 
 ```bash
-ssh mvn-api
+ssh mvn-api-nl
 df -h /
 df -ih /
 docker system df
@@ -190,7 +196,7 @@ deletes during an incident.
 Container or DB readiness fails:
 
 ```bash
-ssh mvn-api
+ssh mvn-api-nl
 cd /opt/air-api
 docker compose -f docker-compose.prod.yml ps
 docker compose -f docker-compose.prod.yml logs --tail=120 db app bot
@@ -199,7 +205,7 @@ docker compose -f docker-compose.prod.yml logs --tail=120 db app bot
 TLS expiry warns or fails:
 
 ```bash
-ssh mvn-api
+ssh mvn-api-nl
 certbot certificates
 certbot renew --dry-run
 nginx -t
@@ -208,7 +214,7 @@ nginx -t
 Backup freshness fails:
 
 ```bash
-ssh mvn-api
+ssh mvn-api-nl
 cd /opt/air-api
 docker compose -f docker-compose.prod.yml logs --tail=200 app | grep -i backup
 docker compose -f docker-compose.prod.yml exec -T app python3 - <<'PY'

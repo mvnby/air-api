@@ -11,9 +11,13 @@ against production data until every migration gate in this document passes.
 
 | Member | SSH alias | WireGuard IP | etcd role | PostgreSQL role |
 | --- | --- | --- | --- | --- |
-| API VPS | `mvn-api` | `10.77.0.2` | voting member | primary or replica |
-| Reserve VPS | `zakup` | `10.77.0.1` | voting member | primary or replica |
+| Netherlands API VPS | `mvn-api-nl` | `10.77.0.2` | voting member | primary or replica |
+| Belarus API VPS | `mvn-api-by` | `10.77.0.1` | voting member | primary or replica |
 | Web VPS | `mvn` | `10.77.0.3` | voting witness | none initially |
+
+For public addresses and SSH settings, see [SSH access](deployment.md#ssh-access).
+Internal Patroni/etcd member names and tracked paths remain `mvn-api` and `zakup`;
+the SSH aliases do not select a primary or rename those members.
 
 The three etcd members use Raft. Two reachable members are required to elect or
 retain a leader. Patroni will later use that leader lease to ensure that only
@@ -590,8 +594,13 @@ The production checker requires all of these invariants at the same time:
 Manual operator check from a machine with both SSH aliases:
 
 ```bash
-python3 scripts/ha/check_patroni_production.py
+API_NODE_SSH=mvn-api-nl RESERVE_NODE_SSH=mvn-api-by \
+  python3 scripts/ha/check_patroni_production.py
 ```
+
+These overrides select the operator SSH aliases while retaining the checker's
+internal Patroni member names. The pinned release/restore helpers use their own
+isolated SSH configuration and do not need these local overrides.
 
 The first required scheduled runs must pass after the switchover and switchback
 drill. Keep `watchdog.mode=off` until a real fencing device is installed and a

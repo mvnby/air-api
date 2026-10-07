@@ -10,11 +10,34 @@ Cloudflare, web-VPS access, rollback tooling and public smoke checks are not
 managed from this API repository. The API interacts with it only through the
 public HTTP contract and the signed catalog-rebuild callback.
 
+### SSH access
+
+Operator SSH configuration confirmed on 2026-10-07:
+
+| SSH alias | HostName | Service | Internal API node identifier |
+| --- | --- | --- | --- |
+| `mvn-api-nl` | `185.250.45.54` | API, Netherlands | `mvn-api` |
+| `mvn-api-by` | `193.47.42.213` | API, Belarus | `zakup` |
+| `mvn` | `153.80.244.78` | Public storefront host | n/a |
+
+All three entries use `User root`, `Port 22` and
+`IdentityFile ~/.ssh/id_ed25519`. Use these aliases for operator `ssh`, `scp`
+and SSH-based checks. The API primary is a live Patroni role; geography and
+the alias do not determine it. Check the topology using the
+[Patroni procedure](postgres-quorum-runbook.md#production-monitoring).
+
+Internal Patroni/etcd member names, CLI selectors such as `--primary zakup`,
+tracked directories `deploy/ha/mvn-api/` and `deploy/ha/zakup/`, and remote
+paths `/opt/air-api` and `/opt/mvn-reserve` keep their existing names. The
+[pinned SSH helper](../scripts/ha/pitr_pinned_ssh.py) generates its own isolated
+configuration with internal aliases `mvn-api` and `zakup`; those names are
+valid inside that explicit configuration and do not depend on `~/.ssh/config`.
+
 ### API Server
-- **Host alias:** `mvn-api` for the original API VPS; `zakup` for the emergency API primary.
+- **SSH aliases:** `mvn-api-nl` for the Netherlands API VPS; `mvn-api-by` for the Belarus API VPS.
 - **User:** `root`
-- **Original API IP:** `185.250.45.54`
-- **Emergency `zakup` IP:** `193.47.42.213`
+- **Netherlands API IP:** `185.250.45.54`
+- **Belarus API IP:** `193.47.42.213`
 - **SSH Key:** `~/.ssh/id_ed25519`
 - **Routing:** `api.mvn.by` is managed by Cloudflare Load Balancing; `/api/ready`
   controls which origin receives traffic.
@@ -236,7 +259,7 @@ Before merging or deploying a compose hardening change, save the current
 production compose file:
 
 ```bash
-ssh mvn-api
+ssh mvn-api-nl
 cd /opt/air-api
 cp docker-compose.prod.yml docker-compose.prod.yml.bak-public-ports-$(date +%Y%m%d%H%M%S)
 ```
@@ -244,7 +267,7 @@ cp docker-compose.prod.yml docker-compose.prod.yml.bak-public-ports-$(date +%Y%m
 After the hardened compose file is deployed, apply the DB binding and verify:
 
 ```bash
-ssh mvn-api
+ssh mvn-api-nl
 cd /opt/air-api
 docker compose -f docker-compose.prod.yml up -d db
 curl -fsS https://api.mvn.by/api/health
@@ -256,7 +279,7 @@ nc -vz 185.250.45.54 8000 # should fail from outside
 Rollback is a compose-file restore plus container recreate:
 
 ```bash
-ssh mvn-api
+ssh mvn-api-nl
 cd /opt/air-api
 cp docker-compose.prod.yml.bak-public-ports-<timestamp> docker-compose.prod.yml
 docker compose -f docker-compose.prod.yml up -d --force-recreate db app bot
@@ -355,8 +378,8 @@ Manual code rollback on the active API host:
 
 ```bash
 scp scripts/deploy_backend_blue_green.sh scripts/deploy_backend_blue_green_safety.sh \
-  scripts/prepare_google_oauth_token_dir.sh scripts/rollback_backend.sh mvn-api:/tmp/
-ssh mvn-api 'chmod +x /tmp/deploy_backend_blue_green.sh \
+  scripts/prepare_google_oauth_token_dir.sh scripts/rollback_backend.sh mvn-api-nl:/tmp/
+ssh mvn-api-nl 'chmod +x /tmp/deploy_backend_blue_green.sh \
   /tmp/deploy_backend_blue_green_safety.sh /tmp/prepare_google_oauth_token_dir.sh \
   /tmp/rollback_backend.sh && \
   CONFIRM_ROLLBACK=true API_PROJECT_DIR=/opt/air-api \
@@ -443,7 +466,7 @@ container.
 bash scripts/check_api_vps_health.sh --public-only
 
 # Full VPS + backup freshness checks from a trusted machine
-API_SSH_HOST=mvn-api API_SSH_USER=root bash scripts/check_api_vps_health.sh
+API_SSH_HOST=mvn-api-nl API_SSH_USER=root bash scripts/check_api_vps_health.sh
 ```
 
 See `docs/api-vps-monitoring.md` for cron examples, the manual GitHub Actions

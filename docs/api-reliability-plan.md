@@ -447,7 +447,7 @@ Minimum near-term monitoring:
 - Full SSH check hourly from a trusted runner:
 
   ```bash
-  API_SSH_HOST=mvn-api API_SSH_USER=root bash scripts/check_api_vps_health.sh
+  API_SSH_HOST=mvn-api-nl API_SSH_USER=root bash scripts/check_api_vps_health.sh
   ```
 
 - Keep `BACKUP_MAX_AGE_HOURS=36` unless the owner changes the backup schedule.
