@@ -654,6 +654,10 @@ branches, invalid timeline birth bounds or gaps block the whole report. Unknown
 objects and all `.history`, `.backup` and `.partial` metadata stay retained.
 Candidate WAL must be on the verified lineage with its whole segment before the
 anchor's start segment; object timestamps do not participate in that decision.
+On an ancestor timeline, the whole candidate segment must also end at/before
+its history-proven fork-point. Preserve fork-containing and post-fork ancestor
+segments even when their numeric positions precede an anchor on a descendant:
+those positions alone do not prove age on the selected restore lineage.
 
 WAL identity parsing is deliberately limited to the repository's PostgreSQL 15
 64-bit long-header layout (both byte orders), the expected system identifier,

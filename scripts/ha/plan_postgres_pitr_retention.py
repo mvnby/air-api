@@ -329,7 +329,14 @@ def _calculate(
         timeline, position = lineage.wal_segment_position(
             w.filename, segment_size_bytes=segment_size
         )
-        if chain.index(timeline) <= chain.index(anchor.timeline) and position < anchor_position:
+        timeline_index = chain.index(timeline)
+        anchor_index = chain.index(anchor.timeline)
+        if (
+            timeline_index < anchor_index
+            and (position + 1) * segment_size > entries[timeline_index].switch_lsn
+        ):
+            reasons[w.key] = "ancestor WAL at/after fork; age relative to anchor is unproven"
+        elif timeline_index <= anchor_index and position < anchor_position:
             reasons[w.key] = (
                 "candidate: complete WAL strictly before anchor start segment on proven lineage"
             )
