@@ -5,7 +5,7 @@ from typing import Any, Optional
 from sqlmodel import select
 from sqlalchemy.orm.attributes import flag_modified
 
-from models import Customer, CustomerBranch, CustomerContract, OrderStatus
+from models import MaintenanceContinuation, Customer, CustomerBranch, CustomerContract, OrderStatus
 from services.customer_creation_service import CustomerCreationService
 from services.customer_party import customer_type_from_value, signing_mode_for_customer_type
 from services.customer_contract_service import CustomerContractService
@@ -43,6 +43,12 @@ QUALIFICATION_META_FIELDS = {
 
 
 async def apply_customer_fields(context: OrderUpdateContext) -> None:
+    continuation = await context.session.scalar(select(MaintenanceContinuation).where(
+        (MaintenanceContinuation.order_id == context.order_id) | (MaintenanceContinuation.source_order_id == context.order_id)))
+    if continuation:
+        for field in ("customer_id", "customer_branch_id"):
+            if field in context.fields_set and getattr(context.payload, field) != getattr(context.order, field):
+                raise ValueError("Клиент и объект связанного ТО сохраняются для истории дефектного акта")
     customer_id_changed = await _apply_customer_link(context)
     qualified_customer_linked = await _create_qualified_customer(context)
     if qualified_customer_linked:

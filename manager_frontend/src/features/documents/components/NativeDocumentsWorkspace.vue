@@ -427,8 +427,9 @@ defineExpose({
                 @sync="syncGoogleDocument(document.id)"
               />
               <button v-if="document.status === 'draft' && access.canCreate" class="native-action-primary" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id) || Boolean(workspace.issueBlockedReason.value)" :title="workspace.issueBlockedReason.value" @click="issueDocument(document)">Выпустить</button>
-              <button v-if="document.status === 'draft' && !document.official_number && !document.artifacts?.length && access.canCreate" class="native-action-danger" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id)" @click="workspace.deleteDraft(document)">Удалить черновик</button>
-              <button v-if="['issued', 'sent', 'signed'].includes(document.status) && access.canReplace" class="native-action" type="button" @click="prepareReplacement(document)">Создать исправленную редакцию</button>
+              <button v-if="document.status === 'draft' && !document.maintenance_source_order_id && !document.official_number && !document.artifacts?.length && access.canCreate" class="native-action-danger" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id)" @click="workspace.deleteDraft(document)">Удалить черновик</button>
+              <button v-if="['issued', 'sent', 'signed'].includes(document.status) && !document.maintenance_source_order_id && access.canReplace" class="native-action" type="button" @click="prepareReplacement(document)">Создать исправленную редакцию</button>
+              <a v-if="document.maintenance_source_order_id" :href="`/manager/orders/kanban?orderId=${document.maintenance_source_order_id}`" target="_blank" rel="noopener" class="native-action">Исходное ТО #{{ document.maintenance_source_order_id }} · замечания и новые версии</a>
               <button v-if="['issued', 'sent', 'signed'].includes(document.status) && access.canReplace" class="native-action-danger" type="button" @click="workspace.requestVoid(document)">Аннулировать</button>
             </div>
           </div>

@@ -604,6 +604,7 @@ def _document_item_from_parts(document, artifacts) -> ManagedDocumentItem:
         )
     )
     return ManagedDocumentItem(
+        maintenance_source_order_id=((document.render_snapshot or {}).get("meta", {}).get("maintenance", {}).get("source_order_id")),
         id=document.id,
         order_id=document.order_id,
         legal_entity_id=document.legal_entity_id,

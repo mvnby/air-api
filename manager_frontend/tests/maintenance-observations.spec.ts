@@ -32,7 +32,7 @@ beforeEach(() => {
 });
 const panel = (props = {}) => mount(MaintenanceObservationsPanel, {
   props: { orderId: 42, customerId: 7, customerBranchId: 8, ...props },
-  global: { stubs: { ServiceAttachmentViewer: true } },
+  global: { stubs: { ServiceAttachmentViewer: true, MaintenanceDefectActsPanel: true } },
 });
 async function newFinding(wrapper: ReturnType<typeof panel>) {
   await wrapper.get('[data-testid="observations-toggle"]').trigger('click'); await flushPromises();

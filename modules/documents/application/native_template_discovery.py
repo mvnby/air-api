@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from modules.documents.domain.placeholder_catalog import MAINTENANCE_OBSERVATION_ROW_PLACEHOLDERS
 from modules.documents.domain import (
     CONDITIONAL_FLAGS,
     LINE_ROW_PLACEHOLDERS,
@@ -31,6 +32,7 @@ def discover_native_placeholder_contract(
         raise TemplateVersionError(str(exc)) from exc
 
     table_catalogs = {
+        "observations": MAINTENANCE_OBSERVATION_ROW_PLACEHOLDERS,
         "lines": LINE_ROW_PLACEHOLDERS,
         "payment_schedule": PAYMENT_SCHEDULE_ROW_PLACEHOLDERS,
     }

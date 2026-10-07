@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { ManagedDocumentArtifactItem } from './ManagedDocumentArtifactItem';
 export type ManagedDocumentItem = {
+    maintenance_source_order_id?: (number | null);
     document_role_type?: ('seller_buyer' | 'executor_customer' | 'contractor_customer' | 'seller_payer' | 'executor_payer' | null);
     id: number;
     order_id: number;

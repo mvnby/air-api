@@ -82,6 +82,7 @@ class DocumentContextSelection:
     business_terms: BusinessDocumentTerms | None = None
     act_terms: ActTerms | None = None
     transport_terms: TransportTerms | None = None
+    maintenance_preparation_id: int | None = None
 
 
 class DocumentContextBuilder:
@@ -129,6 +130,8 @@ class DocumentContextBuilder:
             raise DocumentContextError(
                 "Транспортные реквизиты доступны только для ТН-2 и ТТН-1"
             )
+        if document_type == "maintenance_defect_act" and selection.maintenance_preparation_id is None:
+            raise DocumentContextError("Подготовьте дефектный акт через выбранные замечания ТО")
         business_role = cls._business_role(document_type, selection.business_role)
         order = await cls._load_order(
             session,
@@ -428,7 +431,7 @@ class DocumentContextBuilder:
             {key: value for key, value in row.items() if not key.endswith("_raw")}
             for row in rows
         ]
-        return {
+        snapshot = {
             "schema_version": cls.SNAPSHOT_VERSION,
             "meta": {
                 "tenant_id": tenant_scope.tenant_id,
@@ -449,6 +452,11 @@ class DocumentContextBuilder:
             "conditions": conditions,
             "table_rows": {"lines": public_rows, **business_context.table_rows},
         }
+
+        if document_type == "maintenance_defect_act":
+            from .maintenance_act_snapshot import extend_maintenance_snapshot
+            return await extend_maintenance_snapshot(session, selection=selection, scope=tenant_scope, snapshot=snapshot)
+        return snapshot
 
     @staticmethod
     async def _load_order(

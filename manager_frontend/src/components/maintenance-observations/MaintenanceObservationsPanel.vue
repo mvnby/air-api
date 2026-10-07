@@ -8,6 +8,7 @@ import {
 } from '../../client';
 import { getApiErrorMessage } from '../../utils/api-errors';
 import { listAllCustomerEquipment } from '../equipment/loadAllCustomerEquipment';
+import MaintenanceDefectActsPanel from './MaintenanceDefectActsPanel.vue';
 import ServiceAttachmentViewer from '../service-attachments/ServiceAttachmentViewer.vue';
 import type { ServiceAttachmentItem } from '../service-attachments/types';
 
@@ -17,6 +18,9 @@ const props = defineProps<{
   customerId?: number | null;
   customerBranchId?: number | null;
 }>();
+const selectedIds = ref<number[]>([]);
+const actLocked = ref(false);
+const selectedObservations = computed(() => items.value.filter((item) => selectedIds.value.includes(item.id)).map((item) => ({ observation_id: item.id, expected_version: item.version })));
 const expanded = ref(false);
 const loaded = ref(false);
 const loading = ref(false);
@@ -36,7 +40,7 @@ const viewerId = ref<number | null>(null);
 let requestVersion = 0;
 // Inputs stay independent when this panel is embedded in an equipment/order form.
 const formOwner = computed(() => `maintenance-observation-${props.orderId ?? `equipment-${props.equipmentId}`}`);
-const locked = computed(() => saving.value || Boolean(pendingCreate.value));
+const locked = computed(() => saving.value || Boolean(pendingCreate.value) || actLocked.value);
 const photoItems = computed<ServiceAttachmentItem[]>(() => (detail.value?.photos || []).map((p) => ({
   ...p, file_kind: p.file_kind || 'image', category: p.category || 'defect', mime_type: p.mime_type || 'application/octet-stream', size_bytes: p.size_bytes ?? 0, source: p.source || 'manager_maintenance', processing_status: p.processing_status || 'ready', preview_available: Boolean(p.preview_available), id: p.id ?? null, caption: p.caption ?? null, transcript: p.transcript ?? null,
   processing_error: p.processing_error ?? null, captured_at: p.captured_at ?? null,
@@ -64,6 +68,7 @@ async function load(more = false) {
     if (version !== requestVersion) return;
     items.value = more ? [...items.value, ...response.items] : response.items;
     total.value = response.total;
+    selectedIds.value = selectedIds.value.filter((id) => items.value.some((item) => item.id === id));
     loaded.value = true;
   } catch (cause) { if (version === requestVersion) error.value = getApiErrorMessage(cause); }
   finally { if (version === requestVersion) loading.value = false; }
@@ -144,7 +149,7 @@ async function save() {
   } finally { if (version === requestVersion) saving.value = false; }
 }
 watch(() => [props.orderId, props.equipmentId], () => {
-  requestVersion++; loaded.value = false; loading.value = false; saving.value = false;
+  requestVersion++; selectedIds.value = []; actLocked.value = false; loaded.value = false; loading.value = false; saving.value = false;
   items.value = []; total.value = 0; detail.value = null; editing.value = false;
   error.value = ''; message.value = ''; pendingCreate.value = null; photos.value = []; equipment.value = [];
   if (expanded.value) void load();
@@ -163,13 +168,17 @@ onBeforeUnmount(() => { requestVersion++; });
       <p v-if="loading" role="status" class="text-sm text-gray-500">Загружаем…</p>
       <p v-if="loaded && !items.length" class="text-sm text-gray-500">Замечаний пока нет.</p>
       <div class="space-y-2">
-        <button v-for="item in items" :key="item.id" type="button" class="w-full rounded-lg border border-gray-200 p-3 text-left disabled:opacity-50 dark:border-slate-600" :disabled="locked || loading" @click="open(item.id)">
+        <div v-for="item in items" :key="item.id" class="flex min-w-0 items-start gap-2">
+          <label v-if="orderId" class="shrink-0 pt-3"><input :form="formOwner" v-model="selectedIds" :value="item.id" type="checkbox" :aria-label="`Выбрать замечание #${item.id} для акта`" :disabled="locked || loading" class="h-5 w-5" /></label>
+        <button type="button" class="w-full rounded-lg border border-gray-200 p-3 text-left disabled:opacity-50 dark:border-slate-600" :disabled="locked || loading" @click="open(item.id)">
           <span class="block text-sm font-semibold text-gray-950 dark:text-white">#{{ item.id }} · {{ item.equipment_description }}</span>
           <span class="mt-1 block whitespace-pre-wrap break-words text-sm text-gray-700 dark:text-slate-200">{{ item.facts }}</span>
           <span class="mt-1 block text-xs text-gray-500">ТО #{{ item.source_order_id }} · {{ dateLabel(item.observed_at) }} · {{ item.created_by }}</span>
         </button>
+        </div>
       </div>
       <button v-if="items.length < total" type="button" class="observation-button" :disabled="loading || locked" @click="load(true)">Показать ещё</button>
+      <MaintenanceDefectActsPanel v-if="orderId" :order-id="orderId" :selected="selectedObservations" @lock="actLocked = $event" @refresh="selectedIds = []; load()" />
       <div v-if="editing || detail" class="space-y-3 rounded-lg bg-gray-50 p-3 dark:bg-slate-900/40">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <h3 class="font-semibold text-gray-950 dark:text-white">{{ detail ? `Замечание #${detail.id}` : 'Новое замечание' }}</h3>

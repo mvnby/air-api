@@ -1,5 +1,5 @@
 """Manager commands for factual maintenance findings; no document/work transitions."""
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from uuid import UUID
 from typing import Literal
 
@@ -65,4 +65,40 @@ class MaintenanceObservationDetail(MaintenanceObservationItem):
 
 class MaintenanceObservationList(BaseModel):
     items: list[MaintenanceObservationItem]
+    total: int
+
+
+class MaintenanceActSelectedObservation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    observation_id: int = Field(gt=0)
+    expected_version: int = Field(ge=1)
+
+
+class PrepareMaintenanceDefectAct(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    command_key: UUID
+    observations: list[MaintenanceActSelectedObservation] = Field(min_length=1, max_length=100)
+    legal_entity_id: int = Field(gt=0)
+    issue_date: date
+    replaces_document_id: int | None = Field(default=None, gt=0)
+
+    @field_validator("observations")
+    @classmethod
+    def unique_sorted(cls, value):
+        if len({item.observation_id for item in value}) != len(value):
+            raise ValueError("Выберите каждое замечание только один раз")
+        return sorted(value, key=lambda item: item.observation_id)
+
+
+class MaintenanceDefectActItem(BaseModel):
+    preparation_id: int
+    source_order_id: int
+    continuation_order_id: int
+    document_id: int
+    status: str
+    observations: list[MaintenanceActSelectedObservation]
+
+
+class MaintenanceDefectActList(BaseModel):
+    items: list[MaintenanceDefectActItem]
     total: int

@@ -14,6 +14,7 @@ from models import (
     Order,
     OrderDocument,
     OrderStatus,
+    MaintenanceActPreparation,
 )
 from models.tenancy import TenantScope
 from modules.documents.domain import (
@@ -181,6 +182,7 @@ class ManagedDocumentService:
         template_id: int | None = None,
         replaces_document_id: int | None = None,
         template_storage: TemplateSourceStorage | None = None,
+        commit: bool = True,
     ) -> OrderDocument:
         order = await cls._get_mutable_scoped_order(
             session,
@@ -259,8 +261,11 @@ class ManagedDocumentService:
             google_edit_url=None,
         )
         session.add(document)
-        await cls._commit(session, "Не удалось создать черновик документа")
-        await session.refresh(document)
+        if commit:
+            await cls._commit(session, "Не удалось создать черновик документа")
+            await session.refresh(document)
+        else:
+            await session.flush()
         return document
 
     @classmethod
@@ -292,6 +297,8 @@ class ManagedDocumentService:
             raise ManagedDocumentConflictError(
                 "Черновик уже содержит сформированные файлы и должен остаться в истории"
             )
+        if await session.scalar(select(MaintenanceActPreparation.id).where(MaintenanceActPreparation.document_id == document_id)):
+            raise ManagedDocumentConflictError("Черновик сохраняет связь с замечаниями ТО. Подготовьте новую версию явным действием.")
         await session.delete(document)
         await cls._commit(session, "Не удалось удалить черновик документа")
 
@@ -610,7 +617,10 @@ class ManagedDocumentService:
         )
         if for_update:
             statement = statement.with_for_update()
-        return (await session.execute(statement)).scalar_one_or_none()
+        document = (await session.execute(statement)).scalar_one_or_none()
+        if document is not None and for_update and document.doc_type == "maintenance_defect_act":
+            await ManagedDocumentService._get_mutable_scoped_order(session, tenant_scope=tenant_scope, order_id=document.order_id, require_mutable=True)
+        return document
 
     @staticmethod
     def _basis_numbering_key(document: OrderDocument) -> str | None:

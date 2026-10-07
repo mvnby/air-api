@@ -15,6 +15,7 @@ from models.order import (
     OutgoingEmail,
     Payment,
 )
+from models.maintenance_continuation import MaintenanceContinuation
 from models.maintenance_observation import MaintenanceObservation
 from services.command_transaction import command_transaction
 from services.document_service import DocumentService
@@ -54,6 +55,11 @@ class OrderDeleteCommandService:
                     "Нельзя удалить исходный заказ: сохранены замечания ТО. "
                     "Заказ необходим для сохранения их истории."
                 )
+
+            if await session.scalar(sa.select(MaintenanceContinuation.id).where(
+                (MaintenanceContinuation.source_order_id == order_id) | (MaintenanceContinuation.order_id == order_id)
+            ).limit(1)) is not None:
+                raise OrderHasMaintenanceObservations("Нельзя удалить связанное продолжение ТО: сохранены источники дефектных актов.")
 
             documents = await DocumentService.list_order_documents(
                 session,

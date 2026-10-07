@@ -26,6 +26,7 @@ from modules.documents.infrastructure.renderers import (
 from modules.documents.infrastructure.template_source_storage import (
     PrivateTemplateSourceStorage,
 )
+from modules.documents.domain.placeholder_catalog import MAINTENANCE_OBSERVATION_ROW_PLACEHOLDERS
 from modules.documents.domain import (
     CONDITIONAL_FLAGS,
     LINE_ROW_PLACEHOLDERS,
@@ -90,7 +91,7 @@ async def get_native_placeholder_catalog(
     Access requires an authenticated Manager session/JWT and live membership; see [Manager
     access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
-    return NativePlaceholderCatalogResponse(
+    catalog = NativePlaceholderCatalogResponse(
         document_type=doc_type,
         fields=[
             NativePlaceholderDescriptorItem(
@@ -140,6 +141,14 @@ async def get_native_placeholder_catalog(
             ),
         ],
     )
+
+    if doc_type == "maintenance_defect_act":
+        catalog.tables = [NativePlaceholderTableItem(
+            name="observations", anchor_syntax="{{ observations }}",
+            row_fields=[NativePlaceholderDescriptorItem(name=item.name, label=item.label, group=item.group,
+                syntax=f"{{{{ {item.name} }}}}") for item in MAINTENANCE_OBSERVATION_ROW_PLACEHOLDERS],
+        )]
+    return catalog
 
 
 @router.get(
@@ -383,6 +392,7 @@ async def upload_native_template_version(
                 exc,
             ) from exc
         table_placeholders = {
+            "observations": MAINTENANCE_OBSERVATION_ROW_PLACEHOLDERS,
             "lines": LINE_ROW_PLACEHOLDERS,
             "payment_schedule": PAYMENT_SCHEDULE_ROW_PLACEHOLDERS,
         }
@@ -408,6 +418,7 @@ async def upload_native_template_version(
     allowed_fields = {item.name for item in SCALAR_PLACEHOLDERS}
     allowed_conditions = {item.name for item in CONDITIONAL_FLAGS}
     allowed_tables = {
+        "observations": {item.name for item in MAINTENANCE_OBSERVATION_ROW_PLACEHOLDERS},
         "lines": {item.name for item in LINE_ROW_PLACEHOLDERS},
         "payment_schedule": {
             item.name for item in PAYMENT_SCHEDULE_ROW_PLACEHOLDERS

@@ -13,7 +13,8 @@
     "2": "Orders/documents, customers/contracts, CRM/mail and catalog; reviewed 2026-10-07 from a3e79e89",
     "3": "Content/media, settings/access, tasks/calendar, services/equipment and operations; reviewed 2026-10-07 from a3e79e89",
     "4": "Linked incoming clarification and read-only editable preview, scope/version/replay contract; reviewed 2026-10-07 for issue 1084",
-    "5": "Standalone maintenance observations and private photos; role/scope/context/version/replay contract reviewed 2026-10-07 for issue 1085"
+    "5": "Standalone maintenance observations and private photos; role/scope/context/version/replay contract reviewed 2026-10-07 for issue 1085",
+    "6": "Explicit maintenance defect-act preparation; scoped versions, idempotency, immutable snapshot and native lifecycle reviewed 2026-10-08"
   },
   "operations": {
     "modules/documents/api/condition_presets.py": [
@@ -494,7 +495,9 @@
       ["GET /api/manager/orders/{order_id}/maintenance-observations", "list_manager_order_maintenance_observations", false, 5],
       ["PATCH /api/manager/maintenance-observations/{observation_id}", "update_manager_maintenance_observation", false, 5],
       ["POST /api/manager/maintenance-observations/{observation_id}/photos", "upload_manager_maintenance_observation_photo", false, 5],
-      ["POST /api/manager/orders/{order_id}/maintenance-observations", "create_manager_maintenance_observation", false, 5]
+      ["POST /api/manager/orders/{order_id}/maintenance-observations", "create_manager_maintenance_observation", false, 5],
+      ["POST /api/manager/orders/{order_id}/maintenance-defect-acts", "prepare_manager_maintenance_defect_act", false, 6],
+      ["GET /api/manager/orders/{order_id}/maintenance-defect-acts", "list_manager_maintenance_defect_acts", false, 6]
     ],
     "routers/manager_mail.py": [
       ["DELETE /api/manager/mail/bank-receipts/{receipt_id}", "delete_manager_bank_receipt", false, 2],
