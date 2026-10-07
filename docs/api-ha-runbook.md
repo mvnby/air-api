@@ -622,7 +622,8 @@ attached to a canonical segment block processing.
 
 The encoder reads a protected, unchanged source file in bounded chunks, uses
 one private temporary gzip file and removes it on success or failure. Upload
-proves stored size, digest and format metadata via HEAD plus a full bounded GET.
+uses the same complete gzip reader proof before deletion: stored/decoded sizes,
+both digests, format, ETag and unversioned HEAD/GET identity, plus a final HEAD.
 The source is re-hashed and its file snapshot rechecked afterward. Local deletion
 still happens only after all upload checks and the final source snapshot check.
 Failures preserve the source. Temporary disk capacity must cover one compressed

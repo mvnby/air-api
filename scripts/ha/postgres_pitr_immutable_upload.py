@@ -130,6 +130,11 @@ def _verify_remote_object(
         sha256=sha256,
         extra_metadata=extra_metadata,
     )
+    if extra_metadata and extra_metadata.get("wal-codec") == "gzip":
+        # Upload success must prove exactly the representation accepted by
+        # restore, including version/ETag identity and both byte streams.
+        read_gzip_wal(client, bucket=bucket, key=key, head=contract)
+        return
     _verify_remote_content(
         client,
         bucket=bucket,

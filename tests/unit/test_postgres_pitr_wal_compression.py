@@ -451,3 +451,80 @@ def test_legacy_lineage_caller_cannot_silently_skip_gzip(original):
     with pytest.raises(SystemExit, match="storage codec helper is required"):
         lineage.list_wal_objects(client, bucket=CONFIG.bucket,
                                  prefix="postgres/pitr/mvn-api/wal/", max_objects=100)
+
+
+@pytest.mark.parametrize("replay", [False, True], ids=["first-upload", "replay"])
+@pytest.mark.parametrize("phase", ["initial-head", "get", "final-head"])
+@pytest.mark.parametrize("failure", ["version", "etag", "size"])
+def test_gzip_upload_requires_reader_identity_before_deletion(monkeypatch, tmp_path, original, replay, phase, failure):
+    source = tmp_path / NAME
+    source.write_bytes(original)
+    client = Client()
+    monkeypatch.setattr(upload, "load_config", lambda: CONFIG)
+    monkeypatch.setattr(upload, "build_client", lambda _: client)
+    args = upload_args(tmp_path)
+    if replay:
+        assert upload.upload_wal(args) == 0
+    real_head, real_get = client.head_object, client.get_object
+    existing_heads = 0
+
+    def corrupt_identity(response):
+        response = dict(response)
+        if failure == "version":
+            response["VersionId"] = "version-1"
+        elif failure == "etag":
+            if phase == "initial-head":
+                response.pop("ETag")
+            else:
+                response["ETag"] = '"changed-identity"'
+        else:
+            response["ContentLength"] += 1
+        return response
+
+    def head(**kwargs):
+        nonlocal existing_heads
+        response = real_head(**kwargs)
+        if kwargs["Key"] == KEY + ".gz":
+            existing_heads += 1
+            if (phase == "initial-head" and existing_heads == 1
+                or phase == "final-head" and existing_heads == 2):
+                response = corrupt_identity(response)
+        return response
+
+    def get(**kwargs):
+        response = real_get(**kwargs)
+        return corrupt_identity(response) if phase == "get" else response
+
+    monkeypatch.setattr(client, "head_object", head)
+    monkeypatch.setattr(client, "get_object", get)
+    args.delete_after_upload = True
+    with pytest.raises((SystemExit, RuntimeError)):
+        upload.upload_wal(args)
+    assert source.read_bytes() == original
+    assert len(client.puts) == 1
+    assert all(body.closed for body in client.bodies)
+
+
+@pytest.mark.parametrize("replay", [False, True], ids=["first-upload", "replay"])
+def test_gzip_upload_rejects_changed_final_decoded_metadata(monkeypatch, tmp_path, original, replay):
+    source = tmp_path / NAME
+    source.write_bytes(original)
+    client = Client()
+    monkeypatch.setattr(upload, "load_config", lambda: CONFIG)
+    monkeypatch.setattr(upload, "build_client", lambda _: client)
+    args = upload_args(tmp_path)
+    if replay:
+        upload.upload_wal(args)
+    real_get = client.get_object
+
+    def changed_metadata(**kwargs):
+        response = real_get(**kwargs)
+        client.metadata[KEY + ".gz"]["wal-sha256"] = "f" * 64
+        return response
+
+    monkeypatch.setattr(client, "get_object", changed_metadata)
+    args.delete_after_upload = True
+    with pytest.raises(SystemExit, match="identity changed"):
+        upload.upload_wal(args)
+    assert source.read_bytes() == original
+    assert all(body.closed for body in client.bodies)
