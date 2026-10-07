@@ -35,6 +35,29 @@ class Object:
     etag: str
 
 
+class ProofIdentityClient:
+    """Remember every HEAD identity consumed by the calculation and its helpers."""
+
+    def __init__(self, client: Any):
+        self.client = client
+        self.identities: dict[str, tuple] = {}
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.client, name)
+
+    def head_object(self, **kwargs: Any) -> dict:
+        head = self.client.head_object(**kwargs)
+        key = kwargs["Key"]
+        digest = (head.get("Metadata") or {}).get("sha256")
+        if not isinstance(digest, str) or not security.SHA256_RE.fullmatch(digest):
+            raise ValueError(f"invalid proof SHA256 identity: {key}")
+        identity = (head.get("ContentLength"), head.get("ETag"), head.get("VersionId"), digest)
+        previous = self.identities.setdefault(key, identity)
+        if identity != previous:
+            raise ValueError(f"proof identity changed during planning: {key}")
+        return head
+
+
 def parse_as_of(raw: str) -> datetime:
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})", raw):
         raise ValueError("as-of requires ISO 8601 seconds and an explicit timezone")
@@ -244,6 +267,7 @@ def _calculate(
                 raise ValueError(f"listed artifact size mismatch: {entry.key}")
             check_identity(client, config, obj, entry.sha256)
         pg_manifest = restore._load_postgres_backup_manifest(client, config, manifest)
+        security.validate_postgres_manifest_structure(pg_manifest)
         security.validate_postgres_manifest_lineage(manifest, pg_manifest)
         manifests.append(manifest)
     cutoff = as_of - retention
@@ -386,8 +410,9 @@ def plan(
             expected_system_identifier, label="Expected system identifier"
         )
         objects = list_inventory(client, config)
+        proof_client = ProofIdentityClient(client)
         reasons, evidence = _calculate(
-            client,
+            proof_client,
             config,
             objects,
             as_of=as_of,
@@ -400,9 +425,11 @@ def plan(
         if list_inventory(client, config) != objects:
             raise ValueError("inventory changed during planning; retry from a fresh snapshot")
         for item in objects:
-            head = client.head_object(Bucket=config.bucket, Key=item.key)
+            final_client = proof_client if item.key in proof_client.identities else client
+            head = final_client.head_object(Bucket=config.bucket, Key=item.key)
             if (
-                head.get("ContentLength") != item.size_bytes
+                type(head.get("ContentLength")) is not int
+                or head.get("ContentLength") != item.size_bytes
                 or head.get("ETag") != item.etag
                 or head.get("VersionId") not in (None, "null")
             ):
