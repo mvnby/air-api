@@ -2,11 +2,15 @@
 
 This runbook covers the three hosts in the MVN reliability topology:
 
-| Host | WireGuard IP | Public services | Private services |
-| --- | --- | --- | --- |
-| `mvn-api` | `10.77.0.2` | SSH, HTTPS | PostgreSQL, etcd, Patroni, API slots |
-| `zakup` | `10.77.0.1` | SSH, shared Caddy HTTPS | PostgreSQL, etcd, Patroni, MVN proxy/app slots |
-| `mvn` | `10.77.0.3` | SSH, web HTTPS | etcd witness |
+| Internal host identifier | SSH alias | WireGuard IP | Public services | Private services |
+| --- | --- | --- | --- | --- |
+| `mvn-api` | `mvn-api-nl` | `10.77.0.2` | SSH, HTTPS | PostgreSQL, etcd, Patroni, API slots |
+| `zakup` | `mvn-api-by` | `10.77.0.1` | SSH, shared Caddy HTTPS | PostgreSQL, etcd, Patroni, MVN proxy/app slots |
+| `mvn` | `mvn` | `10.77.0.3` | SSH, web HTTPS | etcd witness |
+
+Use the [operator SSH configuration](deployment.md#ssh-access) for access.
+Tracked host-key files and the pinned release helper's isolated SSH configuration
+retain the internal identifiers `mvn-api` and `zakup`.
 
 Do not enable or rewrite UFW on `mvn-api` or `zakup` as an incidental
 hardening step. Docker networking and the existing WireGuard mesh must be

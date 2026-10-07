@@ -9,17 +9,24 @@ This runbook describes the current active-passive API setup for `api.mvn.by`.
 The system intentionally has one writable PostgreSQL primary and one warm
 standby. Do not make both origins public-writable.
 
-Last verified state: 2026-07-03.
+Physical topology last verified: 2026-07-03. Operator SSH aliases confirmed:
+2026-10-07; see [SSH access](deployment.md#ssh-access).
 
 ## Current Hosts
 
-| Host | SSH alias | Current role | API path | API port |
+| Host | SSH alias | Recorded physical-mode role | API path | API port |
 | --- | --- | --- | --- | --- |
-| Original API VPS | `mvn-api` | Active primary | `/opt/air-api` | nginx `127.0.0.1:18080` -> slot `18001/18002` |
-| Belarus reserve VPS | `zakup` | Warm standby | `/opt/mvn-reserve` | `127.0.0.1:18000` |
+| Netherlands API VPS | `mvn-api-nl` | Active primary | `/opt/air-api` | nginx `127.0.0.1:18080` -> slot `18001/18002` |
+| Belarus API VPS | `mvn-api-by` | Warm standby | `/opt/mvn-reserve` | `127.0.0.1:18000` |
 | Web VPS | `mvn` | Storefront only | n/a | n/a |
 
-Current data direction:
+The roles below describe the recorded physical-mode topology. Verify current
+roles before an operation; in Patroni mode use the
+[production check](postgres-quorum-runbook.md#production-monitoring).
+Internal member names, replication slots, CLI node selectors and paths retain
+`mvn-api` and `zakup`. Operator SSH commands use the aliases in the table.
+
+Recorded data direction (internal node identifiers):
 
 ```text
 mvn-api PostgreSQL primary 10.77.0.2:5432
@@ -32,7 +39,7 @@ legacy local /media fallback
   -> zakup /opt/mvn-reserve/media via mvn-media-sync.timer every 5 minutes
 ```
 
-Runtime split:
+Recorded runtime split (internal node identifiers):
 
 | Runtime | `mvn-api` primary | `zakup` standby |
 | --- | --- | --- |
@@ -87,13 +94,13 @@ single-file token mount.
 Primary:
 
 ```bash
-ssh mvn-api /usr/local/sbin/mvn-primary-status
+ssh mvn-api-nl /usr/local/sbin/mvn-primary-status
 ```
 
 Standby:
 
 ```bash
-ssh zakup /usr/local/sbin/mvn-standby-status
+ssh mvn-api-by /usr/local/sbin/mvn-standby-status
 ```
 
 Public and direct readiness:
@@ -119,7 +126,7 @@ bash scripts/ha/check_active_passive.sh
 Media storage config check:
 
 ```bash
-ssh mvn-api 'cd /opt/air-api && app_service=app; if test -f .active-api-slot; then app_service="app-$(cat .active-api-slot)"; fi; docker compose -f docker-compose.patroni.yml --profile bluegreen exec -T "$app_service" python3 scripts/check_media_storage_config.py --require-object-storage --expected-public-base-url https://cdn.mvn.by'
+ssh mvn-api-nl 'cd /opt/air-api && app_service=app; if test -f .active-api-slot; then app_service="app-$(cat .active-api-slot)"; fi; docker compose -f docker-compose.patroni.yml --profile bluegreen exec -T "$app_service" python3 scripts/check_media_storage_config.py --require-object-storage --expected-public-base-url https://cdn.mvn.by'
 ```
 
 GitHub health check:
@@ -150,7 +157,7 @@ python3 scripts/ha/check_ha_external_prerequisites.py --repo mvnby/air-api --req
 This check uses `gh` metadata only. It lists missing GitHub variables/secrets
 without printing secret values. It cannot read host-local private PITR R2
 credentials; after those are installed, verify them on the primary with
-`ssh mvn-api '/usr/local/sbin/mvn-postgres-pitr-bootstrap verify'`.
+`ssh mvn-api-nl '/usr/local/sbin/mvn-postgres-pitr-bootstrap verify'`.
 
 Operator rollup report:
 
@@ -668,17 +675,17 @@ compatibility policy.
 Manual disk pressure check:
 
 ```bash
-ssh mvn-api 'df -h / && docker system df'
-ssh zakup 'df -h / && docker system df'
+ssh mvn-api-nl 'df -h / && docker system df'
+ssh mvn-api-by 'df -h / && docker system df'
 ```
 
 Manual scoped image cleanup, safe for databases, media volumes, and the last
 three backend releases:
 
 ```bash
-cat scripts/prune_unused_docker_images.sh | ssh mvn-api \
+cat scripts/prune_unused_docker_images.sh | ssh mvn-api-nl \
   'KEEP_BACKEND_IMAGES=3 bash -s'
-cat scripts/prune_unused_docker_images.sh | ssh zakup \
+cat scripts/prune_unused_docker_images.sh | ssh mvn-api-by \
   'KEEP_BACKEND_IMAGES=3 bash -s'
 ```
 
@@ -686,8 +693,8 @@ Manual zero-downtime code rollback on the current primary:
 
 ```bash
 scp scripts/deploy_backend_blue_green.sh scripts/deploy_backend_blue_green_safety.sh \
-  scripts/prepare_google_oauth_token_dir.sh scripts/rollback_backend.sh mvn-api:/tmp/
-ssh mvn-api 'chmod +x /tmp/deploy_backend_blue_green.sh \
+  scripts/prepare_google_oauth_token_dir.sh scripts/rollback_backend.sh mvn-api-nl:/tmp/
+ssh mvn-api-nl 'chmod +x /tmp/deploy_backend_blue_green.sh \
   /tmp/deploy_backend_blue_green_safety.sh /tmp/prepare_google_oauth_token_dir.sh \
   /tmp/rollback_backend.sh && \
   CONFIRM_ROLLBACK=true API_PROJECT_DIR=/opt/air-api \
@@ -840,7 +847,7 @@ Preferred helper path, run on `zakup` after copying
 `/opt/mvn-reserve/docker-compose.primary.yml`:
 
 ```bash
-ssh zakup 'OLD_PRIMARY_SSH=root@10.77.0.2 CONFIRM_PROMOTE=true /usr/local/sbin/mvn-promote-local-standby'
+ssh mvn-api-by 'OLD_PRIMARY_SSH=root@10.77.0.2 CONFIRM_PROMOTE=true /usr/local/sbin/mvn-promote-local-standby'
 ```
 
 The helper is the source of truth for the host-local promotion mechanics. It
@@ -852,7 +859,7 @@ The helper refuses to promote without `OLD_PRIMARY_SSH` by default. If
 `mvn-api` is unreachable and cannot be fenced over SSH, make that risk explicit:
 
 ```bash
-ssh zakup 'ALLOW_UNFENCED_PROMOTE=true CONFIRM_PROMOTE=true /usr/local/sbin/mvn-promote-local-standby'
+ssh mvn-api-by 'ALLOW_UNFENCED_PROMOTE=true CONFIRM_PROMOTE=true /usr/local/sbin/mvn-promote-local-standby'
 ```
 
 The manual steps below are the same procedure expanded for review.
@@ -860,19 +867,19 @@ The manual steps below are the same procedure expanded for review.
 1. Fence the old primary first if reachable:
 
    ```bash
-   ssh mvn-api 'cd /opt/air-api && docker compose -f docker-compose.patroni.yml stop app bot'
+   ssh mvn-api-nl 'cd /opt/air-api && docker compose -f docker-compose.patroni.yml stop app bot'
    ```
 
 2. Confirm standby is caught up:
 
    ```bash
-   ssh zakup /usr/local/sbin/mvn-standby-status
+   ssh mvn-api-by /usr/local/sbin/mvn-standby-status
    ```
 
 3. Promote `zakup`:
 
    ```bash
-   ssh zakup 'cd /opt/mvn-reserve && docker compose -f docker-compose.reserve.yml exec -T db sh -lc '\''pg_ctl promote -D "$PGDATA"'\'''
+   ssh mvn-api-by 'cd /opt/mvn-reserve && docker compose -f docker-compose.reserve.yml exec -T db sh -lc '\''pg_ctl promote -D "$PGDATA"'\'''
    ```
 
 4. Change `zakup` compose/runtime from standby to primary:
@@ -889,19 +896,19 @@ The manual steps below are the same procedure expanded for review.
    prepared primary compose:
 
    ```bash
-   ssh zakup 'cd /opt/mvn-reserve && cp docker-compose.reserve.yml "docker-compose.reserve.yml.pre-promote.$(date -u +%Y%m%d%H%M%S)" && cp docker-compose.primary.yml docker-compose.reserve.yml'
+   ssh mvn-api-by 'cd /opt/mvn-reserve && cp docker-compose.reserve.yml "docker-compose.reserve.yml.pre-promote.$(date -u +%Y%m%d%H%M%S)" && cp docker-compose.primary.yml docker-compose.reserve.yml'
    ```
 
 5. Start primary services on `zakup`:
 
    ```bash
-   ssh zakup 'cd /opt/mvn-reserve && docker compose -f docker-compose.reserve.yml up -d app bot'
+   ssh mvn-api-by 'cd /opt/mvn-reserve && docker compose -f docker-compose.reserve.yml up -d app bot'
    ```
 
 6. Disable media pull on the promoted primary:
 
    ```bash
-   ssh zakup 'systemctl disable --now mvn-media-sync.timer mvn-media-sync.service'
+   ssh mvn-api-by 'systemctl disable --now mvn-media-sync.timer mvn-media-sync.service'
    ```
 
 7. Verify:
@@ -999,7 +1006,8 @@ prove that the latest DB dump restores.
 
 Run through the scheduled/manual GitHub workflow. It creates an owner-only
 temporary SSH context from `SSH_KEY`, trusts only the tracked Ed25519 keys for
-the reviewed `mvn-api` and `zakup` aliases, proves the two-node Patroni
+the reviewed internal `mvn-api` and `zakup` aliases in that isolated configuration
+(independent of the operator aliases in `~/.ssh/config`), proves the two-node Patroni
 topology before and after the drill, and invokes the installed guarded runner
 on the proven primary:
 
