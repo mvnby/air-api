@@ -4,6 +4,7 @@ import DealExecutionTab from './DealExecutionTab.vue';
 import OrderAttachmentsPanel from '../service-attachments/OrderAttachmentsPanel.vue';
 import EmailContractReviewLauncher from '../leads/EmailContractReviewLauncher.vue';
 import OrderEquipmentPanel from '../equipment/OrderEquipmentPanel.vue';
+import MaintenanceObservationsPanel from '../maintenance-observations/MaintenanceObservationsPanel.vue';
 import OrderWorkspaceHeader from './OrderWorkspaceHeader.vue';
 import OrderSalesInstallationWorkspace from './OrderSalesInstallationWorkspace.vue';
 import OrderPaymentsPanel from './OrderPaymentsPanel.vue';
@@ -678,6 +679,7 @@ const saveContextObject = async (draft: { address: string; branchId: number | nu
                 @reload="emit('reload', order.id)"
                 @error="setToast($event, 'error')"
               />
+              <MaintenanceObservationsPanel v-if="order?.workflow_type === 'maintenance'" :key="`observations-${order.id}`" class="mt-4" :order-id="order.id" :customer-id="order.customer?.id" :customer-branch-id="order.customer_branch?.id" />
               <EmailContractReviewLauncher v-if="order && order.attachment_count" :order-id="order.id" />
               <OrderAttachmentsPanel v-if="order" :key="`order-attachments-${order.id}`" class="mt-4" :order-id="order.id" :initial-count="order.attachment_count" :equipment-options="linkedEquipmentOptions" @need-equipment-options="equipmentPanelRef?.ensureLoaded()" @error="setToast($event, 'error')" />
               <OrderWebsiteIntakePanel v-if="isWebsiteOrder" v-model:expanded="expandedDrawerSections.website" :order="order!" :delivery-address="customerDeliveryAddress" :comment="comment" @copy="copyText($event.value, $event.label)" />

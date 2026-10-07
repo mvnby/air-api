@@ -12,7 +12,8 @@
     "1": "Public HTTP/helpers, supply, staff bot and OAuth; completed in a3e79e89",
     "2": "Orders/documents, customers/contracts, CRM/mail and catalog; reviewed 2026-10-07 from a3e79e89",
     "3": "Content/media, settings/access, tasks/calendar, services/equipment and operations; reviewed 2026-10-07 from a3e79e89",
-    "4": "Linked incoming clarification and read-only editable preview, scope/version/replay contract; reviewed 2026-10-07 for issue 1084"
+    "4": "Linked incoming clarification and read-only editable preview, scope/version/replay contract; reviewed 2026-10-07 for issue 1084",
+    "5": "Standalone maintenance observations and private photos; role/scope/context/version/replay contract reviewed 2026-10-07 for issue 1085"
   },
   "operations": {
     "modules/documents/api/condition_presets.py": [
@@ -486,6 +487,14 @@
       ["POST /api/manager/leads", "create_manager_lead", false, 2],
       ["POST /api/manager/leads/{lead_id}/mark-lost", "mark_manager_lead_lost", false, 2],
       ["POST /api/manager/leads/{lead_id}/qualify", "qualify_manager_lead", false, 2]
+    ],
+    "routers/manager_maintenance_observations.py": [
+      ["GET /api/manager/equipment/{equipment_id}/maintenance-observations", "list_manager_equipment_maintenance_observations", false, 5],
+      ["GET /api/manager/maintenance-observations/{observation_id}", "get_manager_maintenance_observation", false, 5],
+      ["GET /api/manager/orders/{order_id}/maintenance-observations", "list_manager_order_maintenance_observations", false, 5],
+      ["PATCH /api/manager/maintenance-observations/{observation_id}", "update_manager_maintenance_observation", false, 5],
+      ["POST /api/manager/maintenance-observations/{observation_id}/photos", "upload_manager_maintenance_observation_photo", false, 5],
+      ["POST /api/manager/orders/{order_id}/maintenance-observations", "create_manager_maintenance_observation", false, 5]
     ],
     "routers/manager_mail.py": [
       ["DELETE /api/manager/mail/bank-receipts/{receipt_id}", "delete_manager_bank_receipt", false, 2],
