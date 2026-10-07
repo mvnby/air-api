@@ -582,6 +582,94 @@ Do not set `POSTGRES_PITR_REQUIRED=true` until both the strict freshness check
 and a physical restore drill pass. After that, leave it true so the daily drill
 keeps proving that basebackups plus archived WAL can actually be restored.
 
+### Report-only retention planner (issue #893, first stage)
+
+Implementation boundary and checks:
+
+1. Require an explicit retention duration, timezone-aware as-of clock, expected
+   PostgreSQL system identifier and archived end WAL. Read a complete inventory;
+   reject listing errors, duplicate keys, missing manifests and unsupported schemas.
+2. Reuse restore manifest/artifact validation and WAL lineage selection. Verify
+   every completed backup's required artifact identities and PostgreSQL manifest;
+   select all backups in the window plus the latest completed anchor at/before
+   its start. Preserve future, unknown and upload-in-progress objects.
+3. Prove the anchor-to-end WAL chain using actual ancestor history. Check WAL
+   long headers against the expected cluster, segment geometry and page position.
+   Preserve all history/backup metadata and anything not provably before the
+   anchor. Any uncertainty blocks the report and clears all candidates.
+4. Exercise offline inventory fixtures for stable timeline, failover, forks/gaps,
+   boundary LSNs, malformed/missing artifacts, pagination, immutable identities,
+   deterministic sizes/order and zero mutations. These prove planning invariants,
+   not recovery to every wall-clock instant; live inventory and physical drills
+   remain separate evidence before any later prune activation.
+
+Run the checked-in synthetic inventory without credentials or database access:
+
+```bash
+python3 scripts/ha/plan_postgres_pitr_retention.py \
+  --inventory tests/unit/fixtures/postgres_pitr_retention/timeline1.json \
+  --as-of 2026-10-07T12:00:00+03:00 --retention-days 7 \
+  --expected-system-identifier 7612345678901234567 \
+  --required-end-wal 000000010000000000000007 --dry-run
+```
+
+The fixture produces six candidates: four objects for the older backup and two
+WAL segments. It deliberately uses synthetic backup contents and WAL headers;
+it is reproducible planning evidence, not a restorable physical backup.
+
+For an authorized live read, replace `--inventory ...` with `--live` and supply
+private `POSTGRES_PITR_*` settings through the existing protected environment.
+Do not pass credentials as arguments or copy production secrets into an
+inventory. Supply the expected system identifier and exact archived end WAL
+from current reviewed cluster evidence. The tool only calls ListObjectsV2, HEAD
+and GET (including conditional 40-byte WAL range reads), never upload/delete or
+credential probes. It reads the full logical namespace, performs complete
+pagination, and repeats listing/identity checks to reject concurrent changes.
+A large archive needs one header read per complete WAL segment and several HEAD
+requests; this is an operator report, not a new scheduled production job.
+
+The JSON report sorts exact keys, byte sizes, ETags and reasons into `retained`
+and `candidates`, with counts and sums. Exit 0 means a planning chain was proven
+through `required_end_wal`; exit 1 means `blocked`, zero candidates and zero
+candidate bytes. An incomplete listing has unknown totals, not an empty archive.
+`deletion_authorized` and `recovery_window_proven` are always false. Saved reports
+can become stale and must never be treated as executable deletion instructions.
+
+Offline inventory schema 1 requires `listing_complete: true` and an `objects`
+array with unique `key`, integer `size_bytes`, `etag` and HEAD `sha256` identity.
+Small manifests/history also carry exact `payload_base64` bytes; full WAL records
+carry `wal_header_hex` for the first 40 bytes. No large tar/WAL bodies are needed.
+These are operator-supplied read observations, not cryptographic attestations.
+The fixture builder is in
+[`test_postgres_pitr_retention.py`](../tests/unit/test_postgres_pitr_retention.py).
+
+All backup artifacts must appear in the complete listing and match their
+manifest's size and digest metadata, including streamed WAL/tablespace files
+when listed. Outer and PostgreSQL manifests and histories are read and digest
+verified. Full tar/WAL bodies are not downloaded or checksum-verified here; that
+and actual recovery still require the existing physical restore drill. Legacy
+v0, unsupported versions, orphaned uploads, identity changes, missing artifacts,
+branches, invalid timeline birth bounds or gaps block the whole report. Unknown
+objects and all `.history`, `.backup` and `.partial` metadata stay retained.
+Candidate WAL must be on the verified lineage with its whole segment before the
+anchor's start segment; object timestamps do not participate in that decision.
+
+WAL identity parsing is deliberately limited to the repository's PostgreSQL 15
+64-bit long-header layout (both byte orders), the expected system identifier,
+8192-byte WAL pages and a declared power-of-two segment size from 1 MiB to 1 GiB.
+Unknown WAL formats block planning. Header fields follow the
+[PostgreSQL 15 source](https://github.com/postgres/postgres/blob/REL_15_STABLE/src/include/access/xlog_internal.h).
+Copied ancestor pages at a failover segment boundary are checked against the
+same history lineage used by restore. Timeline/LSN ordering proves segment
+retention, not the timestamp of every recoverable transaction or current R2
+lifecycle policy. The sizes and lifecycle settings recorded in issue #893 on
+2026-08-04 are historical observations; this stage does not remeasure them.
+
+This stage has no executable delete path, lifecycle/config changes or HA host
+asset activation. Normal API image deployment does not install the host planner.
+Compression, leader-fenced destructive prune and a restore drill after cleanup
+remain later stages; this change does not close issue #893.
+
 ## GitHub Actions Routing
 
 Current production GitHub secret/variables must match the active primary:
