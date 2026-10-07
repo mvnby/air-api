@@ -432,6 +432,7 @@ class ManagedDocumentArtifactAccessResponse(BaseModel):
 
 
 class ManagedDocumentItem(BaseModel):
+    maintenance_source_order_id: int | None = None
     document_role_type: DocumentPartyRoleType | None = None
     id: int
     order_id: int

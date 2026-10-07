@@ -4,9 +4,12 @@
 /* eslint-disable */
 import type { Body_upload_manager_maintenance_observation_photo } from '../models/Body_upload_manager_maintenance_observation_photo';
 import type { CreateMaintenanceObservation } from '../models/CreateMaintenanceObservation';
+import type { MaintenanceDefectActItem } from '../models/MaintenanceDefectActItem';
+import type { MaintenanceDefectActList } from '../models/MaintenanceDefectActList';
 import type { MaintenanceObservationDetail } from '../models/MaintenanceObservationDetail';
 import type { MaintenanceObservationList } from '../models/MaintenanceObservationList';
 import type { ManagerServiceAttachmentItemResponse } from '../models/ManagerServiceAttachmentItemResponse';
+import type { PrepareMaintenanceDefectAct } from '../models/PrepareMaintenanceDefectAct';
 import type { UpdateMaintenanceObservation } from '../models/UpdateMaintenanceObservation';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
@@ -185,6 +188,71 @@ export class ManagerMaintenanceObservationsService {
             },
             formData: formData,
             mediaType: 'multipart/form-data',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Prepare Defect Act
+     * Explicitly prepare a native defect-act draft from current versions of selected
+     * findings on one open or CLOSED ТО. Manager and tenant/storefront/customer/object
+     * ownership are required. Same command key/content returns the same document;
+     * different content or stale versions return 409, mixed context/missing requisites 400,
+     * inaccessible source/issuer 404. Creates/reuses a linked NEGOTIATION continuation,
+     * never executable work, scheduling, a contract or customer delivery. Snapshot sources
+     * are immutable; preview, issue and delivery use the existing document lifecycle.
+     * See [maintenance acts](https://github.com/mvnby/air-api/blob/main/docs/equipment-maintenance.md).
+     * @param orderId
+     * @param requestBody
+     * @returns MaintenanceDefectActItem Successful Response
+     * @throws ApiError
+     */
+    public static prepareManagerMaintenanceDefectAct(
+        orderId: number,
+        requestBody: PrepareMaintenanceDefectAct,
+    ): CancelablePromise<MaintenanceDefectActItem> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/orders/{order_id}/maintenance-defect-acts',
+            path: {
+                'order_id': orderId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * List Defect Acts
+     * List defect-act preparations linked to a scoped source ТО, including CLOSED history.
+     * Requires Manager tenant/storefront access to the source and continuation. Missing or
+     * inaccessible context returns 404. limit is 1–100 with offset pagination. Reading does
+     * not prepare, issue, send or update documents or observations.
+     * See [maintenance acts](https://github.com/mvnby/air-api/blob/main/docs/equipment-maintenance.md).
+     * @param orderId
+     * @param limit
+     * @param offset
+     * @returns MaintenanceDefectActList Successful Response
+     * @throws ApiError
+     */
+    public static listManagerMaintenanceDefectActs(
+        orderId: number,
+        limit: number = 50,
+        offset?: number,
+    ): CancelablePromise<MaintenanceDefectActList> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/orders/{order_id}/maintenance-defect-acts',
+            path: {
+                'order_id': orderId,
+            },
+            query: {
+                'limit': limit,
+                'offset': offset,
+            },
             errors: {
                 422: `Validation Error`,
             },

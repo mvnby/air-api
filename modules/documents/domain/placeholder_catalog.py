@@ -30,6 +30,7 @@ SCALAR_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
     PlaceholderDescriptor(
         "document.official_full_number", "Серия и официальный номер", "Документ"
     ),
+    PlaceholderDescriptor("maintenance.source_order", "Исходное ТО", "Замечания ТО"),
     PlaceholderDescriptor("document.issued_on", "Дата документа", "Документ"),
     PlaceholderDescriptor("document.issue_city", "Город документа", "Документ"),
     PlaceholderDescriptor("document.type", "Тип документа", "Документ"),
@@ -374,6 +375,14 @@ PAYMENT_SCHEDULE_ROW_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
 )
 
 SUPPORTED_NATIVE_DOCUMENT_TYPES = (
-    frozenset({"offer", "invoice", "contract", "act", "tn2", "ttn1"})
+    frozenset({"offer", "invoice", "contract", "act", "tn2", "ttn1", "maintenance_defect_act"})
     | B2C_NATIVE_DOCUMENT_TYPES
+)
+
+
+MAINTENANCE_OBSERVATION_ROW_PLACEHOLDERS = tuple(
+    PlaceholderDescriptor(f"observation.{field}", label, "Замечания ТО")
+    for field, label in (("equipment", "Блок / место проблемы"), ("provenance", "Дата, автор и версия"),
+                         ("facts", "Подтверждённые факты"), ("recommendation", "Рекомендация"),
+                         ("sources", "Источники"), ("photos", "Приватные фото"))
 )

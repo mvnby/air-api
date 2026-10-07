@@ -307,6 +307,9 @@ export type { LeadsInboxListResponse } from './models/LeadsInboxListResponse';
 export type { LeadsInboxTenderResponse } from './models/LeadsInboxTenderResponse';
 export type { LeadSource } from './models/LeadSource';
 export type { LeadUpdatePayload } from './models/LeadUpdatePayload';
+export type { MaintenanceActSelectedObservation } from './models/MaintenanceActSelectedObservation';
+export type { MaintenanceDefectActItem } from './models/MaintenanceDefectActItem';
+export type { MaintenanceDefectActList } from './models/MaintenanceDefectActList';
 export type { MaintenanceObservationContent } from './models/MaintenanceObservationContent';
 export type { MaintenanceObservationDetail } from './models/MaintenanceObservationDetail';
 export type { MaintenanceObservationItem } from './models/MaintenanceObservationItem';
@@ -686,6 +689,7 @@ export type { PersonalTaskListResponse } from './models/PersonalTaskListResponse
 export type { PersonalTaskResponse } from './models/PersonalTaskResponse';
 export type { PersonalTaskStatusPayload } from './models/PersonalTaskStatusPayload';
 export type { PersonalTaskUpdatePayload } from './models/PersonalTaskUpdatePayload';
+export type { PrepareMaintenanceDefectAct } from './models/PrepareMaintenanceDefectAct';
 export type { ProductAvailabilityLeadPayload } from './models/ProductAvailabilityLeadPayload';
 export type { ProductAvailabilityLeadResponse } from './models/ProductAvailabilityLeadResponse';
 export type { ProductBrandResponse } from './models/ProductBrandResponse';

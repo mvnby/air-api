@@ -6,7 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api_contracts.maintenance_observations import (
     CreateMaintenanceObservation, MaintenanceObservationDetail, MaintenanceObservationList, UpdateMaintenanceObservation,
+    PrepareMaintenanceDefectAct, MaintenanceDefectActItem, MaintenanceDefectActList,
 )
+from modules.documents.application.maintenance_act_preparation import MaintenanceActPreparationService
+from modules.documents.application.errors import ManagedDocumentConflictError, ManagedDocumentNotFoundError
+from modules.documents.api.managed_documents_artifacts import _legacy_private_storage
+from modules.documents.infrastructure.template_source_storage import PrivateTemplateSourceStorage
 from core.database import get_session
 from core.security import get_current_manager_tenant_scope, get_current_username, require_manager_access
 from models.tenancy import TenantScope
@@ -21,9 +26,9 @@ router = APIRouter(prefix="/api/manager", tags=["manager-maintenance-observation
 async def command(session, coroutine):
     try:
         return await coroutine
-    except (ObservationNotFound, ObservationConflict, ValueError) as exc:
+    except (ObservationNotFound, ObservationConflict, ManagedDocumentConflictError, ManagedDocumentNotFoundError, ValueError) as exc:
         await session.rollback()
-        code = 404 if isinstance(exc, ObservationNotFound) else 409 if isinstance(exc, ObservationConflict) else 400
+        code = 404 if isinstance(exc, (ObservationNotFound, ManagedDocumentNotFoundError)) else 409 if isinstance(exc, (ObservationConflict, ManagedDocumentConflictError)) else 400
         raise HTTPException(status_code=code, detail=str(exc)) from exc
 
 
@@ -111,3 +116,34 @@ async def upload_photo(observation_id: int, file: UploadFile = File(...), comman
         return await Service.upload_photo(session, observation_id=observation_id, key=command_key, content=content,
                                           filename=file.filename or "photo", mime_type=file.content_type, actor=actor, scope=scope)
     return await command(session, upload())
+
+
+@router.post("/orders/{order_id}/maintenance-defect-acts", response_model=MaintenanceDefectActItem, status_code=201,
+             operation_id=operation_ids.PREPARE_MANAGER_MAINTENANCE_DEFECT_ACT)
+async def prepare_defect_act(order_id: int, payload: PrepareMaintenanceDefectAct, actor: str = Depends(get_current_username),
+                             session: AsyncSession = Depends(get_session), scope: TenantScope = Depends(get_current_manager_tenant_scope)):
+    """Explicitly prepare a native defect-act draft from current versions of selected
+    findings on one open or CLOSED ТО. Manager and tenant/storefront/customer/object
+    ownership are required. Same command key/content returns the same document;
+    different content or stale versions return 409, mixed context/missing requisites 400,
+    inaccessible source/issuer 404. Creates/reuses a linked NEGOTIATION continuation,
+    never executable work, scheduling, a contract or customer delivery. Snapshot sources
+    are immutable; preview, issue and delivery use the existing document lifecycle.
+    See [maintenance acts](https://github.com/mvnby/air-api/blob/main/docs/equipment-maintenance.md).
+    """
+    return await command(session, MaintenanceActPreparationService.prepare(session, source_order_id=order_id,
+        payload=payload, actor=actor, scope=scope, storage=PrivateTemplateSourceStorage(_legacy_private_storage())))
+
+
+@router.get("/orders/{order_id}/maintenance-defect-acts", response_model=MaintenanceDefectActList,
+            operation_id=operation_ids.LIST_MANAGER_MAINTENANCE_DEFECT_ACTS)
+async def list_defect_acts(order_id: int, limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0),
+                          session: AsyncSession = Depends(get_session), scope: TenantScope = Depends(get_current_manager_tenant_scope)):
+    """List defect-act preparations linked to a scoped source ТО, including CLOSED history.
+    Requires Manager tenant/storefront access to the source and continuation. Missing or
+    inaccessible context returns 404. limit is 1–100 with offset pagination. Reading does
+    not prepare, issue, send or update documents or observations.
+    See [maintenance acts](https://github.com/mvnby/air-api/blob/main/docs/equipment-maintenance.md).
+    """
+    return await command(session, MaintenanceActPreparationService.list(session, source_order_id=order_id,
+                                                                       scope=scope, limit=limit, offset=offset))

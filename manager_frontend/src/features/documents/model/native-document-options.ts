@@ -23,6 +23,7 @@ export const NATIVE_DOCUMENT_TYPES = [
 
 export const NUMBER_POLICY_TYPES = [
   ...NATIVE_DOCUMENT_TYPES,
+  { value: 'maintenance_defect_act', label: 'Дефектный акт ТО' },
   { value: 'invoice_offer', label: 'Счёт-оферта' },
 ] as const;
 

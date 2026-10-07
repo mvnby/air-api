@@ -14977,7 +14977,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|invoice|offer|tn2|ttn1)$",
+              "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|invoice|maintenance_defect_act|offer|tn2|ttn1)$",
               "title": "Doc Type"
             }
           }
@@ -19932,6 +19932,133 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ManagerServiceAttachmentItemResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/maintenance-defect-acts": {
+      "post": {
+        "tags": [
+          "manager-maintenance-observations"
+        ],
+        "summary": "Prepare Defect Act",
+        "description": "Explicitly prepare a native defect-act draft from current versions of selected\nfindings on one open or CLOSED \u0422\u041e. Manager and tenant/storefront/customer/object\nownership are required. Same command key/content returns the same document;\ndifferent content or stale versions return 409, mixed context/missing requisites 400,\ninaccessible source/issuer 404. Creates/reuses a linked NEGOTIATION continuation,\nnever executable work, scheduling, a contract or customer delivery. Snapshot sources\nare immutable; preview, issue and delivery use the existing document lifecycle.\nSee [maintenance acts](https://github.com/mvnby/air-api/blob/main/docs/equipment-maintenance.md).",
+        "operationId": "prepare_manager_maintenance_defect_act",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrepareMaintenanceDefectAct"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaintenanceDefectActItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "manager-maintenance-observations"
+        ],
+        "summary": "List Defect Acts",
+        "description": "List defect-act preparations linked to a scoped source \u0422\u041e, including CLOSED history.\nRequires Manager tenant/storefront access to the source and continuation. Missing or\ninaccessible context returns 404. limit is 1\u2013100 with offset pagination. Reading does\nnot prepare, issue, send or update documents or observations.\nSee [maintenance acts](https://github.com/mvnby/air-api/blob/main/docs/equipment-maintenance.md).",
+        "operationId": "list_manager_maintenance_defect_acts",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaintenanceDefectActList"
                 }
               }
             }
@@ -50455,6 +50582,89 @@
         "type": "object",
         "title": "LeadsInboxTenderResponse"
       },
+      "MaintenanceActSelectedObservation": {
+        "properties": {
+          "observation_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Observation Id"
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "observation_id",
+          "expected_version"
+        ],
+        "title": "MaintenanceActSelectedObservation"
+      },
+      "MaintenanceDefectActItem": {
+        "properties": {
+          "preparation_id": {
+            "type": "integer",
+            "title": "Preparation Id"
+          },
+          "source_order_id": {
+            "type": "integer",
+            "title": "Source Order Id"
+          },
+          "continuation_order_id": {
+            "type": "integer",
+            "title": "Continuation Order Id"
+          },
+          "document_id": {
+            "type": "integer",
+            "title": "Document Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "observations": {
+            "items": {
+              "$ref": "#/components/schemas/MaintenanceActSelectedObservation"
+            },
+            "type": "array",
+            "title": "Observations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "preparation_id",
+          "source_order_id",
+          "continuation_order_id",
+          "document_id",
+          "status",
+          "observations"
+        ],
+        "title": "MaintenanceDefectActItem"
+      },
+      "MaintenanceDefectActList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MaintenanceDefectActItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "MaintenanceDefectActList"
+      },
       "MaintenanceObservationContent": {
         "properties": {
           "equipment_id": {
@@ -50905,7 +51115,7 @@
           },
           "document_type": {
             "type": "string",
-            "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|invoice|offer|tn2|ttn1)$",
+            "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|invoice|maintenance_defect_act|offer|tn2|ttn1)$",
             "title": "Document Type"
           },
           "issue_date": {
@@ -51108,6 +51318,17 @@
       },
       "ManagedDocumentItem": {
         "properties": {
+          "maintenance_source_order_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maintenance Source Order Id"
+          },
           "document_role_type": {
             "anyOf": [
               {
@@ -73848,7 +74069,7 @@
           },
           "doc_type": {
             "type": "string",
-            "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|invoice|offer|tn2|ttn1)$",
+            "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|invoice|maintenance_defect_act|offer|tn2|ttn1)$",
             "title": "Doc Type"
           },
           "description": {
@@ -77302,6 +77523,55 @@
           "expected_version"
         ],
         "title": "PersonalTaskUpdatePayload"
+      },
+      "PrepareMaintenanceDefectAct": {
+        "properties": {
+          "command_key": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Command Key"
+          },
+          "observations": {
+            "items": {
+              "$ref": "#/components/schemas/MaintenanceActSelectedObservation"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Observations"
+          },
+          "legal_entity_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Legal Entity Id"
+          },
+          "issue_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Issue Date"
+          },
+          "replaces_document_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replaces Document Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "command_key",
+          "observations",
+          "legal_entity_id",
+          "issue_date"
+        ],
+        "title": "PrepareMaintenanceDefectAct"
       },
       "ProductAvailabilityLeadPayload": {
         "properties": {
