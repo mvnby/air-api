@@ -53,6 +53,15 @@ async def get_manager_catalog_quality_report(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Read a paginated diagnostic report of shared catalog quality, scores, priorities and
+    issue groups. limit is 1–100; only_problems defaults to true. Filters may target fixable
+    issues, but reading the report does not repair products, import offers or publish media.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     return await CatalogQualityService.build_report(
         session=session,
         page=page,

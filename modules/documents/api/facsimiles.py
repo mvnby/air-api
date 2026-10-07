@@ -35,6 +35,15 @@ MAX_FACSIMILE_PIXELS = 20_000_000
 
 @router.post("/legal-entities/{legal_entity_id}/facsimiles/{kind}", operation_id=UPLOAD_MANAGER_DOCUMENT_FACSIMILE)
 async def upload_facsimile(legal_entity_id: int, kind: str, file: UploadFile = File(...), session: AsyncSession = Depends(get_session), auth: AuthenticatedUser = Depends(require_manager_access)):
+    """
+    Upload a private PNG signature or seal for a legal entity in the current tenant.
+    Requires owner/admin access. Only signature/seal is accepted; file must be nonempty, at
+    most 5 MB and 20 million pixels (400 otherwise); missing entity returns 404. Makes a new
+    asset current without rewriting already prepared PDFs.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     if kind not in {"signature", "seal"}:
         raise manager_http_error(status_code=400, endpoint=UPLOAD_MANAGER_DOCUMENT_FACSIMILE, error_code="document_facsimile_kind_invalid", message="Допустимы только signature и seal")
     entity = (await session.execute(select(DocumentLegalEntity).where(DocumentLegalEntity.id == legal_entity_id, DocumentLegalEntity.tenant_id == auth.tenant_id))).scalar_one_or_none()
@@ -63,6 +72,19 @@ async def upload_facsimile(legal_entity_id: int, kind: str, file: UploadFile = F
 @router.post("/documents/{document_id}/facsimile-pdf", operation_id=PREPARE_MANAGER_DOCUMENT_FACSIMILE_PDF)
 async def prepare_facsimile_pdf(document_id: int, payload: DocumentFacsimilePdfPayload | None = None,
                                 session: AsyncSession = Depends(get_session), auth: AuthenticatedUser = Depends(require_manager_access)):
+    """
+    Prepare a separate authoritative signed_pdf artifact for a scoped managed document using
+    signature/seal PNGs and placement. The issued source PDF and earlier copies stay
+    immutable. Submitted placement checks source checksum, current assets and
+    expected_signed_artifact_id to prevent replacing a changed copy;
+    stale/missing/ineligible context returns 409. Sent/signed or closed-order copies cannot
+    be changed; without placement an existing prepared copy can be reused. This is
+    preparation, not email delivery or cryptographic signing. See the [document lifecycle
+    contract](https://github.com/mvnby/air-api/blob/main/docs/document-module-architecture.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         row = await FacsimilePdfService.prepare(
             session, tenant_scope=auth.tenant_scope(), document_id=document_id,
@@ -78,6 +100,15 @@ async def prepare_facsimile_pdf(document_id: int, payload: DocumentFacsimilePdfP
             operation_id=GET_MANAGER_DOCUMENT_FACSIMILE_PREVIEW)
 async def get_facsimile_preview(document_id: int, response: Response, session: AsyncSession = Depends(get_session),
                                auth: AuthenticatedUser = Depends(require_manager_access)):
+    """
+    Read private/no-store PDF page geometry, current signature/seal assets and
+    expected-state metadata for the scoped facsimile editor. Does not prepare a signed PDF.
+    Unavailable source/document/assets return 409; obtain fresh metadata before saving
+    placement.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     response.headers["Cache-Control"] = "private, no-store"
     try:
         return await FacsimilePreviewService.describe(session, tenant_scope=auth.tenant_scope(), document_id=document_id)
@@ -89,6 +120,14 @@ async def get_facsimile_preview(document_id: int, response: Response, session: A
             responses={200: {"content": {"image/png": {}}}}, operation_id=GET_MANAGER_DOCUMENT_FACSIMILE_PREVIEW_PAGE)
 async def get_facsimile_preview_page(document_id: int, page_number: int = Path(ge=1, le=100),
                                     session: AsyncSession = Depends(get_session), auth: AuthenticatedUser = Depends(require_manager_access)):
+    """
+    Render one authenticated scoped PDF preview page as private/no-store PNG, with
+    page_number limited to 1–100. Unavailable document/page/render context returns 409. Does
+    not issue or change the PDF.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         content = await FacsimilePreviewService.page(
             session, tenant_scope=auth.tenant_scope(), document_id=document_id, page_number=page_number,
@@ -102,6 +141,15 @@ async def get_facsimile_preview_page(document_id: int, page_number: int = Path(g
             responses={200: {"content": {"image/png": {}}}}, operation_id=GET_MANAGER_DOCUMENT_FACSIMILE_PREVIEW_ASSET)
 async def get_facsimile_preview_asset(document_id: int, asset_id: str = Path(pattern=r"^[0-9a-f]{32}$"),
                                      session: AsyncSession = Depends(get_session), auth: AuthenticatedUser = Depends(require_manager_access)):
+    """
+    Read an authenticated private/no-store PNG signature/seal asset belonging to this scoped
+    document’s legal entity. asset_id is constrained to the asset identifier format.
+    Unavailable or mismatched asset context returns 409; this is not a public media
+    endpoint.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         content = await FacsimilePreviewService.asset(
             session, tenant_scope=auth.tenant_scope(), document_id=document_id, asset_id=asset_id,
@@ -124,6 +172,15 @@ def _private_png(content: bytes) -> Response:
 
 @router.put("/templates/{template_id}/versions/{version_id}/facsimile-placement", response_model=DocumentFacsimilePlacementItem, operation_id=UPSERT_MANAGER_DOCUMENT_FACSIMILE_PLACEMENT)
 async def upsert_placement(template_id: int, version_id: int, payload: DocumentFacsimilePlacementPayload, session: AsyncSession = Depends(get_session), auth: AuthenticatedUser = Depends(require_manager_access)):
+    """
+    Set legacy facsimile placement defaults for a native template/version owned by the
+    current tenant. Requires owner/admin access. Missing or inaccessible version returns
+    404. Updates placement defaults only; previously generated PDFs are not rewritten and
+    document-specific placement is saved by facsimile-pdf.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     version = (await session.execute(select(DocumentTemplateVersion).join(DocumentTemplate).where(
         DocumentTemplateVersion.id == version_id, DocumentTemplateVersion.template_id == template_id,
         DocumentTemplate.tenant_id == auth.tenant_id,
@@ -144,6 +201,14 @@ async def upsert_placement(template_id: int, version_id: int, payload: DocumentF
 
 @router.get("/templates/{template_id}/versions/{version_id}/facsimile-placement", response_model=DocumentFacsimilePlacementItem, operation_id=GET_MANAGER_DOCUMENT_FACSIMILE_PLACEMENT)
 async def get_placement(template_id: int, version_id: int, session: AsyncSession = Depends(get_session), auth: AuthenticatedUser = Depends(require_manager_access)):
+    """
+    Read legacy facsimile placement defaults for a current-tenant native template/version.
+    Requires owner/admin access. Missing/inaccessible or unconfigured placement returns 404.
+    This does not return the current document-specific prepared PDF placement.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     row = (await session.execute(select(DocumentTemplateFacsimilePlacement).join(DocumentTemplateVersion).join(DocumentTemplate).where(
         DocumentTemplateFacsimilePlacement.template_version_id == version_id, DocumentTemplateVersion.template_id == template_id,
         DocumentTemplate.tenant_id == auth.tenant_id,

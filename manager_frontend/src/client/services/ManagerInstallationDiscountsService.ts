@@ -14,6 +14,16 @@ import { request as __request } from '../core/request';
 export class ManagerInstallationDiscountsService {
     /**
      * List Manager Installation Discount Rules
+     * Read shared installation-discount policy and product overrides with current
+     * margin/eligibility projections. page starts at 1 and limit is 1–100. The list covers
+     * stored overrides rather than every catalog product, and does not change an accepted
+     * estimate.
+     *
+     * Access and scope: system-tenant Manager access is required; these are shared platform
+     * definitions. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [installation estimate
+     * contract](https://github.com/mvnby/air-api/blob/main/docs/installation-estimate-contract.md).
      * @param search
      * @param page
      * @param limit
@@ -40,6 +50,16 @@ export class ManagerInstallationDiscountsService {
     }
     /**
      * Search Manager Installation Discount Products
+     * Search shared product candidates for discount overrides, returning current price/margin
+     * eligibility and whether an override exists. q is at most 200 characters and limit is
+     * 1–50. This only reads suggestions; it does not create rules or recalculate accepted
+     * installation snapshots.
+     *
+     * Access and scope: system-tenant Manager access is required; these are shared platform
+     * definitions. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [installation estimate
+     * contract](https://github.com/mvnby/air-api/blob/main/docs/installation-estimate-contract.md).
      * @param q
      * @param limit
      * @returns ManagerInstallationDiscountProductSearchResponse Successful Response
@@ -63,6 +83,16 @@ export class ManagerInstallationDiscountsService {
     }
     /**
      * Update Manager Installation Discount Policy
+     * Save the shared enable flag, default installation discount and minimum margin policy.
+     * The legacy installation-discount fallback is synchronized when toggling this policy.
+     * This affects future pricing decisions, not tenant rate dictionaries or already accepted
+     * estimates; a repeated PUT saves the submitted policy without an idempotency receipt.
+     *
+     * Access and scope: system-tenant Manager access is required; these are shared platform
+     * definitions. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [installation estimate
+     * contract](https://github.com/mvnby/air-api/blob/main/docs/installation-estimate-contract.md).
      * @param requestBody
      * @returns ManagerInstallationDiscountPolicyResponse Successful Response
      * @throws ApiError
@@ -82,6 +112,16 @@ export class ManagerInstallationDiscountsService {
     }
     /**
      * Upsert Manager Installation Discount Rule
+     * Create or update the unique installation-discount override for one shared product,
+     * returning its current economic decision after saving. Missing product returns 404.
+     * Repeating the same product PUT reuses that override; existing accepted estimate
+     * snapshots are not rewritten.
+     *
+     * Access and scope: system-tenant Manager access is required; these are shared platform
+     * definitions. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [installation estimate
+     * contract](https://github.com/mvnby/air-api/blob/main/docs/installation-estimate-contract.md).
      * @param productId
      * @param requestBody
      * @returns ManagerInstallationDiscountProductResponse Successful Response
@@ -106,6 +146,15 @@ export class ManagerInstallationDiscountsService {
     }
     /**
      * Delete Manager Installation Discount Rule
+     * Permanently remove a product discount override and return 204 so future decisions use
+     * the shared policy fallback. Missing override returns 404, including repeats. This does
+     * not disable the global policy or change accepted estimates.
+     *
+     * Access and scope: system-tenant Manager access is required; these are shared platform
+     * definitions. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [installation estimate
+     * contract](https://github.com/mvnby/air-api/blob/main/docs/installation-estimate-contract.md).
      * @param productId
      * @returns void
      * @throws ApiError

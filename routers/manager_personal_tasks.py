@@ -120,6 +120,14 @@ async def list_manager_personal_tasks(
     auth: AuthenticatedUser = Depends(get_current_auth_context),
     session: AsyncSession = Depends(get_session),
 ) -> PersonalTaskListResponse:
+    """
+    List personal tasks in the current tenant/storefront where the authenticated staff member is
+    author or assignee. Requires a staff owner/admin/manager account with no mandatory password
+    change; legacy identities without staff ID return 403. Supports filter and offset
+    pagination, limit 1–100 (default 50), and returns list counters. It is not an all-company
+    task list, even for owners. See [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     actor = CommandActor.from_auth(auth)
     return await PersonalTaskService.list(
         session,
@@ -140,6 +148,12 @@ async def list_manager_personal_task_assignees(
     auth: AuthenticatedUser = Depends(get_current_auth_context),
     session: AsyncSession = Depends(get_session),
 ) -> PersonalTaskAssigneeListResponse:
+    """
+    List active staff with active memberships in the current tenant as task-assignee candidates,
+    up to limit 1–100. Requires a staff owner/admin/manager account with no mandatory password
+    change. This read neither grants storefront access nor assigns a task; candidate membership
+    is validated again by task mutations.
+    """
     return await PersonalTaskService.list_assignees(
         session,
         actor=CommandActor.from_auth(auth),
@@ -157,6 +171,12 @@ async def get_manager_personal_task(
     auth: AuthenticatedUser = Depends(get_current_auth_context),
     session: AsyncSession = Depends(get_session),
 ) -> PersonalTaskResponse:
+    """
+    Read a personal task visible to its author or assignee in the current tenant/storefront,
+    including its version and linked entities. Requires a staff owner/admin/manager account with
+    no mandatory password change. Missing or invisible tasks return 404 with
+    detail.code=personal_task_not_found; owner role does not bypass this visibility rule.
+    """
     try:
         return await PersonalTaskService.get(
             session,
@@ -180,6 +200,15 @@ async def create_manager_personal_task(
     auth: AuthenticatedUser = Depends(get_current_auth_context),
     session: AsyncSession = Depends(get_session),
 ) -> PersonalTaskResponse:
+    """
+    Create a personal task in the current tenant/storefront; the authenticated staff member is
+    author and default assignee. Requires a staff owner/admin/manager account without mandatory
+    password change; demo writes return 403. Assignee and related entities must be accessible or
+    return 422. Idempotency-Key is required: the same actor/scope/command/key and payload replay
+    the stored 201 response with Idempotency-Replayed=true; changed payload returns 409
+    idempotency_key_reused, busy receipt storage 503 with Retry-After: 1. Missing header returns
+    422; malformed key returns 400.
+    """
     actor = CommandActor.from_auth(auth)
     return await _run_command(
         lambda: PersonalTaskService.create(
@@ -205,6 +234,16 @@ async def patch_manager_personal_task(
     auth: AuthenticatedUser = Depends(get_current_auth_context),
     session: AsyncSession = Depends(get_session),
 ) -> PersonalTaskResponse:
+    """
+    Patch supplied task fields using expected_version; the task must be visible to its author or
+    assignee in the current tenant/storefront. Requires a staff owner/admin/manager account
+    without mandatory password change; demo writes return 403. A successful edit increments
+    version. Missing/invisible task returns 404; stale version returns 409
+    personal_task_version_conflict with current_version; invalid links/assignee return 422.
+    Required Idempotency-Key replays the same actor/scoped command and payload with
+    Idempotency-Replayed=true; changed payload returns 409 and busy receipts return 503 with
+    Retry-After: 1. Retry the same command/key before issuing a new edit.
+    """
     actor = CommandActor.from_auth(auth)
     return await _run_command(
         lambda: PersonalTaskService.update(
@@ -250,6 +289,15 @@ router.add_api_route(
     methods=["POST"],
     response_model=PersonalTaskResponse,
     operation_id=operation_ids.COMPLETE_MANAGER_PERSONAL_TASK,
+    description=(
+        "Complete an active task visible to its author or assignee in the current tenant/storefront. "
+        "Requires a staff owner/admin/manager account without mandatory password change; demo writes return 403. "
+        "Supply expected_version and Idempotency-Key. Success sets completed status/time and increments version. "
+        "Missing/invisible task returns 404; stale version or non-active status returns 409 with a specific detail.code. "
+        "The same actor/scoped command/key and payload replay the stored response with Idempotency-Replayed=true; "
+        "changed payload returns 409 idempotency_key_reused, busy receipts 503 with Retry-After: 1. "
+        "A new key after completion is a new command and conflicts with the completed status."
+    ),
 )
 router.add_api_route(
     "/{task_id}/reopen",
@@ -257,6 +305,15 @@ router.add_api_route(
     methods=["POST"],
     response_model=PersonalTaskResponse,
     operation_id=operation_ids.REOPEN_MANAGER_PERSONAL_TASK,
+    description=(
+        "Reopen a completed or cancelled task visible to its author or assignee in the current tenant/storefront. "
+        "Requires a staff owner/admin/manager account without mandatory password change; demo writes return 403. "
+        "Supply expected_version and Idempotency-Key. Success sets active status, clears completion/cancellation "
+        "timestamps and increments version. Missing/invisible task returns 404; stale version or already-active "
+        "status returns 409. The same actor/scoped command/key and payload replay the stored response with "
+        "Idempotency-Replayed=true; changed payload returns 409 idempotency_key_reused and busy receipts "
+        "return 503 with Retry-After: 1. A new key does not replay the previous reopen."
+    ),
 )
 router.add_api_route(
     "/{task_id}/cancel",
@@ -264,4 +321,13 @@ router.add_api_route(
     methods=["POST"],
     response_model=PersonalTaskResponse,
     operation_id=operation_ids.CANCEL_MANAGER_PERSONAL_TASK,
+    description=(
+        "Cancel an active task visible to its author or assignee in the current tenant/storefront. "
+        "Requires a staff owner/admin/manager account without mandatory password change; demo writes return 403. "
+        "Supply expected_version and Idempotency-Key. Success sets cancelled status/time and increments version; "
+        "the task is retained and can be reopened. Missing/invisible task returns 404; stale version or non-active "
+        "status returns 409. The same actor/scoped command/key and payload replay the stored response with "
+        "Idempotency-Replayed=true; changed payload returns 409 idempotency_key_reused and busy receipts "
+        "return 503 with Retry-After: 1. A new key after cancellation is a new command and conflicts."
+    ),
 )

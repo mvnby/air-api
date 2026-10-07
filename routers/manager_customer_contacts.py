@@ -35,6 +35,16 @@ async def get_manager_customer_contacts(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Read current-tenant customer contacts, ordered primary first and active first. When no
+    persisted contacts exist, returns a virtual legacy primary contact with id=null from the
+    customer phone/email; this read does not materialize it. Missing customer returns 404.
+    See the [customer workspace
+    contract](https://github.com/mvnby/air-api/blob/main/docs/customer-workspace.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     result = await CustomerContactService.list_contacts(
         session, customer_id, tenant_scope=tenant_scope
     )
@@ -60,6 +70,18 @@ async def create_manager_customer_contact(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ):
+    """
+    Create a contact for a current-tenant customer and record field history with the
+    authenticated staff author. The first write materializes the legacy contact; creating a
+    primary contact can reuse that fallback. Selecting a primary demotes siblings and
+    synchronizes customer phone/email. Missing customer returns 404; blank name, inactive
+    primary or primary conflict returns 400. No replay receipt prevents duplicate
+    non-primary contacts. See the [customer workspace
+    contract](https://github.com/mvnby/air-api/blob/main/docs/customer-workspace.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         result = await CustomerContactService.create_contact(
             session,
@@ -98,6 +120,18 @@ async def patch_manager_customer_contact(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ):
+    """
+    Patch supplied fields on a persisted contact of a current-tenant customer and record
+    changed values/author. Primary changes synchronize customer phone/email;
+    removing/deactivating the primary selects another active contact when available and
+    refuses leaving no active replacement. Missing customer/contact returns 404; invalid
+    name/primary state returns 400. No expected_version precondition is provided. See the
+    [customer workspace
+    contract](https://github.com/mvnby/air-api/blob/main/docs/customer-workspace.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         result = await CustomerContactService.patch_contact(
             session,
@@ -136,6 +170,14 @@ async def get_manager_customer_contact_history(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Page field-change history for a current-tenant customer, including old/new values and
+    staff author, newest first. limit is at most 100. Missing customer returns 404; reading
+    does not add history entries or materialize a legacy contact.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     result = await CustomerContactService.history(
         session, customer_id, tenant_scope=tenant_scope, page=page, limit=limit
     )

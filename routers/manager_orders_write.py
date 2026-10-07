@@ -66,6 +66,15 @@ async def create_manager_order(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Create an order in the current Manager tenant/storefront and return its detailed
+    projection. Customer/object/product/service/executor relationships are validated by the
+    command service; invalid context returns 400. This legacy creation has no caller
+    idempotency receipt; repeating POST can create another order.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         data = await OrderCreateCommandService.create_manager_order(
             session=session,
@@ -93,6 +102,15 @@ async def cancel_manager_order_stage_direct(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Set a scoped stage to canceled without needing order_id and return its stale-stage
+    projection. Manager access is required; missing/inaccessible stage returns 404. Enqueues
+    a cancellation notification only on a status change; this is distinct from deleting the
+    stage.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await OrderWorkStageCommandService.cancel_order_stage_direct(
             session,
@@ -119,6 +137,14 @@ async def delete_manager_order_stage_direct(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Hard-delete a work stage accessible in the current tenant/storefront by stage_id and
+    return its removed ID. Missing/inaccessible stage returns 404, including a repeat after
+    deletion. Does not cancel the stage or use the cancellation notification command.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await OrderWorkStageCommandService.delete_order_stage_direct(
             session,
@@ -142,6 +168,19 @@ async def patch_manager_order(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Patch supplied order/customer/commercial fields in the current Manager tenant/storefront
+    and return the refreshed projection. Commercial line arrays replace the targeted
+    proposal’s lines; line_proposal_id disambiguates empty arrays, and sent/accepted
+    proposal lines cannot be overwritten. A won order cannot close with unpaid balance;
+    closing lost can archive an otherwise unused customer. Missing order returns 404;
+    invalid relationships/transitions return 400. No expected_version or idempotency receipt
+    resolves concurrent field edits. See [order saving and proposal
+    scope](https://github.com/mvnby/air-api/blob/main/docs/manager-order-autosave.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         data = await OrderUpdateCommandService.update_order_for_manager(
             session,
@@ -177,6 +216,15 @@ async def preview_import_manager_orders(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Validate an order transfer package and resolve customer/product matches in the current
+    Manager tenant/storefront without committing imported orders. Inspect can_import and
+    unresolved items/warnings; invalid package input returns 400. Product resolution remains
+    separate from import commit.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await OrderTransferService.preview_import(
             session,
@@ -203,6 +251,16 @@ async def import_manager_orders(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Import a transfer package into the current Manager tenant/storefront after rerunning
+    preview validation. Creates orders and related customer/object/line/stage/payment data
+    according to service options; inspect warnings/skipped-payments counts. Unresolved
+    products or invalid data return 400. No caller idempotency receipt is provided:
+    repeating commit can create duplicate orders.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await OrderTransferService.import_orders(
             session,
@@ -230,6 +288,15 @@ async def create_manager_order_proposal(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Create a draft proposal under an accessible order in the current Manager
+    tenant/storefront, optionally copying an active proposal’s lines. Returns the refreshed
+    order and recalculates financial projection. Missing source/order or invalid context
+    returns 400; repeating POST can create another proposal.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await OrderProposalCommandService.create_order_proposal(
             session,
@@ -254,6 +321,15 @@ async def duplicate_manager_order_proposal(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Copy the selected active proposal into a new draft under its scoped order; the path
+    proposal_id supplies the copy source. Returns the refreshed order. Missing/inaccessible
+    source/order returns 400. Repeating POST creates another copy rather than replaying a
+    receipt.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     duplicate_payload = OrderProposalCreatePayload(
         name=payload.name,
         duplicate_from_proposal_id=proposal_id,
@@ -282,6 +358,16 @@ async def patch_manager_order_proposal(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Patch supplied proposal name/status/order/archive metadata under the current
+    tenant/storefront order. Ready-to-send requires nonempty lines and positive total;
+    archived selected proposals can select an active replacement. Recalculates order
+    financial/status projection. Missing proposal/order or invalid state returns 400.
+    Commercial lines are edited through the order command.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await OrderProposalCommandService.update_order_proposal(
             session,
@@ -306,6 +392,15 @@ async def archive_manager_order_proposal(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Archive a proposal under the current tenant/storefront order. If selected, chooses an
+    active replacement when available and refreshes order financial/status projection.
+    Missing proposal/order or invalid context returns 400. Archiving retains the proposal
+    rather than hard-deleting its history.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await OrderProposalCommandService.update_order_proposal(
             session,
@@ -330,6 +425,14 @@ async def select_manager_order_proposal(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Select an active proposal belonging to an accessible scoped order, unselect siblings and
+    refresh order status/financial projection. Missing/archived/foreign-order proposal
+    returns 400. Selection does not copy or issue a document.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await OrderProposalCommandService.select_order_proposal(
             session,
@@ -365,6 +468,19 @@ async def generate_manager_order_document(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Generate or reuse a legacy Google document for the current tenant/storefront order using
+    the selected proposal, template and basis/scope. Closed orders return 409; invalid
+    type/basis/line selection/date returns 400 and unexpected generation failure 500.
+    Proposal/closing document kinds create new records; eligible legacy records of other
+    kinds can be reused by template. Supplied additional_conditions updates order conditions
+    and forces a new document. No generic idempotency receipt is provided. Native lifecycle
+    endpoints are separate. See the [document lifecycle
+    contract](https://github.com/mvnby/air-api/blob/main/docs/document-module-architecture.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     draft_conditions_requested = payload is not None and payload.additional_conditions is not None
     try:
         parsed_contract_date = None
@@ -428,6 +544,15 @@ async def add_manager_order_payment(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Record a payment on an accessible scoped order and refresh financial totals, returning
+    its payment list. Non-BYN currency must match the order target currency. Missing order
+    returns 404; invalid type/currency returns 400. POST is additive with no caller
+    idempotency receipt; reconcile before retrying.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await OrderPaymentCommandService.add_payment(
             session,
@@ -457,6 +582,16 @@ async def delete_manager_order_payment(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Remove a payment from an accessible scoped order and refresh affected finances. For a
+    bank-linked payment, removes all payments from that receipt across accessible orders and
+    returns the receipt to requires_review; cross-tenant allocations are refused. Missing
+    order returns 404; missing/wrong-order payment or invalid allocation returns 400.
+    Returns the selected order’s remaining payment list.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await OrderPaymentCommandService.delete_payment(
             session,
@@ -487,6 +622,15 @@ async def create_manager_order_stage(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Create a work stage under the current tenant/storefront order, checking executor
+    assignment and scheduling and enqueuing relevant staff notification events. Returns the
+    refreshed order; invalid/missing order or executor context returns 400. Repeating POST
+    can add another stage.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await OrderWorkStageCommandService.add_order_stage(
             session,
@@ -511,6 +655,15 @@ async def update_manager_order_stage(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Patch a stage belonging to the specified scoped order. Validates changed executor and
+    normalizes times/status; assignment, rescheduling and cancellation can enqueue staff
+    notification events. Completion of all stages with outstanding balance can put the order
+    on hold. Missing stage or invalid context returns 400; returns the refreshed order.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await OrderWorkStageCommandService.update_order_stage(
             session,
@@ -535,6 +688,14 @@ async def delete_manager_order_stage(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Hard-delete a stage belonging to the specified order in the current tenant/storefront
+    and return the refreshed order projection. Missing/wrong-order stage returns 400,
+    including a repeat after deletion. This is not the direct stage-cancellation workflow.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await OrderWorkStageCommandService.delete_order_stage(
             session,
@@ -557,6 +718,17 @@ async def delete_manager_order(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Hard-delete an accessible scoped order together with
+    proposal/line/stage/executor/payment/document rows, enqueueing provider document
+    cleanup. Bank receipt and outgoing-email histories are detached for audit rather than
+    removed. Missing order/service validation returns 400; unexpected deletion failure 500.
+    No closed-order document lock is applied by this order-delete command; repeat after
+    deletion is not receipt replay.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         await OrderDeleteCommandService.delete_order(
             session,

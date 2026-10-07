@@ -33,8 +33,15 @@ async def bulk_update_specs(
     username: str = Depends(get_current_username)
 ):
     """
-    Массовое добавление или обновление характеристик.
-    Идеально для установки диаметров труб для целой серии кондиционеров сразу.
+    Merge, replace or delete spec keys on existing selected products, normalize the result
+    and synchronize brand/series plus catalog revisions. Replace replaces the full spec map;
+    deleting series aliases clears the series assignment when absent. Missing product IDs
+    are ignored. Wi-Fi edits replace related source/derived keys as a group; changes commit
+    together.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     logger.info(f"Manager {username} bulk updating specs for {len(payload.product_ids)} products. Op: {payload.operation}")
     return await ManagerSpecsService.bulk_update_specs(session, payload)
@@ -51,8 +58,15 @@ async def normalize_legacy_specs(
     username: str = Depends(get_current_username)
 ):
     """
-    Массовая миграция характеристик.
-    Переводит ключи Onliner (кириллица) в System (английский).
+    Scan products with specs and convert legacy labels/values using the legacy migration
+    map. dry_run defaults to true and counts prospective changes without saving;
+    dry_run=false commits changed spec maps. Invalid legacy formats and per-product failures
+    are logged/skipped. This synchronous catalog-wide migration does not run the ordinary
+    normalized-spec/brand-series editor pipeline.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     logger.info(f"Starting specs normalization (dry_run={dry_run}) by {username}")
     return await ManagerLegacySpecsService.normalize_legacy_specs(session, dry_run=dry_run)

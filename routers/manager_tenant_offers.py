@@ -42,6 +42,15 @@ async def list_manager_tenant_audit_events(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ):
+    """
+    Read scoped commercial-change audit events, including actor and change set, using offset
+    and limit (1–100). It only exposes events for the authenticated tenant/selected
+    storefront; reading does not acknowledge or remove them.
+
+    Access and scope: Manager access is required; data is restricted to the authenticated
+    tenant and selected storefront. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     return await TenantOfferService.list_audit_events(
         session,
         tenant_scope=auth.tenant_scope(),
@@ -61,6 +70,15 @@ async def list_manager_tenant_offers(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ):
+    """
+    Read offers only from the authenticated tenant/selected storefront, using offset and
+    limit (1–100). The list contains the storefront’s own commercial/publication fields; it
+    is not the master product editor or a supplier-offer feed.
+
+    Access and scope: Manager access is required; data is restricted to the authenticated
+    tenant and selected storefront. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     return await TenantOfferService.list_offers(
         session,
         tenant_scope=auth.tenant_scope(),
@@ -79,6 +97,18 @@ async def upsert_manager_tenant_offer(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ):
+    """
+    Create or update the selected storefront offer for a product and stage its
+    audit/invalidation together. Missing storefront/product returns 404; inconsistent price
+    fields return 422; conflicting concurrent persistence returns 409. The product/scope
+    identify the upsert; this accepts no client idempotency receipt. Shared catalog fields
+    are not edited.
+
+    Access and scope: system-tenant Manager access is required by the route policy; the
+    offer and audit remain restricted to the authenticated tenant and selected storefront.
+    See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     return await TenantOfferService.upsert_offer(
         session,
         payload=payload.model_dump(),
@@ -98,6 +128,15 @@ async def get_manager_tenant_offer(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ):
+    """
+    Read one offer within the authenticated tenant/selected storefront. Unknown or
+    out-of-scope offer returns 404; missing underlying product also returns 404. Knowing an
+    offer ID does not grant cross-storefront access.
+
+    Access and scope: Manager access is required; data is restricted to the authenticated
+    tenant and selected storefront. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     return await TenantOfferService.get_offer(
         session,
         offer_id=offer_id,
@@ -116,6 +155,17 @@ async def update_manager_tenant_offer(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ):
+    """
+    Update only submitted scoped offer fields and record audit/invalidation when values
+    change. Unknown or out-of-scope offer returns 404; invalid prices return 422; concurrent
+    persistence conflict returns 409. No expected_version or idempotency receipt is
+    accepted; reread current offer before resolving conflicting edits.
+
+    Access and scope: system-tenant Manager access is required by the route policy; the
+    offer and audit remain restricted to the authenticated tenant and selected storefront.
+    See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     return await TenantOfferService.update_offer(
         session,
         offer_id=offer_id,

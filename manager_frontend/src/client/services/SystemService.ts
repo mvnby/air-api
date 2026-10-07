@@ -11,7 +11,10 @@ import { request as __request } from '../core/request';
 export class SystemService {
     /**
      * Get Rebuild Web Status
-     * Return whether the storefront has acknowledged the latest catalog revision.
+     * Read global catalog revision and storefront synchronization acknowledgement state for an
+     * authenticated Manager. This is platform-wide catalog publication state, not a per-tenant job
+     * or a deployment health check. Reading does not dispatch a workflow; the recorded
+     * acknowledgement alone does not verify current storefront availability.
      * @returns WebRebuildStatusResponse Successful Response
      * @throws ApiError
      */
@@ -23,8 +26,11 @@ export class SystemService {
     }
     /**
      * Trigger Rebuild Web
-     * Trigger catalog revision verification in the standalone storefront runtime.
-     * Accessible only by authenticated managers/admins.
+     * Dispatch the standalone storefront's catalog synchronization workflow for the current global
+     * revision, then record that revision as requested. Requires Manager access. A missing GitHub
+     * integration token returns 503; dispatch failure returns 500. A successful response
+     * acknowledges dispatch, not completed synchronization; read /api/system/rebuild-web/status
+     * afterward. No Idempotency-Key receipt prevents repeated workflow dispatches.
      * @returns WebRebuildTriggerResponse Successful Response
      * @throws ApiError
      */
@@ -36,7 +42,13 @@ export class SystemService {
     }
     /**
      * Complete Rebuild Web
-     * Signed callback after the standalone storefront verifies catalog freshness.
+     * Record the standalone storefront's catalog synchronization callback using the shared
+     * X-Web-Rebuild-Token header, not a Manager JWT or an HMAC signature. Missing server token
+     * configuration returns 503; invalid token returns 403. Revision zero resolves to the current
+     * revision. Success stores the supplied published revision/timestamp and clears the error;
+     * failure stores requested revision/error. This writes global state, has no replay receipt or
+     * monotonic-revision guard, and repeated or out-of-order callbacks can replace recorded state.
+     * It does not itself verify the storefront.
      * @param requestBody
      * @param xWebRebuildToken
      * @returns WebRebuildStatusResponse Successful Response

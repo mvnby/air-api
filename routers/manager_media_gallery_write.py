@@ -64,7 +64,18 @@ async def link_search_result(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
-    """Add a search result image to gallery (download and link). Does NOT set as main image."""
+    """
+    Download/ingest a search-result image into shared managed product storage and attach its
+    gallery link. Does not set the main image. Missing product returns 404; invalid
+    source/media returns 400 and runtime processing conflict 409. Existing canonical
+    product/URL links are reused; this is a catalog write, not search.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
+    """
     try:
         return await ManagerMediaOrchestratorService.link_search_result(
             session=session,
@@ -89,7 +100,18 @@ async def set_main_image(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
-    """Set a specific gallery image as the product's main image."""
+    """
+    Set Product.main_image to a gallery image’s permitted publication URL. Missing
+    image/product and other ValueError validation failures are exposed as 404 by this route.
+    Repeating the same selection is a semantic no-op; this does not crop/process the image
+    or delete prior media.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
+    """
     try:
         return await ManagerMediaService.set_main_image(session, image_id)
     except ValueError as exc:
@@ -106,7 +128,18 @@ async def delete_gallery_image(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
-    """Delete only the DB link; physical objects are retained for deferred GC."""
+    """
+    Delete one gallery database link and its variant rows, synchronize legacy product.images
+    and clear main_image if it points to that URL. Physical objects are retained for
+    deferred garbage collection. Missing link returns 404, including after successful
+    deletion.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
+    """
     try:
         return await ManagerMediaService.delete_gallery_image(session, image_id)
     except ValueError as exc:
@@ -124,7 +157,19 @@ async def crop_product_image(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
-    """Crop a concrete ProductImage and either append or replace the gallery image."""
+    """
+    Crop a gallery source and append a new link or replace the selected link according to
+    mode. Replacement rebuilds original-variant metadata and follows an existing main-image
+    reference; set_main can select the result for non-installation images. Invalid/missing
+    source or crop returns 400. This writes media immediately, preserves installation
+    classification and has no idempotency receipt.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
+    """
     try:
         return await ManagerMediaService.crop_gallery_image(
             session=session,
@@ -151,7 +196,18 @@ async def replace_product_image_local(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
-    """Replace one gallery link using browser-prepared bytes without server-side crop work."""
+    """
+    Replace one gallery link with browser-prepared image bytes and rebuild its original
+    variant without server crop work. Main image follows the replacement when it used the
+    old URL; installation classification is kept. Empty file, more than 25 MB, missing
+    image/product or invalid media returns 400. Physical old objects remain retained.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
+    """
     try:
         content = await file.read(MAX_LOCAL_CROP_UPLOAD_BYTES + 1)
         if not content:
@@ -181,7 +237,19 @@ async def remove_product_image_background(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
-    """Remove background from a ProductImage and replace it by default."""
+    """
+    Synchronously process a gallery image with the selected provider/model, replacing its
+    link by default; append creates/reuses a separate result link. Unknown mode falls back
+    to replace. Existing main-image references follow replacement and set_main is honored
+    for non-installation images. Invalid/missing source returns 400; provider/runtime
+    conflict returns 409. This is not a processing-job enqueue.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
+    """
     try:
         return await ManagerMediaService.remove_background_gallery_image(
             session=session,
@@ -208,7 +276,18 @@ async def reuse_image(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
-    """Link an existing image URL to another product."""
+    """
+    Canonicalize an image source URL, ingesting external sources when necessary, and link it
+    to the target product without changing its main image. A fully linked canonical URL is
+    reused; original-variant metadata may be repaired. ValueError failures, including
+    missing product, are exposed as 404 by this route.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
+    """
     try:
         return await ManagerMediaService.reuse_image_link(session, product_id, source_image_url)
     except ValueError as exc:
@@ -225,7 +304,19 @@ async def bulk_add_gallery_images(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
-    """Append image links to selected products without removing existing gallery items."""
+    """
+    Append canonicalized source URLs to all selected products without removing existing
+    gallery links. Existing links are reused; set_main selects the first URL only for
+    non-installation images. Missing products return 404; empty/invalid selections or
+    sources return 400. Database changes and catalog invalidation commit together; this may
+    ingest external sources.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
+    """
     try:
         return await ManagerMediaService.bulk_add_gallery_images(
             session=session,
@@ -254,7 +345,19 @@ async def bulk_upload_local_images(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
-    """Upload local files once and attach to all selected products."""
+    """
+    Upload local files once to shared managed storage and attach their URLs to every
+    selected product. product_ids_json must be a nonempty JSON array; missing products
+    return 404, invalid/empty selection/files return 400. set_main can select the first
+    uploaded URL for non-installation images. Attachments and catalog invalidation commit
+    together.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
+    """
     try:
         return await ManagerMediaOrchestratorService.bulk_upload_local_images(
             session=session,
@@ -279,7 +382,18 @@ async def bulk_delete_common_gallery_images(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
-    """Delete selected common image links from selected products only."""
+    """
+    Remove selected URLs only when they are common to all selected products under the
+    requested installation filter. Invalid/empty selection or URLs outside that intersection
+    returns 400. Deletes gallery/variant rows and clears affected main images, but retains
+    physical files. A repeat requires recalculating the common intersection.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
+    """
     try:
         return await ManagerMediaService.bulk_delete_common_gallery_images(
             session=session,
@@ -306,7 +420,19 @@ async def apply_gallery_to_series(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
-    """Replace sibling products' non-installation galleries with this product's gallery."""
+    """
+    Replace sibling products’ non-installation galleries and main images with the source
+    product’s gallery/main image, preserving installation photos; source URLs are also
+    merged into the series gallery. dry_run=true only reports effects, while the default
+    false commits them. Missing source returns 404; absent series/gallery returns 400.
+    delete_unreferenced=true always returns 409 because physical deletion is deferred.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
+    """
     try:
         return await ManagerMediaService.apply_gallery_to_series(
             session,
@@ -337,7 +463,19 @@ async def process_missing_image_variants(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
-    """Dry-run or explicitly process a bounded batch of missing image variants."""
+    """
+    Select up to 100 gallery images lacking a requested variant. dry_run defaults to true
+    and only reports candidates; false synchronously processes the bounded batch and saves
+    statuses/files with catalog invalidation. Installation photos are excluded by default;
+    default provider is noop. Invalid variant/provider returns 400. Inspect per-item
+    errors/statuses; an HTTP success can include processing failures.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
+    """
     try:
         return await ProductImageVariantService.process_missing_variants(
             session=session,
@@ -365,7 +503,19 @@ async def reprocess_image_variant(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
-    """Retry/reprocess a failed or skipped image variant."""
+    """
+    Synchronously regenerate/retry one gallery image variant and return its saved processing
+    state. Missing image returns 404; invalid variant/provider returns 400. Source/provider
+    failures may be saved as failed and returned with HTTP success; installation catalog
+    variants may be skipped. This is a state change with no job/receipt; inspect
+    processing_status/processing_error before retrying.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
+    """
     try:
         return await ProductImageVariantService.reprocess_variant(
             session=session,
@@ -390,7 +540,18 @@ async def cleanup_media(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
-    """Report orphan candidates; physical deletion is currently disabled."""
+    """
+    Report orphan candidates under local media/products only when dry_run=true. The default
+    dry_run=false returns 409 because physical garbage collection is disabled. deleted_count
+    and reclaimed_bytes describe potential deletions; no file is actually removed, and the
+    returned file list is capped at 50.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
+    """
     logger.info(f"Starting media cleanup (dry_run={dry_run}) by {username}")
     try:
         return await ManagerMediaService.cleanup_media(session, dry_run=dry_run)

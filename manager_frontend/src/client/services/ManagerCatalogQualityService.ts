@@ -9,6 +9,13 @@ import { request as __request } from '../core/request';
 export class ManagerCatalogQualityService {
     /**
      * Get Manager Catalog Quality Report
+     * Read a paginated diagnostic report of shared catalog quality, scores, priorities and
+     * issue groups. limit is 1–100; only_problems defaults to true. Filters may target fixable
+     * issues, but reading the report does not repair products, import offers or publish media.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param page
      * @param limit
      * @param q

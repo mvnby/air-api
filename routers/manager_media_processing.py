@@ -34,6 +34,16 @@ async def list_media_processing_jobs(
     session: AsyncSession = Depends(get_session),
     _username: str = Depends(get_current_username),
 ):
+    """
+    Read up to 100 newest shared media-processing jobs, optionally filtered by status.
+    meta.total is the returned row count, not the size of the full queue; there is no
+    page/offset. Lease tokens are excluded from normal Manager serialization. This does not
+    claim or retry jobs.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     return await MediaProcessingJobService.list_jobs(
         session=session,
         status=status,
@@ -52,6 +62,16 @@ async def create_media_processing_job(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
+    """
+    Persist a new queued background_removal or upscale job for a library raster asset.
+    Missing source returns 404; unsupported operation or SVG source returns 400. Lower
+    priority values are claimed first. The response confirms enqueue, not processing success
+    or publication; each POST creates another job and the original asset remains unchanged.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await MediaProcessingJobService.create_job(
             session=session,

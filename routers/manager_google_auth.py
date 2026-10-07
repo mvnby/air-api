@@ -211,6 +211,12 @@ async def _oauth_owner_binding_is_active(
 
 @router.get("/status", response_model=ManagerGoogleAuthStatusResponse, operation_id=GET_MANAGER_GOOGLE_AUTH_STATUS)
 async def get_manager_google_auth_status(_: str = Depends(get_current_owner_username)):
+    """
+    Read the shared platform Google credential status for a system-tenant owner/admin. Reports
+    the Google service's token status without returning OAuth tokens; provider/service failure
+    returns 502. This is the shared Drive/document integration, distinct from tenant/storefront
+    analytics connections.
+    """
     try:
         status_payload = await run_in_threadpool(lambda: get_google_service().get_token_status())
     except Exception as exc:
@@ -227,6 +233,15 @@ async def get_manager_google_auth_url(
     request: Request,
     auth: AuthenticatedUser = Depends(require_owner_access),
 ):
+    """
+    Begin browser authorization for the shared platform Google integration; requires a
+    system-tenant owner/admin. Returns a consent URL and replaces the pending state in the
+    browser session, bound to the actor and redirect URI for ten minutes. Continue in the same
+    cookie session; the callback consumes state once before exchanging the code. This GET
+    changes session state but does not yet save Google credentials. Redirect configuration
+    failure returns 503; service failure returns 502. Tenant analytics has separate
+    authorization endpoints.
+    """
     state = secrets.token_urlsafe(32)
     try:
         redirect_uri = _google_oauth_redirect_uri(request)

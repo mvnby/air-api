@@ -27,6 +27,17 @@ async def record_manager_order_usage(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(get_current_auth_context),
 ) -> OrderUsageAccepted:
+    """
+    Add a bounded batch of order-workspace UX aggregate events in the current
+    tenant/storefront. Manager access is required. Aggregates contain permitted event labels
+    rather than customer/order field content. In-process rate/concurrency protection returns
+    429 with Retry-After. This is additive and has no replay receipt: blindly retrying can
+    double-count. See [usage
+    boundaries](https://github.com/mvnby/air-api/blob/main/docs/order-workspace-usability.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     scope = auth.tenant_scope()
     try:
         async with _usage_limiter.limit(f"{scope.tenant_id}:{auth.staff_user_id or auth.username}"):
@@ -45,6 +56,15 @@ async def get_manager_order_usage(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(get_current_auth_context),
 ) -> OrderUsageReport:
+    """
+    Read daily aggregate UX counts for the current tenant/storefront over 1–90 days and
+    optional workflow/party/viewport filters. Requires owner/admin access via route policy.
+    Returns aggregated counters, not individual employee click histories. See [usage
+    boundaries](https://github.com/mvnby/air-api/blob/main/docs/order-workspace-usability.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     return await OrderWorkspaceUsageService.report(
         session, auth.tenant_scope(), days=days,
         workflow=workflow, party_kind=party_kind, viewport=viewport,

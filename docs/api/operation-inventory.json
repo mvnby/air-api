@@ -1,777 +1,787 @@
 {
-  "schema": 1,
+  "schema": 2,
   "audit_date": "2026-10-07",
   "baseline_commit": "8a089914",
-  "columns": ["method path", "operation_id", "description_before", "reviewed_stage_1"],
+  "columns": [
+    "method path",
+    "operation_id",
+    "description_before",
+    "reviewed_stage"
+  ],
+  "review_stages": {
+    "1": "Public HTTP/helpers, supply, staff bot and OAuth; completed in a3e79e89",
+    "2": "Orders/documents, customers/contracts, CRM/mail and catalog; reviewed 2026-10-07 from a3e79e89",
+    "3": "Content/media, settings/access, tasks/calendar, services/equipment and operations; reviewed 2026-10-07 from a3e79e89"
+  },
   "operations": {
     "modules/documents/api/condition_presets.py": [
-      ["DELETE /api/manager/document-system/condition-presets/{preset_id}", "delete_manager_document_condition_preset", false, false],
-      ["GET /api/manager/document-system/condition-presets", "list_manager_document_condition_presets", false, false],
-      ["POST /api/manager/document-system/condition-presets", "create_manager_document_condition_preset", false, false]
+      ["DELETE /api/manager/document-system/condition-presets/{preset_id}", "delete_manager_document_condition_preset", false, 2],
+      ["GET /api/manager/document-system/condition-presets", "list_manager_document_condition_presets", false, 2],
+      ["POST /api/manager/document-system/condition-presets", "create_manager_document_condition_preset", false, 2]
     ],
     "modules/documents/api/consumer_defaults.py": [
-      ["GET /api/manager/document-system/orders/{order_id}/consumer-defaults", "get_manager_consumer_equipment_defaults", false, false]
+      ["GET /api/manager/document-system/orders/{order_id}/consumer-defaults", "get_manager_consumer_equipment_defaults", false, 2]
     ],
     "modules/documents/api/facsimiles.py": [
-      ["GET /api/manager/document-system/documents/{document_id}/facsimile-preview", "get_manager_document_facsimile_preview", false, false],
-      ["GET /api/manager/document-system/documents/{document_id}/facsimile-preview/assets/{asset_id}", "get_manager_document_facsimile_preview_asset", false, false],
-      ["GET /api/manager/document-system/documents/{document_id}/facsimile-preview/pages/{page_number}", "get_manager_document_facsimile_preview_page", false, false],
-      ["GET /api/manager/document-system/templates/{template_id}/versions/{version_id}/facsimile-placement", "get_manager_document_facsimile_placement", false, false],
-      ["POST /api/manager/document-system/documents/{document_id}/facsimile-pdf", "prepare_manager_document_facsimile_pdf", false, false],
-      ["POST /api/manager/document-system/legal-entities/{legal_entity_id}/facsimiles/{kind}", "upload_manager_document_facsimile", false, false],
-      ["PUT /api/manager/document-system/templates/{template_id}/versions/{version_id}/facsimile-placement", "upsert_manager_document_facsimile_placement", false, false]
+      ["GET /api/manager/document-system/documents/{document_id}/facsimile-preview", "get_manager_document_facsimile_preview", false, 2],
+      ["GET /api/manager/document-system/documents/{document_id}/facsimile-preview/assets/{asset_id}", "get_manager_document_facsimile_preview_asset", false, 2],
+      ["GET /api/manager/document-system/documents/{document_id}/facsimile-preview/pages/{page_number}", "get_manager_document_facsimile_preview_page", false, 2],
+      ["GET /api/manager/document-system/templates/{template_id}/versions/{version_id}/facsimile-placement", "get_manager_document_facsimile_placement", false, 2],
+      ["POST /api/manager/document-system/documents/{document_id}/facsimile-pdf", "prepare_manager_document_facsimile_pdf", false, 2],
+      ["POST /api/manager/document-system/legal-entities/{legal_entity_id}/facsimiles/{kind}", "upload_manager_document_facsimile", false, 2],
+      ["PUT /api/manager/document-system/templates/{template_id}/versions/{version_id}/facsimile-placement", "upsert_manager_document_facsimile_placement", false, 2]
     ],
     "modules/documents/api/legal_entities_number_policies.py": [
-      ["GET /api/manager/document-system/legal-entities", "list_manager_document_legal_entities", false, false],
-      ["GET /api/manager/document-system/legal-entities/{legal_entity_id}/number-policies", "list_manager_document_number_policies", false, false],
-      ["PATCH /api/manager/document-system/legal-entities/{legal_entity_id}", "patch_manager_document_legal_entity", false, false],
-      ["POST /api/manager/document-system/legal-entities", "create_manager_document_legal_entity", false, false],
-      ["PUT /api/manager/document-system/legal-entities/{legal_entity_id}/number-policies/{document_type}", "upsert_manager_document_number_policy", false, false]
+      ["GET /api/manager/document-system/legal-entities", "list_manager_document_legal_entities", false, 2],
+      ["GET /api/manager/document-system/legal-entities/{legal_entity_id}/number-policies", "list_manager_document_number_policies", false, 2],
+      ["PATCH /api/manager/document-system/legal-entities/{legal_entity_id}", "patch_manager_document_legal_entity", false, 2],
+      ["POST /api/manager/document-system/legal-entities", "create_manager_document_legal_entity", false, 2],
+      ["PUT /api/manager/document-system/legal-entities/{legal_entity_id}/number-policies/{document_type}", "upsert_manager_document_number_policy", false, 2]
     ],
     "modules/documents/api/managed_document_emails.py": [
-      ["POST /api/manager/document-system/orders/{order_id}/email", "send_manager_native_order_email", false, false],
-      ["POST /api/manager/document-system/orders/{order_id}/email/compose", "compose_manager_native_order_email", false, false]
+      ["POST /api/manager/document-system/orders/{order_id}/email", "send_manager_native_order_email", false, 2],
+      ["POST /api/manager/document-system/orders/{order_id}/email/compose", "compose_manager_native_order_email", false, 2]
     ],
     "modules/documents/api/managed_document_external_edits.py": [
-      ["GET /api/manager/document-system/documents/{document_id}/google-edit-session", "get_manager_managed_document_google_edit_session", false, false],
-      ["POST /api/manager/document-system/documents/{document_id}/google-edit-session", "create_manager_managed_document_google_edit_session", false, false],
-      ["POST /api/manager/document-system/documents/{document_id}/google-edit-session/sync", "sync_manager_managed_document_google_edit_session", false, false]
+      ["GET /api/manager/document-system/documents/{document_id}/google-edit-session", "get_manager_managed_document_google_edit_session", false, 2],
+      ["POST /api/manager/document-system/documents/{document_id}/google-edit-session", "create_manager_managed_document_google_edit_session", false, 2],
+      ["POST /api/manager/document-system/documents/{document_id}/google-edit-session/sync", "sync_manager_managed_document_google_edit_session", false, 2]
     ],
     "modules/documents/api/managed_documents_artifacts.py": [
-      ["DELETE /api/manager/document-system/documents/{document_id}/draft", "delete_manager_managed_document_draft", false, false],
-      ["GET /api/manager/document-system/artifacts/{artifact_id}/access", "get_manager_document_artifact_access", false, false],
-      ["GET /api/manager/document-system/artifacts/{artifact_id}/download", "download_manager_document_artifact", false, false],
-      ["GET /api/manager/document-system/documents/{document_id}/artifacts", "list_manager_document_artifacts", false, false],
-      ["GET /api/manager/document-system/documents/{document_id}/preview", "preview_manager_managed_document_draft", false, false],
-      ["GET /api/manager/document-system/orders/{order_id}/documents", "list_manager_managed_order_documents", false, false],
-      ["POST /api/manager/document-system/documents/{document_id}/issue", "issue_manager_managed_document", false, false],
-      ["POST /api/manager/document-system/documents/{document_id}/void", "void_manager_managed_document", false, false],
-      ["POST /api/manager/document-system/orders/{order_id}/documents/drafts", "create_manager_managed_document_draft", false, false]
+      ["DELETE /api/manager/document-system/documents/{document_id}/draft", "delete_manager_managed_document_draft", false, 2],
+      ["GET /api/manager/document-system/artifacts/{artifact_id}/access", "get_manager_document_artifact_access", false, 2],
+      ["GET /api/manager/document-system/artifacts/{artifact_id}/download", "download_manager_document_artifact", false, 2],
+      ["GET /api/manager/document-system/documents/{document_id}/artifacts", "list_manager_document_artifacts", false, 2],
+      ["GET /api/manager/document-system/documents/{document_id}/preview", "preview_manager_managed_document_draft", false, 2],
+      ["GET /api/manager/document-system/orders/{order_id}/documents", "list_manager_managed_order_documents", false, 2],
+      ["POST /api/manager/document-system/documents/{document_id}/issue", "issue_manager_managed_document", false, 2],
+      ["POST /api/manager/document-system/documents/{document_id}/void", "void_manager_managed_document", false, 2],
+      ["POST /api/manager/document-system/orders/{order_id}/documents/drafts", "create_manager_managed_document_draft", false, 2]
     ],
     "modules/documents/api/template_external_edits.py": [
-      ["GET /api/manager/document-system/templates/{template_id}/versions/{version_id}/google-edit-session", "get_manager_native_template_google_edit_session", false, false],
-      ["POST /api/manager/document-system/templates/{template_id}/versions/{version_id}/google-edit-session", "create_manager_native_template_google_edit_session", false, false],
-      ["POST /api/manager/document-system/templates/{template_id}/versions/{version_id}/google-edit-session/sync", "sync_manager_native_template_google_edit_session", false, false]
+      ["GET /api/manager/document-system/templates/{template_id}/versions/{version_id}/google-edit-session", "get_manager_native_template_google_edit_session", false, 2],
+      ["POST /api/manager/document-system/templates/{template_id}/versions/{version_id}/google-edit-session", "create_manager_native_template_google_edit_session", false, 2],
+      ["POST /api/manager/document-system/templates/{template_id}/versions/{version_id}/google-edit-session/sync", "sync_manager_native_template_google_edit_session", false, 2]
     ],
     "modules/documents/api/templates_runtime.py": [
-      ["GET /api/manager/document-system/placeholder-catalog", "get_manager_native_placeholder_catalog", false, false],
-      ["GET /api/manager/document-system/runtime/pdf", "get_manager_document_pdf_runtime", false, false],
-      ["GET /api/manager/document-system/templates", "list_manager_native_document_templates", false, false],
-      ["GET /api/manager/document-system/templates/{template_id}/versions", "list_manager_native_template_versions", false, false],
-      ["GET /api/manager/document-system/templates/{template_id}/versions/{version_id}/source", "download_manager_native_template_version_source", false, false],
-      ["PATCH /api/manager/document-system/templates/{template_id}", "update_manager_native_document_template", false, false],
-      ["POST /api/manager/document-system/templates", "create_manager_native_document_template", false, false],
-      ["POST /api/manager/document-system/templates/{template_id}/versions", "upload_manager_native_template_version", false, false],
-      ["POST /api/manager/document-system/templates/{template_id}/versions/{version_id}/activate", "activate_manager_native_template_version", false, false]
+      ["GET /api/manager/document-system/placeholder-catalog", "get_manager_native_placeholder_catalog", false, 2],
+      ["GET /api/manager/document-system/runtime/pdf", "get_manager_document_pdf_runtime", false, 2],
+      ["GET /api/manager/document-system/templates", "list_manager_native_document_templates", false, 2],
+      ["GET /api/manager/document-system/templates/{template_id}/versions", "list_manager_native_template_versions", false, 2],
+      ["GET /api/manager/document-system/templates/{template_id}/versions/{version_id}/source", "download_manager_native_template_version_source", false, 2],
+      ["PATCH /api/manager/document-system/templates/{template_id}", "update_manager_native_document_template", false, 2],
+      ["POST /api/manager/document-system/templates", "create_manager_native_document_template", false, 2],
+      ["POST /api/manager/document-system/templates/{template_id}/versions", "upload_manager_native_template_version", false, 2],
+      ["POST /api/manager/document-system/templates/{template_id}/versions/{version_id}/activate", "activate_manager_native_template_version", false, 2]
     ],
     "routers/api_admin.py": [
-      ["GET /api/admin/products/search", "admin_search_products_api_admin_products_search_get", false, true],
-      ["GET /api/admin/services/search", "admin_search_services_api_admin_services_search_get", false, true],
-      ["GET /api/admin/tags/filterable", "get_filterable_tags_api_admin_tags_filterable_get", false, true],
-      ["GET /api/health", "health_check_api_health_get", true, true],
-      ["GET /api/products/search", "search_products_api_products_search_get", true, true],
-      ["GET /api/ready", "readiness_check_api_ready_get", true, true]
+      ["GET /api/admin/products/search", "admin_search_products_api_admin_products_search_get", false, 1],
+      ["GET /api/admin/services/search", "admin_search_services_api_admin_services_search_get", false, 1],
+      ["GET /api/admin/tags/filterable", "get_filterable_tags_api_admin_tags_filterable_get", false, 1],
+      ["GET /api/health", "health_check_api_health_get", true, 1],
+      ["GET /api/products/search", "search_products_api_products_search_get", true, 1],
+      ["GET /api/ready", "readiness_check_api_ready_get", true, 1]
     ],
     "routers/api_catalog_revision.py": [
-      ["GET /api/v1/catalog/revision", "get_catalog_revision", false, true]
+      ["GET /api/v1/catalog/revision", "get_catalog_revision", false, 1]
     ],
     "routers/api_content.py": [
-      ["GET /api/v1/config", "get_config", true, true],
-      ["GET /api/v1/content/articles", "get_articles_api_v1_content_articles_get", true, true],
-      ["GET /api/v1/content/articles/{slug}", "get_article_api_v1_content_articles__slug__get", true, true],
-      ["GET /api/v1/content/brands", "get_public_brands", true, true],
-      ["GET /api/v1/content/brands/{brand_slug}/series/{series_slug}", "get_public_brand_series", true, true],
-      ["GET /api/v1/content/brands/{slug}", "get_public_brand", true, true],
-      ["GET /api/v1/content/services", "get_services_api_v1_content_services_get", true, true],
-      ["GET /api/v1/installation-rates", "get_installation_rates_api_v1_installation_rates_get", true, true],
-      ["GET /api/v1/services/options", "get_service_options_api_v1_services_options_get", true, true]
+      ["GET /api/v1/config", "get_config", true, 1],
+      ["GET /api/v1/content/articles", "get_articles_api_v1_content_articles_get", true, 1],
+      ["GET /api/v1/content/articles/{slug}", "get_article_api_v1_content_articles__slug__get", true, 1],
+      ["GET /api/v1/content/brands", "get_public_brands", true, 1],
+      ["GET /api/v1/content/brands/{brand_slug}/series/{series_slug}", "get_public_brand_series", true, 1],
+      ["GET /api/v1/content/brands/{slug}", "get_public_brand", true, 1],
+      ["GET /api/v1/content/services", "get_services_api_v1_content_services_get", true, 1],
+      ["GET /api/v1/installation-rates", "get_installation_rates_api_v1_installation_rates_get", true, 1],
+      ["GET /api/v1/services/options", "get_service_options_api_v1_services_options_get", true, 1]
     ],
     "routers/api_leads.py": [
-      ["POST /api/v1/leads/contact", "create_public_contact_lead", false, true],
-      ["POST /api/v1/leads/installation-estimate", "create_installation_estimate_lead", false, true],
-      ["POST /api/v1/leads/product-availability", "create_product_availability_lead", false, true],
-      ["POST /api/v1/leads/repair-diagnostic", "create_repair_diagnostic_lead", false, true]
+      ["POST /api/v1/leads/contact", "create_public_contact_lead", false, 1],
+      ["POST /api/v1/leads/installation-estimate", "create_installation_estimate_lead", false, 1],
+      ["POST /api/v1/leads/product-availability", "create_product_availability_lead", false, 1],
+      ["POST /api/v1/leads/repair-diagnostic", "create_repair_diagnostic_lead", false, 1]
     ],
     "routers/api_multi_split.py": [
-      ["GET /api/v1/multi-split/options", "list_public_multi_split_options", false, true],
-      ["POST /api/v1/multi-split/leads", "create_public_multi_split_lead", false, true],
-      ["POST /api/v1/multi-split/preview", "preview_public_multi_split", false, true]
+      ["GET /api/v1/multi-split/options", "list_public_multi_split_options", false, 1],
+      ["POST /api/v1/multi-split/leads", "create_public_multi_split_lead", false, 1],
+      ["POST /api/v1/multi-split/preview", "preview_public_multi_split", false, 1]
     ],
     "routers/api_orders.py": [
-      ["POST /api/v1/orders", "create_order", true, true]
+      ["POST /api/v1/orders", "create_order", true, 1]
     ],
     "routers/api_product_collections.py": [
-      ["GET /api/v1/content/placements/{surface_key}/{slot_key}/collections", "get_public_product_collection_placement", false, true]
+      ["GET /api/v1/content/placements/{surface_key}/{slot_key}/collections", "get_public_product_collection_placement", false, 1]
     ],
     "routers/api_products.py": [
-      ["GET /api/v1/catalog", "get_products", false, true],
-      ["GET /api/v1/filters/config", "get_filters_config", false, true],
-      ["GET /api/v1/product-series/navigation", "get_product_series_navigation", false, true],
-      ["GET /api/v1/products", "get_products_v1", false, true],
-      ["GET /api/v1/products/vitebsk-featured", "get_vitebsk_featured_products", false, true],
-      ["GET /api/v1/products/{identifier}", "get_product", false, true],
-      ["GET /api/v1/specs/keys", "get_public_spec_keys", false, true],
-      ["GET /api/v1/specs/registry", "get_public_spec_registry", false, true],
-      ["POST /api/products/{product_id}/generate-description", "generate_product_description_api_products__product_id__generate_description_post", false, true]
+      ["GET /api/v1/catalog", "get_products", false, 1],
+      ["GET /api/v1/filters/config", "get_filters_config", false, 1],
+      ["GET /api/v1/product-series/navigation", "get_product_series_navigation", false, 1],
+      ["GET /api/v1/products", "get_products_v1", false, 1],
+      ["GET /api/v1/products/vitebsk-featured", "get_vitebsk_featured_products", false, 1],
+      ["GET /api/v1/products/{identifier}", "get_product", false, 1],
+      ["GET /api/v1/specs/keys", "get_public_spec_keys", false, 1],
+      ["GET /api/v1/specs/registry", "get_public_spec_registry", false, 1],
+      ["POST /api/products/{product_id}/generate-description", "generate_product_description_api_products__product_id__generate_description_post", false, 1]
     ],
     "routers/api_proxy.py": [
-      ["GET /api/admin/proxy/bank", "find_bank_api_admin_proxy_bank_get", true, true],
-      ["GET /api/admin/proxy/egr", "proxy_egr_api_admin_proxy_egr_get", true, true],
-      ["GET /api/v1/address-suggest", "public_address_suggest", false, true],
-      ["GET /api/v1/proxy/bank", "public_find_bank_api_v1_proxy_bank_get", true, true],
-      ["GET /api/v1/proxy/egr", "public_proxy_egr_api_v1_proxy_egr_get", true, true]
+      ["GET /api/admin/proxy/bank", "find_bank_api_admin_proxy_bank_get", true, 1],
+      ["GET /api/admin/proxy/egr", "proxy_egr_api_admin_proxy_egr_get", true, 1],
+      ["GET /api/v1/address-suggest", "public_address_suggest", false, 1],
+      ["GET /api/v1/proxy/bank", "public_find_bank_api_v1_proxy_bank_get", true, 1],
+      ["GET /api/v1/proxy/egr", "public_proxy_egr_api_v1_proxy_egr_get", true, 1]
     ],
     "routers/api_service_pricing.py": [
-      ["GET /api/v1/service-pricing/installation/config", "get_public_installation_pricing_config", true, true],
-      ["GET /api/v1/service-pricing/tariffs", "list_public_service_tariffs", false, true],
-      ["POST /api/v1/service-pricing/calculate", "calculate_public_service_tariff", false, true],
-      ["POST /api/v1/service-pricing/installation/preview", "preview_public_installation_estimate", false, true],
-      ["POST /api/v1/service-pricing/installation/resolve", "resolve_public_installation_tariff", false, true]
+      ["GET /api/v1/service-pricing/installation/config", "get_public_installation_pricing_config", true, 1],
+      ["GET /api/v1/service-pricing/tariffs", "list_public_service_tariffs", false, 1],
+      ["POST /api/v1/service-pricing/calculate", "calculate_public_service_tariff", false, 1],
+      ["POST /api/v1/service-pricing/installation/preview", "preview_public_installation_estimate", false, 1],
+      ["POST /api/v1/service-pricing/installation/resolve", "resolve_public_installation_tariff", false, 1]
     ],
     "routers/api_storefront.py": [
-      ["GET /api/v1/storefront/context", "get_public_storefront_context", false, true]
+      ["GET /api/v1/storefront/context", "get_public_storefront_context", false, 1]
     ],
     "routers/api_storefront_settings.py": [
-      ["GET /api/v1/storefront-settings", "get_public_storefront_settings", false, true]
+      ["GET /api/v1/storefront-settings", "get_public_storefront_settings", false, 1]
     ],
     "routers/api_yandex_business.py": [
-      ["GET /api/v1/feeds/yandex-business.yml", "get_yandex_business_feed", false, true]
+      ["GET /api/v1/feeds/yandex-business.yml", "get_yandex_business_feed", false, 1]
     ],
     "routers/connector_auth.py": [
-      ["GET /.well-known/oauth-authorization-server", "connector_oauth_metadata", false, true],
-      ["GET /.well-known/oauth-protected-resource", "connector_oauth_resource_metadata", false, true],
-      ["GET /.well-known/oauth-protected-resource/api/connector/mcp", "connector_oauth_resource_path_metadata", false, true],
-      ["GET /api/connector/oauth/authorize", "connector_oauth_authorize", false, true],
-      ["GET /api/manager/connector/grants", "manager_connector_grants", false, true],
-      ["POST /api/connector/oauth/authorize", "connector_oauth_consent", false, true],
-      ["POST /api/connector/oauth/revoke", "connector_oauth_revoke", false, true],
-      ["POST /api/connector/oauth/token", "connector_oauth_token", false, true],
-      ["POST /api/manager/connector/grants/{grant_id}/revoke", "manager_connector_revoke", false, true]
+      ["GET /.well-known/oauth-authorization-server", "connector_oauth_metadata", false, 1],
+      ["GET /.well-known/oauth-protected-resource", "connector_oauth_resource_metadata", false, 1],
+      ["GET /.well-known/oauth-protected-resource/api/connector/mcp", "connector_oauth_resource_path_metadata", false, 1],
+      ["GET /api/connector/oauth/authorize", "connector_oauth_authorize", false, 1],
+      ["GET /api/manager/connector/grants", "manager_connector_grants", false, 1],
+      ["POST /api/connector/oauth/authorize", "connector_oauth_consent", false, 1],
+      ["POST /api/connector/oauth/revoke", "connector_oauth_revoke", false, 1],
+      ["POST /api/connector/oauth/token", "connector_oauth_token", false, 1],
+      ["POST /api/manager/connector/grants/{grant_id}/revoke", "manager_connector_revoke", false, 1]
     ],
     "routers/internal_bot.py": [
-      ["GET /api/internal/bot/v1/catalog/products/{product_id}", "get_internal_bot_catalog_product_v1", false, true],
-      ["GET /api/internal/bot/v1/health", "get_internal_bot_api_health_v1", false, true],
-      ["GET /api/internal/bot/v1/quick-orders/drafts/{draft_id}", "get_internal_bot_quick_order_draft_v1", false, true],
-      ["GET /api/internal/bot/v1/staff/context/{telegram_id}", "get_internal_bot_staff_context_v1", false, true],
-      ["PATCH /api/internal/bot/v1/quick-orders/drafts/{draft_id}", "patch_internal_bot_quick_order_draft_v1", false, true],
-      ["POST /api/internal/bot/v1/catalog/search", "search_internal_bot_catalog_v1", false, true],
-      ["POST /api/internal/bot/v1/customers/requisites/recognize-file", "recognize_internal_bot_customer_requisites_file_v1", true, true],
-      ["POST /api/internal/bot/v1/customers/requisites/recognize-text", "recognize_internal_bot_customer_requisites_text_v1", false, true],
-      ["POST /api/internal/bot/v1/customers/requisites/{recognition_id}/action", "apply_internal_bot_customer_requisites_action_v1", false, true],
-      ["POST /api/internal/bot/v1/quick-orders", "create_internal_bot_quick_order_v1", false, true],
-      ["POST /api/internal/bot/v1/quick-orders/customers/search", "search_internal_bot_quick_order_customers_v1", false, true],
-      ["POST /api/internal/bot/v1/quick-orders/drafts", "start_internal_bot_quick_order_draft_v1", false, true],
-      ["POST /api/internal/bot/v1/quick-orders/drafts/{draft_id}/cancel", "cancel_internal_bot_quick_order_draft_v1", false, true],
-      ["POST /api/internal/bot/v1/quick-orders/drafts/{draft_id}/create", "create_internal_bot_quick_order_from_draft_v1", false, true],
-      ["POST /api/internal/bot/v1/quick-orders/parse", "parse_internal_bot_quick_order_v1", false, true],
-      ["POST /api/internal/bot/v1/tasks/my", "list_internal_bot_my_tasks_v1", false, true],
-      ["POST /api/internal/bot/v1/tasks/stages/{stage_id}/attachments", "attach_internal_bot_task_stage_file_v1", false, true],
-      ["POST /api/internal/bot/v1/tasks/stages/{stage_id}/report", "save_internal_bot_task_report_v1", false, true],
-      ["POST /api/internal/bot/v1/tasks/stages/{stage_id}/status", "update_internal_bot_task_status_v1", false, true]
+      ["GET /api/internal/bot/v1/catalog/products/{product_id}", "get_internal_bot_catalog_product_v1", false, 1],
+      ["GET /api/internal/bot/v1/health", "get_internal_bot_api_health_v1", false, 1],
+      ["GET /api/internal/bot/v1/quick-orders/drafts/{draft_id}", "get_internal_bot_quick_order_draft_v1", false, 1],
+      ["GET /api/internal/bot/v1/staff/context/{telegram_id}", "get_internal_bot_staff_context_v1", false, 1],
+      ["PATCH /api/internal/bot/v1/quick-orders/drafts/{draft_id}", "patch_internal_bot_quick_order_draft_v1", false, 1],
+      ["POST /api/internal/bot/v1/catalog/search", "search_internal_bot_catalog_v1", false, 1],
+      ["POST /api/internal/bot/v1/customers/requisites/recognize-file", "recognize_internal_bot_customer_requisites_file_v1", true, 1],
+      ["POST /api/internal/bot/v1/customers/requisites/recognize-text", "recognize_internal_bot_customer_requisites_text_v1", false, 1],
+      ["POST /api/internal/bot/v1/customers/requisites/{recognition_id}/action", "apply_internal_bot_customer_requisites_action_v1", false, 1],
+      ["POST /api/internal/bot/v1/quick-orders", "create_internal_bot_quick_order_v1", false, 1],
+      ["POST /api/internal/bot/v1/quick-orders/customers/search", "search_internal_bot_quick_order_customers_v1", false, 1],
+      ["POST /api/internal/bot/v1/quick-orders/drafts", "start_internal_bot_quick_order_draft_v1", false, 1],
+      ["POST /api/internal/bot/v1/quick-orders/drafts/{draft_id}/cancel", "cancel_internal_bot_quick_order_draft_v1", false, 1],
+      ["POST /api/internal/bot/v1/quick-orders/drafts/{draft_id}/create", "create_internal_bot_quick_order_from_draft_v1", false, 1],
+      ["POST /api/internal/bot/v1/quick-orders/parse", "parse_internal_bot_quick_order_v1", false, 1],
+      ["POST /api/internal/bot/v1/tasks/my", "list_internal_bot_my_tasks_v1", false, 1],
+      ["POST /api/internal/bot/v1/tasks/stages/{stage_id}/attachments", "attach_internal_bot_task_stage_file_v1", false, 1],
+      ["POST /api/internal/bot/v1/tasks/stages/{stage_id}/report", "save_internal_bot_task_report_v1", false, 1],
+      ["POST /api/internal/bot/v1/tasks/stages/{stage_id}/status", "update_internal_bot_task_status_v1", false, 1]
     ],
     "routers/internal_bot_media.py": [
-      ["POST /api/internal/bot/v1/orders/recent", "list_internal_bot_recent_orders_v1", false, true],
-      ["POST /api/internal/bot/v1/orders/{order_id}/attachments", "attach_internal_bot_order_file_v1", false, true],
-      ["POST /api/internal/bot/v1/repair-nameplates/apply", "apply_internal_bot_repair_nameplate_v1", false, true],
-      ["POST /api/internal/bot/v1/repair-nameplates/orders", "list_internal_bot_repair_nameplate_orders_v1", false, true],
-      ["POST /api/internal/bot/v1/repair-nameplates/recognize", "recognize_internal_bot_repair_nameplate_v1", false, true],
-      ["POST /api/internal/bot/v1/warranty-nameplates/apply", "apply_internal_bot_warranty_nameplate_v1", false, true],
-      ["POST /api/internal/bot/v1/warranty-nameplates/orders", "list_internal_bot_warranty_nameplate_orders_v1", false, true],
-      ["POST /api/internal/bot/v1/warranty-nameplates/recognize", "recognize_internal_bot_warranty_nameplate_v1", false, true]
+      ["POST /api/internal/bot/v1/orders/recent", "list_internal_bot_recent_orders_v1", false, 1],
+      ["POST /api/internal/bot/v1/orders/{order_id}/attachments", "attach_internal_bot_order_file_v1", false, 1],
+      ["POST /api/internal/bot/v1/repair-nameplates/apply", "apply_internal_bot_repair_nameplate_v1", false, 1],
+      ["POST /api/internal/bot/v1/repair-nameplates/orders", "list_internal_bot_repair_nameplate_orders_v1", false, 1],
+      ["POST /api/internal/bot/v1/repair-nameplates/recognize", "recognize_internal_bot_repair_nameplate_v1", false, 1],
+      ["POST /api/internal/bot/v1/warranty-nameplates/apply", "apply_internal_bot_warranty_nameplate_v1", false, 1],
+      ["POST /api/internal/bot/v1/warranty-nameplates/orders", "list_internal_bot_warranty_nameplate_orders_v1", false, 1],
+      ["POST /api/internal/bot/v1/warranty-nameplates/recognize", "recognize_internal_bot_warranty_nameplate_v1", false, 1]
     ],
     "routers/internal_bot_notifications.py": [
-      ["POST /api/internal/bot/v1/staff-notifications/claim", "claim_internal_bot_staff_notification_v1", false, true],
-      ["POST /api/internal/bot/v1/staff-notifications/{delivery_id}/ack", "ack_internal_bot_staff_notification_v1", false, true],
-      ["POST /api/internal/bot/v1/staff-notifications/{delivery_id}/nack", "nack_internal_bot_staff_notification_v1", false, true],
-      ["POST /api/internal/bot/v1/staff-notifications/{delivery_id}/renew", "renew_internal_bot_staff_notification_v1", false, true]
+      ["POST /api/internal/bot/v1/staff-notifications/claim", "claim_internal_bot_staff_notification_v1", false, 1],
+      ["POST /api/internal/bot/v1/staff-notifications/{delivery_id}/ack", "ack_internal_bot_staff_notification_v1", false, 1],
+      ["POST /api/internal/bot/v1/staff-notifications/{delivery_id}/nack", "nack_internal_bot_staff_notification_v1", false, 1],
+      ["POST /api/internal/bot/v1/staff-notifications/{delivery_id}/renew", "renew_internal_bot_staff_notification_v1", false, 1]
     ],
     "routers/internal_bot_operations.py": [
-      ["POST /api/internal/bot/v1/catalog/curated", "get_internal_bot_curated_catalog_v1", false, true],
-      ["POST /api/internal/bot/v1/catalog/products/{product_id}/delete", "delete_internal_bot_catalog_product_v1", false, true],
-      ["POST /api/internal/bot/v1/catalog/products/{product_id}/price", "update_internal_bot_catalog_product_price_v1", false, true],
-      ["POST /api/internal/bot/v1/catalog/selection", "build_internal_bot_catalog_selection_v1", false, true],
-      ["POST /api/internal/bot/v1/repair-context/apply", "apply_internal_bot_repair_context_v1", false, true],
-      ["POST /api/internal/bot/v1/repair-context/comment-draft", "build_internal_bot_repair_comment_draft_v1", false, true],
-      ["POST /api/internal/bot/v1/repair-context/preset-draft", "build_internal_bot_repair_preset_draft_v1", false, true]
+      ["POST /api/internal/bot/v1/catalog/curated", "get_internal_bot_curated_catalog_v1", false, 1],
+      ["POST /api/internal/bot/v1/catalog/products/{product_id}/delete", "delete_internal_bot_catalog_product_v1", false, 1],
+      ["POST /api/internal/bot/v1/catalog/products/{product_id}/price", "update_internal_bot_catalog_product_price_v1", false, 1],
+      ["POST /api/internal/bot/v1/catalog/selection", "build_internal_bot_catalog_selection_v1", false, 1],
+      ["POST /api/internal/bot/v1/repair-context/apply", "apply_internal_bot_repair_context_v1", false, 1],
+      ["POST /api/internal/bot/v1/repair-context/comment-draft", "build_internal_bot_repair_comment_draft_v1", false, 1],
+      ["POST /api/internal/bot/v1/repair-context/preset-draft", "build_internal_bot_repair_preset_draft_v1", false, 1]
     ],
     "routers/internal_bot_runtime.py": [
-      ["POST /api/internal/bot/v1/fsm/get", "get_internal_bot_fsm_state_v1", false, true],
-      ["POST /api/internal/bot/v1/fsm/update", "update_internal_bot_fsm_state_v1", false, true],
-      ["POST /api/internal/bot/v1/runtime-leases/acquire", "acquire_internal_bot_runtime_lease_v1", false, true],
-      ["POST /api/internal/bot/v1/runtime-leases/release", "release_internal_bot_runtime_lease_v1", false, true],
-      ["POST /api/internal/bot/v1/runtime-leases/renew", "renew_internal_bot_runtime_lease_v1", false, true]
+      ["POST /api/internal/bot/v1/fsm/get", "get_internal_bot_fsm_state_v1", false, 1],
+      ["POST /api/internal/bot/v1/fsm/update", "update_internal_bot_fsm_state_v1", false, 1],
+      ["POST /api/internal/bot/v1/runtime-leases/acquire", "acquire_internal_bot_runtime_lease_v1", false, 1],
+      ["POST /api/internal/bot/v1/runtime-leases/release", "release_internal_bot_runtime_lease_v1", false, 1],
+      ["POST /api/internal/bot/v1/runtime-leases/renew", "renew_internal_bot_runtime_lease_v1", false, 1]
     ],
     "routers/internal_bot_voice.py": [
-      ["POST /api/internal/bot/v1/quick-orders/parse-voice", "parse_internal_bot_voice_quick_order_v1", false, true]
+      ["POST /api/internal/bot/v1/quick-orders/parse-voice", "parse_internal_bot_voice_quick_order_v1", false, 1]
     ],
     "routers/manager_analytics_connections.py": [
-      ["GET /api/manager/analytics-connections", "list_manager_analytics_connections", false, false],
-      ["POST /api/manager/analytics-connections/google-ads/authorization-url", "start_manager_google_ads_authorization", false, false],
-      ["POST /api/manager/analytics-connections/google-analytics/authorization-url", "start_manager_google_analytics_authorization", false, false],
-      ["POST /api/manager/analytics-connections/google-search-console/authorization-url", "start_manager_google_search_console_authorization", false, false],
-      ["PUT /api/manager/analytics-connections/yandex-direct", "upsert_manager_yandex_direct_connection", false, false],
-      ["PUT /api/manager/analytics-connections/yandex-metrika", "upsert_manager_yandex_metrika_connection", false, false],
-      ["PUT /api/manager/analytics-connections/yandex-webmaster", "upsert_manager_yandex_webmaster_connection", false, false]
+      ["GET /api/manager/analytics-connections", "list_manager_analytics_connections", false, 3],
+      ["POST /api/manager/analytics-connections/google-ads/authorization-url", "start_manager_google_ads_authorization", false, 3],
+      ["POST /api/manager/analytics-connections/google-analytics/authorization-url", "start_manager_google_analytics_authorization", false, 3],
+      ["POST /api/manager/analytics-connections/google-search-console/authorization-url", "start_manager_google_search_console_authorization", false, 3],
+      ["PUT /api/manager/analytics-connections/yandex-direct", "upsert_manager_yandex_direct_connection", false, 3],
+      ["PUT /api/manager/analytics-connections/yandex-metrika", "upsert_manager_yandex_metrika_connection", false, 3],
+      ["PUT /api/manager/analytics-connections/yandex-webmaster", "upsert_manager_yandex_webmaster_connection", false, 3]
     ],
     "routers/manager_auth.py": [
-      ["GET /api/manager/me", "read_user_me", true, false],
-      ["GET /api/manager/storefronts", "list_manager_storefronts", false, false],
-      ["POST /api/manager/account/change-password", "change_manager_account_password", false, false]
+      ["GET /api/manager/me", "read_user_me", true, 3],
+      ["GET /api/manager/storefronts", "list_manager_storefronts", false, 3],
+      ["POST /api/manager/account/change-password", "change_manager_account_password", false, 3]
     ],
     "routers/manager_backups.py": [
-      ["GET /api/manager/backups", "list_manager_backups", false, false],
-      ["GET /api/manager/backups/restore/{job_id}", "get_manager_backup_restore_status", false, false],
-      ["GET /api/manager/backups/run/{job_id}", "get_manager_backup_run_status", false, false],
-      ["POST /api/manager/backups/restore/{file_id}", "start_manager_backup_restore", false, false],
-      ["POST /api/manager/backups/run", "start_manager_backup_run", false, false]
+      ["GET /api/manager/backups", "list_manager_backups", false, 3],
+      ["GET /api/manager/backups/restore/{job_id}", "get_manager_backup_restore_status", false, 3],
+      ["GET /api/manager/backups/run/{job_id}", "get_manager_backup_run_status", false, 3],
+      ["POST /api/manager/backups/restore/{file_id}", "start_manager_backup_restore", false, 3],
+      ["POST /api/manager/backups/run", "start_manager_backup_run", false, 3]
     ],
     "routers/manager_belzakupki_enrichment.py": [
-      ["GET /api/manager/orders/{order_id}/source-card", "get_manager_order_source_card", false, false],
-      ["GET /api/manager/orders/{order_id}/source-documents/{document_id}", "download_manager_order_source_document", false, false],
-      ["GET /api/manager/orders/{order_id}/source-equipment", "get_manager_order_source_equipment", false, false],
-      ["GET /api/manager/orders/{order_id}/source-preview", "get_manager_order_source_preview", false, false],
-      ["POST /api/manager/orders/{order_id}/source-analyze", "analyze_manager_order_source", false, false],
-      ["POST /api/manager/orders/{order_id}/source-apply", "apply_manager_order_source", false, false],
-      ["POST /api/manager/orders/{order_id}/source-equipment", "add_manager_order_source_equipment", false, false]
+      ["GET /api/manager/orders/{order_id}/source-card", "get_manager_order_source_card", false, 2],
+      ["GET /api/manager/orders/{order_id}/source-documents/{document_id}", "download_manager_order_source_document", false, 2],
+      ["GET /api/manager/orders/{order_id}/source-equipment", "get_manager_order_source_equipment", false, 2],
+      ["GET /api/manager/orders/{order_id}/source-preview", "get_manager_order_source_preview", false, 2],
+      ["POST /api/manager/orders/{order_id}/source-analyze", "analyze_manager_order_source", false, 2],
+      ["POST /api/manager/orders/{order_id}/source-apply", "apply_manager_order_source", false, 2],
+      ["POST /api/manager/orders/{order_id}/source-equipment", "add_manager_order_source_equipment", false, 2]
     ],
     "routers/manager_brands.py": [
-      ["DELETE /api/manager/brands/{brand_id}", "delete_manager_brand", false, false],
-      ["DELETE /api/manager/brands/{brand_id}/features/{feature_id}", "delete_manager_brand_feature", false, false],
-      ["DELETE /api/manager/brands/{brand_id}/series/{series_id}", "delete_manager_brand_series", false, false],
-      ["GET /api/manager/brands", "list_manager_brands", false, false],
-      ["GET /api/manager/brands/{brand_id}/features", "list_manager_brand_features", false, false],
-      ["GET /api/manager/brands/{brand_id}/series", "list_manager_brand_series", false, false],
-      ["POST /api/manager/brands", "create_manager_brand", false, false],
-      ["POST /api/manager/brands/{brand_id}/features", "create_manager_brand_feature", false, false],
-      ["POST /api/manager/brands/{brand_id}/series", "create_manager_brand_series", false, false],
-      ["POST /api/manager/brands/{brand_id}/series/{series_id}/gallery/apply-to-products", "apply_manager_series_gallery_to_products", false, false],
-      ["PUT /api/manager/brands/{brand_id}", "update_manager_brand", false, false],
-      ["PUT /api/manager/brands/{brand_id}/features/{feature_id}", "update_manager_brand_feature", false, false],
-      ["PUT /api/manager/brands/{brand_id}/series/{series_id}", "update_manager_brand_series", false, false]
+      ["DELETE /api/manager/brands/{brand_id}", "delete_manager_brand", false, 2],
+      ["DELETE /api/manager/brands/{brand_id}/features/{feature_id}", "delete_manager_brand_feature", false, 2],
+      ["DELETE /api/manager/brands/{brand_id}/series/{series_id}", "delete_manager_brand_series", false, 2],
+      ["GET /api/manager/brands", "list_manager_brands", false, 2],
+      ["GET /api/manager/brands/{brand_id}/features", "list_manager_brand_features", false, 2],
+      ["GET /api/manager/brands/{brand_id}/series", "list_manager_brand_series", false, 2],
+      ["POST /api/manager/brands", "create_manager_brand", false, 2],
+      ["POST /api/manager/brands/{brand_id}/features", "create_manager_brand_feature", false, 2],
+      ["POST /api/manager/brands/{brand_id}/series", "create_manager_brand_series", false, 2],
+      ["POST /api/manager/brands/{brand_id}/series/{series_id}/gallery/apply-to-products", "apply_manager_series_gallery_to_products", false, 2],
+      ["PUT /api/manager/brands/{brand_id}", "update_manager_brand", false, 2],
+      ["PUT /api/manager/brands/{brand_id}/features/{feature_id}", "update_manager_brand_feature", false, 2],
+      ["PUT /api/manager/brands/{brand_id}/series/{series_id}", "update_manager_brand_series", false, 2]
     ],
     "routers/manager_calendar.py": [
-      ["GET /api/manager/calendar/events", "get_manager_calendar_events", true, false]
+      ["GET /api/manager/calendar/events", "get_manager_calendar_events", true, 3]
     ],
     "routers/manager_catalog.py": [
-      ["DELETE /api/manager/products/{product_id}", "delete_manager_product", false, false],
-      ["GET /api/manager/catalog/import/jobs/current", "get_current_catalog_import_job_status", false, false],
-      ["GET /api/manager/catalog/import/jobs/{job_id}", "get_catalog_import_job_status", false, false],
-      ["GET /api/manager/products/list", "get_manager_products", true, false],
-      ["GET /api/manager/products/smart-search", "smart_search_products", true, false],
-      ["GET /api/manager/products/{product_id}", "get_manager_product", false, false],
-      ["GET /api/manager/tags/all", "get_all_tags", true, false],
-      ["PATCH /api/manager/products/{product_id}", "update_product", true, false],
-      ["POST /api/manager/catalog/import", "catalog_import", true, false],
-      ["POST /api/manager/catalog/import-onliner", "import_onliner", true, false],
-      ["POST /api/manager/catalog/import/jobs", "start_catalog_import_job", true, false],
-      ["POST /api/manager/products", "create_manager_product", true, false],
-      ["POST /api/manager/products/bulk-delete", "bulk_delete_manager_products", true, false],
-      ["POST /api/manager/products/bulk-round-price", "bulk_round_price", true, false],
-      ["POST /api/manager/products/bulk-set-rrc-price", "bulk_set_rrc_price", true, false],
-      ["POST /api/manager/products/{product_id}/duplicate", "duplicate_manager_product", true, false]
+      ["DELETE /api/manager/products/{product_id}", "delete_manager_product", false, 2],
+      ["GET /api/manager/catalog/import/jobs/current", "get_current_catalog_import_job_status", false, 2],
+      ["GET /api/manager/catalog/import/jobs/{job_id}", "get_catalog_import_job_status", false, 2],
+      ["GET /api/manager/products/list", "get_manager_products", true, 2],
+      ["GET /api/manager/products/smart-search", "smart_search_products", true, 2],
+      ["GET /api/manager/products/{product_id}", "get_manager_product", false, 2],
+      ["GET /api/manager/tags/all", "get_all_tags", true, 2],
+      ["PATCH /api/manager/products/{product_id}", "update_product", true, 2],
+      ["POST /api/manager/catalog/import", "catalog_import", true, 2],
+      ["POST /api/manager/catalog/import-onliner", "import_onliner", true, 2],
+      ["POST /api/manager/catalog/import/jobs", "start_catalog_import_job", true, 2],
+      ["POST /api/manager/products", "create_manager_product", true, 2],
+      ["POST /api/manager/products/bulk-delete", "bulk_delete_manager_products", true, 2],
+      ["POST /api/manager/products/bulk-round-price", "bulk_round_price", true, 2],
+      ["POST /api/manager/products/bulk-set-rrc-price", "bulk_set_rrc_price", true, 2],
+      ["POST /api/manager/products/{product_id}/duplicate", "duplicate_manager_product", true, 2]
     ],
     "routers/manager_catalog_decision.py": [
-      ["GET /api/manager/catalog-decision/filter-options", "list_manager_catalog_decision_filter_options", false, false],
-      ["GET /api/manager/catalog-decision/products", "list_manager_catalog_decision_products", false, false],
-      ["POST /api/manager/catalog-decision/collections", "create_manager_catalog_decision_collection", false, false],
-      ["POST /api/manager/catalog-decision/orders", "create_manager_catalog_decision_order", false, false],
-      ["POST /api/manager/catalog-decision/orders/{order_id}/attach", "attach_manager_catalog_decision_to_order", false, false]
+      ["GET /api/manager/catalog-decision/filter-options", "list_manager_catalog_decision_filter_options", false, 2],
+      ["GET /api/manager/catalog-decision/products", "list_manager_catalog_decision_products", false, 2],
+      ["POST /api/manager/catalog-decision/collections", "create_manager_catalog_decision_collection", false, 2],
+      ["POST /api/manager/catalog-decision/orders", "create_manager_catalog_decision_order", false, 2],
+      ["POST /api/manager/catalog-decision/orders/{order_id}/attach", "attach_manager_catalog_decision_to_order", false, 2]
     ],
     "routers/manager_catalog_management.py": [
-      ["POST /api/manager/catalog-management/bulk/apply", "apply_manager_catalog_bulk", false, false],
-      ["POST /api/manager/catalog-management/bulk/preview", "preview_manager_catalog_bulk", false, false],
-      ["POST /api/manager/catalog-management/query", "query_manager_catalog", false, false],
-      ["POST /api/manager/catalog-management/selection", "select_manager_catalog", false, false]
+      ["POST /api/manager/catalog-management/bulk/apply", "apply_manager_catalog_bulk", false, 2],
+      ["POST /api/manager/catalog-management/bulk/preview", "preview_manager_catalog_bulk", false, 2],
+      ["POST /api/manager/catalog-management/query", "query_manager_catalog", false, 2],
+      ["POST /api/manager/catalog-management/selection", "select_manager_catalog", false, 2]
     ],
     "routers/manager_catalog_quality.py": [
-      ["GET /api/manager/catalog-quality/report", "get_manager_catalog_quality_report", false, false]
+      ["GET /api/manager/catalog-quality/report", "get_manager_catalog_quality_report", false, 2]
     ],
     "routers/manager_catalog_usage.py": [
-      ["GET /api/manager/catalog-usage/daily", "get_manager_catalog_usage", false, false],
-      ["POST /api/manager/catalog-usage/batch", "record_manager_catalog_usage", false, false]
+      ["GET /api/manager/catalog-usage/daily", "get_manager_catalog_usage", false, 2],
+      ["POST /api/manager/catalog-usage/batch", "record_manager_catalog_usage", false, 2]
     ],
     "routers/manager_commercial_terms.py": [
-      ["GET /api/manager/orders/{order_id}/commercial-terms", "get_manager_order_commercial_terms", false, false],
-      ["GET /api/manager/orders/{order_id}/commercial-terms/document-defaults", "get_manager_order_commercial_document_defaults", false, false],
-      ["PATCH /api/manager/orders/{order_id}/commercial-terms", "update_manager_order_commercial_terms", false, false],
-      ["POST /api/manager/orders/{order_id}/commercial-terms/extract", "extract_manager_order_commercial_terms", false, false]
+      ["GET /api/manager/orders/{order_id}/commercial-terms", "get_manager_order_commercial_terms", false, 3],
+      ["GET /api/manager/orders/{order_id}/commercial-terms/document-defaults", "get_manager_order_commercial_document_defaults", false, 3],
+      ["PATCH /api/manager/orders/{order_id}/commercial-terms", "update_manager_order_commercial_terms", false, 3],
+      ["POST /api/manager/orders/{order_id}/commercial-terms/extract", "extract_manager_order_commercial_terms", false, 3]
     ],
     "routers/manager_content_ai.py": [
-      ["POST /api/manager/content-ai/brands/short-description/draft", "create_manager_brand_short_description_ai_draft", false, false],
-      ["POST /api/manager/content-ai/features/draft", "create_manager_feature_content_ai_draft", false, false],
-      ["POST /api/manager/content-ai/series/draft", "create_manager_series_content_ai_draft", false, false]
+      ["POST /api/manager/content-ai/brands/short-description/draft", "create_manager_brand_short_description_ai_draft", false, 3],
+      ["POST /api/manager/content-ai/features/draft", "create_manager_feature_content_ai_draft", false, 3],
+      ["POST /api/manager/content-ai/series/draft", "create_manager_series_content_ai_draft", false, 3]
     ],
     "routers/manager_contracts.py": [
-      ["DELETE /api/manager/customers/{customer_id}/contracts/{contract_id}", "delete_manager_customer_contract", false, false],
-      ["GET /api/manager/customers/{customer_id}/contracts", "get_manager_customer_contracts", false, false],
-      ["PATCH /api/manager/customers/{customer_id}/contracts/{contract_id}", "patch_manager_customer_contract", false, false],
-      ["POST /api/manager/customers/{customer_id}/contracts", "create_manager_customer_contract", false, false],
-      ["POST /api/manager/customers/{customer_id}/contracts/upload", "upload_manager_customer_contract", false, false],
-      ["POST /api/manager/customers/{customer_id}/contracts/{contract_id}/archive", "archive_manager_customer_contract", false, false]
+      ["DELETE /api/manager/customers/{customer_id}/contracts/{contract_id}", "delete_manager_customer_contract", false, 2],
+      ["GET /api/manager/customers/{customer_id}/contracts", "get_manager_customer_contracts", false, 2],
+      ["PATCH /api/manager/customers/{customer_id}/contracts/{contract_id}", "patch_manager_customer_contract", false, 2],
+      ["POST /api/manager/customers/{customer_id}/contracts", "create_manager_customer_contract", false, 2],
+      ["POST /api/manager/customers/{customer_id}/contracts/upload", "upload_manager_customer_contract", false, 2],
+      ["POST /api/manager/customers/{customer_id}/contracts/{contract_id}/archive", "archive_manager_customer_contract", false, 2]
     ],
     "routers/manager_crm.py": [
-      ["GET /api/manager/crm/health-report", "get_manager_crm_health_report", false, false]
+      ["GET /api/manager/crm/health-report", "get_manager_crm_health_report", false, 2]
     ],
     "routers/manager_customer_contacts.py": [
-      ["GET /api/manager/customers/{customer_id}/contact-history", "get_manager_customer_contact_history", false, false],
-      ["GET /api/manager/customers/{customer_id}/contacts", "get_manager_customer_contacts", false, false],
-      ["PATCH /api/manager/customers/{customer_id}/contacts/{contact_id}", "patch_manager_customer_contact", false, false],
-      ["POST /api/manager/customers/{customer_id}/contacts", "create_manager_customer_contact", false, false]
+      ["GET /api/manager/customers/{customer_id}/contact-history", "get_manager_customer_contact_history", false, 2],
+      ["GET /api/manager/customers/{customer_id}/contacts", "get_manager_customer_contacts", false, 2],
+      ["PATCH /api/manager/customers/{customer_id}/contacts/{contact_id}", "patch_manager_customer_contact", false, 2],
+      ["POST /api/manager/customers/{customer_id}/contacts", "create_manager_customer_contact", false, 2]
     ],
     "routers/manager_customers.py": [
-      ["DELETE /api/manager/customers/{customer_id}", "delete_manager_customer", false, false],
-      ["DELETE /api/manager/customers/{customer_id}/branches/{branch_id}", "delete_manager_customer_branch", false, false],
-      ["GET /api/manager/customers", "get_manager_customers", true, false],
-      ["GET /api/manager/customers/{customer_id}", "get_manager_customer_detail", false, false],
-      ["GET /api/manager/customers/{customer_id}/branches", "get_manager_customer_branches", false, false],
-      ["GET /api/manager/customers/{customer_id}/docs", "get_manager_customer_docs", false, false],
-      ["GET /api/manager/customers/{customer_id}/reconciliation", "get_manager_customer_reconciliation", false, false],
-      ["PATCH /api/manager/customers/{customer_id}", "patch_manager_customer", false, false],
-      ["PATCH /api/manager/customers/{customer_id}/branches/{branch_id}", "patch_manager_customer_branch", false, false],
-      ["POST /api/manager/customers", "create_manager_customer", false, false],
-      ["POST /api/manager/customers/requisites/recognize", "recognize_manager_customer_requisites", false, false],
-      ["POST /api/manager/customers/requisites/recognize-text", "recognize_manager_customer_requisites_text", false, false],
-      ["POST /api/manager/customers/requisites/{recognition_id}/confirm", "confirm_manager_customer_requisites", false, false],
-      ["POST /api/manager/customers/{customer_id}/branches", "create_manager_customer_branch", false, false],
-      ["POST /api/manager/customers/{customer_id}/reconciliation/document", "create_manager_customer_reconciliation_document", false, false],
-      ["POST /api/manager/customers/{customer_id}/reconciliation/event-relation", "confirm_manager_customer_reconciliation_event_relation", false, false],
-      ["POST /api/manager/customers/{customer_id}/reconciliation/legacy-documents/{document_id}/confirm", "confirm_manager_customer_reconciliation_legacy_document", false, false],
-      ["POST /api/manager/customers/{customer_id}/reconciliation/legacy-documents/{document_id}/review", "review_manager_customer_reconciliation_legacy_document", false, false]
+      ["DELETE /api/manager/customers/{customer_id}", "delete_manager_customer", false, 2],
+      ["DELETE /api/manager/customers/{customer_id}/branches/{branch_id}", "delete_manager_customer_branch", false, 2],
+      ["GET /api/manager/customers", "get_manager_customers", true, 2],
+      ["GET /api/manager/customers/{customer_id}", "get_manager_customer_detail", false, 2],
+      ["GET /api/manager/customers/{customer_id}/branches", "get_manager_customer_branches", false, 2],
+      ["GET /api/manager/customers/{customer_id}/docs", "get_manager_customer_docs", false, 2],
+      ["GET /api/manager/customers/{customer_id}/reconciliation", "get_manager_customer_reconciliation", false, 2],
+      ["PATCH /api/manager/customers/{customer_id}", "patch_manager_customer", false, 2],
+      ["PATCH /api/manager/customers/{customer_id}/branches/{branch_id}", "patch_manager_customer_branch", false, 2],
+      ["POST /api/manager/customers", "create_manager_customer", false, 2],
+      ["POST /api/manager/customers/requisites/recognize", "recognize_manager_customer_requisites", false, 2],
+      ["POST /api/manager/customers/requisites/recognize-text", "recognize_manager_customer_requisites_text", false, 2],
+      ["POST /api/manager/customers/requisites/{recognition_id}/confirm", "confirm_manager_customer_requisites", false, 2],
+      ["POST /api/manager/customers/{customer_id}/branches", "create_manager_customer_branch", false, 2],
+      ["POST /api/manager/customers/{customer_id}/reconciliation/document", "create_manager_customer_reconciliation_document", false, 2],
+      ["POST /api/manager/customers/{customer_id}/reconciliation/event-relation", "confirm_manager_customer_reconciliation_event_relation", false, 2],
+      ["POST /api/manager/customers/{customer_id}/reconciliation/legacy-documents/{document_id}/confirm", "confirm_manager_customer_reconciliation_legacy_document", false, 2],
+      ["POST /api/manager/customers/{customer_id}/reconciliation/legacy-documents/{document_id}/review", "review_manager_customer_reconciliation_legacy_document", false, 2]
     ],
     "routers/manager_dashboard.py": [
-      ["GET /api/manager/dashboard/overview", "get_manager_dashboard_overview", false, false],
-      ["GET /api/manager/dashboard/stats", "get_dashboard_stats", false, false]
+      ["GET /api/manager/dashboard/overview", "get_manager_dashboard_overview", false, 3],
+      ["GET /api/manager/dashboard/stats", "get_dashboard_stats", false, 3]
     ],
     "routers/manager_docs.py": [
-      ["DELETE /api/manager/docs/document-templates/{template_id}", "delete_manager_document_template", false, false],
-      ["DELETE /api/manager/docs/{doc_id}", "delete_manager_doc", false, false],
-      ["GET /api/manager/docs/document-template-files", "list_manager_document_template_files", false, false],
-      ["GET /api/manager/docs/document-templates", "list_manager_document_templates", false, false],
-      ["GET /api/manager/docs/templates/{doc_type}", "get_doc_templates", false, false],
-      ["GET /api/manager/docs/{doc_id}/download", "get_manager_doc_download", false, false],
-      ["GET /api/manager/orders/{order_id}/documents", "get_manager_order_documents", false, false],
-      ["PATCH /api/manager/docs/document-templates/{template_id}", "patch_manager_document_template", false, false],
-      ["POST /api/manager/docs/document-templates", "create_manager_document_template", false, false],
-      ["POST /api/manager/docs/{doc_id}/file", "attach_manager_doc_file", false, false],
-      ["POST /api/manager/orders/{order_id}/documents/external-contract", "register_manager_external_contract", false, false],
-      ["POST /api/manager/orders/{order_id}/documents/upload", "upload_manager_order_document", false, false]
+      ["DELETE /api/manager/docs/document-templates/{template_id}", "delete_manager_document_template", false, 2],
+      ["DELETE /api/manager/docs/{doc_id}", "delete_manager_doc", false, 2],
+      ["GET /api/manager/docs/document-template-files", "list_manager_document_template_files", false, 2],
+      ["GET /api/manager/docs/document-templates", "list_manager_document_templates", false, 2],
+      ["GET /api/manager/docs/templates/{doc_type}", "get_doc_templates", false, 2],
+      ["GET /api/manager/docs/{doc_id}/download", "get_manager_doc_download", false, 2],
+      ["GET /api/manager/orders/{order_id}/documents", "get_manager_order_documents", false, 2],
+      ["PATCH /api/manager/docs/document-templates/{template_id}", "patch_manager_document_template", false, 2],
+      ["POST /api/manager/docs/document-templates", "create_manager_document_template", false, 2],
+      ["POST /api/manager/docs/{doc_id}/file", "attach_manager_doc_file", false, 2],
+      ["POST /api/manager/orders/{order_id}/documents/external-contract", "register_manager_external_contract", false, 2],
+      ["POST /api/manager/orders/{order_id}/documents/upload", "upload_manager_order_document", false, 2]
     ],
     "routers/manager_document_drive.py": [
-      ["GET /api/manager/document-drive/authorization-url", "get_manager_document_drive_authorization_url", false, false],
-      ["GET /api/manager/document-drive/status", "get_manager_document_drive_status", false, false]
+      ["GET /api/manager/document-drive/authorization-url", "get_manager_document_drive_authorization_url", false, 2],
+      ["GET /api/manager/document-drive/status", "get_manager_document_drive_status", false, 2]
     ],
     "routers/manager_equipment.py": [
-      ["GET /api/manager/equipment", "list_manager_equipment", false, false],
-      ["GET /api/manager/equipment/{equipment_id}", "get_manager_equipment", false, false],
-      ["GET /api/manager/equipment/{equipment_id}/history", "list_manager_equipment_history", false, false],
-      ["PATCH /api/manager/equipment/{equipment_id}", "patch_manager_equipment", false, false],
-      ["PATCH /api/manager/equipment/{equipment_id}/components/{component_id}", "patch_manager_equipment_component", false, false],
-      ["POST /api/manager/equipment", "create_manager_equipment", false, false],
-      ["POST /api/manager/equipment/from-order/{order_id}", "create_manager_equipment_from_order", false, false],
-      ["POST /api/manager/equipment/{equipment_id}/components", "create_manager_equipment_component", false, false],
-      ["POST /api/manager/equipment/{equipment_id}/history", "create_manager_equipment_history", false, false],
-      ["POST /api/manager/equipment/{equipment_id}/history/from-repair-order", "create_manager_equipment_history_from_repair_order", false, false],
-      ["POST /api/manager/equipment/{equipment_id}/maintenance-order", "create_manager_maintenance_order", false, false]
+      ["GET /api/manager/equipment", "list_manager_equipment", false, 3],
+      ["GET /api/manager/equipment/{equipment_id}", "get_manager_equipment", false, 3],
+      ["GET /api/manager/equipment/{equipment_id}/history", "list_manager_equipment_history", false, 3],
+      ["PATCH /api/manager/equipment/{equipment_id}", "patch_manager_equipment", false, 3],
+      ["PATCH /api/manager/equipment/{equipment_id}/components/{component_id}", "patch_manager_equipment_component", false, 3],
+      ["POST /api/manager/equipment", "create_manager_equipment", false, 3],
+      ["POST /api/manager/equipment/from-order/{order_id}", "create_manager_equipment_from_order", false, 3],
+      ["POST /api/manager/equipment/{equipment_id}/components", "create_manager_equipment_component", false, 3],
+      ["POST /api/manager/equipment/{equipment_id}/history", "create_manager_equipment_history", false, 3],
+      ["POST /api/manager/equipment/{equipment_id}/history/from-repair-order", "create_manager_equipment_history_from_repair_order", false, 3],
+      ["POST /api/manager/equipment/{equipment_id}/maintenance-order", "create_manager_maintenance_order", false, 3]
     ],
     "routers/manager_equipment_links.py": [
-      ["DELETE /api/manager/orders/{order_id}/equipment-links/{link_id}", "delete_manager_order_equipment_link", false, false],
-      ["GET /api/manager/orders/{order_id}/equipment-links", "list_manager_order_equipment_links", false, false],
-      ["POST /api/manager/orders/{order_id}/equipment-links", "create_manager_order_equipment_link", false, false]
+      ["DELETE /api/manager/orders/{order_id}/equipment-links/{link_id}", "delete_manager_order_equipment_link", false, 3],
+      ["GET /api/manager/orders/{order_id}/equipment-links", "list_manager_order_equipment_links", false, 3],
+      ["POST /api/manager/orders/{order_id}/equipment-links", "create_manager_order_equipment_link", false, 3]
     ],
     "routers/manager_features.py": [
-      ["DELETE /api/manager/features/{feature_id}", "archive_manager_feature", false, false],
-      ["DELETE /api/manager/features/{feature_id}/{target_type}/{target_id}", "delete_manager_feature_target_link", false, false],
-      ["DELETE /api/manager/products/{product_id}/features/{feature_id}", "delete_manager_product_feature", false, false],
-      ["GET /api/manager/feature-categories", "list_manager_feature_categories", false, false],
-      ["GET /api/manager/features", "list_manager_features", false, false],
-      ["GET /api/manager/features/series-migration/preview", "preview_manager_feature_series_migration", false, false],
-      ["GET /api/manager/features/{feature_id}", "get_manager_feature", false, false],
-      ["GET /api/manager/products/{product_id}/features", "get_manager_product_features", false, false],
-      ["PATCH /api/manager/features/{feature_id}", "update_manager_feature", false, false],
-      ["POST /api/manager/features", "create_manager_feature", false, false],
-      ["POST /api/manager/features/series-migration/apply", "apply_manager_feature_series_migration", false, false],
-      ["POST /api/manager/products/{product_id}/features/suggestions/apply", "apply_manager_product_feature_suggestions", false, false],
-      ["PUT /api/manager/features/{feature_id}/{target_type}/{target_id}", "upsert_manager_feature_target_link", false, false],
-      ["PUT /api/manager/products/{product_id}/features", "update_manager_product_features", false, false]
+      ["DELETE /api/manager/features/{feature_id}", "archive_manager_feature", false, 2],
+      ["DELETE /api/manager/features/{feature_id}/{target_type}/{target_id}", "delete_manager_feature_target_link", false, 2],
+      ["DELETE /api/manager/products/{product_id}/features/{feature_id}", "delete_manager_product_feature", false, 2],
+      ["GET /api/manager/feature-categories", "list_manager_feature_categories", false, 2],
+      ["GET /api/manager/features", "list_manager_features", false, 2],
+      ["GET /api/manager/features/series-migration/preview", "preview_manager_feature_series_migration", false, 2],
+      ["GET /api/manager/features/{feature_id}", "get_manager_feature", false, 2],
+      ["GET /api/manager/products/{product_id}/features", "get_manager_product_features", false, 2],
+      ["PATCH /api/manager/features/{feature_id}", "update_manager_feature", false, 2],
+      ["POST /api/manager/features", "create_manager_feature", false, 2],
+      ["POST /api/manager/features/series-migration/apply", "apply_manager_feature_series_migration", false, 2],
+      ["POST /api/manager/products/{product_id}/features/suggestions/apply", "apply_manager_product_feature_suggestions", false, 2],
+      ["PUT /api/manager/features/{feature_id}/{target_type}/{target_id}", "upsert_manager_feature_target_link", false, 2],
+      ["PUT /api/manager/products/{product_id}/features", "update_manager_product_features", false, 2]
     ],
     "routers/manager_google_auth.py": [
-      ["GET /api/manager/google-auth/status", "get_manager_google_auth_status", false, false],
-      ["GET /api/manager/google-auth/url", "get_manager_google_auth_url", false, false]
+      ["GET /api/manager/google-auth/status", "get_manager_google_auth_status", false, 3],
+      ["GET /api/manager/google-auth/url", "get_manager_google_auth_url", false, 3]
     ],
     "routers/manager_incoming.py": [
-      ["GET /api/manager/incoming", "list_manager_incoming", false, false],
-      ["GET /api/manager/incoming/{lead_id}", "get_manager_incoming", false, false],
-      ["PATCH /api/manager/incoming/{lead_id}", "update_manager_incoming", false, false],
-      ["POST /api/manager/incoming", "create_manager_incoming", false, false]
+      ["GET /api/manager/incoming", "list_manager_incoming", false, 2],
+      ["GET /api/manager/incoming/{lead_id}", "get_manager_incoming", false, 2],
+      ["PATCH /api/manager/incoming/{lead_id}", "update_manager_incoming", false, 2],
+      ["POST /api/manager/incoming", "create_manager_incoming", false, 2]
     ],
     "routers/manager_installation_discounts.py": [
-      ["DELETE /api/manager/installation-discounts/products/{product_id}", "delete_manager_installation_discount_rule", false, false],
-      ["GET /api/manager/installation-discounts", "list_manager_installation_discount_rules", false, false],
-      ["GET /api/manager/installation-discounts/products/search", "search_manager_installation_discount_products", false, false],
-      ["PUT /api/manager/installation-discounts/policy", "update_manager_installation_discount_policy", false, false],
-      ["PUT /api/manager/installation-discounts/products/{product_id}", "upsert_manager_installation_discount_rule", false, false]
+      ["DELETE /api/manager/installation-discounts/products/{product_id}", "delete_manager_installation_discount_rule", false, 3],
+      ["GET /api/manager/installation-discounts", "list_manager_installation_discount_rules", false, 3],
+      ["GET /api/manager/installation-discounts/products/search", "search_manager_installation_discount_products", false, 3],
+      ["PUT /api/manager/installation-discounts/policy", "update_manager_installation_discount_policy", false, 3],
+      ["PUT /api/manager/installation-discounts/products/{product_id}", "upsert_manager_installation_discount_rule", false, 3]
     ],
     "routers/manager_installation_estimates.py": [
-      ["GET /api/manager/installation-estimates/standard-tariffs", "list_manager_installation_standard_tariffs", false, false],
-      ["GET /api/manager/installation-estimates/{estimate_id}/revisions/{revision}", "get_manager_installation_estimate_revision", false, false],
-      ["POST /api/manager/installation-estimates/confirm", "confirm_manager_installation_estimate", false, false],
-      ["POST /api/manager/installation-estimates/preview", "preview_manager_installation_estimate", false, false],
-      ["POST /api/manager/installation-estimates/resolve", "resolve_manager_installation_tariff", false, false],
-      ["POST /api/manager/installation-estimates/standard-suggestions", "suggest_manager_installation_standard_tariffs", false, false],
-      ["POST /api/manager/installation-estimates/{estimate_id}/orders/{order_id}/proposals/{proposal_id}/attach", "attach_manager_installation_estimate", false, false]
+      ["GET /api/manager/installation-estimates/standard-tariffs", "list_manager_installation_standard_tariffs", false, 3],
+      ["GET /api/manager/installation-estimates/{estimate_id}/revisions/{revision}", "get_manager_installation_estimate_revision", false, 3],
+      ["POST /api/manager/installation-estimates/confirm", "confirm_manager_installation_estimate", false, 3],
+      ["POST /api/manager/installation-estimates/preview", "preview_manager_installation_estimate", false, 3],
+      ["POST /api/manager/installation-estimates/resolve", "resolve_manager_installation_tariff", false, 3],
+      ["POST /api/manager/installation-estimates/standard-suggestions", "suggest_manager_installation_standard_tariffs", false, 3],
+      ["POST /api/manager/installation-estimates/{estimate_id}/orders/{order_id}/proposals/{proposal_id}/attach", "attach_manager_installation_estimate", false, 3]
     ],
     "routers/manager_installation_rates.py": [
-      ["GET /api/manager/installation-rates", "list_manager_installation_rates", false, false],
-      ["PUT /api/manager/installation-rates/{rate_id}", "update_manager_installation_rate", false, false]
+      ["GET /api/manager/installation-rates", "list_manager_installation_rates", false, 3],
+      ["PUT /api/manager/installation-rates/{rate_id}", "update_manager_installation_rate", false, 3]
     ],
     "routers/manager_installers.py": [
-      ["GET /api/manager/installers", "get_manager_installers", true, false],
-      ["GET /api/manager/installers/search", "search_manager_installers", true, false],
-      ["POST /api/manager/installers", "create_manager_installer", true, false],
-      ["PUT /api/manager/installers/{installer_id}", "update_manager_installer", true, false]
+      ["GET /api/manager/installers", "get_manager_installers", true, 3],
+      ["GET /api/manager/installers/search", "search_manager_installers", true, 3],
+      ["POST /api/manager/installers", "create_manager_installer", true, 3],
+      ["PUT /api/manager/installers/{installer_id}", "update_manager_installer", true, 3]
     ],
     "routers/manager_jev.py": [
-      ["DELETE /api/manager/platform-ai/jev", "delete_jev_connection", false, false],
-      ["GET /api/manager/platform-ai/jev", "get_jev_connection", false, false],
-      ["GET /api/manager/platform-ai/jev/shadow", "get_jev_shadow_report", false, false],
-      ["POST /api/manager/platform-ai/jev/test", "test_jev_connection", false, false],
-      ["PUT /api/manager/platform-ai/jev", "put_jev_connection", false, false]
+      ["DELETE /api/manager/platform-ai/jev", "delete_jev_connection", false, 3],
+      ["GET /api/manager/platform-ai/jev", "get_jev_connection", false, 3],
+      ["GET /api/manager/platform-ai/jev/shadow", "get_jev_shadow_report", false, 3],
+      ["POST /api/manager/platform-ai/jev/test", "test_jev_connection", false, 3],
+      ["PUT /api/manager/platform-ai/jev", "put_jev_connection", false, 3]
     ],
     "routers/manager_leads_contract_review.py": [
-      ["GET /api/manager/leads/inbox/contract-review-jobs/{job_id}", "get_manager_email_lead_contract_review_job", false, false],
-      ["GET /api/manager/leads/inbox/{order_id}/email-originals", "list_manager_email_lead_originals", false, false],
-      ["GET /api/manager/leads/inbox/{order_id}/email-originals/{position}/download", "download_manager_email_lead_original", false, false],
-      ["POST /api/manager/leads/inbox/{order_id}/contract-review/{attachment_id}", "review_manager_email_lead_contract", false, false],
-      ["POST /api/manager/leads/inbox/{order_id}/email-originals/{position}/review", "review_manager_email_lead_original", false, false]
+      ["GET /api/manager/leads/inbox/contract-review-jobs/{job_id}", "get_manager_email_lead_contract_review_job", false, 2],
+      ["GET /api/manager/leads/inbox/{order_id}/email-originals", "list_manager_email_lead_originals", false, 2],
+      ["GET /api/manager/leads/inbox/{order_id}/email-originals/{position}/download", "download_manager_email_lead_original", false, 2],
+      ["POST /api/manager/leads/inbox/{order_id}/contract-review/{attachment_id}", "review_manager_email_lead_contract", false, 2],
+      ["POST /api/manager/leads/inbox/{order_id}/email-originals/{position}/review", "review_manager_email_lead_original", false, 2]
     ],
     "routers/manager_leads_inbox.py": [
-      ["GET /api/manager/leads/counter", "get_manager_leads_counter", true, false],
-      ["GET /api/manager/leads/inbox", "get_manager_leads_inbox", true, false],
-      ["GET /api/manager/leads/inbox/{order_id}", "get_manager_inbox_detail", false, false],
-      ["PATCH /api/manager/leads/inbox/{order_id}/tender", "set_manager_inbox_tender", false, false],
-      ["POST /api/manager/leads/inbox/{order_id}/archive", "archive_manager_inbox_item", false, false],
-      ["POST /api/manager/leads/inbox/{order_id}/no-answer", "record_manager_inbox_no_answer", false, false],
-      ["POST /api/manager/leads/inbox/{order_id}/restore", "restore_manager_inbox_item", false, false],
-      ["PUT /api/manager/leads/inbox/{order_id}/read", "set_manager_inbox_read", false, false]
+      ["GET /api/manager/leads/counter", "get_manager_leads_counter", true, 2],
+      ["GET /api/manager/leads/inbox", "get_manager_leads_inbox", true, 2],
+      ["GET /api/manager/leads/inbox/{order_id}", "get_manager_inbox_detail", false, 2],
+      ["PATCH /api/manager/leads/inbox/{order_id}/tender", "set_manager_inbox_tender", false, 2],
+      ["POST /api/manager/leads/inbox/{order_id}/archive", "archive_manager_inbox_item", false, 2],
+      ["POST /api/manager/leads/inbox/{order_id}/no-answer", "record_manager_inbox_no_answer", false, 2],
+      ["POST /api/manager/leads/inbox/{order_id}/restore", "restore_manager_inbox_item", false, 2],
+      ["PUT /api/manager/leads/inbox/{order_id}/read", "set_manager_inbox_read", false, 2]
     ],
     "routers/manager_leads_link.py": [
-      ["DELETE /api/manager/leads/inbox/{source_order_id}/linked-order", "unlink_manager_email_lead_from_order", false, false],
-      ["GET /api/manager/leads/inbox/{source_order_id}/link-target/{target_order_id}", "preview_manager_email_lead_link_target", false, false],
-      ["POST /api/manager/leads/inbox/{source_order_id}/link-to-order", "link_manager_email_lead_to_order", false, false]
+      ["DELETE /api/manager/leads/inbox/{source_order_id}/linked-order", "unlink_manager_email_lead_from_order", false, 2],
+      ["GET /api/manager/leads/inbox/{source_order_id}/link-target/{target_order_id}", "preview_manager_email_lead_link_target", false, 2],
+      ["POST /api/manager/leads/inbox/{source_order_id}/link-to-order", "link_manager_email_lead_to_order", false, 2]
     ],
     "routers/manager_leads_raw_inbox.py": [
-      ["GET /api/manager/leads/inbox/raw/{lead_id}", "get_manager_raw_inbox_lead", false, false],
-      ["POST /api/manager/leads/inbox/raw/{lead_id}/archive", "archive_manager_raw_inbox_lead", false, false],
-      ["POST /api/manager/leads/inbox/raw/{lead_id}/no-answer", "record_manager_raw_inbox_lead_no_answer", false, false],
-      ["POST /api/manager/leads/inbox/raw/{lead_id}/restore", "restore_manager_raw_inbox_lead", false, false],
-      ["PUT /api/manager/leads/inbox/raw/{lead_id}/read", "set_manager_raw_inbox_lead_read", false, false]
+      ["GET /api/manager/leads/inbox/raw/{lead_id}", "get_manager_raw_inbox_lead", false, 2],
+      ["POST /api/manager/leads/inbox/raw/{lead_id}/archive", "archive_manager_raw_inbox_lead", false, 2],
+      ["POST /api/manager/leads/inbox/raw/{lead_id}/no-answer", "record_manager_raw_inbox_lead_no_answer", false, 2],
+      ["POST /api/manager/leads/inbox/raw/{lead_id}/restore", "restore_manager_raw_inbox_lead", false, 2],
+      ["PUT /api/manager/leads/inbox/raw/{lead_id}/read", "set_manager_raw_inbox_lead_read", false, 2]
     ],
     "routers/manager_leads_read.py": [
-      ["GET /api/manager/leads", "get_manager_leads", false, false]
+      ["GET /api/manager/leads", "get_manager_leads", false, 2]
     ],
     "routers/manager_leads_write.py": [
-      ["PATCH /api/manager/leads/{lead_id}", "patch_manager_lead", false, false],
-      ["POST /api/manager/leads", "create_manager_lead", false, false],
-      ["POST /api/manager/leads/{lead_id}/mark-lost", "mark_manager_lead_lost", false, false],
-      ["POST /api/manager/leads/{lead_id}/qualify", "qualify_manager_lead", false, false]
+      ["PATCH /api/manager/leads/{lead_id}", "patch_manager_lead", false, 2],
+      ["POST /api/manager/leads", "create_manager_lead", false, 2],
+      ["POST /api/manager/leads/{lead_id}/mark-lost", "mark_manager_lead_lost", false, 2],
+      ["POST /api/manager/leads/{lead_id}/qualify", "qualify_manager_lead", false, 2]
     ],
     "routers/manager_mail.py": [
-      ["DELETE /api/manager/mail/bank-receipts/{receipt_id}", "delete_manager_bank_receipt", false, false],
-      ["GET /api/manager/mail/bank-receipts", "list_manager_bank_receipts", false, false],
-      ["GET /api/manager/mail/bank-receipts/{receipt_id}/allocation", "get_manager_bank_receipt_allocation", false, false],
-      ["GET /api/manager/mail/leads/import/status", "get_manager_email_lead_import_status", false, false],
-      ["GET /api/manager/mail/orders/{order_id}/outgoing-emails", "list_manager_order_outgoing_emails", false, false],
-      ["GET /api/manager/mail/outgoing-emails", "list_manager_outgoing_emails", false, false],
-      ["GET /api/manager/mail/outgoing-emails/{email_id}", "get_manager_outgoing_email", false, false],
-      ["PATCH /api/manager/mail/bank-receipts/{receipt_id}/status", "patch_manager_bank_receipt_status", false, false],
-      ["POST /api/manager/mail/bank-receipts/import", "import_manager_bank_receipts", false, false],
-      ["POST /api/manager/mail/bank-receipts/import-statement", "import_manager_bank_statement", false, false],
-      ["POST /api/manager/mail/bank-receipts/{receipt_id}/attach", "attach_manager_bank_receipt", false, false],
-      ["POST /api/manager/mail/bank-receipts/{receipt_id}/attach-group", "attach_manager_bank_receipt_group", false, false],
-      ["POST /api/manager/mail/email/send-test", "send_manager_test_email", false, false],
-      ["POST /api/manager/mail/leads/import", "import_manager_email_leads", false, false],
-      ["POST /api/manager/mail/orders/{order_id}/compose", "compose_manager_order_email", false, false],
-      ["POST /api/manager/mail/orders/{order_id}/email", "send_manager_order_email", false, false],
-      ["POST /api/manager/mail/outgoing-emails/{email_id}/retry", "retry_manager_outgoing_email", false, false],
-      ["PUT /api/manager/mail/bank-receipts/{receipt_id}/allocations", "replace_manager_bank_receipt_allocations", false, false]
+      ["DELETE /api/manager/mail/bank-receipts/{receipt_id}", "delete_manager_bank_receipt", false, 2],
+      ["GET /api/manager/mail/bank-receipts", "list_manager_bank_receipts", false, 2],
+      ["GET /api/manager/mail/bank-receipts/{receipt_id}/allocation", "get_manager_bank_receipt_allocation", false, 2],
+      ["GET /api/manager/mail/leads/import/status", "get_manager_email_lead_import_status", false, 2],
+      ["GET /api/manager/mail/orders/{order_id}/outgoing-emails", "list_manager_order_outgoing_emails", false, 2],
+      ["GET /api/manager/mail/outgoing-emails", "list_manager_outgoing_emails", false, 2],
+      ["GET /api/manager/mail/outgoing-emails/{email_id}", "get_manager_outgoing_email", false, 2],
+      ["PATCH /api/manager/mail/bank-receipts/{receipt_id}/status", "patch_manager_bank_receipt_status", false, 2],
+      ["POST /api/manager/mail/bank-receipts/import", "import_manager_bank_receipts", false, 2],
+      ["POST /api/manager/mail/bank-receipts/import-statement", "import_manager_bank_statement", false, 2],
+      ["POST /api/manager/mail/bank-receipts/{receipt_id}/attach", "attach_manager_bank_receipt", false, 2],
+      ["POST /api/manager/mail/bank-receipts/{receipt_id}/attach-group", "attach_manager_bank_receipt_group", false, 2],
+      ["POST /api/manager/mail/email/send-test", "send_manager_test_email", false, 2],
+      ["POST /api/manager/mail/leads/import", "import_manager_email_leads", false, 2],
+      ["POST /api/manager/mail/orders/{order_id}/compose", "compose_manager_order_email", false, 2],
+      ["POST /api/manager/mail/orders/{order_id}/email", "send_manager_order_email", false, 2],
+      ["POST /api/manager/mail/outgoing-emails/{email_id}/retry", "retry_manager_outgoing_email", false, 2],
+      ["PUT /api/manager/mail/bank-receipts/{receipt_id}/allocations", "replace_manager_bank_receipt_allocations", false, 2]
     ],
     "routers/manager_mdv_catalog.py": [
-      ["POST /api/manager/catalog/mdv/import/jobs", "start_mdv_catalog_import_job", true, false],
-      ["POST /api/manager/catalog/mdv/preview", "preview_mdv_catalog_import", true, false]
+      ["POST /api/manager/catalog/mdv/import/jobs", "start_mdv_catalog_import_job", true, 2],
+      ["POST /api/manager/catalog/mdv/preview", "preview_mdv_catalog_import", true, 2]
     ],
     "routers/manager_media_cleanup.py": [
-      ["GET /api/manager/main-image-cleanup/batches", "list_main_image_cleanup_batches", true, false],
-      ["GET /api/manager/main-image-cleanup/items", "list_main_image_cleanup_items", true, false],
-      ["GET /api/manager/main-image-cleanup/skip-reasons", "list_main_image_cleanup_skip_reasons", true, false],
-      ["POST /api/manager/main-image-cleanup/batches", "create_main_image_cleanup_batch", true, false],
-      ["POST /api/manager/main-image-cleanup/items/approve", "approve_main_image_cleanup_items", true, false],
-      ["POST /api/manager/main-image-cleanup/items/reject", "reject_main_image_cleanup_items", true, false],
-      ["POST /api/manager/main-image-cleanup/items/skip", "skip_main_image_cleanup_items", true, false]
+      ["GET /api/manager/main-image-cleanup/batches", "list_main_image_cleanup_batches", true, 3],
+      ["GET /api/manager/main-image-cleanup/items", "list_main_image_cleanup_items", true, 3],
+      ["GET /api/manager/main-image-cleanup/skip-reasons", "list_main_image_cleanup_skip_reasons", true, 3],
+      ["POST /api/manager/main-image-cleanup/batches", "create_main_image_cleanup_batch", true, 3],
+      ["POST /api/manager/main-image-cleanup/items/approve", "approve_main_image_cleanup_items", true, 3],
+      ["POST /api/manager/main-image-cleanup/items/reject", "reject_main_image_cleanup_items", true, 3],
+      ["POST /api/manager/main-image-cleanup/items/skip", "skip_main_image_cleanup_items", true, 3]
     ],
     "routers/manager_media_gallery_read.py": [
-      ["GET /api/manager/gallery/common-images", "get_common_gallery_images", true, false],
-      ["GET /api/manager/gallery/reuse-search", "reuse_search", true, false],
-      ["GET /api/manager/gallery/variant-candidates", "get_image_variant_candidates", true, false]
+      ["GET /api/manager/gallery/common-images", "get_common_gallery_images", true, 3],
+      ["GET /api/manager/gallery/reuse-search", "reuse_search", true, 3],
+      ["GET /api/manager/gallery/variant-candidates", "get_image_variant_candidates", true, 3]
     ],
     "routers/manager_media_gallery_write.py": [
-      ["DELETE /api/manager/gallery/{image_id}", "delete_image", true, false],
-      ["POST /api/manager/cleanup-media", "cleanup_media", true, false],
-      ["POST /api/manager/gallery/apply-to-series", "apply_gallery_to_series", true, false],
-      ["POST /api/manager/gallery/bulk-add", "bulk_add_gallery_images", true, false],
-      ["POST /api/manager/gallery/bulk-delete-common", "bulk_delete_common_gallery_images", true, false],
-      ["POST /api/manager/gallery/bulk-upload-local", "bulk_upload_local_images", true, false],
-      ["POST /api/manager/gallery/link-search-result", "link_search_result", true, false],
-      ["POST /api/manager/gallery/reuse-image", "reuse_image", true, false],
-      ["POST /api/manager/gallery/set-main", "set_main_image", true, false],
-      ["POST /api/manager/gallery/variants/process-missing", "process_missing_image_variants", true, false],
-      ["POST /api/manager/gallery/{image_id}/crop", "crop_product_image", true, false],
-      ["POST /api/manager/gallery/{image_id}/remove-background", "remove_product_image_background", true, false],
-      ["POST /api/manager/gallery/{image_id}/replace-local", "replace_product_image_local", true, false],
-      ["POST /api/manager/gallery/{image_id}/variants/reprocess", "reprocess_image_variant", true, false]
+      ["DELETE /api/manager/gallery/{image_id}", "delete_image", true, 3],
+      ["POST /api/manager/cleanup-media", "cleanup_media", true, 3],
+      ["POST /api/manager/gallery/apply-to-series", "apply_gallery_to_series", true, 3],
+      ["POST /api/manager/gallery/bulk-add", "bulk_add_gallery_images", true, 3],
+      ["POST /api/manager/gallery/bulk-delete-common", "bulk_delete_common_gallery_images", true, 3],
+      ["POST /api/manager/gallery/bulk-upload-local", "bulk_upload_local_images", true, 3],
+      ["POST /api/manager/gallery/link-search-result", "link_search_result", true, 3],
+      ["POST /api/manager/gallery/reuse-image", "reuse_image", true, 3],
+      ["POST /api/manager/gallery/set-main", "set_main_image", true, 3],
+      ["POST /api/manager/gallery/variants/process-missing", "process_missing_image_variants", true, 3],
+      ["POST /api/manager/gallery/{image_id}/crop", "crop_product_image", true, 3],
+      ["POST /api/manager/gallery/{image_id}/remove-background", "remove_product_image_background", true, 3],
+      ["POST /api/manager/gallery/{image_id}/replace-local", "replace_product_image_local", true, 3],
+      ["POST /api/manager/gallery/{image_id}/variants/reprocess", "reprocess_image_variant", true, 3]
     ],
     "routers/manager_media_ingest_read.py": [
-      ["POST /api/manager/search-images", "search_images", true, false]
+      ["POST /api/manager/search-images", "search_images", true, 3]
     ],
     "routers/manager_media_ingest_write.py": [
-      ["POST /api/manager/upload-image", "upload_image", true, false],
-      ["POST /api/manager/upload-local-images", "upload_local_images", true, false]
+      ["POST /api/manager/upload-image", "upload_image", true, 3],
+      ["POST /api/manager/upload-local-images", "upload_local_images", true, 3]
     ],
     "routers/manager_media_library.py": [
-      ["DELETE /api/manager/media/assets/{asset_id}", "delete_media_asset", false, false],
-      ["GET /api/manager/media/assets", "list_media_assets", false, false],
-      ["GET /api/manager/media/assets/background-removal/options", "get_media_background_removal_config", false, false],
-      ["PATCH /api/manager/media/assets/{asset_id}", "update_media_asset", false, false],
-      ["POST /api/manager/media/assets", "upload_media_assets", false, false],
-      ["POST /api/manager/media/assets/backfill-references", "backfill_referenced_media_assets", false, false],
-      ["POST /api/manager/media/assets/from-url", "upload_media_asset_from_url", false, false],
-      ["POST /api/manager/media/assets/{asset_id}/crop", "crop_media_asset", false, false],
-      ["POST /api/manager/media/assets/{asset_id}/remove-background", "remove_media_asset_background", false, false]
+      ["DELETE /api/manager/media/assets/{asset_id}", "delete_media_asset", false, 3],
+      ["GET /api/manager/media/assets", "list_media_assets", false, 3],
+      ["GET /api/manager/media/assets/background-removal/options", "get_media_background_removal_config", false, 3],
+      ["PATCH /api/manager/media/assets/{asset_id}", "update_media_asset", false, 3],
+      ["POST /api/manager/media/assets", "upload_media_assets", false, 3],
+      ["POST /api/manager/media/assets/backfill-references", "backfill_referenced_media_assets", false, 3],
+      ["POST /api/manager/media/assets/from-url", "upload_media_asset_from_url", false, 3],
+      ["POST /api/manager/media/assets/{asset_id}/crop", "crop_media_asset", false, 3],
+      ["POST /api/manager/media/assets/{asset_id}/remove-background", "remove_media_asset_background", false, 3]
     ],
     "routers/manager_media_processing.py": [
-      ["GET /api/manager/media/processing-jobs", "list_media_processing_jobs", false, false],
-      ["POST /api/manager/media/processing-jobs/{asset_id}", "create_media_processing_job", false, false]
+      ["GET /api/manager/media/processing-jobs", "list_media_processing_jobs", false, 3],
+      ["POST /api/manager/media/processing-jobs/{asset_id}", "create_media_processing_job", false, 3]
     ],
     "routers/manager_media_worker.py": [
-      ["POST /api/manager/media/worker/jobs/claim", "claim_media_worker_job", false, false],
-      ["POST /api/manager/media/worker/jobs/{job_id}/complete", "complete_media_worker_job", false, false],
-      ["POST /api/manager/media/worker/jobs/{job_id}/fail", "fail_media_worker_job", false, false],
-      ["POST /api/manager/media/worker/jobs/{job_id}/renew", "renew_media_worker_job", false, false]
+      ["POST /api/manager/media/worker/jobs/claim", "claim_media_worker_job", false, 3],
+      ["POST /api/manager/media/worker/jobs/{job_id}/complete", "complete_media_worker_job", false, 3],
+      ["POST /api/manager/media/worker/jobs/{job_id}/fail", "fail_media_worker_job", false, 3],
+      ["POST /api/manager/media/worker/jobs/{job_id}/renew", "renew_media_worker_job", false, 3]
     ],
     "routers/manager_multi_split.py": [
-      ["GET /api/manager/multi-split/options", "list_manager_multi_split_options", false, false],
-      ["POST /api/manager/multi-split/orders/{order_id}/proposals", "save_manager_multi_split_proposal", false, false],
-      ["POST /api/manager/multi-split/preview", "preview_manager_multi_split", false, false]
+      ["GET /api/manager/multi-split/options", "list_manager_multi_split_options", false, 2],
+      ["POST /api/manager/multi-split/orders/{order_id}/proposals", "save_manager_multi_split_proposal", false, 2],
+      ["POST /api/manager/multi-split/preview", "preview_manager_multi_split", false, 2]
     ],
     "routers/manager_order_usage.py": [
-      ["GET /api/manager/order-workspace-usage/daily", "get_manager_order_usage", false, false],
-      ["POST /api/manager/order-workspace-usage/batch", "record_manager_order_usage", false, false]
+      ["GET /api/manager/order-workspace-usage/daily", "get_manager_order_usage", false, 2],
+      ["POST /api/manager/order-workspace-usage/batch", "record_manager_order_usage", false, 2]
     ],
     "routers/manager_orders_read.py": [
-      ["GET /api/manager/orders", "get_manager_orders", false, false],
-      ["GET /api/manager/orders/scenarios", "list_manager_order_scenarios", false, false],
-      ["GET /api/manager/orders/work-stages/stale", "list_manager_stale_order_stages", false, false],
-      ["GET /api/manager/orders/{order_id}", "get_manager_order_detail", false, false],
-      ["POST /api/manager/orders/export", "export_manager_orders", false, false]
+      ["GET /api/manager/orders", "get_manager_orders", false, 2],
+      ["GET /api/manager/orders/scenarios", "list_manager_order_scenarios", false, 2],
+      ["GET /api/manager/orders/work-stages/stale", "list_manager_stale_order_stages", false, 2],
+      ["GET /api/manager/orders/{order_id}", "get_manager_order_detail", false, 2],
+      ["POST /api/manager/orders/export", "export_manager_orders", false, 2]
     ],
     "routers/manager_orders_write.py": [
-      ["DELETE /api/manager/orders/work-stages/{stage_id}", "delete_manager_order_stage_direct", false, false],
-      ["DELETE /api/manager/orders/{order_id}", "delete_manager_order", false, false],
-      ["DELETE /api/manager/orders/{order_id}/payments/{payment_id}", "delete_manager_order_payment", false, false],
-      ["DELETE /api/manager/orders/{order_id}/stages/{stage_id}", "delete_manager_order_stage", false, false],
-      ["PATCH /api/manager/orders/work-stages/{stage_id}/cancel", "cancel_manager_order_stage_direct", false, false],
-      ["PATCH /api/manager/orders/{order_id}", "patch_manager_order", false, false],
-      ["PATCH /api/manager/orders/{order_id}/proposals/{proposal_id}", "patch_manager_order_proposal", false, false],
-      ["PATCH /api/manager/orders/{order_id}/stages/{stage_id}", "update_manager_order_stage", false, false],
-      ["POST /api/manager/orders", "create_manager_order", false, false],
-      ["POST /api/manager/orders/import", "import_manager_orders", false, false],
-      ["POST /api/manager/orders/import/preview", "preview_import_manager_orders", false, false],
-      ["POST /api/manager/orders/{order_id}/documents/{doc_type}", "generate_manager_order_document", false, false],
-      ["POST /api/manager/orders/{order_id}/payments", "add_manager_order_payment", false, false],
-      ["POST /api/manager/orders/{order_id}/proposals", "create_manager_order_proposal", false, false],
-      ["POST /api/manager/orders/{order_id}/proposals/{proposal_id}/archive", "archive_manager_order_proposal", false, false],
-      ["POST /api/manager/orders/{order_id}/proposals/{proposal_id}/duplicate", "duplicate_manager_order_proposal", false, false],
-      ["POST /api/manager/orders/{order_id}/proposals/{proposal_id}/select", "select_manager_order_proposal", false, false],
-      ["POST /api/manager/orders/{order_id}/stages", "create_manager_order_stage", false, false]
+      ["DELETE /api/manager/orders/work-stages/{stage_id}", "delete_manager_order_stage_direct", false, 2],
+      ["DELETE /api/manager/orders/{order_id}", "delete_manager_order", false, 2],
+      ["DELETE /api/manager/orders/{order_id}/payments/{payment_id}", "delete_manager_order_payment", false, 2],
+      ["DELETE /api/manager/orders/{order_id}/stages/{stage_id}", "delete_manager_order_stage", false, 2],
+      ["PATCH /api/manager/orders/work-stages/{stage_id}/cancel", "cancel_manager_order_stage_direct", false, 2],
+      ["PATCH /api/manager/orders/{order_id}", "patch_manager_order", false, 2],
+      ["PATCH /api/manager/orders/{order_id}/proposals/{proposal_id}", "patch_manager_order_proposal", false, 2],
+      ["PATCH /api/manager/orders/{order_id}/stages/{stage_id}", "update_manager_order_stage", false, 2],
+      ["POST /api/manager/orders", "create_manager_order", false, 2],
+      ["POST /api/manager/orders/import", "import_manager_orders", false, 2],
+      ["POST /api/manager/orders/import/preview", "preview_import_manager_orders", false, 2],
+      ["POST /api/manager/orders/{order_id}/documents/{doc_type}", "generate_manager_order_document", false, 2],
+      ["POST /api/manager/orders/{order_id}/payments", "add_manager_order_payment", false, 2],
+      ["POST /api/manager/orders/{order_id}/proposals", "create_manager_order_proposal", false, 2],
+      ["POST /api/manager/orders/{order_id}/proposals/{proposal_id}/archive", "archive_manager_order_proposal", false, 2],
+      ["POST /api/manager/orders/{order_id}/proposals/{proposal_id}/duplicate", "duplicate_manager_order_proposal", false, 2],
+      ["POST /api/manager/orders/{order_id}/proposals/{proposal_id}/select", "select_manager_order_proposal", false, 2],
+      ["POST /api/manager/orders/{order_id}/stages", "create_manager_order_stage", false, 2]
     ],
     "routers/manager_personal_tasks.py": [
-      ["GET /api/manager/personal-tasks", "list_manager_personal_tasks", false, false],
-      ["GET /api/manager/personal-tasks/assignees", "list_manager_personal_task_assignees", false, false],
-      ["GET /api/manager/personal-tasks/{task_id}", "get_manager_personal_task", false, false],
-      ["PATCH /api/manager/personal-tasks/{task_id}", "patch_manager_personal_task", false, false],
-      ["POST /api/manager/personal-tasks", "create_manager_personal_task", false, false],
-      ["POST /api/manager/personal-tasks/{task_id}/cancel", "cancel_manager_personal_task", false, false],
-      ["POST /api/manager/personal-tasks/{task_id}/complete", "complete_manager_personal_task", false, false],
-      ["POST /api/manager/personal-tasks/{task_id}/reopen", "reopen_manager_personal_task", false, false]
+      ["GET /api/manager/personal-tasks", "list_manager_personal_tasks", false, 3],
+      ["GET /api/manager/personal-tasks/assignees", "list_manager_personal_task_assignees", false, 3],
+      ["GET /api/manager/personal-tasks/{task_id}", "get_manager_personal_task", false, 3],
+      ["PATCH /api/manager/personal-tasks/{task_id}", "patch_manager_personal_task", false, 3],
+      ["POST /api/manager/personal-tasks", "create_manager_personal_task", false, 3],
+      ["POST /api/manager/personal-tasks/{task_id}/cancel", "cancel_manager_personal_task", false, 3],
+      ["POST /api/manager/personal-tasks/{task_id}/complete", "complete_manager_personal_task", false, 3],
+      ["POST /api/manager/personal-tasks/{task_id}/reopen", "reopen_manager_personal_task", false, 3]
     ],
     "routers/manager_platform_ai.py": [
-      ["DELETE /api/manager/platform-ai", "delete_platform_ai_connection", false, false],
-      ["DELETE /api/manager/platform-ai/deepseek", "delete_deepseek_connection", false, false],
-      ["GET /api/manager/platform-ai", "get_platform_ai_connection", false, false],
-      ["GET /api/manager/platform-ai/deepseek", "get_deepseek_connection", false, false],
-      ["GET /api/manager/platform-ai/models", "get_platform_ai_models", false, false],
-      ["POST /api/manager/platform-ai/deepseek/import-environment", "import_deepseek_environment_key", false, false],
-      ["POST /api/manager/platform-ai/deepseek/test", "test_deepseek_connection", false, false],
-      ["POST /api/manager/platform-ai/test", "test_platform_ai_inference", false, false],
-      ["PUT /api/manager/platform-ai", "put_platform_ai_connection", false, false],
-      ["PUT /api/manager/platform-ai/deepseek", "put_deepseek_connection", false, false]
+      ["DELETE /api/manager/platform-ai", "delete_platform_ai_connection", false, 3],
+      ["DELETE /api/manager/platform-ai/deepseek", "delete_deepseek_connection", false, 3],
+      ["GET /api/manager/platform-ai", "get_platform_ai_connection", false, 3],
+      ["GET /api/manager/platform-ai/deepseek", "get_deepseek_connection", false, 3],
+      ["GET /api/manager/platform-ai/models", "get_platform_ai_models", false, 3],
+      ["POST /api/manager/platform-ai/deepseek/import-environment", "import_deepseek_environment_key", false, 3],
+      ["POST /api/manager/platform-ai/deepseek/test", "test_deepseek_connection", false, 3],
+      ["POST /api/manager/platform-ai/test", "test_platform_ai_inference", false, 3],
+      ["PUT /api/manager/platform-ai", "put_platform_ai_connection", false, 3],
+      ["PUT /api/manager/platform-ai/deepseek", "put_deepseek_connection", false, 3]
     ],
     "routers/manager_product_collections.py": [
-      ["GET /api/manager/product-collections", "list_manager_product_collections", false, false],
-      ["GET /api/manager/product-collections/product-options", "search_manager_product_collection_products", false, false],
-      ["GET /api/manager/product-collections/rule-options", "get_manager_product_collection_rule_options", false, false],
-      ["GET /api/manager/product-collections/{collection_id}", "get_manager_product_collection", false, false],
-      ["GET /api/manager/product-collections/{collection_id}/preview", "preview_manager_product_collection", false, false],
-      ["PATCH /api/manager/product-collections/{collection_id}", "update_manager_product_collection", false, false],
-      ["POST /api/manager/product-collections", "create_manager_product_collection", false, false],
-      ["POST /api/manager/product-collections/{collection_id}/archive", "archive_manager_product_collection", false, false],
-      ["POST /api/manager/product-collections/{collection_id}/duplicate", "duplicate_manager_product_collection", false, false],
-      ["PUT /api/manager/product-collections/{collection_id}/items", "replace_manager_product_collection_items", false, false],
-      ["PUT /api/manager/product-collections/{collection_id}/placements", "replace_manager_product_collection_placements", false, false],
-      ["PUT /api/manager/product-collections/{collection_id}/workspace", "save_manager_product_collection_workspace", false, false]
+      ["GET /api/manager/product-collections", "list_manager_product_collections", false, 3],
+      ["GET /api/manager/product-collections/product-options", "search_manager_product_collection_products", false, 3],
+      ["GET /api/manager/product-collections/rule-options", "get_manager_product_collection_rule_options", false, 3],
+      ["GET /api/manager/product-collections/{collection_id}", "get_manager_product_collection", false, 3],
+      ["GET /api/manager/product-collections/{collection_id}/preview", "preview_manager_product_collection", false, 3],
+      ["PATCH /api/manager/product-collections/{collection_id}", "update_manager_product_collection", false, 3],
+      ["POST /api/manager/product-collections", "create_manager_product_collection", false, 3],
+      ["POST /api/manager/product-collections/{collection_id}/archive", "archive_manager_product_collection", false, 3],
+      ["POST /api/manager/product-collections/{collection_id}/duplicate", "duplicate_manager_product_collection", false, 3],
+      ["PUT /api/manager/product-collections/{collection_id}/items", "replace_manager_product_collection_items", false, 3],
+      ["PUT /api/manager/product-collections/{collection_id}/placements", "replace_manager_product_collection_placements", false, 3],
+      ["PUT /api/manager/product-collections/{collection_id}/workspace", "save_manager_product_collection_workspace", false, 3]
     ],
     "routers/manager_repair_complaints.py": [
-      ["DELETE /api/manager/repair-complaints/{preset_id}", "delete_manager_repair_complaint_preset", false, false],
-      ["GET /api/manager/repair-complaints", "list_manager_repair_complaint_presets", false, false],
-      ["POST /api/manager/repair-complaints", "create_manager_repair_complaint_preset", false, false],
-      ["POST /api/manager/repair-complaints/ai-draft", "generate_manager_repair_act_ai_draft", false, false],
-      ["PUT /api/manager/repair-complaints/{preset_id}", "update_manager_repair_complaint_preset", false, false]
+      ["DELETE /api/manager/repair-complaints/{preset_id}", "delete_manager_repair_complaint_preset", false, 3],
+      ["GET /api/manager/repair-complaints", "list_manager_repair_complaint_presets", false, 3],
+      ["POST /api/manager/repair-complaints", "create_manager_repair_complaint_preset", false, 3],
+      ["POST /api/manager/repair-complaints/ai-draft", "generate_manager_repair_act_ai_draft", false, 3],
+      ["PUT /api/manager/repair-complaints/{preset_id}", "update_manager_repair_complaint_preset", false, 3]
     ],
     "routers/manager_service_attachments.py": [
-      ["DELETE /api/manager/service-attachments/{attachment_id}", "delete_manager_service_attachment", false, false],
-      ["GET /api/manager/equipment/{equipment_id}/attachments", "list_manager_equipment_attachments", false, false],
-      ["GET /api/manager/orders/{order_id}/attachments", "list_manager_order_attachments", false, false],
-      ["GET /api/manager/service-attachments/{attachment_id}/access", "get_manager_service_attachment_access", false, false],
-      ["PATCH /api/manager/service-attachments/{attachment_id}", "patch_manager_service_attachment", false, false],
-      ["POST /api/manager/orders/{order_id}/attachments", "upload_manager_order_attachment", false, false]
+      ["DELETE /api/manager/service-attachments/{attachment_id}", "delete_manager_service_attachment", false, 3],
+      ["GET /api/manager/equipment/{equipment_id}/attachments", "list_manager_equipment_attachments", false, 3],
+      ["GET /api/manager/orders/{order_id}/attachments", "list_manager_order_attachments", false, 3],
+      ["GET /api/manager/service-attachments/{attachment_id}/access", "get_manager_service_attachment_access", false, 3],
+      ["PATCH /api/manager/service-attachments/{attachment_id}", "patch_manager_service_attachment", false, 3],
+      ["POST /api/manager/orders/{order_id}/attachments", "upload_manager_order_attachment", false, 3]
     ],
     "routers/manager_service_catalog.py": [
-      ["GET /api/manager/service-catalog/template-preview", "preview_manager_service_catalog_template", false, false],
-      ["POST /api/manager/service-catalog/clone-template", "clone_manager_service_catalog_template", false, false]
+      ["GET /api/manager/service-catalog/template-preview", "preview_manager_service_catalog_template", false, 3],
+      ["POST /api/manager/service-catalog/clone-template", "clone_manager_service_catalog_template", false, 3]
     ],
     "routers/manager_service_estimates.py": [
-      ["DELETE /api/manager/service-estimates/{estimate_id}", "delete_manager_service_estimate", false, false],
-      ["GET /api/manager/service-estimates", "list_manager_service_estimates", false, false],
-      ["GET /api/manager/service-estimates/{estimate_id}", "get_manager_service_estimate", false, false],
-      ["GET /api/manager/service-estimates/{estimate_id}/order-lines", "get_manager_service_estimate_order_lines", false, false],
-      ["POST /api/manager/service-estimates", "create_manager_service_estimate", false, false],
-      ["POST /api/manager/service-estimates/calculate", "calculate_manager_install_estimate", false, false]
+      ["DELETE /api/manager/service-estimates/{estimate_id}", "delete_manager_service_estimate", false, 3],
+      ["GET /api/manager/service-estimates", "list_manager_service_estimates", false, 3],
+      ["GET /api/manager/service-estimates/{estimate_id}", "get_manager_service_estimate", false, 3],
+      ["GET /api/manager/service-estimates/{estimate_id}/order-lines", "get_manager_service_estimate_order_lines", false, 3],
+      ["POST /api/manager/service-estimates", "create_manager_service_estimate", false, 3],
+      ["POST /api/manager/service-estimates/calculate", "calculate_manager_install_estimate", false, 3]
     ],
     "routers/manager_settings.py": [
-      ["GET /api/manager/settings", "list_manager_settings", false, false],
-      ["GET /api/manager/settings/address-suggest", "suggest_address", false, false],
-      ["GET /api/manager/settings/fx-rate", "get_fx_rate", false, false],
-      ["POST /api/manager/settings", "create_manager_setting", false, false],
-      ["PUT /api/manager/settings/{key}", "update_manager_setting", false, false]
+      ["GET /api/manager/settings", "list_manager_settings", false, 3],
+      ["GET /api/manager/settings/address-suggest", "suggest_address", false, 3],
+      ["GET /api/manager/settings/fx-rate", "get_fx_rate", false, 3],
+      ["POST /api/manager/settings", "create_manager_setting", false, 3],
+      ["PUT /api/manager/settings/{key}", "update_manager_setting", false, 3]
     ],
     "routers/manager_specs.py": [
-      ["POST /api/manager/specs/bulk-update", "bulk_update_specs", true, false],
-      ["POST /api/manager/specs/normalize-legacy", "normalize_legacy_specs", true, false]
+      ["POST /api/manager/specs/bulk-update", "bulk_update_specs", true, 2],
+      ["POST /api/manager/specs/normalize-legacy", "normalize_legacy_specs", true, 2]
     ],
     "routers/manager_staff.py": [
-      ["GET /api/manager/staff", "list_manager_staff", false, false],
-      ["PATCH /api/manager/staff/{staff_user_id}", "patch_manager_staff", false, false],
-      ["POST /api/manager/staff", "create_manager_staff", false, false]
+      ["GET /api/manager/staff", "list_manager_staff", false, 3],
+      ["PATCH /api/manager/staff/{staff_user_id}", "patch_manager_staff", false, 3],
+      ["POST /api/manager/staff", "create_manager_staff", false, 3]
     ],
     "routers/manager_storefront_settings.py": [
-      ["GET /api/manager/storefront-settings", "get_manager_storefront_settings", false, false],
-      ["GET /api/manager/storefront-settings/brand", "get_manager_storefront_brand", false, false],
-      ["POST /api/manager/storefront-settings/logo", "upload_manager_storefront_logo", false, false],
-      ["PUT /api/manager/storefront-settings", "update_manager_storefront_settings", false, false]
+      ["GET /api/manager/storefront-settings", "get_manager_storefront_settings", false, 3],
+      ["GET /api/manager/storefront-settings/brand", "get_manager_storefront_brand", false, 3],
+      ["POST /api/manager/storefront-settings/logo", "upload_manager_storefront_logo", false, 3],
+      ["PUT /api/manager/storefront-settings", "update_manager_storefront_settings", false, 3]
     ],
     "routers/manager_supplier_mapping.py": [
-      ["GET /api/manager/products/{product_id}/supplier-offer-candidates", "list_product_supplier_offer_candidates", false, true],
-      ["PUT /api/manager/supplier-offers/{offer_id}/mapping", "put_supplier_offer_mapping", false, true]
+      ["GET /api/manager/products/{product_id}/supplier-offer-candidates", "list_product_supplier_offer_candidates", false, 1],
+      ["PUT /api/manager/supplier-offers/{offer_id}/mapping", "put_supplier_offer_mapping", false, 1]
     ],
     "routers/manager_supply.py": [
-      ["DELETE /api/manager/supplier-mappings/{mapping_id}", "delete_supplier_mapping", false, true],
-      ["DELETE /api/manager/supplier-sources/{source_id}", "delete_supplier_source", false, true],
-      ["DELETE /api/manager/suppliers/{supplier_id}", "delete_supplier", false, true],
-      ["DELETE /api/manager/suppliers/{supplier_id}/contacts/{contact_id}", "delete_supplier_contact", false, true],
-      ["DELETE /api/manager/suppliers/{supplier_id}/warehouses/{warehouse_id}", "delete_supplier_warehouse", false, true],
-      ["GET /api/manager/products/{product_id}/supplier-offers", "get_product_supplier_offers", false, true],
-      ["GET /api/manager/supplier-offers/source-url-import-candidates", "list_supplier_source_url_import_candidates", false, true],
-      ["GET /api/manager/supplier-offers/unmapped", "list_unmapped_supplier_offers", false, true],
-      ["GET /api/manager/supplier-sources", "list_supplier_sources", false, true],
-      ["GET /api/manager/supplier-sources/{source_id}/analysis", "analyze_supplier_source", false, true],
-      ["GET /api/manager/suppliers", "list_suppliers", false, true],
-      ["GET /api/manager/suppliers/{supplier_id}/contacts", "list_supplier_contacts", false, true],
-      ["GET /api/manager/suppliers/{supplier_id}/sheets", "list_supplier_sheets", false, true],
-      ["GET /api/manager/suppliers/{supplier_id}/warehouses", "list_supplier_warehouses", false, true],
-      ["GET /api/manager/supply-requests", "list_supply_requests", false, true],
-      ["PATCH /api/manager/supplier-sources/{source_id}", "patch_supplier_source", false, true],
-      ["PATCH /api/manager/suppliers/{supplier_id}", "patch_supplier", false, true],
-      ["PATCH /api/manager/suppliers/{supplier_id}/contacts/{contact_id}", "patch_supplier_contact", false, true],
-      ["PATCH /api/manager/suppliers/{supplier_id}/warehouses/{warehouse_id}", "patch_supplier_warehouse", false, true],
-      ["PATCH /api/manager/supply-requests/lines/{line_id}", "patch_supply_request_line", false, true],
-      ["PATCH /api/manager/supply-requests/{request_id}", "patch_supply_request", false, true],
-      ["POST /api/manager/supplier-mappings", "create_supplier_mapping", false, true],
-      ["POST /api/manager/supplier-mappings/bulk", "bulk_create_supplier_mappings", false, true],
-      ["POST /api/manager/supplier-offers/source-url-import", "start_supplier_source_url_import", false, true],
-      ["POST /api/manager/supplier-offers/suggestions", "suggest_supplier_offers", false, true],
-      ["POST /api/manager/supplier-sources", "create_supplier_source", false, true],
-      ["POST /api/manager/supplier-sources/sync-all", "sync_all_supplier_sources", false, true],
-      ["POST /api/manager/supplier-sources/{source_id}/sync", "sync_supplier_source", false, true],
-      ["POST /api/manager/suppliers", "create_supplier", false, true],
-      ["POST /api/manager/suppliers/{supplier_id}/contacts", "create_supplier_contact", false, true],
-      ["POST /api/manager/suppliers/{supplier_id}/warehouses", "create_supplier_warehouse", false, true],
-      ["POST /api/manager/supply-requests", "create_supply_request", false, true],
-      ["POST /api/manager/supply-requests/from-order-lines", "create_supply_request_from_order_lines", false, true],
-      ["POST /api/manager/supply-requests/message/logistics", "generate_supply_logistics_message", false, true],
-      ["POST /api/manager/supply-requests/stock", "create_stock_supply_request", false, true],
-      ["POST /api/manager/supply-requests/{request_id}/message/supplier", "generate_supply_request_supplier_message", false, true],
-      ["PUT /api/manager/products/{product_id}/local-stock", "upsert_product_local_stock", false, true]
+      ["DELETE /api/manager/supplier-mappings/{mapping_id}", "delete_supplier_mapping", false, 1],
+      ["DELETE /api/manager/supplier-sources/{source_id}", "delete_supplier_source", false, 1],
+      ["DELETE /api/manager/suppliers/{supplier_id}", "delete_supplier", false, 1],
+      ["DELETE /api/manager/suppliers/{supplier_id}/contacts/{contact_id}", "delete_supplier_contact", false, 1],
+      ["DELETE /api/manager/suppliers/{supplier_id}/warehouses/{warehouse_id}", "delete_supplier_warehouse", false, 1],
+      ["GET /api/manager/products/{product_id}/supplier-offers", "get_product_supplier_offers", false, 1],
+      ["GET /api/manager/supplier-offers/source-url-import-candidates", "list_supplier_source_url_import_candidates", false, 1],
+      ["GET /api/manager/supplier-offers/unmapped", "list_unmapped_supplier_offers", false, 1],
+      ["GET /api/manager/supplier-sources", "list_supplier_sources", false, 1],
+      ["GET /api/manager/supplier-sources/{source_id}/analysis", "analyze_supplier_source", false, 1],
+      ["GET /api/manager/suppliers", "list_suppliers", false, 1],
+      ["GET /api/manager/suppliers/{supplier_id}/contacts", "list_supplier_contacts", false, 1],
+      ["GET /api/manager/suppliers/{supplier_id}/sheets", "list_supplier_sheets", false, 1],
+      ["GET /api/manager/suppliers/{supplier_id}/warehouses", "list_supplier_warehouses", false, 1],
+      ["GET /api/manager/supply-requests", "list_supply_requests", false, 1],
+      ["PATCH /api/manager/supplier-sources/{source_id}", "patch_supplier_source", false, 1],
+      ["PATCH /api/manager/suppliers/{supplier_id}", "patch_supplier", false, 1],
+      ["PATCH /api/manager/suppliers/{supplier_id}/contacts/{contact_id}", "patch_supplier_contact", false, 1],
+      ["PATCH /api/manager/suppliers/{supplier_id}/warehouses/{warehouse_id}", "patch_supplier_warehouse", false, 1],
+      ["PATCH /api/manager/supply-requests/lines/{line_id}", "patch_supply_request_line", false, 1],
+      ["PATCH /api/manager/supply-requests/{request_id}", "patch_supply_request", false, 1],
+      ["POST /api/manager/supplier-mappings", "create_supplier_mapping", false, 1],
+      ["POST /api/manager/supplier-mappings/bulk", "bulk_create_supplier_mappings", false, 1],
+      ["POST /api/manager/supplier-offers/source-url-import", "start_supplier_source_url_import", false, 1],
+      ["POST /api/manager/supplier-offers/suggestions", "suggest_supplier_offers", false, 1],
+      ["POST /api/manager/supplier-sources", "create_supplier_source", false, 1],
+      ["POST /api/manager/supplier-sources/sync-all", "sync_all_supplier_sources", false, 1],
+      ["POST /api/manager/supplier-sources/{source_id}/sync", "sync_supplier_source", false, 1],
+      ["POST /api/manager/suppliers", "create_supplier", false, 1],
+      ["POST /api/manager/suppliers/{supplier_id}/contacts", "create_supplier_contact", false, 1],
+      ["POST /api/manager/suppliers/{supplier_id}/warehouses", "create_supplier_warehouse", false, 1],
+      ["POST /api/manager/supply-requests", "create_supply_request", false, 1],
+      ["POST /api/manager/supply-requests/from-order-lines", "create_supply_request_from_order_lines", false, 1],
+      ["POST /api/manager/supply-requests/message/logistics", "generate_supply_logistics_message", false, 1],
+      ["POST /api/manager/supply-requests/stock", "create_stock_supply_request", false, 1],
+      ["POST /api/manager/supply-requests/{request_id}/message/supplier", "generate_supply_request_supplier_message", false, 1],
+      ["PUT /api/manager/products/{product_id}/local-stock", "upsert_product_local_stock", false, 1]
     ],
     "routers/manager_tags.py": [
-      ["DELETE /api/manager/tags/groups/{group_id}", "delete_manager_tag_group", true, false],
-      ["DELETE /api/manager/tags/{tag_id}", "delete_manager_tag", true, false],
-      ["GET /api/manager/tags/groups", "get_manager_tag_groups", true, false],
-      ["POST /api/manager/tags", "create_manager_tag", true, false],
-      ["POST /api/manager/tags/groups", "create_manager_tag_group", true, false],
-      ["PUT /api/manager/tags/groups/{group_id}", "update_manager_tag_group", true, false],
-      ["PUT /api/manager/tags/{tag_id}", "update_manager_tag", true, false]
+      ["DELETE /api/manager/tags/groups/{group_id}", "delete_manager_tag_group", true, 2],
+      ["DELETE /api/manager/tags/{tag_id}", "delete_manager_tag", true, 2],
+      ["GET /api/manager/tags/groups", "get_manager_tag_groups", true, 2],
+      ["POST /api/manager/tags", "create_manager_tag", true, 2],
+      ["POST /api/manager/tags/groups", "create_manager_tag_group", true, 2],
+      ["PUT /api/manager/tags/groups/{group_id}", "update_manager_tag_group", true, 2],
+      ["PUT /api/manager/tags/{tag_id}", "update_manager_tag", true, 2]
     ],
     "routers/manager_tariffs.py": [
-      ["DELETE /api/manager/tariffs/{tariff_id}", "delete_manager_tariff", false, false],
-      ["DELETE /api/manager/tariffs/{tariff_id}/rules/{rule_id}", "delete_manager_tariff_rule", false, false],
-      ["GET /api/manager/tariffs", "list_manager_tariffs", false, false],
-      ["GET /api/manager/tariffs/price-book/legacy-comparison", "list_manager_installation_legacy_comparison", false, false],
-      ["GET /api/manager/tariffs/quick-add", "list_manager_quick_tariffs", false, false],
-      ["GET /api/manager/tariffs/rules/favorites", "list_manager_favorite_tariff_rules", false, false],
-      ["GET /api/manager/tariffs/{tariff_id}/rules", "list_manager_tariff_rules", false, false],
-      ["POST /api/manager/tariffs", "create_manager_tariff", false, false],
-      ["POST /api/manager/tariffs/price-book/publish", "publish_manager_installation_price_book", false, false],
-      ["POST /api/manager/tariffs/{tariff_id}/rules", "create_manager_tariff_rule", false, false],
-      ["PUT /api/manager/tariffs/{tariff_id}", "update_manager_tariff", false, false],
-      ["PUT /api/manager/tariffs/{tariff_id}/rules/{rule_id}", "update_manager_tariff_rule", false, false]
+      ["DELETE /api/manager/tariffs/{tariff_id}", "delete_manager_tariff", false, 3],
+      ["DELETE /api/manager/tariffs/{tariff_id}/rules/{rule_id}", "delete_manager_tariff_rule", false, 3],
+      ["GET /api/manager/tariffs", "list_manager_tariffs", false, 3],
+      ["GET /api/manager/tariffs/price-book/legacy-comparison", "list_manager_installation_legacy_comparison", false, 3],
+      ["GET /api/manager/tariffs/quick-add", "list_manager_quick_tariffs", false, 3],
+      ["GET /api/manager/tariffs/rules/favorites", "list_manager_favorite_tariff_rules", false, 3],
+      ["GET /api/manager/tariffs/{tariff_id}/rules", "list_manager_tariff_rules", false, 3],
+      ["POST /api/manager/tariffs", "create_manager_tariff", false, 3],
+      ["POST /api/manager/tariffs/price-book/publish", "publish_manager_installation_price_book", false, 3],
+      ["POST /api/manager/tariffs/{tariff_id}/rules", "create_manager_tariff_rule", false, 3],
+      ["PUT /api/manager/tariffs/{tariff_id}", "update_manager_tariff", false, 3],
+      ["PUT /api/manager/tariffs/{tariff_id}/rules/{rule_id}", "update_manager_tariff_rule", false, 3]
     ],
     "routers/manager_tenant_catalog.py": [
-      ["GET /api/manager/tenant-catalog/products", "list_manager_tenant_catalog_products", false, false]
+      ["GET /api/manager/tenant-catalog/products", "list_manager_tenant_catalog_products", false, 2]
     ],
     "routers/manager_tenant_offers.py": [
-      ["GET /api/manager/tenant-offers", "list_manager_tenant_offers", false, false],
-      ["GET /api/manager/tenant-offers/audit", "list_manager_tenant_audit_events", false, false],
-      ["GET /api/manager/tenant-offers/{offer_id}", "get_manager_tenant_offer", false, false],
-      ["PATCH /api/manager/tenant-offers/{offer_id}", "update_manager_tenant_offer", false, false],
-      ["POST /api/manager/tenant-offers", "upsert_manager_tenant_offer", false, false]
+      ["GET /api/manager/tenant-offers", "list_manager_tenant_offers", false, 2],
+      ["GET /api/manager/tenant-offers/audit", "list_manager_tenant_audit_events", false, 2],
+      ["GET /api/manager/tenant-offers/{offer_id}", "get_manager_tenant_offer", false, 2],
+      ["PATCH /api/manager/tenant-offers/{offer_id}", "update_manager_tenant_offer", false, 2],
+      ["POST /api/manager/tenant-offers", "upsert_manager_tenant_offer", false, 2]
     ],
     "routers/manager_warranties.py": [
-      ["GET /api/manager/equipment/{equipment_id}/warranty-coverages", "list_manager_equipment_warranty_coverages", false, false],
-      ["GET /api/manager/warranty-policies", "list_manager_warranty_policies", false, false],
-      ["PATCH /api/manager/warranty-policies/{policy_id}", "patch_manager_warranty_policy", false, false],
-      ["POST /api/manager/warranty-coverages/{coverage_id}/decision", "decide_manager_warranty_coverage", false, false],
-      ["POST /api/manager/warranty-policies", "create_manager_warranty_policy", false, false]
+      ["GET /api/manager/equipment/{equipment_id}/warranty-coverages", "list_manager_equipment_warranty_coverages", false, 3],
+      ["GET /api/manager/warranty-policies", "list_manager_warranty_policies", false, 3],
+      ["PATCH /api/manager/warranty-policies/{policy_id}", "patch_manager_warranty_policy", false, 3],
+      ["POST /api/manager/warranty-coverages/{coverage_id}/decision", "decide_manager_warranty_coverage", false, 3],
+      ["POST /api/manager/warranty-policies", "create_manager_warranty_policy", false, 3]
     ],
     "routers/manager_yandex_business.py": [
-      ["GET /api/manager/yandex-business/price-list.yml", "get_manager_yandex_business_price_list", false, false],
-      ["GET /api/manager/yandex-business/quality-report", "get_manager_yandex_business_quality_report", false, false],
-      ["GET /api/manager/yandex-business/settings", "get_manager_yandex_business_feed_settings", false, false],
-      ["POST /api/manager/yandex-business/settings/preview", "preview_manager_yandex_business_feed_settings", false, false],
-      ["PUT /api/manager/yandex-business/settings", "update_manager_yandex_business_feed_settings", false, false]
+      ["GET /api/manager/yandex-business/price-list.yml", "get_manager_yandex_business_price_list", false, 3],
+      ["GET /api/manager/yandex-business/quality-report", "get_manager_yandex_business_quality_report", false, 3],
+      ["GET /api/manager/yandex-business/settings", "get_manager_yandex_business_feed_settings", false, 3],
+      ["POST /api/manager/yandex-business/settings/preview", "preview_manager_yandex_business_feed_settings", false, 3],
+      ["PUT /api/manager/yandex-business/settings", "update_manager_yandex_business_feed_settings", false, 3]
     ],
     "routers/system.py": [
-      ["GET /api/system/rebuild-web/status", "get_rebuild_web_status_api_system_rebuild_web_status_get", true, false],
-      ["POST /api/system/rebuild-web", "trigger_rebuild_web_api_system_rebuild_web_post", true, false],
-      ["POST /api/system/rebuild-web/complete", "complete_rebuild_web_api_system_rebuild_web_complete_post", true, false]
+      ["GET /api/system/rebuild-web/status", "get_rebuild_web_status_api_system_rebuild_web_status_get", true, 3],
+      ["POST /api/system/rebuild-web", "trigger_rebuild_web_api_system_rebuild_web_post", true, 3],
+      ["POST /api/system/rebuild-web/complete", "complete_rebuild_web_api_system_rebuild_web_complete_post", true, 3]
     ]
   }
 }

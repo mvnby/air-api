@@ -63,6 +63,18 @@ async def list_media_assets(
     session: AsyncSession = Depends(get_session),
     _username: str = Depends(get_current_username),
 ):
+    """
+    Read the platform media library with title/text, kind, tag and status filters, ordered
+    newest first. page starts at 1 and limit is 1–100; usage_count describes known URL
+    references. This system route lists platform-wide assets, including scoped assets,
+    rather than filtering by selected storefront.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
+    """
     return await MediaLibraryService.list_assets(
         session=session,
         page=page,
@@ -86,6 +98,19 @@ async def upload_media_assets(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
+    """
+    Upload exactly one image per multipart request (despite the files array). The source is
+    limited to 20 MB and tags_json must be a JSON array; violations or invalid/unsafe
+    image/SVG returns 400. Stores a ready original asset in managed library storage; SVG is
+    sanitized and retained as vector. Each call creates asset metadata even when storage
+    deduplicates bytes.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
+    """
     try:
         tags = json.loads(tags_json or "[]")
         if not isinstance(tags, list):
@@ -121,6 +146,18 @@ async def upload_media_asset_from_url(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
+    """
+    Fetch an HTTP(S) image from a public-network source and store it as a ready original
+    library asset. Redirects, MIME and size are checked; localhost/private-network sources
+    are rejected. Invalid source/content returns 400 and runtime storage failure 500. This
+    saves an asset rather than linking it to a product; no idempotency receipt exists.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
+    """
     try:
         return await MediaLibraryService.upload_asset_from_url(
             session=session,
@@ -147,6 +184,19 @@ async def backfill_referenced_media_assets(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
+    """
+    Index existing catalog/content media references into library metadata without rewriting
+    their URLs. execute defaults to false and reports a plan; true creates up to limit
+    (1–5000) metadata records. Already indexed URLs are skipped; include_remote controls
+    recognition of remote references, not remote downloads. This is a synchronous backfill,
+    not ordinary upload or physical cleanup.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
+    """
     return await MediaLibraryService.backfill_referenced_assets(
         session=session,
         execute=execute,
@@ -164,6 +214,15 @@ async def backfill_referenced_media_assets(
 async def get_media_background_removal_config(
     _username: str = Depends(get_current_username),
 ):
+    """
+    Read configured/default background-removal provider, rembg models/process mode and
+    preload options. No image is processed, model configuration changed or worker job
+    started by this request.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     return {
         "default_provider": resolve_background_removal_provider("auto"),
         "default_rembg_model": default_rembg_model_name(),
@@ -185,6 +244,18 @@ async def update_media_asset(
     session: AsyncSession = Depends(get_session),
     _username: str = Depends(get_current_username),
 ):
+    """
+    Update non-null metadata fields and replace tags when supplied; file bytes and URL
+    remain unchanged. Empty alt_text/description clears their value; null fields are
+    ignored. Missing asset returns 404; changing the kind of an in-use storefront_logo
+    returns 400. This global route can edit asset metadata across storefronts.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
+    """
     try:
         return await MediaLibraryService.update_asset(
             session=session,
@@ -212,6 +283,18 @@ async def crop_media_asset(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
+    """
+    Crop a raster source and create a separate crop child asset, preserving the parent
+    asset. Crop coordinates are clamped to source bounds; SVG cropping is rejected. Missing
+    asset returns 404; unavailable/invalid source returns 400. The new processing variant is
+    not an original publication URL; repeating creates another metadata asset.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
+    """
     try:
         return await MediaLibraryService.crop_asset(
             session=session,
@@ -241,6 +324,19 @@ async def remove_media_asset_background(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
+    """
+    Synchronously remove a raster source background using provider/model and create a
+    processed child asset. The source is preserved; no product/brand/series reference is
+    automatically switched. Missing asset returns 404, invalid source/SVG/provider returns
+    400 and runtime conflict 409. Processed library variants differ from permitted original
+    publication URLs; repeats create new metadata.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
+    """
     try:
         return await MediaLibraryService.remove_background(
             session=session,
@@ -268,6 +364,19 @@ async def delete_media_asset(
     session: AsyncSession = Depends(get_session),
     _username: str = Depends(get_current_username),
 ):
+    """
+    Delete library metadata, detach child parent references and attempt to remove the
+    underlying local file only when no references remain. Missing asset returns 404; known
+    usage blocks deletion with 409 unless force=true. force bypasses metadata usage
+    protection but never deletion of an in-use storefront logo. It does not delete child
+    assets or rewrite content references.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
+    """
     try:
         return await MediaLibraryService.delete_asset(session=session, asset_id=asset_id, force=force)
     except LookupError as exc:

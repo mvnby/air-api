@@ -10,6 +10,12 @@ import { request as __request } from '../core/request';
 export class ManagerDocumentDriveService {
     /**
      * Get Manager Document Drive Status
+     * Read the optional Google Drive document-editor connection status for the current
+     * tenant/storefront. Manager access is required. Returns connection readiness/labels
+     * without credentials; this does not check or synchronize an individual editing session.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @returns DocumentDriveStatusResponse Successful Response
      * @throws ApiError
      */
@@ -21,6 +27,14 @@ export class ManagerDocumentDriveService {
     }
     /**
      * Get Manager Document Drive Authorization Url
+     * Start tenant/storefront-bound Google Drive OAuth consent and return its authorization
+     * URL. Requires owner/admin access; binds pending state to the live actor and browser
+     * session. Misconfigured redirect returns 503; provider policy errors keep their status.
+     * Obtaining the URL does not complete the connection and a new request replaces pending
+     * consent state.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @returns DocumentDriveAuthorizationUrlResponse Successful Response
      * @throws ApiError
      */

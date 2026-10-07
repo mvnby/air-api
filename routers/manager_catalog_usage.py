@@ -26,6 +26,18 @@ async def record_manager_catalog_usage(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(get_current_auth_context),
 ) -> CatalogUsageAccepted:
+    """
+    Add batched UI action counters to platform-wide daily aggregates in Europe/Minsk and
+    prune data older than the 90-day retention window. Payload contains action dimensions
+    rather than search/product/customer content. No idempotency receipt exists: replay
+    counts events again. Per-actor rate/concurrency limits may return 429 with Retry-After.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [catalog
+    workspace](https://github.com/mvnby/air-api/blob/main/docs/catalog-management-workspace.md).
+    """
     try:
         async with _usage_limiter.limit(f"catalog-usage:{auth.staff_user_id or auth.username}"):
             accepted = await CatalogWorkspaceUsageService.record(session, payload)
@@ -43,6 +55,17 @@ async def get_manager_catalog_usage(
     outcome: CatalogUsageOutcome | None = None,
     session: AsyncSession = Depends(get_session),
 ) -> CatalogUsageReport:
+    """
+    Read platform-wide daily catalog-workspace telemetry over 1–90 days, optionally filtered
+    by layout, device, action or outcome. Dates use Europe/Minsk; the report is aggregate
+    counters, not individual users or recordings. Reading does not enable event collection.
+
+    Access and scope: system-tenant Manager access and analytics.manage capability are
+    required; aggregates are platform-wide. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [catalog
+    workspace](https://github.com/mvnby/air-api/blob/main/docs/catalog-management-workspace.md).
+    """
     return await CatalogWorkspaceUsageService.report(
         session, days=days, layout_version=layout_version, device=device,
         action=action, outcome=outcome,

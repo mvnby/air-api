@@ -53,6 +53,17 @@ async def get_managed_document_google_edit_session(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> ExternalEditSessionItem:
+    """
+    Inspect the optional Google editing session for a scoped managed draft and refresh its
+    remote revision/status. Does not synchronize edits into the authoritative local source.
+    Missing document/session returns 404, incompatible state 409 and provider failure 502; a
+    missing/unavailable tenant Drive connection fails separately. See the [document
+    lifecycle
+    contract](https://github.com/mvnby/air-api/blob/main/docs/document-module-architecture.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     provider = await _provider(session, auth)
     try:
         row = await ManagedDocumentExternalEditSessionService.get_session(
@@ -82,6 +93,17 @@ async def create_managed_document_google_edit_session(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> ExternalEditSessionItem:
+    """
+    Ensure a provider-owned editable Google copy for a scoped native draft, recording the
+    actor. The native source/context remain authoritative; issued documents cannot be edited
+    through this draft path. Reuses the existing session when appropriate. Missing document
+    returns 404, draft/session conflicts 409, invalid source 400 and provider failure 502;
+    tenant Drive availability is checked first. See the [document lifecycle
+    contract](https://github.com/mvnby/air-api/blob/main/docs/document-module-architecture.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     provider = await _provider(session, auth)
     private = _private_storage()
     try:
@@ -116,6 +138,18 @@ async def sync_managed_document_google_edit_session(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> ExternalEditSessionItem:
+    """
+    Import the edited Google DOCX into the scoped draft after checking
+    expected_base_checksum_sha256 and expected_remote_revision. Requires a caller
+    idempotency_key; retain the same command on retry. Validates document structure before
+    making the new local source authoritative. Missing document/session returns 404,
+    stale/immutable state 409, invalid input 400 and provider failure 502. Does not issue
+    the document. See the [document lifecycle
+    contract](https://github.com/mvnby/air-api/blob/main/docs/document-module-architecture.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     provider = await _provider(session, auth)
     try:
         row = await ManagedDocumentExternalEditSessionService.sync(

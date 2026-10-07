@@ -34,6 +34,15 @@ async def create_manager_lead(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Create a raw Lead in new state in the current tenant/storefront, retaining
+    contact/source/request/follow-up data without creating a customer/order. Blank request
+    or invalid source/segment returns 400. No caller idempotency receipt is provided:
+    repeating POST can create another Lead.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await LeadCommandService.create_lead(
             session=session,
@@ -57,6 +66,16 @@ async def patch_manager_lead(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Patch supplied fields of a raw Lead in the current tenant/storefront and increment its
+    version. Omitted fields remain unchanged; terminal qualified/lost/spam statuses require
+    dedicated commands. Missing Lead returns 404; invalid request/status/source/segment
+    returns 400. This patch does not enforce expected_version or provide a replay receipt,
+    even though it increments version.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         lead = await LeadCommandService.update_lead(
             session=session,
@@ -88,6 +107,18 @@ async def qualify_manager_lead(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Qualify a raw Lead in the current tenant/storefront by explicitly selecting or safely
+    matching/creating a customer and branch, then creating an order and transferring
+    applicable lead data. With an explicit scenario the order enters negotiation; otherwise
+    it remains new_lead. Archived/lost/spam, ambiguous customer matches or invalid
+    branch/scenario return 400; missing Lead 404. An already qualified Lead with its
+    accessible converted order returns that order with order_created=false; no generic
+    caller receipt is supplied.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     ManagerTelemetryService.record_qualify_attempt(endpoint=QUALIFY_MANAGER_LEAD, payload=payload)
     try:
         result = await LeadCommandService.qualify_lead(
@@ -121,6 +152,15 @@ async def mark_manager_lead_lost(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Mark a raw Lead in the current tenant/storefront lost or spam, retain/set loss reason,
+    clear the follow-up date and increment version. Missing Lead returns 404; unsupported
+    terminal status returns 400. This command has no expected_version precondition or replay
+    receipt and does not archive a linked customer or delete source data.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         result = await LeadCommandService.mark_lead_lost(
             session=session,

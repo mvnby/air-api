@@ -46,6 +46,13 @@ async def list_presets(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> ConditionPresetList:
+    """
+    List up to 100 reusable document clauses in the current tenant, newest first. Reading
+    does not apply a clause to an order or document.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     rows = await ConditionPresetService.list(session, auth.tenant_scope())
     return ConditionPresetList(items=[ConditionPresetItem.model_validate(row, from_attributes=True) for row in rows])
 
@@ -56,6 +63,14 @@ async def create_preset(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> ConditionPresetItem:
+    """
+    Save a reusable clause in the current tenant after trimming and case/whitespace
+    normalization for duplicate detection. Invalid or duplicate text returns 409. Repeating
+    this POST can conflict; it is not an idempotency-key replay.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         row = await ConditionPresetService.create(session, auth.tenant_scope(), payload.text)
     except ConditionPresetError as exc:
@@ -74,6 +89,14 @@ async def delete_preset(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> Response:
+    """
+    Delete a clause in the current tenant, returning 204. Missing or foreign-tenant clause
+    returns 404, including a repeat after deletion; existing document snapshots are not
+    rewritten.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         await ConditionPresetService.delete(session, auth.tenant_scope(), preset_id)
     except ConditionPresetNotFound as exc:

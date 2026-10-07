@@ -45,6 +45,15 @@ async def list_manager_repair_complaint_presets(
     limit: int = Query(100, ge=1, le=200),
     session: AsyncSession = Depends(get_session),
 ):
+    """
+    Read shared complaint presets filtered by text, group and favorite status; inactive
+    presets are excluded by default. limit is 1–200, default 100; results follow
+    favorite/sort/group/name ordering. No repair order or diagnostic statement is saved.
+
+    Access and scope: Manager access is required; these definitions are shared across
+    tenants. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     items = await RepairComplaintService.list_presets(
         session=session,
         q=q,
@@ -66,6 +75,16 @@ async def create_manager_repair_complaint_preset(
     payload: ManagerRepairComplaintPresetCreatePayload,
     session: AsyncSession = Depends(get_session),
 ):
+    """
+    Create a shared complaint preset after cleaning whitespace. Empty phrase returns 400 and
+    an existing normalized group/phrase returns 409. This defines reusable text without
+    modifying repair orders; repeated creation is subject to duplicate detection rather than
+    an idempotency receipt.
+
+    Access and scope: system-tenant Manager access is required; these are shared platform
+    definitions. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     return await RepairComplaintService.create_preset(session=session, payload=payload)
 
 
@@ -76,6 +95,16 @@ async def create_manager_repair_complaint_preset(
     dependencies=[Depends(require_system_manager_tenant_scope)],
 )
 async def generate_manager_repair_act_ai_draft(payload: ManagerRepairActAiDraftPayload):
+    """
+    Generate structured repair diagnostic metadata using the configured DeepSeek provider
+    and local defect templates. The response is a draft; no order, diagnosis or act document
+    is saved. Value/input errors and HTTP provider failures caught by this route return 400.
+    Repeats call the provider again and may produce different text.
+
+    Access and scope: system-tenant Manager access is required; these are shared platform
+    definitions. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         repair_meta = await DefectActAIService.generate_repair_meta(payload)
     except (ValueError, httpx.HTTPError) as exc:
@@ -98,6 +127,15 @@ async def update_manager_repair_complaint_preset(
     payload: ManagerRepairComplaintPresetUpdatePayload,
     session: AsyncSession = Depends(get_session),
 ):
+    """
+    Update submitted preset fields after cleaning text. Missing preset returns 404, empty
+    phrase 400 and conflicting normalized group/phrase 409. Changes affect future selection
+    and do not rewrite text already saved in repair orders.
+
+    Access and scope: system-tenant Manager access is required; these are shared platform
+    definitions. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     return await RepairComplaintService.update_preset(session=session, preset_id=preset_id, payload=payload)
 
 
@@ -110,5 +148,13 @@ async def delete_manager_repair_complaint_preset(
     preset_id: int,
     session: AsyncSession = Depends(get_session),
 ):
+    """
+    Permanently delete a shared complaint preset. Missing preset returns 404, including
+    repeats. This does not remove complaint text already copied into repair orders.
+
+    Access and scope: system-tenant Manager access is required; these are shared platform
+    definitions. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     await RepairComplaintService.delete_preset(session=session, preset_id=preset_id)
     return ManagerActionMessageResponse(message="Repair complaint preset deleted successfully")

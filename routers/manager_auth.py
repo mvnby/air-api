@@ -25,8 +25,11 @@ router = APIRouter(prefix="/api/manager", tags=["manager"])
 @router.get("/me", response_model=ManagerAuthStatusResponse, operation_id=READ_USER_ME)
 async def check_auth_status(auth: AuthenticatedUser = Depends(require_manager_access)):
     """
-    Check if current user is authenticated.
-    Returns username if valid, 401 otherwise (via Depends).
+    Read the authenticated Manager identity, live tenant/storefront context and UI capabilities.
+    Includes password-change eligibility, mandatory-password-change and demo-read-only flags.
+    Does not issue or refresh a token. A valid authentication identity still needs Manager
+    access and tenant/storefront context; insufficient access returns 403. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     return {
         "username": auth.username,
@@ -57,6 +60,14 @@ async def change_account_password(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> None:
+    """
+    Change the current staff account password using its current password and record the
+    credential change. Requires Manager access and self-service password eligibility;
+    unavailable self-service returns 409 with detail.code=self_service_unavailable. Credential
+    validation failures return 400 with code/message. Success is 204, increments the account
+    auth version and clears the authentication cookie; sign in again. This command has no replay
+    receipt, and the old password cannot be reused for a retry.
+    """
     if auth.staff_user_id is None or not auth.can_change_password:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -92,6 +103,13 @@ async def list_manager_storefronts(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ):
+    """
+    List active storefronts belonging to the authenticated Manager's current tenant, including
+    display metadata and is_current/is_default markers. This read does not switch storefront or
+    issue credentials. The requested storefront is resolved within the same tenant by the
+    Manager authentication contract; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     return await ManagerStorefrontSelector.list_available(
         session,
         tenant_scope=auth.tenant_scope(),

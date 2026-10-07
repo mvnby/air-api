@@ -41,7 +41,12 @@ async def get_tag_groups(
     _user: str = Depends(get_current_username),
 ):
     """
-    Get all tag groups with their tags.
+    Read all shared tag groups with their tags; no pagination is accepted. This endpoint
+    does not filter by authenticated storefront.
+
+    Access and scope: Manager access is required; this reads the shared platform catalog,
+    not tenant-owned copies. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     return await TagService.get_tag_groups(session=session)
 
@@ -57,7 +62,13 @@ async def create_tag_group(
     _user: str = Depends(get_current_username),
 ):
     """
-    Create a new tag group.
+    Create a shared tag group, deriving slug from title when omitted. Duplicate slug returns
+    400. POST has no idempotency receipt; this creates dictionary state rather than
+    assigning product tags.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     return await TagService.create_tag_group(session=session, payload=payload)
 
@@ -74,7 +85,13 @@ async def update_tag_group(
     _user: str = Depends(get_current_username),
 ):
     """
-    Update an existing tag group.
+    Update submitted tag-group fields. Missing group returns 404; a slug used by another
+    group returns 400. This edits the shared dictionary, leaving product-tag associations
+    attached to their tag IDs.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     return await TagService.update_tag_group(session=session, group_id=group_id, payload=payload)
 
@@ -89,7 +106,12 @@ async def delete_tag_group(
     _user: str = Depends(get_current_username),
 ):
     """
-    Delete a tag group. Restrained if the group has tags.
+    Permanently delete an empty shared tag group. Missing group returns 404, including after
+    deletion; any remaining tag blocks deletion with 400. Remove/reassign tags first.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     await TagService.delete_tag_group(session=session, group_id=group_id)
     return {"message": "Группа успешно удалена"}
@@ -106,7 +128,13 @@ async def create_tag(
     _user: str = Depends(get_current_username),
 ):
     """
-    Create a new tag in a group.
+    Create a tag in an existing shared group, deriving slug from title when omitted. Missing
+    group returns 404; duplicate slug returns 400. This does not assign the tag to products;
+    POST has no idempotency receipt.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     return await TagService.create_tag(session=session, payload=payload)
 
@@ -123,7 +151,13 @@ async def update_tag(
     _user: str = Depends(get_current_username),
 ):
     """
-    Update a tag.
+    Update submitted tag fields. Missing tag returns 404; conflicting slug returns 400.
+    Product links continue to refer to the same tag ID; editing this shared tag affects all
+    linked products.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     return await TagService.update_tag(session=session, tag_id=tag_id, payload=payload)
 
@@ -138,7 +172,13 @@ async def delete_tag(
     _user: str = Depends(get_current_username),
 ):
     """
-    Delete a tag.
+    Permanently delete the tag and its product-tag links. Missing tag returns 404, including
+    on a repeat after deletion. This removes the shared label rather than just removing it
+    from one product.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     await TagService.delete_tag(session=session, tag_id=tag_id)
     return {"message": "Тег успешно удален"}

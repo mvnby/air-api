@@ -71,6 +71,18 @@ async def create_incoming(
     key: str = Depends(get_command_idempotency_key),
     session: AsyncSession = Depends(get_session),
 ):
+    """
+    Save an incomplete incoming request as a Lead in the authenticated staff actor’s
+    tenant/storefront, retaining original text/source time and reporting missing
+    contact/address data. Does not create a customer/order or reserve a work slot; inferred
+    phone/date remain suggestions. Requires Idempotency-Key: same actor/key/payload replays
+    with Idempotency-Replayed; changed key payload or reused source event with different
+    content returns 409. Invalid key returns 400, demo mutation 403, unavailable receipt
+    storage 503 with Retry-After: 1. Retry the unchanged command/key.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     return await mutation(
         IncomingCommandService.create(
             session, actor=caller, payload=payload, idempotency_key=key
@@ -90,6 +102,15 @@ async def list_incoming(
     caller: CommandActor = Depends(actor),
     session: AsyncSession = Depends(get_session),
 ):
+    """
+    List unconverted, unarchived incoming requests in new/contacted state for the
+    authenticated staff actor’s tenant/storefront, newest first. Uses limit/offset with
+    limit at most 100 and returns total. Does not mark personal read state, qualify a lead
+    or schedule requested time.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     return await IncomingCommandService.list(
         session, actor=caller, limit=limit, offset=offset
     )
@@ -105,6 +126,15 @@ async def get_incoming(
     caller: CommandActor = Depends(actor),
     session: AsyncSession = Depends(get_session),
 ):
+    """
+    Read an incoming request with saved intake metadata in the authenticated staff actor’s
+    tenant/storefront, including current version, original text and missing-data state.
+    Missing/inaccessible or non-intake Lead returns 404. Reading does not mark the triage
+    card read or change its workflow.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await IncomingCommandService.get(session, actor=caller, lead_id=lead_id)
     except LookupError as exc:
@@ -126,6 +156,18 @@ async def update_incoming(
     key: str = Depends(get_command_idempotency_key),
     session: AsyncSession = Depends(get_session),
 ):
+    """
+    Correct an active incoming request in the authenticated staff actor’s tenant/storefront
+    using expected_version and Idempotency-Key. Increments version, preserves omitted fields
+    and clears explicitly null optional fields; a changed time wish is reinterpreted only
+    against the retained source clock. Archived/qualified or changed-version request and
+    changed replay payload return 409; missing intake 404, demo mutation 403, invalid key
+    400 and receipt storage unavailable 503 with Retry-After: 1. Same successful command/key
+    replays with Idempotency-Replayed; it does not reserve calendar time.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     return await mutation(
         IncomingCommandService.update(
             session, actor=caller, lead_id=lead_id, payload=payload, idempotency_key=key

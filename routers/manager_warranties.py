@@ -40,6 +40,18 @@ async def list_manager_warranty_policies(
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
 ):
+    """
+    Read shared warranty policy definitions filtered by supplier, brand, series or product;
+    inactive policies are excluded by default. This list is unpaginated. Policies are
+    definitions for coverage selection, not the live warranty status of a customer equipment
+    record.
+
+    Access and scope: Manager access is required; these definitions are shared across
+    tenants. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [warranty policy
+    contract](https://github.com/mvnby/air-api/blob/main/docs/warranty-policies.md).
+    """
     return {
         "items": await WarrantyService.list_policies(
             session,
@@ -63,6 +75,18 @@ async def create_manager_warranty_policy(
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
 ):
+    """
+    Create a shared warranty policy with at least one supplier/brand/series/product target.
+    Invalid references, incompatible series/brand selection or invalid duration/maintenance
+    terms return 400. This defines future coverage selection without rewriting existing
+    equipment coverage snapshots. Repeated POSTs have no idempotency receipt.
+
+    Access and scope: system-tenant Manager access is required; these are shared platform
+    definitions. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [warranty policy
+    contract](https://github.com/mvnby/air-api/blob/main/docs/warranty-policies.md).
+    """
     try:
         return await WarrantyService.create_policy(session, payload=payload.model_dump(exclude_unset=True))
     except ValueError as exc:
@@ -80,6 +104,18 @@ async def patch_manager_warranty_policy(
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
 ):
+    """
+    Update only submitted shared warranty-policy fields. Missing policy returns 404; invalid
+    targets, relationships or durations return 400. Omitted series selection is preserved
+    and an explicitly empty selection clears it. Existing equipment warranty snapshots are
+    not recalculated from the edited definition.
+
+    Access and scope: system-tenant Manager access is required; these are shared platform
+    definitions. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [warranty policy
+    contract](https://github.com/mvnby/air-api/blob/main/docs/warranty-policies.md).
+    """
     try:
         data = await WarrantyService.update_policy(
             session,
@@ -104,6 +140,19 @@ async def list_manager_equipment_warranty_coverages(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Read warranty coverage snapshots and their current temporal, maintenance and
+    operator-decision status for customer equipment. Missing/inaccessible equipment returns
+    404. Reading computes status without changing the stored policy snapshot or recording a
+    warranty decision.
+
+    Access and scope: Manager access is required; equipment ownership is inherited from its
+    customer in the authenticated tenant. Linked orders must also belong to the selected
+    storefront. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [warranty policy
+    contract](https://github.com/mvnby/air-api/blob/main/docs/warranty-policies.md).
+    """
     coverages = await WarrantyCoverageService.list_coverages(
         session,
         equipment_id=equipment_id,
@@ -126,6 +175,21 @@ async def decide_manager_warranty_coverage(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Record a voided/restored decision with a required reason for an equipment coverage under
+    a coverage lock, appending decision history. Missing/inaccessible equipment/coverage
+    returns 404 and invalid action/reason returns 400. Restoring equipment/supplier coverage
+    cannot override warranty_mode=none; valid restoration recalculates maintenance status.
+    Repeats append decisions because no idempotency receipt is used; shared policy
+    definitions remain unchanged.
+
+    Access and scope: Manager access is required; equipment ownership is inherited from its
+    customer in the authenticated tenant. Linked orders must also belong to the selected
+    storefront. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [warranty policy
+    contract](https://github.com/mvnby/air-api/blob/main/docs/warranty-policies.md).
+    """
     try:
         data = await WarrantyCoverageService.record_decision(
             session,

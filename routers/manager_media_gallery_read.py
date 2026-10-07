@@ -37,7 +37,17 @@ async def reuse_search(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
-    """Search for products to reuse images from."""
+    """
+    Search shared product titles for image reuse and return up to 10 product
+    IDs/titles/main-image URLs. q must contain at least two characters; no page/limit
+    parameters are accepted. Reading results does not ingest or link an image.
+
+    Access and scope: Manager access is required; this reads the shared platform catalog,
+    not tenant-owned copies. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
+    """
     return await ManagerMediaService.search_reuse_products(session, q)
 
 
@@ -51,7 +61,15 @@ async def get_common_gallery_images(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
-    """Return non-installation images shared by all selected products."""
+    """
+    Return non-installation URLs present in every selected product’s gallery. Empty
+    selection returns 400; a product with no matching gallery makes the intersection empty.
+    product_count reflects the submitted selection length. This only reads shared links.
+
+    Access and scope: Manager access is required; this reads the shared platform catalog,
+    not tenant-owned copies. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     if not product_ids:
         raise HTTPException(status_code=400, detail="product_ids is required")
 
@@ -78,7 +96,18 @@ async def get_image_variant_candidates(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
-    """Dry-run candidate selection for images missing a requested variant."""
+    """
+    Read a bounded dry-run candidate set missing the requested variant; limit is 1–100 and
+    installation photos are excluded by default. Invalid variant returns 400. This route
+    uses missing-only selection and does not schedule processing or retry recorded failed
+    variants.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
+    """
     try:
         return await ProductImageVariantService.get_missing_variant_candidates(
             session=session,

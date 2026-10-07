@@ -19,6 +19,13 @@ import { request as __request } from '../core/request';
 export class ManagerDocsService {
     /**
      * Get Manager Order Documents
+     * List legacy-compatible document metadata for an order in the current Manager
+     * tenant/storefront, including basis and scoped line metadata. Missing order returns 404.
+     * Native artifacts/lifecycle use document-system endpoints; is_downloadable here reflects
+     * the legacy file reference.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param orderId
      * @returns ManagerOrderDocumentListResponse Successful Response
      * @throws ApiError
@@ -39,6 +46,13 @@ export class ManagerDocsService {
     }
     /**
      * Upload Manager Order Document
+     * Upload a legacy order document to its configured file provider for an accessible order
+     * in the current tenant/storefront. Closed orders return 409 order_documents_locked.
+     * Creates a document record/provider file; no caller idempotency receipt is provided, so
+     * reconcile after an uncertain upload result.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param orderId
      * @param formData
      * @returns ManagerOrderDocumentItem Successful Response
@@ -63,6 +77,13 @@ export class ManagerDocsService {
     }
     /**
      * Register Manager External Contract
+     * Register an external contract’s number/date and optional file or HTTP(S) URL for an
+     * accessible order in the current tenant/storefront. Closed orders return 409; invalid
+     * contract details/URL return 400. This records external evidence rather than generating a
+     * native official contract; repeated POST can create another record.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param orderId
      * @param formData
      * @returns ManagerOrderDocumentItem Successful Response
@@ -87,6 +108,13 @@ export class ManagerDocsService {
     }
     /**
      * Attach Manager Doc File
+     * Replace/upload the provider file associated with an accessible legacy document in the
+     * current tenant/storefront. Closed orders return 409, invalid file/document configuration
+     * 400 and missing document 404. Previous provider file cleanup is attempted after
+     * replacement; this is not a native immutable artifact edit.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param docId
      * @param formData
      * @returns ManagerOrderDocumentItem Successful Response
@@ -111,6 +139,14 @@ export class ManagerDocsService {
     }
     /**
      * Get Manager Doc Download
+     * Download the provider-backed legacy document file for the current tenant/storefront. The
+     * service exports Google content or reads uploaded evidence according to file type.
+     * Missing document/content returns 404; unsupported/unavailable export or native-managed
+     * routing misuse returns 400. Native artifacts have their own authenticated download
+     * endpoint.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param docId
      * @returns any Successful Response
      * @throws ApiError
@@ -131,6 +167,14 @@ export class ManagerDocsService {
     }
     /**
      * Delete Manager Doc
+     * Delete an accessible legacy document record and attempt provider file cleanup. Current
+     * tenant/storefront Manager access is required. Closed order, dependent documents or a
+     * native-managed lifecycle record returns 409; missing document returns 404. Provider
+     * cleanup failure does not imply the database record survived. A repeated delete is not
+     * receipt replay.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param docId
      * @returns ManagerActionMessageResponse Successful Response
      * @throws ApiError
@@ -151,6 +195,12 @@ export class ManagerDocsService {
     }
     /**
      * List Manager Document Templates
+     * List the shared managed legacy Google template directory, excluding implicit legacy
+     * templates and optionally filtering by document type. Requires system-tenant Manager
+     * access; this is not the tenant-owned native template registry.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param docType
      * @returns DocumentTemplateListResponse Successful Response
      * @throws ApiError
@@ -171,6 +221,13 @@ export class ManagerDocsService {
     }
     /**
      * Create Manager Document Template
+     * Create a shared legacy Google template definition from a Drive file reference and
+     * supplied restrictions/basis links. Requires system-tenant Manager access. Invalid
+     * configuration returns 400; this does not upload a native DOCX version. No caller
+     * idempotency receipt is provided.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param requestBody
      * @returns DocumentTemplateItem Successful Response
      * @throws ApiError
@@ -190,6 +247,13 @@ export class ManagerDocsService {
     }
     /**
      * List Manager Document Template Files
+     * Read candidate files from the configured/shared Google Drive template folder. Requires
+     * system-tenant Manager access. This existing endpoint accepts limit 1–200, default 100;
+     * credentials/provider listing failure returns 502. Listing does not create a template
+     * definition or copy files.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param folderId
      * @param limit
      * @returns DocumentTemplateFileListResponse Successful Response
@@ -213,6 +277,12 @@ export class ManagerDocsService {
     }
     /**
      * Patch Manager Document Template
+     * Patch supplied fields of a shared legacy Google template definition. Requires
+     * system-tenant Manager access. Invalid or missing template configuration returns 400;
+     * existing generated document files are not regenerated by this metadata update.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param templateId
      * @param requestBody
      * @returns DocumentTemplateItem Successful Response
@@ -237,6 +307,12 @@ export class ManagerDocsService {
     }
     /**
      * Delete Manager Document Template
+     * Delete a shared legacy template definition after service dependency validation. Requires
+     * system-tenant Manager access. A missing definition or service refusal is returned as
+     * 404; repeating deletion is not an idempotent receipt.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param templateId
      * @returns ManagerActionMessageResponse Successful Response
      * @throws ApiError
@@ -257,6 +333,14 @@ export class ManagerDocsService {
     }
     /**
      * Get Doc Templates
+     * Resolve available legacy templates for a document kind and optional order/customer
+     * context. Manager access and scoped entity checks are required; partner tenants must
+     * supply order or customer context (403 otherwise). Missing/inaccessible context returns
+     * 404. Partner responses restrict exposed customer IDs to the selected customer; this does
+     * not grant access to shared template administration.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param docType
      * @param orderId
      * @param customerId

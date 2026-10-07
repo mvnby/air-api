@@ -31,6 +31,15 @@ async def list_manager_multi_split_options(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Read paginated eligible outdoor or indoor multi-split units for the selected storefront;
+    limit is 1–100. This option list does not certify that arbitrary units are compatible or
+    create an order/proposal.
+
+    Access and scope: Manager access is required; data is restricted to the authenticated
+    tenant and selected storefront. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     return await MultiSplitConfigurationService.list_options(
         session, tenant_scope=tenant_scope, kind=kind, page=page, limit=limit,
     )
@@ -42,6 +51,17 @@ async def preview_manager_multi_split(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Calculate a multi-split configuration and compatibility status from rooms and selected
+    units, using current catalog/supply data. Invalid selection returns 422. Compatibility
+    may be unverified when no confirmed profile exists; preview is not a saved order. Demo
+    scope omits commercial details; accepted components/status must be sent back when
+    saving.
+
+    Access and scope: Manager access is required; data is restricted to the authenticated
+    tenant and selected storefront. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         preview = await MultiSplitConfigurationService.preview(
             session, tenant_scope=tenant_scope, request=payload,
@@ -62,6 +82,17 @@ async def save_manager_multi_split_proposal(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Save a recalculated multi-split configuration as a new draft alternative or an empty
+    existing draft in a scoped negotiation order. Changed components/status returns 409 and
+    requires preview again; incompatible or invalid/lifecycle selections return 400. Saves
+    component/price snapshots, profile provenance and financials together. Each
+    new-alternative POST may create another proposal; no idempotency receipt exists.
+
+    Access and scope: Manager access is required; data is restricted to the authenticated
+    tenant and selected storefront. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await MultiSplitProposalService.save(
             session, tenant_scope=tenant_scope, order_id=order_id, payload=payload,
