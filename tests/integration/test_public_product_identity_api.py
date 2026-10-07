@@ -7,7 +7,8 @@ from services.spec_normalizer import normalize_specs
 
 
 @pytest.mark.asyncio
-async def test_structured_source_identity_survives_catalog_detail_and_navigation(async_client, db):
+@pytest.mark.parametrize("class_label", ["Класс мощности", "Номинальный класс мощности"])
+async def test_structured_source_identity_survives_catalog_detail_and_navigation(async_client, db, class_label):
     brand = Brand(title="Identity source", slug="identity-source", is_published=True)
     db.add(brand)
     await db.flush()
@@ -28,7 +29,7 @@ async def test_structured_source_identity_survives_catalog_detail_and_navigation
         if model:
             rows += f'<tr><th>Модель</th><td>{model}</td></tr>'
         if raw_class:
-            rows += f'<tr><th>Класс мощности</th><td>{raw_class}</td></tr>'
+            rows += f'<tr><th>{class_label}</th><td>{raw_class}</td></tr>'
         soup = BeautifulSoup(f'<div class="product__specs"><table>{rows}</table></div>', "html.parser")
         specs = normalize_specs(AircondParser._extract_specs(soup), title=title, auto_tag_slugs=[])
         product = Product(title=title, slug=f"identity-product-{index}", price=2000, specs=specs, brand_id=brand.id, series_id=series.id, is_published=True)

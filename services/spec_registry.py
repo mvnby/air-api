@@ -149,7 +149,7 @@ SPEC_DEFINITIONS: Mapping[str, SpecDefinition] = {
     "model": _spec("model", "Модель", SpecValueType.TEXT, aliases=("model_code",)),
     "capacity_class": _spec(
         "capacity_class", "Номинальный класс мощности", SpecValueType.TEXT,
-        aliases=("Класс мощности",),
+        aliases=("Класс мощности", "Номинальный класс мощности"),
         description="Подтверждённый номинальный класс из структурированных данных источника. Не вычисляется из кВт или названия модели.",
     ),
     "model_indoor": _spec("model_indoor", "Модель внутреннего блока", SpecValueType.TEXT),
