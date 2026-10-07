@@ -123,8 +123,19 @@ class IncomingCommandService:
         changes = payload.model_dump(mode="json", exclude_unset=True)
         updated = dict(meta)
         if {"workflow_type", "service_type"} & changes.keys():
+            workflow = changes.get("workflow_type", meta.get("workflow_type"))
+            service = changes.get("service_type", meta.get("service_type"))
+            # A null workflow clears the scenario, while a null service keeps
+            # generic work. Clear a non-generic workflow with its sole service
+            # when it was omitted, rather than silently reinferring the cleared value.
+            if "workflow_type" in changes and workflow is None and "service_type" not in changes:
+                service = None
+            if "service_type" in changes and service is None and workflow != "service_work":
+                if "workflow_type" in changes and workflow is not None:
+                    raise ValueError("Cleared service_type conflicts with workflow_type")
+                workflow = None
             changes["workflow_type"], changes["service_type"] = resolve_scenario(
-                workflow_type=changes.get("workflow_type"), service_type=changes.get("service_type"),
+                workflow_type=workflow, service_type=service,
             )
         sources = dict(meta.get("field_sources", {}))
         changed_meta_fields = set()

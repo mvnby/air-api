@@ -126,3 +126,89 @@ async def test_preview_enforces_tenant_scope_before_parsing(db, monkeypatch):
     with pytest.raises(LookupError):
         await IncomingCommandService.get(db, actor=replace(caller, tenant_scope=TenantScope(2, 2)),
             lead_id=saved.value.lead_id, include_preview=True)
+
+
+@pytest.mark.asyncio
+async def test_http_partial_scenario_update_retains_dismantling_through_qualification(db):
+    caller = await actor(db)
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[route_actor] = lambda: caller
+    async def session():
+        yield db
+    app.dependency_overrides[get_session] = session
+    text = "Демонтаж, +375291234567, завтра 09:00; адрес уточнить; созвониться перед выездом"
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test") as client:
+        saved = await client.post("/api/manager/incoming", json={
+            "request_text": text, "workflow_type": "service_work", "service_type": "dismantling",
+            "source_occurred_at": "2026-10-06T21:30:00Z",
+        }, headers={"Idempotency-Key": "review1105-http-create"})
+        assert saved.status_code == 201
+        original = saved.json()
+        lead_id = original["lead_id"]
+        patch = {"request_text": text, "expected_version": 1, "workflow_type": "service_work"}
+        headers = {"Idempotency-Key": "review1105-http-repeat"}
+        corrected = await client.patch(f"/api/manager/incoming/{lead_id}", json=patch, headers=headers)
+        assert corrected.status_code == 200
+        value = corrected.json()
+        assert value["service_type"] == "dismantling"
+        assert value["workflow_type"] == "service_work"
+        assert value["field_sources"] == original["field_sources"]
+        for field in ("original_text", "source_occurred_at", "source_timezone", "phone", "requested_at", "date_precision", "clarification_task_id"):
+            assert value[field] == original[field]
+        replay = await client.patch(f"/api/manager/incoming/{lead_id}", json=patch, headers=headers)
+        assert replay.json() == value and replay.headers["Idempotency-Replayed"] == "true"
+        for field in ("workflow_type", "service_type"):
+            incompatible = await client.patch(f"/api/manager/incoming/{lead_id}", json={
+                "request_text": text, "expected_version": 2, field: "repair",
+            }, headers={"Idempotency-Key": f"review1105-http-incompatible-{field}"})
+            assert incompatible.status_code == 400
+            assert incompatible.json()["detail"]["error_code"] == "invalid_input"
+            current = await client.get(f"/api/manager/incoming/{lead_id}")
+            assert current.json() == value
+    detail = RawLeadInboxService.project(await db.get(Lead, lead_id), None, None)
+    qualified = await LeadCommandService.qualify_lead(db, lead_id, LeadQualifyPayload(
+        expected_version=2, customer_type="individual", name="Иван", phone=value["phone"],
+        workflow_type=detail.workflow_type, service_type=detail.service_type), tenant_scope=caller.tenant_scope)
+    order = await db.get(Order, qualified["order_id"])
+    assert order.workflow_type == "service_work" and order.technical_meta["service_type"] == "dismantling"
+    context = order.technical_meta["incoming_intake"]
+    assert context["service_type"] == "dismantling" and context["field_sources"] == original["field_sources"]
+    assert context["original_text"] == text and context["clarification_task_id"] == original["clarification_task_id"]
+    assert context["requested_at"] == original["requested_at"]
+    assert order.installation_date is None
+    for model in (OrderWorkStage, OrderInstaller):
+        assert (await db.execute(select(func.count()).select_from(model))).scalar_one() == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fields,workflow", [
+    ({"service_type": None}, "service_work"),
+    ({"workflow_type": None}, None),
+    ({"workflow_type": None, "service_type": None}, None),
+])
+async def test_http_explicit_clear_retains_only_compatible_omitted_fields(db, fields, workflow):
+    caller = await actor(db)
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[route_actor] = lambda: caller
+    async def session():
+        yield db
+    app.dependency_overrides[get_session] = session
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test") as client:
+        saved = await client.post("/api/manager/incoming", json={
+            "request_text": "Демонтаж", "workflow_type": "service_work", "service_type": "dismantling",
+        }, headers={"Idempotency-Key": "review1105-http-clear-create"})
+        assert saved.status_code == 201
+        lead_id = saved.json()["lead_id"]
+        cleared = await client.patch(f"/api/manager/incoming/{lead_id}", json={
+            "request_text": "Демонтаж", "expected_version": 1, **fields,
+        }, headers={"Idempotency-Key": "review1105-http-clear-patch"})
+        assert cleared.status_code == 200
+        value = cleared.json()
+        assert value["workflow_type"] == workflow and value["service_type"] is None
+        assert "service_type" not in value["field_sources"]
+        if workflow is None:
+            assert "workflow_type" not in value["field_sources"]
+        else:
+            assert value["field_sources"]["workflow_type"] == saved.json()["field_sources"]["workflow_type"]
