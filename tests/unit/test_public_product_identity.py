@@ -7,8 +7,12 @@ from services.spec_normalizer import normalize_specs
 
 
 @pytest.mark.parametrize("raw, expected", [("07", "07"), (9, "09"), (" 12 ", "12"), ("48", "48"), (None, None), (True, None), (9.0, None), ("9000 BTU/h", None), ("2.6 кВт", None), ("09/12", None), ("00", None), ({}, None)])
-def test_explicit_nominal_class_normalization(raw, expected):
-    specs = normalize_specs({"Модель": "TAC-09CHSD/ZG11IHB", "Класс мощности": raw}, auto_tag_slugs=[])
+@pytest.mark.parametrize("source_key", ["capacity_class", "Класс мощности", "Номинальный класс мощности"])
+def test_explicit_nominal_class_normalization(raw, expected, source_key):
+    specs = normalize_specs({"Модель": "TAC-09CHSD/ZG11IHB", source_key: raw}, auto_tag_slugs=[])
+    assert specs["capacity_class"] == expected
+    if source_key != "capacity_class":
+        assert source_key not in specs
     assert public_product_identity(specs) == {"model_code": "TAC-09CHSD/ZG11IHB", "capacity_class": expected}
     assert normalize_specs(specs, auto_tag_slugs=[]) == specs
 
