@@ -79,3 +79,26 @@ describe('LeadQualifyModal customer choice', () => {
   });
 
 });
+
+
+it('preselects a saved generic incoming scenario without guessing another service', async () => {
+  vi.mocked(api.getManagerOrderScenarios).mockResolvedValue({ items: [
+    { label: 'Обслуживание', workflow_type: 'maintenance', service_type: 'maintenance', hint: '' },
+    { label: 'Работы', workflow_type: 'service_work', service_type: null, hint: '' },
+  ] });
+  const wrapper = mount(LeadQualifyModal, { props: { lead: { ...lead, entity_kind: 'lead', intake_version: 4, workflow_type: 'service_work', service_type: null } as never } });
+  wrappers.push(wrapper);
+  await flushPromises();
+  expect(wrapper.findAll('button').find(button => button.text() === 'Работы')?.attributes('aria-pressed')).toBe('true');
+});
+
+
+it('requires an explicit scenario when incoming parsing left it unknown', async () => {
+  vi.mocked(api.getManagerOrderScenarios).mockResolvedValue({ items: [
+    { label: 'Работы', workflow_type: 'service_work', service_type: null, hint: '' },
+  ] });
+  const wrapper = mount(LeadQualifyModal, { props: { lead: { ...lead, entity_kind: 'lead', intake_version: 1, workflow_type: null, service_type: null } as never } });
+  wrappers.push(wrapper);
+  await flushPromises();
+  expect(wrapper.findAll('button').find(button => button.text() === 'Работы')?.attributes('aria-pressed')).toBe('false');
+});

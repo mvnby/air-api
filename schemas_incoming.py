@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from core.input_validation import validate_optional_email, validate_optional_phone
 
@@ -16,11 +16,19 @@ class IncomingFields(BaseModel):
     phone: str | None = None
     email: str | None = None
     region_text: str | None = Field(default=None, max_length=300)
+    workflow_type: Literal["sales_installation", "service_work", "maintenance", "repair"] | None = None
+    service_type: Literal["turnkey", "install_only", "pre_install", "maintenance", "repair", "dismantling"] | None = None
     address_text: str | None = Field(default=None, max_length=500)
     requested_time_text: str | None = Field(default=None, max_length=300)
     requested_at: AwareDatetime | None = None
     call_before_visit: bool | None = Field(default=None, description="Prior-call agreement, independent of a confirmed visit or task deadline.")
     clarification_requested: bool | None = Field(default=None, description="Explicit instruction to save one linked clarification task. On creation, omission also recognizes standalone positive address/call instructions; false disables that text inference. MCP requires task-write scope when a task is requested.")
+
+    @model_validator(mode="after")
+    def valid_scenario(self):
+        from services.order_scenarios import resolve_scenario
+        resolve_scenario(workflow_type=self.workflow_type, service_type=self.service_type)
+        return self
 
     @field_validator("request_text")
     @classmethod
@@ -59,7 +67,17 @@ class IncomingUpdatePayload(IncomingFields):
     expected_version: int = Field(ge=1)
 
 
+class IncomingPreview(BaseModel):
+    state: Literal["suggested", "unknown", "unavailable"]
+    region_text: str | None = None
+    workflow_type: str | None = None
+    service_type: str | None = None
+    evidence: dict[str, str] = Field(default_factory=dict)
+    field_sources: dict[str, str] = Field(default_factory=dict)
+
+
 class IncomingResponse(IncomingFields):
+    preview: IncomingPreview | None = None
     lead_id: int
     version: int
     intake_state: Literal["needs_contact", "needs_details", "ready_for_review"]

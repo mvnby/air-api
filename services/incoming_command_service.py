@@ -20,6 +20,7 @@ from schemas_incoming import (
     IncomingClarificationPayload,
     IncomingListResponse,
     IncomingResponse,
+    IncomingPreview,
     IncomingUpdatePayload,
 )
 from schemas_manager_leads import LeadCreatePayload
@@ -27,6 +28,8 @@ from schemas_personal_tasks import PersonalTaskCreatePayload
 from services.authenticated_command_service import AuthenticatedCommandService
 from services.bot_quick_order_service import BotQuickOrderService
 from services.lead_command_service import LeadCommandService
+from services.order_scenarios import resolve_scenario
+from services.incoming_preview import incoming_preview
 from services.incoming_agreements import CLARIFICATION_TITLE, explicit_instructions
 from services.personal_task_service import PersonalTaskService
 from services.public_write_idempotency_service import (
@@ -56,12 +59,17 @@ class IncomingCommandService:
             mode="json",
             include={
                 "region_text",
+                "workflow_type",
+                "service_type",
                 "address_text",
                 "requested_time_text",
                 "requested_at",
                 "call_before_visit",
                 "clarification_requested",
             },
+        )
+        fields["workflow_type"], fields["service_type"] = resolve_scenario(
+            workflow_type=payload.workflow_type, service_type=payload.service_type,
         )
         sources = {key: "provided" for key, value in fields.items() if value is not None}
         clarification, call = explicit_instructions(payload.request_text)
@@ -114,6 +122,10 @@ class IncomingCommandService:
         """Omitted fields retain their values; explicit null clears them."""
         changes = payload.model_dump(mode="json", exclude_unset=True)
         updated = dict(meta)
+        if {"workflow_type", "service_type"} & changes.keys():
+            changes["workflow_type"], changes["service_type"] = resolve_scenario(
+                workflow_type=changes.get("workflow_type"), service_type=changes.get("service_type"),
+            )
         sources = dict(meta.get("field_sources", {}))
         changed_meta_fields = set()
         for key in (
@@ -121,6 +133,8 @@ class IncomingCommandService:
             "phone",
             "email",
             "region_text",
+            "workflow_type",
+            "service_type",
             "address_text",
             "requested_time_text",
             "requested_at",
@@ -183,6 +197,8 @@ class IncomingCommandService:
             phone=lead.phone,
             email=lead.email,
             region_text=meta.get("region_text"),
+            workflow_type=meta.get("workflow_type"),
+            service_type=meta.get("service_type"),
             address_text=meta.get("address_text"),
             requested_time_text=meta.get("requested_time_text"),
             requested_at=meta.get("requested_at"),
@@ -439,13 +455,20 @@ class IncomingCommandService:
         )
 
     @classmethod
-    async def get(cls, session: AsyncSession, *, actor: CommandActor, lead_id: int):
+    async def get(cls, session: AsyncSession, *, actor: CommandActor, lead_id: int, include_preview: bool = False):
         lead = await TenantEntityAccessService.get_lead(
             session, lead_id, tenant_scope=actor.tenant_scope, populate_existing=True
         )
         if not lead or not lead.intake_meta:
             raise LookupError("Incoming request not found")
-        return cls._response(lead)
+        response = cls._response(lead)
+        if include_preview:
+            try:
+                response.preview = incoming_preview(lead.request_text)
+            except Exception:
+                # Suggestions are optional and cannot undo an acknowledged save.
+                response.preview = IncomingPreview(state="unavailable")
+        return response
 
     @classmethod
     async def list(

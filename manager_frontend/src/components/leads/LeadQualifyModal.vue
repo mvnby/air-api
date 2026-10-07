@@ -108,7 +108,9 @@ const canSubmit = computed(() => !isLoading.value && !missingCustomerType.value 
 
 api.getManagerOrderScenarios().then((response) => {
   scenarioOptions.value = response.items;
-  scenario.value = response.items.find((item: OrderScenarioOption) => item.service_type === props.lead.service_type) || null;
+  scenario.value = props.lead.workflow_type || props.lead.service_type
+    ? response.items.find((item: OrderScenarioOption) => item.service_type === props.lead.service_type && (!props.lead.workflow_type || item.workflow_type === props.lead.workflow_type)) || null
+    : null;
 }).catch(() => notify('Не удалось загрузить сценарии заказов', 'error'));
 
 const selectCustomerType = (value: Exclude<CustomerTypeChoice, ''>) => {

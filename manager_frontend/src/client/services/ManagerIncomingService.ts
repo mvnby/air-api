@@ -121,22 +121,31 @@ export class ManagerIncomingService {
      * Read an incoming request with saved intake metadata in the authenticated staff actor’s
      * tenant/storefront, including current version, original text and missing-data state.
      * Missing/inaccessible or non-intake Lead returns 404. Reading does not mark the triage
-     * card read or change its workflow.
+     * card read or change its workflow. Optional include_preview returns conservative region
+     * and service/scenario suggestions with source-text evidence after the source has been
+     * saved; it never persists suggestions or calls external AI. Unknown/failed parsing leaves
+     * fields unknown (preview.state unknown/unavailable). The response version binds the
+     * suggestions to this read; corrections still require expected_version.
      *
      * Access requires an authenticated Manager session/JWT and live membership; see [Manager
      * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param leadId
+     * @param includePreview
      * @returns IncomingResponse Successful Response
      * @throws ApiError
      */
     public static getManagerIncoming(
         leadId: number,
+        includePreview: boolean = false,
     ): CancelablePromise<IncomingResponse> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/manager/incoming/{lead_id}',
             path: {
                 'lead_id': leadId,
+            },
+            query: {
+                'include_preview': includePreview,
             },
             errors: {
                 422: `Validation Error`,

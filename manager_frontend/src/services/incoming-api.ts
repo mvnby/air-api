@@ -18,6 +18,9 @@ export const newIncomingIdempotencyKey = (): string => {
 };
 
 export const incomingApi = {
+  preview: (leadId: number): Promise<IncomingResponse> => Promise.resolve(
+    ManagerIncomingService.getManagerIncoming(leadId, true),
+  ),
   clarify: (leadId: number, expectedVersion: number, idempotencyKey: string): Promise<IncomingResponse> => Promise.resolve(
     ManagerIncomingService.createManagerIncomingClarification(leadId, idempotencyKey, { expected_version: expectedVersion }),
   ),

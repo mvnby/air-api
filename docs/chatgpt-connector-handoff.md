@@ -19,8 +19,16 @@
 граница MCP scopes — в [Manager и напоминания](chatgpt-connector.md#manager-и-напоминания),
 поведенческая проверка — [linked clarification tests](../tests/integration/test_incoming_clarification.py).
 Ниже исходный аудит первого выпуска; его пункты linked clarification и
-qualification-preservation закрыты этим срезом. Editable preview региона/услуги
-и реальный мобильный пилот остаются открытыми.
+qualification-preservation закрыты этим срезом. Следующий срез #1084 добавляет read-only предложения района и услуги/сценария
+после подтверждённого сохранения, ручное применение и versioned correction.
+Проверки: [preview unit](../tests/unit/test_incoming_preview.py),
+[durable preview flow](../tests/integration/test_incoming_preview_flow.py),
+[Manager capture](../manager_frontend/tests/quick-incoming-capture.spec.ts).
+Операция GET сохранённого входящего расширена параметром `include_preview`;
+новых HTTP-операций нет. Внешний AI и обязательный wizard не добавлены.
+Это описание изменения; production-выпуск подтверждается PR/CI/deploy,
+реальный мобильный пилот остаётся в #1087. Остальные критерии #1084 не закрывать
+без отдельного подтверждения; выбор существующего клиента остаётся на qualification.
 
 | Сценарий | Доступность первого выпуска |
 | --- | --- |

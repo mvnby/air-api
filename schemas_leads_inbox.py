@@ -92,6 +92,7 @@ class LeadsInboxItemResponse(BaseModel):
     customer_delivery_address: str | None = None
     object_type: str | None = None
     service_type: str | None = None
+    workflow_type: str | None = None
     equipment_class: str | None = None
     marketing_source: str | None = None
     attachment_count: int = 0

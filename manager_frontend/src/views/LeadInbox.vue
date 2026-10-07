@@ -168,6 +168,11 @@ const isQuickIncoming = (item: InboxItem) => Boolean(
   item.entity_kind === 'lead'
   && (item as InboxItem & { intake_state?: string | null }).intake_state,
 );
+const incomingCaptured = async (incoming: { lead_id: number }) => {
+  notifyInboxChanged();
+  setToast(`Входящее #${incoming.lead_id} сохранено`);
+  await load();
+};
 const incomingSaved = async (incoming: { lead_id: number }) => {
   const wasEditing = Boolean(editingIncomingId.value);
   closeIncomingCapture();
@@ -348,6 +353,7 @@ const onEmailImported = async () => {
         :key="editingIncomingId || 'new'"
         :lead-id="editingIncomingId"
         @close="closeIncomingCapture"
+        @captured="incomingCaptured"
         @saved="incomingSaved"
       />
 
