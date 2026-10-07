@@ -85,10 +85,18 @@ def list_wal_objects(
         for raw in page.get("Contents", []):
             key = str(raw.get("Key") or "")
             storage_name = key.rsplit("/", 1)[-1]
-            filename, codec = (
-                storage_helpers.wal_storage_name(storage_name)
-                if storage_helpers else (storage_name, "raw")
-            )
+            if storage_helpers is None:
+                # Older callers must fail closed on encoded segment/history keys,
+                # rather than silently omit them from lineage selection.
+                if (
+                    not WAL_ARCHIVE_NAME_RE.fullmatch(storage_name)
+                    and (WAL_SEGMENT_RE.fullmatch(storage_name[:24])
+                         or re.match(r"[0-9A-F]{8}\.history\.", storage_name))
+                ):
+                    raise SystemExit(f"WAL storage codec helper is required: {storage_name}")
+                filename, codec = storage_name, "raw"
+            else:
+                filename, codec = storage_helpers.wal_storage_name(storage_name)
             if not WAL_ARCHIVE_NAME_RE.fullmatch(filename):
                 continue
             if key != f"{prefix}{filename[:8]}/{storage_name}":

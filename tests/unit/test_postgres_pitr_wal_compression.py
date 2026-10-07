@@ -444,3 +444,10 @@ def test_incompressible_segment_still_roundtrips(tmp_path, original):
     output = tmp_path / "decoded"
     storage.download_gzip_wal(client, bucket=CONFIG.bucket, key=KEY + ".gz", head=head, destination=output)
     assert output.read_bytes() == data
+
+
+def test_legacy_lineage_caller_cannot_silently_skip_gzip(original):
+    client = compressed_client(original)
+    with pytest.raises(SystemExit, match="storage codec helper is required"):
+        lineage.list_wal_objects(client, bucket=CONFIG.bucket,
+                                 prefix="postgres/pitr/mvn-api/wal/", max_objects=100)
