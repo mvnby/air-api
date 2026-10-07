@@ -5,6 +5,9 @@ import { api } from '../src/api';
 import * as uiFeedback from '../src/services/ui-feedback';
 import CustomerProfileView from '../src/views/CustomerProfileView.vue';
 import App from '../src/App.vue';
+import CustomerDetailsPanel from '../src/components/customers/CustomerDetailsPanel.vue';
+import CustomerContactsPanel from '../src/components/customers/CustomerContactsPanel.vue';
+import CustomerIntakeDialog from '../src/components/customers/CustomerIntakeDialog.vue';
 import { clearManagerSession } from '../src/services/manager-session';
 import { storefrontSettingsApi } from '../src/features/settings/storefront-settings-api';
 
@@ -121,5 +124,81 @@ describe('CustomerProfileView workspace', () => {
     await wrapper.get('.back-link').trigger('click');
     await vi.waitFor(() => expect(wrapper.find('.customer-name-link').exists()).toBe(true));
     expect(`${window.location.pathname}${window.location.search}`).toBe('/manager/customers?type=company');
+  });
+});
+
+describe('saved customer completeness', () => {
+  it('keeps unsaved requisites out and permits partial dossier saving', async () => {
+    const value = { ...customer, inn: null, phone: null, email: null };
+    vi.mocked(api.getManagerCustomerDetail).mockResolvedValue(value as never);
+    vi.spyOn(api, 'patchManagerCustomer').mockResolvedValue({ ...value, full_legal_name: 'Полное имя' } as never);
+    const wrapper = mountProfile(); await flushPromises();
+    const summary = () => wrapper.get('[aria-label="Заполненность досье"]');
+    expect(summary().get('[data-completeness="contacts"]').text()).toContain('телефон, email');
+    const details = wrapper.getComponent(CustomerDetailsPanel);
+    await details.findAll('button').find(b => b.text() === 'Изменить')!.trigger('click');
+    await details.get('input[placeholder="Полное наименование"]').setValue('Полное имя');
+    expect(summary().get('[data-completeness="identity"]').text()).toContain('полное наименование, УНП');
+    expect(details.get('button[type="submit"]').attributes('disabled')).toBeUndefined();
+    await details.get('form').trigger('submit'); await flushPromises();
+    expect(api.patchManagerCustomer).toHaveBeenCalledWith(7, { full_legal_name: 'Полное имя' });
+    expect(summary().get('[data-completeness="identity"]').text()).not.toContain('полное наименование');
+    expect(summary().get('[data-completeness="identity"]').text()).toContain('УНП');
+  });
+  it('updates saved additional contacts and recognition without reflecting typed values', async () => {
+    const value = { ...customer, phone: null, email: null, contact_count: 0 };
+    vi.mocked(api.getManagerCustomerDetail).mockResolvedValue(value as never);
+    vi.spyOn(ManagerService, 'createManagerCustomerContact').mockResolvedValue({} as never);
+    const wrapper = mountProfile(); await flushPromises();
+    const contacts = wrapper.getComponent(CustomerContactsPanel);
+    await contacts.findAll('button').find(b => b.text() === 'Добавить')!.trigger('click');
+    await contacts.get('input[name="contact_name"]').setValue('Бухгалтер');
+    await contacts.get('input[name="contact_email"]').setValue('new@example.test');
+    const summary = () => wrapper.get('[aria-label="Заполненность досье"]');
+    expect(summary().get('[data-completeness="contacts"]').text()).toContain('телефон, email');
+    vi.mocked(ManagerService.getManagerCustomerContacts).mockResolvedValue({ items: [{ customer_id: 7, name: 'Бухгалтер', email: 'new@example.test', is_active: true, is_primary: false }] } as never);
+    await contacts.get('form').trigger('submit'); await flushPromises();
+    expect(summary().get('[data-completeness="contacts"]').text()).toContain('Не указаны: телефон');
+    expect(summary().get('[data-completeness="contacts"]').text()).not.toContain('email');
+    await wrapper.findAll('button').find(b => b.text() === 'Из реквизитов')!.trigger('click');
+    wrapper.getComponent(CustomerIntakeDialog).vm.$emit('created', { ...value, inn: '987654321', full_legal_name: 'Распознанное имя', phone: '123' });
+    await flushPromises();
+    expect(summary().get('[data-completeness="identity"]').text()).toContain('Поля заполнены');
+    expect(summary().get('[data-completeness="contacts"]').text()).toContain('Поля заполнены');
+  });
+  it('discards the old contact snapshot when recognition remounts the contacts panel', async () => {
+    let resolveOld!: (value: never) => void;
+    vi.mocked(api.getManagerCustomerDetail).mockResolvedValue({ ...customer, phone: null, email: null, contact_count: 2 } as never);
+    vi.mocked(ManagerService.getManagerCustomerContacts).mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve; }));
+    const wrapper = mountProfile(); await flushPromises();
+    await wrapper.findAll('button').find(b => b.text() === 'Из реквизитов')!.trigger('click');
+    vi.mocked(ManagerService.getManagerCustomerContacts).mockResolvedValue({ items: [] } as never);
+    wrapper.getComponent(CustomerIntakeDialog).vm.$emit('created', { ...customer, phone: null, email: null, contact_count: 0 });
+    await flushPromises();
+    resolveOld({ items: [{ customer_id: 7, phone: 'old', email: 'old@example.test', is_active: true }] } as never);
+    await flushPromises();
+    expect(wrapper.get('[data-completeness="contacts"]').text()).toContain('телефон, email');
+  });
+
+  it('keeps hidden contacts lazy and unloaded secondary contacts unknown', async () => {
+    vi.mocked(api.getManagerCustomerDetail).mockResolvedValue({ ...customer, phone: null, email: null, primary_contact: null, contact_count: 2 } as never);
+    vi.spyOn(ManagerService, 'getManagerCustomerDocs').mockResolvedValue({ items: [] } as never);
+    const wrapper = mountProfile('?customerId=7&openContract=1'); await flushPromises();
+    expect(ManagerService.getManagerCustomerContacts).not.toHaveBeenCalled();
+    expect(wrapper.get('[data-completeness="contacts"]').text()).toContain('ещё не загружены');
+    expect(wrapper.get('[data-completeness="contacts"]').text()).not.toContain('Не указаны');
+  });
+  it('shows only the current client after navigation, even if an old request finishes later', async () => {
+    const wrapper = await mountWorkspace();
+    let resolveOld!: (value: never) => void;
+    vi.mocked(api.getManagerCustomerDetail).mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve; }));
+    wrapper.getComponent(CustomerContactsPanel).vm.$emit('updated'); await flushPromises();
+    vi.mocked(api.getManagerCustomerDetail).mockResolvedValue({ ...customer, id: 8, name: 'Другой клиент', type: 'individual', phone: null, email: null, inn: null, signing_mode: 'self' } as never);
+    window.history.pushState({}, '', '/manager/customers/profile?customerId=8'); window.dispatchEvent(new PopStateEvent('popstate'));
+    await vi.waitFor(() => expect(wrapper.text()).toContain('Другой клиент'));
+    resolveOld(customer as never); await flushPromises();
+    expect(wrapper.get('[data-completeness="identity"]').text()).toContain('Не требуется для физлица');
+    expect(wrapper.get('[data-completeness="contacts"]').text()).toContain('телефон, email');
+    expect(wrapper.text()).not.toContain('ООО Клиент');
   });
 });

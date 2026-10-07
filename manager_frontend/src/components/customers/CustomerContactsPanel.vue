@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Mail, Pencil, Phone, Plus } from 'lucide-vue-next';
 import { ManagerService, type ManagerCatalogCustomerItemResponse } from '../../client';
+import type { SavedContacts } from './customer-completeness';
 import { getApiErrorMessage } from '../../utils/api-errors';
 import { notify } from '../../services/ui-feedback';
 
 const props = defineProps<{ customer: ManagerCatalogCustomerItemResponse; editInitially?: boolean }>();
-const emit = defineEmits<{ updated: []; dirty: [value: boolean] }>();
+const emit = defineEmits<{ updated: []; dirty: [value: boolean]; loaded: [value: SavedContacts] }>();
 type Contact = { id?: number | null; name?: string | null; role?: string | null; phone?: string | null; email?: string | null; is_primary?: boolean; is_active?: boolean };
 type History = { id: number; field_name: string; old_value?: string | null; new_value?: string | null; author_name?: string | null; changed_at: string };
 const items = ref<Contact[]>([]);
@@ -27,11 +28,19 @@ const visibleContacts = computed(() => items.value.filter((item) => showInactive
 const hasLegacyContact = computed(() => !items.value.length && Boolean(props.customer.phone || props.customer.email));
 const labels: Record<string, string> = { name: 'Имя', role: 'Роль', phone: 'Телефон', email: 'Email', is_primary: 'Основной контакт', is_active: 'Актуальность' };
 
+let alive = true;
+onUnmounted(() => { alive = false; });
 async function load() {
   loading.value = true;
   error.value = '';
-  try { items.value = (await ManagerService.getManagerCustomerContacts(props.customer.id)).items; }
-  catch (e) { error.value = getApiErrorMessage(e); }
+  const customerId = props.customer.id;
+  try {
+    const result = await ManagerService.getManagerCustomerContacts(customerId);
+    if (!alive) return;
+    items.value = result.items;
+    emit('loaded', { customerId, items: result.items });
+  }
+  catch (e) { if (alive) { error.value = getApiErrorMessage(e); emit('loaded', { customerId, items: null }); } }
   finally { loading.value = false; }
 }
 async function loadHistory() {

@@ -3,6 +3,8 @@ import { computed, defineAsyncComponent, onMounted, onUnmounted, reactive, ref }
 import { ArrowLeft, Archive, Plus } from 'lucide-vue-next';
 import { api } from '../api';
 import type { ManagerCatalogCustomerItemResponse } from '../client';
+import CustomerCompletenessPanel from '../components/customers/CustomerCompletenessPanel.vue';
+import type { SavedContacts } from '../components/customers/customer-completeness';
 import CustomerContactsPanel from '../components/customers/CustomerContactsPanel.vue';
 import CustomerDetailsPanel from '../components/customers/CustomerDetailsPanel.vue';
 import CustomerIntakeDialog from '../components/customers/CustomerIntakeDialog.vue';
@@ -24,6 +26,7 @@ type Tab = 'contacts' | 'documents' | 'reconciliation' | 'equipment';
 const activeTab = ref<Tab>(initialTab);
 const visited = reactive(new Set<Tab>([initialTab]));
 const customer = ref<ManagerCatalogCustomerItemResponse | null>(null);
+const savedContacts = ref<SavedContacts | null>(null);
 const loading = ref(true);
 const error = ref('');
 const showIntake = ref(false);
@@ -52,7 +55,7 @@ function navigate(path: string) {
 function back() { const target = params.get('returnTo'); navigate(target?.startsWith('/manager/') ? target : '/manager/customers'); }
 function openOrders() { navigate(`/manager/orders/kanban?customerId=${customerId}&segment=all`); }
 function createdOrder(orderId: number) { showCreateOrder.value = false; navigate(`/manager/orders/kanban?orderId=${orderId}`); }
-function recognized(value: ManagerCatalogCustomerItemResponse) { showIntake.value = false; updated(value); contactsRevision.value++; }
+function recognized(value: ManagerCatalogCustomerItemResponse) { showIntake.value = false; updated(value); savedContacts.value = null; contactsRevision.value++; }
 const contactsRevision = ref(0);
 async function openIntake() {
   if (dirty.value) { notify('Сначала сохраните или отмените изменения в карточке', 'info'); return; }
@@ -79,8 +82,9 @@ onUnmounted(() => { alive = false; unregisterGuard(); window.removeEventListener
     <template v-if="customer">
       <p v-if="error" class="workspace-state" role="alert">{{ error }} <button type="button" @click="load">Повторить</button></p>
       <header class="customer-header"><div class="customer-heading"><h1>{{ customer.name || customer.full_legal_name || `Клиент #${customer.id}` }}</h1><div class="customer-meta"><span>{{ customerPartyLabel(normalizeCustomerPartyType(customer.type)) }}</span><span v-if="customer.inn">УНП {{ customer.inn }}</span><button type="button" @click="openOrders">Заказы: {{ customer.order_count }} ↗</button><span v-if="customer.is_archived" class="archive-badge">Архив</span></div></div><div class="customer-tools"><button type="button" class="btn-mini-outline" @click="openIntake">Из реквизитов</button><button type="button" class="btn-mini" @click="showCreateOrder = true"><Plus :size="15" />Заказ</button><button class="archive-action" type="button" :disabled="archiving" :aria-label="customer.is_archived ? 'Вернуть из архива' : 'Архивировать клиента'" :title="customer.is_archived ? 'Вернуть из архива' : 'Архивировать клиента'" @click="archive"><Archive :size="16" /></button></div></header>
+      <CustomerCompletenessPanel :customer="customer" :contacts="savedContacts" />
       <nav class="customer-tabs" aria-label="Разделы клиента"><button v-for="tab in tabItems" :key="tab.id" type="button" :class="{ active: activeTab === tab.id }" :aria-current="activeTab === tab.id ? 'page' : undefined" @click="chooseTab(tab.id)">{{ tab.label }}</button></nav>
-      <div v-if="visited.has('contacts')" v-show="activeTab === 'contacts'" class="contacts-layout"><CustomerContactsPanel :key="`${customer.id}-${contactsRevision}`" :customer="customer" :edit-initially="params.get('editContact') === '1'" @updated="refreshContacts" @dirty="contactsDirty = $event" /><CustomerDetailsPanel :customer="customer" @updated="updated" @dirty="detailsDirty = $event" /></div>
+      <div v-if="visited.has('contacts')" v-show="activeTab === 'contacts'" class="contacts-layout"><CustomerContactsPanel :key="`${customer.id}-${contactsRevision}`" :customer="customer" :edit-initially="params.get('editContact') === '1'" @updated="refreshContacts" @loaded="savedContacts = $event" @dirty="contactsDirty = $event" /><CustomerDetailsPanel :customer="customer" @updated="updated" @dirty="detailsDirty = $event" /></div>
       <div v-if="visited.has('documents')" v-show="activeTab === 'documents'" class="space-y-3"><CustomerContractsPanel v-if="customer.type !== 'individual'" :customer-id="customer.id" /><CustomerDocumentsPanel :customer-id="customer.id" /></div>
       <CustomerReconciliationPanel v-if="visited.has('reconciliation')" v-show="activeTab === 'reconciliation'" :customer-id="customer.id" />
       <CustomerEquipmentPanel v-if="visited.has('equipment')" v-show="activeTab === 'equipment'" :customer="customer" />
