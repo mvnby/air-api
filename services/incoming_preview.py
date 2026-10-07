@@ -18,13 +18,28 @@ SERVICE_PATTERNS = {
 }
 UNCERTAIN = re.compile(r"\b(?:не|нет|без|или|либо|возможно|наверное|может|пока|уточнить|неизвест\w*)\b|\?", re.I)
 
+# A description of cancelled, refused, conditional or past work is not a request.
+# Abstain for the whole source even when the qualifier is in a separate clause.
+NON_REQUEST = re.compile(
+    r"\b(?:отмен\w*|отказ\w*|передум\w*|если|понадоб\w*|"
+    r"ранее|раньше|прошл\w*|выполнен\w*|выполнил\w*|завершен\w*|завершил\w*|сделан\w*|проводил\w*)\b"
+    r"|\bпри\s+необходимости\b|\bбыл[аио]?\s+(?:ремонт\w*|обслуживан\w*)\b"
+    r"|\b(?:ремонт\w*|обслуживан\w*)(?:\s+\w+){0,2}\s+был[аио]?\b",
+    re.I,
+)
+
 
 def incoming_preview(text: str) -> IncomingPreview:
     evidence = {}
     # Phone, addresses and dates are deliberately outside this parser. Existing
     # fields and the retained source clock have their own durable contracts.
     regions = []
-    for match in re.finditer(r"\b(?:район|р-н|микрорайон)\s+([^,;\n.!?]+)", text, re.I):
+    mentions = list(re.finditer(r"\b(?:район|р-н|микрорайон)\s+([^,;\n.!?]+)", text, re.I))
+    # Count all mentions before filtering certainty: an uncertain alternative
+    # must not make the remaining district look unambiguous.
+    for match in mentions:
+        if len(mentions) != 1:
+            break
         value = match.group(1).strip()
         clause = text[max(text.rfind(';', 0, match.start()), text.rfind('\n', 0, match.start()), text.rfind(',', 0, match.start())) + 1:match.end()]
         if (not UNCERTAIN.search(clause) and text[match.end():match.end() + 1] != "?" and len(value) <= 100
@@ -35,7 +50,7 @@ def incoming_preview(text: str) -> IncomingPreview:
         evidence["region_text"] = region
 
     kinds = set()
-    uncertain = False
+    uncertain = bool(NON_REQUEST.search(text))
     for clause in re.split(r"[,;\n.!]", text):
         found = {kind for kind, pattern in SERVICE_PATTERNS.items() if re.search(pattern, clause, re.I)}
         if found:
