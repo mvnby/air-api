@@ -161,6 +161,7 @@ describe('saved customer completeness', () => {
     expect(summary().get('[data-completeness="contacts"]').text()).toContain('Не указаны: телефон');
     expect(summary().get('[data-completeness="contacts"]').text()).not.toContain('email');
     await wrapper.findAll('button').find(b => b.text() === 'Из реквизитов')!.trigger('click');
+    vi.mocked(ManagerService.getManagerCustomerContacts).mockResolvedValue({ items: [{ customer_id: 7, phone: '123', email: 'new@example.test', is_primary: true, is_active: true }] } as never);
     wrapper.getComponent(CustomerIntakeDialog).vm.$emit('created', { ...value, inn: '987654321', full_legal_name: 'Распознанное имя', phone: '123' });
     await flushPromises();
     expect(summary().get('[data-completeness="identity"]').text()).toContain('Поля заполнены');

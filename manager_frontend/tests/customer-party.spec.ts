@@ -78,6 +78,11 @@ describe('saved dossier completeness', () => {
     expect(group({ phone: '1', primary_contact: { email: 'a@b.test', is_active: true } }, 'contacts').missing).toEqual([]);
     expect(group({ primary_contact: { name: 'Анна' }, contact_count: 1 }, 'contacts').missing).toEqual(['телефон', 'email']);
   });
+  it('does not resurrect cleared primary channels from an older customer detail response', () => {
+    const stale = dossier({ phone: 'old', email: 'old@example.test', primary_contact: { phone: 'old', email: 'old@example.test' } });
+    expect(customerCompleteness(stale, { customerId: 1, items: [{ customer_id: 1, phone: null, email: null, is_primary: true, is_active: true }] })[0].missing).toEqual(['телефон', 'email']);
+    expect(customerCompleteness(stale, { customerId: 1, items: [{ customer_id: 1, phone: 'legacy', is_legacy: true, is_active: true }] })[0].missing).toEqual(['email']);
+  });
   it('ignores inactive contacts and snapshots belonging to another client', () => {
     expect(customerCompleteness(dossier(), { customerId: 1, items: [{ customer_id: 1, phone: '1', is_active: false }] })[0].missing).toEqual(['телефон', 'email']);
     expect(customerCompleteness(dossier(), { customerId: 2, items: [{ customer_id: 2, phone: '1', email: 'a' }] })[0].missing).toEqual(['телефон', 'email']);

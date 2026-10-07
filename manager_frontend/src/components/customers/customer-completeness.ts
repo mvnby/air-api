@@ -10,9 +10,10 @@ export function customerCompleteness(customer: ManagerCatalogCustomerItemRespons
   const representative = customer.signing_mode === 'power_of_attorney';
   const company = customer.type === 'company';
   const knownContacts = contacts?.customerId === customer.id ? contacts.items : null;
+  // The loaded list includes the API's virtual legacy contact and is authoritative.
   const active = (knownContacts ?? [customer.primary_contact]).filter((c): c is ManagerCustomerContactItemResponse => !!c && c.is_active !== false);
-  const phone = present(customer.phone) || active.some(c => present(c.phone));
-  const email = present(customer.email) || active.some(c => present(c.email));
+  const phone = (knownContacts === null && present(customer.phone)) || active.some(c => present(c.phone));
+  const email = (knownContacts === null && present(customer.email)) || active.some(c => present(c.email));
   const additionalUnknown = knownContacts === null && (customer.contact_count ?? 0) > active.length;
   const fields = (entries: Array<[unknown, string]>) => entries.filter(([value]) => !present(value)).map(([, label]) => label);
   const validMode = representative || (company ? customer.signing_mode === 'statutory_body' : customer.signing_mode === 'self');
