@@ -258,6 +258,7 @@ export type { IncomingClarificationPayload } from './models/IncomingClarificatio
 export type { IncomingCreatePayload } from './models/IncomingCreatePayload';
 export type { IncomingListResponse } from './models/IncomingListResponse';
 export type { IncomingOrderContext } from './models/IncomingOrderContext';
+export type { IncomingPreview } from './models/IncomingPreview';
 export type { IncomingResponse } from './models/IncomingResponse';
 export type { IncomingUpdatePayload } from './models/IncomingUpdatePayload';
 export type { InferenceTest } from './models/InferenceTest';

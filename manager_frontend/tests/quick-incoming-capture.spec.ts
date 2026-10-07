@@ -2,6 +2,8 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  preview: vi.fn(),
+  scenarios: vi.fn(),
   create: vi.fn(),
   get: vi.fn(),
   update: vi.fn(),
@@ -10,9 +12,11 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../src/services/incoming-api', async (original) => ({
   ...(await original<typeof import('../src/services/incoming-api')>()),
-  incomingApi: { create: mocks.create, get: mocks.get, update: mocks.update },
+  incomingApi: { preview: mocks.preview, create: mocks.create, get: mocks.get, update: mocks.update },
   newIncomingIdempotencyKey: mocks.key,
 }));
+
+vi.mock('../src/api', () => ({ api: { getManagerOrderScenarios: mocks.scenarios } }));
 
 import QuickIncomingCapture from '../src/components/leads/QuickIncomingCapture.vue';
 import type { IncomingResponse } from '../src/services/incoming-api';
@@ -50,6 +54,12 @@ const mountCapture = async (leadId?: number) => {
 beforeEach(() => {
   for (const mock of Object.values(mocks)) mock.mockReset();
   mocks.key.mockReturnValueOnce('key-1').mockReturnValueOnce('key-2').mockReturnValue('key-next');
+  mocks.scenarios.mockResolvedValue({ items: [
+    { label: 'Обслуживание', workflow_type: 'maintenance', service_type: 'maintenance' },
+    { label: 'Ремонт', workflow_type: 'repair', service_type: 'repair' },
+    { label: 'Работы', workflow_type: 'service_work', service_type: null },
+  ] });
+  mocks.preview.mockResolvedValue(incoming({ preview: { state: 'unknown' } }));
   mocks.create.mockResolvedValue(incoming());
   mocks.get.mockResolvedValue(incoming());
   mocks.update.mockResolvedValue(incoming({ version: 4 }));
@@ -143,5 +153,60 @@ describe('QuickIncomingCapture', () => {
     expect(payload.requested_time_text).toBe('в субботу после 15:00');
     expect(Object.prototype.hasOwnProperty.call(payload, 'requested_at')).toBe(false);
     expect(mocks.update.mock.calls.at(-1)?.[2]).toBe('key-2');
+  });
+});
+
+
+describe('incoming suggestions after durable save', () => {
+  const suggested = { state: 'suggested' as const, region_text: 'Билево', workflow_type: 'maintenance', service_type: 'maintenance', evidence: { region_text: 'Билево', service_type: 'ТО квартиры' }, field_sources: { region_text: 'text', service_type: 'text' } };
+  it('acknowledges capture before parsing and leaves manual details untouched', async () => {
+    let resolvePreview!: (value: IncomingResponse) => void;
+    mocks.preview.mockImplementation(() => new Promise(resolve => { resolvePreview = resolve; }));
+    mocks.create.mockResolvedValue(incoming({ request_text: 'ТО квартиры, район Билево', phone: '+375291234567', address_text: 'Ручной адрес', region_text: 'Минск' }));
+    const wrapper = await mountCapture();
+    await wrapper.get('[data-testid="incoming-request-text"]').setValue('ТО квартиры, район Билево');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+    expect(wrapper.emitted('captured')).toHaveLength(1);
+    expect(wrapper.get('[data-testid="incoming-saved"]').text()).toContain('сохранено');
+    await wrapper.get('[data-testid="incoming-region"]').setValue('Центр');
+    resolvePreview(incoming({ request_text: 'ТО квартиры, район Билево', preview: suggested }));
+    await flushPromises();
+    expect((wrapper.get('[data-testid="incoming-region"]').element as HTMLInputElement).value).toBe('Центр');
+    expect((wrapper.get('[data-testid="incoming-phone"]').element as HTMLInputElement).value).toBe('+375291234567');
+    expect(wrapper.get('[data-testid="incoming-preview"]').text()).toContain('из текста «ТО квартиры»');
+    await wrapper.get('[data-testid="incoming-use-scenario"]').trigger('click');
+    await wrapper.get('[data-testid="incoming-scenario"]').setValue('repair:repair');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+    expect(mocks.update).toHaveBeenCalledWith(55, expect.objectContaining({ expected_version: 3, region_text: 'Центр', service_type: 'repair', workflow_type: 'repair' }), 'key-2');
+    expect(mocks.update.mock.calls[0]?.[1]).not.toHaveProperty('phone');
+    expect(mocks.update.mock.calls[0]?.[1]).not.toHaveProperty('address_text');
+    expect(wrapper.emitted('saved')).toHaveLength(1);
+  });
+  it('keeps the acknowledged source editable when suggestions fail', async () => {
+    mocks.preview.mockRejectedValue(new Error('offline'));
+    const wrapper = await mountCapture();
+    await wrapper.get('[data-testid="incoming-request-text"]').setValue('Исходный текст');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+    expect(wrapper.emitted('captured')).toHaveLength(1);
+    expect(wrapper.get('[data-testid="incoming-preview"]').text()).toContain('Исходник сохранён');
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+    await wrapper.get('[data-testid="incoming-region"]').setValue('Витебск');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+    expect(mocks.update.mock.calls[0]?.[1].region_text).toBe('Витебск');
+  });
+  it.each(['version', 'text'])('rejects a preview with stale %s while parsing', async (stale) => {
+    let resolvePreview!: (value: IncomingResponse) => void;
+    mocks.preview.mockImplementation(() => new Promise(resolve => { resolvePreview = resolve; }));
+    const wrapper = await mountCapture(55);
+    if (stale === 'text') await wrapper.get('[data-testid="incoming-request-text"]').setValue('Уточнённый текст');
+    resolvePreview(incoming({ version: stale === 'version' ? 4 : 3, preview: suggested }));
+    await flushPromises();
+    expect(wrapper.find('[data-testid="incoming-use-region"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="incoming-preview"]').text()).toContain('изменились');
+    expect((wrapper.get('[data-testid="incoming-request-text"]').element as HTMLTextAreaElement).value).toBe(stale === 'text' ? 'Уточнённый текст' : 'Исходный текст');
   });
 });

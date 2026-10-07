@@ -69,6 +69,7 @@ class RawLeadInboxService:
             customer_full_legal_name=lead.company_name, location=location,
             customer_delivery_address=meta.get('address_text') if lead.intake_event_key else location,
             source=lead.source, created_at=lead.created_at, source_created_at=meta.get('source_occurred_at') or lead.created_at,
+            workflow_type=meta.get('workflow_type'), service_type=meta.get('service_type'),
             intake_state=intake_state, intake_version=lead.version if intake_state else None,
             requested_time_text=meta.get('requested_time_text'), requested_at=meta.get('requested_at'),
             date_precision=meta.get('date_precision'), call_before_visit=meta.get('call_before_visit'),

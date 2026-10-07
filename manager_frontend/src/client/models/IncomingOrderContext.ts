@@ -8,6 +8,8 @@ export type IncomingOrderContext = {
     phone?: (string | null);
     email?: (string | null);
     region_text?: (string | null);
+    workflow_type?: ('sales_installation' | 'service_work' | 'maintenance' | 'repair' | null);
+    service_type?: ('turnkey' | 'install_only' | 'pre_install' | 'maintenance' | 'repair' | 'dismantling' | null);
     address_text?: (string | null);
     requested_time_text?: (string | null);
     requested_at?: (string | null);

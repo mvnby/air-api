@@ -154,6 +154,7 @@ async def list_incoming(
 )
 async def get_incoming(
     lead_id: int,
+    include_preview: bool = Query(False),
     caller: CommandActor = Depends(actor),
     session: AsyncSession = Depends(get_session),
 ):
@@ -161,13 +162,17 @@ async def get_incoming(
     Read an incoming request with saved intake metadata in the authenticated staff actor’s
     tenant/storefront, including current version, original text and missing-data state.
     Missing/inaccessible or non-intake Lead returns 404. Reading does not mark the triage
-    card read or change its workflow.
+    card read or change its workflow. Optional include_preview returns conservative region
+    and service/scenario suggestions with source-text evidence after the source has been
+    saved; it never persists suggestions or calls external AI. Unknown/failed parsing leaves
+    fields unknown (preview.state unknown/unavailable). The response version binds the
+    suggestions to this read; corrections still require expected_version.
 
     Access requires an authenticated Manager session/JWT and live membership; see [Manager
     access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     try:
-        return await IncomingCommandService.get(session, actor=caller, lead_id=lead_id)
+        return await IncomingCommandService.get(session, actor=caller, lead_id=lead_id, include_preview=include_preview)
     except LookupError as exc:
         raise HTTPException(
             404, detail={"error_code": "not_found", "message": str(exc)}

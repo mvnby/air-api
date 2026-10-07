@@ -31952,7 +31952,7 @@
           "manager/incoming"
         ],
         "summary": "Get Incoming",
-        "description": "Read an incoming request with saved intake metadata in the authenticated staff actor\u2019s\ntenant/storefront, including current version, original text and missing-data state.\nMissing/inaccessible or non-intake Lead returns 404. Reading does not mark the triage\ncard read or change its workflow.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Read an incoming request with saved intake metadata in the authenticated staff actor\u2019s\ntenant/storefront, including current version, original text and missing-data state.\nMissing/inaccessible or non-intake Lead returns 404. Reading does not mark the triage\ncard read or change its workflow. Optional include_preview returns conservative region\nand service/scenario suggestions with source-text evidence after the source has been\nsaved; it never persists suggestions or calls external AI. Unknown/failed parsing leaves\nfields unknown (preview.state unknown/unavailable). The response version binds the\nsuggestions to this read; corrections still require expected_version.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "get_manager_incoming",
         "security": [
           {
@@ -31967,6 +31967,16 @@
             "schema": {
               "type": "integer",
               "title": "Lead Id"
+            }
+          },
+          {
+            "name": "include_preview",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Preview"
             }
           }
         ],
@@ -45176,6 +45186,42 @@
             ],
             "title": "Region Text"
           },
+          "workflow_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "sales_installation",
+                  "service_work",
+                  "maintenance",
+                  "repair"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Type"
+          },
+          "service_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "turnkey",
+                  "install_only",
+                  "pre_install",
+                  "maintenance",
+                  "repair",
+                  "dismantling"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Type"
+          },
           "address_text": {
             "anyOf": [
               {
@@ -45349,6 +45395,42 @@
             ],
             "title": "Region Text"
           },
+          "workflow_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "sales_installation",
+                  "service_work",
+                  "maintenance",
+                  "repair"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Type"
+          },
+          "service_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "turnkey",
+                  "install_only",
+                  "pre_install",
+                  "maintenance",
+                  "repair",
+                  "dismantling"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Type"
+          },
           "address_text": {
             "anyOf": [
               {
@@ -45487,6 +45569,71 @@
         ],
         "title": "IncomingOrderContext"
       },
+      "IncomingPreview": {
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "suggested",
+              "unknown",
+              "unavailable"
+            ],
+            "title": "State"
+          },
+          "region_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region Text"
+          },
+          "workflow_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Type"
+          },
+          "service_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Type"
+          },
+          "evidence": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Evidence"
+          },
+          "field_sources": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Field Sources"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "title": "IncomingPreview"
+      },
       "IncomingResponse": {
         "properties": {
           "request_text": {
@@ -45540,6 +45687,42 @@
               }
             ],
             "title": "Region Text"
+          },
+          "workflow_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "sales_installation",
+                  "service_work",
+                  "maintenance",
+                  "repair"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Type"
+          },
+          "service_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "turnkey",
+                  "install_only",
+                  "pre_install",
+                  "maintenance",
+                  "repair",
+                  "dismantling"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Type"
           },
           "address_text": {
             "anyOf": [
@@ -45600,6 +45783,16 @@
             ],
             "title": "Clarification Requested",
             "description": "Explicit instruction to save one linked clarification task. On creation, omission also recognizes standalone positive address/call instructions; false disables that text inference. MCP requires task-write scope when a task is requested."
+          },
+          "preview": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IncomingPreview"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "lead_id": {
             "type": "integer",
@@ -45751,6 +45944,42 @@
               }
             ],
             "title": "Region Text"
+          },
+          "workflow_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "sales_installation",
+                  "service_work",
+                  "maintenance",
+                  "repair"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Type"
+          },
+          "service_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "turnkey",
+                  "install_only",
+                  "pre_install",
+                  "maintenance",
+                  "repair",
+                  "dismantling"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Type"
           },
           "address_text": {
             "anyOf": [
@@ -48920,6 +49149,17 @@
             ],
             "title": "Service Type"
           },
+          "workflow_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Type"
+          },
           "equipment_class": {
             "anyOf": [
               {
@@ -49509,6 +49749,17 @@
               }
             ],
             "title": "Service Type"
+          },
+          "workflow_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Type"
           },
           "equipment_class": {
             "anyOf": [
