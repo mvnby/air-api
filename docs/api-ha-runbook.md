@@ -582,6 +582,72 @@ Do not set `POSTGRES_PITR_REQUIRED=true` until both the strict freshness check
 and a physical restore drill pass. After that, leave it true so the daily drill
 keeps proving that basebackups plus archived WAL can actually be restored.
 
+### Opt-in WAL gzip storage (issue #893, compression stage)
+
+WAL compression is **off by default**. The uploader and attested tool runner
+accept `--wal-compression none|gzip`; omitting it writes the existing raw format.
+The scheduled wrapper still supplies no compression flag. This application
+release does not install host PITR helpers or units, alter their configuration,
+or enable compression. A separate reviewed host rollout must deploy compatible
+uploader, immutable-storage, restore, lineage, monitoring and runner helpers
+before any writer is enabled. Keep every writer on the same codec during the
+transition; do not change a retry's codec while local WAL remains queued.
+
+Storage format 1:
+
+| Property | Raw (existing) | Gzip (opt-in) |
+| --- | --- | --- |
+| Object key | `<prefix>/<cluster>/wal/<timeline>/<WAL>` | `<prefix>/<cluster>/wal/<timeline>/<WAL>.gz` |
+| PostgreSQL filename | Canonical uppercase 24-digit WAL name | The same name without `.gz` |
+| Stored bytes | Original WAL | One gzip member, level 6, no filename, `mtime=0` |
+| Stored identity | HEAD ContentLength and `sha256` metadata | HEAD ContentLength and `sha256` of the gzip bytes |
+| Original identity | The stored identity | `wal-size` decimal bytes and `wal-sha256` of original WAL |
+| Required extra metadata | None | `wal-format=1`, `wal-codec=gzip`, `wal-name=<WAL>` |
+
+Both representations retain `uploaded-by=mvn-postgres-pitr`, private/no-store
+headers and conditional create-only writes. No HTTP Content-Encoding is set:
+`.gz` is the stored object format, not transparent HTTP compression. Gzip needs
+only the Python standard library. Its fixed timestamp, empty filename and fixed
+compression level make retries deterministic within the supported Python/zlib
+runtime. A changed encoder/runtime that produces different bytes for an existing
+key fails immutable verification; it cannot silently overwrite the object.
+
+Only complete canonical WAL segments are compressed. The current uploader uses
+16 MiB segments; `.history`, `.backup` and full-sized `.partial` objects remain
+raw. Restore/retention validate gzip original sizes as powers of two from 1 MiB
+to 1 GiB, with the selected chain's exact segment geometry still required.
+Stored gzip size is capped at original size + original size / 1000 + 1024 bytes,
+including incompressible input overhead. Unknown versions/codecs or suffixes
+attached to a canonical segment block processing.
+
+The encoder reads a protected, unchanged source file in bounded chunks, uses
+one private temporary gzip file and removes it on success or failure. Upload
+proves stored size, digest and format metadata via HEAD plus a full bounded GET.
+The source is re-hashed and its file snapshot rechecked afterward. Local deletion
+still happens only after all upload checks and the final source snapshot check.
+Failures preserve the source. Temporary disk capacity must cover one compressed
+segment (the current tool container's 64 MiB tmpfs accommodates 16 MiB segments).
+
+Restore supports existing raw objects, gzip objects and mixed chains without
+archive migration. It materializes the original WAL filename and byte content,
+verifies both sizes and SHA256 digests for gzip, and rejects bad CRC, truncation,
+trailing bytes, multiple members and excess decoded size. Input/output chunks
+are bounded to 1 MiB; a temporary destination is published atomically only after
+verification. Gzip GETs are pinned with If-Match and their complete HEAD identity
+is checked again after reading. A raw and gzip representation of the same name
+is a conflict even if their original bytes match: restore and retention stop,
+and upload retains local WAL instead of creating the alternate representation.
+No automatic deduplication or remote deletion is supplied.
+
+These focused checks use PG15-format synthetic headers/page geometry and prove
+byte preservation, chain selection and storage integrity. They are not a physical
+PostgreSQL recovery drill. Remote monitoring recognizes `.gz` and checks both
+representations for the expected canonical WAL; its freshness proof remains
+metadata-based. Separate host activation and a physical restore drill are still
+required before relying on compressed WAL in production. Rolling back an uploader
+to `none` must preserve gzip-capable readers for existing compressed objects;
+retries encountering the alternate format deliberately stop for operator review.
+
 ### Report-only retention planner (issue #893, first stage)
 
 Implementation boundary and checks:
@@ -622,11 +688,12 @@ private `POSTGRES_PITR_*` settings through the existing protected environment.
 Do not pass credentials as arguments or copy production secrets into an
 inventory. Supply the expected system identifier and exact archived end WAL
 from current reviewed cluster evidence. The tool only calls ListObjectsV2, HEAD
-and GET (including conditional 40-byte WAL range reads), never upload/delete or
-credential probes. It reads the full logical namespace, performs complete
+and GET (including conditional 40-byte raw WAL range reads and full bounded
+gzip WAL reads), never upload/delete or credential probes. It reads the full logical namespace, performs complete
 pagination, and repeats listing/identity checks to reject concurrent changes.
-A large archive needs one header read per complete WAL segment and several HEAD
-requests; this is an operator report, not a new scheduled production job.
+A large archive needs one header range read per raw segment, one full streamed
+gzip read per compressed segment, and several HEAD requests; this is an operator
+report, not a new scheduled production job.
 
 The JSON report sorts exact keys, byte sizes, ETags and reasons into `retained`
 and `candidates`, with counts and sums. Exit 0 means a planning chain was proven
@@ -638,7 +705,11 @@ can become stale and must never be treated as executable deletion instructions.
 Offline inventory schema 1 requires `listing_complete: true` and an `objects`
 array with unique `key`, integer `size_bytes`, `etag` and HEAD `sha256` identity.
 Small manifests/history also carry exact `payload_base64` bytes; full WAL records
-carry `wal_header_hex` for the first 40 bytes. No large tar/WAL bodies are needed.
+carry `wal_header_hex` for the first 40 bytes. Gzip records carry the complete
+stored bytes in `payload_base64` and the format fields above in `metadata`;
+`size_bytes`/`sha256` describe those stored bytes. No full raw WAL or tar bodies
+are needed. Decoded WAL bytes are streamed, verified and discarded except
+for their first 40 decoded bytes.
 These are operator-supplied read observations, not cryptographic attestations.
 The fixture builder is in
 [`test_postgres_pitr_retention.py`](../tests/unit/test_postgres_pitr_retention.py).
@@ -653,8 +724,11 @@ its native Manifest-Checksum and file checksums are not verified against backup
 contents here. All SHA256 metadata identities used by the calculation, including
 small manifests and histories, must remain unchanged in the final HEAD pass.
 A changed, missing or malformed SHA256 blocks the report even with the same
-size and ETag. Full tar/WAL bodies are not downloaded or checksum-verified here; that
-and actual recovery still require the existing physical restore drill. Legacy
+size and ETag. All consumed HEAD metadata, including gzip original digest/size,
+codec and name, must remain unchanged in the final pass. Gzip WAL bodies and
+both byte streams' digests are fully verified; raw WAL headers retain conditional
+range reads. Full raw WAL/tar content verification and actual recovery still
+require the existing physical restore drill. Legacy
 v0, unsupported versions, orphaned uploads, identity changes, missing artifacts,
 branches, invalid timeline birth bounds or gaps block the whole report. Unknown
 objects and all `.history`, `.backup` and `.partial` metadata stay retained.
@@ -678,8 +752,9 @@ lifecycle policy. The sizes and lifecycle settings recorded in issue #893 on
 
 This stage has no executable delete path, lifecycle/config changes or HA host
 asset activation. Normal API image deployment does not install the host planner.
-Compression, leader-fenced destructive prune and a restore drill after cleanup
-remain later stages; this change does not close issue #893.
+Compression host activation, leader-fenced destructive prune and a physical
+restore drill after cleanup remain separate stages. Compression tooling and this
+report-only planner do not close issue #893.
 
 ## GitHub Actions Routing
 

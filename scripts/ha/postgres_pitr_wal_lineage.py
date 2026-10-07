@@ -46,7 +46,10 @@ ALLOWED_LOCAL_ARCHIVE_DIRS = {
 class WalObject:
     key: str
     filename: str
-    size_bytes: int
+    size_bytes: int  # Original bytes: lineage and restore-space accounting.
+    stored_size_bytes: int | None = None
+    codec: str = "raw"
+    storage_identity: tuple | None = None
 
 
 @dataclass(frozen=True)
@@ -72,6 +75,7 @@ def list_wal_objects(
     bucket: str,
     prefix: str,
     max_objects: int,
+    storage_helpers=None,
 ) -> list[WalObject]:
     paginator = client.get_paginator("list_objects_v2")
     objects: list[WalObject] = []
@@ -80,10 +84,14 @@ def list_wal_objects(
     for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
         for raw in page.get("Contents", []):
             key = str(raw.get("Key") or "")
-            filename = key.rsplit("/", 1)[-1]
+            storage_name = key.rsplit("/", 1)[-1]
+            filename, codec = (
+                storage_helpers.wal_storage_name(storage_name)
+                if storage_helpers else (storage_name, "raw")
+            )
             if not WAL_ARCHIVE_NAME_RE.fullmatch(filename):
                 continue
-            if key != f"{prefix}{filename[:8]}/{filename}":
+            if key != f"{prefix}{filename[:8]}/{storage_name}":
                 raise SystemExit(f"Noncanonical PITR WAL object key: {key}")
             if filename in seen_names:
                 raise SystemExit(f"Duplicate PITR WAL filename: {filename}")
@@ -99,7 +107,18 @@ def list_wal_objects(
             elif WAL_BACKUP_HISTORY_RE.fullmatch(filename) and size > MAX_TIMELINE_HISTORY_BYTES:
                 raise SystemExit(f"PostgreSQL backup history is too large: {key}")
             seen_names.add(filename)
-            objects.append(WalObject(key=key, filename=filename, size_bytes=size))
+            if codec == "gzip":
+                head = client.head_object(Bucket=bucket, Key=key)
+                contract = storage_helpers.gzip_wal_contract(head, key=key)
+                if size != contract.stored_size:
+                    raise SystemExit(f"Compressed WAL listing size mismatch: {key}")
+                objects.append(WalObject(
+                    key=key, filename=filename, size_bytes=contract.original_size,
+                    stored_size_bytes=size, codec=codec,
+                    storage_identity=storage_helpers.wal_head_identity(head),
+                ))
+            else:
+                objects.append(WalObject(key=key, filename=filename, size_bytes=size))
             if len(objects) > max_objects:
                 raise SystemExit("Too many PITR WAL objects")
     return sorted(objects, key=lambda item: item.filename)
@@ -366,6 +385,10 @@ def select_wal_objects(
     segment_size_bytes: int,
     history_loader: Callable[[WalObject], bytes] | None = None,
 ) -> WalSelection:
+    if any(item.codec not in {"raw", "gzip"} for item in objects):
+        raise SystemExit("Unsupported WAL codec in chain")
+    if len({item.filename for item in objects}) != len(objects):
+        raise SystemExit("Duplicate PITR WAL filename / conflicting representations")
     start_timeline, start_position = wal_segment_position(
         start_wal_name, segment_size_bytes=segment_size_bytes
     )

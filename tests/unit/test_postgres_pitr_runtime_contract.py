@@ -496,7 +496,11 @@ def test_explicit_upload_helper_precedes_image_package_import():
     ):
         source = (REPO_ROOT / "scripts/ha" / name).read_text(encoding="utf-8")
         explicit = source.index('explicit = os.getenv("POSTGRES_PITR_UPLOAD_HELPER"')
-        image_import = source.index("from scripts.ha.upload_postgres_pitr_to_s3 import")
+        image_import = source.index(
+            "from scripts.ha import upload_postgres_pitr_to_s3"
+            if name == "check_postgres_pitr_remote.py"
+            else "from scripts.ha.upload_postgres_pitr_to_s3 import"
+        )
         assert explicit < image_import
 
 

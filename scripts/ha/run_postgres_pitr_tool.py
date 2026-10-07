@@ -345,6 +345,7 @@ def _tool_command(
         command += ["--user", f"{archive_uid}:{archive_gid}"]
         command += _mount(data, "/pitr-data", readonly=False)
         tool_args = ["python", "-I", upload_container, "wal", "--archive-dir", "/pitr-data"]
+        tool_args += ["--wal-compression", getattr(args, "wal_compression", "none")]
         if args.dry_run:
             tool_args.append("--dry-run")
         tool_args.append(
@@ -504,6 +505,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         required=True,
     )
     parser.add_argument("--data-dir", default="")
+    parser.add_argument("--wal-compression", choices=("none", "gzip"), default="none")
     parser.add_argument("--backup-id", default="")
     parser.add_argument("--system-identifier", default="")
     parser.add_argument("--timeline", default="")

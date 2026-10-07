@@ -246,7 +246,8 @@ def test_restore_prepare_forwards_named_restore_point_and_exact_lsn(monkeypatch)
     assert tool_args[tool_args.index("--target-lsn") + 1] == "1/B000000"
 
 
-def test_wal_upload_runs_as_exact_validated_archive_owner(monkeypatch):
+@pytest.mark.parametrize("wal_compression", ["none", "gzip"])
+def test_wal_upload_runs_as_exact_validated_archive_owner(monkeypatch, wal_compression):
     monkeypatch.setattr(
         tool,
         "_validate_helper",
@@ -261,6 +262,7 @@ def test_wal_upload_runs_as_exact_validated_archive_owner(monkeypatch):
     args = argparse.Namespace(
         phase="wal-upload",
         data_dir="/opt/air-api/postgres-wal-archive",
+        wal_compression=wal_compression,
         dry_run=False,
         delete_after_upload=True,
     )
@@ -273,6 +275,7 @@ def test_wal_upload_runs_as_exact_validated_archive_owner(monkeypatch):
         secrets_already_validated=True,
     )
 
+    assert command[command.index("--wal-compression") + 1] == wal_compression
     user_index = command.index("--user")
     assert command[user_index + 1] == "70:70"
     assert user_index < command.index(IMAGE)

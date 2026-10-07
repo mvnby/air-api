@@ -9,6 +9,7 @@ public product-media R2 credentials.
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import importlib.machinery
 import importlib.util
@@ -18,6 +19,7 @@ import re
 import secrets
 import stat
 import sys
+import tempfile
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -331,6 +333,7 @@ def _upload_create_only(
     descriptor: int,
     size_bytes: int,
     digest: str,
+    extra_metadata: dict | None = None,
 ) -> None:
     immutable_upload.upload_create_only(
         client,
@@ -342,6 +345,7 @@ def _upload_create_only(
         multipart_threshold_bytes=MULTIPART_THRESHOLD_BYTES,
         multipart_part_bytes=MULTIPART_PART_BYTES,
         max_multipart_parts=MAX_MULTIPART_PARTS,
+        extra_metadata=extra_metadata,
     )
 
 
@@ -353,6 +357,7 @@ def upload_file(
     dry_run: bool,
     *,
     conditional_create: bool = True,
+    extra_metadata: dict | None = None,
 ) -> ArtifactSnapshot:
     with _open_artifact(source) as (descriptor, opened):
         digest = _sha256_fd(descriptor)
@@ -380,6 +385,7 @@ def upload_file(
                     size_bytes=expected.size_bytes,
                     sha256=digest,
                     head=existing,
+                    extra_metadata=extra_metadata,
                 )
             else:
                 try:
@@ -390,6 +396,7 @@ def upload_file(
                         descriptor=descriptor,
                         size_bytes=expected.size_bytes,
                         digest=digest,
+                        extra_metadata=extra_metadata,
                     )
                 except BaseException as exc:
                     if not _is_precondition_failed(exc):
@@ -401,7 +408,9 @@ def upload_file(
                     key=key,
                     size_bytes=expected.size_bytes,
                     sha256=digest,
+                    extra_metadata=extra_metadata,
                 )
+        _assert_snapshot_unchanged(expected, os.fstat(descriptor))
         return expected
 
 
@@ -410,6 +419,37 @@ def _unlink_uploaded_artifact(snapshot: ArtifactSnapshot) -> None:
     _assert_regular_single_link(snapshot.path, current)
     _assert_snapshot_unchanged(snapshot, current)
     snapshot.path.unlink()
+
+
+def upload_gzip_wal(client, config: PitrS3Config, source: Path, key: str, dry_run: bool) -> ArtifactSnapshot:
+    with _open_artifact(source) as (descriptor, opened):
+        if opened.size_bytes != WAL_SEGMENT_BYTES:
+            raise RuntimeError(f"WAL segment size is not canonical: {source}")
+        digest = hashlib.sha256()
+        with tempfile.TemporaryDirectory(prefix="mvn-pitr-wal-") as directory:
+            compressed = Path(directory) / "wal.gz"
+            with compressed.open("wb") as output:
+                with gzip.GzipFile(filename="", mode="wb", fileobj=output, compresslevel=6, mtime=0) as encoded:
+                    received = 0
+                    while chunk := os.read(descriptor, min(1024 * 1024, opened.size_bytes + 1 - received)):
+                        received += len(chunk)
+                        if received > opened.size_bytes:
+                            raise RuntimeError(f"PITR artifact grew during compression: {source}")
+                        digest.update(chunk)
+                        encoded.write(chunk)
+            expected = ArtifactSnapshot(**{**opened.__dict__, "sha256": digest.hexdigest()})
+            _assert_snapshot_unchanged(expected, os.fstat(descriptor))
+            metadata = {
+                "wal-format": "1", "wal-codec": "gzip", "wal-name": source.name,
+                "wal-size": str(expected.size_bytes), "wal-sha256": expected.sha256,
+            }
+            upload_file(client, config, compressed, key, dry_run, extra_metadata=metadata)
+            _assert_snapshot_unchanged(expected, os.fstat(descriptor))
+            # Re-hash the source after remote verification before it can be deleted.
+            if _sha256_fd(descriptor) != expected.sha256:
+                raise RuntimeError(f"PITR artifact changed during upload: {source}")
+            _assert_snapshot_unchanged(expected, os.fstat(descriptor))
+            return expected
 
 
 def upload_wal(args: argparse.Namespace) -> int:
@@ -422,14 +462,24 @@ def upload_wal(args: argparse.Namespace) -> int:
     uploaded = 0
     for path in iter_wal_files(archive_dir):
         key = wal_key(config, path.name)
-        snapshot = upload_file(
-            client,
-            config,
-            path,
-            key,
-            args.dry_run,
-            conditional_create=True,
-        )
+        codec = getattr(args, "wal_compression", "none")
+        if codec not in {"none", "gzip"}:
+            raise SystemExit("Unsupported WAL upload compression")
+        is_segment = immutable_upload.WAL_NAME_RE.fullmatch(path.name) is not None
+        compress = codec == "gzip" and is_segment
+        if is_segment and not args.dry_run:
+            other_key = key if compress else key + ".gz"
+            if _head_optional(client, bucket=config.bucket, key=other_key) is not None:
+                raise RuntimeError(f"Conflicting WAL representations; local WAL retained: {path.name}")
+        if compress:
+            key += ".gz"
+            snapshot = upload_gzip_wal(client, config, path, key, args.dry_run)
+        else:
+            snapshot = upload_file(client, config, path, key, args.dry_run, conditional_create=True)
+        if is_segment and not args.dry_run:
+            other_key = key[:-3] if compress else key + ".gz"
+            if _head_optional(client, bucket=config.bucket, key=other_key) is not None:
+                raise RuntimeError(f"Conflicting WAL representations; local WAL retained: {path.name}")
         uploaded += 1
         print(
             json.dumps(
@@ -647,6 +697,7 @@ def parse_args() -> argparse.Namespace:
     wal = subparsers.add_parser("wal", help="Upload archived WAL files")
     wal.add_argument("--archive-dir", default="/postgres-wal-archive")
     wal.add_argument("--dry-run", action="store_true")
+    wal.add_argument("--wal-compression", choices=("none", "gzip"), default="none")
     wal.add_argument(
         "--delete-after-upload",
         action=argparse.BooleanOptionalAction,
