@@ -1,9 +1,9 @@
 <script setup lang="ts">
+import OrderMoney from './OrderMoney.vue';
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import type { ManagerQuickTariffResponse, ManagerTariffServiceKind } from '../../client';
 import { api } from '../../api';
 import { getApiErrorMessage } from '../../utils/api-errors';
-import { formatMoney } from './order-utils';
 import { orderedServiceKinds, preferredServiceKind } from './service-catalog-order';
 import type { OrderWorkflowType } from './order-workspace';
 import { standardServiceChoice, type SuggestedInstallation } from './service-installation-choices';
@@ -132,7 +132,7 @@ onBeforeUnmount(() => { request += 1; clearTimeout(timer); });
           <p class="px-2 text-[11px] text-slate-500">Для оборудования в предложении</p>
           <button v-for="group in suggestions" :key="group.tariff.code" type="button" class="block w-full rounded-lg px-2 py-2 text-left text-xs hover:bg-slate-100 dark:hover:bg-slate-800" @mousedown.prevent @click="choose(standardServiceChoice(group.tariff), group.quantity)">
             <span class="block font-medium text-slate-900 dark:text-slate-100">{{ group.tariff.title }}</span>
-            <span class="text-slate-500 dark:text-slate-400">{{ group.quantity }} шт. × {{ formatMoney(Number(group.tariff.price)) }}</span>
+            <span class="text-slate-500 dark:text-slate-400">{{ group.quantity }} шт. × <OrderMoney :value="Number(group.tariff.price)" /></span>
           </button>
           <button v-if="suggestions.length > 1" type="button" data-testid="add-all-suggested-installations" class="min-h-8 px-2 text-xs font-medium text-brand-700" @mousedown.prevent @click="open = false; emit('addSuggested')">Добавить все предложенные монтажи</button>
         </div>
@@ -141,7 +141,7 @@ onBeforeUnmount(() => { request += 1; clearTimeout(timer); });
         <button v-for="(option, index) in options" :key="option.installation_standard?.code || option.tariff_id || index" type="button" :data-testid="`select-service-${option.installation_standard?.code || option.tariff_id}`" class="block w-full rounded-lg px-2 py-2 text-left text-xs hover:bg-slate-100 dark:hover:bg-slate-800" :class="highlighted === index ? 'bg-brand-50 dark:bg-slate-800' : ''" @mousedown.prevent @click="choose(option)">
           <span class="block font-medium text-slate-900 dark:text-slate-100">{{ option.short_name || option.title }}</span>
           <span v-if="option.full_description" class="mt-0.5 block line-clamp-2 text-[11px] leading-snug text-slate-500">{{ option.full_description }}</span>
-          <span class="mt-1 block text-slate-600 dark:text-slate-300">{{ formatMoney(Number(option.price)) }}</span>
+          <span class="mt-1 block text-slate-600 dark:text-slate-300"><OrderMoney :value="Number(option.price)" /></span>
         </button>
         <p v-if="!loading && !error && !options.length" class="px-2 py-2 text-xs text-slate-500">Подходящих услуг нет. Оставьте своё название и укажите цену.</p>
       </div>

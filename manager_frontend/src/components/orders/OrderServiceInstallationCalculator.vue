@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import OrderMoney from './OrderMoney.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { ManagerInstallationEstimatesService, type ManagerInstallationPreviewResponse, type ManagerInstallationStandardTariff, type ManagerInstallationPreviewPayload } from '../../client';
 import { listInstallationStandardTariffs, installationStandardWork, type StandardInstallationChoice } from '../../services/installation-estimate-api';
@@ -139,7 +140,7 @@ onBeforeUnmount(() => { disposed = true; epoch += 1; });
     <p v-if="error" role="alert" class="mt-2 text-xs text-red-700">{{ error }}</p>
     <div v-if="preview" class="mt-3 border-t border-slate-200 pt-3">
       <template v-if="resultLine">
-        <p class="text-sm font-semibold">{{ formatMoney(resultLine.price) }} за монтаж · {{ formatMoney(resultLine.price * quantity) }} за {{ quantity }} шт.</p>
+        <p class="text-sm font-semibold"><OrderMoney :value="resultLine.price" /> за монтаж · <OrderMoney :value="resultLine.price * quantity" /> за {{ quantity }} шт.</p>
         <p class="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-300">{{ resultLine.description }}</p>
         <button type="button" class="btn-mini mt-3 min-h-8 text-xs" data-testid="calculator-apply" @click="apply">Применить к строке</button>
       </template>

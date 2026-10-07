@@ -194,12 +194,16 @@ export function getOrderExecutionLabel(order: ManagerOrderListItemResponse): str
     return EXECUTION_STATUS_LABELS[getOrderExecutionStatus(order)] || 'Назначить работы';
 }
 
-export function formatMoney(value: number): string {
+export function formatMoneyAmount(value: number): string {
     const amount = Number(value);
-    return `${amount.toLocaleString('ru-RU', {
+    return amount.toLocaleString('ru-RU', {
         minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
         maximumFractionDigits: 2,
-    })} BYN`;
+    });
+}
+
+export function formatMoney(value: number): string {
+    return `${formatMoneyAmount(value)} BYN`;
 }
 
 export function formatDate(value?: string | null): string {

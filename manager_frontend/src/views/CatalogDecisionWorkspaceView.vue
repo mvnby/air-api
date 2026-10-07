@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import BynSymbol from '../components/catalog-decision/BynSymbol.vue';
+import BynSymbol from '../components/money/BynSymbol.vue';
 import CatalogDecisionFilters from '../components/catalog-decision/CatalogDecisionFilters.vue';
 import CatalogDecisionCollectionDialog from '../components/catalog-decision/CatalogDecisionCollectionDialog.vue';
 import CatalogDecisionOrderDialog from '../components/catalog-decision/CatalogDecisionOrderDialog.vue';

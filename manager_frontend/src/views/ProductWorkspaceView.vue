@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MoneyAmount from '../components/money/MoneyAmount.vue';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import {
   ArrowLeft,
@@ -296,7 +297,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload));
             <span v-if="product" class="rounded-md px-2 py-1 text-xs font-semibold" :class="product.is_published ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'">
               {{ product.is_published ? 'Опубликован' : 'Скрыт' }}
             </span>
-            <span v-if="product" class="rounded-md bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700 dark:bg-slate-800 dark:text-slate-200">{{ product.price }} BYN</span>
+            <span v-if="product" class="rounded-md bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700 dark:bg-slate-800 dark:text-slate-200"><MoneyAmount :value="product.price" :formatted-value="String(product.price)" /></span>
             <span v-if="product" class="rounded-md bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-800 dark:bg-blue-950 dark:text-blue-200">{{ availabilityLabel }}</span>
           </div>
           <button type="button" class="hidden h-9 items-center gap-2 rounded-lg border border-gray-200 px-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 sm:inline-flex" :disabled="!publicProductUrl" @click="openPublicProduct">
@@ -374,8 +375,8 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload));
         <section class="border-y border-gray-200 bg-white py-4 text-sm dark:border-slate-800 dark:bg-slate-950 xl:rounded-lg xl:border xl:p-4">
           <p class="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">Коммерция</p>
           <dl class="mt-3 space-y-2 text-gray-600 dark:text-slate-300">
-            <div class="flex justify-between gap-3"><dt>Цена</dt><dd class="font-semibold text-gray-900 dark:text-white">{{ product.price }} BYN</dd></div>
-            <div class="flex justify-between gap-3"><dt>Себестоимость</dt><dd>{{ product.min_cost_byn != null ? `${product.min_cost_byn.toFixed(2)} BYN` : '—' }}</dd></div>
+            <div class="flex justify-between gap-3"><dt>Цена</dt><dd class="font-semibold text-gray-900 dark:text-white"><MoneyAmount :value="product.price" :formatted-value="String(product.price)" /></dd></div>
+            <div class="flex justify-between gap-3"><dt>Себестоимость</dt><dd><MoneyAmount :value="product.min_cost_byn" :formatted-value="product.min_cost_byn?.toFixed(2)" /></dd></div>
             <div class="flex justify-between gap-3"><dt>Маржа</dt><dd>{{ product.margin_pct_preview != null ? `${(product.margin_pct_preview * 100).toFixed(1)}%` : '—' }}</dd></div>
             <div class="flex justify-between gap-3"><dt>Витебск</dt><dd>{{ product.vitebsk_qty || 0 }}</dd></div>
             <div class="flex justify-between gap-3"><dt>Минск</dt><dd>{{ product.minsk_qty || 0 }}</dd></div>

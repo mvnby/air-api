@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MoneyAmount from '../components/money/MoneyAmount.vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import { api } from '../api';
 import type {
@@ -501,7 +502,7 @@ onMounted(async () => {
             >
               <div>
                 <div class="text-sm font-medium text-gray-900 dark:text-slate-100">{{ rule.name }}</div>
-                <div class="text-xs text-gray-500 dark:text-slate-400">{{ rule.unit_price }} BYN / {{ rule.unit }}</div>
+                <div class="text-xs text-gray-500 dark:text-slate-400"><MoneyAmount :value="rule.unit_price" :formatted-value="String(rule.unit_price)" /> / {{ rule.unit }}</div>
               </div>
               <input
                 v-model.number="ruleInputMap[rule.id]"
@@ -561,8 +562,8 @@ onMounted(async () => {
                 <tr v-for="line in calculation.lines" :key="`${line.source_type}-${line.sort_order}-${line.name}`">
                   <td class="px-3 py-2 text-gray-900 dark:text-slate-100">{{ line.name }}</td>
                   <td class="px-3 py-2 text-right text-gray-600 dark:text-slate-300">{{ line.qty }} {{ line.unit }}</td>
-                  <td class="px-3 py-2 text-right text-gray-600 dark:text-slate-300">{{ formatMoney(line.unit_price) }}</td>
-                  <td class="px-3 py-2 text-right font-semibold text-gray-900 dark:text-slate-100">{{ formatMoney(line.line_total) }}</td>
+                  <td class="px-3 py-2 text-right text-gray-600 dark:text-slate-300"><MoneyAmount :value="line.unit_price" :formatted-value="formatMoney(line.unit_price)" /></td>
+                  <td class="px-3 py-2 text-right font-semibold text-gray-900 dark:text-slate-100"><MoneyAmount :value="line.line_total" :formatted-value="formatMoney(line.line_total)" /></td>
                 </tr>
               </tbody>
             </table>
@@ -576,15 +577,15 @@ onMounted(async () => {
           <div class="space-y-1 text-sm">
             <div class="flex justify-between text-gray-600 dark:text-slate-300">
               <span>Подытог</span>
-              <span>{{ formatMoney(calculation.subtotal) }} BYN</span>
+              <span><MoneyAmount :value="calculation.subtotal" :formatted-value="formatMoney(calculation.subtotal)" /></span>
             </div>
             <div class="flex justify-between text-gray-600 dark:text-slate-300">
               <span>Скидка</span>
-              <span>- {{ formatMoney(calculation.discount_amount) }} BYN</span>
+              <span>- <MoneyAmount :value="calculation.discount_amount" :formatted-value="formatMoney(calculation.discount_amount)" /></span>
             </div>
             <div class="flex justify-between text-base font-semibold text-gray-900 dark:text-white pt-1 border-t border-gray-200 dark:border-slate-700">
               <span>Итого</span>
-              <span>{{ formatMoney(calculation.total) }} BYN</span>
+              <span><MoneyAmount :value="calculation.total" :formatted-value="formatMoney(calculation.total)" /></span>
             </div>
           </div>
 
@@ -682,7 +683,7 @@ onMounted(async () => {
           <p class="mt-2 text-xs text-gray-500 dark:text-slate-400">{{ item.tariff?.short_name || item.tariff?.selector_label || 'legacy' }}</p>
           <p v-if="item.comment" class="mt-1 text-sm text-gray-600 dark:text-slate-300">{{ item.comment }}</p>
           <div class="mt-3 flex items-center justify-between gap-3 border-t border-gray-100 pt-3 dark:border-slate-700">
-            <p class="font-semibold text-gray-900 dark:text-slate-100">{{ formatMoney(item.total) }} {{ item.currency }}</p>
+            <p class="font-semibold text-gray-900 dark:text-slate-100"><MoneyAmount :value="item.total" :formatted-value="formatMoney(item.total)" :currency="item.currency" /></p>
             <div class="flex shrink-0 gap-2">
               <button
                 class="inline-flex items-center gap-1 rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50 dark:border-slate-600 dark:hover:bg-slate-700"
@@ -732,7 +733,7 @@ onMounted(async () => {
                 {{ item.tariff?.short_name || item.tariff?.selector_label || 'legacy' }}
               </td>
               <td class="px-3 py-2 text-right font-semibold text-gray-900 dark:text-slate-100">
-                {{ formatMoney(item.total) }} {{ item.currency }}
+                <MoneyAmount :value="item.total" :formatted-value="formatMoney(item.total)" :currency="item.currency" />
               </td>
               <td class="px-3 py-2 text-center">
                 <span class="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium" :class="statusBadgeClass(item.status)">
@@ -813,7 +814,7 @@ onMounted(async () => {
                 <tr v-for="line in selectedEstimate.lines" :key="`${line.source_type}-${line.sort_order}-${line.name}`">
                   <td class="px-3 py-2 text-gray-800 dark:text-slate-100">{{ line.name }}</td>
                   <td class="px-3 py-2 text-right text-gray-700 dark:text-slate-200">
-                    {{ formatMoney(line.line_total) }} {{ selectedEstimate.currency }}
+                    <MoneyAmount :value="line.line_total" :formatted-value="formatMoney(line.line_total)" :currency="selectedEstimate.currency" />
                   </td>
                 </tr>
               </tbody>

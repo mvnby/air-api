@@ -1,8 +1,8 @@
 <script setup lang="ts">
+import OrderMoney from './OrderMoney.vue';
 import LineFormattedText from './LineFormattedText.vue';
 import { computed } from 'vue';
 import type { ProductLine, ServiceLine } from './order-editor-types';
-import { formatMoney } from './order-utils';
 
 const props = defineProps<{
   productLines: ProductLine[];
@@ -38,8 +38,8 @@ const rows = computed(() => [
     <div v-for="(row, index) in rows" :key="index" class="grid gap-3 border-b border-slate-100 py-3 md:grid-cols-[minmax(0,1fr)_3.5rem_6rem_6.5rem] md:items-center">
       <div class="min-w-0"><h3 class="break-words text-sm font-semibold"><LineFormattedText :text="row.title" /></h3><p v-if="row.description" class="mt-1 whitespace-pre-line break-words text-xs leading-relaxed text-slate-500"><LineFormattedText :text="row.description" /></p></div>
       <span class="text-sm tabular-nums md:text-right"><span class="md:hidden">Количество: </span>{{ row.quantity }} <span class="text-xs text-slate-500">{{ row.unit }}</span></span>
-      <span class="whitespace-nowrap text-sm tabular-nums md:text-right"><span class="md:hidden">Цена: </span>{{ formatMoney(row.price) }}</span>
-      <span class="whitespace-nowrap text-sm font-semibold tabular-nums md:text-right"><span class="md:hidden">Сумма: </span>{{ formatMoney(row.quantity * row.price) }}</span>
+      <span class="whitespace-nowrap text-sm tabular-nums md:text-right"><span class="md:hidden">Цена: </span><OrderMoney :value="row.price" /></span>
+      <span class="whitespace-nowrap text-sm font-semibold tabular-nums md:text-right"><span class="md:hidden">Сумма: </span><OrderMoney :value="row.quantity * row.price" /></span>
     </div>
     <p v-if="!rows.length" class="py-6 text-sm text-slate-500">В предложении пока нет позиций.</p>
     <p class="mt-4 text-xs leading-relaxed text-slate-500">В стоимость входят перечисленные товары и работы в указанном составе. Дополнительные работы и материалы, не указанные в предложении, рассчитываются отдельно после уточнения условий монтажа.</p>

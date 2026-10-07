@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import OrderMoney from './OrderMoney.vue';
+import MoneyAmount from '../money/MoneyAmount.vue';
 import { computed, ref, watch } from 'vue';
 import type {
   BankReceiptResponse,
@@ -334,7 +336,7 @@ const deletePayment = async (paymentId: number) => {
             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-2">
-                  <span class="font-bold text-slate-900">{{ formatMoney(receipt.amount) }}</span>
+                  <span class="font-bold text-slate-900"><OrderMoney :value="receipt.amount" /></span>
                   <span class="text-slate-500">{{ formatReceiptDate(receipt.received_at) }}</span>
                   <span v-if="receipt.payment_document_number" class="rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-500">№ {{ receipt.payment_document_number }}</span>
                 </div>
@@ -363,8 +365,8 @@ const deletePayment = async (paymentId: number) => {
               </span>
             </div>
             <span class="font-bold text-slate-800" :class="payment.currency !== 'BYN' ? 'text-blue-600' : ''">
-              <template v-if="payment.currency !== 'BYN'">{{ payment.amount.toFixed(2) }} {{ payment.currency }}</template>
-              <template v-else>{{ formatMoney(payment.amount) }}</template>
+              <MoneyAmount v-if="payment.currency !== 'BYN'" :value="payment.amount" :formatted-value="payment.amount.toFixed(2)" :currency="payment.currency" />
+              <OrderMoney v-else :value="payment.amount" />
             </span>
             <span class="w-16 text-right text-slate-400">{{ formatPaymentType(payment.type) }}</span>
             <div v-if="deletingPaymentId === payment.id" class="ml-2 flex items-center gap-2">

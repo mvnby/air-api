@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MoneyAmount from '../components/money/MoneyAmount.vue';
 import { ref, onMounted, onUnmounted, watch, computed, nextTick } from 'vue';
 import { watchDebounced } from '@vueuse/core';
 import {
@@ -1562,7 +1563,7 @@ watchDebounced(
                         class="text-brand-700 dark:text-brand-400 font-semibold text-sm cursor-pointer hover:bg-brand-50 dark:hover:bg-brand-900/40 rounded px-1 -ml-1 transition-colors"
                         title="Нажмите, чтобы изменить цену"
                     >
-                        {{ product.price }} BYN
+                        <MoneyAmount :value="product.price" :formatted-value="String(product.price)" />
                     </p>
                     <button
                         @click.stop="openPublicProductPage(product)"
@@ -1575,9 +1576,9 @@ watchDebounced(
                     </button>
                 </div>
                 <div class="mt-1 space-y-0.5 text-[11px] text-gray-500 dark:text-slate-400">
-                    <div>Себестоимость: {{ product.min_cost_byn != null ? `${product.min_cost_byn.toFixed(2)} BYN` : '—' }}</div>
-                    <div>РРЦ: {{ product.recommended_price_byn != null ? `${product.recommended_price_byn.toFixed(2)} BYN` : '—' }}</div>
-                    <div>Маржа: {{ product.margin_abs_preview != null ? `${product.margin_abs_preview.toFixed(2)} BYN` : '—' }}</div>
+                    <div>Себестоимость: <MoneyAmount :value="product.min_cost_byn" :formatted-value="product.min_cost_byn?.toFixed(2)" /></div>
+                    <div>РРЦ: <MoneyAmount :value="product.recommended_price_byn" :formatted-value="product.recommended_price_byn?.toFixed(2)" /></div>
+                    <div>Маржа: <MoneyAmount :value="product.margin_abs_preview" :formatted-value="product.margin_abs_preview?.toFixed(2)" /></div>
                 </div>
                 <div class="mt-2 flex items-center gap-1.5 text-[10px]">
                     <span class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">Витебск: {{ product.vitebsk_qty || 0 }}</span>
@@ -1673,7 +1674,7 @@ watchDebounced(
               </td>
               <td class="p-4">
                 <div class="text-sm font-semibold text-brand-700 dark:text-brand-400">
-                   {{ product.price }} BYN
+                   <MoneyAmount :value="product.price" :formatted-value="String(product.price)" />
                 </div>
               </td>
               <td class="p-4 text-xs text-gray-600 dark:text-slate-400">
