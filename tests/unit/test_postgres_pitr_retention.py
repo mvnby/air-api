@@ -65,7 +65,7 @@ def backup(backup_id, completed, position, *, timeline=1, source="mvn-api", sysi
     prefix = f"{PREFIX}basebackups/{backup_id}/"
     pg_manifest = {
         "PostgreSQL-Backup-Manifest-Version": 1,
-        "Files": [],
+        "Files": [{"Path": "PG_VERSION", "Size": 3, "Last-Modified": "2026-09-27 09:00:00 GMT"}],
         "WAL-Ranges": [
             {
                 "Timeline": timeline,
@@ -74,10 +74,15 @@ def backup(backup_id, completed, position, *, timeline=1, source="mvn-api", sysi
             }
         ],
     }
+    native_prefix = (json.dumps(pg_manifest, indent=2)[:-2] + ",\n").encode()
+    native_bytes = (
+        native_prefix
+        + (f'"Manifest-Checksum": "{hashlib.sha256(native_prefix).hexdigest()}"}}\n').encode()
+    )
     artifacts = [
         record(prefix + "base.tar.gz", b"synthetic compressed backup identity"),
         record(prefix + "pg_wal.tar.gz", b"synthetic streamed wal identity"),
-        record(prefix + "backup_manifest", json.dumps(pg_manifest, sort_keys=True).encode()),
+        record(prefix + "backup_manifest", native_bytes),
     ]
     payload = dict(
         schema_version=1,
@@ -647,3 +652,131 @@ def test_anchor_after_failover_retains_ancestor_fork_and_divergent_segments(ance
     assert wal_key(1, 4) not in candidates
     assert wal_key(1, 5) not in candidates
     assert wal_key(5, 6) not in candidates
+
+
+def change_postgres_manifest(payload, edit):
+    key = f"{PREFIX}basebackups/anchor/backup_manifest"
+    index = next(i for i, item in enumerate(payload["objects"]) if item["key"] == key)
+    native = json.loads(base64.b64decode(payload["objects"][index]["payload_base64"]))
+    edit(native)
+    updated = record(key, json.dumps(native, sort_keys=True).encode())
+    payload["objects"][index] = updated
+
+    def update_outer(outer):
+        entry = next(item for item in outer["files"] if item["key"] == key)
+        entry.update(size_bytes=updated["size_bytes"], sha256=updated["sha256"])
+
+    change_manifest(payload, "anchor", update_outer)
+
+
+@pytest.mark.parametrize("version", [999, True, 1.0, "1", None])
+def test_native_manifest_requires_exact_supported_integer_version(version):
+    payload = fixture_payload()
+    change_postgres_manifest(
+        payload, lambda native: native.update({"PostgreSQL-Backup-Manifest-Version": version})
+    )
+    blocked(run(payload))
+
+
+@pytest.mark.parametrize(
+    "field", ["PostgreSQL-Backup-Manifest-Version", "Files", "WAL-Ranges", "Manifest-Checksum"]
+)
+def test_native_manifest_requires_all_top_level_fields(field):
+    payload = fixture_payload()
+    change_postgres_manifest(payload, lambda native: native.pop(field))
+    blocked(run(payload))
+
+
+@pytest.mark.parametrize(
+    "files",
+    [
+        None,
+        {},
+        [],
+        [None],
+        [{}],
+        [{"Path": "PG_VERSION", "Size": True, "Last-Modified": "date"}],
+        [{"Path": "PG_VERSION", "Size": 3}],
+        [{"Path": "PG_VERSION", "Encoded-Path": "5047", "Size": 3, "Last-Modified": "date"}],
+        [{"Encoded-Path": "abc", "Size": 3, "Last-Modified": "date"}],
+        [
+            {
+                "Path": "PG_VERSION",
+                "Size": 3,
+                "Last-Modified": "date",
+                "Checksum-Algorithm": "SHA256",
+            }
+        ],
+    ],
+)
+def test_native_manifest_rejects_malformed_file_structures(files):
+    payload = fixture_payload()
+    change_postgres_manifest(payload, lambda native: native.update(Files=files))
+    blocked(run(payload))
+
+
+@pytest.mark.parametrize("checksum", [None, 123, "xyz", "a" * 63])
+def test_native_manifest_rejects_malformed_manifest_checksum(checksum):
+    payload = fixture_payload()
+    change_postgres_manifest(payload, lambda native: native.update({"Manifest-Checksum": checksum}))
+    blocked(run(payload))
+
+
+def test_native_manifest_accepts_encoded_paths_and_optional_file_checksums():
+    payload = fixture_payload()
+    change_postgres_manifest(
+        payload,
+        lambda native: native.update(
+            Files=[
+                {
+                    "Encoded-Path": "50475f56455253494f4e",
+                    "Size": 3,
+                    "Last-Modified": "date",
+                    "Checksum-Algorithm": "SHA256",
+                    "Checksum": "A" * 64,
+                },
+                {"Path": "base/1/123", "Size": 0, "Last-Modified": "date"},
+            ]
+        ),
+    )
+    assert run(payload)["status"] == "planned"
+
+
+@pytest.mark.parametrize(
+    "suffix", ["base.tar.gz", "pg_wal.tar.gz", "backup_manifest", "manifest.json", "history", "wal"]
+)
+@pytest.mark.parametrize("digest", ["0" * 64, None, "malformed"])
+def test_final_head_blocks_changed_missing_or_malformed_used_sha_identity(suffix, digest):
+    payload = failover_payload()
+    if suffix == "history":
+        changed_key = next(
+            item["key"] for item in payload["objects"] if item["key"].endswith(".history")
+        )
+    elif suffix == "wal":
+        changed_key = next(item["key"] for item in payload["objects"] if "wal_header_hex" in item)
+    else:
+        changed_key = f"{PREFIX}basebackups/anchor/{suffix}"
+
+    class MetadataRace(planner.InventoryClient):
+        lists = 0
+
+        def list_objects_v2(self, **kwargs):
+            self.lists += 1
+            return super().list_objects_v2(**kwargs)
+
+        def head_object(self, **kwargs):
+            head = super().head_object(**kwargs)
+            if self.lists >= 2 and kwargs["Key"] == changed_key:
+                head["Metadata"] = {} if digest is None else {"sha256": digest}
+            return head
+
+    report = planner.plan(
+        MetadataRace(payload),
+        CONFIG,
+        as_of=AS_OF,
+        retention=timedelta(days=7),
+        expected_system_identifier=SYSTEM_ID,
+        required_end_wal=wal_name(5, 7),
+    )
+    blocked(report)
+    assert any(changed_key in reason for reason in report["blocked_reasons"])

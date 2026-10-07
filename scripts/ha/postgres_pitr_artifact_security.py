@@ -355,6 +355,57 @@ def validate_outer_manifest(
     )
 
 
+def validate_postgres_manifest_structure(postgres_manifest: dict[str, Any]) -> None:
+    """Validate PG15 metadata shape, without verifying archived file contents."""
+    label = "PostgreSQL backup_manifest"
+    _require_exact_keys(
+        postgres_manifest,
+        {"PostgreSQL-Backup-Manifest-Version", "Files", "WAL-Ranges", "Manifest-Checksum"},
+        label=label,
+    )
+    version = postgres_manifest["PostgreSQL-Backup-Manifest-Version"]
+    if type(version) is not int or version != 1:
+        raise SystemExit(f"{label} requires integer version 1")
+    checksum = postgres_manifest["Manifest-Checksum"]
+    if not isinstance(checksum, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", checksum):
+        raise SystemExit(f"{label} has invalid Manifest-Checksum")
+    files = postgres_manifest["Files"]
+    if not isinstance(files, list) or not files:
+        raise SystemExit(f"{label} requires a nonempty Files list")
+    checksum_lengths = {"CRC32C": 8, "SHA224": 56, "SHA256": 64, "SHA384": 96, "SHA512": 128}
+    for item in files:
+        if not isinstance(item, dict):
+            raise SystemExit(f"{label} Files entry must be an object")
+        paths = {"Path", "Encoded-Path"} & item.keys()
+        if len(paths) != 1:
+            raise SystemExit(f"{label} Files entry requires exactly one path")
+        path_key = next(iter(paths))
+        path = item[path_key]
+        if not isinstance(path, str) or not path:
+            raise SystemExit(f"{label} Files path must be a nonempty string")
+        if path_key == "Encoded-Path" and not re.fullmatch(r"(?:[0-9a-fA-F]{2})+", path):
+            raise SystemExit(f"{label} Encoded-Path must contain hexadecimal octets")
+        expected = {path_key, "Size", "Last-Modified"}
+        has_checksum = bool({"Checksum", "Checksum-Algorithm"} & item.keys())
+        if has_checksum:
+            expected |= {"Checksum", "Checksum-Algorithm"}
+        _require_exact_keys(item, expected, label=f"{label} Files entry")
+        if type(item["Size"]) is not int or item["Size"] < 0:
+            raise SystemExit(f"{label} Files Size must be a nonnegative integer")
+        if not isinstance(item["Last-Modified"], str) or not item["Last-Modified"]:
+            raise SystemExit(f"{label} Files Last-Modified must be a nonempty string")
+        if has_checksum:
+            algorithm = item["Checksum-Algorithm"]
+            length = checksum_lengths.get(algorithm) if isinstance(algorithm, str) else None
+            digest = item["Checksum"]
+            if (
+                length is None
+                or not isinstance(digest, str)
+                or not re.fullmatch(rf"[0-9a-fA-F]{{{length}}}", digest)
+            ):
+                raise SystemExit(f"{label} Files checksum is invalid")
+
+
 def validate_postgres_manifest_lineage(
     manifest: BasebackupManifest,
     postgres_manifest: dict[str, Any],
