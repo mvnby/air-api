@@ -584,7 +584,7 @@ def test_main_reports_idle_when_expected_wal_is_present_and_queue_is_empty(
     output = capsys.readouterr().out
     assert "pitr_remote_wal_expected status=present" in output
     assert "size_bytes=16777216" in output
-    assert client.head_calls == [expected_key]
+    assert client.head_calls == [expected_key, expected_key + ".gz"]
     assert "pitr_remote_wal status=idle" in output
     assert "pitr_remote_summary status=passed failures=0 warnings=1" in output
 
