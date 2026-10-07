@@ -14,7 +14,12 @@ import { request as __request } from '../core/request';
 export class ManagerTagsService {
     /**
      * Get Tag Groups
-     * Get all tag groups with their tags.
+     * Read all shared tag groups with their tags; no pagination is accepted. This endpoint
+     * does not filter by authenticated storefront.
+     *
+     * Access and scope: Manager access is required; this reads the shared platform catalog,
+     * not tenant-owned copies. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @returns ManagerTagGroupResponse Successful Response
      * @throws ApiError
      */
@@ -26,7 +31,13 @@ export class ManagerTagsService {
     }
     /**
      * Create Tag Group
-     * Create a new tag group.
+     * Create a shared tag group, deriving slug from title when omitted. Duplicate slug returns
+     * 400. POST has no idempotency receipt; this creates dictionary state rather than
+     * assigning product tags.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param requestBody
      * @returns ManagerTagGroupResponse Successful Response
      * @throws ApiError
@@ -46,7 +57,13 @@ export class ManagerTagsService {
     }
     /**
      * Update Tag Group
-     * Update an existing tag group.
+     * Update submitted tag-group fields. Missing group returns 404; a slug used by another
+     * group returns 400. This edits the shared dictionary, leaving product-tag associations
+     * attached to their tag IDs.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param groupId
      * @param requestBody
      * @returns ManagerTagGroupResponse Successful Response
@@ -71,7 +88,12 @@ export class ManagerTagsService {
     }
     /**
      * Delete Tag Group
-     * Delete a tag group. Restrained if the group has tags.
+     * Permanently delete an empty shared tag group. Missing group returns 404, including after
+     * deletion; any remaining tag blocks deletion with 400. Remove/reassign tags first.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param groupId
      * @returns any Successful Response
      * @throws ApiError
@@ -92,7 +114,13 @@ export class ManagerTagsService {
     }
     /**
      * Create Tag
-     * Create a new tag in a group.
+     * Create a tag in an existing shared group, deriving slug from title when omitted. Missing
+     * group returns 404; duplicate slug returns 400. This does not assign the tag to products;
+     * POST has no idempotency receipt.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param requestBody
      * @returns ManagerTagOptionResponse Successful Response
      * @throws ApiError
@@ -112,7 +140,13 @@ export class ManagerTagsService {
     }
     /**
      * Update Tag
-     * Update a tag.
+     * Update submitted tag fields. Missing tag returns 404; conflicting slug returns 400.
+     * Product links continue to refer to the same tag ID; editing this shared tag affects all
+     * linked products.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param tagId
      * @param requestBody
      * @returns ManagerTagOptionResponse Successful Response
@@ -137,7 +171,13 @@ export class ManagerTagsService {
     }
     /**
      * Delete Tag
-     * Delete a tag.
+     * Permanently delete the tag and its product-tag links. Missing tag returns 404, including
+     * on a repeat after deletion. This removes the shared label rather than just removing it
+     * from one product.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param tagId
      * @returns any Successful Response
      * @throws ApiError

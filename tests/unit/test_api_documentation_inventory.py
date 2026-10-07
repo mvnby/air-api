@@ -18,11 +18,20 @@ DOC_BASE = "https://github.com/mvnby/air-api/blob/main/"
 
 def test_http_documentation_inventory_matches_routes_and_preserves_descriptions():
     inventory = json.loads((ROOT / "docs/api/operation-inventory.json").read_text())
+    assert inventory["schema"] == 2
+    assert inventory["columns"] == [
+        "method path", "operation_id", "description_before", "reviewed_stage"
+    ]
+    review_stages = inventory["review_stages"]
     expected = {}
     for source, rows in inventory["operations"].items():
-        for operation, operation_id, described_before, reviewed in rows:
+        for operation, operation_id, described_before, reviewed_stage in rows:
             assert operation not in expected, f"Duplicate inventory operation: {operation}"
-            expected[operation] = (source, operation_id, described_before or reviewed)
+            assert type(described_before) is bool, operation
+            assert type(reviewed_stage) is int and str(reviewed_stage) in review_stages, (
+                f"Review stage missing: {operation}; review its contract before publication"
+            )
+            expected[operation] = (source, operation_id)
 
     schema = app.openapi()
     actual = {}
@@ -37,12 +46,11 @@ def test_http_documentation_inventory_matches_routes_and_preserves_descriptions(
             assert operation not in actual, f"Duplicate HTTP operation: {operation}"
             metadata = schema["paths"][route.path][method.lower()]
             actual[operation] = (source, metadata["operationId"])
-            if operation in expected and expected[operation][2]:
-                assert metadata.get("description", "").strip(), (
-                    f"Description lost: {operation}; update route documentation"
-                )
+            assert metadata.get("description", "").strip(), (
+                f"Description missing: {operation}; update route documentation"
+            )
 
-    assert actual == {key: value[:2] for key, value in expected.items()}, (
+    assert actual == expected, (
         "HTTP inventory drift: review added/removed routes and operation IDs, "
         "then update docs/api/operation-inventory.json and documentation-coverage.md"
     )

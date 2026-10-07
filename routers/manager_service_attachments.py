@@ -53,6 +53,18 @@ async def list_manager_order_attachments(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Read active attachment links for a scoped order with their category, caption and
+    equipment/service context. Missing or inaccessible order returns 404; no pagination
+    parameters are accepted. This returns metadata rather than file bytes or permanent
+    public URLs.
+
+    Access and scope: Manager access is required; the order and its children are restricted
+    to the authenticated tenant and selected storefront. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [private service
+    attachments](https://github.com/mvnby/air-api/blob/main/docs/service-attachments.md).
+    """
     data = await ServiceAttachmentService.list_order_attachments(
         session,
         order_id=order_id,
@@ -74,6 +86,19 @@ async def list_manager_equipment_attachments(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Read active private attachment links associated with customer equipment. Missing or
+    inaccessible equipment returns 404; no pagination parameters are accepted. Attachment
+    access remains subject to active link ownership; this does not publish files into the
+    general media library.
+
+    Access and scope: Manager access is required; equipment ownership is inherited from its
+    customer in the authenticated tenant. Linked orders must also belong to the selected
+    storefront. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [private service
+    attachments](https://github.com/mvnby/air-api/blob/main/docs/service-attachments.md).
+    """
     data = await ServiceAttachmentService.list_equipment_attachments(
         session,
         equipment_id=equipment_id,
@@ -103,6 +128,20 @@ async def upload_manager_order_attachment(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Upload a private attachment and create its order link, optionally also linking validated
+    work stage, equipment, component or service history. Empty/oversized files, unsupported
+    type/category and invalid target relationships return 400. Image previews are generated
+    during ingestion when supported; identical bytes may reuse storage while ordinary manual
+    uploads still create separate attachment occurrences. No idempotency receipt is
+    required.
+
+    Access and scope: Manager access is required; the order and its children are restricted
+    to the authenticated tenant and selected storefront. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [private service
+    attachments](https://github.com/mvnby/air-api/blob/main/docs/service-attachments.md).
+    """
     try:
         content = await _read_upload_limited(file)
         return await ServiceAttachmentService.create_and_link_order_attachment(
@@ -136,6 +175,19 @@ async def patch_manager_service_attachment(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Update attachment/link metadata without replacing its file bytes. order_id is required
+    to change category, caption or equipment/component/history association; missing context
+    or invalid relationships returns 400. Missing/archived or inaccessible attachment
+    returns 404. Shared metadata changes require all active links to be owned by the
+    caller’s scope; per-order link edits update the corresponding equipment context.
+
+    Access and scope: Manager access is required; active attachment links must pass order
+    tenant/storefront or equipment customer-tenant ownership checks. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [private service
+    attachments](https://github.com/mvnby/air-api/blob/main/docs/service-attachments.md).
+    """
     try:
         data = await ServiceAttachmentService.update_attachment(
             session,
@@ -163,6 +215,19 @@ async def delete_manager_service_attachment(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Archive an attachment’s link to the specified order and its derived equipment links,
+    returning 204. Without order_id all active links must be owned by the caller before
+    archival; the attachment is archived only when no active links remain. File bytes are
+    retained. Missing/inaccessible/already archived attachment or link returns 404,
+    including repeats.
+
+    Access and scope: Manager access is required; active attachment links must pass order
+    tenant/storefront or equipment customer-tenant ownership checks. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [private service
+    attachments](https://github.com/mvnby/air-api/blob/main/docs/service-attachments.md).
+    """
     if not await ServiceAttachmentService.archive_attachment(
         session,
         attachment_id=attachment_id,
@@ -186,6 +251,20 @@ async def get_manager_service_attachment_access(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Issue a short-lived access URL for an active private attachment after ownership checks,
+    optionally for download. Requested preview falls back to original when no preview
+    exists; the returned variant identifies the actual file. URL expiry is configured
+    between 30 and 3600 seconds. Missing/inaccessible attachment or source returns 404. The
+    returned URL grants temporary file access; this does not create a permanent public media
+    URL.
+
+    Access and scope: Manager access is required; active attachment links must pass order
+    tenant/storefront or equipment customer-tenant ownership checks. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [private service
+    attachments](https://github.com/mvnby/air-api/blob/main/docs/service-attachments.md).
+    """
     try:
         data = await ServiceAttachmentService.get_access(
             session,

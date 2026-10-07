@@ -43,6 +43,16 @@ router = APIRouter(prefix="/api/manager/catalog-decision", tags=["manager catalo
 async def list_catalog_decision_filter_options(
     session: AsyncSession = Depends(get_session), tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Read available brands, series and supported technical filters for the selected
+    storefront’s split-system decision catalog. Options use storefront
+    visibility/eligibility; this does not expose a supplier-management surface or mutate
+    product data.
+
+    Access and scope: Manager access is required; data is restricted to the authenticated
+    tenant and selected storefront. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     return await CatalogDecisionQueryService.list_filter_options(session, tenant_scope=tenant_scope)
 
 
@@ -61,6 +71,17 @@ async def list_catalog_decision_products(
     heating_min: int | None = Query(None, ge=-30, le=-20, multiple_of=5, description="Required outdoor heating temperature in Celsius; includes colder-rated models."),
     session: AsyncSession = Depends(get_session), tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Read eligible complete split systems with technical and commercial projections; limit is
+    1–100. Availability defaults to in_stock; include_orderable removes that restriction.
+    category=multi, unsupported BTU classes or inverted retail bounds return 422. Explicit
+    product_ids is limited to 24. Demo purchase-cost projection uses a synthetic discount
+    from RRC rather than actual supplier cost. This endpoint only reads.
+
+    Access and scope: Manager access is required; data is restricted to the authenticated
+    tenant and selected storefront. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     if retail_min_byn is not None and retail_max_byn is not None and retail_min_byn > retail_max_byn:
         raise HTTPException(status_code=422, detail="retail_min_byn cannot exceed retail_max_byn")
     if any(btu not in SUPPORTED_COOLING_BTU_CLASSES for btu in cooling_btu_classes or ()):
@@ -85,6 +106,19 @@ async def create_catalog_decision_collection(
     auth: AuthenticatedUser = Depends(require_manager_access),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Create a manual draft collection from the chosen split-system IDs, preserving their
+    order as pinned items. Requires Manager access; unlike the general collection routes
+    this bridge does not require storefront.collections.manage. Empty title/duplicates or
+    non-split-system selections return 400; products unavailable to the storefront return
+    404. Each POST creates a new collection.
+
+    Access and scope: Manager access is required; data is restricted to the authenticated
+    tenant and selected storefront. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [collection
+    contract](https://github.com/mvnby/air-api/blob/main/docs/product-collections.md).
+    """
     return await CatalogDecisionCollectionService.create(
         session,
         title=payload.title,
@@ -106,6 +140,18 @@ async def attach_catalog_decision_to_order(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Add selected equipment to a scoped negotiation-stage order. auto returns 409 when active
+    proposals already contain products; replace_selected replaces the selected proposal,
+    new_alternative creates variant(s), and append_to_proposal skips products already in the
+    chosen draft. Invalid selection/proposal/lifecycle mode returns 400. Commands lock the
+    order and recalculate financials. No idempotency receipt exists; repeating
+    new_alternative can create another proposal.
+
+    Access and scope: Manager access is required; data is restricted to the authenticated
+    tenant and selected storefront. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await CatalogDecisionOrderService.attach(
             session,
@@ -132,6 +178,17 @@ async def create_catalog_decision_order(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Create a scoped negotiation-stage quick order with a new proposal and selected equipment
+    snapshots. Duplicate products, empty key or invalid mode returns 400. idempotency_key is
+    scoped to tenant/storefront; a repeat returns the existing order even if the new payload
+    differs, rather than checking a payload receipt. Reuse a key only for the same creation
+    intent.
+
+    Access and scope: Manager access is required; data is restricted to the authenticated
+    tenant and selected storefront. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await CatalogDecisionQuickOrderService.create(
             session,

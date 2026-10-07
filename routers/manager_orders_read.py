@@ -38,6 +38,13 @@ router = APIRouter(prefix="/api/manager/orders", tags=["manager-orders"])
 async def list_manager_order_scenarios(
     _: str = Depends(get_current_username),
 ):
+    """
+    Read the shared allowed order scenario dictionary. Manager access is required; this
+    response is configuration metadata, not a list of tenant orders.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     return {"items": [scenario._asdict() for scenario in SCENARIOS]}
 
 
@@ -55,6 +62,15 @@ async def get_manager_orders(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Page orders accessible in the current Manager tenant/storefront, applying customer
+    segment, status/search/overdue/customer and sort filters before projection. limit is at
+    most 100. Invalid business filters/sort return 400; response carries list metadata
+    rather than unrestricted platform CRM data.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await OrderProjectionService.get_orders_for_manager(
             session=session,
@@ -85,6 +101,14 @@ async def list_manager_stale_order_stages(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    List at most 100 stale work stages in the current Manager tenant/storefront, using the
+    age threshold and optional unscheduled stages. Read-only: does not cancel/delete stages
+    or notify installers.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     return await OrderService.list_stale_order_stages(
         session,
         tenant_scope=tenant_scope,
@@ -101,6 +125,15 @@ async def export_manager_orders(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Export explicitly selected accessible orders as a transfer package in the current
+    Manager tenant/storefront. Missing/inaccessible selections or invalid export input
+    return 400. This POST is read-only; it does not transfer documents/provider files or
+    write a destination tenant.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await OrderTransferService.export_orders(
             session,
@@ -118,6 +151,14 @@ async def get_manager_order_detail(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Read the current Manager tenant/storefront order projection with proposals, lines,
+    stages and payment context. Missing or inaccessible order returns 404. Opening the
+    detail does not imply a client may edit another tenant’s IDs.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     data = await OrderProjectionService.get_order_detail_for_manager(
         session,
         order_id,

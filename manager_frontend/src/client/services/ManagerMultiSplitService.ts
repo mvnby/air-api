@@ -13,6 +13,13 @@ import { request as __request } from '../core/request';
 export class ManagerMultiSplitService {
     /**
      * List Manager Multi Split Options
+     * Read paginated eligible outdoor or indoor multi-split units for the selected storefront;
+     * limit is 1–100. This option list does not certify that arbitrary units are compatible or
+     * create an order/proposal.
+     *
+     * Access and scope: Manager access is required; data is restricted to the authenticated
+     * tenant and selected storefront. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param kind
      * @param page
      * @param limit
@@ -39,6 +46,15 @@ export class ManagerMultiSplitService {
     }
     /**
      * Preview Manager Multi Split
+     * Calculate a multi-split configuration and compatibility status from rooms and selected
+     * units, using current catalog/supply data. Invalid selection returns 422. Compatibility
+     * may be unverified when no confirmed profile exists; preview is not a saved order. Demo
+     * scope omits commercial details; accepted components/status must be sent back when
+     * saving.
+     *
+     * Access and scope: Manager access is required; data is restricted to the authenticated
+     * tenant and selected storefront. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param requestBody
      * @returns ManagerMultiSplitPreviewResponse Successful Response
      * @throws ApiError
@@ -58,6 +74,15 @@ export class ManagerMultiSplitService {
     }
     /**
      * Save Manager Multi Split Proposal
+     * Save a recalculated multi-split configuration as a new draft alternative or an empty
+     * existing draft in a scoped negotiation order. Changed components/status returns 409 and
+     * requires preview again; incompatible or invalid/lifecycle selections return 400. Saves
+     * component/price snapshots, profile provenance and financials together. Each
+     * new-alternative POST may create another proposal; no idempotency receipt exists.
+     *
+     * Access and scope: Manager access is required; data is restricted to the authenticated
+     * tenant and selected storefront. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param orderId
      * @param requestBody
      * @returns ManagerOrderDetailResponse Successful Response

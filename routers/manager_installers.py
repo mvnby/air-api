@@ -36,7 +36,14 @@ async def list_installers(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     """
-    Paginated list of installers.
+    Read a paginated installer/staff projection for the tenant, optionally filtering by
+    search text. page starts at 1; this route currently accepts limit 1–500, default 100.
+    Membership status determines tenant activity independently of the global staff identity.
+
+    Access and scope: Manager access is required; installer visibility follows staff
+    membership in the authenticated tenant. The system tenant also sees unmapped legacy
+    installers. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     return await ManagerInstallerService.get_all(
         session=session,
@@ -58,7 +65,15 @@ async def create_installer(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     """
-    Create a new installer.
+    Create an installer and ensure its linked staff identity and membership in the
+    authenticated tenant. Creation errors are returned as 400. This has staff-account side
+    effects and no idempotency receipt, so repeated calls are not guaranteed to reuse a
+    prior installer.
+
+    Access and scope: Manager access is required; installer visibility follows staff
+    membership in the authenticated tenant. The system tenant also sees unmapped legacy
+    installers. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     try:
         return await ManagerInstallerService.create(
@@ -83,7 +98,14 @@ async def search_installers(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     """
-    Search active installers by name (for autocomplete).
+    Search active tenant installers by name for autocomplete. q must be nonempty and limit
+    is 1–100, default 50; this is a bounded suggestion list without page navigation. No
+    installer/staff membership is created.
+
+    Access and scope: Manager access is required; installer visibility follows staff
+    membership in the authenticated tenant. The system tenant also sees unmapped legacy
+    installers. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     return await ManagerInstallerService.search(
         session=session,
@@ -105,7 +127,17 @@ async def update_installer(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     """
-    Update an existing installer.
+    Update submitted non-null installer identity fields and/or the current tenant
+    membership’s activity. Missing/inaccessible installer returns 404. Partners cannot edit
+    shared identity fields when the staff user has multiple memberships; this service
+    rejection is not converted to a dedicated client error by this route. Omitted/null
+    fields are ignored, including telegram_id; membership changes also recompute aggregate
+    staff activity. No expected-version guard is used.
+
+    Access and scope: Manager access is required; installer visibility follows staff
+    membership in the authenticated tenant. The system tenant also sees unmapped legacy
+    installers. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     installer = await ManagerInstallerService.update(
         session=session,

@@ -47,6 +47,16 @@ async def get_manager_order_source_card(
     order_id: int, _: str = Depends(get_current_username), session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Read locally saved reviewed Belzakupki evidence and private original-attachment metadata
+    for an accessible order in the current tenant/storefront. Does not fetch new source
+    detail or invoke AI. Missing order returns 404; missing/invalid source identity returns
+    400. See [source review and equipment
+    rules](https://github.com/mvnby/air-api/blob/main/docs/belzakupki-intake.md#manager-review-and-source-documents).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await BelzakupkiSourceEquipmentService.card(session, order_id=order_id, scope=tenant_scope)
     except (LookupError, ValueError) as exc:
@@ -58,6 +68,17 @@ async def get_manager_order_source_equipment(
     order_id: int, proposal_id: int | None = None, _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session), tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Preview exact catalog matches from locally reviewed source objects for an accessible
+    scoped order and selected proposal. Reports price/stock, existing lines and reasons
+    items cannot be added or need explicit restoration; no lines are changed. Missing order
+    returns 404 and invalid proposal/source context 400. Returned preview_fingerprint is
+    required by the explicit add command. See [source review and equipment
+    rules](https://github.com/mvnby/air-api/blob/main/docs/belzakupki-intake.md#manager-review-and-source-documents).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await BelzakupkiSourceEquipmentService.preview(session, order_id=order_id, scope=tenant_scope, proposal_id=proposal_id)
     except (LookupError, ValueError) as exc:
@@ -69,6 +90,18 @@ async def add_manager_order_source_equipment(
     order_id: int, payload: ManagerOrderSourceEquipmentAdd, _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session), tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Append explicitly selected exact source-equipment matches to a writable draft proposal
+    in the current tenant/storefront; existing lines/prices/quantities are preserved.
+    Rechecks preview_fingerprint under the order lock: changed proposal/source/price/stock
+    returns 409. Missing order returns 404; invalid selection or read-only context 400.
+    Repeat the same command_id and selection to reuse its stored result; restoring
+    previously removed items requires explicit restore IDs. See [source review and equipment
+    rules](https://github.com/mvnby/air-api/blob/main/docs/belzakupki-intake.md#manager-review-and-source-documents).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await BelzakupkiSourceEquipmentService.add(session, order_id=order_id, scope=tenant_scope, payload=payload)
     except (LookupError, ValueError) as exc:
@@ -86,6 +119,17 @@ async def get_manager_order_source_preview(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Fetch fresh Belzakupki source detail for the accessible current-tenant/storefront order
+    and build a reviewable customer/site/equipment/submission/terms draft. Registry lookup
+    can add warnings. Does not save customer/order changes or invoke document AI. Missing
+    order/source returns 404, invalid source identity 400 and source/configuration failure
+    502. See [source review and equipment
+    rules](https://github.com/mvnby/air-api/blob/main/docs/belzakupki-intake.md#manager-review-and-source-documents).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await BelzakupkiEnrichmentService.preview(session, order_id=order_id, scope=tenant_scope)
     except (LookupError, ValueError, RuntimeError, httpx.HTTPError) as exc:
@@ -104,6 +148,18 @@ async def analyze_manager_order_source(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Run explicit external AI analysis of selected original source documents for an
+    accessible order and return an editable preview. Requires system-tenant Manager access.
+    May fetch originals and extract missing text; does not apply the draft or overwrite
+    order/document values. Missing source/order returns 404, unknown/truncated document
+    input 400 and source/provider failure 502. Repeating starts another analysis rather than
+    replaying a receipt. See [source review and equipment
+    rules](https://github.com/mvnby/air-api/blob/main/docs/belzakupki-intake.md#manager-review-and-source-documents).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await BelzakupkiEnrichmentService.analyze(
             session, order_id=order_id, scope=tenant_scope, payload=payload,
@@ -123,6 +179,20 @@ async def apply_manager_order_source(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Apply reviewed Belzakupki evidence to an accessible order in the current
+    tenant/storefront. Can attach/create the reviewed customer and address branches, save
+    source metadata/terms, select a scenario and move a new lead to negotiation, copy
+    selected originals privately and prefill exact equipment for sales+installation.
+    Archived incoming records, conflicting customer/scenario or invalid originals return
+    400; missing source/order 404, source failure 502. Existing private originals/equipment
+    provenance can be reused, but no generic command receipt or expected_version check is
+    supplied. See [source review and equipment
+    rules](https://github.com/mvnby/air-api/blob/main/docs/belzakupki-intake.md#manager-review-and-source-documents).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await BelzakupkiEnrichmentService.apply(
             session, order_id=order_id, scope=tenant_scope, payload=payload, username=username,
@@ -143,6 +213,16 @@ async def download_manager_order_source_document(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Fetch an original document identified by the accessible order’s saved Belzakupki source
+    in the current tenant/storefront. Returns a private/no-store binary attachment with
+    detected file type. Missing source/order/document returns 404; invalid identity or
+    document above configured attachment-size limit 400; upstream/configuration failure 502.
+    Download does not copy it into the order’s private attachments.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         content, filename, mime_type = await BelzakupkiEnrichmentService.document(
             session, order_id=order_id, document_id=document_id, scope=tenant_scope,

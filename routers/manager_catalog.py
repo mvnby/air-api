@@ -86,8 +86,14 @@ async def list_products_for_manager(
     _user: str = Depends(get_current_username),
 ):
     """
-    Paginated product list for manager UI.
-    Unlike the public catalog, this can show unpublished products.
+    Read a paginated shared product list for editing, including unpublished cards unless
+    filtered. page starts at 1 and limit is 1–100. Brand/category/series and technical
+    filters apply to the master catalog; publication here is not a tenant-offer publication
+    flag.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     return await ManagerCatalogService.list_products(
         session=session,
@@ -122,7 +128,18 @@ async def create_product(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
-    """Create a manual product card from the manager UI."""
+    """
+    Create a manual shared product, normalize specs and synchronize category, brand/series,
+    tags and manuals. Invalid title, references or publication media returns 400.
+    is_published defaults to true; creation is not implicitly a draft. POST has no
+    idempotency receipt and retries may create another card.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
+    """
     try:
         return await ManagerCatalogService.create_product(
             session=session,
@@ -149,7 +166,18 @@ async def duplicate_product(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
-    """Duplicate a product card, optionally overriding selected fields."""
+    """
+    Create a separate card from a source product with submitted overrides and optional
+    gallery/manual/tag copying. Publication is inherited unless overridden or
+    make_unpublished is set. Gallery copying reuses media URLs. Missing source returns 404;
+    invalid fields/media returns 400. Each successful POST creates a new card.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
+    """
     try:
         result = await ManagerCatalogService.duplicate_product(
             session=session,
@@ -185,7 +213,17 @@ async def update_product(
     _user: str = Depends(get_current_username),
 ):
     """
-    Update individual product fields.
+    Update submitted product fields; submitted specs are normalized and supplied
+    tags/manuals replace those relations. Brand/series and category are synchronized
+    according to explicit overrides and changed inputs. Missing product returns 404; invalid
+    fields/references/media returns 400. Writers lock the product to coordinate with bulk
+    apply; no expected_version or client idempotency receipt is accepted.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
     """
     try:
         result = await ManagerCatalogService.update_product(
@@ -221,6 +259,15 @@ async def delete_product(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Permanently delete a product and its removable catalog relations. References from orders
+    prevent deletion and return 400. Missing product returns 404, including after successful
+    deletion. This does not mean unpublishing the product.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         success = await ManagerCatalogService.delete_product(
             session=session,
@@ -253,7 +300,14 @@ async def bulk_round_price(
     _user: str = Depends(get_current_username),
 ):
     """
-    Round prices down to the nearest multiple of 50.
+    Round each existing selected master-product price down to a multiple of 50 and return
+    the changed count. Missing IDs are ignored and an empty selection does nothing.
+    Repeating without intervening price changes makes no further changes; this does not edit
+    tenant offers.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     return await ManagerCatalogService.bulk_round_prices(session=session, request=request)
 
@@ -269,8 +323,14 @@ async def bulk_set_rrc_price(
     _user: str = Depends(get_current_username),
 ):
     """
-    Set selected product prices to their current recommended retail prices.
-    Products without RRC stay unchanged.
+    Set existing selected master-product prices to rounded current supplier-derived
+    recommended retail prices. Products without a positive RRC remain unchanged;
+    skipped_count also includes prices already equal to RRC. Missing IDs are ignored.
+    Repeats recalculate current supply metrics and do not edit tenant offers.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     return await ManagerCatalogService.bulk_set_prices_to_rrc(session=session, request=request)
 
@@ -286,7 +346,14 @@ async def bulk_delete_products(
     _user: str = Depends(get_current_username),
 ):
     """
-    Delete explicitly selected products. Products linked to orders are reported as failed.
+    Permanently delete explicitly selected products one at a time and report per-product
+    failures. Order-linked products cannot be deleted; missing IDs are failures. Successful
+    deletions commit individually, so the batch may partially succeed. Empty selection does
+    nothing; repeating the batch reports previously deleted IDs as missing.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     return await ManagerCatalogService.bulk_delete_products(session=session, request=request)
 
@@ -301,7 +368,12 @@ async def get_all_tags(
     _user: str = Depends(get_current_username),
 ):
     """
-    Return all tags grouped by TagGroup for the product editor.
+    Read all tags grouped by TagGroup for the shared product editor. No pagination
+    parameters are accepted; this does not restrict groups to the selected tenant.
+
+    Access and scope: Manager access is required; this reads the shared platform catalog,
+    not tenant-owned copies. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     return await ManagerCatalogService.get_all_tags(session)
 
@@ -326,11 +398,14 @@ async def smart_search_products(
     _user: str = Depends(get_current_username),
 ):
     """
-    Smart search for manager product picker.
+    Search the shared catalog for the product picker by text tokens and BTU-index numeric
+    tokens with AND-combined matching against titles, tags, area and cooling power.
+    Technical/brand/category filters refine results; limit is 1–100. This does not require
+    publication or tenant-offer eligibility.
 
-    Parses the query string into text tokens and BTU-index number tokens,
-    then applies AND-chained ORM filters against title, tags, area, and
-    power_cooling.  Returns matched products with their tags pre-loaded.
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     return await ManagerCatalogService.smart_search(
         session=session,
@@ -357,6 +432,14 @@ async def get_product_for_manager(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Read a shared product editor card with its related catalog data, including unpublished
+    products. Missing product returns 404; this is not the tenant storefront projection.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     product = await ManagerCatalogService.get_product(
         session=session,
         product_id=product_id,
@@ -380,10 +463,17 @@ async def import_from_onliner(
     _user: str = Depends(get_current_username),
 ):
     """
-    Import products from Onliner.by URLs.
-    Accepts a list of product page URLs and an optional flag to also import
-    related models (sibling AC units linked on the same page).
-    Returns the count of successfully imported and failed products.
+    Synchronously import product URLs using the importer, optionally following related
+    models and updating existing cards. Blank URLs are stripped; successes and per-product
+    errors are returned separately, so success of the HTTP call does not mean all products
+    imported. This writes catalog state and downloads media; repeated calls follow
+    update_existing and source matching rather than an idempotency receipt.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
     """
     urls = [u.strip() for u in payload.urls if u.strip()]
     results = await _importer.import_products_bulk(
@@ -409,9 +499,16 @@ async def catalog_import(
     _user: str = Depends(get_current_username),
 ):
     """
-    Universal product import endpoint.
-    Accepts URLs from any supported source (onliner.by, aircond.by, etc.).
-    ImporterService automatically routes each URL to the appropriate parser.
+    Synchronously import URLs from supported catalog sources, selecting the parser for each
+    URL. Optional related-model expansion and update_existing control writes. Blank URLs are
+    removed and partial successes/errors are returned. This downloads source content/media
+    and mutates cards; it is neither preview nor a background-job response.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
     """
     urls = [u.strip() for u in payload.urls if u.strip()]
     results = await _importer.import_products_bulk(
@@ -438,8 +535,14 @@ async def start_catalog_import_job(
     _user: str = Depends(get_current_username),
 ):
     """
-    Start a universal catalog import in the background and return a job id
-    that can be polled for progress.
+    Persist a new catalog import job and return 202 with its ID/status/stage for polling.
+    Blank URLs are removed; no remaining URL returns 400. The shared queue runs jobs in
+    order; accepted/queued does not mean import completed. Each POST creates a new job with
+    no idempotency receipt; results and partial failures are read from job status.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     urls = [u.strip() for u in payload.urls if u.strip()]
     if not urls:
@@ -466,6 +569,15 @@ async def start_catalog_import_job(
 async def get_current_catalog_import_job_status(
     _user: str = Depends(get_current_username),
 ):
+    """
+    Read the shared import queue’s current job: the running/queued job is preferred,
+    otherwise the latest recorded job. Returns progress and successes/errors without
+    starting work; 404 means no recorded job is available.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     job = await catalog_import_runtime_service.get_current_job()
     if not job:
         raise HTTPException(status_code=404, detail="Catalog import job not found")
@@ -481,6 +593,14 @@ async def get_catalog_import_job_status(
     job_id: str,
     _user: str = Depends(get_current_username),
 ):
+    """
+    Read one persisted shared catalog import job by job_id with progress and results/errors.
+    Missing job returns 404; polling only reads state and does not retry failed imports.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     job = await catalog_import_runtime_service.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Catalog import job not found")

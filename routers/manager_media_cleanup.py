@@ -44,7 +44,19 @@ async def create_main_image_cleanup_batch(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
-    """Create a bounded batch of product main-image cleanup candidates."""
+    """
+    Synchronously create and process a review batch of at most 50 product main-image
+    candidates. Existing product/source pairs are skipped; unsupported
+    remote/missing/local-transparent sources receive skip reasons. Processing outcomes and
+    files are saved, but Product.main_image changes only on approval. Invalid processor
+    returns 400. This POST is not a read-only preview or queued worker job.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
+    """
     try:
         return await ProductMainImageCleanupService.create_batch(
             session=session,
@@ -67,7 +79,15 @@ async def list_main_image_cleanup_batches(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
-    """List cleanup batches for manager review."""
+    """
+    Read saved main-image review batches with offset and limit 1–100. Completion of a batch
+    means candidate processing ended, not that candidates were approved or product main
+    images changed.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     return await ProductMainImageCleanupService.list_batches(
         session=session,
         limit=limit,
@@ -88,7 +108,15 @@ async def list_main_image_cleanup_items(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
-    """List cleanup items by batch and/or status."""
+    """
+    Read saved cleanup candidates/outcomes filtered by batch and/or status, with offset and
+    limit 1–100. Unknown batch/status can yield an empty list; this does not process
+    candidates or approve their use.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     return await ProductMainImageCleanupService.list_items(
         session=session,
         batch_id=batch_id,
@@ -108,7 +136,19 @@ async def approve_main_image_cleanup_items(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
-    """Approve selected candidates and explicitly update Product.main_image."""
+    """
+    Approve ready candidates and immediately set each product main_image to its candidate
+    URL, recording approval and catalog invalidation together.
+    Missing/not-ready/already-approved items are skipped with reasons; an empty ID selection
+    returns 400. No original-image version check is performed, so approval can replace a
+    main image edited since candidate creation. Repeat approvals skip approved items.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
+    """
     try:
         return await ProductMainImageCleanupService.approve_items(
             session=session,
@@ -129,7 +169,16 @@ async def reject_main_image_cleanup_items(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
-    """Reject selected candidates without changing public product fields."""
+    """
+    Mark selected nonapproved cleanup items rejected with an operator reason.
+    Missing/already-approved items are skipped; empty ID selection returns 400. This saves
+    review state but does not change product fields or delete candidate files; repeating may
+    update the review timestamp/reason.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await ProductMainImageCleanupService.reject_items(
             session=session,
@@ -150,7 +199,15 @@ async def skip_main_image_cleanup_items(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
-    """Mark selected items skipped with an operator-visible reason."""
+    """
+    Mark selected nonapproved cleanup items skipped with an operator-visible reason.
+    Missing/already-approved items are reported as skipped; empty ID selection returns 400.
+    This changes review state without updating product main images or deleting media.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await ProductMainImageCleanupService.skip_items(
             session=session,
@@ -169,5 +226,12 @@ async def skip_main_image_cleanup_items(
 async def list_main_image_cleanup_skip_reasons(
     username: str = Depends(get_current_username),
 ):
-    """Return known machine reasons plus user-entered skip reasons support."""
+    """
+    Read known machine skip reasons and whether operator-entered reasons are supported. No
+    candidate processing or product change occurs.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     return ProductMainImageCleanupService.skip_reasons()

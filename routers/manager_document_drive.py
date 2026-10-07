@@ -78,6 +78,14 @@ async def get_manager_document_drive_status(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> DocumentDriveStatusResponse:
+    """
+    Read the optional Google Drive document-editor connection status for the current
+    tenant/storefront. Manager access is required. Returns connection readiness/labels
+    without credentials; this does not check or synchronize an individual editing session.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     return await DocumentDriveConnectionService.status(
         session,
         tenant_scope=auth.tenant_scope(),
@@ -93,6 +101,16 @@ async def get_manager_document_drive_authorization_url(
     request: Request,
     auth: AuthenticatedUser = Depends(require_owner_access),
 ) -> DocumentDriveAuthorizationUrlResponse:
+    """
+    Start tenant/storefront-bound Google Drive OAuth consent and return its authorization
+    URL. Requires owner/admin access; binds pending state to the live actor and browser
+    session. Misconfigured redirect returns 503; provider policy errors keep their status.
+    Obtaining the URL does not complete the connection and a new request replaces pending
+    consent state.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         redirect_uri = _callback_uri(request)
         state = start_document_drive_oauth_state(

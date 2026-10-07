@@ -32,8 +32,16 @@ async def upload_image(
     username: str = Depends(get_current_username),
 ):
     """
-    Download image from URL, convert to WebP, save to local storage,
-    and create a ProductImage record linked to the product.
+    Download a source image, decode/convert it to shared WebP storage and attach it to the
+    product. A non-installation upload also sets main_image; installation uploads do not.
+    Missing product returns 404; invalid source/image returns 400 and runtime storage
+    failure 500. Reusing identical canonical bytes/link does not create another link.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
     """
     logger.info(f"Manager {username} uploading image for product {product_id} from {url}")
     try:
@@ -63,7 +71,19 @@ async def upload_local_images(
     session: AsyncSession = Depends(get_session),
     username: str = Depends(get_current_username),
 ):
-    """Upload multiple local files, convert to WebP, and attach to product."""
+    """
+    Ingest local files into shared WebP product storage and attach successful files in one
+    catalog transaction. Invalid individual files may be skipped; uploaded/images report
+    accepted results. The first successful non-installation image becomes main only if it
+    was missing. Missing product returns 404; repeating identical canonical images can reuse
+    existing links.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [media
+    publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
+    """
     logger.info(f"Manager {username} uploading {len(files)} local images for product {product_id}")
     try:
         return await ManagerMediaOrchestratorService.upload_local_images(

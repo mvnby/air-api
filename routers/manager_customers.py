@@ -104,8 +104,13 @@ async def list_customers_for_manager(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     """
-    Paginated customer list for manager UI.
-    Includes order count per customer.
+    Page customers in the current tenant with order counts and contact summaries. Archived
+    customers are hidden by default; only_with_orders defaults true, and supplied
+    type/search/favorite filters narrow the result. limit is at most 100. This does not
+    expose another tenant’s customer directory.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     return await ManagerCatalogService.list_customers(
         session=session,
@@ -131,6 +136,16 @@ async def create_customer_for_manager(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Create a customer in the current tenant after party/signing-mode and duplicate checks.
+    Invalid customer values return 400; matching existing identity returns 409 with
+    duplicate customer/field hints. Repeating POST is not replayed through an idempotency
+    receipt. See the [customer workspace
+    contract](https://github.com/mvnby/air-api/blob/main/docs/customer-workspace.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await ManagerCatalogService.create_customer(
             session=session,
@@ -168,6 +183,17 @@ async def recognize_customer_requisites_for_manager(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Recognize uploaded customer requisites and save a review draft in the current tenant
+    without creating/updating a customer. Requires system-tenant Manager access for this OCR
+    operation. Accepts JPG/PNG/WEBP/PDF/DOC/DOCX files up to 10 MB; PDFs are bounded to five
+    pages. Invalid/unsupported/oversized content returns 400. Returns inferred party/signing
+    context and duplicate hints for explicit confirmation. See the [customer workspace
+    contract](https://github.com/mvnby/air-api/blob/main/docs/customer-workspace.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         content = await file.read(CustomerRequisitesRecognitionService.MAX_FILE_SIZE_BYTES + 1)
         return await CustomerRequisitesRecognitionService.recognize_bytes(
@@ -198,6 +224,16 @@ async def recognize_customer_requisites_text_for_manager(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Parse requisites text and save a review draft in the current tenant without changing a
+    customer. Requires system-tenant Manager access; submitted text is bounded to 12000
+    characters by the request model. Invalid text returns 400. Duplicate hints are
+    suggestions, not an automatic choice of customer to update. See the [customer workspace
+    contract](https://github.com/mvnby/air-api/blob/main/docs/customer-workspace.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await CustomerRequisitesRecognitionService.recognize_text(
             session, text=payload.text, source="manager", tenant_scope=tenant_scope,
@@ -222,6 +258,17 @@ async def confirm_customer_requisites_for_manager(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Confirm a saved recognition belonging to the current tenant, explicitly creating a
+    customer or updating the selected one. Selected-field updates require baseline values
+    and preserve unselected fields; a changed baseline or duplicate identity returns 409.
+    Missing recognition/customer returns 404, invalid confirmation 400. Repeating an already
+    confirmed recognition returns its customer. See the [customer workspace
+    contract](https://github.com/mvnby/air-api/blob/main/docs/customer-workspace.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await CustomerRequisitesRecognitionService.confirm(
             session,
@@ -277,6 +324,14 @@ async def get_customer_for_manager(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Read the detailed customer projection owned by the current tenant, including contact
+    summary and latest delivery-address context. Missing or inaccessible customer returns
+    404; the detail does not grant access to foreign-tenant relationship IDs.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     customer = await ManagerCatalogService.get_customer(
         session=session,
         customer_id=customer_id,
@@ -301,6 +356,16 @@ async def get_customer_docs_for_manager(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    List documents attached to the current-tenant customer’s accessible orders, with
+    document basis, scope and official or confirmed-legacy identity. Missing customer
+    returns 404. Internal file titles are not promoted to official document numbers;
+    is_downloadable reflects the legacy provider file reference. See the [customer workspace
+    contract](https://github.com/mvnby/air-api/blob/main/docs/customer-workspace.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     docs = await DocumentService.get_customer_documents(
         session,
         customer_id,
@@ -356,6 +421,17 @@ async def get_customer_reconciliation_for_manager(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Calculate a customer ledger over the selected period and optional customer-owned
+    contract using orders in the current tenant/storefront. Returns readiness and warnings
+    for uncertain originals, delivery-event relationships and allocations; does not generate
+    a file or confirm evidence. Missing customer returns 404; invalid period/contract
+    returns 400. See the [customer workspace
+    contract](https://github.com/mvnby/air-api/blob/main/docs/customer-workspace.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         data = await CustomerReconciliationService.build(
             session=session, customer_id=customer_id, date_from=date_from,
@@ -386,6 +462,18 @@ async def create_customer_reconciliation_document_for_manager(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Create a Google reconciliation statement for the current-tenant customer and
+    current-storefront orders after recalculating the selected period/contract and
+    rechecking confirmed legacy source hashes. Missing customer returns 404; invalid scope
+    or incomplete/changed evidence returns 409 with warnings where available. Each
+    successful POST creates a new provider file; no replay receipt is supplied. See the
+    [customer workspace
+    contract](https://github.com/mvnby/air-api/blob/main/docs/customer-workspace.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         data = await CustomerReconciliationService.generate_google_doc(
             session=session, customer_id=customer_id, date_from=date_from,
@@ -423,6 +511,16 @@ async def review_customer_reconciliation_legacy_document_for_manager(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Read an accessible legacy Google delivery original for the customer in the current
+    tenant/storefront and propose number/date/amount/contract with source text/hash. Does
+    not confirm evidence or rewrite the original. Missing scope/document returns 404;
+    unsupported/unreadable/oversized original returns 422. See the [customer workspace
+    contract](https://github.com/mvnby/air-api/blob/main/docs/customer-workspace.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         result = await review_legacy_document(session, customer_id, document_id, tenant_scope)
     except LegacyDocumentReviewError as exc:
@@ -447,6 +545,18 @@ async def confirm_customer_reconciliation_legacy_document_for_manager(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
     auth: AuthenticatedUser = Depends(get_current_auth_context),
 ):
+    """
+    Store explicitly checked reconciliation identity for an accessible legacy original in
+    the current tenant/storefront, with source hash, excerpt and authenticated author.
+    Re-reads the original and checks submitted number/date/amount/contract against it;
+    changed or unsupported evidence returns 409, missing document 404. Updates metadata
+    without rewriting the Google original. No generic expected_version receipt is provided.
+    See the [customer workspace
+    contract](https://github.com/mvnby/air-api/blob/main/docs/customer-workspace.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         result = await confirm_legacy_document(
             session, customer_id, document_id, tenant_scope, payload,
@@ -473,6 +583,18 @@ async def confirm_customer_reconciliation_event_relation_for_manager(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
     auth: AuthenticatedUser = Depends(get_current_auth_context),
 ):
+    """
+    Confirm whether 2–10 distinct delivery documents represent one event or separate events
+    within one accessible order for this current-tenant customer/storefront. Requires active
+    authoritative identities and amounts; same-event documents must agree on date, amount
+    and contract. Invalid/inaccessible context returns 409. Stores reason/author and
+    fingerprints: changed document identity invalidates the relation for later
+    reconciliation. See the [customer workspace
+    contract](https://github.com/mvnby/air-api/blob/main/docs/customer-workspace.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await confirm_event_relation(
             session, customer_id=customer_id, payload=payload,
@@ -497,6 +619,13 @@ async def list_customer_branches_for_manager(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    List branches of a current-tenant customer with the default branch first. Missing or
+    inaccessible customer returns 404; reading does not create a default branch.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     data = await ManagerCatalogService.list_customer_branches(
         session=session,
         customer_id=customer_id,
@@ -522,6 +651,15 @@ async def create_customer_branch_for_manager(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Create an address branch for a current-tenant customer. A first branch becomes default,
+    and explicitly selecting a default demotes siblings. Missing customer returns 404; blank
+    address returns 400. Repeating POST can create another branch; no replay receipt is
+    provided.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         data = await ManagerCatalogService.create_customer_branch(
             session=session,
@@ -557,6 +695,15 @@ async def patch_customer_branch_for_manager(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Patch supplied address/branch fields under a current-tenant customer. Selecting
+    default=true demotes siblings; default=false can leave no branch selected. Missing
+    customer/branch returns 404; blank address returns 400. No expected_version precondition
+    is supplied; existing document scope snapshots are independent of later branch edits.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         data = await ManagerCatalogService.update_customer_branch(
             session=session,
@@ -592,6 +739,15 @@ async def delete_customer_branch_for_manager(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Delete a branch of a current-tenant customer; deleting the default selects the oldest
+    remaining branch as default. Missing customer/branch returns 404, including a repeated
+    delete. This removes the branch record rather than altering saved document scope
+    snapshots.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     data = await ManagerCatalogService.delete_customer_branch(
         session=session,
         customer_id=customer_id,
@@ -618,6 +774,18 @@ async def patch_customer_for_manager(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Patch supplied customer fields in the current tenant. Optional text can be cleared;
+    phone/email changes synchronize the primary contact, and a party-type change derives a
+    compatible signing mode unless explicitly supplied. Missing customer returns 404;
+    incompatible signing mode or invalid values returns 400. This direct patch has no
+    baseline/expected_version conflict check; selective requisites confirmation has its own
+    contract. See the [customer workspace
+    contract](https://github.com/mvnby/air-api/blob/main/docs/customer-workspace.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         customer = await ManagerCatalogService.update_customer(
             session=session,
@@ -650,6 +818,15 @@ async def delete_customer_for_manager(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Delete a current-tenant customer only when it has no linked orders. Missing customer
+    returns 404; linked orders block deletion with 400. Repeating deletion returns 404
+    rather than replaying a receipt. Use the customer archive field when the record and
+    order history must remain.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         success = await CustomerService.delete_for_manager(
             session,

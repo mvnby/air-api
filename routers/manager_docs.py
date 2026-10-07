@@ -107,6 +107,15 @@ async def get_manager_order_documents(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    List legacy-compatible document metadata for an order in the current Manager
+    tenant/storefront, including basis and scoped line metadata. Missing order returns 404.
+    Native artifacts/lifecycle use document-system endpoints; is_downloadable here reflects
+    the legacy file reference.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     docs = await DocumentService.list_order_documents(
         session,
         order_id,
@@ -152,6 +161,15 @@ async def upload_manager_order_document(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Upload a legacy order document to its configured file provider for an accessible order
+    in the current tenant/storefront. Closed orders return 409 order_documents_locked.
+    Creates a document record/provider file; no caller idempotency receipt is provided, so
+    reconcile after an uncertain upload result.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         doc = await DocumentService.upload_document(
             session,
@@ -193,6 +211,15 @@ async def register_manager_external_contract(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Register an external contract’s number/date and optional file or HTTP(S) URL for an
+    accessible order in the current tenant/storefront. Closed orders return 409; invalid
+    contract details/URL return 400. This records external evidence rather than generating a
+    native official contract; repeated POST can create another record.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         doc = await DocumentService.register_external_contract(
             session,
@@ -241,6 +268,15 @@ async def attach_manager_doc_file(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Replace/upload the provider file associated with an accessible legacy document in the
+    current tenant/storefront. Closed orders return 409, invalid file/document configuration
+    400 and missing document 404. Previous provider file cleanup is attempted after
+    replacement; this is not a native immutable artifact edit.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         doc = await DocumentService.attach_file_to_document(
             session,
@@ -290,6 +326,16 @@ async def get_manager_doc_download(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Download the provider-backed legacy document file for the current tenant/storefront. The
+    service exports Google content or reads uploaded evidence according to file type.
+    Missing document/content returns 404; unsupported/unavailable export or native-managed
+    routing misuse returns 400. Native artifacts have their own authenticated download
+    endpoint.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         pdf_content, filename_encoded = await DocumentService.get_download_stream(
             session,
@@ -335,6 +381,16 @@ async def delete_manager_doc(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Delete an accessible legacy document record and attempt provider file cleanup. Current
+    tenant/storefront Manager access is required. Closed order, dependent documents or a
+    native-managed lifecycle record returns 409; missing document returns 404. Provider
+    cleanup failure does not imply the database record survived. A repeated delete is not
+    receipt replay.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         order_id = await DocumentService.delete_document(
             session,
@@ -378,6 +434,14 @@ async def list_manager_document_templates(
     _: TenantScope = Depends(require_system_manager_tenant_scope),
     session: AsyncSession = Depends(get_session),
 ):
+    """
+    List the shared managed legacy Google template directory, excluding implicit legacy
+    templates and optionally filtering by document type. Requires system-tenant Manager
+    access; this is not the tenant-owned native template registry.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     items = await DocumentTemplateService.list_template_items(session, doc_type, include_legacy=False)
     return {"items": [DocumentTemplateItem(**item) for item in items]}
 
@@ -392,6 +456,15 @@ async def list_manager_document_template_files(
     limit: int = Query(100, ge=1, le=200),
     _: TenantScope = Depends(require_system_manager_tenant_scope),
 ):
+    """
+    Read candidate files from the configured/shared Google Drive template folder. Requires
+    system-tenant Manager access. This existing endpoint accepts limit 1–200, default 100;
+    credentials/provider listing failure returns 502. Listing does not create a template
+    definition or copy files.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         files = await run_in_threadpool(
             lambda: get_google_service().list_files(folder_id, limit=limit)
@@ -422,6 +495,15 @@ async def create_manager_document_template(
     _: TenantScope = Depends(require_system_manager_tenant_scope),
     session: AsyncSession = Depends(get_session),
 ):
+    """
+    Create a shared legacy Google template definition from a Drive file reference and
+    supplied restrictions/basis links. Requires system-tenant Manager access. Invalid
+    configuration returns 400; this does not upload a native DOCX version. No caller
+    idempotency receipt is provided.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         item = await DocumentTemplateService.create_template(session, payload)
         return DocumentTemplateItem(**item)
@@ -440,6 +522,14 @@ async def patch_manager_document_template(
     _: TenantScope = Depends(require_system_manager_tenant_scope),
     session: AsyncSession = Depends(get_session),
 ):
+    """
+    Patch supplied fields of a shared legacy Google template definition. Requires
+    system-tenant Manager access. Invalid or missing template configuration returns 400;
+    existing generated document files are not regenerated by this metadata update.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         item = await DocumentTemplateService.update_template(session, template_id, payload)
         return DocumentTemplateItem(**item)
@@ -457,6 +547,14 @@ async def delete_manager_document_template(
     _: TenantScope = Depends(require_system_manager_tenant_scope),
     session: AsyncSession = Depends(get_session),
 ):
+    """
+    Delete a shared legacy template definition after service dependency validation. Requires
+    system-tenant Manager access. A missing definition or service refusal is returned as
+    404; repeating deletion is not an idempotent receipt.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         await DocumentTemplateService.delete_template(session, template_id)
         return {"message": "Document template deleted"}
@@ -477,6 +575,16 @@ async def get_doc_templates(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Resolve available legacy templates for a document kind and optional order/customer
+    context. Manager access and scoped entity checks are required; partner tenants must
+    supply order or customer context (403 otherwise). Missing/inaccessible context returns
+    404. Partner responses restrict exposed customer IDs to the selected customer; this does
+    not grant access to shared template administration.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     selected_customer_id = customer_id
     if not tenant_scope.is_system and order_id is None and customer_id is None:
         raise HTTPException(

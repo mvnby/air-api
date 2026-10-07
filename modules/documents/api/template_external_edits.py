@@ -59,6 +59,15 @@ async def get_native_template_google_edit_session(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> ExternalEditSessionItem:
+    """
+    Inspect and refresh the Google editing session for a template version/legal entity in
+    the current tenant. Requires owner/admin access. Remote changes are reported rather than
+    silently replacing the immutable local version. Missing session returns 404, conflicting
+    state 409, provider failure 502; tenant Drive availability is checked first.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     provider = await _google_provider(
         session, auth, endpoint=GET_MANAGER_NATIVE_TEMPLATE_GOOGLE_EDIT_SESSION
     )
@@ -107,6 +116,16 @@ async def create_native_template_google_edit_session(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> ExternalEditSessionItem:
+    """
+    Ensure a Google editable copy of a native template version in the current tenant.
+    Requires owner/admin access. Reuses an existing eligible session; creating a copy does
+    not activate or overwrite the immutable version. Missing version/scope returns 404,
+    session/version conflict 409, invalid input/source 400 and provider failure 502; tenant
+    Drive availability is required.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     provider = await _google_provider(
         session, auth, endpoint=CREATE_MANAGER_NATIVE_TEMPLATE_GOOGLE_EDIT_SESSION
     )
@@ -165,6 +184,18 @@ async def sync_native_template_google_edit_session(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> TemplateExternalEditSyncResponse:
+    """
+    Import a remote template edit as a new validated native version in the current tenant.
+    Requires owner/admin access, expected base checksum, expected remote revision and
+    idempotency_key. Retain the same command on retry; reread session state on conflict.
+    Returns the version and session; activation is a separate command. Missing
+    version/session returns 404, stale state 409, semantic DOCX validation 422, invalid
+    input 400 and provider failure 502. See [native template
+    versions](https://github.com/mvnby/air-api/blob/main/docs/native-document-template-bundles.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     provider = await _google_provider(
         session, auth, endpoint=SYNC_MANAGER_NATIVE_TEMPLATE_GOOGLE_EDIT_SESSION
     )

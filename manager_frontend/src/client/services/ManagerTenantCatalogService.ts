@@ -9,6 +9,15 @@ import { request as __request } from '../core/request';
 export class ManagerTenantCatalogService {
     /**
      * List Manager Tenant Catalog Products
+     * Read published master products with the selected storefront’s offer projection,
+     * paginated with limit 1–100. For partners, allowed means an active published offer whose
+     * grant is active or absent; an inactive linked grant hides that offer from the
+     * projection. For the system tenant allowed follows master publication and the allowed
+     * filter is ignored. No grant or offer is created.
+     *
+     * Access and scope: Manager access is required; data is restricted to the authenticated
+     * tenant and selected storefront. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param page
      * @param limit
      * @param search

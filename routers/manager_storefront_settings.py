@@ -18,6 +18,12 @@ async def get_storefront_brand(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ):
+    """
+    Read display name and ready logo URLs for the authenticated Manager's current storefront.
+    Available to Manager roles without owner-only settings access. An unconfigured storefront
+    uses service defaults; missing storefront returns 404. This projection excludes the rest of
+    the storefront settings.
+    """
     settings = await StorefrontSettingsService.get_settings(session, tenant_scope=auth.tenant_scope())
     return StorefrontBrandResponse(
         display_name=settings.site.display_name,
@@ -32,6 +38,13 @@ async def upload_storefront_logo(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_owner_access),
 ):
+    """
+    Upload a storefront_logo media asset for the current storefront; requires a current-tenant
+    owner/admin. Accepts one multipart file up to 20 MiB; invalid media/size returns 400.
+    Returns uploaded asset metadata, but does not select it as the storefront logo: save its ID
+    through PUT /api/manager/storefront-settings. The upload may create assets/files and has no
+    command replay receipt.
+    """
     try:
         content = await file.read(20 * 1024 * 1024 + 1)
         if len(content) > 20 * 1024 * 1024:
@@ -55,6 +68,13 @@ async def get_storefront_settings(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_owner_access),
 ):
+    """
+    Read site branding, contacts, service directions and optimistic version for the current
+    storefront; requires a current-tenant owner/admin. If no saved settings exist, returns
+    defaults with version=0 without creating a settings row; canonical system-storefront
+    defaults can include platform contacts. Missing storefront returns 404. Logo URLs refer only
+    to ready assets in this storefront.
+    """
     return await StorefrontSettingsService.get_settings(session, tenant_scope=auth.tenant_scope())
 
 
@@ -64,6 +84,14 @@ async def update_storefront_settings(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_owner_access),
 ):
+    """
+    Replace current-storefront site settings and service directions using the version returned
+    by GET. Requires a current-tenant owner/admin. Stale version returns 409; a logo must be a
+    ready storefront_logo asset of this storefront or returns 422; missing storefront returns
+    404. A change increments version, records an audit event and stages catalog invalidation for
+    configured targets. Identical saved data with the current version is a no-op; retrying an
+    old version after a successful change conflicts.
+    """
     return await StorefrontSettingsService.update_settings(
         session,
         tenant_scope=auth.tenant_scope(),

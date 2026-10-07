@@ -41,6 +41,21 @@ async def calculate_manager_install_estimate(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Calculate legacy tariff/rule pricing and discount without saving a ServiceEstimate or
+    adding order lines. Missing/out-of-scope tariff returns 404; inactive tariffs remain
+    addressable by ID, but inactive rules are excluded from calculation. After tenant
+    price-book publication, installation tariffs return 409 book_preview_required while
+    other service kinds remain available. Use published-book preview/confirmation for new
+    typed installation pricing.
+
+    Access and scope: Manager access is required; service catalog data belongs to the
+    authenticated tenant, independently of storefront. The system tenant also reads legacy
+    rows with NULL tenant ownership. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [installation estimate
+    contract](https://github.com/mvnby/air-api/blob/main/docs/installation-estimate-contract.md).
+    """
     return await ServiceEstimateService.calculate_install_estimate(
         session, payload, tenant_scope
     )
@@ -58,6 +73,21 @@ async def create_manager_service_estimate(
     username: str = Depends(get_current_username),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Calculate current legacy tariff/rules and save an independent estimate/item snapshot,
+    optionally linked to a tenant customer. Missing/out-of-scope tariff or inaccessible
+    customer returns 404; inactive tariffs remain addressable by ID. Installation tariffs
+    are blocked with 409 book_preview_required after book publication; other service kinds
+    remain supported. No idempotency receipt exists: each successful call creates a new
+    snapshot and does not attach it to an order.
+
+    Access and scope: Manager access is required; service catalog data belongs to the
+    authenticated tenant, independently of storefront. The system tenant also reads legacy
+    rows with NULL tenant ownership. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [installation estimate
+    contract](https://github.com/mvnby/air-api/blob/main/docs/installation-estimate-contract.md).
+    """
     return await ServiceEstimateService.create_install_estimate(
         session=session,
         payload=payload,
@@ -74,6 +104,18 @@ async def list_manager_service_estimates(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Read saved historical service estimates, optionally by customer, with page starting at 1
+    and limit 1–100. Publication of a typed installation price book does not hide prior
+    estimates. Reading uses saved snapshots rather than recalculating current tariffs.
+
+    Access and scope: Manager access is required; service catalog data belongs to the
+    authenticated tenant, independently of storefront. The system tenant also reads legacy
+    rows with NULL tenant ownership. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [installation estimate
+    contract](https://github.com/mvnby/air-api/blob/main/docs/installation-estimate-contract.md).
+    """
     return await ServiceEstimateService.list_estimates(
         session=session,
         page=page,
@@ -95,6 +137,20 @@ async def get_manager_service_estimate_order_lines(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Project a saved service estimate into collapsed/detailed order-line payloads with
+    short/full descriptions. Missing estimate returns 404; inconsistent totals or amounts
+    outside the writable service-money range return 409. Discount is distributed so
+    projected lines reconcile to the saved total. This only returns a projection and does
+    not insert proposal/order lines.
+
+    Access and scope: Manager access is required; service catalog data belongs to the
+    authenticated tenant, independently of storefront. The system tenant also reads legacy
+    rows with NULL tenant ownership. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [installation estimate
+    contract](https://github.com/mvnby/air-api/blob/main/docs/installation-estimate-contract.md).
+    """
     return await ServiceEstimateService.get_estimate_order_lines(
         session=session,
         estimate_id=estimate_id,
@@ -110,6 +166,18 @@ async def get_manager_service_estimate(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Read one saved historical service-estimate snapshot and items. Missing or inaccessible
+    estimate returns 404. Changes to tariff definitions and later price-book publication do
+    not recalculate its saved amounts.
+
+    Access and scope: Manager access is required; service catalog data belongs to the
+    authenticated tenant, independently of storefront. The system tenant also reads legacy
+    rows with NULL tenant ownership. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [installation estimate
+    contract](https://github.com/mvnby/air-api/blob/main/docs/installation-estimate-contract.md).
+    """
     return await ServiceEstimateService.get_estimate_by_id(
         session=session,
         estimate_id=estimate_id,
@@ -127,6 +195,19 @@ async def delete_manager_service_estimate(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Permanently delete one saved historical service estimate. Missing or inaccessible
+    estimate returns 404, including after deletion. This is a mutation of saved history, not
+    cancellation of an accepted typed installation estimate or automatic removal of order
+    lines.
+
+    Access and scope: Manager access is required; service catalog data belongs to the
+    authenticated tenant, independently of storefront. The system tenant also reads legacy
+    rows with NULL tenant ownership. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [installation estimate
+    contract](https://github.com/mvnby/air-api/blob/main/docs/installation-estimate-contract.md).
+    """
     return await ServiceEstimateService.delete_estimate(
         session=session,
         estimate_id=estimate_id,

@@ -82,6 +82,16 @@ async def preview_managed_document_draft(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> Response:
+    """
+    Render a private/no-store PDF preview for a scoped managed draft using its saved
+    context/template or edited source. Does not issue the document or reserve a number.
+    Missing/inaccessible document returns 404, incompatible draft state 409 and
+    rendering/source failure 503. See the [document lifecycle
+    contract](https://github.com/mvnby/air-api/blob/main/docs/document-module-architecture.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     private = _legacy_private_storage()
     try:
         content, filename = await ManagedDocumentDraftPreviewService.render_pdf(
@@ -134,6 +144,16 @@ async def list_managed_order_documents(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> ManagedDocumentListResponse:
+    """
+    List documents for an order accessible in the current tenant/storefront, with
+    lifecycle/provider metadata and accessible native artifacts. Missing order returns 404.
+    Reading legacy metadata does not migrate or regenerate legacy files. See the [document
+    lifecycle
+    contract](https://github.com/mvnby/air-api/blob/main/docs/document-module-architecture.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         rows = await ManagedDocumentService.list_for_order(
             session,
@@ -160,6 +180,18 @@ async def create_managed_document_draft(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> ManagedDocumentItem:
+    """
+    Create a native draft and immutable context snapshot for the current tenant/storefront
+    order, selected proposal, issuer and document basis. Closed orders or incompatible
+    template/replacement context return 409; missing dependencies 404, invalid selection 400
+    and unavailable template storage 503. No official number is reserved yet. Repeating POST
+    creates another draft; no caller idempotency receipt is provided. See the [document
+    lifecycle
+    contract](https://github.com/mvnby/air-api/blob/main/docs/document-module-architecture.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         row = await ManagedDocumentService.create_draft(
             session,
@@ -250,6 +282,15 @@ async def delete_managed_document_draft(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> Response:
+    """
+    Delete a scoped unissued native draft, returning 204. A draft with reserved official
+    number, issuance/artifacts or immutable state cannot be deleted (409); missing document
+    returns 404. Use lifecycle commands for issued records, not this endpoint. A repeat
+    after deletion returns 404.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         await ManagedDocumentService.delete_draft(
             session,
@@ -283,6 +324,18 @@ async def issue_managed_document(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> ManagedDocumentItem:
+    """
+    Issue a current-tenant managed draft by reserving its official number and rendering
+    immutable DOCX/PDF artifacts. Saved external edits must be synchronized and their remote
+    revision verified first. Missing document returns 404, state/edit conflicts 409 and
+    generation failure 503. A failed render retains its reservation; retry the same document
+    rather than creating a new draft. Already issued/sent/signed records reuse their
+    issuance result. See the [document lifecycle
+    contract](https://github.com/mvnby/air-api/blob/main/docs/document-module-architecture.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     private = _legacy_private_storage()
     try:
         from .router import get_google_document_edit_provider
@@ -341,6 +394,16 @@ async def void_managed_document(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> ManagedDocumentItem:
+    """
+    Void a scoped managed document with an explicit reason and mark its numbering
+    reservation void. Artifacts and official number are retained; voiding does not delete or
+    recycle them. Missing document returns 404, forbidden lifecycle transition or invalid
+    reason 409. See the [document lifecycle
+    contract](https://github.com/mvnby/air-api/blob/main/docs/document-module-architecture.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         row = await ManagedDocumentService.void(
             session,
@@ -369,6 +432,14 @@ async def list_document_artifacts(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> ManagedDocumentArtifactListResponse:
+    """
+    List private artifact metadata for a document accessible in the current
+    tenant/storefront. Missing document returns 404. This does not return artifact bytes or
+    provide a public media URL.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         rows = await ManagedDocumentService.list_artifacts(
             session,
@@ -394,6 +465,15 @@ async def get_document_artifact_access(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> ManagedDocumentArtifactAccessResponse:
+    """
+    Resolve private access to a scoped artifact. Returns a provider signed URL for a bounded
+    TTL of 30–3600 seconds, or the authenticated API download path when signing is
+    unavailable. Missing artifact/file returns 404 and integrity failure 409. The fallback
+    path still requires Manager authentication; expires_in is not an anonymous access grant.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         artifact = await ManagedDocumentService.get_artifact(
             session,
@@ -436,6 +516,15 @@ async def download_document_artifact(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> Response:
+    """
+    Download bytes of a scoped private artifact after storage integrity validation. Missing
+    artifact/file returns 404 and corrupt/incompatible storage metadata 409. Response is an
+    attachment with its artifact content type and private/no-store headers. Read-only access
+    remains separate from issuance.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         artifact = await ManagedDocumentService.get_artifact(
             session,

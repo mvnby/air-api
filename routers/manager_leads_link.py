@@ -35,6 +35,16 @@ async def preview_manager_email_lead_link_target(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ) -> EmailLeadLinkTarget:
+    """
+    Preview the selected existing order as a link target for an accessible email new_lead in
+    the current tenant/storefront. Does not link, copy attachments or run the full
+    unworked-source checks used by commit. Missing source/target returns 404,
+    invalid/self/new-lead target 422 and another existing link 409. See the [incoming triage
+    contract](https://github.com/mvnby/air-api/blob/main/docs/incoming-triage-workspace.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         target = await EmailLeadOrderLinkService.preview_target(
             session,
@@ -59,6 +69,18 @@ async def link_manager_email_lead_to_order(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ) -> EmailLeadLinkResult:
+    """
+    Link an unworked email new_lead to an existing accessible order in the current
+    tenant/storefront, recording actor/time and mirroring private attachment links while
+    retaining the source. Paid or previously sent sources are rejected (422); missing
+    context returns 404, different existing link 409 and unavailable needed mailbox original
+    503. Same target can reuse the existing link result; no caller replay key is supplied.
+    The target may be closed. See the [incoming triage
+    contract](https://github.com/mvnby/air-api/blob/main/docs/incoming-triage-workspace.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         result = await EmailLeadOrderLinkService.link(
             session,
@@ -84,6 +106,17 @@ async def unlink_manager_email_lead_from_order(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ) -> EmailLeadUnlinkResult:
+    """
+    Remove an accessible email lead’s link in the current tenant/storefront and archive only
+    attachment links mirrored from that source into the target. Source files and target
+    business record remain. Returns the former target ID; missing source/link returns 404,
+    including repeated unlink. Does not delete original attachments or restore a separate
+    manual archive decision. See the [incoming triage
+    contract](https://github.com/mvnby/air-api/blob/main/docs/incoming-triage-workspace.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         target_order_id = await EmailLeadOrderLinkService.unlink(
             session, source_order_id=source_order_id, tenant_scope=tenant_scope,

@@ -134,8 +134,14 @@ import { request as __request } from '../core/request';
 export class ManagerService {
     /**
      * List Products For Manager
-     * Paginated product list for manager UI.
-     * Unlike the public catalog, this can show unpublished products.
+     * Read a paginated shared product list for editing, including unpublished cards unless
+     * filtered. page starts at 1 and limit is 1–100. Brand/category/series and technical
+     * filters apply to the master catalog; publication here is not a tenant-offer publication
+     * flag.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param page
      * @param limit
      * @param search
@@ -198,8 +204,13 @@ export class ManagerService {
     }
     /**
      * List Customers For Manager
-     * Paginated customer list for manager UI.
-     * Includes order count per customer.
+     * Page customers in the current tenant with order counts and contact summaries. Archived
+     * customers are hidden by default; only_with_orders defaults true, and supplied
+     * type/search/favorite filters narrow the result. limit is at most 100. This does not
+     * expose another tenant’s customer directory.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param page
      * @param limit
      * @param search
@@ -238,6 +249,14 @@ export class ManagerService {
     }
     /**
      * Create Customer For Manager
+     * Create a customer in the current tenant after party/signing-mode and duplicate checks.
+     * Invalid customer values return 400; matching existing identity returns 409 with
+     * duplicate customer/field hints. Repeating POST is not replayed through an idempotency
+     * receipt. See the [customer workspace
+     * contract](https://github.com/mvnby/air-api/blob/main/docs/customer-workspace.md).
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param requestBody
      * @returns ManagerCatalogCustomerItemResponse Successful Response
      * @throws ApiError
@@ -257,6 +276,15 @@ export class ManagerService {
     }
     /**
      * Recognize Customer Requisites For Manager
+     * Recognize uploaded customer requisites and save a review draft in the current tenant
+     * without creating/updating a customer. Requires system-tenant Manager access for this OCR
+     * operation. Accepts JPG/PNG/WEBP/PDF/DOC/DOCX files up to 10 MB; PDFs are bounded to five
+     * pages. Invalid/unsupported/oversized content returns 400. Returns inferred party/signing
+     * context and duplicate hints for explicit confirmation. See the [customer workspace
+     * contract](https://github.com/mvnby/air-api/blob/main/docs/customer-workspace.md).
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param formData
      * @returns CustomerRequisitesRecognitionResponse Successful Response
      * @throws ApiError
@@ -276,6 +304,14 @@ export class ManagerService {
     }
     /**
      * Recognize Customer Requisites Text For Manager
+     * Parse requisites text and save a review draft in the current tenant without changing a
+     * customer. Requires system-tenant Manager access; submitted text is bounded to 12000
+     * characters by the request model. Invalid text returns 400. Duplicate hints are
+     * suggestions, not an automatic choice of customer to update. See the [customer workspace
+     * contract](https://github.com/mvnby/air-api/blob/main/docs/customer-workspace.md).
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param requestBody
      * @returns CustomerRequisitesRecognitionResponse Successful Response
      * @throws ApiError
@@ -295,6 +331,15 @@ export class ManagerService {
     }
     /**
      * Confirm Customer Requisites For Manager
+     * Confirm a saved recognition belonging to the current tenant, explicitly creating a
+     * customer or updating the selected one. Selected-field updates require baseline values
+     * and preserve unselected fields; a changed baseline or duplicate identity returns 409.
+     * Missing recognition/customer returns 404, invalid confirmation 400. Repeating an already
+     * confirmed recognition returns its customer. See the [customer workspace
+     * contract](https://github.com/mvnby/air-api/blob/main/docs/customer-workspace.md).
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param recognitionId
      * @param requestBody
      * @returns CustomerRequisitesConfirmResponse Successful Response
@@ -319,6 +364,12 @@ export class ManagerService {
     }
     /**
      * Get Customer For Manager
+     * Read the detailed customer projection owned by the current tenant, including contact
+     * summary and latest delivery-address context. Missing or inaccessible customer returns
+     * 404; the detail does not grant access to foreign-tenant relationship IDs.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param customerId
      * @returns ManagerCatalogCustomerItemResponse Successful Response
      * @throws ApiError
@@ -339,6 +390,16 @@ export class ManagerService {
     }
     /**
      * Patch Customer For Manager
+     * Patch supplied customer fields in the current tenant. Optional text can be cleared;
+     * phone/email changes synchronize the primary contact, and a party-type change derives a
+     * compatible signing mode unless explicitly supplied. Missing customer returns 404;
+     * incompatible signing mode or invalid values returns 400. This direct patch has no
+     * baseline/expected_version conflict check; selective requisites confirmation has its own
+     * contract. See the [customer workspace
+     * contract](https://github.com/mvnby/air-api/blob/main/docs/customer-workspace.md).
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param customerId
      * @param requestBody
      * @returns ManagerCatalogCustomerItemResponse Successful Response
@@ -363,6 +424,13 @@ export class ManagerService {
     }
     /**
      * Delete Customer For Manager
+     * Delete a current-tenant customer only when it has no linked orders. Missing customer
+     * returns 404; linked orders block deletion with 400. Repeating deletion returns 404
+     * rather than replaying a receipt. Use the customer archive field when the record and
+     * order history must remain.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param customerId
      * @returns any Successful Response
      * @throws ApiError
@@ -383,6 +451,14 @@ export class ManagerService {
     }
     /**
      * Get Customer Docs For Manager
+     * List documents attached to the current-tenant customer’s accessible orders, with
+     * document basis, scope and official or confirmed-legacy identity. Missing customer
+     * returns 404. Internal file titles are not promoted to official document numbers;
+     * is_downloadable reflects the legacy provider file reference. See the [customer workspace
+     * contract](https://github.com/mvnby/air-api/blob/main/docs/customer-workspace.md).
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param customerId
      * @returns ManagerCustomerDocumentListResponse Successful Response
      * @throws ApiError
@@ -403,6 +479,15 @@ export class ManagerService {
     }
     /**
      * Get Customer Reconciliation For Manager
+     * Calculate a customer ledger over the selected period and optional customer-owned
+     * contract using orders in the current tenant/storefront. Returns readiness and warnings
+     * for uncertain originals, delivery-event relationships and allocations; does not generate
+     * a file or confirm evidence. Missing customer returns 404; invalid period/contract
+     * returns 400. See the [customer workspace
+     * contract](https://github.com/mvnby/air-api/blob/main/docs/customer-workspace.md).
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param customerId
      * @param dateFrom
      * @param dateTo
@@ -434,6 +519,16 @@ export class ManagerService {
     }
     /**
      * Create Customer Reconciliation Document For Manager
+     * Create a Google reconciliation statement for the current-tenant customer and
+     * current-storefront orders after recalculating the selected period/contract and
+     * rechecking confirmed legacy source hashes. Missing customer returns 404; invalid scope
+     * or incomplete/changed evidence returns 409 with warnings where available. Each
+     * successful POST creates a new provider file; no replay receipt is supplied. See the
+     * [customer workspace
+     * contract](https://github.com/mvnby/air-api/blob/main/docs/customer-workspace.md).
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param customerId
      * @param dateFrom
      * @param dateTo
@@ -465,6 +560,14 @@ export class ManagerService {
     }
     /**
      * Review Customer Reconciliation Legacy Document For Manager
+     * Read an accessible legacy Google delivery original for the customer in the current
+     * tenant/storefront and propose number/date/amount/contract with source text/hash. Does
+     * not confirm evidence or rewrite the original. Missing scope/document returns 404;
+     * unsupported/unreadable/oversized original returns 422. See the [customer workspace
+     * contract](https://github.com/mvnby/air-api/blob/main/docs/customer-workspace.md).
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param customerId
      * @param documentId
      * @returns ManagerLegacyReconciliationReviewResponse Successful Response
@@ -488,6 +591,16 @@ export class ManagerService {
     }
     /**
      * Confirm Customer Reconciliation Legacy Document For Manager
+     * Store explicitly checked reconciliation identity for an accessible legacy original in
+     * the current tenant/storefront, with source hash, excerpt and authenticated author.
+     * Re-reads the original and checks submitted number/date/amount/contract against it;
+     * changed or unsupported evidence returns 409, missing document 404. Updates metadata
+     * without rewriting the Google original. No generic expected_version receipt is provided.
+     * See the [customer workspace
+     * contract](https://github.com/mvnby/air-api/blob/main/docs/customer-workspace.md).
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param customerId
      * @param documentId
      * @param requestBody
@@ -515,6 +628,16 @@ export class ManagerService {
     }
     /**
      * Confirm Customer Reconciliation Event Relation For Manager
+     * Confirm whether 2–10 distinct delivery documents represent one event or separate events
+     * within one accessible order for this current-tenant customer/storefront. Requires active
+     * authoritative identities and amounts; same-event documents must agree on date, amount
+     * and contract. Invalid/inaccessible context returns 409. Stores reason/author and
+     * fingerprints: changed document identity invalidates the relation for later
+     * reconciliation. See the [customer workspace
+     * contract](https://github.com/mvnby/air-api/blob/main/docs/customer-workspace.md).
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param customerId
      * @param requestBody
      * @returns ManagerCustomerReconciliationEventRelationResponse Successful Response
@@ -539,6 +662,11 @@ export class ManagerService {
     }
     /**
      * List Customer Branches For Manager
+     * List branches of a current-tenant customer with the default branch first. Missing or
+     * inaccessible customer returns 404; reading does not create a default branch.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param customerId
      * @returns ManagerCustomerBranchListResponse Successful Response
      * @throws ApiError
@@ -559,6 +687,13 @@ export class ManagerService {
     }
     /**
      * Create Customer Branch For Manager
+     * Create an address branch for a current-tenant customer. A first branch becomes default,
+     * and explicitly selecting a default demotes siblings. Missing customer returns 404; blank
+     * address returns 400. Repeating POST can create another branch; no replay receipt is
+     * provided.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param customerId
      * @param requestBody
      * @returns ManagerCustomerBranchItemResponse Successful Response
@@ -583,6 +718,13 @@ export class ManagerService {
     }
     /**
      * Patch Customer Branch For Manager
+     * Patch supplied address/branch fields under a current-tenant customer. Selecting
+     * default=true demotes siblings; default=false can leave no branch selected. Missing
+     * customer/branch returns 404; blank address returns 400. No expected_version precondition
+     * is supplied; existing document scope snapshots are independent of later branch edits.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param customerId
      * @param branchId
      * @param requestBody
@@ -610,6 +752,13 @@ export class ManagerService {
     }
     /**
      * Delete Customer Branch For Manager
+     * Delete a branch of a current-tenant customer; deleting the default selects the oldest
+     * remaining branch as default. Missing customer/branch returns 404, including a repeated
+     * delete. This removes the branch record rather than altering saved document scope
+     * snapshots.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param customerId
      * @param branchId
      * @returns ManagerActionMessageResponse Successful Response
@@ -633,6 +782,14 @@ export class ManagerService {
     }
     /**
      * Get Manager Customer Contacts
+     * Read current-tenant customer contacts, ordered primary first and active first. When no
+     * persisted contacts exist, returns a virtual legacy primary contact with id=null from the
+     * customer phone/email; this read does not materialize it. Missing customer returns 404.
+     * See the [customer workspace
+     * contract](https://github.com/mvnby/air-api/blob/main/docs/customer-workspace.md).
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param customerId
      * @returns ManagerCustomerContactListResponse Successful Response
      * @throws ApiError
@@ -653,6 +810,16 @@ export class ManagerService {
     }
     /**
      * Create Manager Customer Contact
+     * Create a contact for a current-tenant customer and record field history with the
+     * authenticated staff author. The first write materializes the legacy contact; creating a
+     * primary contact can reuse that fallback. Selecting a primary demotes siblings and
+     * synchronizes customer phone/email. Missing customer returns 404; blank name, inactive
+     * primary or primary conflict returns 400. No replay receipt prevents duplicate
+     * non-primary contacts. See the [customer workspace
+     * contract](https://github.com/mvnby/air-api/blob/main/docs/customer-workspace.md).
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param customerId
      * @param requestBody
      * @returns ManagerCustomerContactItemResponse Successful Response
@@ -677,6 +844,16 @@ export class ManagerService {
     }
     /**
      * Patch Manager Customer Contact
+     * Patch supplied fields on a persisted contact of a current-tenant customer and record
+     * changed values/author. Primary changes synchronize customer phone/email;
+     * removing/deactivating the primary selects another active contact when available and
+     * refuses leaving no active replacement. Missing customer/contact returns 404; invalid
+     * name/primary state returns 400. No expected_version precondition is provided. See the
+     * [customer workspace
+     * contract](https://github.com/mvnby/air-api/blob/main/docs/customer-workspace.md).
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param customerId
      * @param contactId
      * @param requestBody
@@ -704,6 +881,12 @@ export class ManagerService {
     }
     /**
      * Get Manager Customer Contact History
+     * Page field-change history for a current-tenant customer, including old/new values and
+     * staff author, newest first. limit is at most 100. Missing customer returns 404; reading
+     * does not add history entries or materialize a legacy contact.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param customerId
      * @param page
      * @param limit
@@ -732,7 +915,16 @@ export class ManagerService {
     }
     /**
      * Create Product
-     * Create a manual product card from the manager UI.
+     * Create a manual shared product, normalize specs and synchronize category, brand/series,
+     * tags and manuals. Invalid title, references or publication media returns 400.
+     * is_published defaults to true; creation is not implicitly a draft. POST has no
+     * idempotency receipt and retries may create another card.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [media
+     * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
      * @param requestBody
      * @returns ManagerActionMessageResponse Successful Response
      * @throws ApiError
@@ -752,7 +944,16 @@ export class ManagerService {
     }
     /**
      * Duplicate Product
-     * Duplicate a product card, optionally overriding selected fields.
+     * Create a separate card from a source product with submitted overrides and optional
+     * gallery/manual/tag copying. Publication is inherited unless overridden or
+     * make_unpublished is set. Gallery copying reuses media URLs. Missing source returns 404;
+     * invalid fields/media returns 400. Each successful POST creates a new card.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [media
+     * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
      * @param productId
      * @param requestBody
      * @returns ManagerActionMessageResponse Successful Response
@@ -777,7 +978,17 @@ export class ManagerService {
     }
     /**
      * Update Product
-     * Update individual product fields.
+     * Update submitted product fields; submitted specs are normalized and supplied
+     * tags/manuals replace those relations. Brand/series and category are synchronized
+     * according to explicit overrides and changed inputs. Missing product returns 404; invalid
+     * fields/references/media returns 400. Writers lock the product to coordinate with bulk
+     * apply; no expected_version or client idempotency receipt is accepted.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [media
+     * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
      * @param productId
      * @param requestBody
      * @returns ManagerActionMessageResponse Successful Response
@@ -802,6 +1013,13 @@ export class ManagerService {
     }
     /**
      * Delete Product
+     * Permanently delete a product and its removable catalog relations. References from orders
+     * prevent deletion and return 400. Missing product returns 404, including after successful
+     * deletion. This does not mean unpublishing the product.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param productId
      * @returns any Successful Response
      * @throws ApiError
@@ -822,6 +1040,12 @@ export class ManagerService {
     }
     /**
      * Get Product For Manager
+     * Read a shared product editor card with its related catalog data, including unpublished
+     * products. Missing product returns 404; this is not the tenant storefront projection.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param productId
      * @returns ManagerCatalogProductItemResponse Successful Response
      * @throws ApiError
@@ -842,7 +1066,14 @@ export class ManagerService {
     }
     /**
      * Bulk Round Price
-     * Round prices down to the nearest multiple of 50.
+     * Round each existing selected master-product price down to a multiple of 50 and return
+     * the changed count. Missing IDs are ignored and an empty selection does nothing.
+     * Repeating without intervening price changes makes no further changes; this does not edit
+     * tenant offers.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param requestBody
      * @returns ManagerBulkRoundPriceResponse Successful Response
      * @throws ApiError
@@ -862,8 +1093,14 @@ export class ManagerService {
     }
     /**
      * Bulk Set Rrc Price
-     * Set selected product prices to their current recommended retail prices.
-     * Products without RRC stay unchanged.
+     * Set existing selected master-product prices to rounded current supplier-derived
+     * recommended retail prices. Products without a positive RRC remain unchanged;
+     * skipped_count also includes prices already equal to RRC. Missing IDs are ignored.
+     * Repeats recalculate current supply metrics and do not edit tenant offers.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param requestBody
      * @returns ManagerBulkSetRrcPriceResponse Successful Response
      * @throws ApiError
@@ -883,7 +1120,14 @@ export class ManagerService {
     }
     /**
      * Bulk Delete Products
-     * Delete explicitly selected products. Products linked to orders are reported as failed.
+     * Permanently delete explicitly selected products one at a time and report per-product
+     * failures. Order-linked products cannot be deleted; missing IDs are failures. Successful
+     * deletions commit individually, so the batch may partially succeed. Empty selection does
+     * nothing; repeating the batch reports previously deleted IDs as missing.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param requestBody
      * @returns ManagerBulkDeleteProductsResponse Successful Response
      * @throws ApiError
@@ -903,7 +1147,12 @@ export class ManagerService {
     }
     /**
      * Get All Tags
-     * Return all tags grouped by TagGroup for the product editor.
+     * Read all tags grouped by TagGroup for the shared product editor. No pagination
+     * parameters are accepted; this does not restrict groups to the selected tenant.
+     *
+     * Access and scope: Manager access is required; this reads the shared platform catalog,
+     * not tenant-owned copies. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @returns ManagerTagGroupResponse Successful Response
      * @throws ApiError
      */
@@ -915,11 +1164,14 @@ export class ManagerService {
     }
     /**
      * Smart Search Products
-     * Smart search for manager product picker.
+     * Search the shared catalog for the product picker by text tokens and BTU-index numeric
+     * tokens with AND-combined matching against titles, tags, area and cooling power.
+     * Technical/brand/category filters refine results; limit is 1–100. This does not require
+     * publication or tenant-offer eligibility.
      *
-     * Parses the query string into text tokens and BTU-index number tokens,
-     * then applies AND-chained ORM filters against title, tags, area, and
-     * power_cooling.  Returns matched products with their tags pre-loaded.
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param q Free-text search query, e.g. 'mdv loft 18'
      * @param limit
      * @param isInverter
@@ -967,10 +1219,17 @@ export class ManagerService {
     }
     /**
      * Import From Onliner
-     * Import products from Onliner.by URLs.
-     * Accepts a list of product page URLs and an optional flag to also import
-     * related models (sibling AC units linked on the same page).
-     * Returns the count of successfully imported and failed products.
+     * Synchronously import product URLs using the importer, optionally following related
+     * models and updating existing cards. Blank URLs are stripped; successes and per-product
+     * errors are returned separately, so success of the HTTP call does not mean all products
+     * imported. This writes catalog state and downloads media; repeated calls follow
+     * update_existing and source matching rather than an idempotency receipt.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [media
+     * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
      * @param requestBody
      * @returns CatalogImportResultResponse Successful Response
      * @throws ApiError
@@ -990,9 +1249,16 @@ export class ManagerService {
     }
     /**
      * Catalog Import
-     * Universal product import endpoint.
-     * Accepts URLs from any supported source (onliner.by, aircond.by, etc.).
-     * ImporterService automatically routes each URL to the appropriate parser.
+     * Synchronously import URLs from supported catalog sources, selecting the parser for each
+     * URL. Optional related-model expansion and update_existing control writes. Blank URLs are
+     * removed and partial successes/errors are returned. This downloads source content/media
+     * and mutates cards; it is neither preview nor a background-job response.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [media
+     * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
      * @param requestBody
      * @returns CatalogImportResultResponse Successful Response
      * @throws ApiError
@@ -1012,8 +1278,14 @@ export class ManagerService {
     }
     /**
      * Start Catalog Import Job
-     * Start a universal catalog import in the background and return a job id
-     * that can be polled for progress.
+     * Persist a new catalog import job and return 202 with its ID/status/stage for polling.
+     * Blank URLs are removed; no remaining URL returns 400. The shared queue runs jobs in
+     * order; accepted/queued does not mean import completed. Each POST creates a new job with
+     * no idempotency receipt; results and partial failures are read from job status.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param requestBody
      * @returns CatalogImportJobStartResponse Successful Response
      * @throws ApiError
@@ -1033,6 +1305,13 @@ export class ManagerService {
     }
     /**
      * Get Current Catalog Import Job Status
+     * Read the shared import queue’s current job: the running/queued job is preferred,
+     * otherwise the latest recorded job. Returns progress and successes/errors without
+     * starting work; 404 means no recorded job is available.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @returns CatalogImportJobStatusResponse Successful Response
      * @throws ApiError
      */
@@ -1044,6 +1323,12 @@ export class ManagerService {
     }
     /**
      * Get Catalog Import Job Status
+     * Read one persisted shared catalog import job by job_id with progress and results/errors.
+     * Missing job returns 404; polling only reads state and does not retry failed imports.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param jobId
      * @returns CatalogImportJobStatusResponse Successful Response
      * @throws ApiError
@@ -1064,7 +1349,17 @@ export class ManagerService {
     }
     /**
      * Create Main Image Cleanup Batch
-     * Create a bounded batch of product main-image cleanup candidates.
+     * Synchronously create and process a review batch of at most 50 product main-image
+     * candidates. Existing product/source pairs are skipped; unsupported
+     * remote/missing/local-transparent sources receive skip reasons. Processing outcomes and
+     * files are saved, but Product.main_image changes only on approval. Invalid processor
+     * returns 400. This POST is not a read-only preview or queued worker job.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [media
+     * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
      * @param requestBody
      * @returns ProductMainImageCleanupBatchCreateResponse Successful Response
      * @throws ApiError
@@ -1084,7 +1379,13 @@ export class ManagerService {
     }
     /**
      * List Main Image Cleanup Batches
-     * List cleanup batches for manager review.
+     * Read saved main-image review batches with offset and limit 1–100. Completion of a batch
+     * means candidate processing ended, not that candidates were approved or product main
+     * images changed.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param limit
      * @param offset
      * @returns ProductMainImageCleanupBatchListResponse Successful Response
@@ -1108,7 +1409,13 @@ export class ManagerService {
     }
     /**
      * List Main Image Cleanup Items
-     * List cleanup items by batch and/or status.
+     * Read saved cleanup candidates/outcomes filtered by batch and/or status, with offset and
+     * limit 1–100. Unknown batch/status can yield an empty list; this does not process
+     * candidates or approve their use.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param batchId
      * @param status
      * @param limit
@@ -1138,7 +1445,17 @@ export class ManagerService {
     }
     /**
      * Approve Main Image Cleanup Items
-     * Approve selected candidates and explicitly update Product.main_image.
+     * Approve ready candidates and immediately set each product main_image to its candidate
+     * URL, recording approval and catalog invalidation together.
+     * Missing/not-ready/already-approved items are skipped with reasons; an empty ID selection
+     * returns 400. No original-image version check is performed, so approval can replace a
+     * main image edited since candidate creation. Repeat approvals skip approved items.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [media
+     * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
      * @param requestBody
      * @returns ProductMainImageCleanupDecisionResponse Successful Response
      * @throws ApiError
@@ -1158,7 +1475,14 @@ export class ManagerService {
     }
     /**
      * Reject Main Image Cleanup Items
-     * Reject selected candidates without changing public product fields.
+     * Mark selected nonapproved cleanup items rejected with an operator reason.
+     * Missing/already-approved items are skipped; empty ID selection returns 400. This saves
+     * review state but does not change product fields or delete candidate files; repeating may
+     * update the review timestamp/reason.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param requestBody
      * @returns ProductMainImageCleanupDecisionResponse Successful Response
      * @throws ApiError
@@ -1178,7 +1502,13 @@ export class ManagerService {
     }
     /**
      * Skip Main Image Cleanup Items
-     * Mark selected items skipped with an operator-visible reason.
+     * Mark selected nonapproved cleanup items skipped with an operator-visible reason.
+     * Missing/already-approved items are reported as skipped; empty ID selection returns 400.
+     * This changes review state without updating product main images or deleting media.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param requestBody
      * @returns ProductMainImageCleanupDecisionResponse Successful Response
      * @throws ApiError
@@ -1198,7 +1528,12 @@ export class ManagerService {
     }
     /**
      * List Main Image Cleanup Skip Reasons
-     * Return known machine reasons plus user-entered skip reasons support.
+     * Read known machine skip reasons and whether operator-entered reasons are supported. No
+     * candidate processing or product change occurs.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @returns ProductMainImageCleanupSkipReasonsResponse Successful Response
      * @throws ApiError
      */
@@ -1210,8 +1545,15 @@ export class ManagerService {
     }
     /**
      * Search Images
-     * Search for images using DuckDuckGo.
-     * Returns a list of image objects: {image, width, height, ...}
+     * Search DuckDuckGo remotely for image metadata/URLs using q and max_results. Provider
+     * failures degrade to an empty successful result. This POST only searches: it does not
+     * download/store images or change gallery/main-image state. The current max_results
+     * integer has no explicit route range; there is no pagination or guaranteed stable result
+     * ordering.
+     *
+     * Access and scope: Manager access is required; this reads the shared platform catalog,
+     * not tenant-owned copies. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param q Query string for image search
      * @param maxResults
      * @returns ManagerMediaImageSearchResultResponse Successful Response
@@ -1235,8 +1577,16 @@ export class ManagerService {
     }
     /**
      * Upload Image
-     * Download image from URL, convert to WebP, save to local storage,
-     * and create a ProductImage record linked to the product.
+     * Download a source image, decode/convert it to shared WebP storage and attach it to the
+     * product. A non-installation upload also sets main_image; installation uploads do not.
+     * Missing product returns 404; invalid source/image returns 400 and runtime storage
+     * failure 500. Reusing identical canonical bytes/link does not create another link.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [media
+     * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
      * @param url URL of the image to download
      * @param productId ID of the product to attach image to
      * @param isInstallation Is this an installation photo?
@@ -1263,7 +1613,17 @@ export class ManagerService {
     }
     /**
      * Upload Local Images
-     * Upload multiple local files, convert to WebP, and attach to product.
+     * Ingest local files into shared WebP product storage and attach successful files in one
+     * catalog transaction. Invalid individual files may be skipped; uploaded/images report
+     * accepted results. The first successful non-installation image becomes main only if it
+     * was missing. Missing product returns 404; repeating identical canonical images can reuse
+     * existing links.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [media
+     * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
      * @param productId ID of the product
      * @param formData
      * @param isInstallation
@@ -1291,7 +1651,15 @@ export class ManagerService {
     }
     /**
      * Reuse Search
-     * Search for products to reuse images from.
+     * Search shared product titles for image reuse and return up to 10 product
+     * IDs/titles/main-image URLs. q must contain at least two characters; no page/limit
+     * parameters are accepted. Reading results does not ingest or link an image.
+     *
+     * Access and scope: Manager access is required; this reads the shared platform catalog,
+     * not tenant-owned copies. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [media
+     * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
      * @param q
      * @returns ManagerMediaReuseSearchItemResponse Successful Response
      * @throws ApiError
@@ -1312,7 +1680,13 @@ export class ManagerService {
     }
     /**
      * Get Common Gallery Images
-     * Return non-installation images shared by all selected products.
+     * Return non-installation URLs present in every selected product’s gallery. Empty
+     * selection returns 400; a product with no matching gallery makes the intersection empty.
+     * product_count reflects the submitted selection length. This only reads shared links.
+     *
+     * Access and scope: Manager access is required; this reads the shared platform catalog,
+     * not tenant-owned copies. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param productIds Selected product IDs
      * @returns CommonGalleryImageResponse Successful Response
      * @throws ApiError
@@ -1333,7 +1707,16 @@ export class ManagerService {
     }
     /**
      * Get Image Variant Candidates
-     * Dry-run candidate selection for images missing a requested variant.
+     * Read a bounded dry-run candidate set missing the requested variant; limit is 1–100 and
+     * installation photos are excluded by default. Invalid variant returns 400. This route
+     * uses missing-only selection and does not schedule processing or retry recorded failed
+     * variants.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [media
+     * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
      * @param variantType Variant to check: original, processed, card, full
      * @param limit
      * @param includeInstallation
@@ -1360,7 +1743,16 @@ export class ManagerService {
     }
     /**
      * Link Search Result
-     * Add a search result image to gallery (download and link). Does NOT set as main image.
+     * Download/ingest a search-result image into shared managed product storage and attach its
+     * gallery link. Does not set the main image. Missing product returns 404; invalid
+     * source/media returns 400 and runtime processing conflict 409. Existing canonical
+     * product/URL links are reused; this is a catalog write, not search.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [media
+     * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
      * @param url URL of the image
      * @param productId ID of the product
      * @returns ManagerMediaImageLinkResponse Successful Response
@@ -1384,7 +1776,16 @@ export class ManagerService {
     }
     /**
      * Set Main Image
-     * Set a specific gallery image as the product's main image.
+     * Set Product.main_image to a gallery image’s permitted publication URL. Missing
+     * image/product and other ValueError validation failures are exposed as 404 by this route.
+     * Repeating the same selection is a semantic no-op; this does not crop/process the image
+     * or delete prior media.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [media
+     * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
      * @param imageId ID of the ProductImage to set as main
      * @returns ManagerMediaSetMainImageResponse Successful Response
      * @throws ApiError
@@ -1405,7 +1806,16 @@ export class ManagerService {
     }
     /**
      * Delete Gallery Image
-     * Delete only the DB link; physical objects are retained for deferred GC.
+     * Delete one gallery database link and its variant rows, synchronize legacy product.images
+     * and clear main_image if it points to that URL. Physical objects are retained for
+     * deferred garbage collection. Missing link returns 404, including after successful
+     * deletion.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [media
+     * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
      * @param imageId
      * @returns ManagerMediaDeleteImageResponse Successful Response
      * @throws ApiError
@@ -1426,7 +1836,17 @@ export class ManagerService {
     }
     /**
      * Crop Product Image
-     * Crop a concrete ProductImage and either append or replace the gallery image.
+     * Crop a gallery source and append a new link or replace the selected link according to
+     * mode. Replacement rebuilds original-variant metadata and follows an existing main-image
+     * reference; set_main can select the result for non-installation images. Invalid/missing
+     * source or crop returns 400. This writes media immediately, preserves installation
+     * classification and has no idempotency receipt.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [media
+     * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
      * @param imageId
      * @param requestBody
      * @returns ManagerMediaImageLinkResponse Successful Response
@@ -1451,7 +1871,16 @@ export class ManagerService {
     }
     /**
      * Replace Product Image Local
-     * Replace one gallery link using browser-prepared bytes without server-side crop work.
+     * Replace one gallery link with browser-prepared image bytes and rebuild its original
+     * variant without server crop work. Main image follows the replacement when it used the
+     * old URL; installation classification is kept. Empty file, more than 25 MB, missing
+     * image/product or invalid media returns 400. Physical old objects remain retained.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [media
+     * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
      * @param imageId
      * @param formData
      * @returns ManagerMediaImageLinkResponse Successful Response
@@ -1476,7 +1905,17 @@ export class ManagerService {
     }
     /**
      * Remove Product Image Background
-     * Remove background from a ProductImage and replace it by default.
+     * Synchronously process a gallery image with the selected provider/model, replacing its
+     * link by default; append creates/reuses a separate result link. Unknown mode falls back
+     * to replace. Existing main-image references follow replacement and set_main is honored
+     * for non-installation images. Invalid/missing source returns 400; provider/runtime
+     * conflict returns 409. This is not a processing-job enqueue.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [media
+     * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
      * @param imageId
      * @param provider Processing provider: auto, noop, manual, rembg, birefnet, ben
      * @param rembgModel Optional rembg model override
@@ -1511,7 +1950,16 @@ export class ManagerService {
     }
     /**
      * Reuse Image
-     * Link an existing image URL to another product.
+     * Canonicalize an image source URL, ingesting external sources when necessary, and link it
+     * to the target product without changing its main image. A fully linked canonical URL is
+     * reused; original-variant metadata may be repaired. ValueError failures, including
+     * missing product, are exposed as 404 by this route.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [media
+     * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
      * @param productId
      * @param sourceImageUrl
      * @returns ManagerMediaReuseImageResponse Successful Response
@@ -1535,7 +1983,17 @@ export class ManagerService {
     }
     /**
      * Bulk Add Gallery Images
-     * Append image links to selected products without removing existing gallery items.
+     * Append canonicalized source URLs to all selected products without removing existing
+     * gallery links. Existing links are reused; set_main selects the first URL only for
+     * non-installation images. Missing products return 404; empty/invalid selections or
+     * sources return 400. Database changes and catalog invalidation commit together; this may
+     * ingest external sources.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [media
+     * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
      * @param requestBody
      * @returns ManagerMediaBulkAddResponse Successful Response
      * @throws ApiError
@@ -1555,7 +2013,17 @@ export class ManagerService {
     }
     /**
      * Bulk Upload Local Images
-     * Upload local files once and attach to all selected products.
+     * Upload local files once to shared managed storage and attach their URLs to every
+     * selected product. product_ids_json must be a nonempty JSON array; missing products
+     * return 404, invalid/empty selection/files return 400. set_main can select the first
+     * uploaded URL for non-installation images. Attachments and catalog invalidation commit
+     * together.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [media
+     * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
      * @param formData
      * @returns ManagerMediaBulkUploadResponse Successful Response
      * @throws ApiError
@@ -1575,7 +2043,16 @@ export class ManagerService {
     }
     /**
      * Bulk Delete Common Gallery Images
-     * Delete selected common image links from selected products only.
+     * Remove selected URLs only when they are common to all selected products under the
+     * requested installation filter. Invalid/empty selection or URLs outside that intersection
+     * returns 400. Deletes gallery/variant rows and clears affected main images, but retains
+     * physical files. A repeat requires recalculating the common intersection.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [media
+     * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
      * @param requestBody
      * @returns ManagerMediaBulkDeleteResponse Successful Response
      * @throws ApiError
@@ -1595,7 +2072,17 @@ export class ManagerService {
     }
     /**
      * Apply Gallery To Series
-     * Replace sibling products' non-installation galleries with this product's gallery.
+     * Replace sibling products’ non-installation galleries and main images with the source
+     * product’s gallery/main image, preserving installation photos; source URLs are also
+     * merged into the series gallery. dry_run=true only reports effects, while the default
+     * false commits them. Missing source returns 404; absent series/gallery returns 400.
+     * delete_unreferenced=true always returns 409 because physical deletion is deferred.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [media
+     * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
      * @param productId Source product ID
      * @param dryRun Preview changes without applying them
      * @param deleteUnreferenced Rejected with 409 because physical media cleanup is deferred
@@ -1622,7 +2109,17 @@ export class ManagerService {
     }
     /**
      * Process Missing Image Variants
-     * Dry-run or explicitly process a bounded batch of missing image variants.
+     * Select up to 100 gallery images lacking a requested variant. dry_run defaults to true
+     * and only reports candidates; false synchronously processes the bounded batch and saves
+     * statuses/files with catalog invalidation. Installation photos are excluded by default;
+     * default provider is noop. Invalid variant/provider returns 400. Inspect per-item
+     * errors/statuses; an HTTP success can include processing failures.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [media
+     * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
      * @param variantType Variant to process: processed, card, full
      * @param limit
      * @param includeInstallation
@@ -1658,7 +2155,17 @@ export class ManagerService {
     }
     /**
      * Reprocess Image Variant
-     * Retry/reprocess a failed or skipped image variant.
+     * Synchronously regenerate/retry one gallery image variant and return its saved processing
+     * state. Missing image returns 404; invalid variant/provider returns 400. Source/provider
+     * failures may be saved as failed and returned with HTTP success; installation catalog
+     * variants may be skipped. This is a state change with no job/receipt; inspect
+     * processing_status/processing_error before retrying.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [media
+     * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
      * @param imageId
      * @param variantType Variant to reprocess: processed, card, full
      * @param provider Processing provider: auto, noop, manual, rembg, birefnet, ben
@@ -1690,7 +2197,16 @@ export class ManagerService {
     }
     /**
      * Cleanup Media
-     * Report orphan candidates; physical deletion is currently disabled.
+     * Report orphan candidates under local media/products only when dry_run=true. The default
+     * dry_run=false returns 409 because physical garbage collection is disabled. deleted_count
+     * and reclaimed_bytes describe potential deletions; no file is actually removed, and the
+     * returned file list is capped at 50.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [media
+     * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
      * @param dryRun
      * @returns ManagerMediaCleanupResponse Successful Response
      * @throws ApiError
@@ -1711,7 +2227,14 @@ export class ManagerService {
     }
     /**
      * Preview Mdv Catalog Import
-     * Build a dry-run report for official MDV exports before writing products.
+     * Fetch official MDV exports and calculate a dry-run report, including prospective legacy
+     * replacements when requested. No product is saved, deleted or archived. Catalog
+     * identifiers and sample bounds are validated by the request/service; this may perform
+     * remote reads without creating a queue job.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param requestBody
      * @returns MdvCatalogPreviewResponse Successful Response
      * @throws ApiError
@@ -1731,7 +2254,15 @@ export class ManagerService {
     }
     /**
      * Start Mdv Catalog Import Job
-     * Start an official MDV catalog refresh in the existing background queue.
+     * Start an official MDV refresh and return 202 with a shared import job ID. If
+     * replace_legacy_catalogs is supplied, legacy cleanup commits BEFORE the job is enqueued:
+     * unreferenced cards are deleted and order-linked cards are hidden/marked for update. This
+     * is a destructive write, not preview; accepting the job does not guarantee eventual
+     * import success. Repeating creates another job.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param requestBody
      * @returns CatalogImportJobStartResponse Successful Response
      * @throws ApiError
@@ -1751,8 +2282,15 @@ export class ManagerService {
     }
     /**
      * Bulk Update Specs
-     * Массовое добавление или обновление характеристик.
-     * Идеально для установки диаметров труб для целой серии кондиционеров сразу.
+     * Merge, replace or delete spec keys on existing selected products, normalize the result
+     * and synchronize brand/series plus catalog revisions. Replace replaces the full spec map;
+     * deleting series aliases clears the series assignment when absent. Missing product IDs
+     * are ignored. Wi-Fi edits replace related source/derived keys as a group; changes commit
+     * together.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param requestBody
      * @returns ManagerBulkSpecsResponse Successful Response
      * @throws ApiError
@@ -1772,8 +2310,15 @@ export class ManagerService {
     }
     /**
      * Normalize Legacy Specs
-     * Массовая миграция характеристик.
-     * Переводит ключи Onliner (кириллица) в System (английский).
+     * Scan products with specs and convert legacy labels/values using the legacy migration
+     * map. dry_run defaults to true and counts prospective changes without saving;
+     * dry_run=false commits changed spec maps. Invalid legacy formats and per-product failures
+     * are logged/skipped. This synchronous catalog-wide migration does not run the ordinary
+     * normalized-spec/brand-series editor pipeline.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param dryRun Если True - не сохраняет изменения в БД, только показывает пример
      * @returns ManagerNormalizeLegacySpecsResponse Successful Response
      * @throws ApiError
@@ -1794,8 +2339,11 @@ export class ManagerService {
     }
     /**
      * Check Auth Status
-     * Check if current user is authenticated.
-     * Returns username if valid, 401 otherwise (via Depends).
+     * Read the authenticated Manager identity, live tenant/storefront context and UI capabilities.
+     * Includes password-change eligibility, mandatory-password-change and demo-read-only flags.
+     * Does not issue or refresh a token. A valid authentication identity still needs Manager
+     * access and tenant/storefront context; insufficient access returns 403. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @returns ManagerAuthStatusResponse Successful Response
      * @throws ApiError
      */
@@ -1807,6 +2355,12 @@ export class ManagerService {
     }
     /**
      * Change Account Password
+     * Change the current staff account password using its current password and record the
+     * credential change. Requires Manager access and self-service password eligibility;
+     * unavailable self-service returns 409 with detail.code=self_service_unavailable. Credential
+     * validation failures return 400 with code/message. Success is 204, increments the account
+     * auth version and clears the authentication cookie; sign in again. This command has no replay
+     * receipt, and the old password cannot be reused for a retry.
      * @param requestBody
      * @returns void
      * @throws ApiError
@@ -1826,6 +2380,11 @@ export class ManagerService {
     }
     /**
      * List Manager Storefronts
+     * List active storefronts belonging to the authenticated Manager's current tenant, including
+     * display metadata and is_current/is_default markers. This read does not switch storefront or
+     * issue credentials. The requested storefront is resolved within the same tenant by the
+     * Manager authentication contract; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @returns ManagerStorefrontListResponse Successful Response
      * @throws ApiError
      */

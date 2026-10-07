@@ -43,6 +43,14 @@ async def compose_native_order_email(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> OrderEmailComposeResponse:
+    """
+    Compose suggested recipient, subject/body and selected document attachments for an
+    accessible order in the current tenant/storefront. Preview only: does not submit email
+    or mark documents sent. Invalid document/template/order selection returns 400.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await OrderEmailTemplateService.compose(
             session,
@@ -71,6 +79,19 @@ async def send_native_order_email(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> OutgoingEmailResponse:
+    """
+    Send an email for an accessible order with selected native/legacy document attachments,
+    recording outgoing-email state and document delivery. Manager access is required;
+    current SMTP sending supports the system tenant only (409
+    tenant_email_sender_not_configured for partner tenants). Invalid selection/content
+    returns 400 and send failure 502. No caller idempotency receipt is provided: inspect
+    outgoing-email history before repeating a lost send response. See the [document
+    lifecycle
+    contract](https://github.com/mvnby/air-api/blob/main/docs/document-module-architecture.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     if not auth.is_system_tenant:
         raise manager_http_error(
             status_code=409,

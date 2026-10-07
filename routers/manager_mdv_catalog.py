@@ -38,7 +38,14 @@ async def preview_mdv_catalog_import(
     _user: str = Depends(get_current_username),
 ):
     """
-    Build a dry-run report for official MDV exports before writing products.
+    Fetch official MDV exports and calculate a dry-run report, including prospective legacy
+    replacements when requested. No product is saved, deleted or archived. Catalog
+    identifiers and sample bounds are validated by the request/service; this may perform
+    remote reads without creating a queue job.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     report = await MdvCatalogPreviewService.build_preview(
         session,
@@ -61,7 +68,15 @@ async def start_mdv_catalog_import_job(
     _user: str = Depends(get_current_username),
 ):
     """
-    Start an official MDV catalog refresh in the existing background queue.
+    Start an official MDV refresh and return 202 with a shared import job ID. If
+    replace_legacy_catalogs is supplied, legacy cleanup commits BEFORE the job is enqueued:
+    unreferenced cards are deleted and order-linked cards are hidden/marked for update. This
+    is a destructive write, not preview; accepting the job does not guarantee eventual
+    import success. Repeating creates another job.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     replace_catalogs = MdvLegacyReplaceService.normalize_catalogs(
         payload.replace_legacy_catalogs

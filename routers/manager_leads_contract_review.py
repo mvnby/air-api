@@ -39,6 +39,17 @@ async def get_manager_email_lead_contract_review_job(
     job_id: str,
     auth: AuthenticatedUser = Depends(get_current_auth_context),
 ) -> ContractReviewJobResponse:
+    """
+    Poll an AI review job owned by the authenticated tenant+username. Returns
+    running/completed/failed with report or sanitized error; does not start a new review.
+    Jobs live only in the serving process; a finished job expires 30 minutes after creation,
+    and restart/another process can lose it. Unknown, foreign-owner or expired job returns
+    404. See the [incoming triage
+    contract](https://github.com/mvnby/air-api/blob/main/docs/incoming-triage-workspace.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     job = await EmailContractReviewJobService.get(job_id=job_id, owner=_owner(auth))
     if job is None:
         raise HTTPException(status_code=404, detail="Проверка не найдена или срок хранения истёк")
@@ -68,6 +79,15 @@ async def list_manager_email_lead_originals(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ) -> OriginalEmailAttachmentList:
+    """
+    List attachment positions/names/types/sizes from the original mailbox message for an
+    email-source order accessible in the current tenant/storefront. Reads the retained email
+    source, not just copied private attachments. Missing source/message returns 404; mailbox
+    loading failure 503. Does not invoke AI or mark the incoming card read.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     originals = await _originals(session, order_id, tenant_scope)
     return OriginalEmailAttachmentList(items=[
         OriginalEmailAttachmentItem(
@@ -88,6 +108,16 @@ async def download_manager_email_lead_original(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ) -> Response:
+    """
+    Download one position from the original mailbox message for an email-source order
+    accessible in the current tenant/storefront. Returns private/no-store
+    application/octet-stream attachment. Missing source/position returns 404; mailbox
+    loading failure 503. Original retention/availability is required; this does not create
+    an order attachment.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     originals = await _originals(session, order_id, tenant_scope)
     item = next((candidate for candidate in originals if candidate.position == position), None)
     if item is None:
@@ -115,6 +145,19 @@ async def review_manager_email_lead_original(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ) -> ContractReviewJobResponse:
+    """
+    Start an explicit background AI contract review of a mailbox-original attachment from an
+    accessible scoped email order. Requires system-tenant Manager access. Returns a running
+    job owned by tenant+username; poll its result rather than treating HTTP success as a
+    completed report. Missing original/position returns 404, mailbox failure 503, per-actor
+    limiter 429 with Retry-After or process-capacity refusal 429.
+    Unsupported/unreadable/oversized contract may fail inside the job. No replay receipt:
+    repeat POST can launch another job. See the [incoming triage
+    contract](https://github.com/mvnby/air-api/blob/main/docs/incoming-triage-workspace.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         async with manager_content_ai_limiter.limit(_owner(auth)):
             originals = await _originals(session, order_id, tenant_scope)
@@ -147,6 +190,18 @@ async def review_manager_email_lead_contract(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ) -> ContractReviewJobResponse:
+    """
+    Start an explicit background AI contract review of a saved original email attachment
+    linked to an accessible order in the current tenant/storefront. Requires system-tenant
+    Manager access. Returns a tenant+username-owned running job, not a completed report;
+    document/provider validation failures can appear as failed job state. Missing
+    attachment/context returns 404; per-actor limiter 429 with Retry-After and process
+    capacity 429. No generic idempotency key is supplied. See the [incoming triage
+    contract](https://github.com/mvnby/air-api/blob/main/docs/incoming-triage-workspace.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         async with manager_content_ai_limiter.limit(_owner(auth)):
             source = await EmailContractReviewService.load_content(

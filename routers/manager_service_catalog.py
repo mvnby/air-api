@@ -38,6 +38,18 @@ async def preview_manager_service_catalog_template(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Read canonical service-template fingerprint/counts and target-tenant state to determine
+    whether a detached clone is available. This performs no writes. The system tenant cannot
+    clone into itself; a partner target must be empty or already match a completed clone,
+    and canonical drafts must match the current published book when one exists.
+
+    Access and scope: owner/admin access is required in the authenticated tenant and
+    selected storefront; partner owners may use this workflow. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [installation estimate
+    contract](https://github.com/mvnby/air-api/blob/main/docs/installation-estimate-contract.md).
+    """
     return await ServiceCatalogTemplateService.preview(
         session,
         tenant_scope=tenant_scope,
@@ -55,6 +67,20 @@ async def clone_manager_service_catalog_template(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
     auth: AuthenticatedUser = Depends(require_owner_access),
 ):
+    """
+    Copy the canonical template into the authenticated partner tenant as detached
+    service-card/tariff/rule/rate data, including its own first published book when
+    applicable. expected_fingerprint guards source changes; changed source, partial/nonempty
+    incompatible target or system-tenant target returns 409, missing tenant/storefront 404.
+    Source/target locks protect the atomic copy and audit. A complete matching prior clone
+    returns already_cloned; later canonical edits do not synchronize into the copy.
+
+    Access and scope: owner/admin access is required in the authenticated tenant and
+    selected storefront; partner owners may use this workflow. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [installation estimate
+    contract](https://github.com/mvnby/air-api/blob/main/docs/installation-estimate-contract.md).
+    """
     return await ServiceCatalogTemplateService.clone(
         session,
         tenant_scope=tenant_scope,

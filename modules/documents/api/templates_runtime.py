@@ -82,6 +82,14 @@ _NATIVE_DOCUMENT_TYPE_PATTERN = (
 async def get_native_placeholder_catalog(
     doc_type: str = Query(..., pattern=_NATIVE_DOCUMENT_TYPE_PATTERN),
 ) -> NativePlaceholderCatalogResponse:
+    """
+    Read the shared supported native document placeholder/condition/table catalog for an
+    accepted document type. Manager access is required by router dependencies; this returns
+    template authoring metadata without tenant CRM data.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     return NativePlaceholderCatalogResponse(
         document_type=doc_type,
         fields=[
@@ -145,6 +153,14 @@ async def list_native_document_templates(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> NativeDocumentTemplateListResponse:
+    """
+    List native template definitions under a legal entity owned by the current tenant,
+    optionally filtered by document type. Missing issuer scope returns 404. This lists
+    definitions and their activation state rather than generating an order document.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         rows = await NativeTemplateVersionService.list_templates(
             session,
@@ -174,6 +190,16 @@ async def create_native_document_template(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> NativeDocumentTemplateItem:
+    """
+    Create a native template definition under the current tenant’s legal entity. Requires
+    owner/admin access; no DOCX version is uploaded or activated by this command. Missing
+    scope returns 404, conflicting definition 409 and invalid definition 400. See [native
+    template
+    versions](https://github.com/mvnby/air-api/blob/main/docs/native-document-template-bundles.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         row = await NativeTemplateVersionService.create_template(
             session,
@@ -218,6 +244,15 @@ async def update_native_document_template(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> NativeDocumentTemplateItem:
+    """
+    Update submitted template definition metadata in the current tenant; route access is
+    Manager (no owner-only policy is attached to this operation). Missing template/scope
+    returns 404, conflicting use-case definition 409 and invalid metadata 400. This does not
+    replace an immutable DOCX version.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         row = await NativeTemplateVersionService.update_template_metadata(
             session,
@@ -265,6 +300,13 @@ async def list_native_template_versions(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> NativeTemplateVersionListResponse:
+    """
+    List immutable versions for a template and legal entity owned by the current tenant.
+    Missing template/issuer scope returns 404; listing does not activate a version.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         rows = await NativeTemplateVersionService.list_versions(
             session,
@@ -295,6 +337,17 @@ async def upload_native_template_version(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> NativeTemplateVersionItem:
+    """
+    Upload an immutable native DOCX version for the current tenant’s template/legal entity.
+    Requires owner/admin access. Empty/invalid DOCX or placeholder schema returns 400; file
+    above 5 MB returns 413, semantic template validation issues 422, missing scope 404 and
+    version conflicts 409. When schema is omitted supported placeholders are discovered from
+    the file. Upload does not activate the version. See [native template
+    versions](https://github.com/mvnby/air-api/blob/main/docs/native-document-template-bundles.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     content = await _read_upload_limited(file, MAX_NATIVE_TEMPLATE_BYTES)
     try:
         preflight_native_docx(content)
@@ -439,6 +492,16 @@ async def activate_native_template_version(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> NativeTemplateVersionItem:
+    """
+    Activate an existing valid immutable version for the current tenant’s template/legal
+    entity. Requires owner/admin access. Missing version/scope returns 404 and incompatible
+    version state 409. Existing issued document snapshots/artifacts are not regenerated by
+    activation. See [native template
+    versions](https://github.com/mvnby/air-api/blob/main/docs/native-document-template-bundles.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         row = await NativeTemplateVersionService.activate_version(
             session,
@@ -484,6 +547,15 @@ async def download_native_template_version_source(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> Response:
+    """
+    Download the stored immutable DOCX source for a current-tenant template/version after
+    checksum verification. Requires owner/admin access. Missing version returns 404;
+    missing/corrupt source integrity returns 409. Returns a private/no-store binary
+    attachment rather than JSON.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         version = await NativeTemplateVersionService.get_version(
             session,
@@ -537,6 +609,15 @@ async def download_native_template_version_source(
     operation_id=GET_MANAGER_DOCUMENT_PDF_RUNTIME,
 )
 async def get_document_pdf_runtime() -> DocumentPdfRuntimeStatus:
+    """
+    Check the configured native PDF converter’s runtime health without rendering a document.
+    Manager access is required by router dependencies; response reports shared converter
+    availability/provider/detail, not tenant business data. available=false is a health
+    result rather than proof of successful generation.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     converter = _legacy_pdf_converter()
     health = await asyncio.to_thread(converter.health)
     return DocumentPdfRuntimeStatus(

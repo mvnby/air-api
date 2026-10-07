@@ -55,6 +55,13 @@ async def list_document_legal_entities(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> DocumentLegalEntityListResponse:
+    """
+    List document issuer legal entities owned by the current tenant. Does not list the
+    shared supplier directory or other tenants’ requisites.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     rows = await DocumentLegalEntityService.list(
         session,
         tenant_scope=auth.tenant_scope(),
@@ -74,6 +81,15 @@ async def create_document_legal_entity(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> DocumentLegalEntityItem:
+    """
+    Create an issuer legal entity in the current tenant. Requires owner/admin access via
+    route policy. Default-issuer selection is maintained by the service; conflicting
+    identity/default configuration returns 409 and invalid requisites 400. This does not
+    provision an external integration account.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         row = await DocumentLegalEntityService.create(
             session,
@@ -115,6 +131,15 @@ async def patch_document_legal_entity(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> DocumentLegalEntityItem:
+    """
+    Patch supplied issuer fields/requisites in the current tenant. Requires owner/admin
+    access. Missing entity returns 404, conflicting identity/default configuration 409 and
+    invalid values 400. Existing issued document snapshots remain independent of updated
+    requisites.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     changes = payload.model_dump(exclude_unset=True)
     if payload.requisites is not None:
         changes["requisites"] = payload.requisites.model_dump(exclude_unset=True)
@@ -159,6 +184,14 @@ async def list_document_number_policies(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> DocumentNumberPolicyListResponse:
+    """
+    Read effective numbering policies for a legal entity in the current tenant, including
+    defaults that are not persisted yet. Missing or inaccessible entity returns 404; reading
+    does not reserve an official number.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         items = await DocumentNumberPolicyService.list_effective(
             session,
@@ -199,6 +232,16 @@ async def upsert_document_number_policy(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> DocumentNumberPolicyItem:
+    """
+    Set the effective numbering policy for the selected document kind and current tenant
+    legal entity. Requires owner/admin access. Missing entity returns 404; unsupported kind
+    or invalid policy returns 400. Saving a policy does not reserve or recycle numbers
+    already assigned. See the [document lifecycle
+    contract](https://github.com/mvnby/air-api/blob/main/docs/document-module-architecture.md).
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         row = await DocumentNumberPolicyService.upsert(
             session,

@@ -57,6 +57,16 @@ async def list_feature_categories(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Read feature-library categories in their display order. This shared dictionary has no
+    pagination and reading it does not create or assign features.
+
+    Access and scope: Manager access is required; this reads the shared platform catalog,
+    not tenant-owned copies. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [feature
+    taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
+    """
     return await FeatureLibraryService.list_categories(session)
 
 
@@ -75,6 +85,18 @@ async def list_features(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Read shared feature definitions with category/brand/product/scope filters. Active
+    features are shown by default; is_active may select archived definitions. product_id
+    checks product existence and returns 404 if missing. total is the returned list length;
+    no pagination is accepted.
+
+    Access and scope: Manager access is required; this reads the shared platform catalog,
+    not tenant-owned copies. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [feature
+    taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
+    """
     items = await FeatureLibraryService.list_features(
         session,
         search=search,
@@ -98,6 +120,19 @@ async def create_feature(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Create a feature and its automatic rules; is_active defaults to true. New definitions
+    support universal or brand ownership; brand features require a valid brand and only
+    universal features accept automatic rules. Invalid category, replacement, scope or
+    unpublished media returns 400. Returns 201; creation does not assign it to every brand
+    product and has no idempotency receipt.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [feature
+    taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
+    """
     return await FeatureLibraryService.create_feature(session, payload)
 
 
@@ -111,6 +146,18 @@ async def preview_feature_series_migration(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Read candidates where the same active manual feature is assigned without individual
+    overrides to every published product in a series. Omitted/empty valid series IDs scans
+    all series; returned candidate tokens describe the current source links. This read-only
+    report does not create series links or remove product links.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [feature
+    taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
+    """
     return await FeatureSeriesMigrationService.preview(session, series_ids=series_ids)
 
 
@@ -124,6 +171,19 @@ async def apply_feature_series_migration(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Move only submitted candidate rows from repeated product assignments to series
+    assignments, deleting the matching product links in one transaction. Duplicate
+    candidates return 400; stale tokens/source links or changed eligibility return 409. Rows
+    are locked and revalidated; refresh preview after conflict. This mutates catalog
+    inheritance and is not a background job.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [feature
+    taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
+    """
     return await FeatureSeriesMigrationService.apply(session, payload.candidates)
 
 
@@ -137,6 +197,17 @@ async def get_feature(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Read a shared feature definition, rules and relationships, including archived
+    definitions. Missing feature returns 404. Library ownership scope is distinct from
+    effective product visibility.
+
+    Access and scope: Manager access is required; this reads the shared platform catalog,
+    not tenant-owned copies. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [feature
+    taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
+    """
     return await FeatureLibraryService.get_feature(session, feature_id)
 
 
@@ -151,6 +222,18 @@ async def update_feature(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Update supplied definition fields/rules, validating ownership, replacements and media
+    readiness. Missing feature returns 404; invalid references, replacement cycles or
+    illegal scope changes returns 400. Legacy series/product/derived definitions must be
+    migrated to universal or brand before ordinary editing.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [feature
+    taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
+    """
     return await FeatureLibraryService.update_feature(session, feature_id, payload)
 
 
@@ -164,6 +247,17 @@ async def archive_feature(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Set the feature inactive and return its archived definition; this is not a physical
+    delete. Missing feature returns 404. Archiving changes effective catalog projections
+    while keeping the stored definition and historical relationships.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [feature
+    taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
+    """
     return await FeatureLibraryService.archive_feature(session, feature_id)
 
 
@@ -180,6 +274,18 @@ async def upsert_target_link(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Create or update a brand/series feature assignment and overrides; returns 204. Feature
+    and target must exist and ownership must allow the target. Invalid scope/media or a
+    fourth featured series feature returns 400; missing target returns 404. is_featured
+    applies only to series; universal rules resolve separately from stored assignments.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [feature
+    taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
+    """
     await FeatureAssignmentService.upsert_target_link(
         session,
         feature_id=feature_id,
@@ -202,6 +308,18 @@ async def delete_target_link(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Remove a stored brand/series assignment and return 204. Missing series returns 404; an
+    absent brand or assignment is a no-op in the current service. Removal stops that
+    inheritance path but does not archive the feature or suppress other rule/product
+    assignments.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [feature
+    taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
+    """
     await FeatureAssignmentService.delete_target_link(
         session,
         feature_id=feature_id,
@@ -221,6 +339,17 @@ async def get_product_features(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Read a product feature workspace with explicit assignments, effective
+    inherited/rule-derived features and automatic suggestions. Missing product returns 404.
+    This is a resolved view of shared catalog features, not only a raw relation list.
+
+    Access and scope: Manager access is required; this reads the shared platform catalog,
+    not tenant-owned copies. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [feature
+    taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
+    """
     return await FeatureAssignmentService.get_product_workspace(session, product_id)
 
 
@@ -235,6 +364,18 @@ async def update_product_features(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Replace a product’s explicit feature assignments, including enabled/hidden overrides,
+    then return the resolved workspace. Omitted entries lose their explicit assignment;
+    inherited/rule-derived features may remain. Missing product returns 404; duplicate,
+    invalid, archived or incompatible features/media returns 400. Writes commit together.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [feature
+    taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
+    """
     return await FeatureAssignmentService.replace_product_assignments(
         session, product_id, payload.assignments
     )
@@ -251,6 +392,17 @@ async def delete_product_feature(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Delete the explicit product assignment and return the resolved workspace. Missing
+    product returns 404; missing assignment is a no-op. Inherited or automatic features can
+    reappear, so deletion is different from an explicit hidden override.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [feature
+    taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
+    """
     return await FeatureAssignmentService.delete_product_assignment(
         session, product_id, feature_id
     )
@@ -267,6 +419,18 @@ async def apply_product_feature_suggestions(
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_username),
 ):
+    """
+    Revalidate requested suggestion IDs and persist only legacy derived suggestions, then
+    return the resolved workspace. Universal automatic rules already resolve without stored
+    links. Missing product returns 404; outdated/unavailable suggestions return 409. Refresh
+    the workspace before retrying stale suggestions.
+
+    Access and scope: system-tenant Manager access is required; this operates on the shared
+    platform catalog. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [feature
+    taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
+    """
     return await FeatureAssignmentService.apply_product_suggestions(
         session, product_id, payload.feature_ids
     )

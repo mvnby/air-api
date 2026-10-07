@@ -23,6 +23,12 @@ import { request as __request } from '../core/request';
 export class ManagerBrandsService {
     /**
      * List Manager Brands
+     * List all brands with product counts, ordered by sort_order and title. No pagination
+     * parameters are accepted.
+     *
+     * Access and scope: Manager access is required; this reads the shared platform catalog,
+     * not tenant-owned copies. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @returns ManagerBrandListResponse Successful Response
      * @throws ApiError
      */
@@ -34,6 +40,15 @@ export class ManagerBrandsService {
     }
     /**
      * Create Manager Brand
+     * Create a shared brand and synchronize its brand tag. Title and generated/requested slug
+     * must be nonempty; an existing slug or invalid publication media returns 400. This POST
+     * has no idempotency receipt.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [media
+     * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
      * @param requestBody
      * @returns ManagerBrandResponse Successful Response
      * @throws ApiError
@@ -53,6 +68,15 @@ export class ManagerBrandsService {
     }
     /**
      * Update Manager Brand
+     * Update submitted brand fields and synchronize the brand tag when identity changes.
+     * Missing brand returns 404; conflicting slug, empty title or invalid content media
+     * returns 400. Semantic no-op edits do not publish a new catalog revision.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [media
+     * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
      * @param brandId
      * @param requestBody
      * @returns ManagerBrandResponse Successful Response
@@ -77,6 +101,13 @@ export class ManagerBrandsService {
     }
     /**
      * Delete Manager Brand
+     * Delete a brand and its unused brand tag. Missing brand returns 404, including after
+     * prior deletion; products, series or products attached to its tag block deletion with
+     * 400. This is a permanent delete, not hiding a brand.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param brandId
      * @returns ManagerActionMessageResponse Successful Response
      * @throws ApiError
@@ -97,6 +128,15 @@ export class ManagerBrandsService {
     }
     /**
      * List Manager Brand Features
+     * List active shared features belonging to one brand with series-assignment counts.
+     * Missing brand returns 404; this list is not paginated. Creating a brand feature alone
+     * does not assign it to all brand products.
+     *
+     * Access and scope: Manager access is required; this reads the shared platform catalog,
+     * not tenant-owned copies. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [feature
+     * taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
      * @param brandId
      * @returns ManagerBrandFeatureListResponse Successful Response
      * @throws ApiError
@@ -117,6 +157,15 @@ export class ManagerBrandsService {
     }
     /**
      * Create Manager Brand Feature
+     * Create a brand-owned feature through the brand editor. Missing brand returns 404; empty
+     * title, duplicate slug within the brand or invalid feature media returns 400. Creation
+     * does not assign the feature to series/products and has no idempotency receipt.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [feature
+     * taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
      * @param brandId
      * @param requestBody
      * @returns ManagerBrandFeatureResponse Successful Response
@@ -141,6 +190,15 @@ export class ManagerBrandsService {
     }
     /**
      * Update Manager Brand Feature
+     * Update submitted fields of a feature belonging to the requested brand. Missing brand or
+     * feature returns 404; empty title, duplicate brand slug or invalid media returns 400.
+     * Assignments to series are preserved.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [feature
+     * taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
      * @param brandId
      * @param featureId
      * @param requestBody
@@ -168,6 +226,16 @@ export class ManagerBrandsService {
     }
     /**
      * Delete Manager Brand Feature
+     * Archive an unassigned brand feature by setting it inactive and preserving its
+     * definition/history. Missing brand or feature returns 404; any series assignment blocks
+     * archiving with 400. An already archived unassigned feature is a semantic no-op; this is
+     * not a physical delete.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [feature
+     * taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
      * @param brandId
      * @param featureId
      * @returns ManagerActionMessageResponse Successful Response
@@ -191,6 +259,14 @@ export class ManagerBrandsService {
     }
     /**
      * List Manager Brand Series
+     * List series belonging to a brand, including hidden series, product counts and feature
+     * assignments. Missing brand returns 404; no page/limit parameters are accepted.
+     *
+     * Access and scope: Manager access is required; this reads the shared platform catalog,
+     * not tenant-owned copies. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [feature
+     * taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
      * @param brandId
      * @returns ManagerBrandSeriesListResponse Successful Response
      * @throws ApiError
@@ -211,6 +287,15 @@ export class ManagerBrandsService {
     }
     /**
      * Create Manager Brand Series
+     * Create a shared series under the requested brand, validating its feature assignments and
+     * publication media. Missing brand returns 404; empty title, conflicting slug or invalid
+     * feature/media choices returns 400. This POST has no idempotency receipt.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [feature
+     * taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
      * @param brandId
      * @param requestBody
      * @returns ManagerBrandSeriesResponse Successful Response
@@ -235,6 +320,16 @@ export class ManagerBrandsService {
     }
     /**
      * Update Manager Brand Series
+     * Update submitted series fields and, when supplied, replace feature assignments. Missing
+     * brand/series returns 404; invalid assignments/media, duplicate slug or including a
+     * hidden series in the brand showcase returns 400. Feature priority permits at most three
+     * featured entries.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [feature
+     * taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
      * @param brandId
      * @param seriesId
      * @param requestBody
@@ -262,6 +357,13 @@ export class ManagerBrandsService {
     }
     /**
      * Delete Manager Brand Series
+     * Permanently delete a series and its feature links. Missing brand/series returns 404;
+     * assigned products block deletion with 400, so hide a used series instead. A repeat after
+     * deletion returns 404.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param brandId
      * @param seriesId
      * @returns ManagerActionMessageResponse Successful Response
@@ -285,6 +387,16 @@ export class ManagerBrandsService {
     }
     /**
      * Apply Manager Series Gallery To Products
+     * Save the submitted nonempty gallery on the series and add those URLs to every assigned
+     * product. Existing links are skipped; product main images are not changed. Missing
+     * brand/series returns 404; empty/invalid media returns 400. Series and product changes
+     * commit together; this writes state rather than producing a preview.
+     *
+     * Access and scope: system-tenant Manager access is required; this operates on the shared
+     * platform catalog. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [media
+     * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
      * @param brandId
      * @param seriesId
      * @param requestBody

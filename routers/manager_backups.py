@@ -48,6 +48,12 @@ BACKUP_LIST_UNAVAILABLE_MESSAGE = "Список резервных копий в
 
 @router.get("", response_model=ManagerBackupListResponse, operation_id=LIST_MANAGER_BACKUPS)
 async def list_manager_backups():
+    """
+    List up to 100 configured Google Drive backup entries for a system-tenant owner/admin. These
+    are platform database/media backups, not tenant exports; listing performs no restore.
+    Unconfigured storage returns 503 and credential/provider listing failures return 502 with
+    detail.error_code=backup_list_unavailable in the Manager error envelope.
+    """
     try:
         items = await run_in_threadpool(lambda: backup_service.list_backups(limit=100))
     except BackupConfigurationError as exc:
@@ -76,6 +82,14 @@ async def list_manager_backups():
     status_code=status.HTTP_202_ACCEPTED,
 )
 async def start_manager_backup_run():
+    """
+    Start a manual platform backup in the API process and return 202 with job_id/status/stage.
+    Requires a system-tenant owner/admin and production environment (otherwise 400). A known
+    active backup or restore returns 409; startup failure returns 500. Poll
+    /api/manager/backups/run/{job_id}; 202 is acceptance, not backup success. Job records and
+    exclusion locks are process-local and do not survive restart or provide an HA-wide lock. No
+    replay key is supported.
+    """
     if not settings.is_production:
         raise HTTPException(
             status_code=400,
@@ -106,6 +120,12 @@ async def start_manager_backup_run():
     operation_id=GET_MANAGER_BACKUP_RUN_STATUS,
 )
 async def get_manager_backup_run_status(job_id: str):
+    """
+    Read a manual backup job from this API process's in-memory registry; requires a
+    system-tenant owner/admin. Returns status/stage/timestamps and error, with success/failed
+    terminal outcomes. Unknown jobs return 404, including after a process restart or on another
+    worker/node. This endpoint neither starts nor retries a backup.
+    """
     job = backup_run_runtime_service.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Backup job not found")
@@ -119,6 +139,16 @@ async def get_manager_backup_run_status(job_id: str):
     status_code=status.HTTP_202_ACCEPTED,
 )
 async def start_manager_backup_restore(file_id: str):
+    """
+    Start restoration of a configured platform database or media backup and return 202 with a
+    job ID. Requires a system-tenant owner/admin and BACKUP_RESTORE_ENABLED; normal operation
+    returns 503 because restore is disabled. This can replace shared production data and belongs
+    to the supervised [production-data
+    procedure](https://github.com/mvnby/air-api/blob/main/docs/production-data-operations.md).
+    Known active jobs return 409, an unlisted file 404 and unsupported kind 400. The job first
+    creates a safety copy; completion/failure must be polled. State and exclusion locks are
+    process-local, without an HA-wide lock or replay receipt.
+    """
     if not settings.BACKUP_RESTORE_ENABLED:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -156,6 +186,12 @@ async def start_manager_backup_restore(file_id: str):
     operation_id=GET_MANAGER_BACKUP_RESTORE_STATUS,
 )
 async def get_manager_backup_restore_status(job_id: str):
+    """
+    Read a restore job from this API process's in-memory registry; requires a system-tenant
+    owner/admin. Includes stage, terminal success/failed, error and safety-copy path when
+    available. Unknown jobs return 404, including after restart or when polling a different
+    worker/node. Reading status does not enable, start or repeat restoration.
+    """
     job = backup_restore_runtime_service.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Restore job not found")

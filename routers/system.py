@@ -22,7 +22,10 @@ async def get_rebuild_web_status(
     session: AsyncSession = Depends(get_session),
 ):
     """
-    Return whether the storefront has acknowledged the latest catalog revision.
+    Read global catalog revision and storefront synchronization acknowledgement state for an
+    authenticated Manager. This is platform-wide catalog publication state, not a per-tenant job
+    or a deployment health check. Reading does not dispatch a workflow; the recorded
+    acknowledgement alone does not verify current storefront availability.
     """
     logger.debug("User %s checked web rebuild status.", username)
     return await CatalogRevisionService.get_static_rebuild_status(session)
@@ -34,8 +37,11 @@ async def trigger_rebuild_web(
     session: AsyncSession = Depends(get_session),
 ):
     """
-    Trigger catalog revision verification in the standalone storefront runtime.
-    Accessible only by authenticated managers/admins.
+    Dispatch the standalone storefront's catalog synchronization workflow for the current global
+    revision, then record that revision as requested. Requires Manager access. A missing GitHub
+    integration token returns 503; dispatch failure returns 500. A successful response
+    acknowledges dispatch, not completed synchronization; read /api/system/rebuild-web/status
+    afterward. No Idempotency-Key receipt prevents repeated workflow dispatches.
     """
     status = await CatalogRevisionService.get_static_rebuild_status(session)
     current_revision = int(status["current_revision"])
@@ -81,7 +87,13 @@ async def complete_rebuild_web(
     session: AsyncSession = Depends(get_session),
 ):
     """
-    Signed callback after the standalone storefront verifies catalog freshness.
+    Record the standalone storefront's catalog synchronization callback using the shared
+    X-Web-Rebuild-Token header, not a Manager JWT or an HMAC signature. Missing server token
+    configuration returns 503; invalid token returns 403. Revision zero resolves to the current
+    revision. Success stores the supplied published revision/timestamp and clears the error;
+    failure stores requested revision/error. This writes global state, has no replay receipt or
+    monotonic-revision guard, and repeated or out-of-order callbacks can replace recorded state.
+    It does not itself verify the storefront.
     """
     if not settings.WEB_REBUILD_CALLBACK_TOKEN:
         raise HTTPException(status_code=503, detail="Web rebuild callback token is not configured")

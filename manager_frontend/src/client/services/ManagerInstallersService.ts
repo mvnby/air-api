@@ -12,7 +12,14 @@ import { request as __request } from '../core/request';
 export class ManagerInstallersService {
     /**
      * List Installers
-     * Paginated list of installers.
+     * Read a paginated installer/staff projection for the tenant, optionally filtering by
+     * search text. page starts at 1; this route currently accepts limit 1–500, default 100.
+     * Membership status determines tenant activity independently of the global staff identity.
+     *
+     * Access and scope: Manager access is required; installer visibility follows staff
+     * membership in the authenticated tenant. The system tenant also sees unmapped legacy
+     * installers. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param page
      * @param limit
      * @param search
@@ -39,7 +46,15 @@ export class ManagerInstallersService {
     }
     /**
      * Create Installer
-     * Create a new installer.
+     * Create an installer and ensure its linked staff identity and membership in the
+     * authenticated tenant. Creation errors are returned as 400. This has staff-account side
+     * effects and no idempotency receipt, so repeated calls are not guaranteed to reuse a
+     * prior installer.
+     *
+     * Access and scope: Manager access is required; installer visibility follows staff
+     * membership in the authenticated tenant. The system tenant also sees unmapped legacy
+     * installers. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param requestBody
      * @returns ManagerInstallerResponse Successful Response
      * @throws ApiError
@@ -59,7 +74,14 @@ export class ManagerInstallersService {
     }
     /**
      * Search Installers
-     * Search active installers by name (for autocomplete).
+     * Search active tenant installers by name for autocomplete. q must be nonempty and limit
+     * is 1–100, default 50; this is a bounded suggestion list without page navigation. No
+     * installer/staff membership is created.
+     *
+     * Access and scope: Manager access is required; installer visibility follows staff
+     * membership in the authenticated tenant. The system tenant also sees unmapped legacy
+     * installers. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param q Search term for installer name
      * @param limit
      * @returns ManagerInstallerListResponse Successful Response
@@ -83,7 +105,17 @@ export class ManagerInstallersService {
     }
     /**
      * Update Installer
-     * Update an existing installer.
+     * Update submitted non-null installer identity fields and/or the current tenant
+     * membership’s activity. Missing/inaccessible installer returns 404. Partners cannot edit
+     * shared identity fields when the staff user has multiple memberships; this service
+     * rejection is not converted to a dedicated client error by this route. Omitted/null
+     * fields are ignored, including telegram_id; membership changes also recompute aggregate
+     * staff activity. No expected-version guard is used.
+     *
+     * Access and scope: Manager access is required; installer visibility follows staff
+     * membership in the authenticated tenant. The system tenant also sees unmapped legacy
+     * installers. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param installerId
      * @param requestBody
      * @returns ManagerInstallerResponse Successful Response

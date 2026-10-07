@@ -28,6 +28,17 @@ async def get_manager_leads(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Page raw Lead records in the current tenant/storefront using
+    status/source/search/overdue/sort filters; limit is at most 100. Without explicit
+    status, the list selects new/contacted leads even when include_archived=true; archived
+    rows are hidden unless requested. Invalid status/source returns 400; unknown sort falls
+    back to newest first. This is the Lead list, not the unified Order+Lead incoming feed;
+    reading does not mark personal read state.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         return await LeadService.list_leads(
             session=session,

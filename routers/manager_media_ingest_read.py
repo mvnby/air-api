@@ -23,8 +23,15 @@ async def search_images(
     username: str = Depends(get_current_username),
 ):
     """
-    Search for images using DuckDuckGo.
-    Returns a list of image objects: {image, width, height, ...}
+    Search DuckDuckGo remotely for image metadata/URLs using q and max_results. Provider
+    failures degrade to an empty successful result. This POST only searches: it does not
+    download/store images or change gallery/main-image state. The current max_results
+    integer has no explicit route range; there is no pagination or guaranteed stable result
+    ordering.
+
+    Access and scope: Manager access is required; this reads the shared platform catalog,
+    not tenant-owned copies. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     logger.info(f"Manager {username} searching images for: {q}")
     return await ManagerMediaService.search_images(q, max_results=max_results)

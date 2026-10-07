@@ -43,6 +43,18 @@ async def list_manager_installation_discount_rules(
     limit: int = Query(default=50, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
 ):
+    """
+    Read shared installation-discount policy and product overrides with current
+    margin/eligibility projections. page starts at 1 and limit is 1–100. The list covers
+    stored overrides rather than every catalog product, and does not change an accepted
+    estimate.
+
+    Access and scope: system-tenant Manager access is required; these are shared platform
+    definitions. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [installation estimate
+    contract](https://github.com/mvnby/air-api/blob/main/docs/installation-estimate-contract.md).
+    """
     return await InstallationDiscountService.list_rules(
         session,
         search=search,
@@ -61,6 +73,18 @@ async def search_manager_installation_discount_products(
     limit: int = Query(default=20, ge=1, le=50),
     session: AsyncSession = Depends(get_session),
 ):
+    """
+    Search shared product candidates for discount overrides, returning current price/margin
+    eligibility and whether an override exists. q is at most 200 characters and limit is
+    1–50. This only reads suggestions; it does not create rules or recalculate accepted
+    installation snapshots.
+
+    Access and scope: system-tenant Manager access is required; these are shared platform
+    definitions. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [installation estimate
+    contract](https://github.com/mvnby/air-api/blob/main/docs/installation-estimate-contract.md).
+    """
     return ManagerInstallationDiscountProductSearchResponse(
         items=await InstallationDiscountService.search_products(
             session,
@@ -79,6 +103,18 @@ async def update_manager_installation_discount_policy(
     payload: ManagerInstallationDiscountPolicyUpdatePayload,
     session: AsyncSession = Depends(get_session),
 ):
+    """
+    Save the shared enable flag, default installation discount and minimum margin policy.
+    The legacy installation-discount fallback is synchronized when toggling this policy.
+    This affects future pricing decisions, not tenant rate dictionaries or already accepted
+    estimates; a repeated PUT saves the submitted policy without an idempotency receipt.
+
+    Access and scope: system-tenant Manager access is required; these are shared platform
+    definitions. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [installation estimate
+    contract](https://github.com/mvnby/air-api/blob/main/docs/installation-estimate-contract.md).
+    """
     return await InstallationDiscountService.update_policy(session, payload)
 
 
@@ -92,6 +128,18 @@ async def upsert_manager_installation_discount_rule(
     payload: ManagerInstallationDiscountRuleUpdatePayload,
     session: AsyncSession = Depends(get_session),
 ):
+    """
+    Create or update the unique installation-discount override for one shared product,
+    returning its current economic decision after saving. Missing product returns 404.
+    Repeating the same product PUT reuses that override; existing accepted estimate
+    snapshots are not rewritten.
+
+    Access and scope: system-tenant Manager access is required; these are shared platform
+    definitions. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [installation estimate
+    contract](https://github.com/mvnby/air-api/blob/main/docs/installation-estimate-contract.md).
+    """
     return await InstallationDiscountService.upsert_rule(
         session,
         product_id=product_id,
@@ -108,6 +156,17 @@ async def delete_manager_installation_discount_rule(
     product_id: int,
     session: AsyncSession = Depends(get_session),
 ):
+    """
+    Permanently remove a product discount override and return 204 so future decisions use
+    the shared policy fallback. Missing override returns 404, including repeats. This does
+    not disable the global policy or change accepted estimates.
+
+    Access and scope: system-tenant Manager access is required; these are shared platform
+    definitions. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    See [installation estimate
+    contract](https://github.com/mvnby/air-api/blob/main/docs/installation-estimate-contract.md).
+    """
     await InstallationDiscountService.delete_rule(
         session,
         product_id=product_id,

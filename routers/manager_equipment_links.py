@@ -27,6 +27,15 @@ async def list_manager_order_equipment_links(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Read equipment associated with a scoped order, including legacy source-order
+    associations without duplicate equipment entries. Missing or inaccessible order returns
+    404. This does not create missing explicit links.
+
+    Access and scope: Manager access is required; the order and its children are restricted
+    to the authenticated tenant and selected storefront. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     data = await EquipmentLinkService.list_for_order(
         session,
         order_id=order_id,
@@ -50,6 +59,16 @@ async def create_manager_order_equipment_link(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Associate existing customer equipment with an order after checking customer/branch
+    compatibility and link role. Missing order/equipment returns 404 and incompatible
+    relationships or role returns 400. An existing order/equipment pair is reused and its
+    role may be updated; this does not create an equipment unit.
+
+    Access and scope: Manager access is required; the order and its children are restricted
+    to the authenticated tenant and selected storefront. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         data = await EquipmentLinkService.link_existing(
             session,
@@ -73,6 +92,16 @@ async def delete_manager_order_equipment_link(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
+    """
+    Delete one equipment/order association and return 204, clearing matching legacy
+    source_order_id when necessary. Equipment, warranty snapshots and service history are
+    retained. Missing/inaccessible order/link/equipment returns 404, including after prior
+    deletion.
+
+    Access and scope: Manager access is required; the order and its children are restricted
+    to the authenticated tenant and selected storefront. See [Manager
+    authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     if not await EquipmentLinkService.unlink(
         session,
         order_id=order_id,

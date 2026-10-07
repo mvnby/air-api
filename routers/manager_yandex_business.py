@@ -53,6 +53,12 @@ def _settings_response(
 async def get_manager_yandex_business_feed_settings(
     session: AsyncSession = Depends(get_session),
 ) -> YandexBusinessFeedSettingsResponse:
+    """
+    Read effective Yandex Business feed settings for the server-resolved system tenant. Requires
+    system-tenant Manager access via route policy. These are
+    canonical platform-feed settings, not settings of the caller's selected storefront. Reading
+    does not publish or change the feed.
+    """
     tenant_scope = await SystemTenantScopeResolver.resolve(session)
     return _settings_response(
         await YandexBusinessFeedSettingsService.get(session, tenant_scope=tenant_scope)
@@ -68,6 +74,13 @@ async def preview_manager_yandex_business_feed_settings(
     payload: YandexBusinessFeedSettingsPayload,
     session: AsyncSession = Depends(get_session),
 ) -> YandexBusinessFeedPreview:
+    """
+    Build the platform Yandex Business feed quality preview from supplied settings without
+    saving them or publishing the feed. Requires system-tenant Manager access via route policy;
+    reads the feed service's
+    canonical catalog scope. Returns the candidate settings with the quality report so it can be
+    compared before the owner-only update.
+    """
     configuration = _configuration(payload)
     report = await YandexBusinessPriceListService.preview_quality_report(
         session,
@@ -89,6 +102,12 @@ async def update_manager_yandex_business_feed_settings(
     session: AsyncSession = Depends(get_session),
     _owner_username: str = Depends(get_current_owner_username),
 ) -> YandexBusinessFeedSettingsResponse:
+    """
+    Save the canonical Yandex Business feed configuration for the server-resolved system tenant.
+    Requires a system-tenant owner/admin. The payload replaces the feed settings through the
+    settings service; this does not submit a feed to Yandex or confirm its acceptance. No
+    optimistic version or command replay receipt is provided.
+    """
     tenant_scope = await SystemTenantScopeResolver.resolve(session)
     configuration = await YandexBusinessFeedSettingsService.update(
         session,
@@ -113,6 +132,12 @@ async def update_manager_yandex_business_feed_settings(
 async def get_manager_yandex_business_price_list(
     session: AsyncSession = Depends(get_session),
 ):
+    """
+    Download the canonical Yandex Business price list generated from current feed
+    settings/catalog data. Requires Manager access. Despite the .yml filename, the body is YML
+    XML with application/xml content type and attachment disposition, not YAML or JSON. This
+    read does not upload the feed to Yandex.
+    """
     content = await YandexBusinessPriceListService.build_xml(session)
     filename = quote("yandex-business-price-list.yml")
     return Response(
@@ -132,4 +157,11 @@ async def get_manager_yandex_business_price_list(
 async def get_manager_yandex_business_quality_report(
     session: AsyncSession = Depends(get_session),
 ) -> YandexBusinessFeedQualityReport:
+    """
+    Read the quality report for the canonical Yandex Business feed using saved/effective feed
+    settings. Requires system-tenant Manager access via route policy; the report is not scoped
+    to an arbitrary caller-selected
+    storefront. Reports feed inclusion/exclusion diagnostics without updating products/settings
+    or submitting data to Yandex.
+    """
     return await YandexBusinessPriceListService.build_quality_report(session)

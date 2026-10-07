@@ -13,6 +13,13 @@ import { request as __request } from '../core/request';
 export class ManagerTenantOffersService {
     /**
      * List Manager Tenant Audit Events
+     * Read scoped commercial-change audit events, including actor and change set, using offset
+     * and limit (1–100). It only exposes events for the authenticated tenant/selected
+     * storefront; reading does not acknowledge or remove them.
+     *
+     * Access and scope: Manager access is required; data is restricted to the authenticated
+     * tenant and selected storefront. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param offset
      * @param limit
      * @returns ManagerTenantAuditEventListResponse Successful Response
@@ -36,6 +43,13 @@ export class ManagerTenantOffersService {
     }
     /**
      * List Manager Tenant Offers
+     * Read offers only from the authenticated tenant/selected storefront, using offset and
+     * limit (1–100). The list contains the storefront’s own commercial/publication fields; it
+     * is not the master product editor or a supplier-offer feed.
+     *
+     * Access and scope: Manager access is required; data is restricted to the authenticated
+     * tenant and selected storefront. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param offset
      * @param limit
      * @returns ManagerTenantOfferListResponse Successful Response
@@ -59,6 +73,16 @@ export class ManagerTenantOffersService {
     }
     /**
      * Upsert Manager Tenant Offer
+     * Create or update the selected storefront offer for a product and stage its
+     * audit/invalidation together. Missing storefront/product returns 404; inconsistent price
+     * fields return 422; conflicting concurrent persistence returns 409. The product/scope
+     * identify the upsert; this accepts no client idempotency receipt. Shared catalog fields
+     * are not edited.
+     *
+     * Access and scope: system-tenant Manager access is required by the route policy; the
+     * offer and audit remain restricted to the authenticated tenant and selected storefront.
+     * See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param requestBody
      * @returns ManagerTenantOfferResponse Successful Response
      * @throws ApiError
@@ -78,6 +102,13 @@ export class ManagerTenantOffersService {
     }
     /**
      * Get Manager Tenant Offer
+     * Read one offer within the authenticated tenant/selected storefront. Unknown or
+     * out-of-scope offer returns 404; missing underlying product also returns 404. Knowing an
+     * offer ID does not grant cross-storefront access.
+     *
+     * Access and scope: Manager access is required; data is restricted to the authenticated
+     * tenant and selected storefront. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param offerId
      * @returns ManagerTenantOfferResponse Successful Response
      * @throws ApiError
@@ -98,6 +129,15 @@ export class ManagerTenantOffersService {
     }
     /**
      * Update Manager Tenant Offer
+     * Update only submitted scoped offer fields and record audit/invalidation when values
+     * change. Unknown or out-of-scope offer returns 404; invalid prices return 422; concurrent
+     * persistence conflict returns 409. No expected_version or idempotency receipt is
+     * accepted; reread current offer before resolving conflicting edits.
+     *
+     * Access and scope: system-tenant Manager access is required by the route policy; the
+     * offer and audit remain restricted to the authenticated tenant and selected storefront.
+     * See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param offerId
      * @param requestBody
      * @returns ManagerTenantOfferResponse Successful Response

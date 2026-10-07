@@ -47,6 +47,14 @@ async def get_manager_consumer_equipment_defaults(
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> ConsumerEquipmentDefaultsResponse:
+    """
+    Resolve equipment and warranty defaults for an accessible order/proposal in the current
+    tenant/storefront, optionally at an issue date. Read-only: does not save a document.
+    Missing order returns 404; invalid proposal selection returns 400.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
     try:
         terms = await resolve_consumer_equipment_defaults_for_order(
             session,

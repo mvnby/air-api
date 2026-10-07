@@ -15,10 +15,22 @@ request/response в [OpenAPI](../../openapi.json) или MCP `tools/list` ост
 
 Некоторые Manager-списки вообще не принимают `page/limit`, другие имеют
 эти параметры. Для новых Manager-списков правило проекта — `limit ≤ 100`,
-но два существующих маршрута поставок принимают до 200: анализ источника
-`GET /api/manager/supplier-sources/{source_id}/analysis` и кандидаты импорта
-`GET /api/manager/supplier-offers/source-url-import-candidates`. У второго
-`total` означает число возвращённых кандидатов, а не весь объём поиска.
+но у существующих операций есть исключения:
+
+| Операция | Максимальный `limit` |
+| --- | ---: |
+| `GET /api/manager/supplier-sources/{source_id}/analysis` | 200 |
+| `GET /api/manager/supplier-offers/source-url-import-candidates` | 200 |
+| `GET /api/manager/docs/document-template-files` | 200 |
+| `GET /api/manager/repair-complaints` | 200 |
+| `GET /api/manager/installers` | 500 |
+
+У кандидатов импорта `total` означает число возвращённых кандидатов,
+а не весь объём поиска. `limit` команды
+`POST /api/manager/media/assets/backfill-references` ограничивает размер
+обработки (до 5000), а не страницу списка; её режимы и побочные эффекты
+описаны у самой операции.
+
 Ограничения проверяйте у конкретной операции; нельзя добавлять `page` к любому
 URL по аналогии. Проверьте параметры и
 response model выбранной операции. Даже если OpenAPI показывает `page`/`limit`

@@ -15,6 +15,14 @@ import { request as __request } from '../core/request';
 export class ManagerCatalogDecisionService {
     /**
      * List Catalog Decision Filter Options
+     * Read available brands, series and supported technical filters for the selected
+     * storefront’s split-system decision catalog. Options use storefront
+     * visibility/eligibility; this does not expose a supplier-management surface or mutate
+     * product data.
+     *
+     * Access and scope: Manager access is required; data is restricted to the authenticated
+     * tenant and selected storefront. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @returns CatalogDecisionFilterOptionsResponse Successful Response
      * @throws ApiError
      */
@@ -26,6 +34,15 @@ export class ManagerCatalogDecisionService {
     }
     /**
      * List Catalog Decision Products
+     * Read eligible complete split systems with technical and commercial projections; limit is
+     * 1–100. Availability defaults to in_stock; include_orderable removes that restriction.
+     * category=multi, unsupported BTU classes or inverted retail bounds return 422. Explicit
+     * product_ids is limited to 24. Demo purchase-cost projection uses a synthetic discount
+     * from RRC rather than actual supplier cost. This endpoint only reads.
+     *
+     * Access and scope: Manager access is required; data is restricted to the authenticated
+     * tenant and selected storefront. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param page
      * @param limit
      * @param search
@@ -115,6 +132,17 @@ export class ManagerCatalogDecisionService {
     }
     /**
      * Create Catalog Decision Collection
+     * Create a manual draft collection from the chosen split-system IDs, preserving their
+     * order as pinned items. Requires Manager access; unlike the general collection routes
+     * this bridge does not require storefront.collections.manage. Empty title/duplicates or
+     * non-split-system selections return 400; products unavailable to the storefront return
+     * 404. Each POST creates a new collection.
+     *
+     * Access and scope: Manager access is required; data is restricted to the authenticated
+     * tenant and selected storefront. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * See [collection
+     * contract](https://github.com/mvnby/air-api/blob/main/docs/product-collections.md).
      * @param requestBody
      * @returns ManagerProductCollectionResponse Successful Response
      * @throws ApiError
@@ -134,6 +162,16 @@ export class ManagerCatalogDecisionService {
     }
     /**
      * Attach Catalog Decision To Order
+     * Add selected equipment to a scoped negotiation-stage order. auto returns 409 when active
+     * proposals already contain products; replace_selected replaces the selected proposal,
+     * new_alternative creates variant(s), and append_to_proposal skips products already in the
+     * chosen draft. Invalid selection/proposal/lifecycle mode returns 400. Commands lock the
+     * order and recalculate financials. No idempotency receipt exists; repeating
+     * new_alternative can create another proposal.
+     *
+     * Access and scope: Manager access is required; data is restricted to the authenticated
+     * tenant and selected storefront. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param orderId
      * @param requestBody
      * @returns ManagerOrderDetailResponse Successful Response
@@ -158,6 +196,15 @@ export class ManagerCatalogDecisionService {
     }
     /**
      * Create Catalog Decision Order
+     * Create a scoped negotiation-stage quick order with a new proposal and selected equipment
+     * snapshots. Duplicate products, empty key or invalid mode returns 400. idempotency_key is
+     * scoped to tenant/storefront; a repeat returns the existing order even if the new payload
+     * differs, rather than checking a payload receipt. Reuse a key only for the same creation
+     * intent.
+     *
+     * Access and scope: Manager access is required; data is restricted to the authenticated
+     * tenant and selected storefront. See [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param requestBody
      * @returns ManagerOrderDetailResponse Successful Response
      * @throws ApiError

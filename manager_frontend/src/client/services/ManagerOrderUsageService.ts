@@ -11,6 +11,15 @@ import { request as __request } from '../core/request';
 export class ManagerOrderUsageService {
     /**
      * Record Manager Order Usage
+     * Add a bounded batch of order-workspace UX aggregate events in the current
+     * tenant/storefront. Manager access is required. Aggregates contain permitted event labels
+     * rather than customer/order field content. In-process rate/concurrency protection returns
+     * 429 with Retry-After. This is additive and has no replay receipt: blindly retrying can
+     * double-count. See [usage
+     * boundaries](https://github.com/mvnby/air-api/blob/main/docs/order-workspace-usability.md).
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param requestBody
      * @returns OrderUsageAccepted Successful Response
      * @throws ApiError
@@ -30,6 +39,13 @@ export class ManagerOrderUsageService {
     }
     /**
      * Get Manager Order Usage
+     * Read daily aggregate UX counts for the current tenant/storefront over 1–90 days and
+     * optional workflow/party/viewport filters. Requires owner/admin access via route policy.
+     * Returns aggregated counters, not individual employee click histories. See [usage
+     * boundaries](https://github.com/mvnby/air-api/blob/main/docs/order-workspace-usability.md).
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param days
      * @param workflow
      * @param partyKind
