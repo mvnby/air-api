@@ -5,6 +5,7 @@ import type { PersonalTask } from '../src/services/personal-tasks-api';
 
 const mocks = vi.hoisted(() => ({
   list: vi.fn(),
+  get: vi.fn(),
   assignees: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
@@ -14,6 +15,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../src/services/personal-tasks-api', async (original) => ({
   ...(await original<typeof import('../src/services/personal-tasks-api')>()),
   listPersonalTasks: mocks.list,
+  getPersonalTask: mocks.get,
   listPersonalTaskAssignees: mocks.assignees,
   createPersonalTask: mocks.create,
   updatePersonalTask: mocks.update,
@@ -68,6 +70,7 @@ const mountView = async (item: PersonalTask = task()) => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  window.history.replaceState({}, '', '/manager/tasks');
   mocks.assignees.mockResolvedValue({ items: [{ id: 11, display_name: 'Анна' }] });
   mocks.create.mockResolvedValue(task());
   mocks.update.mockResolvedValue(task());
@@ -80,6 +83,14 @@ afterEach(() => {
 });
 
 describe('PersonalTasksView', () => {
+  it('opens a linked completed task directly even outside the active first page', async () => {
+    window.history.replaceState({}, '', '/manager/tasks?taskId=91');
+    mocks.get.mockResolvedValue({ ...task('completed'), id: 91, text: 'Уточнить адрес / созвониться перед выездом', lead_id: 8 });
+    const wrapper = await mountView();
+    expect(mocks.get).toHaveBeenCalledWith(91);
+    expect(wrapper.get('[data-testid="linked-personal-task"]').text()).toContain('Уточнить адрес');
+    expect(wrapper.get('[data-testid="linked-personal-task"]').text()).toContain('#91');
+  });
   it('creates a text-only task from the compact form and refreshes the list', async () => {
     const wrapper = await mountView();
 

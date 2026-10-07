@@ -359,6 +359,7 @@ const submitQualify = async () => {
     const payload = buildPayload();
     if (props.lead.entity_kind === 'lead') {
       const result = await ManagerLeadsService.qualifyManagerLead(props.lead.id, {
+        expected_version: props.lead.intake_version ?? undefined,
         customer_id: payload.customer_id ?? undefined,
         customer_branch_id: payload.customer_branch_id ?? undefined,
         customer_type: payload.customer_type ?? undefined,

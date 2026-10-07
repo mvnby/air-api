@@ -6,6 +6,7 @@ import PersonalTaskCard from '../components/tasks/PersonalTaskCard.vue';
 import {
   changePersonalTaskStatus,
   createPersonalTask,
+  getPersonalTask,
   listPersonalTaskAssignees,
   listPersonalTasks,
   newPersonalTaskCommandKey,
@@ -28,6 +29,8 @@ const filters: Array<{ value: PersonalTaskFilter; label: string }> = [
 
 const selectedFilter = ref<PersonalTaskFilter>('active');
 const tasks = ref<PersonalTask[]>([]);
+const focusedTaskId = ref(Number(new URLSearchParams(window.location.search).get('taskId')) || null);
+const focusedTask = ref<PersonalTask | null>(null);
 const staff = ref<PersonalTaskAssignee[]>([]);
 const loading = ref(true);
 const creating = ref(false);
@@ -61,6 +64,7 @@ const load = async () => {
     const result = await listPersonalTasks(selectedFilter.value);
     tasks.value = result.items;
     dueReminderCount.value = result.due_reminder_count;
+    if (focusedTaskId.value) focusedTask.value = await getPersonalTask(focusedTaskId.value);
   } catch (caught) {
     error.value = getApiErrorMessage(caught);
   } finally {
@@ -77,8 +81,10 @@ const loadStaff = async () => {
 };
 
 const chooseFilter = async (filter: PersonalTaskFilter) => {
-  if (selectedFilter.value === filter) return;
+  if (selectedFilter.value === filter && !focusedTaskId.value) return;
   selectedFilter.value = filter;
+  focusedTaskId.value = null;
+  focusedTask.value = null;
   await load();
 };
 
@@ -175,6 +181,7 @@ onMounted(() => {
     </div>
 
     <div v-if="loading" class="flex justify-center py-12 text-slate-500"><Loader2 class="h-6 w-6 animate-spin" /></div>
+    <section v-else-if="focusedTask" data-testid="linked-personal-task"><h2 class="mb-2 font-semibold">Связанное поручение #{{ focusedTask.id }}</h2><PersonalTaskCard :task="focusedTask" :staff="staff" :busy="busyId === focusedTask.id" @toggle="toggle" @cancel="cancel" @save="save" /></section>
     <p v-else-if="!tasks.length" class="rounded-xl border border-dashed border-slate-300 px-4 py-10 text-center text-slate-500 dark:border-slate-700">{{ emptyMessage }}</p>
     <div v-else class="grid gap-3">
       <PersonalTaskCard v-for="task in tasks" :key="task.id" :task="task" :staff="staff" :busy="busyId === task.id" @toggle="toggle" @cancel="cancel" @save="save" />

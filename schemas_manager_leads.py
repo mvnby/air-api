@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from core.input_validation import (
     validate_optional_bic,
@@ -121,6 +121,7 @@ class LeadUpdatePayload(BaseModel):
 
 
 class LeadQualifyPayload(BaseModel):
+    expected_version: Optional[int] = Field(default=None, ge=1)
     customer_id: Optional[int] = None
     customer_branch_id: Optional[int] = None
     name: Optional[str] = None

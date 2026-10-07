@@ -78,6 +78,28 @@ async def _rpc(client, method, params=None, *, token="token-one", request_id=1):
 
 
 @pytest.mark.asyncio
+async def test_incoming_explicit_clarification_requires_task_scope_before_mutation(mcp_client, monkeypatch):
+    client, access, checks, _ = mcp_client
+    access["token-two"].add("kitlane:incoming:write")
+    mutated = []
+    async def create(*args, **kwargs):
+        mutated.append(True)
+        raise LookupError("test mutation reached")
+    monkeypatch.setattr(IncomingCommandService, "create", create)
+    arguments = {"idempotency_key": "clarification-scope-0001", "payload": {"request_text": "ТО квартиры; адрес уточнить"}}
+    denied = await _rpc(client, "tools/call", {"name": "create_incoming", "arguments": arguments}, token="token-two")
+    result = denied.json()["result"]
+    assert result["isError"] and result["structuredContent"]["error"]["code"] == "insufficient_scope"
+    assert not mutated
+    assert "kitlane:tasks:write" in str(result)
+    assert checks[-1] == ("token-two", "kitlane:tasks:write")
+    arguments["payload"]["clarification_requested"] = False
+    allowed_intake = await _rpc(client, "tools/call", {"name": "create_incoming", "arguments": arguments}, token="token-two")
+    assert allowed_intake.json()["result"]["structuredContent"]["error"]["code"] == "not_found"
+    assert mutated == [True]
+
+
+@pytest.mark.asyncio
 async def test_real_sdk_handshake_discovery_and_actor_isolation(mcp_client):
     client, access, checks, adapter = mcp_client
     initialize = await _rpc(client, "initialize", {

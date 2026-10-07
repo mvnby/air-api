@@ -11,7 +11,8 @@
   "review_stages": {
     "1": "Public HTTP/helpers, supply, staff bot and OAuth; completed in a3e79e89",
     "2": "Orders/documents, customers/contracts, CRM/mail and catalog; reviewed 2026-10-07 from a3e79e89",
-    "3": "Content/media, settings/access, tasks/calendar, services/equipment and operations; reviewed 2026-10-07 from a3e79e89"
+    "3": "Content/media, settings/access, tasks/calendar, services/equipment and operations; reviewed 2026-10-07 from a3e79e89",
+    "4": "Linked incoming clarification, scope/version/replay contract; reviewed 2026-10-07 for issue 1084"
   },
   "operations": {
     "modules/documents/api/condition_presets.py": [
@@ -412,7 +413,8 @@
       ["GET /api/manager/incoming", "list_manager_incoming", false, 2],
       ["GET /api/manager/incoming/{lead_id}", "get_manager_incoming", false, 2],
       ["PATCH /api/manager/incoming/{lead_id}", "update_manager_incoming", false, 2],
-      ["POST /api/manager/incoming", "create_manager_incoming", false, 2]
+      ["POST /api/manager/incoming", "create_manager_incoming", false, 2],
+      ["POST /api/manager/incoming/{lead_id}/clarification", "create_manager_incoming_clarification", false, 4]
     ],
     "routers/manager_installation_discounts.py": [
       ["DELETE /api/manager/installation-discounts/products/{product_id}", "delete_manager_installation_discount_rule", false, 3],

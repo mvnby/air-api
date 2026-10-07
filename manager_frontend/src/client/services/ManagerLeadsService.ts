@@ -131,6 +131,13 @@ export class ManagerLeadsService {
      * accessible converted order returns that order with order_created=false; no generic
      * caller receipt is supplied.
      *
+     * Durable quick incoming requires expected_version; a missing/stale version returns
+     * 409 before customer/order mutation. Qualification retains the original source text,
+     * source clock, corrected fields, field provenance, wished time and prior-call agreement
+     * in incoming_context. These wishes do not create a work stage, booked slot or installer
+     * assignment. A saved address is used when no delivery address is provided; a region
+     * remains region context, never an invented street address.
+     *
      * Access requires an authenticated Manager session/JWT and live membership; see [Manager
      * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param leadId

@@ -17,7 +17,8 @@ from starlette.responses import JSONResponse
 from core.database import async_session_maker
 from services.connector_auth_policy import ConnectorAuthError, issuer
 from services.connector_auth_service import ConnectorAuthService
-from services.connector_mcp_tools import READ_SCOPE, TOOLS, execute_tool
+from services.connector_mcp_tools import READ_SCOPE, TASK_SCOPE, TOOLS, execute_tool
+from services.incoming_agreements import explicit_instructions
 from services.incoming_command_service import IncomingVersionConflict
 from services.personal_task_service import (
     PersonalTaskNotFoundError, PersonalTaskStatusConflictError,
@@ -95,12 +96,21 @@ class ConnectorMCPApplication:
             return _tool_error("invalid_token", "Connect your Kitlane account", status=401,
                                meta={"mcp/www_authenticate": [_challenge(tool.scope)]})
         try:
+            required_scope = tool.scope
             async with self.session_factory() as session:
                 actor = await ConnectorAuthService.resolve_actor(session, token, tool.scope)
+                if name in {"create_incoming", "update_incoming"}:
+                    payload = tool.input_model.model_validate(arguments).payload
+                    requests_task = payload.clarification_requested
+                    if name == "create_incoming" and requests_task is None:
+                        requests_task = explicit_instructions(payload.request_text)[0]
+                    if requests_task:
+                        required_scope = TASK_SCOPE
+                        await ConnectorAuthService.resolve_actor(session, token, TASK_SCOPE)
                 return await execute_tool(session, actor, tool, arguments)
         except ConnectorAuthError as exc:
             return _tool_error(exc.error, str(exc), status=exc.status_code,
-                               meta={"mcp/www_authenticate": [_challenge(tool.scope, exc.error)]})
+                               meta={"mcp/www_authenticate": [_challenge(required_scope, exc.error)]})
         except HTTPException as exc:
             message = str(exc.detail) if isinstance(exc.detail, str) else "Kitlane rejected this request"
             return _tool_error("request_rejected", message, status=exc.status_code)

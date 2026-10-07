@@ -9,6 +9,7 @@ from core.security import AuthenticatedUser, get_current_auth_context
 from routers import manager_operation_ids as operation_ids
 from schemas_incoming import (
     IncomingCreatePayload,
+    IncomingClarificationPayload,
     IncomingListResponse,
     IncomingResponse,
     IncomingUpdatePayload,
@@ -53,9 +54,39 @@ async def mutation(call, response: Response):
         raise HTTPException(
             404, detail={"error_code": "not_found", "message": str(exc)}
         ) from exc
+    except ValueError as exc:
+        raise HTTPException(400, detail={"error_code": "invalid_input", "message": str(exc)}) from exc
     response.status_code = result.status_code
     response.headers["Idempotency-Replayed"] = str(result.replayed).lower()
     return result.value
+
+
+@router.post(
+    "/{lead_id}/clarification", response_model=IncomingResponse,
+    operation_id=operation_ids.CREATE_MANAGER_INCOMING_CLARIFICATION,
+)
+async def create_clarification(
+    lead_id: int, payload: IncomingClarificationPayload, response: Response,
+    caller: CommandActor = Depends(actor),
+    key: str = Depends(get_command_idempotency_key),
+    session: AsyncSession = Depends(get_session),
+):
+    """Explicitly create one linked address/call clarification task from the known
+    incoming context for the authenticated Manager actor's tenant/storefront. The
+    task is assigned to the caller without a deadline or reminder; a customer wish
+    never becomes a callback deadline or booked visit. Requires expected_version
+    and Idempotency-Key. Same command/key replays; changed payload/key, stale version
+    or terminal incoming returns 409, missing/inaccessible intake 404, demo 403,
+    invalid input/key 400/422 and unavailable receipt 503 with Retry-After: 1.
+    A new intentional command on the current version returns the existing link.
+    Task read/edit visibility remains the PersonalTask author/assignee contract.
+
+    Access requires an authenticated Manager session/JWT and live membership; see
+    [Manager access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
+    return await mutation(IncomingCommandService.create_clarification(
+        session, actor=caller, lead_id=lead_id, payload=payload, idempotency_key=key,
+    ), response)
 
 
 @router.post(

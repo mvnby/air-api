@@ -3,6 +3,8 @@ import { computed, ref, watch } from 'vue';
 import { leadInboxApi, notifyInboxChanged, type InboxItem, type InboxHistory, type InboxContactRequest } from '../../services/lead-inbox';
 import LeadInboxDetails from './LeadInboxDetails.vue';
 import LeadRefusalPanel from './LeadRefusalPanel.vue';
+import { incomingApi, newIncomingIdempotencyKey } from '../../services/incoming-api';
+import { getApiErrorMessage } from '../../utils/api-errors';
 const props = defineProps<{ item: InboxItem; isArchive?: boolean; contactSaving?: boolean; quickIncoming?: boolean }>();
 const emit = defineEmits<{
   (e: 'qualify', item: InboxItem): void; (e: 'no-answer', request: InboxContactRequest): void;
@@ -16,6 +18,28 @@ const refusing = ref(false);
 const refusalMode = ref<'refusal' | 'not_request'>('refusal');
 const detailLoading = ref(false);
 const error = ref('');
+const clarificationSaving = ref(false);
+const clarificationKey = ref(newIncomingIdempotencyKey());
+const clarificationTaskId = ref(props.item.clarification_task_id);
+watch(() => props.item.clarification_task_id, value => { clarificationTaskId.value = value; });
+watch(() => props.item.intake_version, () => { clarificationKey.value = newIncomingIdempotencyKey(); });
+const createClarification = async () => {
+  if (clarificationSaving.value || !props.item.intake_version) return;
+  clarificationSaving.value = true;
+  error.value = '';
+  try {
+    const result = await incomingApi.clarify(props.item.id, props.item.intake_version, clarificationKey.value);
+    clarificationTaskId.value = result.clarification_task_id;
+    emit('updated', { ...props.item, intake_version: result.version, clarification_task_id: result.clarification_task_id });
+    notifyInboxChanged();
+  } catch (caught) {
+    error.value = getApiErrorMessage(caught);
+    if (typeof caught === 'object' && caught !== null && 'status' in caught && caught.status === 409) {
+      error.value = 'Входящее изменилось. Откройте «Исправить», загрузите актуальную версию и повторите действие.';
+    }
+  }
+  finally { clarificationSaving.value = false; }
+};
 const detail = ref<InboxItem | null>(null);
 const history = ref<InboxHistory[]>([]);
 const readSaving = ref(false);
@@ -32,7 +56,7 @@ const date = (value: string) => { const parsed = new Date(value); return Number.
 const displayDate = computed(() => props.item.source_created_at || props.item.created_at);
 const deadline = computed(() => props.item.deadline_at || props.item.tender?.deadline_at);
 const budget = computed(() => props.item.budget_amount == null ? null : new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(props.item.budget_amount));
-const missingFieldNames: Record<string, string> = { name: 'имя', phone: 'телефон', email: 'email', address_text: 'адрес', region_text: 'регион', requested_time_text: 'желаемое время' };
+const missingFieldNames: Record<string, string> = { contact: 'контакт', address: 'адрес', name: 'имя', phone: 'телефон', email: 'email', address_text: 'адрес', region_text: 'регион', requested_time_text: 'желаемое время' };
 const visibleMissingFields = computed(() => (props.item.missing_fields || []).map(field => missingFieldNames[field] || field));
 const intakeLabel = computed(() => {
   if (props.item.intake_state === 'ready_for_review') return 'Готово к проверке';
@@ -76,7 +100,10 @@ const markUnread = async () => { await setRead(false); if (!error.value) expande
       <div v-if="quickIncoming" class="quick-intake" data-testid="quick-incoming-state">
         <strong>{{ intakeLabel }}</strong><span v-if="visibleMissingFields.length">Не указано: {{ visibleMissingFields.join(', ') }}</span>
         <p v-if="item.requested_time_text">Пожелание клиента по времени: «{{ item.requested_time_text }}» · это не запись</p>
-        <p v-if="item.intake_state !== 'ready_for_review'">Следующий шаг: <a href="/manager/tasks">создайте поручение на уточнение</a>.</p>
+        <p v-if="item.requested_at">Желаемая дата: {{ item.date_precision === 'date' ? new Date(item.requested_at).toLocaleDateString('ru-BY', { timeZone: 'Europe/Minsk' }) : date(item.requested_at) }} · выезд не подтверждён</p>
+        <p v-if="item.call_before_visit">Созвониться перед выездом</p>
+        <p v-if="clarificationTaskId" role="status">Связанное поручение: <a :href="`/manager/tasks?taskId=${clarificationTaskId}`">Уточнение #{{ clarificationTaskId }}</a></p>
+        <button v-else-if="!isArchive" type="button" data-testid="incoming-clarification" :disabled="clarificationSaving || !item.intake_version" @click="createClarification">{{ clarificationSaving ? 'Сохраняем поручение…' : 'Уточнить адрес / созвониться перед выездом' }}</button>
       </div>
       <p v-if="item.commercial_terms_summary?.length" class="terms-summary">{{ item.commercial_terms_summary.join(' · ') }}</p>
       <div v-if="item.related_requests?.length" class="related-requests"><p v-for="related in item.related_requests" :key="related.order_id"><strong>Эта закупка уже встречалась:</strong> <a :href="`/manager/orders/kanban?orderId=${related.order_id}`">#{{ related.order_id }} {{ related.title }}</a><span v-if="related.outcome"> · {{ outcomes[related.outcome] || related.outcome }}</span><span v-if="related.reason"> · {{ reasons[related.reason] || related.reason }}</span><span v-if="related.note"> · {{ related.note }}</span></p></div>

@@ -50,6 +50,9 @@ export type LeadsInboxItemResponse = {
     intake_version?: (number | null);
     requested_time_text?: (string | null);
     requested_at?: (string | null);
+    date_precision?: ('date' | 'datetime' | null);
+    call_before_visit?: (boolean | null);
+    clarification_task_id?: (number | null);
     missing_fields?: Array<string>;
 };
 

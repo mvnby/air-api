@@ -2,6 +2,8 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { InboxItem } from '../src/services/lead-inbox';
 const mocks = vi.hoisted(() => ({ detail: vi.fn(), read: vi.fn(), archive: vi.fn(), archiveNonRequest: vi.fn(), notifyInboxChanged: vi.fn() }));
+const incomingMocks = vi.hoisted(() => ({ clarify: vi.fn() }));
+vi.mock('../src/services/incoming-api', () => ({ incomingApi: incomingMocks, newIncomingIdempotencyKey: () => 'clarification-ui-key' }));
 vi.mock('../src/services/lead-inbox', () => ({ leadInboxApi: mocks, notifyInboxChanged: mocks.notifyInboxChanged }));
 vi.mock('../src/components/leads/LeadInboxDetails.vue', () => ({ default: {
   props: ['item', 'history'], emits: ['mark-unread', 'not-request'],
@@ -28,14 +30,23 @@ describe('Incoming decisions and personal read state', () => {
     expect(mocks.detail).not.toHaveBeenCalled();
     wrapper.unmount();
   });
-  it('shows quick intake gaps, customer wished time and the explicit task next step', () => {
-    const wrapper = mount(LeadInboxCard, { props: { item: { ...lead, intake_state: 'needs_details', missing_fields: ['address_text'], requested_time_text: 'в пятницу после 16:00' }, quickIncoming: true } });
+  it('creates linked clarification directly from the known incoming and retains its retry key', async () => {
+    const wrapper = mount(LeadInboxCard, { props: { item: { ...lead, intake_state: 'needs_details', intake_version: 3, missing_fields: ['address'], requested_time_text: 'в пятницу после 16:00' }, quickIncoming: true } });
     const state = wrapper.get('[data-testid="quick-incoming-state"]');
     expect(state.text()).toContain('Нужно уточнить адрес');
     expect(state.text()).toContain('Не указано: адрес');
     expect(state.text()).toContain('Пожелание клиента по времени: «в пятницу после 16:00» · это не запись');
-    expect(state.get('a').attributes('href')).toBe('/manager/tasks');
-    expect(state.get('a').text()).toBe('создайте поручение на уточнение');
+    expect(incomingMocks.clarify).not.toHaveBeenCalled();
+    incomingMocks.clarify.mockRejectedValueOnce(new Error('Ответ потерян'));
+    await state.get('[data-testid="incoming-clarification"]').trigger('click'); await flushPromises();
+    expect(wrapper.get('[role="alert"]').text()).toContain('Ответ потерян');
+    incomingMocks.clarify.mockResolvedValueOnce({ version: 4, clarification_task_id: 21 });
+    await state.get('[data-testid="incoming-clarification"]').trigger('click'); await flushPromises();
+    expect(incomingMocks.clarify).toHaveBeenNthCalledWith(1, 7, 3, 'clarification-ui-key');
+    expect(incomingMocks.clarify).toHaveBeenNthCalledWith(2, 7, 3, 'clarification-ui-key');
+    expect(state.get('a').attributes('href')).toBe('/manager/tasks?taskId=21');
+    expect(state.find('[data-testid="incoming-clarification"]').exists()).toBe(false);
+    expect(wrapper.emitted('updated')?.[0]?.[0]).toEqual(expect.objectContaining({ intake_version: 4, clarification_task_id: 21 }));
     wrapper.unmount();
   });
   it('marks only explicitly opened details read and can mark them unread again', async () => {

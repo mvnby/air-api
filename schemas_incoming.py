@@ -19,6 +19,8 @@ class IncomingFields(BaseModel):
     address_text: str | None = Field(default=None, max_length=500)
     requested_time_text: str | None = Field(default=None, max_length=300)
     requested_at: AwareDatetime | None = None
+    call_before_visit: bool | None = Field(default=None, description="Prior-call agreement, independent of a confirmed visit or task deadline.")
+    clarification_requested: bool | None = Field(default=None, description="Explicit instruction to save one linked clarification task. On creation, omission also recognizes standalone positive address/call instructions; false disables that text inference. MCP requires task-write scope when a task is requested.")
 
     @field_validator("request_text")
     @classmethod
@@ -67,9 +69,28 @@ class IncomingResponse(IncomingFields):
     original_text: str
     date_precision: Literal["date", "datetime"] | None = None
     field_sources: dict[str, str] = Field(default_factory=dict)
+    clarification_task_id: int | None = None
     manager_url: str
 
 
 class IncomingListResponse(BaseModel):
     items: list[IncomingResponse]
     total: int
+
+
+class IncomingClarificationPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_version: int = Field(ge=1)
+
+
+class IncomingOrderContext(IncomingFields):
+    model_config = ConfigDict(extra="ignore")
+    lead_id: int
+    lead_version: int
+    original_text: str
+    source_occurred_at: datetime | None = None
+    source_timezone: str
+    date_precision: Literal["date", "datetime"] | None = None
+    field_sources: dict[str, str] = Field(default_factory=dict)
+    clarification_task_id: int | None = None
+    agreement_status: Literal["customer_wish"] = "customer_wish"

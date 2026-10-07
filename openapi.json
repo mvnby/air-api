@@ -21468,7 +21468,7 @@
           "manager-leads"
         ],
         "summary": "Qualify Manager Lead",
-        "description": "Qualify a raw Lead in the current tenant/storefront by explicitly selecting or safely\nmatching/creating a customer and branch, then creating an order and transferring\napplicable lead data. With an explicit scenario the order enters negotiation; otherwise\nit remains new_lead. Archived/lost/spam, ambiguous customer matches or invalid\nbranch/scenario return 400; missing Lead 404. An already qualified Lead with its\naccessible converted order returns that order with order_created=false; no generic\ncaller receipt is supplied.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Qualify a raw Lead in the current tenant/storefront by explicitly selecting or safely\nmatching/creating a customer and branch, then creating an order and transferring\napplicable lead data. With an explicit scenario the order enters negotiation; otherwise\nit remains new_lead. Archived/lost/spam, ambiguous customer matches or invalid\nbranch/scenario return 400; missing Lead 404. An already qualified Lead with its\naccessible converted order returns that order with order_created=false; no generic\ncaller receipt is supplied.\n\nDurable quick incoming requires expected_version; a missing/stale version returns\n409 before customer/order mutation. Qualification retains the original source text,\nsource clock, corrected fields, field provenance, wished time and prior-call agreement\nin incoming_context. These wishes do not create a work stage, booked slot or installer\nassignment. A saved address is used when no delivery address is provided; a region\nremains region context, never an invented street address.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "qualify_manager_lead",
         "security": [
           {
@@ -31745,6 +31745,73 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/incoming/{lead_id}/clarification": {
+      "post": {
+        "tags": [
+          "manager/incoming"
+        ],
+        "summary": "Create Clarification",
+        "description": "Explicitly create one linked address/call clarification task from the known\nincoming context for the authenticated Manager actor's tenant/storefront. The\ntask is assigned to the caller without a deadline or reminder; a customer wish\nnever becomes a callback deadline or booked visit. Requires expected_version\nand Idempotency-Key. Same command/key replays; changed payload/key, stale version\nor terminal incoming returns 409, missing/inaccessible intake 404, demo 403,\ninvalid input/key 400/422 and unavailable receipt 503 with Retry-After: 1.\nA new intentional command on the current version returns the existing link.\nTask read/edit visibility remains the PersonalTask author/assignee contract.\n\nAccess requires an authenticated Manager session/JWT and live membership; see\n[Manager access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "operationId": "create_manager_incoming_clarification",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "lead_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Lead Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IncomingClarificationPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncomingResponse"
+                }
               }
             }
           },
@@ -45040,6 +45107,21 @@
         ],
         "title": "InboxTenderPayload"
       },
+      "IncomingClarificationPayload": {
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_version"
+        ],
+        "title": "IncomingClarificationPayload"
+      },
       "IncomingCreatePayload": {
         "properties": {
           "request_text": {
@@ -45130,6 +45212,30 @@
             ],
             "title": "Requested At"
           },
+          "call_before_visit": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Before Visit",
+            "description": "Prior-call agreement, independent of a confirmed visit or task deadline."
+          },
+          "clarification_requested": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clarification Requested",
+            "description": "Explicit instruction to save one linked clarification task. On creation, omission also recognizes standalone positive address/call instructions; false disables that text inference. MCP requires task-write scope when a task is requested."
+          },
           "source_occurred_at": {
             "anyOf": [
               {
@@ -45188,6 +45294,198 @@
           "total"
         ],
         "title": "IncomingListResponse"
+      },
+      "IncomingOrderContext": {
+        "properties": {
+          "request_text": {
+            "type": "string",
+            "maxLength": 12000,
+            "minLength": 1,
+            "title": "Request Text"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "region_text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region Text"
+          },
+          "address_text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address Text"
+          },
+          "requested_time_text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Time Text"
+          },
+          "requested_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested At"
+          },
+          "call_before_visit": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Before Visit",
+            "description": "Prior-call agreement, independent of a confirmed visit or task deadline."
+          },
+          "clarification_requested": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clarification Requested",
+            "description": "Explicit instruction to save one linked clarification task. On creation, omission also recognizes standalone positive address/call instructions; false disables that text inference. MCP requires task-write scope when a task is requested."
+          },
+          "lead_id": {
+            "type": "integer",
+            "title": "Lead Id"
+          },
+          "lead_version": {
+            "type": "integer",
+            "title": "Lead Version"
+          },
+          "original_text": {
+            "type": "string",
+            "title": "Original Text"
+          },
+          "source_occurred_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Occurred At"
+          },
+          "source_timezone": {
+            "type": "string",
+            "title": "Source Timezone"
+          },
+          "date_precision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "date",
+                  "datetime"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Precision"
+          },
+          "field_sources": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Field Sources"
+          },
+          "clarification_task_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clarification Task Id"
+          },
+          "agreement_status": {
+            "type": "string",
+            "const": "customer_wish",
+            "title": "Agreement Status",
+            "default": "customer_wish"
+          }
+        },
+        "type": "object",
+        "required": [
+          "request_text",
+          "lead_id",
+          "lead_version",
+          "original_text",
+          "source_timezone"
+        ],
+        "title": "IncomingOrderContext"
       },
       "IncomingResponse": {
         "properties": {
@@ -45279,6 +45577,30 @@
             ],
             "title": "Requested At"
           },
+          "call_before_visit": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Before Visit",
+            "description": "Prior-call agreement, independent of a confirmed visit or task deadline."
+          },
+          "clarification_requested": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clarification Requested",
+            "description": "Explicit instruction to save one linked clarification task. On creation, omission also recognizes standalone positive address/call instructions; false disables that text inference. MCP requires task-write scope when a task is requested."
+          },
           "lead_id": {
             "type": "integer",
             "title": "Lead Id"
@@ -45344,6 +45666,17 @@
             },
             "type": "object",
             "title": "Field Sources"
+          },
+          "clarification_task_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clarification Task Id"
           },
           "manager_url": {
             "type": "string",
@@ -45454,6 +45787,30 @@
               }
             ],
             "title": "Requested At"
+          },
+          "call_before_visit": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Before Visit",
+            "description": "Prior-call agreement, independent of a confirmed visit or task deadline."
+          },
+          "clarification_requested": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clarification Requested",
+            "description": "Explicit instruction to save one linked clarification task. On creation, omission also recognizes standalone positive address/call instructions; false disables that text inference. MCP requires task-write scope when a task is requested."
           },
           "expected_version": {
             "type": "integer",
@@ -47559,6 +47916,18 @@
       },
       "LeadQualifyPayload": {
         "properties": {
+          "expected_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Version"
+          },
           "customer_id": {
             "anyOf": [
               {
@@ -48645,6 +49014,43 @@
             ],
             "title": "Requested At"
           },
+          "date_precision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "date",
+                  "datetime"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Precision"
+          },
+          "call_before_visit": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Before Visit"
+          },
+          "clarification_task_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clarification Task Id"
+          },
           "missing_fields": {
             "items": {
               "type": "string"
@@ -49197,6 +49603,43 @@
               }
             ],
             "title": "Requested At"
+          },
+          "date_precision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "date",
+                  "datetime"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Precision"
+          },
+          "call_before_visit": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Before Visit"
+          },
+          "clarification_task_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clarification Task Id"
           },
           "missing_fields": {
             "items": {
@@ -61832,6 +62275,16 @@
             "type": "number",
             "title": "Balance Due",
             "default": 0.0
+          },
+          "incoming_context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IncomingOrderContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "source_enrichment": {
             "anyOf": [

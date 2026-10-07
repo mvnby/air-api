@@ -17,14 +17,18 @@ from models import Lead, LeadIntakeSource, LeadStatus
 from models.leads_inbox import InboxTriageState
 from schemas_incoming import (
     IncomingCreatePayload,
+    IncomingClarificationPayload,
     IncomingListResponse,
     IncomingResponse,
     IncomingUpdatePayload,
 )
 from schemas_manager_leads import LeadCreatePayload
+from schemas_personal_tasks import PersonalTaskCreatePayload
 from services.authenticated_command_service import AuthenticatedCommandService
 from services.bot_quick_order_service import BotQuickOrderService
 from services.lead_command_service import LeadCommandService
+from services.incoming_agreements import CLARIFICATION_TITLE, explicit_instructions
+from services.personal_task_service import PersonalTaskService
 from services.public_write_idempotency_service import (
     PublicWriteCommandResponse,
     PublicWriteIdempotencyConflict,
@@ -55,9 +59,16 @@ class IncomingCommandService:
                 "address_text",
                 "requested_time_text",
                 "requested_at",
+                "call_before_visit",
+                "clarification_requested",
             },
         )
-        sources = {key: "provided" for key, value in fields.items() if value}
+        sources = {key: "provided" for key, value in fields.items() if value is not None}
+        clarification, call = explicit_instructions(payload.request_text)
+        for key, inferred in (("clarification_requested", clarification), ("call_before_visit", call)):
+            if fields[key] is None and inferred:
+                fields[key] = True
+                sources[key] = "text"
         phone = payload.phone
         if not phone and (
             isinstance(payload, IncomingCreatePayload)
@@ -104,6 +115,7 @@ class IncomingCommandService:
         changes = payload.model_dump(mode="json", exclude_unset=True)
         updated = dict(meta)
         sources = dict(meta.get("field_sources", {}))
+        changed_meta_fields = set()
         for key in (
             "name",
             "phone",
@@ -112,18 +124,29 @@ class IncomingCommandService:
             "address_text",
             "requested_time_text",
             "requested_at",
+            "call_before_visit",
+            "clarification_requested",
         ):
             if key not in changes:
                 continue
             if key not in {"name", "phone", "email"}:
+                old_value = meta.get(key)
+                new_value = changes[key]
+                if key == "requested_at" and old_value and new_value:
+                    same_value = datetime.fromisoformat(old_value) == datetime.fromisoformat(new_value)
+                else:
+                    same_value = old_value == new_value
+                if same_value:
+                    continue
                 updated[key] = changes[key]
-            if changes[key]:
+                changed_meta_fields.add(key)
+            if changes[key] is not None:
                 sources[key] = "provided"
             else:
                 sources.pop(key, None)
-        if "requested_at" in changes:
+        if "requested_at" in changed_meta_fields:
             updated["date_precision"] = "datetime" if payload.requested_at else None
-        elif "requested_time_text" in changes:
+        elif "requested_time_text" in changed_meta_fields:
             # A changed wish invalidates the old suggestion. Reinterpret it only
             # against the retained source clock, never against processing time.
             updated["requested_at"] = None
@@ -169,6 +192,9 @@ class IncomingCommandService:
             original_text=meta.get("original_text", lead.request_text),
             date_precision=meta.get("date_precision"),
             field_sources=meta.get("field_sources", {}),
+            call_before_visit=meta.get("call_before_visit"),
+            clarification_requested=meta.get("clarification_requested"),
+            clarification_task_id=meta.get("clarification_task_id"),
             manager_url=f"{settings.MANAGER_BASE_URL.rstrip('/')}/leads?incomingId={lead.id}",
         )
 
@@ -238,6 +264,8 @@ class IncomingCommandService:
             }
             session.add(lead)
             await session.flush()
+            if lead.intake_meta.get("clarification_requested"):
+                await cls._ensure_clarification(session, actor=actor, lead=lead)
             return PublicWriteCommandResponse(
                 value=cls._response(lead),
                 status_code=201,
@@ -307,6 +335,8 @@ class IncomingCommandService:
                     setattr(lead, key, getattr(payload, key))
             lead.request_text = payload.request_text
             lead.intake_meta = cls._updated_meta(payload, meta, source_time)
+            if payload.clarification_requested:
+                await cls._ensure_clarification(session, actor=actor, lead=lead)
             lead.version += 1
             session.add(lead)
             await session.flush()
@@ -328,6 +358,79 @@ class IncomingCommandService:
             },
             response_model=IncomingResponse,
             operation=operation,
+        )
+
+    @staticmethod
+    async def _ensure_clarification(
+        session: AsyncSession, *, actor: CommandActor, lead: Lead,
+    ) -> None:
+        if (lead.intake_meta or {}).get("clarification_task_id"):
+            return
+        meta = lead.intake_meta or {}
+        context = [f"Входящее #{lead.id}"]
+        for label, value in (
+            ("Контакт", lead.phone or lead.email),
+            ("Район", meta.get("region_text")),
+            ("Адрес", meta.get("address_text")),
+            ("Пожелание по времени (выезд не подтверждён)", meta.get("requested_at") or meta.get("requested_time_text")),
+        ):
+            if value:
+                context.append(f"{label}: {value}")
+        context.append(f"Исходные сведения доступны во входящем #{lead.id}.")
+        context.append(f"Текст обращения: {lead.request_text[:4000]}")
+        task = await PersonalTaskService.create(
+            session, actor=actor,
+            payload=PersonalTaskCreatePayload(
+                text=CLARIFICATION_TITLE,
+                description="\n".join(context),
+                lead_id=lead.id,
+            ),
+            idempotency_key=f"incoming-clarification-{lead.id}",
+        )
+        lead.intake_meta = {**meta, "clarification_task_id": task.value.id}
+        session.add(lead)
+        await session.flush()
+
+    @classmethod
+    async def create_clarification(
+        cls,
+        session: AsyncSession,
+        *,
+        actor: CommandActor,
+        lead_id: int,
+        payload: IncomingClarificationPayload,
+        idempotency_key: str,
+    ):
+        async def operation():
+            lead = await TenantEntityAccessService.get_lead(
+                session, lead_id, tenant_scope=actor.tenant_scope,
+                for_update=True, populate_existing=True,
+            )
+            if not lead or not lead.intake_meta:
+                raise LookupError("Incoming request not found")
+            state = await session.get(InboxTriageState, ("lead", lead_id), populate_existing=True)
+            if (
+                lead.version != payload.expected_version
+                or lead.converted_order_id
+                or lead.archived_at
+                or lead.status not in (LeadStatus.new, LeadStatus.contacted)
+                or (state and state.archived_at)
+            ):
+                raise IncomingVersionConflict("Incoming request has changed; reload its current version")
+            if not lead.intake_meta.get("clarification_task_id"):
+                await cls._ensure_clarification(session, actor=actor, lead=lead)
+                lead.version += 1
+                session.add(lead)
+                await session.flush()
+            return PublicWriteCommandResponse(
+                value=cls._response(lead), resource_type="lead", resource_id=lead.id,
+                response_max_bytes=128 * 1024,
+            )
+        return await AuthenticatedCommandService.execute(
+            session, actor=actor, command_name="incoming.clarification",
+            idempotency_key=idempotency_key,
+            payload={"lead_id": lead_id, **payload.model_dump(mode="json")},
+            response_model=IncomingResponse, operation=operation,
         )
 
     @classmethod

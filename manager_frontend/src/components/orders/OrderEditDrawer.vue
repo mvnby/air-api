@@ -8,6 +8,7 @@ import OrderWorkspaceHeader from './OrderWorkspaceHeader.vue';
 import OrderSalesInstallationWorkspace from './OrderSalesInstallationWorkspace.vue';
 import OrderPaymentsPanel from './OrderPaymentsPanel.vue';
 import OrderWebsiteIntakePanel from './OrderWebsiteIntakePanel.vue';
+import OrderIncomingContext from './OrderIncomingContext.vue';
 import OrderPlanningPanel from './OrderPlanningPanel.vue';
 import OrderRepairPanel from './OrderRepairPanel.vue';
 import OrderCustomerContext from './OrderCustomerContext.vue';
@@ -654,6 +655,7 @@ const saveContextObject = async (draft: { address: string; branchId: number | nu
             </section>
 
             <section v-show="activeWorkspaceSection === 'work'" class="min-w-0" data-order-usage="workspace-work-panel">
+              <OrderIncomingContext v-if="order?.incoming_context" :context="order.incoming_context" />
               <OrderSalesInstallationWorkspace
                 v-if="workflowType === 'sales_installation'"
                 class="mt-4"
