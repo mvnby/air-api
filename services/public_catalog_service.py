@@ -19,6 +19,7 @@ from schemas import (
     ProductSeriesNavigationResponse,
     ProductSiblingResponse,
 )
+from services.product_identity import public_product_identity
 from services.catalog import CatalogService
 from services.feature_resolver_service import FeatureResolverService
 from services.installation_discount_service import InstallationDiscountService
@@ -370,6 +371,8 @@ class PublicCatalogService:
             warranties=warranties,
         )
         response = PublicProductSearchItemResponse(
+            model_code=mapped.model_code,
+            capacity_class=mapped.capacity_class,
             id=mapped.id,
             title=mapped.title,
             slug=mapped.slug,
@@ -591,6 +594,7 @@ class PublicCatalogService:
                 ),
                 series_siblings=[
                     ProductSiblingResponse(
+                        **public_product_identity(item.product.specs),
                         id=item.product.id,
                         title=item.product.title,
                         slug=item.product.slug,

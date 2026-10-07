@@ -27,7 +27,7 @@
 
 | Область | Путь для поиска | Владелец контракта и документация |
 | --- | --- | --- |
-| Публичный каталог и характеристики | `GET /api/v1/products`, `GET /api/v1/filters/config`, `/api/v1/specs/*` | [api_products.py](../../routers/api_products.py), [схемы товаров](../../schemas.py), [таксономия](../catalog/feature-taxonomy-guide.md) |
+| Публичный каталог и характеристики | `GET /api/v1/products`, `GET /api/v1/filters/config`, `/api/v1/specs/*` | [api_products.py](../../routers/api_products.py), [схемы товаров](../../schemas.py), [таксономия](../catalog/feature-taxonomy-guide.md), [код модели и номинальный класс](../catalog/public-product-identity.md) |
 | Управление каталогом и характеристиками | `/api/manager/catalog-management/*`, `/api/manager/products/*`, `/api/manager/features/*` | [manager_catalog_management.py](../../routers/manager_catalog_management.py), [manager_features.py](../../routers/manager_features.py), [рабочая область](../catalog-management-workspace.md) |
 | Контент и подборки | `/api/v1/content/*`, `/api/manager/product-collections/*` | [api_content.py](../../routers/api_content.py), [manager_product_collections.py](../../routers/manager_product_collections.py), [контракт подборок](../product-collections.md) |
 | Медиа и галерея | `/api/manager/media/assets/*`, `/api/manager/gallery/*` | [manager_media_library.py](../../routers/manager_media_library.py), [manager_media_gallery.py](../../routers/manager_media_gallery.py), [публикация медиа](../catalog-media-publication.md) |

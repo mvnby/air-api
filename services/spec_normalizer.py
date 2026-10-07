@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional
 
 from services.spec_registry import (
     INDOOR_TYPE_LABELS,
+    canonical_capacity_class,
     REGISTRY_DIMENSIONS_MAP,
     REGISTRY_KEY_MAP,
     REGISTRY_UNORDERED_DIMENSION_KEYS,
@@ -128,6 +129,8 @@ def _split_dimensions(specs: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def clean_value(key: str, val: Any, keep_units: bool = True, source_key: str | None = None) -> Any:
+    if key == "capacity_class":
+        return canonical_capacity_class(val)
     if not isinstance(val, str):
         return val
         

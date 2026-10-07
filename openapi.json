@@ -77813,6 +77813,30 @@
       },
       "ProductResponse": {
         "properties": {
+          "model_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Code",
+            "description": "Exact manufacturer designation from canonical model specs; null when unconfirmed."
+          },
+          "capacity_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capacity Class",
+            "description": "Confirmed nominal capacity class (e.g. 07, 09, 12); never inferred from title or kW. Null when unknown or inapplicable."
+          },
           "id": {
             "type": "integer",
             "title": "Id"
@@ -78615,6 +78639,30 @@
       },
       "ProductSiblingResponse": {
         "properties": {
+          "model_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Code",
+            "description": "Exact manufacturer designation from canonical model specs; null when unconfirmed."
+          },
+          "capacity_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capacity Class",
+            "description": "Confirmed nominal capacity class (e.g. 07, 09, 12); never inferred from title or kW. Null when unknown or inapplicable."
+          },
           "id": {
             "type": "integer",
             "title": "Id"
@@ -79625,6 +79673,30 @@
       },
       "PublicProductSearchItemResponse": {
         "properties": {
+          "model_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Code",
+            "description": "Exact manufacturer designation from canonical model specs; null when unconfirmed."
+          },
+          "capacity_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capacity Class",
+            "description": "Confirmed nominal capacity class (e.g. 07, 09, 12); never inferred from title or kW. Null when unknown or inapplicable."
+          },
           "id": {
             "type": "integer",
             "title": "Id"

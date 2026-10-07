@@ -337,7 +337,16 @@ PublicStockState = Literal[
 ]
 
 
-class ProductBase(BaseModel):
+class PublicProductIdentityResponse(BaseModel):
+    model_code: Optional[str] = Field(
+        default=None, description="Exact manufacturer designation from canonical model specs; null when unconfirmed.",
+    )
+    capacity_class: Optional[str] = Field(
+        default=None, description="Confirmed nominal capacity class (e.g. 07, 09, 12); never inferred from title or kW. Null when unknown or inapplicable.",
+    )
+
+
+class ProductBase(PublicProductIdentityResponse):
     id: int
     title: str
     slug: Optional[str]
@@ -412,7 +421,7 @@ class PublicProductWarrantyResponse(BaseModel):
     terms: Optional[str] = None
 
 
-class ProductSiblingResponse(BaseModel):
+class ProductSiblingResponse(PublicProductIdentityResponse):
     id: int
     title: str
     slug: Optional[str]

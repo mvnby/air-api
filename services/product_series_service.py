@@ -14,6 +14,7 @@ from schemas import (
     ProductSiblingResponse,
     PublicProductWarrantyResponse,
 )
+from services.product_identity import public_product_identity
 from services.product_series_payloads import build_product_series_response
 from services.product_area import area_from_specs
 from services.product_serialization import sanitize_specs
@@ -70,6 +71,7 @@ class ProductSeriesService:
         warranty: PublicProductWarrantyResponse | None = None,
     ) -> ProductSiblingResponse:
         return ProductSiblingResponse(
+            **public_product_identity(item.specs),
             id=item.id,
             title=item.title,
             slug=item.slug,

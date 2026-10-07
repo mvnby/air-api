@@ -14,6 +14,7 @@ from schemas import (
     TagGroupResponse,
     TagResponse,
 )
+from services.product_identity import public_product_identity
 from services.product_image_processing_contract import (
     ProductImageManualQualityStatus,
     ProductImageProcessingStatus,
@@ -188,6 +189,7 @@ def map_product_to_response(
         item = sibling_projection.product
         siblings_payload.append(
             ProductSiblingResponse(
+                **public_product_identity(item.specs),
                 id=item.id,
                 title=item.title,
                 slug=item.slug,
@@ -232,6 +234,7 @@ def map_product_to_response(
     )
 
     response = ProductResponse(
+        **public_product_identity(product.specs),
         id=product.id,
         title=product.title,
         slug=product.slug,

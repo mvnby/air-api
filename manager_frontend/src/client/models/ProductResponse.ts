@@ -11,6 +11,14 @@ import type { PublicFeatureResponse } from './PublicFeatureResponse';
 import type { PublicProductWarrantyResponse } from './PublicProductWarrantyResponse';
 import type { TagResponse } from './TagResponse';
 export type ProductResponse = {
+    /**
+     * Exact manufacturer designation from canonical model specs; null when unconfirmed.
+     */
+    model_code?: (string | null);
+    /**
+     * Confirmed nominal capacity class (e.g. 07, 09, 12); never inferred from title or kW. Null when unknown or inapplicable.
+     */
+    capacity_class?: (string | null);
     id: number;
     title: string;
     slug: (string | null);
