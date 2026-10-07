@@ -63,6 +63,7 @@ async def test_only_explicit_positive_instruction_creates_task(db, text, expecte
 async def test_explicit_intake_task_is_atomic_and_source_event_replays_once(db):
     caller = await actor(db)
     payload = IncomingCreatePayload(request_text="ТО квартиры +375291234567, Билево, завтра 09:00; адрес уточнить",
+        name="Анна", email="anna@example.test",
         region_text="Билево", source_event_id="message-clarification-1",
         source_occurred_at=datetime(2026, 10, 6, 20, 59, tzinfo=timezone.utc))
     first = await IncomingCommandService.create(db, actor=caller, payload=payload, idempotency_key="clarification-save-0001")
@@ -76,6 +77,7 @@ async def test_explicit_intake_task_is_atomic_and_source_event_replays_once(db):
     assert task.assignee_staff_user_id == caller.staff_user_id
     assert task.due_at is task.reminder_at is None
     assert "+375291234567" in task.description and "Билево" in task.description
+    assert "Анна" in task.description and "anna@example.test" in task.description
     assert "2026-10-07T09:00:00+03:00" in task.description
     with pytest.raises(PublicWriteIdempotencyConflict):
         await IncomingCommandService.create(db, actor=caller,
@@ -242,6 +244,20 @@ async def test_unchanged_date_only_correction_retains_precision_and_provenance(d
             requested_time_text="завтра", requested_at=saved.value.requested_at), idempotency_key="date-only-correct-0001")
     assert corrected.value.date_precision == "date"
     assert corrected.value.field_sources["requested_at"] == "text"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("keep_date", [True, False])
+async def test_explicit_date_override_wins_over_changed_time_text(db, keep_date):
+    caller = await actor(db)
+    saved = await create(db, caller, request_text="ТО завтра", requested_time_text="завтра",
+        source_occurred_at=datetime(2025, 12, 31, 21, 1, tzinfo=timezone.utc))
+    expected_date = saved.value.requested_at if keep_date else None
+    corrected = await IncomingCommandService.update(db, actor=caller, lead_id=saved.value.lead_id,
+        payload=IncomingUpdatePayload(request_text="Исправление времени", expected_version=1,
+            requested_time_text="послезавтра 09:00", requested_at=expected_date), idempotency_key="explicit-date-override1")
+    assert corrected.value.requested_at == expected_date
+    assert corrected.value.date_precision == ("date" if keep_date else None)
 
 
 @pytest.mark.asyncio

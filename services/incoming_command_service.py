@@ -144,8 +144,9 @@ class IncomingCommandService:
                 sources[key] = "provided"
             else:
                 sources.pop(key, None)
-        if "requested_at" in changed_meta_fields:
-            updated["date_precision"] = "datetime" if payload.requested_at else None
+        if "requested_at" in changes:
+            if "requested_at" in changed_meta_fields:
+                updated["date_precision"] = "datetime" if payload.requested_at else None
         elif "requested_time_text" in changed_meta_fields:
             # A changed wish invalidates the old suggestion. Reinterpret it only
             # against the retained source clock, never against processing time.
@@ -369,13 +370,17 @@ class IncomingCommandService:
         meta = lead.intake_meta or {}
         context = [f"Входящее #{lead.id}"]
         for label, value in (
-            ("Контакт", lead.phone or lead.email),
+            ("Имя", lead.name),
+            ("Телефон", lead.phone),
+            ("Email", lead.email),
             ("Район", meta.get("region_text")),
             ("Адрес", meta.get("address_text")),
             ("Пожелание по времени (выезд не подтверждён)", meta.get("requested_at") or meta.get("requested_time_text")),
         ):
             if value:
                 context.append(f"{label}: {value}")
+        if meta.get("call_before_visit"):
+            context.append("Договорённость: созвониться перед выездом")
         context.append(f"Исходные сведения доступны во входящем #{lead.id}.")
         context.append(f"Текст обращения: {lead.request_text[:4000]}")
         task = await PersonalTaskService.create(
