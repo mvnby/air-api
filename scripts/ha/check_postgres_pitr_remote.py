@@ -33,7 +33,7 @@ def _load_python_module_from_path(module_name: str, path: Path) -> Any | None:
     return module
 
 
-def _load_upload_helpers() -> tuple[Any, Any]:
+def _load_upload_helpers() -> tuple[Any, Any, Any]:
     explicit = os.getenv("POSTGRES_PITR_UPLOAD_HELPER", "").strip()
     if explicit:
         helper_path = Path(explicit)
@@ -45,12 +45,12 @@ def _load_upload_helpers() -> tuple[Any, Any]:
         )
         if module is None:
             raise SystemExit("Explicit PostgreSQL PITR upload helper could not be loaded")
-        return module.build_client, module.load_config
+        return module.build_client, module.load_config, module.immutable_upload
 
     try:
-        from scripts.ha.upload_postgres_pitr_to_s3 import build_client, load_config
+        from scripts.ha import upload_postgres_pitr_to_s3 as upload
 
-        return build_client, load_config
+        return upload.build_client, upload.load_config, upload.immutable_upload
     except ModuleNotFoundError:
         pass
 
@@ -60,7 +60,7 @@ def _load_upload_helpers() -> tuple[Any, Any]:
     )
 
 
-build_client, load_config = _load_upload_helpers()
+build_client, load_config, wal_storage = _load_upload_helpers()
 
 WAL_SEGMENT_RE = re.compile(r"^[0-9A-F]{24}$")
 REMOTE_WAL_SEGMENT_RE = re.compile(r"^[0-9A-F]{24}(?:\.partial)?$")
@@ -114,6 +114,7 @@ def _latest_object(
     latest: dict[str, Any] | None = None
     pages = 0
     objects = 0
+    seen_wal_names: set[str] = set()
     for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
         pages += 1
         if pages > MAX_LIST_PAGES:
@@ -130,14 +131,30 @@ def _latest_object(
             key = str(item.get("Key") or "")
             if suffix and not key.endswith(suffix):
                 continue
-            filename = key.rsplit("/", 1)[-1]
+            storage_name = key.rsplit("/", 1)[-1]
+            try:
+                filename, codec = wal_storage.wal_storage_name(storage_name)
+            except SystemExit as exc:
+                raise StatusProofError(str(exc)) from exc
             if canonical_wal and (
                 not REMOTE_WAL_SEGMENT_RE.fullmatch(filename)
-                or key != f"{prefix}{filename[:8]}/{filename}"
+                or key != f"{prefix}{filename[:8]}/{storage_name}"
             ):
                 continue
             if canonical_wal:
+                if filename in seen_wal_names:
+                    raise StatusProofError("conflicting WAL representations / duplicate name")
+                seen_wal_names.add(filename)
                 size = item.get("Size")
+                if codec == "gzip":
+                    head = client.head_object(Bucket=bucket, Key=key)
+                    try:
+                        contract = wal_storage.gzip_wal_contract(head, key=key)
+                    except SystemExit as exc:
+                        raise StatusProofError(str(exc)) from exc
+                    if size != contract.stored_size:
+                        raise StatusProofError("compressed WAL listing size mismatch")
+                    size = contract.original_size
                 if (
                     isinstance(size, bool)
                     or not isinstance(size, int)
@@ -552,10 +569,18 @@ def main() -> int:
         else:
             expected_key = f"{wal_prefix}{expected_wal[:8]}/{expected_wal}"
             try:
-                expected_head = client.head_object(
-                    Bucket=config.bucket,
-                    Key=expected_key,
-                )
+                raw_head = wal_storage._head_optional(client, bucket=config.bucket, key=expected_key)
+                gzip_head = wal_storage._head_optional(client, bucket=config.bucket, key=expected_key + ".gz")
+                if raw_head is not None and gzip_head is not None:
+                    raise StatusProofError("conflicting WAL representations")
+                if gzip_head is not None:
+                    expected_key += ".gz"
+                    expected_head = gzip_head
+                elif raw_head is not None:
+                    expected_head = raw_head
+                else:
+                    print(f"pitr_remote_wal_expected status=missing wal={expected_wal} key={expected_key}")
+                    raise StatusProofError("expected WAL object missing")
             except Exception as exc:
                 if not _is_missing_object_error(exc):
                     print(
@@ -571,11 +596,18 @@ def main() -> int:
                     failures += 1
             else:
                 try:
-                    expected_size, expected_digest = _object_head_proof(
-                        expected_head,
-                        label="expected WAL",
-                        expected_size=WAL_SEGMENT_BYTES,
-                    )
+                    if expected_key.endswith(".gz"):
+                        try:
+                            contract = wal_storage.gzip_wal_contract(expected_head, key=expected_key)
+                        except SystemExit as exc:
+                            raise StatusProofError(str(exc)) from exc
+                        if contract.original_size != WAL_SEGMENT_BYTES:
+                            raise StatusProofError("expected WAL size is not canonical")
+                        expected_size, expected_digest = contract.stored_size, contract.stored_sha256
+                    else:
+                        expected_size, expected_digest = _object_head_proof(
+                            expected_head, label="expected WAL", expected_size=WAL_SEGMENT_BYTES,
+                        )
                 except StatusProofError as exc:
                     print(
                         "pitr_remote_wal_expected status=invalid "

@@ -18,6 +18,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from scripts.ha import postgres_pitr_artifact_security as security
+from scripts.ha import postgres_pitr_immutable_upload as storage
 from scripts.ha import postgres_pitr_wal_lineage as lineage
 from scripts.ha import restore_postgres_pitr_from_s3 as restore
 
@@ -51,7 +52,8 @@ class ProofIdentityClient:
         digest = (head.get("Metadata") or {}).get("sha256")
         if not isinstance(digest, str) or not security.SHA256_RE.fullmatch(digest):
             raise ValueError(f"invalid proof SHA256 identity: {key}")
-        identity = (head.get("ContentLength"), head.get("ETag"), head.get("VersionId"), digest)
+        identity = (head.get("ContentLength"), head.get("ETag"), head.get("VersionId"), digest,
+                    tuple(sorted((head.get("Metadata") or {}).items())))
         previous = self.identities.setdefault(key, identity)
         if identity != previous:
             raise ValueError(f"proof identity changed during planning: {key}")
@@ -188,6 +190,9 @@ def wal_header_identity(
 
 def read_wal_header(client: Any, config: Any, item: Object) -> bytes:
     check_identity(client, config, item)
+    head = client.head_object(Bucket=config.bucket, Key=item.key)
+    if any(k.startswith("wal-") for k in (head.get("Metadata") or {})):
+        raise ValueError(f"unsupported raw WAL codec metadata: {item.key}")
     response = client.get_object(
         Bucket=config.bucket, Key=item.key, Range="bytes=0-39", IfMatch=item.etag
     )
@@ -234,13 +239,21 @@ def _calculate(
                 raise ValueError(f"noncanonical basebackup key: {item.key}")
             groups.setdefault(suffix[0], []).append(item)
         elif item.key.startswith(wal_prefix):
-            name = item.key.rsplit("/", 1)[-1]
+            storage_name = item.key.rsplit("/", 1)[-1]
+            name, codec = storage.wal_storage_name(storage_name)
             if not lineage.WAL_ARCHIVE_NAME_RE.fullmatch(name):
                 continue
-            if item.key != f"{wal_prefix}{name[:8]}/{name}" or item.size_bytes <= 0:
+            if item.key != f"{wal_prefix}{name[:8]}/{storage_name}" or item.size_bytes <= 0:
                 raise ValueError(f"noncanonical WAL object: {item.key}")
-            wal_objects.append(lineage.WalObject(item.key, name, item.size_bytes))
+            if codec == "gzip":
+                check_identity(client, config, item)
+                contract = storage.gzip_wal_contract(client.head_object(Bucket=config.bucket, Key=item.key), key=item.key)
+                wal_objects.append(lineage.WalObject(item.key, name, contract.original_size, item.size_bytes, codec))
+            else:
+                wal_objects.append(lineage.WalObject(item.key, name, item.size_bytes))
             reasons[item.key] = "WAL metadata/partial or position not proven obsolete"
+    if len({w.filename for w in wal_objects}) != len(wal_objects):
+        raise ValueError("Conflicting WAL representations / duplicate canonical name")
     if len(groups) > restore.MAX_LISTED_MANIFESTS:
         raise ValueError("too many basebackup groups")
     manifests = []
@@ -342,8 +355,15 @@ def _calculate(
             continue
         if w.size_bytes != segment_size:
             raise ValueError(f"WAL segment has an invalid size: {w.key}")
+        if w.codec == "gzip":
+            header = storage.read_gzip_wal(
+                client, bucket=config.bucket, key=w.key,
+                head=client.head_object(Bucket=config.bucket, Key=w.key),
+            )
+        else:
+            header = read_wal_header(client, config, by_key[w.key])
         wal_header_identity(
-            read_wal_header(client, config, by_key[w.key]),
+            header,
             item=w,
             system_identifier=expected_system_identifier,
             segment_size=segment_size,
@@ -514,7 +534,7 @@ class InventoryClient:
         return dict(
             ContentLength=r["size_bytes"],
             ETag=r["etag"],
-            Metadata={"sha256": r.get("sha256", "")},
+            Metadata={"sha256": r.get("sha256", ""), **r.get("metadata", {})},
             VersionId=r.get("version_id"),
         )
 

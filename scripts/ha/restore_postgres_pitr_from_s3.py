@@ -113,6 +113,14 @@ recovery_config = _load_support_module(
     label="recovery config",
 )
 BasebackupManifest = artifact_security.BasebackupManifest
+wal_storage = _load_support_module(
+    env_name="POSTGRES_PITR_IMMUTABLE_UPLOAD_HELPER",
+    module_name="mvn_postgres_pitr_wal_storage",
+    repository_name="postgres_pitr_immutable_upload",
+    label="immutable WAL storage",
+)
+
+
 WalObject = wal_lineage.WalObject
 WalSelection = wal_lineage.WalSelection
 WAL_RESTORABLE_RE = wal_lineage.WAL_RESTORABLE_RE
@@ -166,6 +174,7 @@ def _list_wal_objects(client: Any, config: Any) -> list[WalObject]:
         client,
         bucket=config.bucket,
         prefix=_wal_prefix(config),
+        storage_helpers=wal_storage,
         max_objects=MAX_LISTED_WAL_OBJECTS,
     )
 
@@ -522,20 +531,7 @@ def command_prepare(args: argparse.Namespace) -> int:
         wal_dir = target_dir / "wal"
         wal_dir.mkdir(parents=True)
         for item in wal_objects:
-            expected_sha256 = artifact_security.object_sha256(
-                client,
-                bucket=config.bucket,
-                key=item.key,
-                expected_size=item.size_bytes,
-            )
-            artifact_security.download_verified_object(
-                client,
-                bucket=config.bucket,
-                key=item.key,
-                destination=wal_dir / item.filename,
-                expected_size=item.size_bytes,
-                expected_sha256=expected_sha256,
-            )
+            _download_wal(client, config, item, wal_dir / item.filename)
             downloaded_wal += 1
 
     (target_dir / "manifest.json").write_text(
@@ -592,6 +588,33 @@ def command_prepare(args: argparse.Namespace) -> int:
     return 0
 
 
+def _download_wal(client, config, item: WalObject, destination: Path) -> None:
+    if item.codec not in {"raw", "gzip"}:
+        raise SystemExit(f"Unsupported WAL codec: {item.codec}")
+    if item.codec == "gzip":
+        head = client.head_object(Bucket=config.bucket, Key=item.key)
+        contract = wal_storage.gzip_wal_contract(head, key=item.key)
+        if (contract.original_size != item.size_bytes or contract.stored_size != item.stored_size_bytes
+            or (item.storage_identity is not None and wal_storage.wal_head_identity(head) != item.storage_identity)):
+            raise SystemExit(f"Compressed WAL identity changed since listing: {item.key}")
+        wal_storage.download_gzip_wal(client, bucket=config.bucket, key=item.key, head=head, destination=destination)
+    else:
+        head = client.head_object(Bucket=config.bucket, Key=item.key)
+        if any(k.startswith("wal-") for k in (head.get("Metadata") or {})):
+            raise SystemExit(f"Unsupported raw WAL codec metadata: {item.key}")
+        maximum = (wal_storage.MAX_WAL_BYTES if WAL_SEGMENT_RE.fullmatch(item.filename)
+                   else wal_lineage.MAX_TIMELINE_HISTORY_BYTES)
+        if not 0 < item.size_bytes <= maximum:
+            raise SystemExit(f"WAL object exceeds permitted size: {item.key}")
+        expected_sha256 = artifact_security.object_sha256(
+            client, bucket=config.bucket, key=item.key, expected_size=item.size_bytes,
+        )
+        artifact_security.download_verified_object(
+            client, bucket=config.bucket, key=item.key, destination=destination,
+            expected_size=item.size_bytes, expected_sha256=expected_sha256,
+        )
+
+
 def command_fetch_wal(args: argparse.Namespace) -> int:
     wal_name = str(args.wal_name or "").strip()
     if not WAL_RESTORABLE_RE.fullmatch(wal_name):
@@ -600,25 +623,23 @@ def command_fetch_wal(args: argparse.Namespace) -> int:
     config = load_config()
     client = build_client(config)
     key = _wal_key(config, wal_name)
-    head = client.head_object(Bucket=config.bucket, Key=key)
-    try:
-        expected_size = int(head["ContentLength"])
-    except (KeyError, TypeError, ValueError) as exc:
-        raise SystemExit(f"PITR WAL metadata is incomplete: {wal_name}") from exc
-    expected_sha256 = artifact_security.object_sha256(
-        client,
-        bucket=config.bucket,
-        key=key,
-        expected_size=expected_size,
-    )
-    artifact_security.download_verified_object(
-        client,
-        bucket=config.bucket,
-        key=key,
-        destination=destination,
-        expected_size=expected_size,
-        expected_sha256=expected_sha256,
-    )
+    raw = wal_storage._head_optional(client, bucket=config.bucket, key=key)
+    compressed = (wal_storage._head_optional(client, bucket=config.bucket, key=key + ".gz")
+                  if WAL_SEGMENT_RE.fullmatch(wal_name) else None)
+    if raw is not None and compressed is not None:
+        raise SystemExit(f"Conflicting WAL representations: {wal_name}")
+    if compressed is not None:
+        key += ".gz"
+        contract = wal_storage.gzip_wal_contract(compressed, key=key)
+        item = WalObject(
+            key, wal_name, contract.original_size, contract.stored_size, "gzip",
+            wal_storage.wal_head_identity(compressed),
+        )
+    elif raw is not None:
+        item = WalObject(key, wal_name, int(raw["ContentLength"]))
+    else:
+        raise SystemExit(f"Missing PITR WAL object: {wal_name}")
+    _download_wal(client, config, item, destination)
     print(json.dumps({"status": "fetched", "wal_name": wal_name, "key": key}, sort_keys=True))
     return 0
 

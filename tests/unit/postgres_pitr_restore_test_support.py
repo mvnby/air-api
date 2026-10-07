@@ -91,6 +91,10 @@ class FakeClient:
 
     def head_object(self, *, Bucket, Key):
         assert Bucket == FakeConfig.bucket
+        if Key not in self.objects:
+            class MissingObject(Exception):
+                response = {"Error": {"Code": "NoSuchKey"}}
+            raise MissingObject()
         return {
             "ContentLength": len(self.objects[Key]),
             "Metadata": self.metadata.get(Key, {}),
