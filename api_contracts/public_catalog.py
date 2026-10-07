@@ -6,10 +6,15 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_serializer
 
-from schemas import ProductKind, PublicProductWarrantyResponse, PublicStockState
+from schemas import (
+    ProductKind,
+    PublicProductIdentityResponse,
+    PublicProductWarrantyResponse,
+    PublicStockState,
+)
 
 
-class PublicProductSearchItemResponse(BaseModel):
+class PublicProductSearchItemResponse(PublicProductIdentityResponse):
     """Small public projection; internal sourcing and margin data is excluded."""
 
     model_config = ConfigDict(extra="forbid")

@@ -44,6 +44,16 @@ def canonical_indoor_type_slug(value: Any) -> str | None:
     return None
 
 
+def canonical_capacity_class(value: Any) -> str | None:
+    """Normalize an explicitly supplied nominal class, never a measured capacity."""
+    if isinstance(value, bool) or not isinstance(value, (str, int)):
+        return None
+    text = str(value).strip()
+    if not re.fullmatch(r"[0-9]{1,2}", text) or int(text) == 0:
+        return None
+    return text.zfill(2)
+
+
 def normalize_numeric_range_separators(value: Any) -> str:
     """Keep a signed bound signed, but treat a dash after a digit as a range separator."""
     text = str(value).replace("−", "-").replace("–", "-").replace("—", "-").replace("\xa0", " ")
@@ -136,7 +146,12 @@ SPEC_DEFINITIONS: Mapping[str, SpecDefinition] = {
     ),
     "brand": _spec("brand", "Бренд", SpecValueType.TEXT),
     "series": _spec("series", "Серия", SpecValueType.TEXT),
-    "model": _spec("model", "Модель", SpecValueType.TEXT),
+    "model": _spec("model", "Модель", SpecValueType.TEXT, aliases=("model_code",)),
+    "capacity_class": _spec(
+        "capacity_class", "Номинальный класс мощности", SpecValueType.TEXT,
+        aliases=("Класс мощности",),
+        description="Подтверждённый номинальный класс из структурированных данных источника. Не вычисляется из кВт или названия модели.",
+    ),
     "model_indoor": _spec("model_indoor", "Модель внутреннего блока", SpecValueType.TEXT),
     "model_outdoor": _spec("model_outdoor", "Модель наружного блока", SpecValueType.TEXT),
     "sku": _spec("sku", "Артикул", SpecValueType.TEXT),

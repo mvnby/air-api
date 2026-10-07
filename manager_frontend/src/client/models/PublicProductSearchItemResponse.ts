@@ -7,6 +7,14 @@ import type { PublicProductWarrantyResponse } from './PublicProductWarrantyRespo
  * Small public projection; internal sourcing and margin data is excluded.
  */
 export type PublicProductSearchItemResponse = {
+    /**
+     * Exact manufacturer designation from canonical model specs; null when unconfirmed.
+     */
+    model_code?: (string | null);
+    /**
+     * Confirmed nominal capacity class (e.g. 07, 09, 12); never inferred from title or kW. Null when unknown or inapplicable.
+     */
+    capacity_class?: (string | null);
     id: number;
     title: string;
     slug?: (string | null);
