@@ -190,3 +190,60 @@ def test_manual_capacity_uses_attested_shell_and_ignores_inherited_environment(m
     assert args[-2:] == ["/usr/local/sbin/mvn-postgres-pitr-restore-drill", "768"]
     assert kwargs["check"] is True and kwargs["timeout"] == 10
     assert set(kwargs["env"]) == {"PATH"}
+
+
+def test_physical_proof_removes_only_owned_containers_before_fixture(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from scripts.ci import prove_pitr_recovery_capacity as proof
+
+    events = []
+    outputs = iter(["owned-source\nowned-recovery\nforeign-test\n", "foreign-test\n"])
+
+    def run(args, **kwargs):
+        if args[1] == "container":
+            events.append("list")
+            return SimpleNamespace(stdout=next(outputs), returncode=0)
+        events.append(args[-1])
+        return SimpleNamespace(returncode=0, stderr="")
+
+    monkeypatch.setattr(proof, "run", run)
+    monkeypatch.setattr(proof.shutil, "rmtree", lambda root: events.append(("delete", root)))
+    proof.cleanup_owned_runtime(["owned-source", "owned-recovery", "owned-verify"], tmp_path)
+    assert events == ["list", "owned-source", "owned-recovery", "list", ("delete", tmp_path)]
+
+
+@pytest.mark.parametrize("mode", ["daemon-failure", "remaining-container", "remove-failure"])
+def test_physical_cleanup_failure_keeps_mounted_fixture_and_fails(monkeypatch, tmp_path, mode):
+    from types import SimpleNamespace
+    from scripts.ci import prove_pitr_recovery_capacity as proof
+
+    deleted = []
+    lists = iter(["owned\n", "owned\n" if mode == "remaining-container" else ""])
+
+    def run(args, **kwargs):
+        if args[1] == "container":
+            if mode == "daemon-failure":
+                raise subprocess.CalledProcessError(1, args, stderr="daemon unavailable")
+            return SimpleNamespace(stdout=next(lists), returncode=0)
+        return SimpleNamespace(returncode=1 if mode == "remove-failure" else 0, stderr="failed")
+
+    monkeypatch.setattr(proof, "run", run)
+    monkeypatch.setattr(proof.shutil, "rmtree", deleted.append)
+    with pytest.raises((RuntimeError, subprocess.CalledProcessError)):
+        proof.cleanup_owned_runtime(["owned"], tmp_path)
+    assert deleted == []
+
+
+def test_physical_cleanup_failure_revokes_pass_artifact_and_fails_step(monkeypatch, tmp_path):
+    from scripts.ci import prove_pitr_recovery_capacity as proof
+
+    def reject(*args):
+        raise RuntimeError("daemon unavailable")
+
+    monkeypatch.setattr(proof, "cleanup_owned_runtime", reject)
+    evidence = tmp_path / "evidence.json"
+    with pytest.raises(RuntimeError, match="daemon unavailable"):
+        proof.finish_proof({"status": "PASS", "physical_recovery_executed": True}, [], tmp_path, evidence)
+    result = json.loads(evidence.read_text())
+    assert result["status"] == "FAILED" and result["test_runtime_cleaned"] is False
+    assert result["cleanup_error"] == "daemon unavailable"
