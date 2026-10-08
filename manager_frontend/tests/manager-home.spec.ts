@@ -16,6 +16,8 @@ vi.mock('../src/api', () => ({
 }));
 
 import ManagerHome from '../src/views/ManagerHome.vue';
+import BynSymbol from '../src/components/money/BynSymbol.vue';
+import MoneyAmount from '../src/components/money/MoneyAmount.vue';
 
 const operationalStats = {
   total_amount: 0,
@@ -53,6 +55,31 @@ describe('ManagerHome operational resilience', () => {
     expect(wrapper.text()).toContain('ООО Тест');
     expect(wrapper.text()).toContain('Клиент Тест · Д-15');
     expect(wrapper.text()).toContain('Заказ #77');
+  });
+
+  it.each([0, -12.55, 12.5, 123456789.4])('renders receipt amount %s with the BYN symbol and existing precision', async (amount) => {
+    mocks.stats.mockResolvedValue({ ...operationalStats, bank_receipts_review: [{ ...operationalStats.bank_receipts_review[0], amount }] });
+    const wrapper = mount(ManagerHome);
+    await flushPromises();
+    const money = wrapper.findComponent(MoneyAmount);
+    expect(money.exists()).toBe(true);
+    expect(money.findComponent(BynSymbol).exists()).toBe(true);
+    expect(money.text().replace(/\s+/g, ' ')).toBe(
+      new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'BYN', maximumFractionDigits: 0 })
+        .format(amount).replace(/\s+/g, ' '),
+    );
+    expect(wrapper.text()).toContain('ООО Тест');
+    await wrapper.findAll('button').find(button => button.text() === 'Заказ #77')!.trigger('click');
+    expect(window.location.pathname + window.location.search).toBe('/manager/orders/kanban?orderId=77');
+    expect(mocks.stats).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a missing receipt amount distinct from a zero payment', async () => {
+    mocks.stats.mockResolvedValue({ ...operationalStats, bank_receipts_review: [{ ...operationalStats.bank_receipts_review[0], amount: null }] });
+    const wrapper = mount(ManagerHome);
+    await flushPromises();
+    expect(wrapper.findComponent(MoneyAmount).text()).toBe('—');
+    expect(wrapper.findComponent(BynSymbol).exists()).toBe(false);
   });
 
   it('does not claim there are no urgent actions when lead counter loading fails', async () => {

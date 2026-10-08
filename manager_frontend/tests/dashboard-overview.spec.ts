@@ -5,6 +5,8 @@ import DashboardFunnel from '../src/components/dashboard/DashboardFunnel.vue';
 import DashboardKpiCard from '../src/components/dashboard/DashboardKpiCard.vue';
 import DashboardSalesChart from '../src/components/dashboard/DashboardSalesChart.vue';
 import DashboardSearchDemand from '../src/components/dashboard/DashboardSearchDemand.vue';
+import BynSymbol from '../src/components/money/BynSymbol.vue';
+import MoneyAmount from '../src/components/money/MoneyAmount.vue';
 import {
   formatDashboardComparisonPeriod,
   formatDurationSeconds,
@@ -43,6 +45,39 @@ describe('dashboard overview presentation rules', () => {
     expect(wrapper.text()).not.toContain('Долг');
   });
 
+  it.each(['revenue', 'receivables'] as const)('renders the official BYN symbol for %s, including zero', (metric) => {
+    const wrapper = mount(DashboardKpiCard, {
+      props: { metric, kpi: kpi({ current: 0, unit: 'byn' }) },
+    });
+    expect(wrapper.findComponent(BynSymbol).exists()).toBe(true);
+    expect(wrapper.get('.kitlane-kpi-value').text().replace(/\s+/g, ' ')).toBe('0 BYN');
+  });
+
+  it.each([-0.25, -12.55, 12.55, 123456789.4])('preserves whole-ruble KPI formatting for %s', (current) => {
+    const wrapper = mount(DashboardKpiCard, {
+      props: { metric: 'revenue', kpi: kpi({ current }) },
+    });
+    expect(wrapper.findComponent(BynSymbol).exists()).toBe(true);
+    expect(wrapper.get('.kitlane-kpi-value').text().replace(/\s+/g, ' ')).toBe(
+      new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'BYN', maximumFractionDigits: 0 })
+        .format(current).replace(/\s+/g, ' '),
+    );
+  });
+
+  it.each([null, undefined, Number.NaN, Number.POSITIVE_INFINITY])('keeps an unknown monetary KPI missing (%s)', (current) => {
+    const wrapper = mount(DashboardKpiCard, {
+      props: { metric: 'revenue', kpi: kpi({ current }) },
+    });
+    expect(wrapper.get('.kitlane-kpi-value').text()).toBe('—');
+    expect(wrapper.findComponent(BynSymbol).exists()).toBe(false);
+  });
+
+  it('keeps count KPIs free of currency symbols', () => {
+    const wrapper = mount(DashboardKpiCard, { props: { metric: 'sales', kpi: kpi({ current: 12.5 }) } });
+    expect(wrapper.get('.kitlane-kpi-value').text()).toBe('12,5');
+    expect(wrapper.findComponent(MoneyAmount).exists()).toBe(false);
+  });
+
   it('calls monthly stage events deal movement and never shows a cohort conversion', () => {
     const wrapper = mount(DashboardFunnel, {
       props: { stages: [
@@ -66,6 +101,9 @@ describe('dashboard overview presentation rules', () => {
     await chart.trigger('keydown', { key: 'ArrowRight' });
     expect(wrapper.text()).toContain('2 сент.');
     expect(wrapper.text()).toContain('200');
+    expect(wrapper.findComponent(BynSymbol).exists()).toBe(true);
+    expect(wrapper.findComponent(MoneyAmount).text().replace(/\s+/g, ' ')).toBe('200 BYN');
+    expect(wrapper.findAll('circle title')[1]!.text().replace(/\s+/g, ' ')).toBe('2 сент.: 200 BYN, 2 продаж');
   });
 
   it('filters, expands, and sorts search requests without losing mobile cards', async () => {
