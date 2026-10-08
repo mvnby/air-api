@@ -141,3 +141,28 @@ OpenAPI и типизированный клиент обновляются вм
 исходник. Район не превращается в улицу, пожелание даты не создаёт выезд.
 Контракт, версия и происхождение описаны в
 [Manager и напоминания](chatgpt-connector.md#manager-и-напоминания).
+
+### Приёмка быстрого входящего (#1084)
+
+Приёмка ограничена исходными восемью критериями. Выбор существующего клиента
+происходит при квалификации; голосовая клавиатура и вставка используют обычное
+текстовое поле Manager. Реальный ChatGPT/Android/Live/фото-пилот относится к
+[#1087](https://github.com/mvnby/air-api/issues/1087), обработка Drive — к
+[#1086](https://github.com/mvnby/air-api/issues/1086).
+
+| Исходный критерий | Реализация и проверяемое доказательство |
+| --- | --- |
+| Телефон, район и обслуживание сохраняются одним действием | [Быстрый ввод](../manager_frontend/src/components/leads/QuickIncomingCapture.vue), [проверки capture/preview](../tests/integration/test_incoming_preview_flow.py) и [Manager capture](../manager_frontend/tests/quick-incoming-capture.spec.ts). Реквизиты, имя и точный адрес при сохранении необязательны. |
+| Нет адреса — понятное следующее действие, район не становится улицей | [Связанное уточнение и квалификация](../tests/integration/test_incoming_clarification.py): явное поручение сохраняется атомарно, иначе действие предлагается в карточке; район остаётся отдельным значением. |
+| Без телефона или доступного разбора исходник сохраняется | [Intake-команда](../services/incoming_command_service.py), [проверки исходника/состояния](../tests/integration/test_incoming_commands.py) и [ошибки preview](../tests/integration/test_incoming_preview_flow.py). |
+| Сохранность после 24 часов и закрытия сессии | [Persistence regression](../tests/integration/test_incoming_persistence.py): строки старше 24 часов читаются через новый engine и физическое подключение после закрытия прежних session/pool; исходник, clock/timezone, пожелание и linked task сохранены и доступны в списках. |
+| Пожелание, выезд и предварительный звонок различаются | [Разбор пожеланий](../tests/unit/test_incoming_requested_date.py) и [qualification](../tests/integration/test_incoming_clarification.py) проверяют source timezone, границу суток и отсутствие брони/срока TODO. Явное планирование использует [существующие команды этапов](../services/order_work_stage_command_service.py), [проверки этапов](../tests/unit/test_order_service_manager.py) и [Manager planning](../manager_frontend/tests/order-planning-panel.spec.ts). |
+| Retry/source event не дублируют заявку или TODO, правки сохраняются | [Intake replay/версии/concurrency](../tests/integration/test_incoming_commands.py), [clarification replay](../tests/integration/test_incoming_clarification.py) и [изменённый payload в Manager](../manager_frontend/tests/quick-incoming-capture.spec.ts). |
+| Квалификация создаёт один заказ с выбранным сценарием и исходной связью | [Qualification context](../tests/integration/test_incoming_clarification.py) и [scenario correction flow](../tests/integration/test_incoming_preview_flow.py). [Выбор клиента](../manager_frontend/tests/lead-qualify-customer-choice.spec.ts) явный; [Manager leads API](../tests/integration/test_manager_leads_api.py) проверяет нормализованные неоднозначные контакты и выбранный адрес/филиал. |
+| Доступ, версии, ошибки и Manager contract проверяются сервером | [Incoming contract checks](../tests/integration/test_incoming_commands.py), [scope/version qualification](../tests/integration/test_incoming_clarification.py), синхронные OpenAPI/client в выпусках [#1101](https://github.com/mvnby/air-api/pull/1101), [#1105](https://github.com/mvnby/air-api/pull/1105), [#1106](https://github.com/mvnby/air-api/pull/1106). |
+
+Persistence regression моделирует пересоздание подключения приложения к
+PostgreSQL. Приёмочный PR должен выполнить его на отдельной физической тестовой
+базе; наличие теста и успешная коллекция сами по себе не подтверждают результат.
+Закрытие #1084 требует успешного обязательного CI для принятой ревизии и
+проверенного штатного выпуска. Новое поведение в приёмочный срез не входит.
