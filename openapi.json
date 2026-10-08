@@ -16362,6 +16362,112 @@
         }
       }
     },
+    "/api/manager/document-system/orders/{order_id}/documents/readiness": {
+      "post": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Check Managed Document Readiness",
+        "description": "Read the selected native version and scoped order facts without creating a draft\nor reserving a number. Reports only applicable placeholders surviving the frozen\nparty conditions. Creating a draft and issuing it repeat server-side checks;\nthis response is advisory and does not authorize issuance. Returns 404 for\nscoped dependencies, 409 for incompatible context, 400 for invalid facts and\n503 for unavailable private template bytes. Manager membership is required.",
+        "operationId": "check_manager_managed_document_readiness",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagedDocumentDraftPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedDocumentReadinessResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/document-system/documents/{document_id}/readiness": {
+      "get": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Get Managed Document Readiness",
+        "description": "Check a scoped draft's persisted facts against its frozen native template.\n\nReads source bytes without refreshing the snapshot or calling an edit provider.\nIssued documents are not rechecked. Missing/inaccessible documents return 404,\nincompatible context 409, unavailable source 503 and invalid snapshot 400.\nManager membership is required. The issuance service repeats this check.",
+        "operationId": "get_manager_managed_document_readiness",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentCustomerReadiness"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/orders/scenarios": {
       "get": {
         "tags": [
@@ -42375,6 +42481,54 @@
         "type": "object",
         "title": "DeepseekConnectionUpdate"
       },
+      "DocumentCustomerMissingField": {
+        "properties": {
+          "field": {
+            "type": "string",
+            "title": "Field"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "critical": {
+            "type": "boolean",
+            "title": "Critical"
+          }
+        },
+        "type": "object",
+        "required": [
+          "field",
+          "label",
+          "critical"
+        ],
+        "title": "DocumentCustomerMissingField"
+      },
+      "DocumentCustomerReadiness": {
+        "properties": {
+          "checked": {
+            "type": "boolean",
+            "title": "Checked"
+          },
+          "missing_fields": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentCustomerMissingField"
+            },
+            "type": "array",
+            "title": "Missing Fields"
+          },
+          "can_issue": {
+            "type": "boolean",
+            "title": "Can Issue"
+          }
+        },
+        "type": "object",
+        "required": [
+          "checked",
+          "can_issue"
+        ],
+        "title": "DocumentCustomerReadiness"
+      },
       "DocumentDriveAuthorizationUrlResponse": {
         "properties": {
           "url": {
@@ -51090,6 +51244,12 @@
       },
       "ManagedDocumentDraftPayload": {
         "properties": {
+          "allow_incomplete_customer": {
+            "type": "boolean",
+            "title": "Allow Incomplete Customer",
+            "description": "\u042f\u0432\u043d\u043e\u0435 \u0441\u043e\u0437\u0434\u0430\u043d\u0438\u0435 \u0447\u0435\u0440\u043d\u043e\u0432\u0438\u043a\u0430 \u0441 \u043d\u0435\u0437\u0430\u043f\u043e\u043b\u043d\u0435\u043d\u043d\u044b\u043c\u0438 \u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u044b\u043c\u0438 \u043f\u043e\u043b\u044f\u043c\u0438 \u043a\u043b\u0438\u0435\u043d\u0442\u0430",
+            "default": false
+          },
           "document_role_type": {
             "anyOf": [
               {
@@ -51318,6 +51478,16 @@
       },
       "ManagedDocumentItem": {
         "properties": {
+          "customer_readiness": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocumentCustomerReadiness"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "maintenance_source_order_id": {
             "anyOf": [
               {
@@ -51653,6 +51823,41 @@
           "items"
         ],
         "title": "ManagedDocumentListResponse"
+      },
+      "ManagedDocumentReadinessResponse": {
+        "properties": {
+          "checked": {
+            "type": "boolean",
+            "title": "Checked"
+          },
+          "missing_fields": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentCustomerMissingField"
+            },
+            "type": "array",
+            "title": "Missing Fields"
+          },
+          "can_issue": {
+            "type": "boolean",
+            "title": "Can Issue"
+          },
+          "template_id": {
+            "type": "integer",
+            "title": "Template Id"
+          },
+          "template_version_id": {
+            "type": "integer",
+            "title": "Template Version Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "checked",
+          "can_issue",
+          "template_id",
+          "template_version_id"
+        ],
+        "title": "ManagedDocumentReadinessResponse"
       },
       "ManagedDocumentVoidPayload": {
         "properties": {

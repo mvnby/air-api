@@ -67,6 +67,56 @@ class NativeDocxRenderer:
             discovered.update(parsed)
         return dict(discovered)
 
+    def discover_active_placeholders(
+        self, source: bytes, conditions: Mapping[str, bool]
+    ) -> frozenset[str]:
+        """Discover fields in the surviving body/table/header/footer branches."""
+        try:
+            document = Document(BytesIO(flatten_legacy_form_fields(source)))
+        except Exception as exc:
+            raise ValueError("Исходный DOCX шаблона повреждён или не читается") from exc
+        if not isinstance(conditions, Mapping) or any(
+            not isinstance(value, bool) for value in conditions.values()
+        ):
+            raise ValueError("Условные флаги снимка должны быть boolean")
+        processor = DocxConditionProcessor()
+        issues, _ = processor.validate(document, frozenset(conditions))
+        if issues:
+            raise ValueError("; ".join(issue.message for issue in issues))
+        processor.render(document, conditions)
+        fields: set[str] = set()
+        for paragraph in self._iter_active_story_paragraphs(document):
+            parsed, _ = self._parse_placeholders(self._paragraph_text(paragraph))
+            fields.update(parsed)
+        return frozenset(fields)
+
+    def _iter_active_story_paragraphs(self, document):
+        # Readiness only: disabled first/even stories are not document requirements.
+        # Choose active containers before deduplication so inherited stories used by
+        # a later section are included even if disabled in the preceding section.
+        containers = [document]
+        for section in document.sections:
+            containers.extend((section.header, section.footer))
+            if section.different_first_page_header_footer:
+                containers.extend(
+                    (section.first_page_header, section.first_page_footer)
+                )
+            if document.settings.odd_and_even_pages_header_footer:
+                containers.extend((section.even_page_header, section.even_page_footer))
+        seen: set[object] = set()
+        for container in containers:
+            for paragraph in container.paragraphs:
+                if paragraph._p not in seen:
+                    seen.add(paragraph._p)
+                    yield paragraph
+            for table in container.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        for paragraph, _location, _row in self._iter_cell_paragraphs(
+                            cell, "readiness", row._tr, seen
+                        ):
+                            yield paragraph
+
     def discover_conditions(self, source: bytes) -> frozenset[str]:
         """Return safe condition identifiers found in conditional markers."""
         try:

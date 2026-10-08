@@ -11,9 +11,12 @@ from models.tenancy import TenantScope
 from modules.documents.domain import DocumentStatus
 from modules.documents.infrastructure.artifact_storage import DocumentArtifactStorage
 from modules.documents.infrastructure.renderers import NativeDocxRenderer, PdfConverter
-from modules.documents.infrastructure.template_source_storage import TemplateSourceStorage
+from modules.documents.infrastructure.template_source_storage import (
+    TemplateSourceStorage,
+)
 
 from .artifact_helpers import build_render_inputs, stored_artifact
+from .customer_readiness import source_customer_readiness, mark_incomplete_docx
 from .editable_draft import (
     DEFERRED_OFFICIAL_FIELDS,
     finalize_editable_draft,
@@ -54,8 +57,18 @@ class ManagedDocumentDraftPreviewService:
             tenant_scope=tenant_scope,
             document=document,
         )
+        readiness = await source_customer_readiness(
+            document.render_snapshot,
+            template=template,
+            version=version,
+            template_storage=template_storage,
+            document_type=document.doc_type,
+        )
         schema = version.placeholder_schema or {}
-        deferred = frozenset(str(item) for item in schema.get("fields", [])) & DEFERRED_OFFICIAL_FIELDS
+        deferred = (
+            frozenset(str(item) for item in schema.get("fields", []))
+            & DEFERRED_OFFICIAL_FIELDS
+        )
         displayed_values = preview_values(deferred)
         artifacts = await ManagedDocumentService.list_artifacts(
             session,
@@ -90,9 +103,12 @@ class ManagedDocumentDraftPreviewService:
                 source=source,
                 snapshot=snapshot,
             )
-            rendered_docx = NativeDocxRenderer().render(
-                render_template, render_context
-            ).content
+            rendered_docx = (
+                NativeDocxRenderer().render(render_template, render_context).content
+            )
+        rendered_docx = await asyncio.to_thread(
+            mark_incomplete_docx, rendered_docx, readiness
+        )
         filename = f"draft-{document.internal_reference or document.id}.docx"
         pdf = await asyncio.to_thread(
             pdf_converter.convert_docx,

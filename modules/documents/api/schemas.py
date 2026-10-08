@@ -15,7 +15,11 @@ from .business_schemas import ActTermsPayload, BusinessDocumentTermsPayload
 
 
 DocumentPartyRoleType = Literal[
-    "seller_buyer", "executor_customer", "contractor_customer", "seller_payer", "executor_payer",
+    "seller_buyer",
+    "executor_customer",
+    "contractor_customer",
+    "seller_payer",
+    "executor_payer",
 ]
 
 
@@ -284,6 +288,10 @@ class NativePlaceholderCatalogResponse(BaseModel):
 
 
 class ManagedDocumentDraftPayload(BaseModel):
+    allow_incomplete_customer: bool = Field(
+        default=False,
+        description="Явное создание черновика с незаполненными обязательными полями клиента",
+    )
     document_role_type: DocumentPartyRoleType | None = None
 
     model_config = ConfigDict(extra="forbid")
@@ -431,7 +439,25 @@ class ManagedDocumentArtifactAccessResponse(BaseModel):
     expires_in: int
 
 
+class DocumentCustomerMissingField(BaseModel):
+    field: str
+    label: str
+    critical: bool
+
+
+class DocumentCustomerReadiness(BaseModel):
+    checked: bool
+    missing_fields: list[DocumentCustomerMissingField] = Field(default_factory=list)
+    can_issue: bool
+
+
+class ManagedDocumentReadinessResponse(DocumentCustomerReadiness):
+    template_id: int
+    template_version_id: int
+
+
 class ManagedDocumentItem(BaseModel):
+    customer_readiness: DocumentCustomerReadiness | None = None
     maintenance_source_order_id: int | None = None
     document_role_type: DocumentPartyRoleType | None = None
     id: int

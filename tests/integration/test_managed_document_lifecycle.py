@@ -187,11 +187,19 @@ async def _seed(db, tmp_path):
         template_id=template.id,
         version_id=version.id,
     )
+    db.info["test_template_storage"] = template_storage
     return scope, order, issuer, template_storage, artifact_storage
 
 
 async def _draft(
-    db, *, scope, order, issuer, issue_date=date(2026, 8, 26), replaces=None
+    db,
+    *,
+    scope,
+    order,
+    issuer,
+    issue_date=date(2026, 8, 26),
+    replaces=None,
+    allow_incomplete=False,
 ):
     return await ManagedDocumentService.create_draft(
         db,
@@ -209,6 +217,8 @@ async def _draft(
             ),
         ),
         replaces_document_id=replaces,
+        allow_incomplete_customer=allow_incomplete,
+        template_storage=db.info["test_template_storage"],
     )
 
 
@@ -428,7 +438,10 @@ async def test_default_issuer_bootstraps_legacy_contract_sequence_without_crossi
         pdf_converter=FakePdfConverter(),
     )
     assert result.document.official_number == "056"
-    assert result.document.render_snapshot["values"]["document.official_full_number"] == "Д-2026-056"
+    assert (
+        result.document.render_snapshot["values"]["document.official_full_number"]
+        == "Д-2026-056"
+    )
 
     repeated = await ManagedDocumentService.issue(
         db,
@@ -467,7 +480,9 @@ async def test_default_issuer_bootstraps_legacy_contract_sequence_without_crossi
 
 
 @pytest.mark.asyncio
-async def test_non_default_issuer_does_not_claim_unattributed_legacy_sequence(db, tmp_path):
+async def test_non_default_issuer_does_not_claim_unattributed_legacy_sequence(
+    db, tmp_path
+):
     scope, order, issuer, template_storage, artifact_storage = await _seed(db, tmp_path)
     db.add(
         OrderDocument(
@@ -530,7 +545,10 @@ async def test_non_default_issuer_does_not_claim_unattributed_legacy_sequence(db
         pdf_converter=FakePdfConverter(),
     )
     assert result.document.official_number == "001"
-    assert result.document.render_snapshot["values"]["document.official_full_number"] == "Д-2026-001"
+    assert (
+        result.document.render_snapshot["values"]["document.official_full_number"]
+        == "Д-2026-001"
+    )
 
 
 @pytest.mark.asyncio
@@ -695,3 +713,167 @@ async def test_only_one_active_replacement_can_exist_for_a_document(db, tmp_path
         pdf_converter=FakePdfConverter(),
     )
     assert issued.document.replaces_document_id == original.id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "cached",
+    [None, "malformed", {"checked": True, "can_issue": True, "missing_fields": []}],
+)
+async def test_incomplete_customer_issue_uses_frozen_facts_before_any_reservation_or_artifact(
+    db, tmp_path, cached
+):
+    from copy import deepcopy
+    from modules.documents.application.customer_readiness import (
+        check_saved_document_readiness,
+    )
+
+    scope, order, issuer, templates, artifacts = await _seed(db, tmp_path)
+    customer = await db.get(Customer, order.customer_id)
+    customer.name = ""
+    customer.full_legal_name = ""
+    db.add(customer)
+    await db.commit()
+    with pytest.raises(
+        ManagedDocumentConflictError, match="Полное наименование клиента"
+    ):
+        await _draft(db, scope=scope, order=order, issuer=issuer)
+    assert not (await db.execute(select(OrderDocument))).scalars().all()
+    draft = await _draft(
+        db, scope=scope, order=order, issuer=issuer, allow_incomplete=True
+    )
+    saved = deepcopy(draft.render_snapshot)
+    assert saved["values"]["customer.full_name"] == ""
+    assert saved["meta"]["customer_readiness"]["can_issue"] is False
+    patched = deepcopy(saved)
+    if cached is None:
+        patched["meta"].pop("customer_readiness")
+    else:
+        patched["meta"]["customer_readiness"] = cached
+    draft.render_snapshot = patched
+    customer.name = customer.full_legal_name = "Заполненная карточка"
+    db.add_all([draft, customer])
+    await db.commit()
+    result = await check_saved_document_readiness(
+        db, tenant_scope=scope, document=draft, template_storage=templates
+    )
+    assert result["can_issue"] is False
+    assert draft.render_snapshot["values"]["customer.full_name"] == ""
+
+    class NoPdfCalls:
+        def convert_docx(self, *args, **kwargs):
+            raise AssertionError(
+                "incomplete draft must fail before artifact conversion"
+            )
+
+    with pytest.raises(ManagedDocumentConflictError, match="создайте новый черновик"):
+        await ManagedDocumentService.issue(
+            db,
+            tenant_scope=scope,
+            document_id=draft.id,
+            template_storage=templates,
+            artifact_storage=artifacts,
+            pdf_converter=NoPdfCalls(),
+        )
+    assert not (await db.execute(select(DocumentNumberReservation))).scalars().all()
+    assert not (await db.execute(select(DocumentNumberSequence))).scalars().all()
+    assert not (await db.execute(select(DocumentArtifact))).scalars().all()
+    assert draft.status == "draft" and draft.official_number is None
+    fresh = await _draft(db, scope=scope, order=order, issuer=issuer)
+    assert fresh.render_snapshot["meta"]["customer_readiness"]["can_issue"] is True
+    assert (
+        fresh.render_snapshot["values"]["customer.full_name"] == "Заполненная карточка"
+    )
+
+
+@pytest.mark.asyncio
+async def test_preflight_template_change_is_rechecked_and_saved_draft_keeps_its_version(
+    db, tmp_path
+):
+    from modules.documents.application.customer_readiness import (
+        check_selection_readiness,
+        check_saved_document_readiness,
+    )
+
+    scope, order, issuer, templates, artifacts = await _seed(db, tmp_path)
+    selection = DocumentContextSelection(
+        order_id=order.id,
+        legal_entity_id=issuer.id,
+        document_type="contract",
+        issue_date=date(2026, 8, 26),
+        business_terms=BusinessDocumentTerms(
+            contract_scenario="services",
+            payment_schedule=(
+                PaymentScheduleItem(
+                    share_percent=Decimal("100"), due_event="before_work"
+                ),
+            ),
+        ),
+    )
+    checked = await check_selection_readiness(
+        db,
+        tenant_scope=scope,
+        selection=selection,
+        template_id=None,
+        template_storage=templates,
+    )
+    assert checked["can_issue"] is True
+    complete_draft = await _draft(db, scope=scope, order=order, issuer=issuer)
+    document = Document(BytesIO(_template_docx()))
+    document.add_paragraph("Адрес: {{ customer.legal_address }}")
+    source = BytesIO()
+    document.save(source)
+    version = await NativeTemplateVersionService.upload_native_docx_version(
+        db,
+        tenant_scope=scope,
+        legal_entity_id=issuer.id,
+        template_id=checked["template_id"],
+        filename="new-context.docx",
+        content=source.getvalue(),
+        placeholder_contract=NativeTemplatePlaceholderContract.create(
+            field_catalog={
+                "document.official_full_number",
+                "customer.full_name",
+                "customer.legal_address",
+            },
+            table_blocks=(
+                TableBlockSpec(
+                    name="lines",
+                    row_fields=frozenset(
+                        {"line.number", "line.title", "line.quantity", "line.amount"}
+                    ),
+                ),
+            ),
+        ),
+        storage=templates,
+    )
+    await NativeTemplateVersionService.activate_version(
+        db,
+        tenant_scope=scope,
+        legal_entity_id=issuer.id,
+        template_id=checked["template_id"],
+        version_id=version.id,
+    )
+    with pytest.raises(ManagedDocumentConflictError, match="Юридический адрес клиента"):
+        await _draft(db, scope=scope, order=order, issuer=issuer)
+    incomplete = await _draft(
+        db, scope=scope, order=order, issuer=issuer, allow_incomplete=True
+    )
+    assert incomplete.template_version_id == version.id
+    assert (
+        incomplete.render_snapshot["meta"]["customer_readiness"]["can_issue"] is False
+    )
+    assert complete_draft.template_version_id == checked["template_version_id"]
+    old = await check_saved_document_readiness(
+        db, tenant_scope=scope, document=complete_draft, template_storage=templates
+    )
+    assert old["can_issue"] is True
+    result = await ManagedDocumentService.issue(
+        db,
+        tenant_scope=scope,
+        document_id=complete_draft.id,
+        template_storage=templates,
+        artifact_storage=artifacts,
+        pdf_converter=FakePdfConverter(),
+    )
+    assert result.document.status == "issued"

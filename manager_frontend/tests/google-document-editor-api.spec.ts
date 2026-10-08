@@ -28,6 +28,7 @@ const session: GoogleDocumentEditSession = {
   detail: null,
 };
 const previousBase = OpenAPI.BASE;
+const previousToken = OpenAPI.TOKEN;
 
 beforeEach(() => {
   OpenAPI.BASE = '/backend';
@@ -35,6 +36,7 @@ beforeEach(() => {
 
 afterEach(() => {
   OpenAPI.BASE = previousBase;
+  OpenAPI.TOKEN = previousToken;
   vi.restoreAllMocks();
 });
 
@@ -78,5 +80,46 @@ describe('googleDocumentEditorApi', () => {
 
     expect(result.newTemplateVersionCreated).toBe(false);
     expect(result.session.status).toBe('ready');
+  });
+
+  it('does not post sync when the issue context is cancelled during its nested session read', async () => {
+    let resolveRead!: (response: Response) => void;
+    const fetch = vi.spyOn(globalThis, 'fetch').mockReturnValue(new Promise<Response>((resolve) => { resolveRead = resolve; }));
+    let active = true;
+    const pending = googleDocumentEditorApi.syncSession(target, () => active);
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    active = false;
+    resolveRead(new Response(JSON.stringify(session), { status: 200 }));
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0]?.[1]?.method).toBe('GET');
+  });
+
+  it('checks the continuation again after asynchronous POST token resolution before fetch', async () => {
+    let resolveToken!: (token: string) => void;
+    const tokenBarrier = new Promise<string>((resolve) => { resolveToken = resolve; });
+    const token = vi.fn(async (options) => options.method === 'POST' ? tokenBarrier : 'get-token');
+    OpenAPI.TOKEN = token;
+    const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify(session), { status: 200 }));
+    let active = true;
+    const pending = googleDocumentEditorApi.syncSession(target, () => active);
+    await vi.waitFor(() => expect(token).toHaveBeenCalledTimes(2));
+    active = false;
+    resolveToken('post-token');
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('still posts guarded sync with the observed revision while the action is current', async () => {
+    const fetch = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify(session), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...session, status: 'ready' }), { status: 200 }));
+    const result = await googleDocumentEditorApi.syncSession(target, () => true);
+    expect(result.session.status).toBe('ready');
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch.mock.calls[1]?.[1]).toEqual(expect.objectContaining({
+      method: 'POST',
+      body: expect.stringContaining('"expected_remote_revision":"revision-2"'),
+    }));
   });
 });

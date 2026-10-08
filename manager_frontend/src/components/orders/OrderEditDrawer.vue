@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, onScopeDispose, ref, watch } from 'vue';
 import DealExecutionTab from './DealExecutionTab.vue';
 import OrderAttachmentsPanel from '../service-attachments/OrderAttachmentsPanel.vue';
 import EmailContractReviewLauncher from '../leads/EmailContractReviewLauncher.vue';
@@ -393,12 +393,28 @@ const orderWorkspace = computed(() => buildOrderWorkspaceViewModel({
 }));
 const beforeDocumentGenerate = orderSaving.beforeDocumentGenerate;
 
+let documentRefreshGeneration = 0;
+const documentRefreshTimers = new Set<number>();
+const invalidateDocumentRefresh = () => {
+  documentRefreshGeneration += 1;
+  for (const timer of documentRefreshTimers) window.clearTimeout(timer);
+  documentRefreshTimers.clear();
+};
+watch(() => [props.order?.id, props.modelValue], invalidateDocumentRefresh, { flush: 'sync' });
+onScopeDispose(invalidateDocumentRefresh);
+
 const handleDocumentPanelToast = (payload: { message: string; type?: 'success' | 'error' }) => {
   setToast(payload.message, payload.type || 'success');
-  if (props.order?.id) window.setTimeout(() => {
-    void loadOrderEmails(props.order!.id);
-    void loadManagedDocuments(props.order!.id);
+  const orderId = props.order?.id;
+  if (!orderId || !props.modelValue) return;
+  const generation = documentRefreshGeneration;
+  const timer = window.setTimeout(() => {
+    documentRefreshTimers.delete(timer);
+    if (generation !== documentRefreshGeneration || !props.modelValue || props.order?.id !== orderId) return;
+    void loadOrderEmails(orderId);
+    void loadManagedDocuments(orderId);
   }, 500);
+  documentRefreshTimers.add(timer);
 };
 
 const refreshOrderFromDocumentsPanel = () => {

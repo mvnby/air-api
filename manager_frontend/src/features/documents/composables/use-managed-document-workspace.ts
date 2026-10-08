@@ -1,12 +1,14 @@
-import { computed, ref, watch } from 'vue';
+import { computed, onScopeDispose, ref, watch } from 'vue';
 import { commercialTermsApi, mergeCommercialDocumentDefaults } from '../../../services/commercial-terms-api';
 import type { DocumentRoleType } from '../model/document-types';
 import {
   ManagerDocumentSystemService,
   OpenAPI,
+  type CancelablePromise,
   type DocumentLegalEntityItem,
   type DocumentPdfRuntimeStatus,
   type ManagedDocumentItem,
+  type DocumentCustomerReadiness,
   type NativeDocumentTemplateItem,
   type NativeTemplateVersionItem,
 } from '../../../client';
@@ -43,11 +45,17 @@ import { openNativeDocumentPreview } from '../integrations/native-document-previ
 
 type ManagedWorkspaceInput = {
   orderId: () => number;
+  customerContext?: () => unknown;
   workflowType: () => string | null | undefined;
   proposalId: () => number | null;
   proposalTotalCents: () => number | null;
   notify: (message: string, type?: 'success' | 'error') => void;
   refresh: () => void;
+};
+
+type IssueAction = {
+  isCurrent: () => boolean;
+  canIssue: () => boolean;
 };
 
 type ConsumerDefaultField = 'equipment_brand' | 'equipment_model' | 'goods_warranty_months' | 'goods_warranty_terms';
@@ -61,6 +69,7 @@ const consumerDefaultFields: ConsumerDefaultField[] = [
 
 export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   const documents = ref<ManagedDocumentItem[]>([]);
+  const customerReadiness = ref<DocumentCustomerReadiness | null>(null);
   const legalEntities = ref<DocumentLegalEntityItem[]>([]);
   const templates = ref<NativeDocumentTemplateItem[]>([]);
   const templateVersions = ref<NativeTemplateVersionItem[]>([]);
@@ -87,7 +96,55 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   const templateVersionsLoading = ref(false);
   const voidTarget = ref<ManagedDocumentItem | null>(null);
   const voidReason = ref('');
+  let workspaceActive = true;
+  let workspaceGeneration = 0;
+  const pendingMutations = new Set<{ cancel: () => void; isCurrent: () => boolean }>();
+  const cancelStaleMutations = () => {
+    for (const pending of pendingMutations) if (!pending.isCurrent()) pending.cancel();
+  };
+  const awaitMutation = async <T>(request: CancelablePromise<T>, isCurrent: () => boolean) => {
+    const pending = { cancel: () => request.cancel(), isCurrent };
+    pendingMutations.add(pending);
+    if (!isCurrent()) pending.cancel();
+    try {
+      return await request;
+    } finally {
+      pendingMutations.delete(pending);
+    }
+  };
+  let issueActionGeneration = 0;
   let requestId = 0;
+  watch(() => input.orderId(), () => {
+    workspaceGeneration += 1;
+    issueActionGeneration += 1;
+    cancelStaleMutations();
+    requestId += 1;
+    busy.value = false;
+  }, { flush: 'sync' });
+  onScopeDispose(() => {
+    workspaceActive = false;
+    workspaceGeneration += 1;
+    issueActionGeneration += 1;
+    cancelStaleMutations();
+    requestId += 1;
+  });
+
+  const beginIssueAction = (document: ManagedDocumentItem): IssueAction => {
+    const orderId = input.orderId();
+    const generation = ++issueActionGeneration;
+    cancelStaleMutations();
+    const isCurrent = () => workspaceActive && generation === issueActionGeneration
+      && input.orderId() === orderId;
+    const canIssue = () => {
+      if (!isCurrent() || document.order_id !== orderId) return false;
+      const current = documents.value.find((item) => item.id === document.id);
+      return current?.order_id === orderId && current.status === 'draft'
+        && current.doc_type === document.doc_type
+        && current.document_template_id === document.document_template_id
+        && current.template_version_id === document.template_version_id;
+    };
+    return { isCurrent, canIssue };
+  };
   let templateRequestId = 0;
   let versionRequestId = 0;
   let commercialDefaultsRequestId = 0;
@@ -277,16 +334,19 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     return '';
   });
 
-  const loadDocuments = async () => {
+  const loadDocuments = async (isCurrent = () => true) => {
+    if (!workspaceActive || !isCurrent()) return;
     const orderId = input.orderId();
     const currentRequest = ++requestId;
     try {
       const response = await ManagerDocumentSystemService.listManagerManagedOrderDocuments(orderId);
-      if (currentRequest === requestId && input.orderId() === orderId) {
+      if (workspaceActive && isCurrent() && currentRequest === requestId && input.orderId() === orderId) {
         documents.value = response.items.filter((item) => item.provider === 'native');
       }
     } catch (error) {
-      input.notify(`Не удалось загрузить CRM-документы: ${getApiErrorMessage(error)}`, 'error');
+      if (workspaceActive && isCurrent() && currentRequest === requestId && input.orderId() === orderId) {
+        input.notify(`Не удалось загрузить CRM-документы: ${getApiErrorMessage(error)}`, 'error');
+      }
     }
   };
 
@@ -477,49 +537,74 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   );
   watch(selectedTemplateId, () => void loadTemplateVersions(), { flush: 'sync' });
 
-  const createDraft = async () => {
-    if (draftBlockedReason.value || !selectedLegalEntityId.value) return;
+  const draftPayload = computed(() => ({
+    legal_entity_id: selectedLegalEntityId.value,
+    document_type: documentType.value,
+    issue_date: issueDate.value,
+    issue_city: issueCity.value.trim() || null,
+    template_id: selectedTemplateId.value,
+    proposal_id: input.proposalId() || null,
+    business_role: documentType.value === 'invoice' ? businessRole.value : null,
+    document_role_type: ['contract', 'invoice', 'act', 'offer'].includes(documentType.value) ? documentRoleType.value : null,
+    base_document_id: baseDocumentId.value,
+    base_customer_contract_id: baseCustomerContractId.value,
+    replaces_document_id: replacesDocumentId.value,
+    consumer_terms: isConsumerDocumentType(documentType.value)
+      ? {
+        ...consumerTerms.value,
+        goods_warranty_months: isSupplyInstallationDocumentType(documentType.value)
+          && !consumerDefaultsLoaded.value
+          && !manuallyEditedConsumerDefaultFields.has('goods_warranty_months')
+          ? null
+          : consumerTerms.value.goods_warranty_months,
+        goods_warranty_terms: isSupplyInstallationDocumentType(documentType.value)
+          && !consumerDefaultsLoaded.value
+          && !manuallyEditedConsumerDefaultFields.has('goods_warranty_terms')
+          ? null
+          : consumerTerms.value.goods_warranty_terms,
+        installation_first_stage_amount: consumerTerms.value.installation_two_stages
+          ? normalizeByNAmount(consumerTerms.value.installation_first_stage_amount)
+          : null,
+      }
+      : undefined,
+    business_terms: isBusinessTermsDocumentType(documentType.value)
+      ? serializeBusinessTerms(documentType.value, businessTerms.value)
+      : undefined,
+    act_terms: documentType.value === 'act' ? actTerms.value : undefined,
+    transport_terms: ['tn2', 'ttn1'].includes(documentType.value)
+      ? serializeTransportTerms(transportTerms.value)
+      : undefined,
+  }));
+
+  const customerContextKey = computed(() => JSON.stringify(input.customerContext?.() || null));
+  watch([draftPayload, customerContextKey, () => input.orderId()], () => { customerReadiness.value = null; }, { deep: true, flush: 'sync' });
+
+  const createDraft = async (allowIncomplete = false) => {
+    if (!workspaceActive || draftBlockedReason.value || !selectedLegalEntityId.value) return;
+    const generation = workspaceGeneration;
+    const orderId = input.orderId();
+    const isCurrent = () => workspaceActive && generation === workspaceGeneration && input.orderId() === orderId;
     busy.value = true;
     try {
-      const payload = {
-        legal_entity_id: selectedLegalEntityId.value,
-        document_type: documentType.value,
-        issue_date: issueDate.value,
-        issue_city: issueCity.value.trim() || null,
-        template_id: selectedTemplateId.value,
-        proposal_id: input.proposalId() || null,
-        business_role: documentType.value === 'invoice' ? businessRole.value : null,
-        document_role_type: ['contract', 'invoice', 'act', 'offer'].includes(documentType.value) ? documentRoleType.value : null,
-        base_document_id: baseDocumentId.value,
-        base_customer_contract_id: baseCustomerContractId.value,
-        replaces_document_id: replacesDocumentId.value,
-        consumer_terms: isConsumerDocumentType(documentType.value)
-          ? {
-            ...consumerTerms.value,
-            goods_warranty_months: isSupplyInstallationDocumentType(documentType.value)
-              && !consumerDefaultsLoaded.value
-              && !manuallyEditedConsumerDefaultFields.has('goods_warranty_months')
-              ? null
-              : consumerTerms.value.goods_warranty_months,
-            goods_warranty_terms: isSupplyInstallationDocumentType(documentType.value)
-              && !consumerDefaultsLoaded.value
-              && !manuallyEditedConsumerDefaultFields.has('goods_warranty_terms')
-              ? null
-              : consumerTerms.value.goods_warranty_terms,
-            installation_first_stage_amount: consumerTerms.value.installation_two_stages
-              ? normalizeByNAmount(consumerTerms.value.installation_first_stage_amount)
-              : null,
-          }
-          : undefined,
-        business_terms: isBusinessTermsDocumentType(documentType.value)
-          ? serializeBusinessTerms(documentType.value, businessTerms.value)
-          : undefined,
-        act_terms: documentType.value === 'act' ? actTerms.value : undefined,
-        transport_terms: ['tn2', 'ttn1'].includes(documentType.value)
-          ? serializeTransportTerms(transportTerms.value)
-          : undefined,
-      };
-      await ManagerDocumentSystemService.createManagerManagedDocumentDraft(input.orderId(), payload);
+      const payload = { ...JSON.parse(JSON.stringify(draftPayload.value)) as typeof draftPayload.value,
+        legal_entity_id: selectedLegalEntityId.value };
+      const contextKey = JSON.stringify({ payload, customer: customerContextKey.value });
+      if (['contract', 'invoice'].includes(payload.document_type)) {
+        const readiness = await ManagerDocumentSystemService.checkManagerManagedDocumentReadiness(orderId, payload);
+        if (!isCurrent()) return;
+        if (contextKey !== JSON.stringify({ payload: draftPayload.value, customer: customerContextKey.value })) {
+          input.notify('Выбор документа изменился. Проверьте выбранный шаблон ещё раз.', 'error');
+          return;
+        }
+        customerReadiness.value = readiness;
+        if (!readiness.can_issue && !allowIncomplete) return;
+      }
+      if (!isCurrent()) return;
+      await awaitMutation(ManagerDocumentSystemService.createManagerManagedDocumentDraft(orderId, {
+        ...payload, allow_incomplete_customer: allowIncomplete,
+      }), isCurrent);
+      if (!isCurrent()) return;
+      customerReadiness.value = null;
       replacesDocumentId.value = null;
       resetConsumerTerms();
       if (isSupplyInstallationDocumentType(documentType.value)) {
@@ -529,29 +614,55 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       resetBusinessTerms();
       resetActTerms();
       resetTransportTerms();
-      await loadDocuments();
+      await loadDocuments(isCurrent);
+      if (!isCurrent()) return;
       input.refresh();
       input.notify('Черновик создан. Данные заказа зафиксированы, но официальный номер ещё не занят.');
     } catch (error) {
-      input.notify(`Не удалось создать черновик: ${getApiErrorMessage(error)}`, 'error');
+      if (isCurrent()) input.notify(`Не удалось создать черновик: ${getApiErrorMessage(error)}`, 'error');
     } finally {
-      busy.value = false;
+      if (isCurrent()) busy.value = false;
     }
   };
 
-  const issue = async (document: ManagedDocumentItem) => {
-    if (issueBlockedReason.value) return;
+  const checkDocumentReadiness = async (document: ManagedDocumentItem, action = beginIssueAction(document)) => {
+    if (!action.canIssue()) return false;
+    if (document.status !== 'draft' || !['contract', 'invoice'].includes(document.doc_type)) return true;
     busy.value = true;
     try {
-      await ManagerDocumentSystemService.issueManagerManagedDocument(document.id);
+      const readiness = await ManagerDocumentSystemService.getManagerManagedDocumentReadiness(document.id);
+      if (!action.canIssue()) return false;
+      documents.value = documents.value.map((item) => item.id === document.id
+        ? { ...item, customer_readiness: readiness } : item);
+      if (!readiness.can_issue) {
+        input.notify(`Не заполнены поля клиента: ${(readiness.missing_fields || []).filter((item) => item.critical).map((item) => item.label).join(', ')}. Заполните карточку и создайте новый черновик.`, 'error');
+        return false;
+      }
+      return true;
+    } catch (error) {
+      if (action.canIssue()) input.notify(`Не удалось проверить реквизиты: ${getApiErrorMessage(error)}`, 'error');
+      return false;
+    } finally {
+      if (action.isCurrent()) busy.value = false;
+    }
+  };
+
+  const issue = async (document: ManagedDocumentItem, action = beginIssueAction(document)) => {
+    if (!action.canIssue() || issueBlockedReason.value) return;
+    busy.value = true;
+    try {
+      await awaitMutation(ManagerDocumentSystemService.issueManagerManagedDocument(document.id), action.isCurrent);
+      if (!action.isCurrent()) return;
       await loadDocuments();
+      if (!action.isCurrent()) return;
       input.refresh();
       input.notify('Документу присвоен официальный номер, DOCX и PDF сохранены.');
     } catch (error) {
+      if (!action.isCurrent()) return;
       input.notify(`Выпуск не завершён: ${getApiErrorMessage(error)}`, 'error');
       await loadDocuments();
     } finally {
-      busy.value = false;
+      if (action.isCurrent()) busy.value = false;
     }
   };
 
@@ -677,6 +788,9 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     businessTerms,
     busy,
     consumerTerms,
+    customerReadiness,
+    checkDocumentReadiness,
+    beginIssueAction,
     updateConsumerTerms,
     createDraft,
     deleteDraft,
