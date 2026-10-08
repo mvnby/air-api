@@ -24,7 +24,7 @@ on:
         description: "Recovery memory cap in canonical MiB 768..4096; requires stage cap plus 512 MiB host reserve"
         type: string
         required: false
-        default: "4096"
+        default: "768"
       require_wal:
         description: "Require a complete archived WAL chain (must stay enabled)"
         type: boolean
@@ -41,7 +41,7 @@ env:
   PITR_RESTORE_DRILL_REQUIRED: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.required) || vars.POSTGRES_PITR_REQUIRED || 'false' }}
   PITR_RESTORE_BACKUP_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.backup_id || '' }}
   PITR_RESTORE_TARGET_TIME: ${{ github.event_name == 'workflow_dispatch' && inputs.target_time || '' }}
-  PITR_RESTORE_RECOVERY_MEMORY_MIB: ${{ github.event_name == 'workflow_dispatch' && inputs.recovery_memory_mib || '4096' }}
+  PITR_RESTORE_RECOVERY_MEMORY_MIB: ${{ github.event_name == 'workflow_dispatch' && inputs.recovery_memory_mib || '768' }}
   PITR_RESTORE_REQUIRE_WAL: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.require_wal) || 'true' }}
 
 jobs:

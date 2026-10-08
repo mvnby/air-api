@@ -195,8 +195,7 @@ def _remote_command(
         expected_release_sha256,
     ]
     if phase == "restore-drill":
-        if recovery_memory_mib is not None:
-            command.extend(["--recovery-memory-mib", str(recovery_memory_mib)])
+        command.extend(["--recovery-memory-mib", str(recovery_memory_mib or 768)])
         if backup_id:
             if not BACKUP_ID_RE.fullmatch(backup_id):
                 raise WorkflowError("backup ID is invalid")

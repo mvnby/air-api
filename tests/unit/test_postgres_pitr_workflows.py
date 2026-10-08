@@ -106,7 +106,8 @@ def test_postgres_pitr_restore_drill_workflow_preserves_required_gate_and_wal_pr
     }
     assert dispatch_inputs["required"]["default"] == "true"
     assert dispatch_inputs["require_wal"]["default"] == "true"
-    assert dispatch_inputs["recovery_memory_mib"]["default"] == "4096"
+    assert dispatch_inputs["recovery_memory_mib"]["default"] == "768"
+    assert "inputs.recovery_memory_mib || '768'" in env["PITR_RESTORE_RECOVERY_MEMORY_MIB"]
     assert dispatch_inputs["recovery_memory_mib"]["type"] == "string"
     assert '--recovery-memory-mib "${PITR_RESTORE_RECOVERY_MEMORY_MIB}"' in drill_step["run"]
 

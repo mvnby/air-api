@@ -107,9 +107,9 @@ def test_capacity_checks_precede_operational_effects_and_all_stages():
         assert driver[:driver.index(stage)].rstrip().endswith(check)
 
 
-def test_preserves_historical_default_and_actual_recovery_cgroup_flags():
+def test_reviewed_default_and_actual_recovery_cgroup_flags():
     source = DRILL.read_text()
-    assert 'RECOVERY_MEMORY_MIB="${RECOVERY_MEMORY_MIB:-4096}"' in source
+    assert 'RECOVERY_MEMORY_MIB="${RECOVERY_MEMORY_MIB:-768}"' in source
     assert '--memory "${recovery_memory_mib}m"' in source
     assert '--memory-swap "${recovery_memory_mib}m"' in source
     assert '--memory 4g' not in source
@@ -292,3 +292,10 @@ while [ ! -e "$TEST_RELEASE" ]; do sleep 0.01; done
         if process.poll() is None:
             process.kill()
         process.wait(timeout=3)
+
+
+def test_controller_omitted_cap_forwards_reviewed_default_and_verify_has_no_cap():
+    arguments = dict(target=PATRONI_NODES[0], expected_database_role="",
+        operation_id="a" * 32, expected_release_sha256="b" * 64, backup_id="", target_time="")
+    assert "--recovery-memory-mib 768" in workflow._remote_command(phase="restore-drill", **arguments)
+    assert "--recovery-memory-mib" not in workflow._remote_command(phase="verify", **arguments)

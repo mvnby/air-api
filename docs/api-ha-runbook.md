@@ -752,13 +752,15 @@ R2 lifecycle changes and production restore remain separately gated.
 
 ### Physical drill memory capacity
 
-The physical drill keeps its historical recovery default of `4096` MiB.
-Use the manual workflow's `recovery_memory_mib` input to select a reviewed
-canonical integer from `768` through `4096`; for example, add
-`-f recovery_memory_mib=768` to the separately approved drill command.
-This input is valid only for the physical restore phase. The controller and
-installed manual runner validate and forward it; arbitrary inherited host
-variables cannot enlarge the reviewed cap.
+The physical drill defaults to `768` MiB in the shell helper, manual/controller
+entrypoints, workflow input and scheduled run. The previous `4096` MiB default
+could not fit the recorded 3.82 GiB primary host. Use the manual workflow's
+`recovery_memory_mib` input to select a separately reviewed canonical integer
+from `768` through `4096`; for example, add `-f recovery_memory_mib=1024` only
+when that cap and its required headroom have been approved. This input is valid
+only for the physical restore phase. The controller and installed manual runner
+validate and forward it; arbitrary inherited host variables cannot enlarge the
+reviewed cap.
 
 The drill reuses the attested deployment capacity guard before creating a
 restore point, switching WAL, staging/uploading history or creating restore
@@ -767,9 +769,10 @@ and recovery stage. Required physical `MemAvailable` is
 `max(768 MiB tool, 512 MiB verifier, configured recovery cap) + 512 MiB`.
 The reserve follows the deployment guard's allowance for concurrent production
 activity; swap does not satisfy this requirement. Invalid, duplicate or low
-memory values fail closed. Thus a `768` MiB recovery needs at least `1280` MiB
-available; the unchanged `4096` default needs `4608` MiB. Verify fresh disk and
-memory together immediately before dispatch. The recovery cgroup has equal
+memory values fail closed. Thus the `768` MiB default needs at least `1280` MiB
+available; an explicit `4096` MiB cap needs `4608` MiB. Scheduled runs also refuse
+to proceed when concurrent load leaves insufficient headroom. Verify fresh disk
+and memory together immediately before dispatch. The recovery cgroup has equal
 memory and memory-swap limits, so it cannot borrow host swap beyond the cap.
 
 The narrowly selected physical proof step in the existing
@@ -781,9 +784,16 @@ and pause/data checks at `768` MiB. Require that proof and full CI for the exact
 reviewed revision. It is a capacity regression fixture, not acceptance of the
 current production archive or a guarantee for a larger future workload. The
 proof records effective PostgreSQL settings; reassess sizing when those settings
-or backup size change. Changing the scheduled default requires an explicit
-review of that physical proof and observed settings. The existing complete-diff
-report selects this proof for capacity/recovery changes (including this PR and
+or backup size change. The default was reviewed against the 2026-10-08 production
+metadata (`shared_buffers=128 MiB`, `work_mem=4 MiB`,
+`maintenance_work_mem=64 MiB`, `max_connections=100`) and a 113 MB production
+backup. The [initial physical proof](https://github.com/mvnby/air-api/actions/runs/37789906688)
+passed at `768` MiB on a 217,520,065-byte synthetic backup with matching settings,
+checksums enabled, target/data checks and verified cleanup. That supports this
+capacity decision for the recorded settings/workload; it does not accept the
+production archive. Require a fresh physical PASS and full CI for subsequent
+exact revisions, and explicit sizing review before changing the default.
+The existing complete-diff report selects this proof for capacity/recovery changes (including this PR and
 its main merge); later UI-only changes skip it. Missing or invalid selection
 fails closed. Its failed physical proof fails the unit job and mandatory CI
 gate; its JSON artifact records the actual result.

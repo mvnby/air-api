@@ -322,12 +322,15 @@ def test_finalized_release_attestation_requires_exact_paths_hashes_and_digest(
         )
 
 
-@pytest.mark.parametrize("cap,expected", [(None, "4096"), (768, "768")])
+@pytest.mark.parametrize("cap,expected", [(None, "768"), (768, "768"), (1024, "1024"), (4096, "4096")])
 def test_physical_drill_receives_only_reviewed_recovery_memory(monkeypatch, tmp_path, cap, expected):
     project, _, calls, _ = _run_setup(monkeypatch, tmp_path)
     monkeypatch.setenv("RECOVERY_MEMORY_MIB", "16384")
+    checked_caps = []
+    monkeypatch.setattr(manual, "_require_drill_capacity", checked_caps.append)
     assert manual.run_manual(
         phase="restore-drill", project_dir=str(project), compose_file="docker-compose.patroni.yml",
         operation_id="b" * 32, expected_release_sha256="f" * 64, recovery_memory_mib=cap,
     ) == 17
+    assert checked_caps == [int(expected)]
     assert calls[0][1]["environment"]["RECOVERY_MEMORY_MIB"] == expected

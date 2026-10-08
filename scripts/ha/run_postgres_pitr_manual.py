@@ -395,7 +395,7 @@ def run_manual(
                 expected_release_sha256=expected_release_sha256,
             )
             if phase == "restore-drill":
-                _require_drill_capacity(recovery_memory_mib or 4096)
+                _require_drill_capacity(recovery_memory_mib or 768)
             operation_guard.reconcile_project_operations(project_dir)
             if phase == "logical-restore-drill":
                 _validate_state_root(LOGICAL_STATE_ROOT)
@@ -428,7 +428,7 @@ def run_manual(
                     }
                 )
                 if phase == "restore-drill":
-                    environment["RECOVERY_MEMORY_MIB"] = str(recovery_memory_mib or 4096)
+                    environment["RECOVERY_MEMORY_MIB"] = str(recovery_memory_mib or 768)
                 command = ["/bin/bash", str(BOOTSTRAP), phase]
                 record_command = str(BOOTSTRAP)
             return operation_guard.run_guarded_process(
