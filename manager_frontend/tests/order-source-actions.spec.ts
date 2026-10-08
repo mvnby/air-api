@@ -102,3 +102,18 @@ describe('Order source actions', () => {
     expect(wrapper.emitted('review')).toHaveLength(1); click.mockRestore();
   });
 });
+
+
+describe('source equipment price display', () => {
+  it.each([null, undefined, NaN, Infinity, "125", 0, -12.345, 12.345, 123456789.12])('preserves ru-RU source precision for %s', async (price) => {
+    api.equipment.mockResolvedValue({ ...preview, items: [{ ...preview.items[0], price }] });
+    const wrapper = mount(OrderSourceEquipmentAction, { props: { orderId: 461, proposalId: 465 } });
+    await wrapper.get('button').trigger('click'); await flushPromises();
+    const money = wrapper.findComponent({ name: 'MoneyAmount' });
+    const valid = typeof price === 'number' && Number.isFinite(price);
+    expect(money.text()).toBe(valid ? `${price.toLocaleString('ru-RU')} BYN` : '—');
+    expect(money.find('svg').exists()).toBe(valid);
+    expect(wrapper.get('input[type="checkbox"]').element.checked).toBe(true);
+    wrapper.unmount();
+  });
+});

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { ArrowRight, Check, Clock3, MoreVertical, Pause, Pencil, Play, Save, Trash2, Undo2, X } from 'lucide-vue-next';
-import { formatMoney } from './order-utils';
+import OrderMoney from './OrderMoney.vue';
 import { ORDER_WORKFLOW_OPTIONS, type OrderWorkflowType, type OrderWorkspaceViewModel } from './order-workspace';
 import { STICKY_HEADER_RESIZE_DURATION_MS } from '../../composables/useSmartStickyHeader';
 
@@ -304,10 +304,10 @@ const onWorkflowChange = async (event: Event) => {
     </div>
 
     <div v-if="!effectiveCompact && !workspace" class="mt-2.5 flex flex-wrap items-center gap-2">
-      <span class="rounded-lg bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">Сумма {{ formatMoney(total) }}</span>
-      <span class="text-xs text-slate-500 dark:text-slate-400">оплачено {{ formatMoney(paid) }}</span>
+      <span class="rounded-lg bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">Сумма <OrderMoney class="relative" :value="total" /></span>
+      <span class="text-xs text-slate-500 dark:text-slate-400">оплачено <OrderMoney class="relative" :value="paid" /></span>
       <span class="text-xs font-semibold" :class="balance > 0 ? 'text-rose-600 dark:text-rose-300' : 'text-emerald-700 dark:text-emerald-300'">
-        {{ balance > 0 ? 'долг ' + formatMoney(balance) : 'долга нет' }}
+        <template v-if="balance > 0">долг <OrderMoney class="relative" :value="balance" /></template><template v-else>долга нет</template>
       </span>
     </div>
 
