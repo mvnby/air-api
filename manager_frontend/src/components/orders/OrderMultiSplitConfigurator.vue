@@ -9,6 +9,7 @@ import {
   type MultiSplitRoomInput,
   type OrderProposalResponse,
 } from '../../client';
+import MoneyAmount from '../money/MoneyAmount.vue';
 import { useDemoReadOnly } from '../../services/manager-demo';
 
 const props = defineProps<{
@@ -170,10 +171,10 @@ async function save() {
           <p class="font-semibold">{{ preview.status === 'confirmed' ? 'Совместимость подтверждена' : preview.status === 'incompatible' ? 'Состав несовместим' : 'Требуется проверка специалистом' }}</p>
           <p class="mt-1">{{ preview.explanation }}</p>
           <ul class="mt-2 list-inside list-disc">
-            <li v-for="item in preview.components" :key="item.product_id">{{ item.title }} × {{ item.quantity }} — {{ money(item.total_price_byn) }} · {{ availabilityLabel(item.availability) }}</li>
+            <li v-for="item in preview.components" :key="item.product_id">{{ item.title }} × {{ item.quantity }} — <MoneyAmount v-if="typeof item.total_price_byn === 'number' && Number.isFinite(item.total_price_byn)" :value="item.total_price_byn" /><span v-else>нет данных</span> · {{ availabilityLabel(item.availability) }}</li>
           </ul>
-          <p class="mt-2 font-semibold">Оборудование: {{ money(preview.equipment_total_byn) }}</p>
-          <p>Закупка: {{ money(preview.purchase_cost_total_byn) }} · Маржа: {{ money(preview.margin_byn) }}</p>
+          <p class="mt-2 font-semibold">Оборудование: <MoneyAmount v-if="typeof preview.equipment_total_byn === 'number' && Number.isFinite(preview.equipment_total_byn)" :value="preview.equipment_total_byn" /><span v-else>нет данных</span></p>
+          <p>Закупка: <MoneyAmount v-if="typeof preview.purchase_cost_total_byn === 'number' && Number.isFinite(preview.purchase_cost_total_byn)" :value="preview.purchase_cost_total_byn" /><span v-else>нет данных</span> · Маржа: <MoneyAmount v-if="typeof preview.margin_byn === 'number' && Number.isFinite(preview.margin_byn)" :value="preview.margin_byn" /><span v-else>нет данных</span></p>
           <p v-if="!preview.composition_complete" class="mt-1 text-amber-800">Состав может требовать обязательных компонентов после проверки.</p>
           <button type="button" class="btn-mini-outline mt-3" :disabled="saving || demoReadOnly || preview.status === 'incompatible'" @click="save">{{ saving ? 'Сохраняем…' : 'Сохранить отдельным вариантом' }}</button>
         </div>
@@ -182,7 +183,7 @@ async function save() {
     <div v-if="savedConfigurations.length" class="mt-4 border-t border-sky-200 pt-3">
       <strong>Сохранённые конфигурации</strong>
       <div v-for="item in savedConfigurations" :key="item.id" class="mt-2 rounded-lg bg-white p-2">
-        <p>{{ item.name }} · {{ item.multi_split_configuration?.rooms?.length ?? 0 }} пом. · {{ item.multi_split_configuration?.verification_status === 'confirmed' ? 'подтверждена' : 'требуется проверка' }} · сохранено {{ money(item.total_amount) }}</p>
+        <p>{{ item.name }} · {{ item.multi_split_configuration?.rooms?.length ?? 0 }} пом. · {{ item.multi_split_configuration?.verification_status === 'confirmed' ? 'подтверждена' : 'требуется проверка' }} · сохранено <MoneyAmount v-if="typeof item.total_amount === 'number' && Number.isFinite(item.total_amount)" :value="item.total_amount" /><span v-else>нет данных</span></p>
         <p class="text-xs text-slate-600">{{ item.multi_split_configuration?.component_snapshot?.map((part) => `${part.title} × ${part.quantity}`).join('; ') }}</p>
         <a v-if="sourceLink(item.multi_split_configuration?.source_url)" :href="sourceLink(item.multi_split_configuration?.source_url) || undefined" target="_blank" rel="noopener noreferrer" class="text-xs text-sky-700">Источник совместимости · {{ item.multi_split_configuration?.source_version }}</a>
       </div>
