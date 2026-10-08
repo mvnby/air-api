@@ -24,6 +24,10 @@ from scripts.ha import postgres_pitr_wal_lineage as lineage
 
 DRILL = REPO / 'scripts/ha/restore_postgres_pitr_drill.sh'
 RECOVERY_MIB = 768
+# The selector must only see complete archived segments, including in CI.
+SYNTHETIC_ARCHIVE_COMMAND = (
+    "cp %p /pitr-wal/%f.pending && mv /pitr-wal/%f.pending /pitr-wal/%f"
+)
 REPRESENTATIVE_MIN_BYTES = 128 * 1024**2  # Above the recorded 113 MB production backup.
 
 
@@ -104,7 +108,7 @@ def prove(evidence):
              '-e', 'POSTGRES_INITDB_ARGS=--data-checksums',
              '-v', f'{pgdata}:/var/lib/postgresql/data', '-v', f'{wal}:/pitr-wal',
              '-v', f'{prepared}:/pitr-backup', image, 'postgres',
-             '-c', 'archive_mode=on', '-c', 'archive_command=cp %p /pitr-wal/%f'])
+             '-c', 'archive_mode=on', '-c', f'archive_command={SYNTHETIC_ARCHIVE_COMMAND}'])
         for _ in range(60):
             if sql(source, 'SELECT 1', check=False).returncode == 0:
                 break
@@ -210,7 +214,7 @@ def prove(evidence):
                      after_target_rows=0, recovery_settings=settings, image_ref=image,
                      source_revision=run(['git', '-c', f'safe.directory={REPO}',
                              '-C', str(REPO), 'rev-parse', 'HEAD']).stdout.strip())
-    except Exception as exc:
+    except (Exception, SystemExit) as exc:
         proof['error'] = str(exc)
         for name in containers:
             result = run(['docker','logs','--tail','40',name],check=False)

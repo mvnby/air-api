@@ -247,3 +247,48 @@ def test_physical_cleanup_failure_revokes_pass_artifact_and_fails_step(monkeypat
     result = json.loads(evidence.read_text())
     assert result["status"] == "FAILED" and result["test_runtime_cleaned"] is False
     assert result["cleanup_error"] == "daemon unavailable"
+
+
+def test_synthetic_archiver_hides_partial_segment_until_complete(tmp_path):
+    import shlex
+    import time
+    from scripts.ci import prove_pitr_recovery_capacity as proof
+
+    wal = tmp_path / "wal"
+    wal.mkdir()
+    source = tmp_path / "source-wal"
+    with source.open("wb") as stream:
+        stream.truncate(16 * 1024**2)
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    started, release = tmp_path / "started", tmp_path / "release"
+    cp = fake_bin / "cp"
+    cp.write_text("""#!/bin/sh
+printf partial > "$2"
+touch "$TEST_STARTED"
+while [ ! -e "$TEST_RELEASE" ]; do sleep 0.01; done
+/bin/cp "$1" "$2"
+""")
+    cp.chmod(0o755)
+    name = "00000001000000000000000E"
+    command = proof.SYNTHETIC_ARCHIVE_COMMAND.replace("/pitr-wal", shlex.quote(str(wal)))
+    command = command.replace("%p", shlex.quote(str(source))).replace("%f", name)
+    process = subprocess.Popen(["bash", "-ec", command], env={**os.environ,
+        "PATH": str(fake_bin) + ":" + os.environ["PATH"],
+        "TEST_STARTED": str(started), "TEST_RELEASE": str(release)})
+    try:
+        deadline = time.monotonic() + 3
+        while not started.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert started.exists(), "controlled partial copy did not start"
+        assert (wal / (name + ".pending")).read_bytes() == b"partial"
+        assert not (wal / name).exists(), "selector could observe a partial final segment"
+        release.touch()
+        assert process.wait(timeout=3) == 0
+        assert (wal / name).stat().st_size == 16 * 1024**2
+        assert not (wal / (name + ".pending")).exists()
+    finally:
+        release.touch(exist_ok=True)
+        if process.poll() is None:
+            process.kill()
+        process.wait(timeout=3)
