@@ -220,6 +220,20 @@ async def _create_native_template(
     return template_id, version_id
 
 
+async def _create_native_contract_template(
+    client: AsyncClient,
+    headers: dict[str, str],
+    *,
+    legal_entity_id: int,
+) -> tuple[int, int]:
+    return await _create_native_template(
+        client,
+        headers,
+        legal_entity_id=legal_entity_id,
+        document_type="contract",
+    )
+
+
 async def _seed_order(db) -> Order:
     customer = Customer(
         tenant_id=1,
