@@ -52,9 +52,9 @@ class Customer(SQLModel, table=True):
     bic: Optional[str] = None
     iban: Optional[str] = None
 
-    signer_position: str = Field(default="директора")
+    signer_position: str = Field(default="")
     signer_name: Optional[str] = None
-    acting_basis: str = Field(default="Устава")
+    acting_basis: str = Field(default="")
     signing_mode: str = Field(default="self", sa_column=Column(String, nullable=False))
 
     created_at: datetime = Field(default_factory=datetime.now)

@@ -38,6 +38,14 @@ Use the party conditions instead of writing one fixed preamble:
 - `seller.organization_statutory_body` / `customer.organization_statutory_body`
 - `seller.signs_by_power_of_attorney` / `customer.signs_by_power_of_attorney`
 
+Unknown customer signer position and authority basis remain empty strings in
+new native snapshots and rendered placeholders. Customer creation never infers
+“директора” or “Устава” from missing, null or blank input. On update, omitted
+fields preserve stored values; explicit null or blank input clears them.
+Customer party type and signing mode still follow their existing rules.
+Existing customer values and frozen/issued snapshots are not rewritten: an old
+“директора” or “Устава” may be an explicitly confirmed fact.
+
 ### Party names in native documents
 
 Contracts, invoices, proposals and work acts support five pairs:

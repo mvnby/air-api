@@ -252,7 +252,7 @@ async def test_manager_customer_patch_updates_requisites(async_client, db):
 
 
 @pytest.mark.asyncio
-async def test_manager_customer_patch_defaults_blank_required_requisites(async_client, db):
+async def test_manager_customer_patch_clears_unknown_signing_requisites(async_client, db):
     headers = await _auth_headers(async_client)
 
     customer = Customer(
@@ -280,8 +280,8 @@ async def test_manager_customer_patch_defaults_blank_required_requisites(async_c
     assert patch_resp.status_code == 200
     patched = patch_resp.json()
     assert patched["phone"] == "+375 (29) 591-26-81"
-    assert patched["signer_position"] == "директора"
-    assert patched["acting_basis"] == "Устава"
+    assert patched["signer_position"] == ""
+    assert patched["acting_basis"] == ""
 
 
 @pytest.mark.asyncio
@@ -937,3 +937,57 @@ async def test_manager_customer_delete_success_without_orders(async_client, db):
 
     result = await db.execute(select(Customer).where(Customer.id == customer.id))
     assert result.scalar_one_or_none() is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "party,mode",
+    [
+        ("company", "statutory_body"),
+        ("individual_entrepreneur", "self"),
+        ("individual", "self"),
+    ],
+)
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {},
+        {"signer_position": None, "acting_basis": None},
+        {"signer_position": "", "acting_basis": ""},
+        {"signer_position": " \t ", "acting_basis": " \n "},
+        {"signer_position": " Представителя ", "acting_basis": " Доверенности № 7 "},
+    ],
+)
+async def test_manager_customer_signing_requisites_create_and_update(
+    async_client, db, party, mode, fields
+):
+    headers = await _auth_headers(async_client)
+    created = await async_client.post(
+        "/api/manager/customers",
+        headers=headers,
+        json={"name": "Неизвестный подписант", "type": party, **fields},
+    )
+    assert created.status_code == 201
+    data = created.json()
+    for field in ("signer_position", "acting_basis"):
+        assert data[field] == (fields.get(field) or "").strip()
+    assert data["type"] == party
+    assert data["signing_mode"] == mode
+    supplied = {"signer_position": "Представителя", "acting_basis": "Доверенности № 7"}
+    url = f"/api/manager/customers/{data['id']}"
+    assert (
+        await async_client.patch(url, headers=headers, json=supplied)
+    ).status_code == 200
+    updated = await async_client.patch(url, headers=headers, json=fields)
+    assert updated.status_code == 200
+    data = updated.json()
+    for field in supplied:
+        assert data[field] == (
+            (fields[field] or "").strip() if field in fields else supplied[field]
+        )
+    assert data["type"] == party
+    assert data["signing_mode"] == mode
+    persisted = await db.get(Customer, data["id"])
+    await db.refresh(persisted)
+    assert persisted.signer_position == data["signer_position"]
+    assert persisted.acting_basis == data["acting_basis"]
