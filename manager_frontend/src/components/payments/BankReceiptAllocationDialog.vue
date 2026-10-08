@@ -178,7 +178,7 @@ const save = () => {
           </div>
 
           <template v-else-if="detail">
-            <div class="mb-4 grid grid-cols-3 gap-2 text-center text-sm">
+            <div class="mb-4 grid grid-cols-1 gap-2 text-center text-sm sm:grid-cols-3">
               <div class="rounded-md bg-slate-50 px-2 py-2 dark:bg-slate-800">
                 <div class="text-xs text-slate-500 dark:text-slate-400">Поступило</div>
                 <div class="mt-0.5 font-semibold text-slate-950 dark:text-white"><MoneyAmount :value="Number(detail.receipt_amount || 0)" :currency="currency" :formatted-value="money(detail.receipt_amount)" /></div>
