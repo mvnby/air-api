@@ -10,7 +10,7 @@ import OrderWorkspaceHeader from '../src/components/orders/OrderWorkspaceHeader.
 import OrderWorkspaceNav from '../src/components/orders/OrderWorkspaceNav.vue';
 import OrderRequestSourceCard from '../src/components/orders/OrderRequestSourceCard.vue';
 import LeadSourceReviewModal from '../src/components/leads/LeadSourceReviewModal.vue';
-import { ManagerOrdersService, ManagerMailService, ManagerSettingsService } from '../src/client';
+import { ManagerOrdersService, ManagerMailService, ManagerSettingsService, ManagerDocumentSystemService } from '../src/client';
 import { ManagerOrderUsageService, CancelablePromise } from '../src/client';
 import { managerSession } from '../src/services/manager-session';
 import { managerStorefrontSelection } from '../src/services/manager-storefront-selection';
@@ -64,6 +64,7 @@ beforeEach(() => {
   localStorage.clear(); sessionStorage.clear();
   stored = initialOrder();
   vi.spyOn(ManagerMailService, 'listManagerOrderOutgoingEmails').mockResolvedValue({ items: [] } as any);
+  vi.spyOn(ManagerDocumentSystemService, 'listManagerManagedOrderDocuments').mockResolvedValue({ items: [] });
   vi.spyOn(ManagerOrdersService, 'patchManagerOrder').mockImplementation(async (_id, payload) => commit(payload));
 });
 afterEach(() => { wrapper?.unmount(); vi.restoreAllMocks(); vi.useRealTimers(); });
@@ -413,4 +414,36 @@ describe('equipment picker navigation from the order', () => {
     expect(wrapper.findComponent(OrderProposalWorkspace).props('proposal').activeProposalId.value).toBe(26);
     expect(ManagerOrdersService.patchManagerOrder).not.toHaveBeenCalled();
   });
+  it.each(['close', 'switch order', 'close and reopen', 'dispose'])
+  ('cancels the delayed document-toast refresh on %s', async (change) => {
+    const managed = vi.spyOn(ManagerDocumentSystemService, 'listManagerManagedOrderDocuments').mockResolvedValue({ items: [] });
+    await mountDrawer();
+    await openDocuments();
+    wrapper.findComponent(OrderDocumentsWorkspace).vm.$emit('toast', { message: 'Изменения из Google сохранены в истории документа.' });
+    if (change === 'dispose') wrapper.unmount();
+    else if (change === 'switch order') await wrapper.setProps({ order: { ...stored, id: 396 } });
+    else {
+      await wrapper.setProps({ modelValue: false });
+      if (change === 'close and reopen') await wrapper.setProps({ modelValue: true });
+    }
+    await flushPromises();
+    managed.mockClear();
+    vi.mocked(ManagerMailService.listManagerOrderOutgoingEmails).mockClear();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(managed).not.toHaveBeenCalled();
+    expect(ManagerMailService.listManagerOrderOutgoingEmails).not.toHaveBeenCalled();
+  });
+
+  it('keeps the document-toast refresh for the same open order', async () => {
+    const managed = vi.spyOn(ManagerDocumentSystemService, 'listManagerManagedOrderDocuments').mockResolvedValue({ items: [] });
+    await mountDrawer();
+    await openDocuments();
+    managed.mockClear();
+    vi.mocked(ManagerMailService.listManagerOrderOutgoingEmails).mockClear();
+    wrapper.findComponent(OrderDocumentsWorkspace).vm.$emit('toast', { message: 'Документ сохранён.' });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(managed).toHaveBeenCalledWith(395);
+    expect(ManagerMailService.listManagerOrderOutgoingEmails).toHaveBeenCalledWith(395, 20);
+  });
+
 });

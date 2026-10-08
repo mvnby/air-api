@@ -85,8 +85,14 @@ const errorCode = (payload: unknown) => {
   return typeof code === 'string' ? code : null;
 };
 
-const request = async <T>(path: string, method: ApiRequestOptions['method'] = 'GET', body?: unknown): Promise<T> => {
+const assertCurrentAction = (isCurrent: () => boolean) => {
+  if (!isCurrent()) throw new DOMException('Действие с документом отменено.', 'AbortError');
+};
+
+const request = async <T>(path: string, method: ApiRequestOptions['method'] = 'GET', body?: unknown, isCurrent = () => true): Promise<T> => {
+  assertCurrentAction(isCurrent);
   const token = await resolveToken(method, path);
+  assertCurrentAction(isCurrent);
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
   if (body !== undefined) headers['Content-Type'] = 'application/json';
@@ -138,8 +144,10 @@ export const googleDocumentEditorApi = {
     return unwrapSession(await request<SessionPayload>(sessionPath(target), 'POST', body));
   },
 
-  async syncSession(target: GoogleDocumentEditTarget) {
+  async syncSession(target: GoogleDocumentEditTarget, isCurrent = () => true) {
+    assertCurrentAction(isCurrent);
     const current = await this.getSession(target);
+    assertCurrentAction(isCurrent);
     if (!current?.base_checksum_sha256 || !current.remote_revision) {
       throw new Error('Google ещё не сообщил версию файла. Обновите страницу и повторите синхронизацию.');
     }
@@ -148,7 +156,7 @@ export const googleDocumentEditorApi = {
       expected_remote_revision: current.remote_revision,
       idempotency_key: crypto.randomUUID(),
     };
-    const payload = await request<SessionPayload>(sessionPath(target, '/sync'), 'POST', body);
+    const payload = await request<SessionPayload>(sessionPath(target, '/sync'), 'POST', body, isCurrent);
     return {
       session: unwrapSession(payload),
       newTemplateVersionCreated: 'session' in payload && Boolean(payload.new_template_version),

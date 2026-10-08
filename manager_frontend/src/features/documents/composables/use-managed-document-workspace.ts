@@ -4,6 +4,7 @@ import type { DocumentRoleType } from '../model/document-types';
 import {
   ManagerDocumentSystemService,
   OpenAPI,
+  type CancelablePromise,
   type DocumentLegalEntityItem,
   type DocumentPdfRuntimeStatus,
   type ManagedDocumentItem,
@@ -96,22 +97,42 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   const voidTarget = ref<ManagedDocumentItem | null>(null);
   const voidReason = ref('');
   let workspaceActive = true;
+  let workspaceGeneration = 0;
+  const pendingMutations = new Set<{ cancel: () => void; isCurrent: () => boolean }>();
+  const cancelStaleMutations = () => {
+    for (const pending of pendingMutations) if (!pending.isCurrent()) pending.cancel();
+  };
+  const awaitMutation = async <T>(request: CancelablePromise<T>, isCurrent: () => boolean) => {
+    const pending = { cancel: () => request.cancel(), isCurrent };
+    pendingMutations.add(pending);
+    if (!isCurrent()) pending.cancel();
+    try {
+      return await request;
+    } finally {
+      pendingMutations.delete(pending);
+    }
+  };
   let issueActionGeneration = 0;
   let requestId = 0;
   watch(() => input.orderId(), () => {
+    workspaceGeneration += 1;
     issueActionGeneration += 1;
+    cancelStaleMutations();
     requestId += 1;
     busy.value = false;
   }, { flush: 'sync' });
   onScopeDispose(() => {
     workspaceActive = false;
+    workspaceGeneration += 1;
     issueActionGeneration += 1;
+    cancelStaleMutations();
     requestId += 1;
   });
 
   const beginIssueAction = (document: ManagedDocumentItem): IssueAction => {
     const orderId = input.orderId();
     const generation = ++issueActionGeneration;
+    cancelStaleMutations();
     const isCurrent = () => workspaceActive && generation === issueActionGeneration
       && input.orderId() === orderId;
     const canIssue = () => {
@@ -313,16 +334,19 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     return '';
   });
 
-  const loadDocuments = async () => {
+  const loadDocuments = async (isCurrent = () => true) => {
+    if (!workspaceActive || !isCurrent()) return;
     const orderId = input.orderId();
     const currentRequest = ++requestId;
     try {
       const response = await ManagerDocumentSystemService.listManagerManagedOrderDocuments(orderId);
-      if (currentRequest === requestId && input.orderId() === orderId) {
+      if (workspaceActive && isCurrent() && currentRequest === requestId && input.orderId() === orderId) {
         documents.value = response.items.filter((item) => item.provider === 'native');
       }
     } catch (error) {
-      input.notify(`Не удалось загрузить CRM-документы: ${getApiErrorMessage(error)}`, 'error');
+      if (workspaceActive && isCurrent() && currentRequest === requestId && input.orderId() === orderId) {
+        input.notify(`Не удалось загрузить CRM-документы: ${getApiErrorMessage(error)}`, 'error');
+      }
     }
   };
 
@@ -556,25 +580,30 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   watch([draftPayload, customerContextKey, () => input.orderId()], () => { customerReadiness.value = null; }, { deep: true, flush: 'sync' });
 
   const createDraft = async (allowIncomplete = false) => {
-    if (draftBlockedReason.value || !selectedLegalEntityId.value) return;
+    if (!workspaceActive || draftBlockedReason.value || !selectedLegalEntityId.value) return;
+    const generation = workspaceGeneration;
+    const orderId = input.orderId();
+    const isCurrent = () => workspaceActive && generation === workspaceGeneration && input.orderId() === orderId;
     busy.value = true;
     try {
       const payload = { ...JSON.parse(JSON.stringify(draftPayload.value)) as typeof draftPayload.value,
         legal_entity_id: selectedLegalEntityId.value };
-      const orderId = input.orderId();
       const contextKey = JSON.stringify({ payload, customer: customerContextKey.value });
       if (['contract', 'invoice'].includes(payload.document_type)) {
         const readiness = await ManagerDocumentSystemService.checkManagerManagedDocumentReadiness(orderId, payload);
-        if (orderId !== input.orderId() || contextKey !== JSON.stringify({ payload: draftPayload.value, customer: customerContextKey.value })) {
+        if (!isCurrent()) return;
+        if (contextKey !== JSON.stringify({ payload: draftPayload.value, customer: customerContextKey.value })) {
           input.notify('Выбор документа изменился. Проверьте выбранный шаблон ещё раз.', 'error');
           return;
         }
         customerReadiness.value = readiness;
         if (!readiness.can_issue && !allowIncomplete) return;
       }
-      await ManagerDocumentSystemService.createManagerManagedDocumentDraft(orderId, {
+      if (!isCurrent()) return;
+      await awaitMutation(ManagerDocumentSystemService.createManagerManagedDocumentDraft(orderId, {
         ...payload, allow_incomplete_customer: allowIncomplete,
-      });
+      }), isCurrent);
+      if (!isCurrent()) return;
       customerReadiness.value = null;
       replacesDocumentId.value = null;
       resetConsumerTerms();
@@ -585,13 +614,14 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       resetBusinessTerms();
       resetActTerms();
       resetTransportTerms();
-      await loadDocuments();
+      await loadDocuments(isCurrent);
+      if (!isCurrent()) return;
       input.refresh();
       input.notify('Черновик создан. Данные заказа зафиксированы, но официальный номер ещё не занят.');
     } catch (error) {
-      input.notify(`Не удалось создать черновик: ${getApiErrorMessage(error)}`, 'error');
+      if (isCurrent()) input.notify(`Не удалось создать черновик: ${getApiErrorMessage(error)}`, 'error');
     } finally {
-      busy.value = false;
+      if (isCurrent()) busy.value = false;
     }
   };
 
@@ -621,7 +651,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     if (!action.canIssue() || issueBlockedReason.value) return;
     busy.value = true;
     try {
-      await ManagerDocumentSystemService.issueManagerManagedDocument(document.id);
+      await awaitMutation(ManagerDocumentSystemService.issueManagerManagedDocument(document.id), action.isCurrent);
       if (!action.isCurrent()) return;
       await loadDocuments();
       if (!action.isCurrent()) return;

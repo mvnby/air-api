@@ -126,9 +126,10 @@ const setContractScenario = (scenario: ContractScenario) => {
 };
 const googleEditor = useGoogleDocumentEditor({
   notify: (message, type = 'success') => emit('toast', { message, type }),
-  onSynced: async (target) => {
-    if (target.kind !== 'managed-document') return;
-    await workspace.loadDocuments();
+  onSynced: async (target, _result, isCurrent = () => true) => {
+    if (target.kind !== 'managed-document' || !isCurrent()) return;
+    await workspace.loadDocuments(isCurrent);
+    if (!isCurrent()) return;
     emit('refresh');
   },
 });

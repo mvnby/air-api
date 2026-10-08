@@ -10,7 +10,7 @@ import {
 
 type GoogleDocumentEditorInput = {
   notify: (message: string, type?: 'success' | 'error') => void;
-  onSynced?: (target: GoogleDocumentEditTarget, result: GoogleDocumentSyncResult) => void | Promise<void>;
+  onSynced?: (target: GoogleDocumentEditTarget, result: GoogleDocumentSyncResult, isCurrent?: () => boolean) => void | Promise<void>;
 };
 
 const targetKey = (target: GoogleDocumentEditTarget) => target.kind === 'managed-document'
@@ -94,25 +94,28 @@ export const useGoogleDocumentEditor = (input: GoogleDocumentEditorInput) => {
     }
   };
 
-  const sync = async (target: GoogleDocumentEditTarget, isCurrent = () => true) => {
-    if (!connected.value || !isCurrent()) return false;
+  const sync = async (target: GoogleDocumentEditTarget, isCurrent?: () => boolean) => {
+    const canContinue = isCurrent || (() => true);
+    if (!connected.value || !canContinue()) return false;
     const key = targetKey(target);
     if (busyKeys.has(key)) return false;
     trackedTargets.set(key, target);
     busyKeys.add(key);
     try {
-      const result = await googleDocumentEditorApi.syncSession(target);
-      if (!isCurrent()) return false;
+      const result = isCurrent
+        ? await googleDocumentEditorApi.syncSession(target, isCurrent)
+        : await googleDocumentEditorApi.syncSession(target);
+      if (!canContinue()) return false;
       sessions[key] = result.session;
       input.notify(target.kind === 'template-version'
         ? result.newTemplateVersionCreated
           ? 'Изменения сохранены как новая версия шаблона.'
           : 'Шаблон уже синхронизирован — новых изменений нет.'
         : 'Изменения из Google сохранены в истории документа.');
-      await input.onSynced?.(target, result);
-      return true;
+      await input.onSynced?.(target, result, canContinue);
+      return canContinue();
     } catch (error) {
-      if (isCurrent()) input.notify(`Не удалось забрать изменения: ${getApiErrorMessage(error)}`, 'error');
+      if (canContinue()) input.notify(`Не удалось забрать изменения: ${getApiErrorMessage(error)}`, 'error');
       return false;
     } finally {
       busyKeys.delete(key);

@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ManagerDocumentSystemService,
   ManagerDocsService,
+  CancelablePromise,
+  OpenAPI,
   type ManagerOrderDetailResponse,
 } from '../src/client';
 import NativeDocumentsWorkspace from '../src/features/documents/components/NativeDocumentsWorkspace.vue';
@@ -980,7 +982,7 @@ describe('Selected native customer requirements', () => {
     vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments)
       .mockImplementation(async (orderId) => ({ items: orderId === 42 ? [issueDraft as never] : [] }));
     const barrier = deferred<never>();
-    vi.mocked(ManagerDocumentSystemService.issueManagerManagedDocument).mockReturnValue(barrier.promise);
+    vi.mocked(ManagerDocumentSystemService.issueManagerManagedDocument).mockReturnValue(new CancelablePromise((resolve, reject) => { void barrier.promise.then(resolve, reject); }));
     const wrapper = await mountWorkspace();
     await clickIssue(wrapper);
     expect(ManagerDocumentSystemService.issueManagerManagedDocument).toHaveBeenCalledWith(77);
@@ -1014,7 +1016,7 @@ describe('Selected native customer requirements', () => {
     const barrier = deferred<never>();
     vi.mocked(googleDocumentEditorApi.syncSession).mockReturnValue(barrier.promise);
     await clickIssue(wrapper);
-    expect(googleDocumentEditorApi.syncSession).toHaveBeenCalledWith({ kind: 'managed-document', documentId: 77 });
+    expect(googleDocumentEditorApi.syncSession).toHaveBeenCalledWith({ kind: 'managed-document', documentId: 77 }, expect.any(Function));
     await wrapper.setProps({ order: { ...baseOrder, id: 43 } });
     await flushPromises();
     vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockClear();
@@ -1024,5 +1026,74 @@ describe('Selected native customer requirements', () => {
     expect(ManagerDocumentSystemService.listManagerManagedOrderDocuments).not.toHaveBeenCalled();
     expect(wrapper.emitted('refresh')).toBeUndefined();
     expect(wrapper.emitted('toast')?.some(([payload]) => payload.message.includes('Изменения из Google'))).not.toBe(true);
+  });
+
+  it('does not update or refresh a departed workspace after the Google onSynced list read', async () => {
+    vi.mocked(googleDocumentEditorApi.getConnectionStatus).mockResolvedValue({ connected: true, provider: 'google_drive' } as never);
+    const listBarrier = deferred<{ items: never[] }>();
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments)
+      .mockResolvedValueOnce({ items: [issueDraft as never] })
+      .mockReturnValueOnce(listBarrier.promise)
+      .mockResolvedValue({ items: [] });
+    const wrapper = await mountWorkspace();
+    vi.mocked(googleDocumentEditorApi.getSession).mockResolvedValue({ status: 'changed', can_edit: true } as never);
+    await clickIssue(wrapper);
+    expect(googleDocumentEditorApi.syncSession).toHaveBeenCalledWith({ kind: 'managed-document', documentId: 77 }, expect.any(Function));
+    expect(ManagerDocumentSystemService.listManagerManagedOrderDocuments).toHaveBeenCalledTimes(2);
+    await wrapper.setProps({ order: { ...baseOrder, id: 43 } });
+    await flushPromises();
+    const refreshBefore = wrapper.emitted('refresh')?.length || 0;
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockClear();
+    listBarrier.resolve({ items: [{ ...issueDraft, customer_readiness: missing } as never] });
+    await flushPromises();
+    expect(ManagerDocumentSystemService.issueManagerManagedDocument).not.toHaveBeenCalled();
+    expect(ManagerDocumentSystemService.listManagerManagedOrderDocuments).not.toHaveBeenCalled();
+    expect(wrapper.emitted('refresh')?.length || 0).toBe(refreshBefore);
+    expect(wrapper.find('[data-testid="incomplete-native-draft"]').exists()).toBe(false);
+  });
+
+  it('discards ready create preflight after the workspace closes and another order opens', async () => {
+    const barrier = deferred<{ checked: boolean; can_issue: boolean; missing_fields: never[] }>();
+    vi.mocked(ManagerDocumentSystemService.checkManagerManagedDocumentReadiness).mockReturnValue(barrier.promise as never);
+    const oldWorkspace = await mountWorkspace();
+    await chooseContract(oldWorkspace);
+    await oldWorkspace.get('[data-testid="create-native-draft"]').trigger('click');
+    await flushPromises();
+    oldWorkspace.unmount();
+    const current = await mountWorkspace(undefined, { ...baseOrder, id: 43 });
+    barrier.resolve({ checked: true, can_issue: true, missing_fields: [] });
+    await flushPromises();
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).not.toHaveBeenCalled();
+    expect(current.emitted('refresh')).toBeUndefined();
+    expect(oldWorkspace.emitted('toast')).toBeUndefined();
+  });
+
+  it.each(['issue', 'create'])('cancels generated %s transport while its POST token is pending on close', async (action) => {
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({ items: action === 'issue' ? [issueDraft as never] : [] });
+    if (action === 'issue') vi.mocked(ManagerDocumentSystemService.issueManagerManagedDocument).mockRestore();
+    else vi.mocked(ManagerDocumentSystemService.createManagerManagedDocumentDraft).mockRestore();
+    const tokenBarrier = deferred<string>();
+    const previousToken = OpenAPI.TOKEN;
+    const token = vi.fn(async (options) => options.method === 'POST' ? tokenBarrier.promise : 'read-token');
+    OpenAPI.TOKEN = token;
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response('{"items":[]}', { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    try {
+      const wrapper = await mountWorkspace();
+      if (action === 'issue') await clickIssue(wrapper);
+      else {
+        await chooseContract(wrapper);
+        await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
+        await flushPromises();
+      }
+      expect(token).toHaveBeenCalledWith(expect.objectContaining({ method: 'POST' }));
+      expect(fetch.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
+      wrapper.unmount();
+      tokenBarrier.resolve('late-post-token');
+      await flushPromises();
+      expect(fetch.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0);
+      expect(wrapper.emitted('refresh')).toBeUndefined();
+    } finally {
+      OpenAPI.TOKEN = previousToken;
+    }
   });
 });
