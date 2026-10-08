@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import type { ManagerOrderDetailResponse } from '../../client';
 import OrderDrawerSection from './OrderDrawerSection.vue';
-import { formatMoney } from './order-utils';
+import OrderMoney from './OrderMoney.vue';
 
 const props = defineProps<{
   order: ManagerOrderDetailResponse;
@@ -131,32 +131,32 @@ const copy = (value: string | null | undefined, label: string) => {
             :key="`website-product-${line.id}`"
             class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2"
           >
-            <div class="flex items-start justify-between gap-3">
+            <div class="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p class="text-sm font-medium text-gray-900">{{ line.title }}</p>
                 <div class="mt-1 flex flex-wrap gap-2 text-xs text-gray-500">
                   <span>Кол-во: {{ line.quantity }}</span>
-                  <span v-if="line.installationIncluded" class="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">
+                  <span v-if="line.installationIncluded" class="inline-flex flex-wrap items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">
                     <span class="material-icons-round text-[14px]">construction</span>
                     Монтаж включен
-                    <span v-if="line.installationPrice > 0">+ {{ formatMoney(line.installationPrice) }}</span>
+                    <span v-if="line.installationPrice > 0">+ <OrderMoney class="relative" :value="line.installationPrice" /></span>
                   </span>
                 </div>
               </div>
-              <span class="whitespace-nowrap text-sm font-semibold text-gray-800">{{ formatMoney(line.lineTotal) }}</span>
+              <span class="whitespace-nowrap text-sm font-semibold text-gray-800"><OrderMoney class="relative" :value="line.lineTotal" /></span>
             </div>
           </div>
 
           <div
             v-for="line in serviceLines"
             :key="`website-service-${line.id}`"
-            class="flex items-start justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2"
+            class="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2"
           >
             <div>
               <p class="text-sm font-medium text-gray-900">{{ line.title }}</p>
               <p class="mt-1 text-xs text-gray-500">Кол-во: {{ line.quantity }}</p>
             </div>
-            <span class="whitespace-nowrap text-sm font-semibold text-gray-800">{{ formatMoney(line.lineTotal) }}</span>
+            <span class="whitespace-nowrap text-sm font-semibold text-gray-800"><OrderMoney class="relative" :value="line.lineTotal" /></span>
           </div>
 
           <p

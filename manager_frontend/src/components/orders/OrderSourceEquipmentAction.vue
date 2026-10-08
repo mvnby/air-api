@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import MoneyAmount from '../money/MoneyAmount.vue';
 import { getApiErrorMessage } from '../../utils/api-errors';
 import { orderSourceReviewApi, sourceEquipmentPrefillMessage, type SourceEquipmentPreview, type SourceCommandHook, type SourceCommandEndHook } from '../../services/order-source-review';
 
@@ -16,7 +17,7 @@ let requestVersion = 0;
 let commandIntent: { key: string; id: string } | null = null;
 const sameScope = (orderId: number, proposalId: number | null | undefined, version: number) => props.orderId === orderId && props.proposalId === proposalId && requestVersion === version;
 const selectableCount = computed(() => selectedIds.value.length + restoreIds.value.length);
-const formatMoney = (value?: number | null) => value == null ? '—' : `${value.toLocaleString('ru-RU')} BYN`;
+const formatAmount = (value?: number | null) => value == null ? undefined : value.toLocaleString('ru-RU');
 const load = async () => {
   const orderId = props.orderId; const proposalId = props.proposalId; const version = ++requestVersion;
   loading.value = true; error.value = '';
@@ -84,7 +85,7 @@ watch(() => [props.orderId, props.proposalId] as const, () => {
             <tbody><tr v-for="(item, index) in preview.items" :key="`${item.product_id || 'missing'}-${index}`" class="border-b border-slate-100 align-top">
               <td class="max-w-64 py-2 pr-2 break-words">{{ [item.brand, item.model].filter(Boolean).join(' ') || 'Модель не указана' }}</td>
               <td class="py-2 pr-2">{{ item.quantity ?? '—' }}</td>
-              <td class="whitespace-nowrap py-2 pr-2">{{ formatMoney(item.price) }}<span class="block text-slate-500">{{ item.available_quantity == null ? '—' : `${item.available_quantity} шт. доступно` }}</span></td>
+              <td class="whitespace-nowrap py-2 pr-2"><MoneyAmount class="relative" :value="item.price" :formatted-value="formatAmount(item.price)" /><span class="block text-slate-500">{{ item.available_quantity == null ? '—' : `${item.available_quantity} шт. доступно` }}</span></td>
               <td class="py-2"><label v-if="item.can_add && item.product_id" class="flex gap-2"><input v-model="selectedIds" type="checkbox" :value="item.product_id" :disabled="applying" />Добавить</label><label v-else-if="item.can_restore && item.product_id" class="flex gap-2"><input v-model="restoreIds" type="checkbox" :value="item.product_id" :disabled="applying" />{{ item.reason === 'previously_added_elsewhere' ? 'Добавить повторно' : 'Восстановить удалённое' }}</label><p class="mt-1 text-slate-600">{{ item.message }}</p></td>
             </tr></tbody>
           </table>

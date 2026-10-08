@@ -96,3 +96,23 @@ describe('OrderWebsiteIntakePanel', () => {
     expect(wrapper.get('section > div').attributes('style') || '').not.toContain('display: none');
   });
 });
+
+
+describe('website intake money', () => {
+  it.each([null, undefined, NaN, Infinity, "125", 0, -12.345, 12.345, 123456789.12])('preserves line amount %s without substituting zero', (value) => {
+    const wrapper = mount(OrderWebsiteIntakePanel, { props: { order: { ...order,
+      product_lines: [{ ...order.product_lines![0], line_total: value }],
+      service_lines: [{ ...order.service_lines![0], line_total: value }],
+    } as ManagerOrderDetailResponse, expanded: true, deliveryAddress: '', comment: '' } });
+    mountedWrappers.push(wrapper);
+    const money = wrapper.findAllComponents({ name: 'MoneyAmount' });
+    expect(money).toHaveLength(3);
+    expect(money[0]!.text()).toBe('300 BYN');
+    const expected = typeof value === 'number' && Number.isFinite(value)
+      ? `${value.toLocaleString('ru-RU', { minimumFractionDigits: Number.isInteger(value) ? 0 : 2, maximumFractionDigits: 2 })} BYN` : '—';
+    for (const line of money.slice(1)) {
+      expect(line.text()).toBe(expected);
+      expect(line.find('svg').exists()).toBe(expected !== '—');
+    }
+  });
+});
