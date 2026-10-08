@@ -4,7 +4,8 @@ import { Check, ChevronDown, ChevronUp, X } from 'lucide-vue-next';
 import type { Segment } from '../../api';
 import type { ManagerOrderListItemResponse } from '../../client';
 import type { CustomerOrderGroup } from './order-utils';
-import { formatMoney, formatOrderCount, getOrderSegment } from './order-utils';
+import { formatOrderCount, getOrderSegment } from './order-utils';
+import OrderMoney from './OrderMoney.vue';
 import { useDemoReadOnly } from '../../services/manager-demo';
 import OrderCardB2B from './OrderCardB2B.vue';
 import OrderCardB2C from './OrderCardB2C.vue';
@@ -115,12 +116,12 @@ const cardComponentForOrder = (order: ManagerOrderListItemResponse) => {
           <span class="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
             {{ formatOrderCount(group.orders.length) }}
           </span>
-          <span>Сумма: <strong class="text-slate-800 dark:text-slate-200">{{ formatMoney(group.totalAmount) }}</strong></span>
-          <span v-if="!demoReadOnly">Маржа: <strong class="text-brand-700 dark:text-brand-300">{{ formatMoney(group.margin) }}</strong></span>
+          <span>Сумма: <strong class="text-slate-800 dark:text-slate-200"><OrderMoney :value="group.totalAmount" /></strong></span>
+          <span v-if="!demoReadOnly">Маржа: <strong class="text-brand-700 dark:text-brand-300"><OrderMoney :value="group.margin" /></strong></span>
           <span>
             Остаток:
             <strong :class="group.balanceDue > 0 ? 'text-amber-800 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'">
-              {{ formatMoney(group.balanceDue) }}
+              <OrderMoney :value="group.balanceDue" />
             </strong>
           </span>
           <span v-if="group.needsAttention" class="font-semibold text-red-600 dark:text-red-300">Нужно внимание</span>

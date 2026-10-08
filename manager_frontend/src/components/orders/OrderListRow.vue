@@ -2,8 +2,9 @@
 import { computed } from 'vue';
 import type { ManagerOrderListItemResponse } from '../../client';
 import type { Segment } from '../../api';
-import { formatDate, formatMoney, formatPhone, getOrderBoardLabel, getOrderCustomerName, getOrderExecutionLabel, getOrderNegotiationLabel, getOrderSegment, isOverdue } from './order-utils';
+import { formatDate, formatPhone, getOrderBoardLabel, getOrderCustomerName, getOrderExecutionLabel, getOrderNegotiationLabel, getOrderSegment, isOverdue } from './order-utils';
 import OrderTitleEditor from './OrderTitleEditor.vue';
+import OrderMoney from './OrderMoney.vue';
 import { useDemoReadOnly } from '../../services/manager-demo';
 
 const props = defineProps<{
@@ -89,11 +90,11 @@ const demoReadOnly = useDemoReadOnly();
       <p><span class="text-gray-500 dark:text-slate-400">Работы:</span> {{ formatDate(order.installation_date) }}</p>
     </td>
     <td class="px-3 py-2.5 align-top text-xs">
-      <p class="font-semibold text-gray-900 dark:text-white">{{ formatMoney(order.total_amount) }}</p>
-      <p v-if="!demoReadOnly" class="mt-0.5 text-brand-700 dark:text-brand-300">Маржа: {{ formatMoney(Number(order.margin || 0)) }}</p>
+      <p class="font-semibold text-gray-900 dark:text-white"><OrderMoney :value="order.total_amount" /></p>
+      <p v-if="!demoReadOnly" class="mt-0.5 text-brand-700 dark:text-brand-300">Маржа: <OrderMoney :value="order.margin" /></p>
     </td>
     <td class="px-3 py-2.5 align-top text-xs">
-      <p class="font-semibold" :class="balanceDue > 0 ? 'text-amber-800 dark:text-amber-300' : 'text-gray-900 dark:text-white'">{{ formatMoney(balanceDue) }}</p>
+      <p class="font-semibold" :class="balanceDue > 0 ? 'text-amber-800 dark:text-amber-300' : 'text-gray-900 dark:text-white'"><OrderMoney :value="balanceDue" /></p>
     </td>
     <td class="px-3 py-2.5 align-top">
       <div class="flex flex-col items-start gap-1.5">
