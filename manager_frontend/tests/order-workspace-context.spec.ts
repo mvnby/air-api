@@ -17,6 +17,16 @@ describe('order context accordion layout', () => {
     expect(w.get('[data-order-usage="context-customer"]').attributes('aria-expanded')).toBe('true');
     expect(w.get('#order-context-object-editor').attributes('style')).toContain('display: none');
   });
+  it('keeps money precision, unknown values and disabled context actions', async () => {
+    const w = make();
+    await w.setProps({ paid: -0.25, total: 1234567.89, balance: 0, disabled: true });
+    expect(w.text()).toContain('-0,25 BYN из 1\u00a0234\u00a0567,89 BYN');
+    expect(w.text()).toContain('Оплачено');
+    expect(w.get('[data-order-usage="context-customer"]').attributes('disabled')).toBeDefined();
+    await w.setProps({ paid: NaN });
+    expect(w.get('[data-order-usage="context-payments"]').text()).toContain('—');
+    w.unmount();
+  });
   it('preserves payment navigation and totals', async () => {
     const w = make(); await w.get('[data-order-usage="context-payments"]').trigger('click');
     expect(w.emitted('payments')).toHaveLength(1); expect(w.text()).toContain('100 BYN из 600 BYN'); expect(w.text()).toContain('Остаток 500 BYN');

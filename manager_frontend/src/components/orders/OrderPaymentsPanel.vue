@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import OrderMoney from './OrderMoney.vue';
 import MoneyAmount from '../money/MoneyAmount.vue';
+import BynSymbol from '../money/BynSymbol.vue';
 import { computed, ref, watch } from 'vue';
 import type {
   BankReceiptResponse,
@@ -11,8 +12,6 @@ import type {
 } from '../../client';
 import { ManagerMailService, ManagerOrdersService } from '../../client';
 import { getApiErrorMessage } from '../../utils/api-errors';
-import OrderDrawerSection from './OrderDrawerSection.vue';
-import { formatMoney } from './order-utils';
 import { useDemoReadOnly } from '../../services/manager-demo';
 
 const props = defineProps<{
@@ -69,9 +68,6 @@ const isAddingPayment = ref(false);
 const deletingPaymentId = ref<number | null>(null);
 const demoReadOnly = useDemoReadOnly();
 
-const summary = computed(() => (
-  `оплачено ${formatMoney(props.totalPayments)} · остаток ${formatMoney(props.balanceDue)} · итого ${formatMoney(props.total)}${demoReadOnly.value ? '' : ` · маржа ${formatMoney(props.margin)}`}`
-));
 const candidateBankReceipts = computed(() => (
   bankReceipts.value.filter((receipt) => receipt.status === 'requires_review')
 ));
@@ -254,14 +250,23 @@ const deletePayment = async (paymentId: number) => {
 </script>
 
 <template>
-  <OrderDrawerSection
-    id="order-workspace-payments"
-    v-model:expanded="expandedModel"
-    title="Оплаты"
-    :summary="summary"
-    icon="account_balance_wallet"
-    tone="default"
-  >
+  <section id="order-workspace-payments" class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-0 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+    <button type="button" class="flex w-full items-center justify-between gap-3 rounded-2xl px-4 py-3 text-left" :aria-expanded="expanded" @click="expandedModel = !expanded">
+      <div class="min-w-0">
+        <h3 class="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+          <span class="material-icons-round text-[18px] text-brand-600 dark:text-brand-300" aria-hidden="true">account_balance_wallet</span>
+          Оплаты
+        </h3>
+        <p class="relative mt-0.5 flex flex-wrap gap-x-1 text-xs text-slate-500 dark:text-slate-400" data-testid="payment-summary">
+          <span>оплачено <OrderMoney :value="totalPayments" /></span>
+          <span>· остаток <OrderMoney :value="balanceDue" /></span>
+          <span>· итого <OrderMoney :value="total" /></span>
+          <span v-if="!demoReadOnly">· маржа <OrderMoney :value="margin" /></span>
+        </p>
+      </div>
+      <span class="material-icons-round shrink-0 text-[20px] text-slate-500 dark:text-slate-400" aria-hidden="true">{{ expanded ? 'expand_less' : 'expand_more' }}</span>
+    </button>
+    <div v-show="expanded" class="border-t border-white/70 px-4 pb-4 pt-3 dark:border-slate-700">
     <section
       class="rounded-2xl border border-slate-200 bg-slate-50 p-3 shadow-sm sm:p-5"
       data-testid="order-payments-panel"
@@ -310,7 +315,7 @@ const deletePayment = async (paymentId: number) => {
 
       <div class="mt-3 flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-end">
         <label class="field-label !mb-0 flex-1 text-xs">
-          Внести платеж ({{ enableCurrency ? (targetCurrency || 'USD') : 'BYN' }})
+          <span>Внести платеж (<template v-if="enableCurrency">{{ targetCurrency || 'USD' }}</template><span v-else class="relative inline-flex items-baseline"><span class="sr-only">BYN</span><BynSymbol /></span>)</span>
           <input v-model.number="newPaymentAmount" data-testid="payment-amount" type="number" step="0.01" min="0" class="field-input mt-1 shadow-sm" placeholder="0.00" />
         </label>
         <label class="field-label !mb-0 text-xs sm:w-1/3">
@@ -336,7 +341,7 @@ const deletePayment = async (paymentId: number) => {
             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-2">
-                  <span class="font-bold text-slate-900"><OrderMoney :value="receipt.amount" /></span>
+                  <span class="relative font-bold text-slate-900 dark:text-slate-100"><OrderMoney :value="receipt.amount" /></span>
                   <span class="text-slate-500">{{ formatReceiptDate(receipt.received_at) }}</span>
                   <span v-if="receipt.payment_document_number" class="rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-500">№ {{ receipt.payment_document_number }}</span>
                 </div>
@@ -364,8 +369,8 @@ const deletePayment = async (paymentId: number) => {
                 Банк
               </span>
             </div>
-            <span class="font-bold text-slate-800" :class="payment.currency !== 'BYN' ? 'text-blue-600' : ''">
-              <MoneyAmount v-if="payment.currency !== 'BYN'" :value="payment.amount" :formatted-value="payment.amount.toFixed(2)" :currency="payment.currency" />
+            <span class="relative font-bold text-slate-800 dark:text-slate-100" :class="payment.currency !== 'BYN' ? 'text-blue-600 dark:text-blue-300' : ''">
+              <MoneyAmount v-if="payment.currency !== 'BYN'" :value="payment.amount" :formatted-value="typeof payment.amount === 'number' ? payment.amount.toFixed(2) : undefined" :currency="payment.currency" />
               <OrderMoney v-else :value="payment.amount" />
             </span>
             <span class="w-16 text-right text-slate-400">{{ formatPaymentType(payment.type) }}</span>
@@ -397,5 +402,6 @@ const deletePayment = async (paymentId: number) => {
         </div>
       </div>
     </section>
-  </OrderDrawerSection>
+    </div>
+  </section>
 </template>

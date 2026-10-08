@@ -2,7 +2,9 @@
 import { ref, computed, watch } from 'vue';
 import { ManagerOrdersService, ManagerMailService } from '../../client';
 import type { BankReceiptResponse, ManagerOrderDetailResponse } from '../../client';
-import { formatMoney } from './order-utils';
+import OrderMoney from './OrderMoney.vue';
+import MoneyAmount from '../money/MoneyAmount.vue';
+import BynSymbol from '../money/BynSymbol.vue';
 import DateTimeField from '../ui/DateTimeField.vue';
 import { getApiErrorMessage } from '../../utils/api-errors';
 import { fromLocalDateTimeInput } from '../../utils/datetime';
@@ -101,12 +103,6 @@ const paymentCurrency = computed<PaymentCurrencyValue>(() => {
   const currency = props.order.target_currency;
   return currency === 'USD' || currency === 'EUR' ? currency : 'BYN';
 });
-
-const formatPaymentAmount = (amount: number | null | undefined, currency?: string | null) => (
-  currency && currency !== 'BYN'
-    ? `${Number(amount || 0).toFixed(2)} ${currency}`
-    : formatMoney(amount || 0)
-);
 
 const addPayment = async () => {
   if (!newPaymentAmount.value || isAddingPayment.value) return;
@@ -285,13 +281,13 @@ watch(() => props.order.id, () => {
           <h3 class="text-lg font-bold text-slate-800 font-['Space_Grotesk'] mb-4">Финансы</h3>
           <div class="mb-4 text-center border border-slate-200 rounded-xl py-6 bg-white shadow-inner">
               <p class="text-sm font-medium text-slate-500 uppercase tracking-wide">Остаток к оплате</p>
-              <p class="text-4xl font-black mt-2 tracking-tight" :class="(order.balance_due || 0) > 0 ? 'text-red-500' : 'text-brand-600'">
-                  {{ formatMoney(order.balance_due || 0) }}
+              <p class="relative text-2xl sm:text-4xl font-black mt-2 tracking-tight" :class="(order.balance_due || 0) > 0 ? 'text-red-500' : 'text-brand-600'">
+                  <OrderMoney :value="typeof order.balance_due === 'number' ? order.balance_due : null" />
               </p>
           </div>
           
           <div class="flex items-end gap-2 bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
-              <label class="flex-1 field-label !mb-0 text-xs">Внести сумму ({{ paymentCurrency }})
+              <label class="flex-1 field-label !mb-0 text-xs"><span>Внести сумму (<span v-if="paymentCurrency === 'BYN'" class="relative inline-flex items-baseline"><span class="sr-only">BYN</span><BynSymbol /></span><template v-else>{{ paymentCurrency }}</template>)</span>
                   <input v-model.number="newPaymentAmount" type="number" min="0" class="field-input mt-1 shadow-sm" placeholder="0.00" />
               </label>
               <button type="button" data-order-usage="payment_add" class="btn-mini h-[38px] w-[100px]" :disabled="!newPaymentAmount || isAddingPayment" @click="addPayment">
@@ -312,7 +308,7 @@ watch(() => props.order.id, () => {
                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-2">
-                      <span class="font-bold text-slate-900">{{ formatMoney(receipt.amount) }}</span>
+                      <span class="relative font-bold text-slate-900 dark:text-slate-100"><OrderMoney :value="typeof receipt.amount === 'number' ? receipt.amount : null" /></span>
                       <span class="text-slate-500">{{ formatReceiptDate(receipt.received_at) }}</span>
                       <span v-if="receipt.payment_document_number" class="rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-500">№ {{ receipt.payment_document_number }}</span>
                     </div>
@@ -343,8 +339,9 @@ watch(() => props.order.id, () => {
                         Банк
                       </span>
                     </div>
-                    <span class="font-bold text-slate-800" :class="p.currency !== 'BYN' ? 'text-blue-600' : ''">
-                      {{ formatPaymentAmount(p.amount, p.currency) }}
+                    <span class="relative font-bold text-slate-800 dark:text-slate-100" :class="p.currency !== 'BYN' ? 'text-blue-600 dark:text-blue-300' : ''">
+                      <MoneyAmount v-if="p.currency && p.currency !== 'BYN'" :value="typeof p.amount === 'number' ? p.amount : null" :formatted-value="typeof p.amount === 'number' ? p.amount.toFixed(2) : undefined" :currency="p.currency" />
+                      <OrderMoney v-else :value="typeof p.amount === 'number' ? p.amount : null" />
                     </span>
                     <span class="text-slate-400 w-16 text-right">{{ formatPaymentType(p.type) }}</span>
                   </div>

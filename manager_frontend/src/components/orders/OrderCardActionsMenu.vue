@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { MoreVertical, XCircle } from 'lucide-vue-next';
+import OrderMoney from './OrderMoney.vue';
 import type { ManagerOrderListItemResponse } from '../../client';
 import {
   EXECUTION_STATUS_OPTIONS,
   NEGOTIATION_STATUS_OPTIONS,
-  formatMoney,
   getOrderBoardColumn,
   getOrderExecutionStatus,
   getOrderNegotiationStatus,
@@ -151,7 +151,7 @@ onBeforeUnmount(() => {
           @click="closeDebt"
         >
           <span class="material-icons-round text-[16px]">payments</span>
-          Закрыть долг {{ formatMoney(balanceDue) }}
+          <span class="relative min-w-0">Закрыть долг <OrderMoney :value="order.balance_due" /></span>
         </button>
       </template>
 
