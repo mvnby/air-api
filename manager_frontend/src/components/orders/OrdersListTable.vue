@@ -2,8 +2,9 @@
 import { computed, ref } from 'vue';
 import type { Segment } from '../../api';
 import type { OrderRenderItem } from './order-utils';
-import { STATUS_LABELS, formatMoney, formatOrderCount } from './order-utils';
+import { STATUS_LABELS, formatOrderCount } from './order-utils';
 import OrderListRow from './OrderListRow.vue';
+import OrderMoney from './OrderMoney.vue';
 import { useDemoReadOnly } from '../../services/manager-demo';
 
 const props = defineProps<{
@@ -53,7 +54,7 @@ const isGroupSelected = (item: OrderRenderItem) => {
 
 <template>
   <div class="overflow-x-auto rounded-[2rem] border border-gray-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-900 sm:p-3">
-    <table class="w-full min-w-[960px] table-fixed text-sm text-gray-700 dark:text-slate-200">
+    <table class="w-full min-w-[960px] text-sm text-gray-700 dark:text-slate-200">
       <colgroup>
         <col class="w-10" />
         <col class="w-[280px]" />
@@ -115,11 +116,11 @@ const isGroupSelected = (item: OrderRenderItem) => {
                 <span v-else class="text-xs text-gray-500 dark:text-slate-400">Без срочных флагов</span>
               </td>
               <td class="px-3 py-3 text-xs text-gray-500 dark:text-slate-400">Сводка по клиенту</td>
-              <td class="px-3 py-3 text-xs"><p class="font-semibold text-gray-900 dark:text-white">{{ formatMoney(item.group.totalAmount) }}</p><p v-if="!demoReadOnly" class="mt-0.5 text-brand-700 dark:text-brand-300">Маржа: {{ formatMoney(item.group.margin) }}</p></td>
+              <td class="px-3 py-3 text-xs"><p class="font-semibold text-gray-900 dark:text-white"><OrderMoney :value="item.group.totalAmount" /></p><p v-if="!demoReadOnly" class="mt-0.5 text-brand-700 dark:text-brand-300">Маржа: <OrderMoney :value="item.group.margin" /></p></td>
               <td
                 class="px-3 py-3 text-xs"
               >
-                <p class="font-semibold" :class="item.group.balanceDue > 0 ? 'text-amber-800 dark:text-amber-300' : 'text-gray-900 dark:text-white'">{{ formatMoney(item.group.balanceDue) }}</p>
+                <p class="font-semibold" :class="item.group.balanceDue > 0 ? 'text-amber-800 dark:text-amber-300' : 'text-gray-900 dark:text-white'"><OrderMoney :value="item.group.balanceDue" /></p>
               </td>
               <td class="px-3 py-3">
                 <button class="btn-mini-outline" type="button" @click="toggleGroup(item.group.id)">

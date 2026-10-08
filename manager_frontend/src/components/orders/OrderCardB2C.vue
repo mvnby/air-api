@@ -2,9 +2,10 @@
 import { computed, ref } from 'vue';
 import { ChevronDown, ChevronUp, ExternalLink } from 'lucide-vue-next';
 import type { ManagerOrderListItemResponse } from '../../client';
-import { BOARD_CARD_ACCENT_CLASSES, BOARD_COLUMN_TONE_CLASSES, formatDate, formatMoney, formatPhone, formatRelativeAge, getOrderBoardColumn, getOrderBoardLabel, getOrderExecutionLabel, getOrderExecutionStatus, getOrderNegotiationLabel, getOrderNegotiationStatus, isOverdue } from './order-utils';
+import { BOARD_CARD_ACCENT_CLASSES, BOARD_COLUMN_TONE_CLASSES, formatDate, formatPhone, formatRelativeAge, getOrderBoardColumn, getOrderBoardLabel, getOrderExecutionLabel, getOrderExecutionStatus, getOrderNegotiationLabel, getOrderNegotiationStatus, isOverdue } from './order-utils';
 import OrderCardActionsMenu from './OrderCardActionsMenu.vue';
 import OrderTitleEditor from './OrderTitleEditor.vue';
+import OrderMoney from './OrderMoney.vue';
 import { useDemoReadOnly } from '../../services/manager-demo';
 
 const props = defineProps<{
@@ -99,12 +100,12 @@ const hasComment = computed(() => Boolean(props.order.comment?.trim()));
 const paymentSummary = computed(() => {
   const balance = Number(props.order.balance_due || 0);
   if (balance > 0) {
-    return { label: `Остаток: ${formatMoney(balance)}`, className: 'text-amber-800 dark:text-amber-300' };
+    return { label: 'Остаток:', amount: balance, className: 'text-amber-800 dark:text-amber-300' };
   }
   if (props.order.total_amount > 0) {
-    return { label: 'Оплачено', className: 'text-emerald-700 dark:text-emerald-300' };
+    return { label: 'Оплачено', amount: null, className: 'text-emerald-700 dark:text-emerald-300' };
   }
-  return { label: 'Без суммы', className: 'text-gray-500 dark:text-slate-400' };
+  return { label: 'Без суммы', amount: null, className: 'text-gray-500 dark:text-slate-400' };
 });
 </script>
 
@@ -181,7 +182,7 @@ const paymentSummary = computed(() => {
       </span>
       <span class="text-[11px] font-medium" :class="boardTextClass">В статусе: {{ statusAge }}</span>
       <span v-if="dateSummary" class="text-[11px] font-medium" :class="dateSummary.className">{{ dateSummary.label }}: {{ dateSummary.value }}</span>
-      <span class="text-[11px] font-semibold" :class="paymentSummary.className">{{ paymentSummary.label }}</span>
+      <span class="text-[11px] font-semibold" :class="paymentSummary.className">{{ paymentSummary.label }} <OrderMoney v-if="paymentSummary.amount !== null" :value="paymentSummary.amount" /></span>
     </div>
 
     <Transition name="fade">
@@ -192,9 +193,9 @@ const paymentSummary = computed(() => {
           <p v-if="hasComment" class="max-h-20 overflow-hidden"><span class="font-semibold text-gray-800 dark:text-white">Комментарий:</span> {{ order.comment }}</p>
         </div>
 
-        <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
-          <p class="rounded-xl bg-gray-50 px-2 py-1.5 text-gray-700 dark:bg-slate-900/40 dark:text-slate-300">Сумма: <span class="font-semibold">{{ formatMoney(order.total_amount) }}</span></p>
-          <p v-if="!demoReadOnly" class="rounded-xl bg-gray-50 px-2 py-1.5 text-gray-700 dark:bg-slate-900/40 dark:text-slate-300">Маржа: <span class="font-semibold">{{ formatMoney(Number(order.margin || 0)) }}</span></p>
+        <div class="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+          <p class="rounded-xl bg-gray-50 px-2 py-1.5 text-gray-700 dark:bg-slate-900/40 dark:text-slate-300">Сумма: <span class="font-semibold"><OrderMoney :value="order.total_amount" /></span></p>
+          <p v-if="!demoReadOnly" class="rounded-xl bg-gray-50 px-2 py-1.5 text-gray-700 dark:bg-slate-900/40 dark:text-slate-300">Маржа: <span class="font-semibold"><OrderMoney :value="order.margin" /></span></p>
           <p v-if="order.next_followup_date" class="rounded-xl bg-gray-50 px-2 py-1.5 text-gray-700 dark:bg-slate-900/40 dark:text-slate-300">Касание: <span class="font-semibold">{{ formatDate(order.next_followup_date) }}</span></p>
           <p v-if="order.measurement_date" class="rounded-xl bg-gray-50 px-2 py-1.5 text-gray-700 dark:bg-slate-900/40 dark:text-slate-300">Замер: <span class="font-semibold">{{ formatDate(order.measurement_date) }}</span></p>
           <p v-if="order.installation_date" class="rounded-xl bg-gray-50 px-2 py-1.5 text-gray-700 dark:bg-slate-900/40 dark:text-slate-300">Работы: <span class="font-semibold">{{ formatDate(order.installation_date) }}</span></p>
