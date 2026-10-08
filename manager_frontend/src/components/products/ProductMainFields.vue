@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BynSymbol from '../money/BynSymbol.vue';
 import { Globe } from 'lucide-vue-next';
 import type { Product, ProductUpdate } from '../../api';
 
@@ -59,28 +60,30 @@ const categoryLabel = (category: Category) => categories.find(item => item.value
 
 <div class="grid grid-cols-2 gap-3">
     <div>
-        <label class="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1">Цена (BYN)</label>
+        <label class="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1" for="product-price">Цена (<BynSymbol /><span class="sr-only">BYN</span>)</label>
         <div class="relative">
             <input
+                id="product-price"
                 v-model.number="form.price"
                 type="number"
                 class="w-full pl-3 pr-10 py-2 bg-slate-100 dark:bg-slate-800 border rounded-xl focus:bg-white dark:focus:bg-slate-700 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-bold text-brand-700 dark:text-brand-400 text-sm"
                 :class="errors.price ? 'border-red-400 dark:border-red-800 focus:border-red-500' : 'border-gray-200 dark:border-slate-700'"
             />
-            <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 text-xs">BYN</span>
+            <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 text-xs"><BynSymbol /><span class="sr-only"> BYN</span></span>
         </div>
         <p v-if="errors.price" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ errors.price }}</p>
     </div>
     <div>
-        <label class="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1 line-through decoration-gray-400 dark:decoration-slate-600">Старая цена</label>
+        <label class="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1 line-through decoration-gray-400 dark:decoration-slate-600" for="product-old-price">Старая цена<span class="sr-only"> (BYN)</span></label>
         <div class="relative">
             <input
+                id="product-old-price"
                 v-model.number="form.old_price"
                 type="number"
                 class="w-full pl-3 pr-10 py-2 bg-slate-100 dark:bg-slate-800 border rounded-xl focus:bg-white dark:focus:bg-slate-700 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all text-gray-500 dark:text-slate-400 text-sm"
                 :class="errors.old_price ? 'border-red-400 dark:border-red-800 focus:border-red-500' : 'border-gray-200 dark:border-slate-700'"
             />
-            <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 text-xs">BYN</span>
+            <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 text-xs"><BynSymbol /><span class="sr-only"> BYN</span></span>
         </div>
         <p v-if="errors.old_price" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ errors.old_price }}</p>
     </div>

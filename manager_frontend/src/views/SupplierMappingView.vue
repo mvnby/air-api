@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MoneyAmount from '../components/money/MoneyAmount.vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import { api } from '../api';
 import { getApiErrorMessage } from '../utils/api-errors';
@@ -365,7 +366,7 @@ onMounted(async () => {
             <span class="block truncate font-medium">{{ item.title_raw || item.source_url }}</span>
             <span class="mt-1 block text-xs text-slate-500">
               {{ item.supplier_name || item.supplier_id }}<span v-if="item.source_name"> · {{ item.source_name }}</span>
-              <span v-if="item.rrc_byn"> · {{ item.rrc_byn }} BYN</span>
+              <span v-if="item.rrc_byn != null"> · <MoneyAmount :value="item.rrc_byn" :formatted-value="String(item.rrc_byn)" /></span>
               <span v-if="item.qty"> · {{ item.qty }} шт.</span>
             </span>
             <span v-if="item.model_tokens?.length" class="mt-1 block truncate font-mono text-xs text-slate-500">
@@ -382,7 +383,7 @@ onMounted(async () => {
       </p>
     </section>
 
-    <div class="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden">
+    <div class="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl relative overflow-x-auto">
       <table class="w-full text-sm">
         <thead class="bg-gray-50 dark:bg-slate-900/40 text-gray-500">
           <tr>
@@ -421,7 +422,7 @@ onMounted(async () => {
                 </a>
               </td>
               <td class="p-3">{{ offer.qty }}</td>
-              <td class="p-3">{{ offer.wholesale_value || '—' }} <span v-if="offer.wholesale_currency">{{ offer.wholesale_currency }}</span></td>
+              <td class="p-3"><MoneyAmount v-if="offer.wholesale_currency" :value="offer.wholesale_value" :currency="offer.wholesale_currency" :formatted-value="String(offer.wholesale_value)" /><span v-else class="whitespace-nowrap">{{ offer.wholesale_value ?? '—' }}</span></td>
               <td class="p-3">
                 <div v-if="offer.model_tokens?.length" class="mb-1 flex flex-wrap gap-1">
                   <span v-for="token in offer.model_tokens.slice(0, 4)" :key="`${keyOf(offer)}-${token}`" class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-600">
@@ -469,7 +470,7 @@ onMounted(async () => {
                     <label v-for="p in inlineCandidates[keyOf(offer)] || []" :key="p.id" class="flex items-start gap-2 border rounded px-3 py-2 bg-white">
                       <input v-model.number="selectedProductMap[keyOf(offer)]" type="radio" :value="p.id" />
                       <span class="min-w-0">
-                        <span class="block font-medium">{{ p.title }} ({{ p.price }} BYN)</span>
+                        <span class="block font-medium">{{ p.title }} (<MoneyAmount :value="p.price" :formatted-value="String(p.price)" />)</span>
                         <span v-if="p.confidence !== undefined" class="mt-1 inline-flex rounded border px-1.5 py-0.5 text-[11px]" :class="confidenceClass(p.confidence)">
                           {{ p.confidence }}% · score {{ p.score }}
                         </span>
