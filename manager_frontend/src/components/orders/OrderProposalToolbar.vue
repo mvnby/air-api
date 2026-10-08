@@ -8,7 +8,7 @@ import {
   proposalPrimaryAction,
   proposalPrimaryActionLabel,
 } from './proposal-lifecycle';
-import { formatMoney } from './order-utils';
+import OrderMoney from './OrderMoney.vue';
 
 const props = defineProps<{
   proposals: OrderProposalResponse[];
@@ -106,19 +106,19 @@ defineExpose({
         </span>
         <span class="mt-1 flex items-center gap-1.5">
           <span class="rounded-full px-1.5 py-0.5 text-[10px] font-semibold" :class="toneClass(proposal)">{{ statusMeta(proposal).label }}</span>
-          <span class="whitespace-nowrap opacity-70">{{ formatMoney(proposal.total_amount || 0) }}</span>
+          <span class="whitespace-nowrap opacity-70"><OrderMoney class="relative" :value="proposal.total_amount" /></span>
         </span>
       </button>
     </div>
 
     <div v-if="activeProposal" class="flex min-w-0 flex-wrap items-center gap-2" :class="compact ? '' : 'mt-2'">
-      <div class="min-w-0 flex-1">
+      <div class="min-w-[10rem] flex-1">
         <div class="flex min-w-0 flex-wrap items-center gap-1.5 text-xs">
           <span class="truncate font-semibold text-slate-900 dark:text-white">{{ activeProposal.name }}</span>
           <span v-if="activeProposal.is_selected" class="rounded-full bg-brand-50 px-2 py-0.5 font-semibold text-brand-700 dark:bg-brand-500/15 dark:text-brand-200">Активное</span>
           <span class="rounded-full px-2 py-0.5 font-semibold" :class="toneClass(activeProposal)">{{ statusMeta(activeProposal).label }}</span>
         </div>
-        <p v-if="!compact" class="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">{{ lineLabel(activeProposal) }} · {{ formatMoney(activeProposal.total_amount || 0) }}</p>
+        <p v-if="!compact" class="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">{{ lineLabel(activeProposal) }} · <OrderMoney class="relative" :value="activeProposal.total_amount" /></p>
       </div>
 
       <div v-if="$slots.controls" class="order-last flex w-full min-w-0 flex-wrap items-center gap-2 sm:order-none sm:w-auto"><slot name="controls" /></div>

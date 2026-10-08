@@ -119,3 +119,34 @@ describe('catalog money callers', () => {
     expect(wrapper.get('#product-old-price').element).toHaveProperty('value', ''); wrapper.unmount();
   });
 });
+
+
+describe('order header and proposal toolbar money callers', () => {
+  it.each([null, undefined, NaN, Infinity, "125", 0, -12.345, 12.345, 123456789.12])('keeps raw unknown and numeric value %s', async (value) => {
+    const [{ default: Header }, { default: Toolbar }] = await Promise.all([
+      import('../src/components/orders/OrderWorkspaceHeader.vue'), import('../src/components/orders/OrderProposalToolbar.vue'),
+    ]);
+    const header = mount(Header, { props: { title: 'Заказ', workflow: 'supply', viewModel: { stageLabel: 'Новый', nextAction: { label: 'Продолжить' } } as any, total: value as any, paid: value as any, balance: 12.345 } });
+    const proposal = { id: 1, name: 'Вариант', status: 'draft', is_selected: true, total_amount: value, product_lines: [{ id: 1 }], service_lines: [] } as any;
+    const toolbar = mount(Toolbar, { props: { proposals: [proposal, { ...proposal, id: 2 }], activeProposalId: 1 } });
+    const valid = typeof value === 'number' && Number.isFinite(value);
+    const expected = valid ? `${value.toLocaleString('ru-RU', { minimumFractionDigits: Number.isInteger(value) ? 0 : 2, maximumFractionDigits: 2 })} BYN` : '—';
+    for (const money of [...header.findAllComponents(MoneyAmount).slice(0, 2), ...toolbar.findAllComponents(MoneyAmount)]) {
+      expect(money.text()).toBe(expected); expect(money.find('svg').exists()).toBe(valid);
+    }
+    expect(header.findAllComponents(MoneyAmount)[2]!.text()).toBe('12,35 BYN');
+    await toolbar.findAll('button')[0]!.trigger('click'); expect(toolbar.emitted('open')?.[0]).toEqual([proposal]);
+    const primary = toolbar.findAll('button').find((b) => b.text().includes('Заполните') || b.text().includes('Завершить'))!;
+    await primary.trigger('click');
+    expect(Boolean(toolbar.emitted('change-status'))).toBe(Number(value || 0) > 0);
+    await header.findAll('button').find((b) => b.text() === 'Внести оплату')!.trigger('click');
+    expect(header.emitted('payments')).toEqual([[]]);
+    await header.findAll('button').find((b) => b.text() === 'Продолжить')!.trigger('click');
+    expect(header.emitted('next')).toEqual([[]]);
+    await header.setProps({ compact: true }); expect(header.findAllComponents(MoneyAmount)).toHaveLength(0);
+    await header.setProps({ compact: false, workspace: true }); expect(header.findAllComponents(MoneyAmount)).toHaveLength(0);
+    await toolbar.setProps({ compact: true, loading: true }); expect(toolbar.findAllComponents(MoneyAmount)).toHaveLength(2);
+    expect(toolbar.findAll('button').every((b) => b.attributes('disabled') !== undefined)).toBe(true);
+    header.unmount(); toolbar.unmount();
+  });
+});
