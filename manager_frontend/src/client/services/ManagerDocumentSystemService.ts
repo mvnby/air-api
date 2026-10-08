@@ -8,6 +8,7 @@ import type { ConditionPresetItem } from '../models/ConditionPresetItem';
 import type { ConditionPresetList } from '../models/ConditionPresetList';
 import type { ConditionPresetPayload } from '../models/ConditionPresetPayload';
 import type { ConsumerEquipmentDefaultsResponse } from '../models/ConsumerEquipmentDefaultsResponse';
+import type { DocumentCustomerReadiness } from '../models/DocumentCustomerReadiness';
 import type { DocumentFacsimilePdfPayload } from '../models/DocumentFacsimilePdfPayload';
 import type { DocumentFacsimilePlacementItem } from '../models/DocumentFacsimilePlacementItem';
 import type { DocumentFacsimilePlacementPayload } from '../models/DocumentFacsimilePlacementPayload';
@@ -26,6 +27,7 @@ import type { ManagedDocumentArtifactListResponse } from '../models/ManagedDocum
 import type { ManagedDocumentDraftPayload } from '../models/ManagedDocumentDraftPayload';
 import type { ManagedDocumentItem } from '../models/ManagedDocumentItem';
 import type { ManagedDocumentListResponse } from '../models/ManagedDocumentListResponse';
+import type { ManagedDocumentReadinessResponse } from '../models/ManagedDocumentReadinessResponse';
 import type { ManagedDocumentVoidPayload } from '../models/ManagedDocumentVoidPayload';
 import type { NativeDocumentTemplateCreatePayload } from '../models/NativeDocumentTemplateCreatePayload';
 import type { NativeDocumentTemplateItem } from '../models/NativeDocumentTemplateItem';
@@ -1285,6 +1287,62 @@ export class ManagerDocumentSystemService {
             url: '/api/manager/document-system/artifacts/{artifact_id}/download',
             path: {
                 'artifact_id': artifactId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Check Managed Document Readiness
+     * Read the selected native version and scoped order facts without creating a draft
+     * or reserving a number. Reports only applicable placeholders surviving the frozen
+     * party conditions. Creating a draft and issuing it repeat server-side checks;
+     * this response is advisory and does not authorize issuance. Returns 404 for
+     * scoped dependencies, 409 for incompatible context, 400 for invalid facts and
+     * 503 for unavailable private template bytes. Manager membership is required.
+     * @param orderId
+     * @param requestBody
+     * @returns ManagedDocumentReadinessResponse Successful Response
+     * @throws ApiError
+     */
+    public static checkManagerManagedDocumentReadiness(
+        orderId: number,
+        requestBody: ManagedDocumentDraftPayload,
+    ): CancelablePromise<ManagedDocumentReadinessResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/document-system/orders/{order_id}/documents/readiness',
+            path: {
+                'order_id': orderId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Managed Document Readiness
+     * Check a scoped draft's persisted facts against its frozen native template.
+     *
+     * Reads source bytes without refreshing the snapshot or calling an edit provider.
+     * Issued documents are not rechecked. Missing/inaccessible documents return 404,
+     * incompatible context 409, unavailable source 503 and invalid snapshot 400.
+     * Manager membership is required. The issuance service repeats this check.
+     * @param documentId
+     * @returns DocumentCustomerReadiness Successful Response
+     * @throws ApiError
+     */
+    public static getManagerManagedDocumentReadiness(
+        documentId: number,
+    ): CancelablePromise<DocumentCustomerReadiness> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/document-system/documents/{document_id}/readiness',
+            path: {
+                'document_id': documentId,
             },
             errors: {
                 422: `Validation Error`,

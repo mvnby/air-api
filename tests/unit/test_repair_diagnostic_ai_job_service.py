@@ -619,14 +619,39 @@ async def test_heartbeat_prevents_second_replica_from_reclaiming_long_runner(
     repair_ai_factory,
     monkeypatch,
 ):
+    from sqlalchemy import event as sqlalchemy_event
+
     order_id, event_id = await _seed_job(repair_ai_factory)
     monkeypatch.setattr(RepairDiagnosticAiJobService, "LEASE_SECONDS", 0.18)
+    base_time = datetime.now(timezone.utc)
+    current_time = base_time
+
+    class ControlledClock:
+        @staticmethod
+        def now(_timezone):
+            return current_time
+
+    monkeypatch.setattr("services.repair_diagnostic_ai_job_service.datetime", ControlledClock)
     started = asyncio.Event()
+    renewed = asyncio.Event()
+    finish_runner = asyncio.Event()
     contender_calls = 0
+    actual_renew_lease = RepairDiagnosticAiJobService._renew_lease
+
+    async def observe_renewal(cls, session, *, claim, now):
+        result = await actual_renew_lease(session, claim=claim, now=now)
+        if result and claim.worker_id == "primary-worker" and now == base_time + timedelta(seconds=0.16):
+            # Wait for a real committed renewal, not merely an in-flight flush.
+            sqlalchemy_event.listen(
+                session.sync_session, "after_commit", lambda _session: renewed.set(), once=True,
+            )
+        return result
+
+    monkeypatch.setattr(RepairDiagnosticAiJobService, "_renew_lease", classmethod(observe_renewal))
 
     async def long_runner(**_kwargs):
         started.set()
-        await asyncio.sleep(0.4)
+        await finish_runner.wait()
 
     async def contender(**_kwargs):
         nonlocal contender_calls
@@ -640,15 +665,28 @@ async def test_heartbeat_prevents_second_replica_from_reclaiming_long_runner(
             runner=long_runner,
         )
     )
-    await started.wait()
-    await asyncio.sleep(0.24)
-    contender_processed = await RepairDiagnosticAiJobService.process_batch(
-        worker_id="contender-worker",
-        limit=1,
-        session_factory=repair_ai_factory,
-        runner=contender,
-    )
-    primary_processed = await primary_task
+    try:
+        await asyncio.wait_for(started.wait(), timeout=5)
+        # Real heartbeat loop and DB renewal run at a controlled logical instant.
+        # CI scheduling/SQLite latency cannot consume this deliberately tiny lease.
+        current_time = base_time + timedelta(seconds=0.16)
+        await asyncio.wait_for(renewed.wait(), timeout=5)
+        _order, claimed_event = await _load(repair_ai_factory, order_id, event_id)
+        assert claimed_event.worker_id == "primary-worker"
+        assert claimed_event.lease_expires_at.replace(tzinfo=timezone.utc) == (
+            current_time + timedelta(seconds=0.18)
+        )
+        # The original lease has expired; only the persisted renewal protects it.
+        current_time = base_time + timedelta(seconds=0.24)
+        contender_processed = await RepairDiagnosticAiJobService.process_batch(
+            worker_id="contender-worker",
+            limit=1,
+            session_factory=repair_ai_factory,
+            runner=contender,
+        )
+    finally:
+        finish_runner.set()
+        primary_processed = await asyncio.wait_for(primary_task, timeout=5)
 
     _order, event = await _load(repair_ai_factory, order_id, event_id)
     assert primary_processed == 1

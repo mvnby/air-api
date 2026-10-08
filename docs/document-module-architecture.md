@@ -75,6 +75,39 @@ tenant + legal entity + document kind + series + period
 Google file id и edit URL являются provider mapping, но не источником истины.
 Выпущенный PDF/DOCX и metadata snapshot сохраняются отдельно.
 
+## Заполненность клиента в выбранном нативном действии
+
+Для `contract`/`invoice` application service проверяет effective placeholders
+реальных DOCX bytes после применения frozen conditions через существующий
+`DocxConditionProcessor`. Отключённые first/even Word headers/footers не
+добавляют требований; активные inherited stories учитываются. Общий security
+каталог загрузки/рендера остаётся прежним. Проверка использует raw factual snapshot; линии для
+заполнения принадлежат только выходному документу. Требования не выводятся из
+общей сводки карточки. Политика полей и UI описаны в
+[рабочей области клиента](customer-workspace.md#проверка-клиента-для-выбранного-договора-или-счёта).
+
+`POST /api/manager/document-system/orders/{order_id}/documents/readiness`
+принимает draft selection и возвращает `checked`, `missing_fields` (field,
+label, critical), `can_issue`, template/version IDs. Это read-only preflight:
+создание повторяет факты и актуальный выбор, и по умолчанию отклоняет критичные
+пропуски. `allow_incomplete_customer=true` явно разрешает неполный черновик.
+`GET /api/manager/document-system/documents/{document_id}/readiness` читает
+scoped saved draft без provider calls и без обновления снимка. Manager использует
+его перед синхронизацией внешнего редактора для выпуска. Сам `issue` повторяет
+проверку actual saved template/version/source/facts до резервирования номера и
+артефактов; отсутствие, повреждение или устаревание cached readiness не дают
+разрешения на выпуск. Уже issued/sent/signed записи не пересчитываются.
+
+Пометка неполного черновика добавляется к output copy в body и каждый активный
+вариант header всех sections, включая first/even page; исходный tenant template
+не изменяется. Редактируемый DOCX сохраняет пометку; preview повторно добавляет
+её и к синхронизированному source, если пользователь удалил её в редакторе.
+Скачивание draft DOCX проходит через private API presentation guard; presigned
+URL к storage для такой копии не выдаётся. Этот guard меняет только response
+bytes, проверяя сохранённые факты/шаблон, и не переписывает stored artifact.
+Issued artifacts сохраняют существующий путь доступа и исходные bytes.
+Изменение карточки не обновляет сохранённые факты, существующие номера или файлы.
+
 ## Хранилище и приватность
 
 Документные артефакты приватны и tenant-scoped. Публичные URL и общий media
