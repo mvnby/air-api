@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MoneyAmount from '../money/MoneyAmount.vue';
 import { computed, ref, watch } from 'vue';
 import { Eye, ImageOff, Loader2 } from 'lucide-vue-next';
 import type {
@@ -131,7 +132,7 @@ watch(() => props.active.id, () => {
             </div>
             <div class="min-w-0 p-3">
               <strong class="block break-words text-sm leading-snug">{{ item.product.title }}</strong>
-              <p class="mt-2 font-bold">{{ item.product.price }} BYN</p>
+              <p class="mt-2 font-bold"><MoneyAmount :value="item.product.price" :formatted-value="String(item.product.price)" /></p>
               <p class="mt-1 text-xs text-slate-500">{{ item.selection_source === 'fallback' ? 'Из резерва' : item.selection_source === 'automatic' ? 'По правилу' : 'Добавлен вручную' }}</p>
             </div>
           </article>
@@ -178,8 +179,8 @@ watch(() => props.active.id, () => {
   .preview-grid--tiles .product-card:first-child { grid-column:auto; }
   .preview-grid--carousel { grid-auto-columns:minmax(210px,82%); }
 }
-:global(.dark) .field-input { border-color:rgb(71 85 105); }
-:global(.dark) .preview-chip { background:rgb(30 41 59); }
-:global(.dark) .product-card { background:rgb(15 23 42); border-color:rgb(51 65 85); }
-:global(.dark) .product-image { background:rgb(30 41 59); }
+.dark .field-input { border-color:rgb(71 85 105); }
+.dark .preview-chip { background:rgb(30 41 59); }
+.dark .product-card { background:rgb(15 23 42); border-color:rgb(51 65 85); }
+.dark .product-image { background:rgb(30 41 59); }
 </style>
