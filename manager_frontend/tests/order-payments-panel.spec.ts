@@ -124,6 +124,26 @@ describe('OrderPaymentsPanel', () => {
     expect(wrapper.find('svg[viewBox="0 0 360.67 446.4"]').exists()).toBe(true);
   });
 
+  it('keeps the structured summary available when collapsed and emits its toggle', async () => {
+    const wrapper = mountPanel([], false);
+    await wrapper.setProps({ totalPayments: 0, balanceDue: -0.25, total: 1234567.89, margin: NaN });
+    const summary = wrapper.get('[data-testid="payment-summary"]');
+    expect(summary.text()).toContain('оплачено 0 BYN');
+    expect(summary.text()).toContain('· остаток -0,25 BYN');
+    expect(summary.text()).toContain('· итого 1\u00a0234\u00a0567,89 BYN');
+    expect(summary.text()).toContain('· маржа —');
+    expect(summary.findAll('svg')).toHaveLength(3);
+    await wrapper.get('button[aria-expanded]').trigger('click');
+    expect(wrapper.emitted('update:expanded')).toEqual([[true]]);
+  });
+
+  it('preserves unknown foreign currency codes and missing payment values', async () => {
+    const wrapper = mountPanel([{ ...payment, currency: 'GBP' as any, amount: -0.25 }, { ...payment, id: 802, currency: 'EUR', amount: null as any }]);
+    await flushPromises();
+    expect(wrapper.text()).toContain('-0.25\u00a0GBP');
+    expect(wrapper.find('[aria-label="Нет данных"]').exists()).toBe(true);
+  });
+
   it('omits margin from the payment summary in a read-only demo', async () => {
     managerSession.auth.value = { demo_read_only: true } as any;
     const wrapper = mountPanel();
