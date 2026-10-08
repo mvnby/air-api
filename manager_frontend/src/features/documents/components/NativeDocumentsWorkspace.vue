@@ -71,6 +71,7 @@ const canManageDocumentSettings = computed(() => (
 ));
 const canSendNativeEmail = computed(() => managerSession.auth.value?.is_system_tenant === true);
 const workspace = useManagedDocumentWorkspace({
+  customerContext: () => props.order.customer,
   orderId: () => props.order.id,
   workflowType: () => props.workflowType || props.order.workflow_type,
   proposalId: () => proposalId.value,
@@ -155,9 +156,13 @@ const customerTypeLabel = computed(() => {
   if (props.order.customer?.type === 'individual_entrepreneur') return 'ИП';
   return 'физлицо';
 });
-const customerWarnings = computed(() => (
-  getCustomerDocumentWarnings(props.order.customer, workspace.documentType.value)
-));
+const customerWarnings = computed(() => ['contract', 'invoice'].includes(workspace.documentType.value)
+  ? (workspace.customerReadiness.value?.missing_fields || []).map((item) => item.label)
+  : getCustomerDocumentWarnings(props.order.customer, workspace.documentType.value));
+const incompleteDraft = (document: Parameters<typeof workspace.issue>[0]) => document.status === 'draft'
+  && document.customer_readiness?.can_issue === false;
+const criticalMissingLabels = (document: Parameters<typeof workspace.issue>[0]) => (document.customer_readiness?.missing_fields || [])
+  .filter((item) => item.critical).map((item) => item.label).join(', ');
 const audienceMismatchWarning = computed(() => (
   isConsumerDocument.value && !customerIsConsumer.value
     ? `Карточка клиента отмечена как ${customerTypeLabel.value}. Заказ-акт для физлица лучше не выпускать до проверки типа клиента.`
@@ -308,6 +313,7 @@ const googleDraftBusy = (documentId: number) => {
   return googleEditor.isBusy(target) || session?.status === 'syncing';
 };
 const issueDocument = async (document: Parameters<typeof workspace.issue>[0]) => {
+  if (!await workspace.checkDocumentReadiness(document)) return;
   const target = googleTarget(document.id);
   if (googleEditor.connected.value) {
     await googleEditor.loadSession(target);
@@ -331,7 +337,7 @@ const handleEmailSent = async () => {
   emit('toast', { message: 'Письмо с документами отправлено', type: 'success' });
 };
 
-const createDraft = async () => {
+const createDraft = async (allowIncomplete = false) => {
   if (preparingDraft.value || workspace.busy.value || workspace.draftBlockedReason.value) return;
   preparingDraft.value = true;
   try {
@@ -342,7 +348,7 @@ const createDraft = async () => {
     }
     // The save callback may replace the order in the parent; let its new props reach this workspace.
     await nextTick();
-    await workspace.createDraft();
+    await workspace.createDraft(allowIncomplete);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Не удалось сохранить изменения заказа.';
     emit('toast', { message, type: 'error' });
@@ -402,9 +408,15 @@ defineExpose({
               <div class="flex flex-wrap items-center gap-2">
                 <h4 class="font-bold text-slate-900 dark:text-white">{{ document.status === 'draft' ? `${documentTypeName(document.doc_type)} · номер ещё не присвоен` : officialDocumentTitle(document) }}</h4>
                 <span class="rounded-full px-2 py-0.5 text-[11px] font-bold" :class="managedDocumentStatusClass(document.status)">{{ managedDocumentStatus(document.status) }}</span>
+                <span v-if="incompleteDraft(document)" class="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-900" data-testid="incomplete-native-draft">Не заполнены поля</span>
                 <span v-if="document.business_role === 'offer'" class="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-bold text-violet-800">Счёт-оферта</span>
               </div>
               <p class="mt-1 text-xs text-slate-500">от {{ formatDate(document.official_date || document.date) }} · CRM: <span class="font-mono">{{ document.internal_reference || `#${document.id}` }}</span></p>
+              <div v-if="incompleteDraft(document)" class="mt-2 text-xs text-amber-800" data-testid="native-draft-missing-fields">
+                <p>Не заполнены поля клиента: {{ criticalMissingLabels(document) }}.</p>
+                <p>Заполните карточку и создайте новый черновик. Данные этого черновика сохранятся.</p>
+                <button type="button" class="mt-1 font-semibold underline" @click="openCustomerProfile">Заполнить карточку</button>
+              </div>
               <p v-if="document.replaces_document_id" class="mt-1 text-xs font-semibold text-blue-600">Заменяет CRM-документ #{{ document.replaces_document_id }}</p>
               <p v-if="document.void_reason" class="mt-1 text-xs text-rose-600">Причина: {{ document.void_reason }}</p>
             </div>
@@ -426,7 +438,7 @@ defineExpose({
                 @open="googleEditor.open(googleTarget(document.id))"
                 @sync="syncGoogleDocument(document.id)"
               />
-              <button v-if="document.status === 'draft' && access.canCreate" class="native-action-primary" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id) || Boolean(workspace.issueBlockedReason.value)" :title="workspace.issueBlockedReason.value" @click="issueDocument(document)">Выпустить</button>
+              <button v-if="document.status === 'draft' && access.canCreate" class="native-action-primary" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id) || Boolean(workspace.issueBlockedReason.value) || incompleteDraft(document)" :title="incompleteDraft(document) ? `Не заполнены поля: ${criticalMissingLabels(document)}` : workspace.issueBlockedReason.value" @click="issueDocument(document)">Выпустить</button>
               <button v-if="document.status === 'draft' && !document.maintenance_source_order_id && !document.official_number && !document.artifacts?.length && access.canCreate" class="native-action-danger" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id)" @click="workspace.deleteDraft(document)">Удалить черновик</button>
               <button v-if="['issued', 'sent', 'signed'].includes(document.status) && !document.maintenance_source_order_id && access.canReplace" class="native-action" type="button" @click="prepareReplacement(document)">Создать исправленную редакцию</button>
               <a v-if="document.maintenance_source_order_id" :href="`/manager/orders/kanban?orderId=${document.maintenance_source_order_id}`" target="_blank" rel="noopener" class="native-action">Исходное ТО #{{ document.maintenance_source_order_id }} · замечания и новые версии</a>
@@ -528,8 +540,12 @@ defineExpose({
 
           <div v-if="customerWarnings.length || audienceMismatchWarning" class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" data-testid="native-customer-readiness-warning">
             <p v-if="audienceMismatchWarning">{{ audienceMismatchWarning }}</p>
-            <p v-if="customerWarnings.length">Для полного документа в карточке клиента не хватает: {{ customerWarnings.join(', ') }}.</p>
-            <button class="mt-1 font-semibold underline underline-offset-2" type="button" @click="openCustomerProfile">Открыть карточку клиента</button>
+            <p v-if="customerWarnings.length">Не заполнены поля для выбранного документа: {{ customerWarnings.join(', ') }}.</p>
+            <div class="mt-2 flex flex-wrap gap-3">
+              <button class="font-semibold underline underline-offset-2" type="button" @click="openCustomerProfile">Заполнить карточку</button>
+              <button v-if="workspace.customerReadiness.value?.can_issue === false" class="native-action" type="button" data-testid="create-incomplete-native-draft" :disabled="preparingDraft || workspace.busy.value" @click="createDraft(true)">Создать черновик с пустыми полями</button>
+            </div>
+            <p v-if="workspace.customerReadiness.value?.can_issue === false" class="mt-2 text-xs">В черновике будут линии для заполнения и пометка на страницах. Для выпуска заполните карточку и создайте новый черновик.</p>
           </div>
 
           <label v-if="basisSupported" class="native-field mt-4">
@@ -586,7 +602,7 @@ defineExpose({
           <p v-if="workspace.draftBlockedReason.value && !workspace.hasInstallationTwoStagesError.value" class="mt-3 text-xs font-semibold text-amber-700 dark:text-amber-300" data-testid="native-draft-blocked-reason">{{ workspace.draftBlockedReason.value }}. <button v-if="canManageDocumentSettings" class="underline" type="button" @click="openSettings">Исправить в настройках</button></p>
           <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4 dark:border-slate-700">
             <span class="text-xs text-slate-500">Черновик можно проверить до присвоения номера.</span>
-            <button class="inline-flex h-10 items-center justify-center rounded-xl bg-brand-600 px-5 text-sm font-bold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50" type="button" data-testid="create-native-draft" data-order-usage="document_create" :disabled="preparingDraft || workspace.busy.value || Boolean(workspace.draftBlockedReason.value)" :title="workspace.draftBlockedReason.value" @click="createDraft">Создать черновик</button>
+            <button class="inline-flex h-10 items-center justify-center rounded-xl bg-brand-600 px-5 text-sm font-bold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50" type="button" data-testid="create-native-draft" data-order-usage="document_create" :disabled="preparingDraft || workspace.busy.value || Boolean(workspace.draftBlockedReason.value)" :title="workspace.draftBlockedReason.value" @click="createDraft(false)">Создать черновик</button>
           </div>
         </template>
       </div>

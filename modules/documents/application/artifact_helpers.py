@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import asyncio
 from typing import Any, Mapping
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +11,7 @@ from sqlmodel import select
 
 from models import DocumentArtifact, DocumentTemplate, DocumentTemplateVersion
 from modules.documents.domain.customer_signing import customer_signing_text
+from .customer_readiness import snapshot_customer_readiness, mark_incomplete_docx
 from modules.documents.infrastructure.artifact_storage import StoredDocumentArtifact
 from modules.documents.infrastructure.renderers import (
     DocumentTemplateVersion as RenderTemplateVersion,
@@ -35,10 +37,18 @@ def build_render_inputs(
         )
         for item in schema.get("tables", [])
     )
+    readiness = snapshot_customer_readiness(
+        snapshot,
+        source=source,
+        document_type=str(
+            getattr(template, "doc_type", "")
+            or (snapshot.get("values") or {}).get("document.type")
+        ),
+    )
     render_template = RenderTemplateVersion(
         template_key=f"template-{template.id}",
         version=version.version,
-        source=source,
+        source=mark_incomplete_docx(source, readiness),
         field_catalog=field_catalog,
         condition_catalog=condition_catalog,
         table_blocks=table_blocks,
@@ -59,6 +69,19 @@ def build_render_inputs(
             key = f"customer.{field}"
             if key in field_catalog:
                 snapshot_values[key] = value
+    # Additional missing customer facts get handwriting space in the output copy.
+    for item in readiness["missing_fields"]:
+        field = item.get("field")
+        if (
+            field in field_catalog
+            and field.startswith("customer.")
+            and not str(snapshot_values.get(field) or "").strip()
+        ):
+            snapshot_values[field] = (
+                "________________________________ ("
+                + str(item.get("label") or "поле клиента")
+                + ")"
+            )
     snapshot_conditions = snapshot.get("conditions")
     snapshot_tables = snapshot.get("table_rows", {})
     context = RenderContext(
@@ -159,3 +182,38 @@ async def list_artifacts(
         .scalars()
         .all()
     )
+
+
+async def requires_guarded_draft_download(session, *, tenant_scope, artifact) -> bool:
+    """Editable draft DOCX must pass through the presentation guard, not a storage URL."""
+    if artifact.kind not in {"source_docx", "rendered_docx"}:
+        return False
+    from .lifecycle_service import ManagedDocumentService
+
+    document = await ManagedDocumentService.get_document(
+        session, tenant_scope=tenant_scope, document_id=artifact.order_document_id
+    )
+    return document.status == "draft" and document.doc_type in {"contract", "invoice"}
+
+
+async def prepare_artifact_download(
+    session, *, tenant_scope, artifact, content, template_storage
+) -> bytes:
+    """Keep downloaded incomplete draft copies marked without rewriting stored artifacts."""
+    if not await requires_guarded_draft_download(
+        session, tenant_scope=tenant_scope, artifact=artifact
+    ):
+        return content
+    from .lifecycle_service import ManagedDocumentService
+    from .customer_readiness import check_saved_document_readiness
+
+    document = await ManagedDocumentService.get_document(
+        session, tenant_scope=tenant_scope, document_id=artifact.order_document_id
+    )
+    readiness = await check_saved_document_readiness(
+        session,
+        tenant_scope=tenant_scope,
+        document=document,
+        template_storage=template_storage,
+    )
+    return await asyncio.to_thread(mark_incomplete_docx, content, readiness)

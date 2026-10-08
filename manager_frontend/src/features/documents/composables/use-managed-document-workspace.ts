@@ -7,6 +7,7 @@ import {
   type DocumentLegalEntityItem,
   type DocumentPdfRuntimeStatus,
   type ManagedDocumentItem,
+  type DocumentCustomerReadiness,
   type NativeDocumentTemplateItem,
   type NativeTemplateVersionItem,
 } from '../../../client';
@@ -43,6 +44,7 @@ import { openNativeDocumentPreview } from '../integrations/native-document-previ
 
 type ManagedWorkspaceInput = {
   orderId: () => number;
+  customerContext?: () => unknown;
   workflowType: () => string | null | undefined;
   proposalId: () => number | null;
   proposalTotalCents: () => number | null;
@@ -61,6 +63,7 @@ const consumerDefaultFields: ConsumerDefaultField[] = [
 
 export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   const documents = ref<ManagedDocumentItem[]>([]);
+  const customerReadiness = ref<DocumentCustomerReadiness | null>(null);
   const legalEntities = ref<DocumentLegalEntityItem[]>([]);
   const templates = ref<NativeDocumentTemplateItem[]>([]);
   const templateVersions = ref<NativeTemplateVersionItem[]>([]);
@@ -477,49 +480,69 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   );
   watch(selectedTemplateId, () => void loadTemplateVersions(), { flush: 'sync' });
 
-  const createDraft = async () => {
+  const draftPayload = computed(() => ({
+    legal_entity_id: selectedLegalEntityId.value,
+    document_type: documentType.value,
+    issue_date: issueDate.value,
+    issue_city: issueCity.value.trim() || null,
+    template_id: selectedTemplateId.value,
+    proposal_id: input.proposalId() || null,
+    business_role: documentType.value === 'invoice' ? businessRole.value : null,
+    document_role_type: ['contract', 'invoice', 'act', 'offer'].includes(documentType.value) ? documentRoleType.value : null,
+    base_document_id: baseDocumentId.value,
+    base_customer_contract_id: baseCustomerContractId.value,
+    replaces_document_id: replacesDocumentId.value,
+    consumer_terms: isConsumerDocumentType(documentType.value)
+      ? {
+        ...consumerTerms.value,
+        goods_warranty_months: isSupplyInstallationDocumentType(documentType.value)
+          && !consumerDefaultsLoaded.value
+          && !manuallyEditedConsumerDefaultFields.has('goods_warranty_months')
+          ? null
+          : consumerTerms.value.goods_warranty_months,
+        goods_warranty_terms: isSupplyInstallationDocumentType(documentType.value)
+          && !consumerDefaultsLoaded.value
+          && !manuallyEditedConsumerDefaultFields.has('goods_warranty_terms')
+          ? null
+          : consumerTerms.value.goods_warranty_terms,
+        installation_first_stage_amount: consumerTerms.value.installation_two_stages
+          ? normalizeByNAmount(consumerTerms.value.installation_first_stage_amount)
+          : null,
+      }
+      : undefined,
+    business_terms: isBusinessTermsDocumentType(documentType.value)
+      ? serializeBusinessTerms(documentType.value, businessTerms.value)
+      : undefined,
+    act_terms: documentType.value === 'act' ? actTerms.value : undefined,
+    transport_terms: ['tn2', 'ttn1'].includes(documentType.value)
+      ? serializeTransportTerms(transportTerms.value)
+      : undefined,
+  }));
+
+  const customerContextKey = computed(() => JSON.stringify(input.customerContext?.() || null));
+  watch([draftPayload, customerContextKey, () => input.orderId()], () => { customerReadiness.value = null; }, { deep: true, flush: 'sync' });
+
+  const createDraft = async (allowIncomplete = false) => {
     if (draftBlockedReason.value || !selectedLegalEntityId.value) return;
     busy.value = true;
     try {
-      const payload = {
-        legal_entity_id: selectedLegalEntityId.value,
-        document_type: documentType.value,
-        issue_date: issueDate.value,
-        issue_city: issueCity.value.trim() || null,
-        template_id: selectedTemplateId.value,
-        proposal_id: input.proposalId() || null,
-        business_role: documentType.value === 'invoice' ? businessRole.value : null,
-        document_role_type: ['contract', 'invoice', 'act', 'offer'].includes(documentType.value) ? documentRoleType.value : null,
-        base_document_id: baseDocumentId.value,
-        base_customer_contract_id: baseCustomerContractId.value,
-        replaces_document_id: replacesDocumentId.value,
-        consumer_terms: isConsumerDocumentType(documentType.value)
-          ? {
-            ...consumerTerms.value,
-            goods_warranty_months: isSupplyInstallationDocumentType(documentType.value)
-              && !consumerDefaultsLoaded.value
-              && !manuallyEditedConsumerDefaultFields.has('goods_warranty_months')
-              ? null
-              : consumerTerms.value.goods_warranty_months,
-            goods_warranty_terms: isSupplyInstallationDocumentType(documentType.value)
-              && !consumerDefaultsLoaded.value
-              && !manuallyEditedConsumerDefaultFields.has('goods_warranty_terms')
-              ? null
-              : consumerTerms.value.goods_warranty_terms,
-            installation_first_stage_amount: consumerTerms.value.installation_two_stages
-              ? normalizeByNAmount(consumerTerms.value.installation_first_stage_amount)
-              : null,
-          }
-          : undefined,
-        business_terms: isBusinessTermsDocumentType(documentType.value)
-          ? serializeBusinessTerms(documentType.value, businessTerms.value)
-          : undefined,
-        act_terms: documentType.value === 'act' ? actTerms.value : undefined,
-        transport_terms: ['tn2', 'ttn1'].includes(documentType.value)
-          ? serializeTransportTerms(transportTerms.value)
-          : undefined,
-      };
-      await ManagerDocumentSystemService.createManagerManagedDocumentDraft(input.orderId(), payload);
+      const payload = { ...JSON.parse(JSON.stringify(draftPayload.value)) as typeof draftPayload.value,
+        legal_entity_id: selectedLegalEntityId.value };
+      const orderId = input.orderId();
+      const contextKey = JSON.stringify({ payload, customer: customerContextKey.value });
+      if (['contract', 'invoice'].includes(payload.document_type)) {
+        const readiness = await ManagerDocumentSystemService.checkManagerManagedDocumentReadiness(orderId, payload);
+        if (orderId !== input.orderId() || contextKey !== JSON.stringify({ payload: draftPayload.value, customer: customerContextKey.value })) {
+          input.notify('Выбор документа изменился. Проверьте выбранный шаблон ещё раз.', 'error');
+          return;
+        }
+        customerReadiness.value = readiness;
+        if (!readiness.can_issue && !allowIncomplete) return;
+      }
+      await ManagerDocumentSystemService.createManagerManagedDocumentDraft(orderId, {
+        ...payload, allow_incomplete_customer: allowIncomplete,
+      });
+      customerReadiness.value = null;
       replacesDocumentId.value = null;
       resetConsumerTerms();
       if (isSupplyInstallationDocumentType(documentType.value)) {
@@ -534,6 +557,26 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       input.notify('Черновик создан. Данные заказа зафиксированы, но официальный номер ещё не занят.');
     } catch (error) {
       input.notify(`Не удалось создать черновик: ${getApiErrorMessage(error)}`, 'error');
+    } finally {
+      busy.value = false;
+    }
+  };
+
+  const checkDocumentReadiness = async (document: ManagedDocumentItem) => {
+    if (document.status !== 'draft' || !['contract', 'invoice'].includes(document.doc_type)) return true;
+    busy.value = true;
+    try {
+      const readiness = await ManagerDocumentSystemService.getManagerManagedDocumentReadiness(document.id);
+      documents.value = documents.value.map((item) => item.id === document.id
+        ? { ...item, customer_readiness: readiness } : item);
+      if (!readiness.can_issue) {
+        input.notify(`Не заполнены поля клиента: ${(readiness.missing_fields || []).filter((item) => item.critical).map((item) => item.label).join(', ')}. Заполните карточку и создайте новый черновик.`, 'error');
+        return false;
+      }
+      return true;
+    } catch (error) {
+      input.notify(`Не удалось проверить реквизиты: ${getApiErrorMessage(error)}`, 'error');
+      return false;
     } finally {
       busy.value = false;
     }
@@ -677,6 +720,8 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     businessTerms,
     busy,
     consumerTerms,
+    customerReadiness,
+    checkDocumentReadiness,
     updateConsumerTerms,
     createDraft,
     deleteDraft,

@@ -7,6 +7,10 @@ import type { BusinessDocumentTermsPayload_Input } from './BusinessDocumentTerms
 import type { ConsumerDocumentTermsPayload } from './ConsumerDocumentTermsPayload';
 import type { TransportTermsPayload } from './TransportTermsPayload';
 export type ManagedDocumentDraftPayload = {
+    /**
+     * Явное создание черновика с незаполненными обязательными полями клиента
+     */
+    allow_incomplete_customer?: boolean;
     document_role_type?: ('seller_buyer' | 'executor_customer' | 'contractor_customer' | 'seller_payer' | 'executor_payer' | null);
     legal_entity_id: number;
     document_type: string;

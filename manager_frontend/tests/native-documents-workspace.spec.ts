@@ -156,6 +156,12 @@ beforeEach(() => {
       created_at: NOW,
     }],
   });
+  vi.spyOn(ManagerDocumentSystemService, 'checkManagerManagedDocumentReadiness').mockResolvedValue({
+    checked: true, can_issue: true, missing_fields: [], template_id: 100, template_version_id: 101,
+  });
+  vi.spyOn(ManagerDocumentSystemService, 'getManagerManagedDocumentReadiness').mockResolvedValue({
+    checked: true, can_issue: true, missing_fields: [],
+  });
   vi.spyOn(ManagerDocumentSystemService, 'createManagerManagedDocumentDraft').mockResolvedValue({} as never);
   vi.spyOn(ManagerDocumentSystemService, 'issueManagerManagedDocument').mockResolvedValue({} as never);
   vi.spyOn(ManagerDocumentSystemService, 'deleteManagerManagedDocumentDraft').mockResolvedValue(undefined as never);
@@ -788,5 +794,111 @@ describe('NativeDocumentsWorkspace', () => {
     pendingAct.resolve({ items: [] });
     await flushPromises();
     expect(create.attributes('title')).toContain('Нет шаблона');
+  });
+});
+
+
+describe('Selected native customer requirements', () => {
+  const missing = { checked: true, can_issue: false,
+    missing_fields: [{ field: 'customer.legal_address', label: 'Юридический адрес клиента', critical: true }],
+    template_id: 100, template_version_id: 101 };
+
+  const chooseContract = async (wrapper: VueWrapper) => {
+    await wrapper.get('[data-testid="native-document-type-contract"]').trigger('click');
+    await flushPromises();
+    const action = wrapper.findAll('button').find((button) => button.text().includes('Создать наш договор'));
+    if (action) await action.trigger('click');
+    await flushPromises();
+  };
+
+  it('lists only effective server fields and requires an explicit incomplete draft choice', async () => {
+    vi.mocked(ManagerDocumentSystemService.checkManagerManagedDocumentReadiness).mockResolvedValue(missing);
+    const wrapper = await mountWorkspace();
+    await chooseContract(wrapper);
+    await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
+    await flushPromises();
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).not.toHaveBeenCalled();
+    const warning = wrapper.get('[data-testid="native-customer-readiness-warning"]');
+    expect(warning.text()).toContain('Юридический адрес клиента');
+    expect(warning.text()).not.toContain('Основание полномочий');
+    await wrapper.get('[data-testid="create-incomplete-native-draft"]').trigger('click');
+    await flushPromises();
+    expect(ManagerDocumentSystemService.checkManagerManagedDocumentReadiness).toHaveBeenCalledTimes(2);
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenCalledWith(42,
+      expect.objectContaining({ document_type: 'contract', allow_incomplete_customer: true }));
+  });
+
+  it('permits a selected template with no missing critical fields even with an incomplete card', async () => {
+    const wrapper = await mountWorkspace();
+    await chooseContract(wrapper);
+    await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
+    await flushPromises();
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenCalledWith(42,
+      expect.objectContaining({ allow_incomplete_customer: false }));
+    expect(wrapper.find('[data-testid="create-incomplete-native-draft"]').exists()).toBe(false);
+  });
+
+  it('discards a preflight response when the selected context changes in flight', async () => {
+    const barrier = deferred<typeof missing>();
+    vi.mocked(ManagerDocumentSystemService.checkManagerManagedDocumentReadiness).mockReturnValue(barrier.promise as never);
+    const wrapper = await mountWorkspace();
+    await chooseContract(wrapper);
+    await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="native-document-issue-city"]').setValue('Минск');
+    barrier.resolve(missing);
+    await flushPromises();
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).not.toHaveBeenCalled();
+    expect(wrapper.find('[data-testid="create-incomplete-native-draft"]').exists()).toBe(false);
+  });
+
+  it('discards delayed preflight when saved customer or signing mode changes', async () => {
+    const barrier = deferred<typeof missing>();
+    vi.mocked(ManagerDocumentSystemService.checkManagerManagedDocumentReadiness).mockReturnValue(barrier.promise as never);
+    const wrapper = await mountWorkspace();
+    await chooseContract(wrapper);
+    await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
+    await flushPromises();
+    await wrapper.setProps({ order: { ...baseOrder, customer: { ...baseOrder.customer, signing_mode: 'power_of_attorney' } } });
+    barrier.resolve(missing);
+    await flushPromises();
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).not.toHaveBeenCalled();
+    expect(wrapper.find('[data-testid="create-incomplete-native-draft"]').exists()).toBe(false);
+  });
+
+  it('marks the persisted incomplete draft and disables issuance without hiding preview', async () => {
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({ items: [{
+      id: 77, order_id: 42, legal_entity_id: 5, doc_type: 'contract', status: 'draft', provider: 'native',
+      internal_reference: 'draft77', display_number: 'draft77', date: NOW, created_at: NOW,
+      customer_readiness: missing, artifacts: [],
+    }] });
+    const wrapper = await mountWorkspace();
+    expect(wrapper.get('[data-testid="incomplete-native-draft"]').text()).toContain('Не заполнены поля');
+    expect(wrapper.get('[data-testid="native-draft-missing-fields"]').text()).toContain('Юридический адрес клиента');
+    const issue = wrapper.findAll('button').find((button) => button.text() === 'Выпустить')!;
+    expect(issue.attributes('disabled')).toBeDefined();
+    const preview = wrapper.findAll('button').find((button) => button.text().includes('Предпросмотр'))!;
+    expect(preview.attributes('disabled')).toBeUndefined();
+    const fill = wrapper.get('[data-testid="native-draft-missing-fields"]').find('button');
+    await fill.trigger('click');
+    expect(window.location.pathname).toBe('/manager/customers/profile');
+    expect(window.location.search).toContain('customerId=11');
+  });
+
+  it('rechecks an old draft with no cached metadata before Google sync or issue', async () => {
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({ items: [{
+      id: 77, order_id: 42, legal_entity_id: 5, doc_type: 'contract', status: 'draft', provider: 'native',
+      internal_reference: 'draft77', display_number: 'draft77', date: NOW, created_at: NOW, artifacts: [],
+    }] });
+    vi.mocked(ManagerDocumentSystemService.getManagerManagedDocumentReadiness).mockResolvedValue(missing);
+    const wrapper = await mountWorkspace();
+    const before = vi.mocked(googleDocumentEditorApi.getSession).mock.calls.length;
+    await wrapper.findAll('button').find((button) => button.text() === 'Выпустить')!.trigger('click');
+    await flushPromises();
+    expect(ManagerDocumentSystemService.getManagerManagedDocumentReadiness).toHaveBeenCalledWith(77);
+    expect(ManagerDocumentSystemService.issueManagerManagedDocument).not.toHaveBeenCalled();
+    expect(googleDocumentEditorApi.syncSession).not.toHaveBeenCalled();
+    expect(vi.mocked(googleDocumentEditorApi.getSession).mock.calls.length).toBe(before);
+    expect(wrapper.get('[data-testid="native-draft-missing-fields"]').text()).toContain('Юридический адрес клиента');
   });
 });

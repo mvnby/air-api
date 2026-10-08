@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from urllib.parse import quote
 
+from pydantic import ValidationError
+
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,14 +11,6 @@ from core.config import settings
 from core.database import get_session
 from core.manager_api_errors import manager_http_error
 from core.security import AuthenticatedUser, require_manager_access
-from modules.documents.application.context_builder import DocumentContextSelection
-from modules.documents.domain import (
-    ActTerms,
-    BusinessDocumentTerms,
-    ConsumerDocumentTerms,
-    PaymentScheduleItem,
-    TransportTerms,
-)
 from modules.documents.application.errors import (
     ManagedDocumentConflictError,
     ManagedDocumentError,
@@ -30,6 +24,10 @@ from modules.documents.application.draft_preview import (
     ManagedDocumentDraftPreviewService,
 )
 from modules.documents.application.editable_draft import EditableDraftError
+from modules.documents.application.artifact_helpers import (
+    requires_guarded_draft_download,
+    prepare_artifact_download,
+)
 from modules.documents.application.editable_draft_issue import (
     verify_document_external_edit_before_issue,
 )
@@ -52,11 +50,14 @@ from routers.manager_operation_ids import (
 )
 from routers.manager_permission_policy import ManagerPermissionRoute
 
+from .draft_selection import selection_from_payload
+
 from .schemas import (
     ManagedDocumentArtifactAccessResponse,
     ManagedDocumentArtifactItem,
     ManagedDocumentArtifactListResponse,
     ManagedDocumentDraftPayload,
+    DocumentCustomerReadiness,
     ManagedDocumentItem,
     ManagedDocumentListResponse,
     ManagedDocumentVoidPayload,
@@ -116,7 +117,7 @@ async def preview_managed_document_draft(
             "managed_document_preview_conflict",
             exc,
         )
-    except (FileNotFoundError, TypeError, ValueError) as exc:
+    except (OSError, TypeError, ValueError) as exc:
         raise _document_error(
             503,
             PREVIEW_MANAGER_MANAGED_DOCUMENT_DRAFT,
@@ -196,56 +197,10 @@ async def create_managed_document_draft(
         row = await ManagedDocumentService.create_draft(
             session,
             tenant_scope=auth.tenant_scope(),
-            selection=DocumentContextSelection(
-                order_id=order_id,
-                document_type=payload.document_type,
-                legal_entity_id=payload.legal_entity_id,
-                issue_date=payload.issue_date,
-                issue_city=payload.issue_city,
-                proposal_id=payload.proposal_id,
-                base_document_id=payload.base_document_id,
-                base_customer_contract_id=payload.base_customer_contract_id,
-                scope_customer_branch_id=payload.scope_customer_branch_id,
-                scope_title=payload.scope_title,
-                scope_address=payload.scope_address,
-                scope_service_line_ids=tuple(payload.scope_service_line_ids),
-                scope_service_line_quantities=payload.scope_service_line_quantities,
-                scope_product_line_ids=tuple(payload.scope_product_line_ids),
-                business_role=payload.business_role,
-                document_role_type=payload.document_role_type,
-                consumer_terms=(
-                    ConsumerDocumentTerms(**payload.consumer_terms.model_dump())
-                    if payload.consumer_terms is not None
-                    else None
-                ),
-                business_terms=(
-                    BusinessDocumentTerms(
-                        **{
-                            **payload.business_terms.model_dump(
-                                exclude={"payment_schedule"}
-                            ),
-                            "payment_schedule": tuple(
-                                PaymentScheduleItem(**item.model_dump())
-                                for item in payload.business_terms.payment_schedule
-                            ),
-                        }
-                    )
-                    if payload.business_terms is not None
-                    else None
-                ),
-                act_terms=(
-                    ActTerms(**payload.act_terms.model_dump())
-                    if payload.act_terms is not None
-                    else None
-                ),
-                transport_terms=(
-                    TransportTerms(**payload.transport_terms.model_dump())
-                    if payload.transport_terms is not None
-                    else None
-                ),
-            ),
+            selection=selection_from_payload(order_id, payload),
             template_id=payload.template_id,
             replaces_document_id=payload.replaces_document_id,
+            allow_incomplete_customer=payload.allow_incomplete_customer,
             template_storage=PrivateTemplateSourceStorage(_legacy_private_storage()),
         )
     except ManagedDocumentNotFoundError as exc:
@@ -261,11 +216,12 @@ async def create_managed_document_draft(
         )
     except OSError as exc:
         raise _document_error(
-            503, CREATE_MANAGER_MANAGED_DOCUMENT_DRAFT,
+            503,
+            CREATE_MANAGER_MANAGED_DOCUMENT_DRAFT,
             "managed_document_template_unavailable",
             ValueError("Не удалось прочитать шаблон документа"),
         ) from exc
-    except (ManagedDocumentError, ValueError) as exc:
+    except (ManagedDocumentError, TypeError, ValueError) as exc:
         raise _document_error(
             400, CREATE_MANAGER_MANAGED_DOCUMENT_DRAFT, "managed_document_invalid", exc
         )
@@ -338,6 +294,13 @@ async def issue_managed_document(
     """
     private = _legacy_private_storage()
     try:
+        # Check the actual saved snapshot/template before any external edit-provider call.
+        await ManagedDocumentService.validate_issue_customer_readiness(
+            session,
+            tenant_scope=auth.tenant_scope(),
+            document_id=document_id,
+            template_storage=PrivateTemplateSourceStorage(private),
+        )
         from .router import get_google_document_edit_provider
 
         provider = None
@@ -372,6 +335,20 @@ async def issue_managed_document(
     except (ManagedDocumentConflictError, EditableDraftError) as exc:
         raise _document_error(
             409, ISSUE_MANAGER_MANAGED_DOCUMENT, "managed_document_conflict", exc
+        )
+    except OSError as exc:
+        raise _document_error(
+            503,
+            ISSUE_MANAGER_MANAGED_DOCUMENT,
+            "managed_document_template_unavailable",
+            exc,
+        )
+    except (TypeError, ValueError) as exc:
+        raise _document_error(
+            409,
+            ISSUE_MANAGER_MANAGED_DOCUMENT,
+            "managed_document_snapshot_invalid",
+            exc,
         )
     except ManagedDocumentGenerationError as exc:
         raise _document_error(
@@ -484,15 +461,27 @@ async def get_document_artifact_access(
         storage = PrivateDocumentArtifactStorage(
             _legacy_private_storage(artifact.provider)
         )
-        url = await storage.presign(
-            ManagedDocumentService.stored_artifact(artifact),
-            expires_seconds=ttl,
-        )
+        if await requires_guarded_draft_download(
+            session, tenant_scope=auth.tenant_scope(), artifact=artifact
+        ):
+            url = None
+        else:
+            url = await storage.presign(
+                ManagedDocumentService.stored_artifact(artifact),
+                expires_seconds=ttl,
+            )
     except (ManagedDocumentNotFoundError, FileNotFoundError) as exc:
         raise _document_error(
             404,
             GET_MANAGER_DOCUMENT_ARTIFACT_ACCESS,
             "document_artifact_not_found",
+            exc,
+        )
+    except OSError as exc:
+        raise _document_error(
+            503,
+            GET_MANAGER_DOCUMENT_ARTIFACT_ACCESS,
+            "document_artifact_unavailable",
             exc,
         )
     except (TypeError, ValueError):
@@ -535,9 +524,23 @@ async def download_document_artifact(
             _legacy_private_storage(artifact.provider)
         )
         content = await storage.read(ManagedDocumentService.stored_artifact(artifact))
+        content = await prepare_artifact_download(
+            session,
+            tenant_scope=auth.tenant_scope(),
+            artifact=artifact,
+            content=content,
+            template_storage=PrivateTemplateSourceStorage(_legacy_private_storage()),
+        )
     except (ManagedDocumentNotFoundError, FileNotFoundError) as exc:
         raise _document_error(
             404, DOWNLOAD_MANAGER_DOCUMENT_ARTIFACT, "document_artifact_not_found", exc
+        )
+    except OSError as exc:
+        raise _document_error(
+            503,
+            DOWNLOAD_MANAGER_DOCUMENT_ARTIFACT,
+            "document_artifact_unavailable",
+            exc,
         )
     except (TypeError, ValueError):
         raise manager_http_error(
@@ -604,14 +607,21 @@ def _document_item_from_parts(document, artifacts) -> ManagedDocumentItem:
         )
     )
     return ManagedDocumentItem(
-        maintenance_source_order_id=((document.render_snapshot or {}).get("meta", {}).get("maintenance", {}).get("source_order_id")),
+        maintenance_source_order_id=(
+            (document.render_snapshot or {})
+            .get("meta", {})
+            .get("maintenance", {})
+            .get("source_order_id")
+        ),
         id=document.id,
         order_id=document.order_id,
         legal_entity_id=document.legal_entity_id,
         proposal_id=document.proposal_id,
         doc_type=document.doc_type,
         business_role=document.business_role,
-        document_role_type=((document.render_snapshot or {}).get("meta") or {}).get("document_role_type"),
+        document_role_type=((document.render_snapshot or {}).get("meta") or {}).get(
+            "document_role_type"
+        ),
         status=document.status or "issued",
         provider=provider,
         internal_reference=document.internal_reference,
@@ -641,6 +651,7 @@ def _document_item_from_parts(document, artifacts) -> ManagedDocumentItem:
         void_reason=document.void_reason,
         google_edit_url=document.google_edit_url,
         created_at=document.created_at,
+        customer_readiness=_cached_customer_readiness(document),
         artifacts=[
             ManagedDocumentArtifactItem.model_validate(item) for item in artifacts
         ],
@@ -654,3 +665,13 @@ def _document_error(status_code: int, endpoint: str, code: str, exc: Exception):
         error_code=code,
         message=str(exc),
     )
+
+
+def _cached_customer_readiness(document):
+    meta = (document.render_snapshot or {}).get("meta") or {}
+    if not isinstance(meta, dict):
+        return None
+    try:
+        return DocumentCustomerReadiness.model_validate(meta.get("customer_readiness"))
+    except ValidationError:
+        return None

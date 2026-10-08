@@ -2,8 +2,10 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { DocumentCustomerReadiness } from './DocumentCustomerReadiness';
 import type { ManagedDocumentArtifactItem } from './ManagedDocumentArtifactItem';
 export type ManagedDocumentItem = {
+    customer_readiness?: (DocumentCustomerReadiness | null);
     maintenance_source_order_id?: (number | null);
     document_role_type?: ('seller_buyer' | 'executor_customer' | 'contractor_customer' | 'seller_payer' | 'executor_payer' | null);
     id: number;

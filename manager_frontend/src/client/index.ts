@@ -201,6 +201,8 @@ export type { DashboardTouchpoint } from './models/DashboardTouchpoint';
 export type { DeepseekConnectionStatus } from './models/DeepseekConnectionStatus';
 export type { DeepseekConnectionTest } from './models/DeepseekConnectionTest';
 export type { DeepseekConnectionUpdate } from './models/DeepseekConnectionUpdate';
+export type { DocumentCustomerMissingField } from './models/DocumentCustomerMissingField';
+export type { DocumentCustomerReadiness } from './models/DocumentCustomerReadiness';
 export type { DocumentDriveAuthorizationUrlResponse } from './models/DocumentDriveAuthorizationUrlResponse';
 export type { DocumentDriveStatusResponse } from './models/DocumentDriveStatusResponse';
 export type { DocumentFacsimilePdfPayload } from './models/DocumentFacsimilePdfPayload';
@@ -321,6 +323,7 @@ export type { ManagedDocumentArtifactListResponse } from './models/ManagedDocume
 export type { ManagedDocumentDraftPayload } from './models/ManagedDocumentDraftPayload';
 export type { ManagedDocumentItem } from './models/ManagedDocumentItem';
 export type { ManagedDocumentListResponse } from './models/ManagedDocumentListResponse';
+export type { ManagedDocumentReadinessResponse } from './models/ManagedDocumentReadinessResponse';
 export type { ManagedDocumentVoidPayload } from './models/ManagedDocumentVoidPayload';
 export type { ManagerActionMessageResponse } from './models/ManagerActionMessageResponse';
 export type { ManagerAuthStatusResponse } from './models/ManagerAuthStatusResponse';

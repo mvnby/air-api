@@ -743,3 +743,92 @@ async def test_document_system_templates_are_hidden_from_another_tenant(
 
     assert foreign_list.status_code == 404
     assert foreign_template_list.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_selected_customer_readiness_blocks_issue_before_google_and_numbering(
+    async_client, db, monkeypatch
+):
+    import importlib
+    from copy import deepcopy
+    from models import OrderDocument, DocumentNumberReservation
+
+    document_router = importlib.import_module("modules.documents.api.router")
+    headers = await _legacy_owner_headers(async_client)
+    issuer_id = await _create_issuer(async_client, headers, name="ООО Readiness API")
+    template_id, version_id = await _create_native_contract_template(
+        async_client, headers, legal_entity_id=issuer_id
+    )
+    order = await _seed_order(db)
+    payload = {
+        "legal_entity_id": issuer_id,
+        "document_type": "contract",
+        "issue_date": "2026-08-26",
+        "template_id": template_id,
+        "business_terms": {
+            "contract_scenario": "services",
+            "payment_schedule": [{"share_percent": 100, "due_event": "before_work"}],
+        },
+    }
+    preflight = await async_client.post(
+        f"{BASE}/orders/{order.id}/documents/readiness", headers=headers, json=payload
+    )
+    assert preflight.status_code == 200 and preflight.json()["can_issue"]
+    assert preflight.json()["template_version_id"] == version_id
+    assert not (await db.execute(select(OrderDocument))).scalars().all()
+    customer = await db.get(Customer, order.customer_id)
+    customer.name = customer.full_legal_name = ""
+    db.add(customer)
+    await db.commit()
+    refusal = await async_client.post(
+        f"{BASE}/orders/{order.id}/documents/drafts", headers=headers, json=payload
+    )
+    assert refusal.status_code == 409 and "Полное наименование клиента" in refusal.text
+    draft = await async_client.post(
+        f"{BASE}/orders/{order.id}/documents/drafts",
+        headers=headers,
+        json={**payload, "allow_incomplete_customer": True},
+    )
+    assert draft.status_code == 200, draft.text
+    assert not draft.json()["customer_readiness"]["can_issue"]
+    doc_id = draft.json()["id"]
+    saved = await db.get(OrderDocument, doc_id)
+    patched = deepcopy(saved.render_snapshot)
+    patched["meta"]["customer_readiness"] = "malformed"
+    saved.render_snapshot = patched
+    db.add(saved)
+    await db.commit()
+    listing = await async_client.get(
+        f"{BASE}/orders/{order.id}/documents", headers=headers
+    )
+    assert (
+        listing.status_code == 200
+        and listing.json()["items"][0]["customer_readiness"] is None
+    )
+    checked = await async_client.get(
+        f"{BASE}/documents/{doc_id}/readiness", headers=headers
+    )
+    assert checked.status_code == 200 and not checked.json()["can_issue"]
+    provider_calls = []
+
+    async def no_provider(*args, **kwargs):
+        provider_calls.append(True)
+        raise AssertionError(
+            "incomplete snapshot must be rejected before edit-provider setup"
+        )
+
+    monkeypatch.setattr(
+        document_router, "get_google_document_edit_provider", no_provider
+    )
+    issue = await async_client.post(f"{BASE}/documents/{doc_id}/issue", headers=headers)
+    assert issue.status_code == 409 and "Полное наименование клиента" in issue.text
+    assert provider_calls == []
+    assert not (await db.execute(select(DocumentNumberReservation))).scalars().all()
+    assert not (await db.execute(select(DocumentArtifact))).scalars().all()
+    other_tenant, _storefront, user = await _create_tenant_owner(
+        db, slug="readiness-other", username="readiness-other-owner"
+    )
+    forbidden = await async_client.get(
+        f"{BASE}/documents/{doc_id}/readiness", headers=_staff_headers(user)
+    )
+    assert forbidden.status_code == 404

@@ -39,6 +39,11 @@ from modules.documents.infrastructure.template_source_storage import (
 )
 
 from .artifact_helpers import artifact_row, list_artifacts, stored_artifact
+from .customer_readiness import (
+    source_customer_readiness,
+    check_saved_document_readiness,
+    assert_customer_ready,
+)
 from .editable_draft import EditableDraftError
 from .installation_context import staged_template_is_supported
 from .editable_draft_issue import load_editable_draft_for_issue
@@ -181,6 +186,7 @@ class ManagedDocumentService:
         selection: DocumentContextSelection,
         template_id: int | None = None,
         replaces_document_id: int | None = None,
+        allow_incomplete_customer: bool = False,
         template_storage: TemplateSourceStorage | None = None,
         commit: bool = True,
     ) -> OrderDocument:
@@ -227,6 +233,17 @@ class ManagedDocumentService:
             template_version=version,
             template_storage=template_storage,
         )
+        readiness = await source_customer_readiness(
+            snapshot,
+            template=template,
+            version=version,
+            template_storage=template_storage,
+            document_type=selection.document_type,
+        )
+        if not allow_incomplete_customer:
+            assert_customer_ready(readiness)
+        if readiness["checked"]:
+            snapshot["meta"]["customer_readiness"] = readiness
         internal_reference = new_internal_reference()
         issue_datetime = datetime.combine(selection.issue_date, time.min)
         document = OrderDocument(
@@ -303,6 +320,22 @@ class ManagedDocumentService:
         await cls._commit(session, "Не удалось удалить черновик документа")
 
     @classmethod
+    async def validate_issue_customer_readiness(
+        cls, session, *, tenant_scope, document_id, template_storage
+    ):
+        document = await cls.get_document(
+            session, tenant_scope=tenant_scope, document_id=document_id
+        )
+        readiness = await check_saved_document_readiness(
+            session,
+            tenant_scope=tenant_scope,
+            document=document,
+            template_storage=template_storage,
+        )
+        assert_customer_ready(readiness)
+        return readiness
+
+    @classmethod
     async def issue(
         cls,
         session: AsyncSession,
@@ -345,6 +378,13 @@ class ManagedDocumentService:
             raise ManagedDocumentConflictError(
                 "У черновика отсутствует снимок или версия шаблона"
             )
+        readiness = await check_saved_document_readiness(
+            session,
+            tenant_scope=tenant_scope,
+            document=document,
+            template_storage=template_storage,
+        )
+        assert_customer_ready(readiness)
         if document.replaces_document_id:
             await lock_replacement_target(
                 session,

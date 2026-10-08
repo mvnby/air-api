@@ -21,6 +21,7 @@ from . import (
     facsimiles,
     legal_entities_number_policies,
     managed_document_emails,
+    managed_document_readiness,
     managed_document_external_edits,
     managed_documents_artifacts,
     template_external_edits,
@@ -50,6 +51,7 @@ router.include_router(managed_document_emails.router)
 router.include_router(template_external_edits.router)
 router.include_router(managed_document_external_edits.router)
 router.include_router(managed_documents_artifacts.router)
+router.include_router(managed_document_readiness.router)
 
 
 async def get_google_document_edit_provider(*, session, tenant_scope):
