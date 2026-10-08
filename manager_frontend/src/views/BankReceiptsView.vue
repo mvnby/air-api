@@ -7,6 +7,7 @@ import type {
   BankReceiptAllocationPayload,
   BankReceiptResponse,
 } from '../client';
+import MoneyAmount from '../components/money/MoneyAmount.vue';
 import BankReceiptAllocationDialog from '../components/payments/BankReceiptAllocationDialog.vue';
 import BankReceiptManualAttach from '../components/payments/BankReceiptManualAttach.vue';
 import { getApiErrorMessage } from '../utils/api-errors';
@@ -439,7 +440,7 @@ onMounted(loadReceipts);
 
         <div v-else-if="!receipts.length" class="py-16 text-center text-gray-500 dark:text-slate-400">Поступлений не найдено</div>
 
-        <div v-else class="overflow-x-auto">
+        <div v-else class="relative overflow-x-auto">
           <table class="min-w-full divide-y divide-gray-200 text-sm dark:divide-slate-700">
             <thead class="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:bg-slate-900/70 dark:text-slate-400">
               <tr>
@@ -465,12 +466,12 @@ onMounted(loadReceipts);
                     <div class="text-xs text-gray-500 dark:text-slate-400">Док. {{ receipt.payment_document_number || '—' }}</div>
                   </td>
                   <td class="whitespace-nowrap px-4 py-3 text-gray-900 dark:text-slate-100">
-                    <div class="font-semibold">{{ formatAmount(receipt) }}</div>
+                    <div class="font-semibold"><MoneyAmount :value="receipt.amount" :currency="receipt.currency" :formatted-value="formatAmount(receipt).replace(/ [^ ]*$/, '')" /></div>
                     <div v-if="receipt.allocation_count" class="mt-1 text-xs font-medium text-brand-700 dark:text-brand-300">
-                      Распределено {{ formatMoneyValue(receipt.allocated_amount, receipt.currency) }}
+                      Распределено <MoneyAmount :value="receipt.allocated_amount" :currency="receipt.currency" />
                     </div>
                     <div v-if="Number(receipt.unallocated_amount || 0) > 0" class="text-xs font-medium text-amber-700 dark:text-amber-300">
-                      Остаток {{ formatMoneyValue(receipt.unallocated_amount, receipt.currency) }}
+                      Остаток <MoneyAmount :value="receipt.unallocated_amount" :currency="receipt.currency" />
                     </div>
                   </td>
                   <td class="px-4 py-3">
@@ -523,13 +524,13 @@ onMounted(loadReceipts);
                     >
                       <div class="font-semibold">
                         {{ groupMatchLabel(receipt) }}:
-                        {{ formatMoneyValue(groupMatch(receipt)?.total_balance_due, receipt.currency) }}
+                        <MoneyAmount :value="groupMatch(receipt)?.total_balance_due" :currency="receipt.currency" />
                       </div>
                       <div
                         v-if="groupMatch(receipt)?.selection_mode === 'exact_subset'"
                         class="mt-0.5 opacity-80"
                       >
-                        Всего открыто по УНП: {{ formatMoneyValue(groupMatch(receipt)?.open_balance_due, receipt.currency) }}
+                        Всего открыто по УНП: <MoneyAmount :value="groupMatch(receipt)?.open_balance_due" :currency="receipt.currency" />
                       </div>
                       <div class="mt-1 flex flex-wrap gap-1">
                         <button
@@ -538,7 +539,7 @@ onMounted(loadReceipts);
                           class="rounded-md bg-white/70 px-1.5 py-0.5 font-semibold transition hover:bg-white dark:bg-slate-950/40 dark:hover:bg-slate-950/70"
                           @click="goToOrder(Number(item.order_id))"
                         >
-                          #{{ item.order_id }} · {{ formatMoneyValue(item.balance_due, receipt.currency) }}
+                          #{{ item.order_id }} · <MoneyAmount :value="item.balance_due" :currency="receipt.currency" />
                         </button>
                       </div>
                       <div v-if="groupMatch(receipt)?.is_exact" class="mt-1 font-semibold">

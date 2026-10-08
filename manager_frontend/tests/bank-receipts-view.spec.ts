@@ -2,6 +2,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BankReceiptResponse } from '../src/client';
 import { ManagerMailService } from '../src/client';
+import MoneyAmount from '../src/components/money/MoneyAmount.vue';
 import BankReceiptsView from '../src/views/BankReceiptsView.vue';
 
 vi.mock('../src/client', () => ({
@@ -98,4 +99,35 @@ describe('BankReceiptsView', () => {
       expect(wrapper.find(`[data-testid="manual-attach-start-${receipt.id}"]`).exists()).toBe(false);
     },
   );
+});
+
+
+describe('bank receipt monetary display', () => {
+  it.each([0, -12.5, 12.345, 1234567890.12])('preserves ru-BY precision for %s', async (amount) => {
+    const wrapper = await mountView([{ ...receipt, amount, unallocated_amount: 0 }]);
+    const money = wrapper.findComponent(MoneyAmount);
+    expect(money.text()).toBe(`${new Intl.NumberFormat('ru-BY', { maximumFractionDigits: 2 }).format(amount)} BYN`);
+    expect(money.find('svg[aria-hidden="true"]').exists()).toBe(true);
+  });
+
+  it.each([null, undefined, NaN, Infinity])('keeps missing/invalid %s distinct from zero', async (amount) => {
+    const wrapper = await mountView([{ ...receipt, amount, unallocated_amount: 0 } as BankReceiptResponse]);
+    expect(wrapper.findComponent(MoneyAmount).attributes('aria-label')).toBe('Нет данных');
+    expect(wrapper.findComponent(MoneyAmount).text()).toBe('—');
+  });
+
+  it.each(['USD', 'EUR', 'XYZ'])('preserves the raw %s currency code', async (currency) => {
+    const wrapper = await mountView([{ ...receipt, amount: 12.5, currency, unallocated_amount: 0 }]);
+    const money = wrapper.findComponent(MoneyAmount);
+    expect(money.text()).toBe(`12,5 ${currency}`);
+    expect(money.find('svg').exists()).toBe(false);
+  });
+
+  it('renders allocated, remaining, group totals and order balances through the shared display', async () => {
+    const wrapper = await mountView([{ ...receipt, allocation_count: 1, allocated_amount: 10,
+      match_meta: { group_match: { available: true, is_exact: true, selection_mode: 'exact_subset',
+        total_balance_due: 1460, open_balance_due: 2000,
+        orders: [{ order_id: 279, balance_due: 1460 }] } } }]);
+    expect(wrapper.findAllComponents(MoneyAmount).map((money) => money.props('value'))).toEqual([1460, 10, 1460, 1460, 2000, 1460]);
+  });
 });
