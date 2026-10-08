@@ -671,8 +671,12 @@ deployments through rollout and postchecks; workflow concurrency is
 `postgres-pitr-host-operations`, not the application release concurrency group.
 
 **Approved apply.** Only after the preceding gate, dispatch from `main` with
-`confirm_sha` equal to the exact reviewed main SHA. A moved main fails the gate;
-make a fresh plan instead of changing the confirmation blindly.
+`confirm_sha` equal to the exact reviewed main SHA. This workflow has no
+`target_release_sha` input: dispatch revision, checked-out asset sources and
+`confirm_sha` must be the same main SHA. The dated source SHA/digests above are
+evidence, not a future installation selector. A moved main fails the gate;
+repeat the read-only host review and offline derivation for the new main before
+requesting approval, instead of changing the confirmation blindly.
 
 ```bash
 gh workflow run rollout-postgres-pitr-host-assets.yml --repo mvnby/air-api \
