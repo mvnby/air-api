@@ -300,3 +300,36 @@ async def test_terminal_incoming_cannot_create_a_clarification(db, terminal):
         await IncomingCommandService.create_clarification(db, actor=caller, lead_id=lead.id,
             payload=IncomingClarificationPayload(expected_version=1), idempotency_key="clarification-terminal-1")
     assert await count(db, PersonalTask) == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("wish", [
+    "ТО не завтра, дату уточнить",
+    "ТО завтра или послезавтра в 09:00",
+    "ТО завтра; созвониться сегодня в 18:00",
+    "ТО через месяц, звонок завтра в 09:00",
+])
+async def test_qualification_keeps_unknown_wish_and_undated_clarification(db, wish):
+    caller = await actor(db)
+    text = wish + "; адрес уточнить; созвониться перед выездом"
+    source = datetime(2026, 10, 7, 19, 30, tzinfo=timezone.utc)
+    saved = await create(db, caller, request_text=text, source_occurred_at=source)
+    assert saved.value.requested_at is saved.value.date_precision is None
+    assert saved.value.call_before_visit is True
+    task = await db.get(PersonalTask, saved.value.clarification_task_id)
+    assert task.due_at is task.reminder_at is None
+    result = await LeadCommandService.qualify_lead(db, saved.value.lead_id,
+        LeadQualifyPayload(expected_version=1, workflow_type="maintenance", service_type="maintenance"), tenant_scope=caller.tenant_scope)
+    order = await db.get(Order, result["order_id"])
+    context = IncomingOrderContext.model_validate(order.technical_meta["incoming_intake"])
+    assert context.requested_at is context.date_precision is None
+    assert context.original_text == context.request_text == text
+    assert context.source_occurred_at == source
+    assert context.call_before_visit is True
+    assert "requested_at" not in context.field_sources
+    assert context.clarification_task_id == task.id
+    assert order.installation_date is None
+    assert await count(db, PersonalTask) == 1
+    assert await count(db, OrderWorkStage) == await count(db, OrderInstaller) == 0
+    detail = await OrderProjectionService.get_order_detail_for_manager(db, order.id, tenant_scope=caller.tenant_scope)
+    assert detail["incoming_context"] == order.technical_meta["incoming_intake"]

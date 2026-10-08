@@ -498,3 +498,80 @@ async def test_concurrent_delivery_across_physical_connections_creates_one_lead(
         assert await _count(check, PublicWriteIdempotency) == (1 if same_key else 2)
         receipts = (await check.execute(select(PublicWriteIdempotency))).scalars().all()
         assert all(row.completed_at is not None for row in receipts)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("text", [
+    "ТО не завтра, дату уточнить",
+    "ТО завтра или послезавтра в 09:00",
+    "ТО завтра; созвониться сегодня в 18:00",
+    "ТО через месяц, звонок завтра в 09:00",
+])
+async def test_ambiguous_create_and_changed_wish_abstain_with_stable_replay(db, monkeypatch, text):
+    from models.personal_task import PersonalTask
+    import services.incoming_command_service as module
+
+    class LaterClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2030, 1, 1, tzinfo=timezone.utc).astimezone(tz)
+
+    actor = await _actor(db)
+    source = datetime(2026, 10, 7, 19, 30, tzinfo=timezone.utc)
+    created = await _create(db, actor, request_text=text, source_occurred_at=source)
+    assert created.value.requested_at is created.value.date_precision is None
+    assert created.value.request_text == created.value.original_text == text
+    assert "requested_at" not in created.value.field_sources
+    monkeypatch.setattr(module, "datetime", LaterClock)
+    replay = await _create(db, actor, request_text=text, source_occurred_at=source)
+    assert replay.replayed and replay.value == created.value
+    positive_payload = IncomingUpdatePayload(expected_version=1, request_text=text, requested_time_text="ТО завтра в 09:00")
+    positive = await IncomingCommandService.update(db, actor=actor, lead_id=created.value.lead_id,
+        payload=positive_payload, idempotency_key="date-positive-wish-0001")
+    assert positive.value.requested_at.isoformat() == "2026-10-08T09:00:00+03:00"
+    assert positive.value.date_precision == "datetime"
+    payload = IncomingUpdatePayload(expected_version=2, request_text=text, requested_time_text=text)
+    changed = await IncomingCommandService.update(db, actor=actor, lead_id=created.value.lead_id,
+        payload=payload, idempotency_key="date-ambiguous-wish-0001")
+    retry = await IncomingCommandService.update(db, actor=actor, lead_id=created.value.lead_id,
+        payload=payload, idempotency_key="date-ambiguous-wish-0001")
+    assert retry.replayed and retry.value == changed.value
+    assert changed.value.requested_at is changed.value.date_precision is None
+    assert changed.value.requested_time_text == changed.value.original_text == text
+    assert changed.value.source_occurred_at == source
+    assert changed.value.source_timezone == "Europe/Minsk"
+    assert "requested_at" not in changed.value.field_sources
+    assert changed.value.version == 3
+    assert await _count(db, Lead) == 1
+    assert await _count(db, PublicWriteIdempotency) == 3
+    assert await _count(db, Order) == await _count(db, OrderWorkStage) == await _count(db, PersonalTask) == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("zone,expected", [
+    ("Asia/Tokyo", "2026-10-09T09:00:00+09:00"),
+    ("America/Los_Angeles", "2026-10-08T09:00:00-07:00"),
+])
+async def test_delayed_replay_and_correction_use_the_source_timezone(db, monkeypatch, zone, expected):
+    import services.incoming_command_service as module
+
+    class LaterClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2030, 1, 1, tzinfo=timezone.utc).astimezone(tz)
+
+    actor = await _actor(db)
+    source = datetime(2026, 10, 7, 22, 30, tzinfo=timezone.utc)
+    values = dict(request_text="ТО завтра в 09:00", source_occurred_at=source, source_timezone=zone)
+    created = await _create(db, actor, **values)
+    assert created.value.requested_at.isoformat() == expected
+    monkeypatch.setattr(module, "datetime", LaterClock)
+    replay = await _create(db, actor, **values)
+    assert replay.replayed and replay.value == created.value
+    corrected = await IncomingCommandService.update(db, actor=actor, lead_id=created.value.lead_id,
+        payload=IncomingUpdatePayload(expected_version=1, request_text="ТО дату уточнить", requested_time_text="завтра в 09:00"),
+        idempotency_key="date-delayed-correction1")
+    assert corrected.value.requested_at.isoformat() == expected
+    assert corrected.value.source_occurred_at == source
+    assert corrected.value.source_timezone == zone
+    assert corrected.value.original_text == values["request_text"]
