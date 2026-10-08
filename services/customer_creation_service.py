@@ -141,11 +141,11 @@ class CustomerCreationService:
             bic=cls._clean_optional(payload.get("bic")),
             iban=cls._clean_optional(payload.get("iban")),
             signer_position=(
-                cls._clean_optional(payload.get("signer_position")) or "директора"
+                cls._clean_optional(payload.get("signer_position")) or ""
             ),
             signer_name=cls._clean_optional(payload.get("signer_name")),
             acting_basis=(
-                cls._clean_optional(payload.get("acting_basis")) or "Устава"
+                cls._clean_optional(payload.get("acting_basis")) or ""
             ),
             signing_mode=signing_mode,
             is_favorite=bool(payload.get("is_favorite", False)),

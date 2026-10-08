@@ -779,3 +779,107 @@ async def test_party_roles_inherit_frozen_contract_and_allow_override(db, docume
     assert snapshot["values"]["seller.role_gen"] == ("Продавца" if expected == "seller_payer" else "Исполнителя")
     assert snapshot["values"]["customer.role_ins"] == "Плательщиком"
     assert contract.render_snapshot == {"meta": {"document_role_type": "executor_payer"}}
+
+
+@pytest.mark.asyncio
+async def test_unknown_customer_signing_requisites_render_empty_and_preserve_issued_snapshot(
+    db, tmp_path
+):
+    from io import BytesIO
+    from copy import deepcopy
+    from docx import Document
+    from modules.documents.infrastructure.renderers import (
+        NativeDocxRenderer,
+        DocumentTemplateVersion,
+        RenderContext,
+    )
+    from services.customer_service import CustomerService
+
+    order, issuer, selected, _ = await _seed_order(db)
+    scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
+    customer = await db.get(Customer, order.customer_id)
+    customer.signer_position = "директора"
+    customer.acting_basis = "Устава"
+    await db.commit()
+    selection = DocumentContextSelection(
+        order_id=order.id,
+        legal_entity_id=issuer.id,
+        document_type="invoice",
+        issue_date=date(2026, 8, 26),
+    )
+    old_snapshot = await DocumentContextBuilder.build(
+        db, tenant_scope=scope, selection=selection
+    )
+    issued = OrderDocument(
+        tenant_id=1,
+        legal_entity_id=issuer.id,
+        order_id=order.id,
+        proposal_id=selected.id,
+        doc_type="invoice",
+        status="issued",
+        internal_reference="signing-old",
+        number="signing-old",
+        render_snapshot=deepcopy(old_snapshot),
+    )
+    db.add(issued)
+    await db.commit()
+    await CustomerService.update_for_manager(
+        db,
+        customer_id=customer.id,
+        tenant_scope=scope,
+        payload={"signer_position": None, "acting_basis": "  "},
+    )
+    snapshot = await DocumentContextBuilder.build(
+        db, tenant_scope=scope, selection=selection
+    )
+    assert snapshot["values"]["customer.signer_position"] == ""
+    assert snapshot["values"]["customer.acting_basis"] == ""
+    assert snapshot["conditions"]["customer.organization_statutory_body"] is True
+    await db.refresh(customer)
+    assert customer.signer_position == customer.acting_basis == ""
+    await db.refresh(issued)
+    assert issued.render_snapshot == old_snapshot
+    document = Document()
+    document.add_paragraph("Должность: [{{ customer.signer_position }}]")
+    document.add_paragraph("Основание: [{{ customer.acting_basis }}]")
+    source = BytesIO()
+    document.save(source)
+    template = DocumentTemplateVersion(
+        template_key="signing",
+        version=1,
+        source=source.getvalue(),
+        field_catalog=frozenset(snapshot["values"]),
+    )
+    renderer = NativeDocxRenderer()
+    rendered = renderer.render(template, RenderContext(values=snapshot["values"]))
+    result = Document(BytesIO(rendered.content))
+    assert [p.text for p in result.paragraphs] == ["Должность: []", "Основание: []"]
+    assert not result.tables
+    (tmp_path / "unknown-signing.docx").write_bytes(rendered.content)
+    old_rendered = renderer.render(
+        template, RenderContext(values=issued.render_snapshot["values"])
+    )
+    assert [p.text for p in Document(BytesIO(old_rendered.content)).paragraphs] == [
+        "Должность: [директора]",
+        "Основание: [Устава]",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_context_builder_keeps_unknown_customer_position_empty(db):
+    value = ""
+    order, issuer, _, _ = await _seed_order(db)
+    customer = await db.get(Customer, order.customer_id)
+    customer.signer_position = value
+    snapshot = await DocumentContextBuilder.build(
+        db,
+        tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
+        selection=DocumentContextSelection(
+            order_id=order.id,
+            legal_entity_id=issuer.id,
+            document_type="invoice",
+            issue_date=date(2026, 8, 26),
+        ),
+    )
+    assert snapshot["values"]["customer.signer_position"] == ""
+    assert customer.signer_position == value

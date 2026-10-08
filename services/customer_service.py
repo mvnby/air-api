@@ -346,10 +346,7 @@ class CustomerService:
         legacy_phone_before_update = customer.phone
         legacy_email_before_update = customer.email
 
-        defaulted_text_fields = {
-            "signer_position": "директора",
-            "acting_basis": "Устава",
-        }
+        signing_text_fields = ("signer_position", "acting_basis")
         optional_text_fields = (
             "email",
             "inn",
@@ -404,12 +401,12 @@ class CustomerService:
         if "is_archived" in payload and payload["is_archived"] is not None:
             customer.is_archived = bool(payload["is_archived"])
 
-        for field, default_value in defaulted_text_fields.items():
+        for field in signing_text_fields:
             if field not in payload:
                 continue
             value = payload[field]
             trimmed = str(value).strip() if value is not None else ""
-            setattr(customer, field, trimmed or default_value)
+            setattr(customer, field, trimmed)
 
         for field in optional_text_fields:
             if field not in payload:

@@ -345,7 +345,7 @@ class DocumentContextBuilder:
             "customer.iban": str(getattr(customer, "iban", "") or ""),
             "customer.bic": str(getattr(customer, "bic", "") or ""),
             "customer.signer_position": str(
-                getattr(customer, "signer_position", "") or "директора"
+                getattr(customer, "signer_position", "") or ""
             ),
             "customer.signer_name": str(getattr(customer, "signer_name", "") or ""),
             "customer.acting_basis": str(getattr(customer, "acting_basis", "") or ""),
