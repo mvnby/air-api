@@ -6,8 +6,10 @@ from sqlalchemy import text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models import Customer, CustomerContract, CustomerType, GlobalConfig, Order
+from models import Customer, CustomerContract, GlobalConfig, Order
 from models.tenancy import TenantScope
+from modules.documents.domain.customer_signing import customer_signing_text
+from modules.documents.domain.party import customer_document_entity_type
 from services.document_role_service import DocumentRoleService
 from services.google_service import get_google_service
 from services.customer_party import is_business_customer_type
@@ -76,9 +78,14 @@ class CustomerContractService:
     @staticmethod
     def _build_replacements(customer: Customer, contract: CustomerContract) -> Dict[str, str]:
         is_business = CustomerContractService._is_business_customer(customer)
-        signs_personally = (
-            customer.type == CustomerType.individual_entrepreneur
-            and customer.signing_mode == "self"
+        signing = customer_signing_text(
+            entity_type=customer_document_entity_type(
+                customer.type, name=customer.name, full_legal_name=customer.full_legal_name,
+            ),
+            signing_mode=customer.signing_mode,
+            signer_position=customer.signer_position,
+            signer_name=customer.signer_name,
+            acting_basis=customer.acting_basis,
         )
         client_name = customer.full_legal_name if is_business and customer.full_legal_name else customer.name
         return {
@@ -87,9 +94,9 @@ class CustomerContractService:
             "{{email}}": f"email: {customer.email or '-'}",
             "{{inn}}": customer.inn or "-",
             "{{address}}": customer.legal_address or customer.actual_address or "-",
-            "{{signer_position}}": "" if signs_personally else customer.signer_position or "директора",
-            "{{signer_name}}": customer.signer_name or "_______________________________________",
-            "{{acting_basis}}": "" if signs_personally else customer.acting_basis or "Устава",
+            "{{signer_position}}": signing["signer_position"],
+            "{{signer_name}}": signing["signer_name"],
+            "{{acting_basis}}": signing["acting_basis"],
             "{{bank_name}}": customer.bank_name or "-",
             "{{iban}}": customer.iban or "-",
             "{{bic}}": customer.bic or "-",

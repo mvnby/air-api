@@ -782,17 +782,16 @@ async def test_party_roles_inherit_frozen_contract_and_allow_override(db, docume
 
 
 @pytest.mark.asyncio
-async def test_unknown_customer_signing_requisites_render_empty_and_preserve_issued_snapshot(
+async def test_unknown_customer_signing_requisites_render_lines_and_preserve_issued_snapshot(
     db, tmp_path
 ):
     from io import BytesIO
     from copy import deepcopy
     from docx import Document
-    from modules.documents.infrastructure.renderers import (
-        NativeDocxRenderer,
-        DocumentTemplateVersion,
-        RenderContext,
-    )
+    from types import SimpleNamespace
+    from modules.documents.application.artifact_helpers import build_render_inputs
+    from modules.documents.domain.customer_signing import CUSTOMER_POSITION_LINE, CUSTOMER_BASIS_LINE
+    from modules.documents.infrastructure.renderers import NativeDocxRenderer
     from services.customer_service import CustomerService
 
     order, issuer, selected, _ = await _seed_order(db)
@@ -844,21 +843,27 @@ async def test_unknown_customer_signing_requisites_render_empty_and_preserve_iss
     document.add_paragraph("Основание: [{{ customer.acting_basis }}]")
     source = BytesIO()
     document.save(source)
-    template = DocumentTemplateVersion(
-        template_key="signing",
-        version=1,
-        source=source.getvalue(),
-        field_catalog=frozenset(snapshot["values"]),
-    )
+
+    def inputs(facts):
+        return build_render_inputs(
+            template=SimpleNamespace(id=1),
+            version=SimpleNamespace(
+                version=1, source_filename="signing.docx",
+                placeholder_schema={"fields": ["customer.signer_position", "customer.acting_basis"]},
+            ),
+            source=source.getvalue(), snapshot=facts,
+        )
+    template, render_context = inputs(snapshot)
     renderer = NativeDocxRenderer()
-    rendered = renderer.render(template, RenderContext(values=snapshot["values"]))
+    rendered = renderer.render(template, render_context)
     result = Document(BytesIO(rendered.content))
-    assert [p.text for p in result.paragraphs] == ["Должность: []", "Основание: []"]
+    assert [p.text for p in result.paragraphs] == [
+        f"Должность: [{CUSTOMER_POSITION_LINE}]", f"Основание: [{CUSTOMER_BASIS_LINE}]",
+    ]
     assert not result.tables
     (tmp_path / "unknown-signing.docx").write_bytes(rendered.content)
-    old_rendered = renderer.render(
-        template, RenderContext(values=issued.render_snapshot["values"])
-    )
+    old_template, old_context = inputs(issued.render_snapshot)
+    old_rendered = renderer.render(old_template, old_context)
     assert [p.text for p in Document(BytesIO(old_rendered.content)).paragraphs] == [
         "Должность: [директора]",
         "Основание: [Устава]",

@@ -609,3 +609,53 @@ def test_pdf_over_five_pages_is_rejected_instead_of_partially_read():
 
     with pytest.raises(ValueError, match="больше 5 страниц"):
         CustomerRequisitesRecognitionService._extract_pdf_text(output.getvalue())
+
+
+@pytest.mark.parametrize("value", [None, "", "  ", "действующий на основании", "на основании."])
+def test_unknown_authority_basis_never_becomes_charter(value):
+    extracted, _ = CustomerRequisitesRecognitionService._normalize_extracted(
+        {"name": "ООО Клиент", "signer_position": "  ", "acting_basis": value}, "",
+    )
+    assert extracted["acting_basis"] is None
+    assert extracted["signer_position"] is None
+    payload = CustomerRequisitesRecognitionService._customer_payload(extracted)
+    assert payload["signer_position"] == payload["acting_basis"] == ""
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("name", "expected_type", "expected_mode"),
+    [("ООО Клиент", "company", "statutory_body"),
+     ("ИП Иванов Иван Иванович", "individual_entrepreneur", "self"),
+     ("Иванов Иван Иванович", "individual", "self")],
+)
+async def test_confirm_ocr_without_signing_facts_stores_empty_fields(
+    sqlite_session, monkeypatch, name, expected_type, expected_mode,
+):
+    async def extract(_text):
+        return {"name": name, "acting_basis": "действующий на основании"}
+
+    monkeypatch.setattr(CustomerRequisitesRecognitionService, "extract_requisites", extract)
+    draft = await CustomerRequisitesRecognitionService.recognize_text(
+        sqlite_session, text=f"{name} реквизиты клиента для договора", source="manager",
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+    confirmed = await CustomerRequisitesRecognitionService.confirm(
+        sqlite_session, recognition_id=draft["id"], action="create",
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+    customer = await sqlite_session.get(Customer, confirmed["customer"]["id"])
+    assert customer.type == expected_type
+    assert customer.signing_mode == expected_mode
+    assert customer.signer_position == customer.acting_basis == ""
+    # The default update path must not fill unknown values either.
+    another = await CustomerRequisitesRecognitionService.recognize_text(
+        sqlite_session, text=f"{name} реквизиты клиента для договора", source="telegram_text",
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+    await CustomerRequisitesRecognitionService.confirm(
+        sqlite_session, recognition_id=another["id"], action="update", customer_id=customer.id,
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+    await sqlite_session.refresh(customer)
+    assert customer.signer_position == customer.acting_basis == ""

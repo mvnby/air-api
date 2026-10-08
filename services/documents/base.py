@@ -10,6 +10,8 @@ from sqlalchemy.orm import selectinload
 from num2words import num2words
 
 from models import CustomerContract, DocumentTemplate, Order, OrderDocument, OrderProductLink, OrderServiceLink, CustomerType
+from modules.documents.domain.customer_signing import customer_signing_text
+from modules.documents.domain.party import customer_document_entity_type
 from services.document_role_service import DocumentRoleService
 from services.installation_estimate_projection import frozen_installation_descriptions
 
@@ -161,9 +163,9 @@ class BaseDocumentStrategy(ABC):
             "{{email}}": "-",
             "{{inn}}": "-",
             "{{address}}": "-",
-            "{{signer_position}}": "директора", 
+            "{{signer_position}}": "",
             "{{signer_name}}": "-",
-            "{{acting_basis}}": "Устава",
+            "{{acting_basis}}": "",
             "{{bank_name}}": "-",
             "{{iban}}": "-",
             "{{bic}}": "-",
@@ -318,9 +320,14 @@ class BaseDocumentStrategy(ABC):
             else:
                 client_main_name = c.name
 
-            signs_personally = (
-                c.type == CustomerType.individual_entrepreneur
-                and getattr(c, "signing_mode", "self") == "self"
+            signing = customer_signing_text(
+                entity_type=customer_document_entity_type(
+                    c.type, name=c.name, full_legal_name=c.full_legal_name,
+                ),
+                signing_mode=getattr(c, "signing_mode", None),
+                signer_position=c.signer_position,
+                signer_name=c.signer_name,
+                acting_basis=c.acting_basis,
             )
 
             replacements.update({
@@ -329,9 +336,9 @@ class BaseDocumentStrategy(ABC):
                 "{{email}}": f"email: {c.email or '-'}",
                 "{{inn}}": c.inn or "-",
                 "{{address}}": c.legal_address or c.actual_address or "-",
-                "{{signer_position}}": "" if signs_personally else c.signer_position or "директора",
-                "{{signer_name}}": c.signer_name or "_______________________________________",
-                "{{acting_basis}}": "" if signs_personally else c.acting_basis or "Устава",
+                "{{signer_position}}": signing["signer_position"],
+                "{{signer_name}}": signing["signer_name"],
+                "{{acting_basis}}": signing["acting_basis"],
                 "{{bank_name}}": c.bank_name or "-",
                 "{{iban}}": c.iban or "-",
                 "{{bic}}": c.bic or "-"

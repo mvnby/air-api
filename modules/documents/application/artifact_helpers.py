@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from models import DocumentArtifact, DocumentTemplate, DocumentTemplateVersion
+from modules.documents.domain.customer_signing import customer_signing_text
 from modules.documents.infrastructure.artifact_storage import StoredDocumentArtifact
 from modules.documents.infrastructure.renderers import (
     DocumentTemplateVersion as RenderTemplateVersion,
@@ -43,7 +44,21 @@ def build_render_inputs(
         table_blocks=table_blocks,
         filename=str(version.source_filename or "template.docx"),
     )
-    snapshot_values = snapshot.get("values", {})
+    snapshot_values = dict(snapshot.get("values", {}))
+    # Use frozen party metadata before projecting to the template allowlist.
+    # Handwriting hints belong only to rendering, never to the factual snapshot.
+    if snapshot_values.get("customer.entity_type"):
+        signing = customer_signing_text(
+            entity_type=snapshot_values["customer.entity_type"],
+            signing_mode=snapshot_values.get("customer.signing_mode"),
+            signer_position=snapshot_values.get("customer.signer_position"),
+            signer_name=snapshot_values.get("customer.signer_name"),
+            acting_basis=snapshot_values.get("customer.acting_basis"),
+        )
+        for field, value in signing.items():
+            key = f"customer.{field}"
+            if key in field_catalog:
+                snapshot_values[key] = value
     snapshot_conditions = snapshot.get("conditions")
     snapshot_tables = snapshot.get("table_rows", {})
     context = RenderContext(
