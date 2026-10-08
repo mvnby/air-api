@@ -313,14 +313,16 @@ const googleDraftBusy = (documentId: number) => {
   return googleEditor.isBusy(target) || session?.status === 'syncing';
 };
 const issueDocument = async (document: Parameters<typeof workspace.issue>[0]) => {
-  if (!await workspace.checkDocumentReadiness(document)) return;
+  const action = workspace.beginIssueAction(document);
+  if (!await workspace.checkDocumentReadiness(document, action) || !action.canIssue()) return;
   const target = googleTarget(document.id);
   if (googleEditor.connected.value) {
     await googleEditor.loadSession(target);
+    if (!action.canIssue()) return;
     const session = googleEditor.getSession(target);
     if (session?.status === 'changed' && session.can_edit) {
-      const synced = await googleEditor.sync(target);
-      if (!synced) return;
+      const synced = await googleEditor.sync(target, action.isCurrent);
+      if (!synced || !action.canIssue()) return;
     } else if (session && session.status !== 'ready') {
       emit('toast', {
         message: 'Черновик ещё не синхронизирован с Google Docs',
@@ -329,7 +331,7 @@ const issueDocument = async (document: Parameters<typeof workspace.issue>[0]) =>
       return;
     }
   }
-  await workspace.issue(document);
+  await workspace.issue(document, action);
 };
 const handleEmailSent = async () => {
   await workspace.loadDocuments();

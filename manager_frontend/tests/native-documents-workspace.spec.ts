@@ -901,4 +901,128 @@ describe('Selected native customer requirements', () => {
     expect(vi.mocked(googleDocumentEditorApi.getSession).mock.calls.length).toBe(before);
     expect(wrapper.get('[data-testid="native-draft-missing-fields"]').text()).toContain('Юридический адрес клиента');
   });
+
+  const issueDraft = {
+    id: 77, order_id: 42, legal_entity_id: 5, doc_type: 'contract', status: 'draft', provider: 'native',
+    internal_reference: 'draft77', display_number: 'draft77', date: NOW, created_at: NOW, artifacts: [],
+    customer_readiness: { checked: true, can_issue: true, missing_fields: [] },
+  };
+  const clickIssue = async (wrapper: VueWrapper) => {
+    await wrapper.findAll('button').find((button) => button.text() === 'Выпустить')!.trigger('click');
+    await flushPromises();
+  };
+
+  it.each(['switch order', 'switch away and back', 'close and reopen'])
+  ('discards issue readiness after %s without updating the current workspace', async (change) => {
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments)
+      .mockImplementation(async (orderId) => ({ items: [{ ...issueDraft, order_id: orderId } as never] }));
+    const barrier = deferred<typeof missing>();
+    vi.mocked(ManagerDocumentSystemService.getManagerManagedDocumentReadiness).mockReturnValue(barrier.promise as never);
+    let wrapper = await mountWorkspace();
+    await clickIssue(wrapper);
+    expect(ManagerDocumentSystemService.getManagerManagedDocumentReadiness).toHaveBeenCalledWith(77);
+    if (change === 'close and reopen') {
+      wrapper.unmount();
+      wrapper = await mountWorkspace();
+    } else {
+      await wrapper.setProps({ order: { ...baseOrder, id: 43 } });
+      await flushPromises();
+      if (change === 'switch away and back') {
+        await wrapper.setProps({ order: baseOrder });
+        await flushPromises();
+      }
+    }
+    const refreshBefore = wrapper.emitted('refresh')?.length || 0;
+    // A late missing response must not overwrite even an identically numbered document
+    // in the reopened workspace. A late ready response must not authorize its issue.
+    barrier.resolve(missing);
+    await flushPromises();
+    expect(ManagerDocumentSystemService.issueManagerManagedDocument).not.toHaveBeenCalled();
+    expect(googleDocumentEditorApi.syncSession).not.toHaveBeenCalled();
+    expect(wrapper.find('[data-testid="incomplete-native-draft"]').exists()).toBe(false);
+    expect(wrapper.emitted('refresh')?.length || 0).toBe(refreshBefore);
+    expect(wrapper.emitted('toast')?.some(([payload]) => payload.message.includes('Не заполнены поля'))).not.toBe(true);
+  });
+
+  it('does not issue a ready late response after close and reopening another order', async () => {
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({ items: [issueDraft as never] });
+    const barrier = deferred<typeof issueDraft.customer_readiness>();
+    vi.mocked(ManagerDocumentSystemService.getManagerManagedDocumentReadiness).mockReturnValue(barrier.promise as never);
+    const oldWorkspace = await mountWorkspace();
+    await clickIssue(oldWorkspace);
+    oldWorkspace.unmount();
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({ items: [] });
+    const newWorkspace = await mountWorkspace(undefined, { ...baseOrder, id: 43 });
+    barrier.resolve(issueDraft.customer_readiness);
+    await flushPromises();
+    expect(ManagerDocumentSystemService.issueManagerManagedDocument).not.toHaveBeenCalled();
+    expect(googleDocumentEditorApi.syncSession).not.toHaveBeenCalled();
+    expect(newWorkspace.emitted('refresh')).toBeUndefined();
+  });
+
+  it('rechecks issue context after awaiting the Google session before syncing or issuing', async () => {
+    vi.mocked(googleDocumentEditorApi.getConnectionStatus).mockResolvedValue({ connected: true, provider: 'google_drive' } as never);
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({ items: [issueDraft as never] });
+    const wrapper = await mountWorkspace();
+    const barrier = deferred<never>();
+    vi.mocked(googleDocumentEditorApi.getSession).mockReturnValue(barrier.promise);
+    await clickIssue(wrapper);
+    expect(ManagerDocumentSystemService.getManagerManagedDocumentReadiness).toHaveBeenCalledWith(77);
+    await wrapper.setProps({ order: { ...baseOrder, id: 43 } });
+    await flushPromises();
+    barrier.resolve({ status: 'changed', can_edit: true } as never);
+    await flushPromises();
+    expect(googleDocumentEditorApi.syncSession).not.toHaveBeenCalled();
+    expect(ManagerDocumentSystemService.issueManagerManagedDocument).not.toHaveBeenCalled();
+  });
+
+  it('does not refresh a new order when an already submitted issue finishes late', async () => {
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments)
+      .mockImplementation(async (orderId) => ({ items: orderId === 42 ? [issueDraft as never] : [] }));
+    const barrier = deferred<never>();
+    vi.mocked(ManagerDocumentSystemService.issueManagerManagedDocument).mockReturnValue(barrier.promise);
+    const wrapper = await mountWorkspace();
+    await clickIssue(wrapper);
+    expect(ManagerDocumentSystemService.issueManagerManagedDocument).toHaveBeenCalledWith(77);
+    await wrapper.setProps({ order: { ...baseOrder, id: 43 } });
+    await flushPromises();
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockClear();
+    barrier.resolve({} as never);
+    await flushPromises();
+    expect(ManagerDocumentSystemService.listManagerManagedOrderDocuments).not.toHaveBeenCalled();
+    expect(wrapper.emitted('refresh')).toBeUndefined();
+    expect(wrapper.emitted('toast')?.some(([payload]) => payload.message.includes('официальный номер'))).not.toBe(true);
+  });
+
+  it('still issues a ready draft while its order and workspace remain current', async () => {
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments)
+      .mockResolvedValueOnce({ items: [issueDraft as never] })
+      .mockResolvedValue({ items: [{ ...issueDraft, status: 'issued' } as never] });
+    const wrapper = await mountWorkspace();
+    await clickIssue(wrapper);
+    expect(ManagerDocumentSystemService.issueManagerManagedDocument).toHaveBeenCalledWith(77);
+    expect(wrapper.emitted('refresh')).toHaveLength(1);
+    expect(wrapper.emitted('toast')?.some(([payload]) => payload.message.includes('официальный номер'))).toBe(true);
+  });
+
+  it('does not issue or refresh another order after pending Google synchronization', async () => {
+    vi.mocked(googleDocumentEditorApi.getConnectionStatus).mockResolvedValue({ connected: true, provider: 'google_drive' } as never);
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments)
+      .mockImplementation(async (orderId) => ({ items: orderId === 42 ? [issueDraft as never] : [] }));
+    const wrapper = await mountWorkspace();
+    vi.mocked(googleDocumentEditorApi.getSession).mockResolvedValue({ status: 'changed', can_edit: true } as never);
+    const barrier = deferred<never>();
+    vi.mocked(googleDocumentEditorApi.syncSession).mockReturnValue(barrier.promise);
+    await clickIssue(wrapper);
+    expect(googleDocumentEditorApi.syncSession).toHaveBeenCalledWith({ kind: 'managed-document', documentId: 77 });
+    await wrapper.setProps({ order: { ...baseOrder, id: 43 } });
+    await flushPromises();
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockClear();
+    barrier.resolve({ session: { status: 'ready', can_edit: true }, newTemplateVersionCreated: false } as never);
+    await flushPromises();
+    expect(ManagerDocumentSystemService.issueManagerManagedDocument).not.toHaveBeenCalled();
+    expect(ManagerDocumentSystemService.listManagerManagedOrderDocuments).not.toHaveBeenCalled();
+    expect(wrapper.emitted('refresh')).toBeUndefined();
+    expect(wrapper.emitted('toast')?.some(([payload]) => payload.message.includes('Изменения из Google'))).not.toBe(true);
+  });
 });

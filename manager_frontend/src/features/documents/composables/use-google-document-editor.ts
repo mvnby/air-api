@@ -94,14 +94,15 @@ export const useGoogleDocumentEditor = (input: GoogleDocumentEditorInput) => {
     }
   };
 
-  const sync = async (target: GoogleDocumentEditTarget) => {
-    if (!connected.value) return false;
+  const sync = async (target: GoogleDocumentEditTarget, isCurrent = () => true) => {
+    if (!connected.value || !isCurrent()) return false;
     const key = targetKey(target);
     if (busyKeys.has(key)) return false;
     trackedTargets.set(key, target);
     busyKeys.add(key);
     try {
       const result = await googleDocumentEditorApi.syncSession(target);
+      if (!isCurrent()) return false;
       sessions[key] = result.session;
       input.notify(target.kind === 'template-version'
         ? result.newTemplateVersionCreated
@@ -111,7 +112,7 @@ export const useGoogleDocumentEditor = (input: GoogleDocumentEditorInput) => {
       await input.onSynced?.(target, result);
       return true;
     } catch (error) {
-      input.notify(`Не удалось забрать изменения: ${getApiErrorMessage(error)}`, 'error');
+      if (isCurrent()) input.notify(`Не удалось забрать изменения: ${getApiErrorMessage(error)}`, 'error');
       return false;
     } finally {
       busyKeys.delete(key);

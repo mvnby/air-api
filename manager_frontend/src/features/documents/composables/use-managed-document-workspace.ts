@@ -1,4 +1,4 @@
-import { computed, ref, watch } from 'vue';
+import { computed, onScopeDispose, ref, watch } from 'vue';
 import { commercialTermsApi, mergeCommercialDocumentDefaults } from '../../../services/commercial-terms-api';
 import type { DocumentRoleType } from '../model/document-types';
 import {
@@ -52,6 +52,11 @@ type ManagedWorkspaceInput = {
   refresh: () => void;
 };
 
+type IssueAction = {
+  isCurrent: () => boolean;
+  canIssue: () => boolean;
+};
+
 type ConsumerDefaultField = 'equipment_brand' | 'equipment_model' | 'goods_warranty_months' | 'goods_warranty_terms';
 
 const consumerDefaultFields: ConsumerDefaultField[] = [
@@ -90,7 +95,35 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   const templateVersionsLoading = ref(false);
   const voidTarget = ref<ManagedDocumentItem | null>(null);
   const voidReason = ref('');
+  let workspaceActive = true;
+  let issueActionGeneration = 0;
   let requestId = 0;
+  watch(() => input.orderId(), () => {
+    issueActionGeneration += 1;
+    requestId += 1;
+    busy.value = false;
+  }, { flush: 'sync' });
+  onScopeDispose(() => {
+    workspaceActive = false;
+    issueActionGeneration += 1;
+    requestId += 1;
+  });
+
+  const beginIssueAction = (document: ManagedDocumentItem): IssueAction => {
+    const orderId = input.orderId();
+    const generation = ++issueActionGeneration;
+    const isCurrent = () => workspaceActive && generation === issueActionGeneration
+      && input.orderId() === orderId;
+    const canIssue = () => {
+      if (!isCurrent() || document.order_id !== orderId) return false;
+      const current = documents.value.find((item) => item.id === document.id);
+      return current?.order_id === orderId && current.status === 'draft'
+        && current.doc_type === document.doc_type
+        && current.document_template_id === document.document_template_id
+        && current.template_version_id === document.template_version_id;
+    };
+    return { isCurrent, canIssue };
+  };
   let templateRequestId = 0;
   let versionRequestId = 0;
   let commercialDefaultsRequestId = 0;
@@ -562,11 +595,13 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     }
   };
 
-  const checkDocumentReadiness = async (document: ManagedDocumentItem) => {
+  const checkDocumentReadiness = async (document: ManagedDocumentItem, action = beginIssueAction(document)) => {
+    if (!action.canIssue()) return false;
     if (document.status !== 'draft' || !['contract', 'invoice'].includes(document.doc_type)) return true;
     busy.value = true;
     try {
       const readiness = await ManagerDocumentSystemService.getManagerManagedDocumentReadiness(document.id);
+      if (!action.canIssue()) return false;
       documents.value = documents.value.map((item) => item.id === document.id
         ? { ...item, customer_readiness: readiness } : item);
       if (!readiness.can_issue) {
@@ -575,26 +610,29 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       }
       return true;
     } catch (error) {
-      input.notify(`Не удалось проверить реквизиты: ${getApiErrorMessage(error)}`, 'error');
+      if (action.canIssue()) input.notify(`Не удалось проверить реквизиты: ${getApiErrorMessage(error)}`, 'error');
       return false;
     } finally {
-      busy.value = false;
+      if (action.isCurrent()) busy.value = false;
     }
   };
 
-  const issue = async (document: ManagedDocumentItem) => {
-    if (issueBlockedReason.value) return;
+  const issue = async (document: ManagedDocumentItem, action = beginIssueAction(document)) => {
+    if (!action.canIssue() || issueBlockedReason.value) return;
     busy.value = true;
     try {
       await ManagerDocumentSystemService.issueManagerManagedDocument(document.id);
+      if (!action.isCurrent()) return;
       await loadDocuments();
+      if (!action.isCurrent()) return;
       input.refresh();
       input.notify('Документу присвоен официальный номер, DOCX и PDF сохранены.');
     } catch (error) {
+      if (!action.isCurrent()) return;
       input.notify(`Выпуск не завершён: ${getApiErrorMessage(error)}`, 'error');
       await loadDocuments();
     } finally {
-      busy.value = false;
+      if (action.isCurrent()) busy.value = false;
     }
   };
 
@@ -722,6 +760,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     consumerTerms,
     customerReadiness,
     checkDocumentReadiness,
+    beginIssueAction,
     updateConsumerTerms,
     createDraft,
     deleteDraft,
