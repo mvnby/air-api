@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import OrderMoney from './OrderMoney.vue';
 import MoneyAmount from '../money/MoneyAmount.vue';
+import BynSymbol from '../money/BynSymbol.vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import { api } from '../../api';
 import type { ManagerInstallEstimateResponse, ManagerOrderServiceLinePayload, ManagerQuickTariffResponse, ManagerTariffResponse, ManagerTariffRuleResponse, ManagerTariffServiceKind } from '../../client';
@@ -195,7 +196,7 @@ onMounted(() => { void Promise.all([load(), loadBookState()]); });
         <label v-if="hasRule('per_meter_over_included')" class="text-xs">Длина трассы, м<input v-model.number="routeLength" type="number" min="0" step="0.1" class="field-input mt-1" /></label>
         <label class="text-xs">Количество<input v-model.number="quantity" type="number" min="1" step="1" class="field-input mt-1" /></label>
         <label v-if="hasRule('per_hole_manual')" class="text-xs">Доп. отверстия<input v-model.number="extraHoles" type="number" min="0" step="1" class="field-input mt-1" /></label>
-        <label class="text-xs">Скидка, BYN<input v-model.number="discount" type="number" min="0" step="0.01" class="field-input mt-1" /></label>
+        <label class="text-xs"><span>Скидка, <BynSymbol /><span class="sr-only">BYN</span></span><input v-model.number="discount" type="number" min="0" step="0.01" class="field-input mt-1" /></label>
       </div>
       <div v-if="manualRules.length" class="mt-3 grid gap-2 sm:grid-cols-2">
         <label v-for="rule in manualRules" :key="rule.id" class="text-xs">{{ rule.name }} · <OrderMoney :value="rule.unit_price" />/{{ rule.unit }}

@@ -25,13 +25,15 @@ export const moneyToCents = (value: unknown): number | null => {
 
 export const centsToAmount = (cents: number) => `${Math.floor(cents / 100)}.${String(cents % 100).padStart(2, '0')}`;
 
-export const formatByn = (cents: number | null) => {
+export const formatBynAmount = (cents: number | null) => {
   if (cents === null) return '—';
-  return `${(cents / 100).toLocaleString('ru-RU', {
+  return (cents / 100).toLocaleString('ru-RU', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })} BYN`;
+  });
 };
+
+export const formatByn = (cents: number | null) => cents === null ? '—' : `${formatBynAmount(cents)} BYN`;
 
 export const proposalLineTotalCents = (proposal: {
   product_lines?: Array<{ line_total: number }>;

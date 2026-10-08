@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import MoneyAmount from '../components/money/MoneyAmount.vue';
+import BynSymbol from '../components/money/BynSymbol.vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import { api } from '../api';
 import type {
@@ -455,7 +456,7 @@ onMounted(async () => {
             </label>
 
             <label class="block">
-              <span class="mb-1 block text-sm text-gray-600 dark:text-slate-300">Скидка (BYN)</span>
+              <span class="mb-1 block text-sm text-gray-600 dark:text-slate-300">Скидка (<BynSymbol /><span class="sr-only">BYN</span>)</span>
               <input
                 v-model.number="estimateForm.discount_amount"
                 type="number"

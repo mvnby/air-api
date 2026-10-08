@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import OrderMoney from './OrderMoney.vue';
+import MoneyText from '../money/MoneyText.vue';
 import { computed } from 'vue';
 import { ArrowRight } from 'lucide-vue-next';
 import type { ProductLine, ServiceLine } from './order-editor-types';
@@ -37,7 +38,7 @@ const totals = computed(() => {
       </div>
       <div class="ml-auto flex min-w-0 items-center gap-3">
         <div class="text-right tabular-nums"><span class="block text-xs text-slate-500">Итого</span><strong class="whitespace-nowrap text-base sm:text-lg" data-testid="proposal-grand-total"><OrderMoney :value="totals.total" /></strong></div>
-        <button v-if="!preview" type="button" class="btn-mini min-h-9 max-w-[55vw] gap-1.5 px-3 text-xs disabled:opacity-50" :disabled="busy" @click="emit('next')"><span>{{ actionLabel }}</span><ArrowRight :size="15" class="shrink-0" aria-hidden="true" /></button>
+        <button v-if="!preview" type="button" class="btn-mini min-h-9 max-w-[55vw] gap-1.5 px-3 text-xs disabled:opacity-50" :disabled="busy" @click="emit('next')"><span><MoneyText :text="actionLabel" /></span><ArrowRight :size="15" class="shrink-0" aria-hidden="true" /></button>
       </div>
     </div>
   </footer>

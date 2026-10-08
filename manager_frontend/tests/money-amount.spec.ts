@@ -50,6 +50,7 @@ vi.mock('../src/api', () => ({ api: {
   listSuppliers: vi.fn().mockResolvedValue({ items: [{ id: 1, name: 'Supplier' }] }),
   listSupplierSources: vi.fn().mockResolvedValue({ items: [] }),
   listSupplierSourceUrlImportCandidates: vi.fn(), suggestSupplierOffers: vi.fn(),
+  listSupplierWarehouses: vi.fn(), listSupplyRequests: vi.fn(),
 } }));
 vi.mock('../src/services/product-supplier-offers-api', () => ({
   supplierMappingApi: { listUnmapped: vi.fn() }, productSupplierOffersApi: { listCandidates: vi.fn() },
@@ -148,5 +149,46 @@ describe('order header and proposal toolbar money callers', () => {
     await toolbar.setProps({ compact: true, loading: true }); expect(toolbar.findAllComponents(MoneyAmount)).toHaveLength(2);
     expect(toolbar.findAll('button').every((b) => b.attributes('disabled') !== undefined)).toBe(true);
     header.unmount(); toolbar.unmount();
+  });
+});
+
+describe('remaining Manager money displays', () => {
+  it.each([
+    ['Ожидать оплату 123 456 BYN', '123 456 BYN'],
+    ['Оплачено 0 из 1\u00a0234 BYN', '1\u00a0234 BYN'],
+    ['Долг -12,34 BYN.', '-12,34 BYN'],
+    ['Остаток 0,01 BYN', '0,01 BYN'],
+  ])('keeps the original status and currency text: %s', async (text, amount) => {
+    const { default: MoneyText } = await import('../src/components/money/MoneyText.vue');
+    const wrapper = mount(MoneyText, { props: { text } });
+    expect(wrapper.text()).toBe(text);
+    expect(wrapper.getComponent(MoneyAmount).text()).toBe(amount);
+    expect(wrapper.get('svg').attributes('aria-hidden')).toBe('true');
+  });
+
+  it('leaves labels without BYN amounts unchanged', async () => {
+    const { default: MoneyText } = await import('../src/components/money/MoneyText.vue');
+    for (const text of ['Долга нет', 'Цена 10 USD', 'BYN — код валюты']) {
+      const wrapper = mount(MoneyText, { props: { text } });
+      expect(wrapper.text()).toBe(text);
+      expect(wrapper.find('svg').exists()).toBe(false);
+    }
+  });
+
+  it('shows a zero supply cost, preserves precision, and keeps missing cost distinct', async () => {
+    vi.mocked(api.listSupplierWarehouses).mockResolvedValue({ items: [] } as any);
+    vi.mocked(api.listSupplyRequests).mockResolvedValue({ items: [{
+      id: 1, supplier_id: 1, supplier_name: 'Supplier', status: 'draft',
+      lines: [0, -0.01, 10.2345, 123456789.12, null].map((price, id) => ({
+        id, title_snapshot: `Line ${id}`, qty: 1, unit_cost_snapshot: price,
+      })),
+    }] } as any);
+    const { default: SupplyRequestsView } = await import('../src/views/SupplyRequestsView.vue');
+    const wrapper = mount(SupplyRequestsView); await flushPromises();
+    expect(wrapper.findAllComponents(MoneyAmount).map(amount => amount.text())).toEqual([
+      '0 BYN', '-0,01 BYN', '10,235 BYN', '123\u00a0456\u00a0789,12 BYN',
+    ]);
+    expect(wrapper.text()).toContain('цена не указана');
+    wrapper.unmount();
   });
 });

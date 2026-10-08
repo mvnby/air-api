@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import MoneyAmount from '../components/money/MoneyAmount.vue';
 import {
   CheckCircle2,
   Clipboard,
@@ -100,11 +101,7 @@ const groupedRequests = computed(() => {
 
 const activeRequestIds = computed(() => requests.value.map((request) => request.id));
 
-const formatMoney = (value: unknown) => {
-  const numberValue = Number(value || 0);
-  if (!Number.isFinite(numberValue)) return '0 BYN';
-  return `${numberValue.toLocaleString('ru-RU')} BYN`;
-};
+const unitCost = (value: unknown) => value == null || value === '' ? null : Number(value);
 
 const formatDate = (value?: string | null) => {
   if (!value) return '';
@@ -516,7 +513,7 @@ onMounted(async () => {
                     <div>
                       <p class="font-semibold text-slate-900">{{ line.title_snapshot }}</p>
                       <p class="mt-1 text-sm text-slate-500">
-                        {{ line.qty }} шт. · {{ line.unit_cost_snapshot ? formatMoney(line.unit_cost_snapshot) : 'цена не указана' }}
+                        {{ line.qty }} шт. · <MoneyAmount v-if="unitCost(line.unit_cost_snapshot) !== null" :value="unitCost(line.unit_cost_snapshot)" :formatted-value="unitCost(line.unit_cost_snapshot)?.toLocaleString('ru-RU')" /><span v-else>цена не указана</span>
                         <span v-if="line.order_product_link_id"> · заказная строка #{{ line.order_product_link_id }}</span>
                         <span v-else> · склад</span>
                       </p>
