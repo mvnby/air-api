@@ -11,7 +11,8 @@ import DashboardKpiGrid from '../components/dashboard/DashboardKpiGrid.vue';
 import DashboardLoadingState from '../components/dashboard/DashboardLoadingState.vue';
 import DashboardSalesChart from '../components/dashboard/DashboardSalesChart.vue';
 import DashboardSiteSeo from '../components/dashboard/DashboardSiteSeo.vue';
-import { formatDashboardComparisonPeriod, formatDashboardCurrency } from '../services/dashboard-overview';
+import { formatDashboardComparisonPeriod, formatDashboardMoneyAmount } from '../services/dashboard-overview';
+import MoneyAmount from '../components/money/MoneyAmount.vue';
 
 type DashboardTab = 'sales' | 'site-seo' | 'advertising';
 const tabs: Array<{ id: DashboardTab; label: string; icon: Component }> = [
@@ -146,7 +147,7 @@ const shortText = (value?: string | null, limit = 120) => {
       <section v-if="stats && (stats.bank_receipts_review_count || 0) > 0" class="pt-2">
         <h2 class="mb-3 text-lg font-semibold text-slate-800 dark:text-gray-300">Поступления требуют проверки</h2>
         <article v-for="receipt in stats.bank_receipts_review" :key="receipt.id" class="mb-3 rounded-xl border border-amber-200 bg-white p-4 dark:border-amber-500/30 dark:bg-[#1e293b]">
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p class="font-semibold text-slate-900 dark:text-white">{{ formatDashboardCurrency(receipt.amount) }} <span class="ml-2 text-sm font-normal text-[var(--kitlane-muted)]">{{ receipt.payer_name || 'Плательщик не указан' }}</span></p><p class="mt-1 text-xs text-[var(--kitlane-muted)] dark:text-slate-400">УНП {{ receipt.payer_unp || 'не указан' }} · документ {{ receipt.payment_document_number || 'не указан' }}</p><p class="mt-2 text-sm text-slate-600 dark:text-slate-300">{{ shortText(receipt.payment_purpose) }}</p></div><button v-if="receipt.candidate_order_ids?.length" type="button" class="inline-flex items-center gap-1 self-start rounded-lg bg-[var(--kitlane-accent)] px-3 py-2 text-sm font-semibold text-white" @click="openOrder(receipt.candidate_order_ids[0]!)">Заказ #{{ receipt.candidate_order_ids[0] }}<ExternalLink class="h-4 w-4" /></button><button v-else type="button" class="inline-flex items-center gap-1 self-start rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold" @click="navigate('/manager/orders/kanban')"><Search class="h-4 w-4" />Найти заказ</button></div>
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p class="font-semibold text-slate-900 dark:text-white"><MoneyAmount :value="receipt.amount" :formatted-value="formatDashboardMoneyAmount(receipt.amount)" /> <span class="ml-2 text-sm font-normal text-[var(--kitlane-muted)]">{{ receipt.payer_name || 'Плательщик не указан' }}</span></p><p class="mt-1 text-xs text-[var(--kitlane-muted)] dark:text-slate-400">УНП {{ receipt.payer_unp || 'не указан' }} · документ {{ receipt.payment_document_number || 'не указан' }}</p><p class="mt-2 text-sm text-slate-600 dark:text-slate-300">{{ shortText(receipt.payment_purpose) }}</p></div><button v-if="receipt.candidate_order_ids?.length" type="button" class="inline-flex items-center gap-1 self-start rounded-lg bg-[var(--kitlane-accent)] px-3 py-2 text-sm font-semibold text-white" @click="openOrder(receipt.candidate_order_ids[0]!)">Заказ #{{ receipt.candidate_order_ids[0] }}<ExternalLink class="h-4 w-4" /></button><button v-else type="button" class="inline-flex items-center gap-1 self-start rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold" @click="navigate('/manager/orders/kanban')"><Search class="h-4 w-4" />Найти заказ</button></div>
         </article>
       </section>
       <section v-if="stats && stats.expiring_contracts?.length" class="pt-2">

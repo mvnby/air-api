@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import DashboardAdvertising from '../src/components/dashboard/DashboardAdvertising.vue';
 import DashboardSearchDemand from '../src/components/dashboard/DashboardSearchDemand.vue';
 import DashboardSiteSeo from '../src/components/dashboard/DashboardSiteSeo.vue';
+import BynSymbol from '../src/components/money/BynSymbol.vue';
+import MoneyAmount from '../src/components/money/MoneyAmount.vue';
 
 const searchDemand = {
   status: 'unconfigured' as const,
@@ -11,6 +13,36 @@ const searchDemand = {
 };
 
 describe('dashboard efficiency integrations', () => {
+  it.each([0, -12.55, 12.5, 123456789.12])('uses the BYN symbol without changing advertising spend precision (%s)', (ad_spend) => {
+    const wrapper = mount(DashboardAdvertising, {
+      props: {
+        canManageIntegrations: false,
+        marketing: { status: 'fresh', providers: [{ provider: 'yandex_direct', status: 'fresh', currency: 'BYN', ad_spend }] },
+      },
+    });
+    expect(wrapper.findComponent(BynSymbol).exists()).toBe(true);
+    expect(wrapper.findComponent(MoneyAmount).text().replace(/\s+/g, ' ')).toBe(
+      new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'BYN', maximumFractionDigits: 2 })
+        .format(ad_spend).replace(/\s+/g, ' '),
+    );
+  });
+
+  it.each(['USD', 'EUR', 'GBP', 'X Y', undefined])('preserves non-BYN advertising currency formatting (%s)', (currency) => {
+    const wrapper = mount(DashboardAdvertising, {
+      props: {
+        canManageIntegrations: false,
+        marketing: { status: 'fresh', providers: [{ provider: 'yandex_direct', status: 'fresh', currency, ad_spend: 12.5 }] },
+      },
+    });
+    let expected = '12,5';
+    if (currency) {
+      try { expected = new Intl.NumberFormat('ru-RU', { style: 'currency', currency, maximumFractionDigits: 2 }).format(12.5); }
+      catch { expected = `12,5 ${currency}`; }
+    }
+    expect(wrapper.find('dd').text()).toBe(expected);
+    expect(wrapper.findComponent(BynSymbol).exists()).toBe(false);
+  });
+
   it('does not render a meaningless advertising metric panel before providers are connected', () => {
     const wrapper = mount(DashboardAdvertising, {
       props: { marketing: { status: 'unconfigured', providers: [] }, canManageIntegrations: false },

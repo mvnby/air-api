@@ -25,6 +25,10 @@ export const formatDashboardCurrency = (value: number | null | undefined) => (
     : new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'BYN', maximumFractionDigits: 0 }).format(value)
 );
 
+export const formatDashboardMoneyAmount = (value: number | null | undefined) => (
+  value == null ? '—' : new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(value)
+);
+
 const inclusivePeriodEnd = (endExclusive: string) => new Date(new Date(endExclusive).getTime() - 1);
 const dashboardDateParts = (value: Date) => Object.fromEntries(
   new Intl.DateTimeFormat('ru-RU', {

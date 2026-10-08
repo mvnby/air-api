@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import type { DashboardSalesSeriesPoint } from '../../client';
-import { formatDashboardCurrency, formatDashboardNumber } from '../../services/dashboard-overview';
+import { formatDashboardCurrency, formatDashboardMoneyAmount, formatDashboardNumber } from '../../services/dashboard-overview';
+import MoneyAmount from '../money/MoneyAmount.vue';
 
 const props = defineProps<{ series: DashboardSalesSeriesPoint[] }>();
 const activeIndex = ref<number | null>(null);
@@ -64,7 +65,7 @@ const selectFromKey = (event: KeyboardEvent) => {
       </div>
       <div v-if="activePoint" class="max-w-full text-xs text-slate-600 dark:text-slate-300 sm:text-right" aria-live="polite">
         <p class="font-semibold">{{ formatDate(activePoint.date) }}</p>
-        <p>{{ formatDashboardCurrency(activePoint.revenue) }} · {{ formatDashboardNumber(activePoint.sales) }} продаж</p>
+        <p><MoneyAmount :value="activePoint.revenue" :formatted-value="formatDashboardMoneyAmount(activePoint.revenue)" /> · {{ formatDashboardNumber(activePoint.sales) }} продаж</p>
       </div>
     </div>
     <div v-if="series.length" class="mt-4 overflow-hidden">
