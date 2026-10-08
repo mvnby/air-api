@@ -71,6 +71,9 @@ const formatAmount = (receipt: BankReceiptResponse) => {
   return formatMoneyValue(receipt.amount, receipt.currency);
 };
 
+// Retain the existing textual formatter independently of the visual display.
+void formatAmount;
+
 const loadReceipts = async () => {
   loading.value = true;
   error.value = '';
@@ -466,7 +469,7 @@ onMounted(loadReceipts);
                     <div class="text-xs text-gray-500 dark:text-slate-400">Док. {{ receipt.payment_document_number || '—' }}</div>
                   </td>
                   <td class="whitespace-nowrap px-4 py-3 text-gray-900 dark:text-slate-100">
-                    <div class="font-semibold"><MoneyAmount :value="receipt.amount" :currency="receipt.currency" :formatted-value="formatAmount(receipt).replace(/ [^ ]*$/, '')" /></div>
+                    <div class="font-semibold"><MoneyAmount :value="receipt.amount" :currency="receipt.currency" /></div>
                     <div v-if="receipt.allocation_count" class="mt-1 text-xs font-medium text-brand-700 dark:text-brand-300">
                       Распределено <MoneyAmount :value="receipt.allocated_amount" :currency="receipt.currency" />
                     </div>

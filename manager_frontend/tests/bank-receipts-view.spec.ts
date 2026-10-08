@@ -116,10 +116,10 @@ describe('bank receipt monetary display', () => {
     expect(wrapper.findComponent(MoneyAmount).text()).toBe('—');
   });
 
-  it.each(['USD', 'EUR', 'XYZ'])('preserves the raw %s currency code', async (currency) => {
+  it.each(['USD', 'EUR', 'XYZ', 'X Y', 'BYN '])('preserves the raw %s currency code', async (currency) => {
     const wrapper = await mountView([{ ...receipt, amount: 12.5, currency, unallocated_amount: 0 }]);
     const money = wrapper.findComponent(MoneyAmount);
-    expect(money.text()).toBe(`12,5 ${currency}`);
+    expect(money.element.textContent).toBe(`12,5 ${currency}`);
     expect(money.find('svg').exists()).toBe(false);
   });
 
