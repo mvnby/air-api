@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MoneyAmount from '../money/MoneyAmount.vue';
 import { computed, ref, watch } from 'vue';
 import {
   Archive, ArrowDown, ArrowUp, Copy, Plus, RefreshCw, Save, Search, Trash2,
@@ -182,7 +183,7 @@ watch(() => props.active?.id, () => {
               data-testid="search-product"
               @click="chooseProduct(product)"
             >
-              <span class="min-w-0"><strong class="block break-words text-sm">{{ product.title }}</strong><span class="text-xs text-slate-500">{{ kindLabel(product.product_kind) }} · {{ product.price }} BYN</span></span>
+              <span class="min-w-0"><strong class="block break-words text-sm">{{ product.title }}</strong><span class="text-xs text-slate-500">{{ kindLabel(product.product_kind) }} · <MoneyAmount :value="product.price" :formatted-value="String(product.price)" /></span></span>
               <RefreshCw v-if="replacementItem" class="h-4 w-4 shrink-0" /><Plus v-else class="h-4 w-4 shrink-0" />
             </button>
           </div>
@@ -192,7 +193,7 @@ watch(() => props.active?.id, () => {
               <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-slate-100 text-xs font-bold text-slate-500 dark:bg-slate-800">{{ index + 1 }}</span>
               <div class="min-w-0 flex-1">
                 <strong class="block break-words text-sm">{{ item.product_title }}</strong>
-                <p class="mt-1 break-words text-xs text-slate-500">{{ kindLabel(item.product_kind) }} · {{ item.price }} BYN · <span :class="item.is_published ? 'text-emerald-700' : 'text-red-700'">{{ item.is_published ? 'Опубликован' : 'Скрыт' }}</span></p>
+                <p class="mt-1 break-words text-xs text-slate-500">{{ kindLabel(item.product_kind) }} · <MoneyAmount :value="item.price" :formatted-value="String(item.price)" /> · <span :class="item.is_published ? 'text-emerald-700' : 'text-red-700'">{{ item.is_published ? 'Опубликован' : 'Скрыт' }}</span></p>
                 <label class="mt-2 block text-xs">Редакторская заметка<input v-model="item.editorial_note" class="field-input" placeholder="Необязательно" @input="updateItems(items)" /></label>
                 <label v-if="form.mode === 'hybrid'" class="mt-2 inline-flex items-center gap-2 text-xs"><input v-model="item.is_pinned" type="checkbox" @change="updateItems(items)" /> Закреплён</label>
                 <button class="mt-2 inline-flex items-center gap-1 text-xs font-bold text-blue-700" type="button" @click="beginReplace(index)"><RefreshCw class="h-3.5 w-3.5" /> Заменить товар</button>
@@ -259,7 +260,7 @@ watch(() => props.active?.id, () => {
 .tab-button,.panel-button { min-width:0; min-height:34px; border-radius:6px; padding:0 4px; font-size:13px; font-weight:700; color:rgb(71 85 105); overflow-wrap:anywhere; }
 .tab-button--active,.panel-button--active { background:white; color:rgb(30 64 175); box-shadow:0 1px 2px rgb(15 23 42 / .12); }
 label { font-size:12px; font-weight:650; color:rgb(71 85 105); }
-:global(.dark) .editor-card { background:rgb(15 23 42); border-color:rgb(51 65 85); }
-:global(.dark) .field-input { border-color:rgb(71 85 105); }
-:global(.dark) .tab-button--active,:global(.dark) .panel-button--active { background:rgb(30 41 59); color:rgb(191 219 254); }
+.dark .editor-card { background:rgb(15 23 42); border-color:rgb(51 65 85); }
+.dark .field-input { border-color:rgb(71 85 105); }
+.dark .tab-button--active,.dark .panel-button--active { background:rgb(30 41 59); color:rgb(191 219 254); }
 </style>

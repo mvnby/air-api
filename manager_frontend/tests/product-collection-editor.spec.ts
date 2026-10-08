@@ -59,6 +59,21 @@ const mountEditor = (overrides = {}) => mount(ProductCollectionEditor, {
 });
 
 describe('product collection editor', () => {
+  it.each([0, -0.01, 10.2345, 123456789.12, null, undefined])('preserves raw collection price %s in composition, search and preview', async price => {
+    const wrapper = mountEditor({
+      items: [item({ price })],
+      searchResults: [{ id: 8, title: 'Search', slug: 'search', price, product_kind: 'complete_split_system' }],
+      preview: { items: [{ product: { id: 8, title: 'Preview', price }, selection_source: 'manual' }] },
+    });
+    const text = price == null ? '—' : `${price} BYN`;
+    expect(wrapper.get('[data-testid="search-product"]').text()).toContain(text);
+    expect(wrapper.get('input[placeholder="Необязательно"]').element.parentElement!.parentElement!.textContent).toContain(text);
+    await wrapper.findAll('button').find(button => button.text() === 'Предпросмотр')!.trigger('click');
+    expect(wrapper.get('.product-card').text()).toContain(text);
+    expect(wrapper.get('.product-card').find('svg[viewBox="0 0 360.67 446.4"]').exists()).toBe(price != null);
+    wrapper.unmount();
+  });
+
   it('keeps formation controls on Products and preserves row metadata when replacing a product', async () => {
     const source = item();
     const wrapper = mountEditor({ items: [source] });

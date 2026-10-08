@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BynSymbol from '../components/money/BynSymbol.vue';
 import MoneyAmount from '../components/money/MoneyAmount.vue';
 import { ref, onMounted, onUnmounted, watch, computed, nextTick } from 'vue';
 import { watchDebounced } from '@vueuse/core';
@@ -1548,6 +1549,7 @@ watchDebounced(
                     <template v-if="editingPriceId === product.id">
                         <input 
                             v-model="priceBuffer"
+                            aria-label="Цена (BYN)"
                             type="number"
                             @blur="savePrice(product)"
                             @keyup.enter="savePrice(product)"
@@ -1555,7 +1557,7 @@ watchDebounced(
                             class="w-24 px-1 py-0.5 border border-brand-500 dark:border-brand-400 rounded text-sm outline-none bg-brand-50 dark:bg-brand-900/30 text-gray-900 dark:text-slate-200"
                             auto-focus
                         />
-                        <span class="text-xs text-brand-600 dark:text-brand-400 ml-1">BYN</span>
+                        <span class="text-xs text-brand-600 dark:text-brand-400 ml-1"><BynSymbol /><span class="sr-only"> BYN</span></span>
                     </template>
                     <p 
                         v-else 
@@ -1678,8 +1680,8 @@ watchDebounced(
                 </div>
               </td>
               <td class="p-4 text-xs text-gray-600 dark:text-slate-400">
-                <div>Себест: {{ product.min_cost_byn != null ? `${product.min_cost_byn.toFixed(2)}` : '—' }}</div>
-                <div>РРЦ: {{ product.recommended_price_byn != null ? `${product.recommended_price_byn.toFixed(2)}` : '—' }}</div>
+                <div>Себест: <MoneyAmount :value="product.min_cost_byn" :formatted-value="product.min_cost_byn?.toFixed(2)" /></div>
+                <div>РРЦ: <MoneyAmount :value="product.recommended_price_byn" :formatted-value="product.recommended_price_byn?.toFixed(2)" /></div>
                 <div>V: {{ product.vitebsk_qty || 0 }} / M: {{ product.minsk_qty || 0 }}</div>
               </td>
               <td class="p-4 text-right">
