@@ -22,7 +22,7 @@ from .template_selection import (
 )
 
 
-READINESS_DOCUMENT_TYPES = frozenset({"contract", "invoice"})
+READINESS_DOCUMENT_TYPES = frozenset({"contract", "invoice", "act"})
 CRITICAL_CUSTOMER_FIELDS = frozenset(
     {
         "customer.display_name",

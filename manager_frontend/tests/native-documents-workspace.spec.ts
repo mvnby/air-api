@@ -805,18 +805,18 @@ describe('Selected native customer requirements', () => {
     missing_fields: [{ field: 'customer.legal_address', label: 'Юридический адрес клиента', critical: true }],
     template_id: 100, template_version_id: 101 };
 
-  const chooseContract = async (wrapper: VueWrapper) => {
-    await wrapper.get('[data-testid="native-document-type-contract"]').trigger('click');
+  const chooseDocument = async (wrapper: VueWrapper, documentType = 'contract') => {
+    await wrapper.get(`[data-testid="native-document-type-${documentType}"]`).trigger('click');
     await flushPromises();
     const action = wrapper.findAll('button').find((button) => button.text().includes('Создать наш договор'));
     if (action) await action.trigger('click');
     await flushPromises();
   };
 
-  it('lists only effective server fields and requires an explicit incomplete draft choice', async () => {
+  it.each(['contract', 'act'])('lists only effective server fields and requires an explicit incomplete draft choice for %s', async (documentType) => {
     vi.mocked(ManagerDocumentSystemService.checkManagerManagedDocumentReadiness).mockResolvedValue(missing);
     const wrapper = await mountWorkspace();
-    await chooseContract(wrapper);
+    await chooseDocument(wrapper, documentType);
     await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
     await flushPromises();
     expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).not.toHaveBeenCalled();
@@ -827,12 +827,12 @@ describe('Selected native customer requirements', () => {
     await flushPromises();
     expect(ManagerDocumentSystemService.checkManagerManagedDocumentReadiness).toHaveBeenCalledTimes(2);
     expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenCalledWith(42,
-      expect.objectContaining({ document_type: 'contract', allow_incomplete_customer: true }));
+      expect.objectContaining({ document_type: documentType, allow_incomplete_customer: true }));
   });
 
-  it('permits a selected template with no missing critical fields even with an incomplete card', async () => {
+  it.each(['contract', 'act'])('permits a selected template with no missing critical fields even with an incomplete card for %s', async (documentType) => {
     const wrapper = await mountWorkspace();
-    await chooseContract(wrapper);
+    await chooseDocument(wrapper, documentType);
     await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
     await flushPromises();
     expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenCalledWith(42,
@@ -840,11 +840,11 @@ describe('Selected native customer requirements', () => {
     expect(wrapper.find('[data-testid="create-incomplete-native-draft"]').exists()).toBe(false);
   });
 
-  it('discards a preflight response when the selected context changes in flight', async () => {
+  it.each(['contract', 'act'])('discards a preflight response when the selected context changes in flight for %s', async (documentType) => {
     const barrier = deferred<typeof missing>();
     vi.mocked(ManagerDocumentSystemService.checkManagerManagedDocumentReadiness).mockReturnValue(barrier.promise as never);
     const wrapper = await mountWorkspace();
-    await chooseContract(wrapper);
+    await chooseDocument(wrapper, documentType);
     await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
     await flushPromises();
     await wrapper.get('[data-testid="native-document-issue-city"]').setValue('Минск');
@@ -854,11 +854,11 @@ describe('Selected native customer requirements', () => {
     expect(wrapper.find('[data-testid="create-incomplete-native-draft"]').exists()).toBe(false);
   });
 
-  it('discards delayed preflight when saved customer or signing mode changes', async () => {
+  it.each(['contract', 'act'])('discards delayed preflight when saved customer or signing mode changes for %s', async (documentType) => {
     const barrier = deferred<typeof missing>();
     vi.mocked(ManagerDocumentSystemService.checkManagerManagedDocumentReadiness).mockReturnValue(barrier.promise as never);
     const wrapper = await mountWorkspace();
-    await chooseContract(wrapper);
+    await chooseDocument(wrapper, documentType);
     await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
     await flushPromises();
     await wrapper.setProps({ order: { ...baseOrder, customer: { ...baseOrder.customer, signing_mode: 'power_of_attorney' } } });
@@ -868,9 +868,9 @@ describe('Selected native customer requirements', () => {
     expect(wrapper.find('[data-testid="create-incomplete-native-draft"]').exists()).toBe(false);
   });
 
-  it('marks the persisted incomplete draft and disables issuance without hiding preview', async () => {
+  it.each(['contract', 'act'])('marks the persisted incomplete draft and disables issuance without hiding preview for %s', async (documentType) => {
     vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({ items: [{
-      id: 77, order_id: 42, legal_entity_id: 5, doc_type: 'contract', status: 'draft', provider: 'native',
+      id: 77, order_id: 42, legal_entity_id: 5, doc_type: documentType, status: 'draft', provider: 'native',
       internal_reference: 'draft77', display_number: 'draft77', date: NOW, created_at: NOW,
       customer_readiness: missing, artifacts: [],
     }] });
@@ -887,9 +887,9 @@ describe('Selected native customer requirements', () => {
     expect(window.location.search).toContain('customerId=11');
   });
 
-  it('rechecks an old draft with no cached metadata before Google sync or issue', async () => {
+  it.each(['contract', 'act'])('rechecks an old draft with no cached metadata before Google sync or issue for %s', async (documentType) => {
     vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({ items: [{
-      id: 77, order_id: 42, legal_entity_id: 5, doc_type: 'contract', status: 'draft', provider: 'native',
+      id: 77, order_id: 42, legal_entity_id: 5, doc_type: documentType, status: 'draft', provider: 'native',
       internal_reference: 'draft77', display_number: 'draft77', date: NOW, created_at: NOW, artifacts: [],
     }] });
     vi.mocked(ManagerDocumentSystemService.getManagerManagedDocumentReadiness).mockResolvedValue(missing);
@@ -914,10 +914,20 @@ describe('Selected native customer requirements', () => {
     await flushPromises();
   };
 
-  it.each(['switch order', 'switch away and back', 'close and reopen'])
-  ('discards issue readiness after %s without updating the current workspace', async (change) => {
+  it('issues a complete act after the current saved-template check', async () => {
     vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments)
-      .mockImplementation(async (orderId) => ({ items: [{ ...issueDraft, order_id: orderId } as never] }));
+      .mockResolvedValue({ items: [{ ...issueDraft, doc_type: 'act' } as never] });
+    const wrapper = await mountWorkspace();
+    await clickIssue(wrapper);
+    expect(ManagerDocumentSystemService.getManagerManagedDocumentReadiness).toHaveBeenCalledWith(77);
+    expect(ManagerDocumentSystemService.issueManagerManagedDocument).toHaveBeenCalledWith(77);
+  });
+
+  it.each(['contract', 'act'].flatMap((documentType) =>
+    ['switch order', 'switch away and back', 'close and reopen'].map((change) => ({ documentType, change }))))
+  ('discards $documentType issue readiness after $change without updating the current workspace', async ({ documentType, change }) => {
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments)
+      .mockImplementation(async (orderId) => ({ items: [{ ...issueDraft, doc_type: documentType, order_id: orderId } as never] }));
     const barrier = deferred<typeof missing>();
     vi.mocked(ManagerDocumentSystemService.getManagerManagedDocumentReadiness).mockReturnValue(barrier.promise as never);
     let wrapper = await mountWorkspace();
@@ -946,8 +956,8 @@ describe('Selected native customer requirements', () => {
     expect(wrapper.emitted('toast')?.some(([payload]) => payload.message.includes('Не заполнены поля'))).not.toBe(true);
   });
 
-  it('does not issue a ready late response after close and reopening another order', async () => {
-    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({ items: [issueDraft as never] });
+  it.each(['contract', 'act'])('does not issue a ready late %s response after close and reopening another order', async (documentType) => {
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({ items: [{ ...issueDraft, doc_type: documentType } as never] });
     const barrier = deferred<typeof issueDraft.customer_readiness>();
     vi.mocked(ManagerDocumentSystemService.getManagerManagedDocumentReadiness).mockReturnValue(barrier.promise as never);
     const oldWorkspace = await mountWorkspace();
@@ -1052,11 +1062,11 @@ describe('Selected native customer requirements', () => {
     expect(wrapper.find('[data-testid="incomplete-native-draft"]').exists()).toBe(false);
   });
 
-  it('discards ready create preflight after the workspace closes and another order opens', async () => {
+  it.each(['contract', 'act'])('discards ready create preflight after the workspace closes and another order opens for %s', async (documentType) => {
     const barrier = deferred<{ checked: boolean; can_issue: boolean; missing_fields: never[] }>();
     vi.mocked(ManagerDocumentSystemService.checkManagerManagedDocumentReadiness).mockReturnValue(barrier.promise as never);
     const oldWorkspace = await mountWorkspace();
-    await chooseContract(oldWorkspace);
+    await chooseDocument(oldWorkspace, documentType);
     await oldWorkspace.get('[data-testid="create-native-draft"]').trigger('click');
     await flushPromises();
     oldWorkspace.unmount();
@@ -1081,7 +1091,7 @@ describe('Selected native customer requirements', () => {
       const wrapper = await mountWorkspace();
       if (action === 'issue') await clickIssue(wrapper);
       else {
-        await chooseContract(wrapper);
+        await chooseDocument(wrapper);
         await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
         await flushPromises();
       }

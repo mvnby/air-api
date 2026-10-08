@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from io import BytesIO
 
 import pytest
@@ -183,11 +183,12 @@ async def _create_issuer(
     return int(response.json()["id"])
 
 
-async def _create_native_contract_template(
+async def _create_native_template(
     client: AsyncClient,
     headers: dict[str, str],
     *,
     legal_entity_id: int,
+    document_type: str = "contract",
 ) -> tuple[int, int]:
     created = await client.post(
         f"{BASE}/templates",
@@ -195,8 +196,8 @@ async def _create_native_contract_template(
         json={
             "legal_entity_id": legal_entity_id,
             "name": "Договор поставки",
-            "doc_type": "contract",
-            "contract_scenario": "services",
+            "doc_type": document_type,
+            "contract_scenario": "services" if document_type == "contract" else None,
         },
     )
     assert created.status_code == 200, created.text
@@ -217,6 +218,20 @@ async def _create_native_contract_template(
     assert activated.status_code == 200, activated.text
     assert activated.json()["status"] == "active"
     return template_id, version_id
+
+
+async def _create_native_contract_template(
+    client: AsyncClient,
+    headers: dict[str, str],
+    *,
+    legal_entity_id: int,
+) -> tuple[int, int]:
+    return await _create_native_template(
+        client,
+        headers,
+        legal_entity_id=legal_entity_id,
+        document_type="contract",
+    )
 
 
 async def _seed_order(db) -> Order:
@@ -291,7 +306,7 @@ async def test_document_system_native_template_flow_discovers_catalog_and_activa
     }
 
     issuer_id = await _create_issuer(async_client, headers, name="ООО API Продавец")
-    template_id, version_id = await _create_native_contract_template(
+    template_id, version_id = await _create_native_template(
         async_client,
         headers,
         legal_entity_id=issuer_id,
@@ -397,7 +412,7 @@ async def test_native_template_google_round_trip_creates_unactivated_revision(
 
     headers = await _legacy_owner_headers(async_client)
     issuer_id = await _create_issuer(async_client, headers, name="ООО Google Редактор")
-    template_id, version_id = await _create_native_contract_template(
+    template_id, version_id = await _create_native_template(
         async_client,
         headers,
         legal_entity_id=issuer_id,
@@ -565,7 +580,7 @@ async def test_document_system_draft_issue_is_idempotent_and_artifacts_are_tenan
 
     headers = await _legacy_owner_headers(async_client)
     issuer_id = await _create_issuer(async_client, headers, name="ООО Выпуск API")
-    template_id, _version_id = await _create_native_contract_template(
+    template_id, _version_id = await _create_native_template(
         async_client,
         headers,
         legal_entity_id=issuer_id,
@@ -657,7 +672,7 @@ async def test_document_system_deletes_only_unissued_native_draft(
 
     headers = await _legacy_owner_headers(async_client)
     issuer_id = await _create_issuer(async_client, headers, name="ООО Черновики API")
-    template_id, _version_id = await _create_native_contract_template(
+    template_id, _version_id = await _create_native_template(
         async_client,
         headers,
         legal_entity_id=issuer_id,
@@ -717,7 +732,7 @@ async def test_document_system_templates_are_hidden_from_another_tenant(
 ):
     headers_a = await _legacy_owner_headers(async_client)
     issuer_a = await _create_issuer(async_client, headers_a, name="ООО Tenant A")
-    template_id, _version_id = await _create_native_contract_template(
+    template_id, _version_id = await _create_native_template(
         async_client,
         headers_a,
         legal_entity_id=issuer_a,
@@ -746,8 +761,9 @@ async def test_document_system_templates_are_hidden_from_another_tenant(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("document_type", ["contract", "act"])
 async def test_selected_customer_readiness_blocks_issue_before_google_and_numbering(
-    async_client, db, monkeypatch
+    async_client, db, monkeypatch, document_type
 ):
     import importlib
     from copy import deepcopy
@@ -756,8 +772,8 @@ async def test_selected_customer_readiness_blocks_issue_before_google_and_number
     document_router = importlib.import_module("modules.documents.api.router")
     headers = await _legacy_owner_headers(async_client)
     issuer_id = await _create_issuer(async_client, headers, name="ООО Readiness API")
-    template_id, version_id = await _create_native_contract_template(
-        async_client, headers, legal_entity_id=issuer_id
+    template_id, version_id = await _create_native_template(
+        async_client, headers, legal_entity_id=issuer_id, document_type=document_type
     )
     order = await _seed_order(db)
     customer = await db.get(Customer, order.customer_id)
@@ -766,22 +782,50 @@ async def test_selected_customer_readiness_blocks_issue_before_google_and_number
     customer.type = "company"
     db.add(customer)
     await db.commit()
+    if document_type == "act":
+        db.add(
+            OrderDocument(
+                tenant_id=1,
+                legal_entity_id=issuer_id,
+                order_id=order.id,
+                doc_type="contract",
+                status="issued",
+                number="Д-001",
+                internal_reference="readiness-api-act-basis",
+                official_date=date(2026, 8, 20),
+                render_snapshot={"meta": {"document_role_type": "executor_payer"}},
+                google_file_id=None,
+                google_edit_url=None,
+            )
+        )
+        await db.commit()
     payload = {
         "legal_entity_id": issuer_id,
-        "document_type": "contract",
+        "document_type": document_type,
         "issue_date": "2026-08-26",
         "template_id": template_id,
         "business_terms": {
             "contract_scenario": "services",
             "payment_schedule": [{"share_percent": 100, "due_event": "before_work"}],
-        },
+        }
+        if document_type == "contract"
+        else None,
+        "act_terms": {"claims_status": "none"} if document_type == "act" else None,
     }
     preflight = await async_client.post(
         f"{BASE}/orders/{order.id}/documents/readiness", headers=headers, json=payload
     )
     assert preflight.status_code == 200 and preflight.json()["can_issue"]
     assert preflight.json()["template_version_id"] == version_id
-    assert not (await db.execute(select(OrderDocument))).scalars().all()
+    assert (
+        not (
+            await db.execute(
+                select(OrderDocument).where(OrderDocument.doc_type == document_type)
+            )
+        )
+        .scalars()
+        .all()
+    )
     customer = await db.get(Customer, order.customer_id)
     customer.name = customer.full_legal_name = ""
     db.add(customer)
@@ -809,7 +853,10 @@ async def test_selected_customer_readiness_blocks_issue_before_google_and_number
     )
     assert (
         listing.status_code == 200
-        and listing.json()["items"][0]["customer_readiness"] is None
+        and next(item for item in listing.json()["items"] if item["id"] == doc_id)[
+            "customer_readiness"
+        ]
+        is None
     )
     checked = await async_client.get(
         f"{BASE}/documents/{doc_id}/readiness", headers=headers

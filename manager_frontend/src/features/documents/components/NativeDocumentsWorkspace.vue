@@ -157,7 +157,7 @@ const customerTypeLabel = computed(() => {
   if (props.order.customer?.type === 'individual_entrepreneur') return 'ИП';
   return 'физлицо';
 });
-const customerWarnings = computed(() => ['contract', 'invoice'].includes(workspace.documentType.value)
+const customerWarnings = computed(() => ['contract', 'invoice', 'act'].includes(workspace.documentType.value)
   ? (workspace.customerReadiness.value?.missing_fields || []).map((item) => item.label)
   : getCustomerDocumentWarnings(props.order.customer, workspace.documentType.value));
 const incompleteDraft = (document: Parameters<typeof workspace.issue>[0]) => document.status === 'draft'

@@ -77,14 +77,14 @@ Google file id и edit URL являются provider mapping, но не исто
 
 ## Заполненность клиента в выбранном нативном действии
 
-Для `contract`/`invoice` application service проверяет effective placeholders
+Для `contract`/`invoice`/`act` application service проверяет effective placeholders
 реальных DOCX bytes после применения frozen conditions через существующий
 `DocxConditionProcessor`. Отключённые first/even Word headers/footers не
 добавляют требований; активные inherited stories учитываются. Общий security
 каталог загрузки/рендера остаётся прежним. Проверка использует raw factual snapshot; линии для
 заполнения принадлежат только выходному документу. Требования не выводятся из
 общей сводки карточки. Политика полей и UI описаны в
-[рабочей области клиента](customer-workspace.md#проверка-клиента-для-выбранного-договора-или-счёта).
+[рабочей области клиента](customer-workspace.md#проверка-клиента-для-выбранного-договора-счёта-или-акта).
 
 `POST /api/manager/document-system/orders/{order_id}/documents/readiness`
 принимает draft selection и возвращает `checked`, `missing_fields` (field,
