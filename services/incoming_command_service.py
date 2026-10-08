@@ -2,7 +2,6 @@
 
 import hashlib
 import json
-import re
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
@@ -30,6 +29,7 @@ from services.bot_quick_order_service import BotQuickOrderService
 from services.lead_command_service import LeadCommandService
 from services.order_scenarios import resolve_scenario
 from services.incoming_preview import incoming_preview
+from services.incoming_requested_date import requested_date
 from services.incoming_agreements import CLARIFICATION_TITLE, explicit_instructions
 from services.personal_task_service import PersonalTaskService
 from services.public_write_idempotency_service import (
@@ -91,6 +91,7 @@ class IncomingCommandService:
             sources["phone"] = "provided"
         # The deterministic parser returns suggestions only. A wished-for date
         # is never a work stage or a reserved calendar slot.
+        precision = "datetime" if payload.requested_at else None
         if (
             not payload.requested_at
             and (
@@ -99,21 +100,14 @@ class IncomingCommandService:
             )
             and source_time is not None
         ):
-            parsed = BotQuickOrderService._parse_date(
-                payload.requested_time_text or payload.request_text, now=source_time
+            parsed, precision = requested_date(
+                payload.requested_time_text or payload.request_text, source_time,
+                region_text=payload.region_text,
             )
             if parsed:
                 fields["requested_at"] = parsed.isoformat()
                 sources["requested_at"] = "text"
-        explicit_time = re.search(
-            r"\b\d{1,2}:\d{2}\b|\b(?:в|к)\s*\d{1,2}\b",
-            payload.requested_time_text or payload.request_text,
-        )
-        fields["date_precision"] = (
-            ("datetime" if payload.requested_at or explicit_time else "date")
-            if fields.get("requested_at")
-            else None
-        )
+        fields["date_precision"] = precision
         fields["field_sources"] = sources
         return phone, fields
 
