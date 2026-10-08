@@ -750,6 +750,53 @@ failed drill. Keep the freeze and same-transaction evidence; resume only after
 fresh proof and an approved recovery decision. Gzip activation, prune/delete,
 R2 lifecycle changes and production restore remain separately gated.
 
+### Physical drill memory capacity
+
+The physical drill keeps its historical recovery default of `4096` MiB.
+Use the manual workflow's `recovery_memory_mib` input to select a reviewed
+canonical integer from `768` through `4096`; for example, add
+`-f recovery_memory_mib=768` to the separately approved drill command.
+This input is valid only for the physical restore phase. The controller and
+installed manual runner validate and forward it; arbitrary inherited host
+variables cannot enlarge the reviewed cap.
+
+The drill reuses the attested deployment capacity guard before creating a
+restore point, switching WAL, staging/uploading history or creating restore
+files. It checks again before each sequential upload/prepare, backup verification
+and recovery stage. Required physical `MemAvailable` is
+`max(768 MiB tool, 512 MiB verifier, configured recovery cap) + 512 MiB`.
+The reserve follows the deployment guard's allowance for concurrent production
+activity; swap does not satisfy this requirement. Invalid, duplicate or low
+memory values fail closed. Thus a `768` MiB recovery needs at least `1280` MiB
+available; the unchanged `4096` default needs `4608` MiB. Verify fresh disk and
+memory together immediately before dispatch. The recovery cgroup has equal
+memory and memory-swap limits, so it cannot borrow host swap beyond the cap.
+
+The narrowly selected physical proof step in the existing
+[CI unit job](../.github/workflows/ci.yml) runs the actual production
+verification/recovery commands on an isolated
+synthetic PostgreSQL backup larger than the recorded 113 MB production backup,
+with post-backup WAL, file checksums, a named target, exact system identifier
+and pause/data checks at `768` MiB. Require that proof and full CI for the exact
+reviewed revision. It is a capacity regression fixture, not acceptance of the
+current production archive or a guarantee for a larger future workload. The
+proof records effective PostgreSQL settings; reassess sizing when those settings
+or backup size change. Changing the scheduled default requires an explicit
+review of that physical proof and observed settings. The existing complete-diff
+report selects this proof for capacity/recovery changes (including this PR and
+its main merge); later UI-only changes skip it. Missing or invalid selection
+fails closed. Its failed physical proof fails the unit job and mandatory CI
+gate; its JSON artifact records the actual result.
+
+Approval also covers the actual operational effects: rollout strict verification
+and the separate strict check create a restore point, switch WAL, upload the
+exact raw segment and remove delivered local WAL. A physical drill stages,
+validates and uploads original timeline histories before its complete chain
+selector, creates its own restore point/WAL switch by default, and manages only
+its disposable files/containers. These actions do not replace production data.
+They are not read-only operations. Archive prune/delete, gzip activation and
+R2 lifecycle/delete remain separately authorized.
+
 ### Opt-in WAL gzip storage (issue #893, compression stage)
 
 WAL compression is **off by default**. The uploader and attested tool runner

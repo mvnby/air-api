@@ -172,6 +172,7 @@ def _remote_command(
     expected_release_sha256: str,
     backup_id: str,
     target_time: str,
+    recovery_memory_mib: int | None = None,
 ) -> str:
     if phase not in {"verify", "restore-drill", "logical-restore-drill"}:
         raise WorkflowError("unreviewed workflow phase")
@@ -179,6 +180,7 @@ def _remote_command(
         raise WorkflowError("operation ID must be 32 lowercase hexadecimal characters")
     if not re.fullmatch(r"[0-9a-f]{64}", expected_release_sha256):
         raise WorkflowError("expected PITR release digest must be 64 lowercase hex characters")
+    validate_recovery_memory_mib(phase, recovery_memory_mib)
     command = [
         MANUAL_RUNNER,
         "--phase",
@@ -193,6 +195,8 @@ def _remote_command(
         expected_release_sha256,
     ]
     if phase == "restore-drill":
+        if recovery_memory_mib is not None:
+            command.extend(["--recovery-memory-mib", str(recovery_memory_mib)])
         if backup_id:
             if not BACKUP_ID_RE.fullmatch(backup_id):
                 raise WorkflowError("backup ID is invalid")
@@ -366,10 +370,12 @@ def execute(
     phase: str,
     backup_id: str,
     target_time: str,
+    recovery_memory_mib: int | None = None,
     allow_maintenance_skip: bool = False,
     identity_stream: BinaryIO,
     runner: Runner | None = None,
 ) -> None:
+    validate_recovery_memory_mib(phase, recovery_memory_mib)
     actual_runner = runner or _run_subprocess
     payload = bytearray(_read_identity(identity_stream))
     temporary = Path(
@@ -416,6 +422,7 @@ def execute(
             expected_release_sha256=expected_release_sha256,
             backup_id=backup_id,
             target_time=target_time,
+            recovery_memory_mib=recovery_memory_mib,
         )
         print(
             f"[pitr-workflow][info] selected_primary={before.primary.alias} "
@@ -457,6 +464,21 @@ def execute(
         temporary.rmdir()
 
 
+def parse_recovery_memory_mib(raw: str) -> int:
+    if not re.fullmatch(r"[1-9][0-9]{2,3}", raw) or not 768 <= int(raw) <= 4096:
+        raise argparse.ArgumentTypeError("recovery memory must be canonical MiB 768..4096")
+    return int(raw)
+
+
+def validate_recovery_memory_mib(phase: str, value: int | None) -> None:
+    if value is None:
+        return
+    if phase != "restore-drill":
+        raise WorkflowError("recovery memory is valid only for restore-drill")
+    if type(value) is not int or not 768 <= value <= 4096:
+        raise WorkflowError("recovery memory must be integer MiB 768..4096")
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = WorkflowArgumentParser(description=__doc__)
     parser.add_argument(
@@ -466,12 +488,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--backup-id", default="")
     parser.add_argument("--target-time", default="")
+    parser.add_argument("--recovery-memory-mib", type=parse_recovery_memory_mib, default=None)
     parser.add_argument(
         "--allow-maintenance-skip",
         action="store_true",
         help="Skip a scheduled drill only while both nodes prove official maintenance",
     )
     args = parser.parse_args(argv)
+    if args.recovery_memory_mib is not None and args.phase != "restore-drill":
+        parser.error("recovery memory is valid only for restore-drill")
     if args.phase != "restore-drill" and (args.backup_id or args.target_time):
         parser.error("backup/target overrides are valid only for restore-drill")
     return args
@@ -493,6 +518,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             phase=args.phase,
             backup_id=args.backup_id,
             target_time=args.target_time,
+            recovery_memory_mib=args.recovery_memory_mib,
             allow_maintenance_skip=args.allow_maintenance_skip,
             identity_stream=sys.stdin.buffer,
         )

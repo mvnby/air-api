@@ -20,6 +20,11 @@ on:
         type: string
         required: false
         default: ""
+      recovery_memory_mib:
+        description: "Recovery memory cap in canonical MiB 768..4096; requires stage cap plus 512 MiB host reserve"
+        type: string
+        required: false
+        default: "4096"
       require_wal:
         description: "Require a complete archived WAL chain (must stay enabled)"
         type: boolean
@@ -36,6 +41,7 @@ env:
   PITR_RESTORE_DRILL_REQUIRED: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.required) || vars.POSTGRES_PITR_REQUIRED || 'false' }}
   PITR_RESTORE_BACKUP_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.backup_id || '' }}
   PITR_RESTORE_TARGET_TIME: ${{ github.event_name == 'workflow_dispatch' && inputs.target_time || '' }}
+  PITR_RESTORE_RECOVERY_MEMORY_MIB: ${{ github.event_name == 'workflow_dispatch' && inputs.recovery_memory_mib || '4096' }}
   PITR_RESTORE_REQUIRE_WAL: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.require_wal) || 'true' }}
 
 jobs:
@@ -97,7 +103,7 @@ jobs:
           ssh_identity="${SSH_KEY}"
           unset SSH_KEY
           trap 'ssh_identity=' EXIT
-          args=(--phase restore-drill)
+          args=(--phase restore-drill --recovery-memory-mib "${PITR_RESTORE_RECOVERY_MEMORY_MIB}")
           if [ "${GITHUB_EVENT_NAME}" = "schedule" ]; then
             args+=(--allow-maintenance-skip)
           fi
@@ -122,6 +128,7 @@ jobs:
             echo "- backup_selector: ${{ env.PITR_RESTORE_BACKUP_ID != '' && 'explicit canonical id' || 'latest valid backup' }}"
             echo "- recovery_target: ${{ env.PITR_RESTORE_TARGET_TIME != '' && 'explicit canonical UTC' || 'server-generated restore point' }}"
             echo "- require_wal: true"
+            echo "- recovery_memory_mib: ${PITR_RESTORE_RECOVERY_MEMORY_MIB}"
             echo "- log_artifact: postgres-pitr-restore-drill-log-${{ github.run_id }}"
           } >> "${GITHUB_STEP_SUMMARY}"
 

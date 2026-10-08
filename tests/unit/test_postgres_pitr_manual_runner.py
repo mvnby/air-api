@@ -32,6 +32,7 @@ def _run_setup(monkeypatch, tmp_path: Path):
             (project_dir, compose_file, kwargs["expected_release_sha256"])
         ),
     )
+    monkeypatch.setattr(manual, "_require_drill_capacity", lambda _cap: None)
     lock_paths = []
 
     def open_lock(path=manual.LOCK_PATH):
@@ -319,3 +320,14 @@ def test_finalized_release_attestation_requires_exact_paths_hashes_and_digest(
             compose_file,
             expected_release_sha256=release,
         )
+
+
+@pytest.mark.parametrize("cap,expected", [(None, "4096"), (768, "768")])
+def test_physical_drill_receives_only_reviewed_recovery_memory(monkeypatch, tmp_path, cap, expected):
+    project, _, calls, _ = _run_setup(monkeypatch, tmp_path)
+    monkeypatch.setenv("RECOVERY_MEMORY_MIB", "16384")
+    assert manual.run_manual(
+        phase="restore-drill", project_dir=str(project), compose_file="docker-compose.patroni.yml",
+        operation_id="b" * 32, expected_release_sha256="f" * 64, recovery_memory_mib=cap,
+    ) == 17
+    assert calls[0][1]["environment"]["RECOVERY_MEMORY_MIB"] == expected

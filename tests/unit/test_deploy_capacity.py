@@ -85,6 +85,8 @@ def test_capacity_rejects_low_swap_even_with_free_memory(tmp_path):
         "MemAvailable: 2097152 kB\nMemAvailable: 2097152 kB\nSwapTotal: 0 kB\nSwapFree: 0 kB\n",
         "MemAvailable: 2097152 kB\nSwapTotal: 0 kB\n",
         "MemAvailable: unknown kB\nSwapTotal: 0 kB\nSwapFree: 0 kB\n",
+        "MemAvailable: 2097152 MB\nSwapTotal: 0 kB\nSwapFree: 0 kB\n",
+        "MemAvailable: 2097152 kB extra\nSwapTotal: 0 kB\nSwapFree: 0 kB\n",
     ],
 )
 def test_capacity_rejects_ambiguous_or_invalid_meminfo(tmp_path, meminfo):

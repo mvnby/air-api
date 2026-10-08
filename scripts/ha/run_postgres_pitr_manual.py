@@ -11,6 +11,7 @@ import json
 import os
 import re
 import stat
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -314,6 +315,20 @@ def _attest_finalized_release(
     return release
 
 
+def _require_drill_capacity(recovery_memory_mib: int) -> None:
+    # Execute the same attested shell guard before durable operation effects.
+    subprocess.run(
+        [
+            "/bin/bash", "-ec", 'source "$1"; require_drill_capacity "$2"',
+            "pitr-capacity", "/usr/local/sbin/mvn-postgres-pitr-restore-drill",
+            str(recovery_memory_mib),
+        ],
+        env={"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
+        check=True,
+        timeout=10,
+    )
+
+
 def run_manual(
     *,
     phase: str,
@@ -324,7 +339,9 @@ def run_manual(
     backup_id: str = "",
     target_time: str = "",
     expected_database_role: str = "",
+    recovery_memory_mib: int | None = None,
 ) -> int:
+    validate_recovery_memory_mib(phase, recovery_memory_mib)
     if os.geteuid() != 0:
         raise RuntimeError("root execution is required")
     _validate_self()
@@ -372,12 +389,14 @@ def run_manual(
             for helper in REQUIRED_HELPERS:
                 _validate_helper(helper)
             operation_guard = _load_operation_guard()
-            operation_guard.reconcile_project_operations(project_dir)
             _attest_finalized_release(
                 project_dir,
                 compose_file,
                 expected_release_sha256=expected_release_sha256,
             )
+            if phase == "restore-drill":
+                _require_drill_capacity(recovery_memory_mib or 4096)
+            operation_guard.reconcile_project_operations(project_dir)
             if phase == "logical-restore-drill":
                 _validate_state_root(LOGICAL_STATE_ROOT)
             environment = {
@@ -408,6 +427,8 @@ def run_manual(
                         "TARGET_TIME": target_time,
                     }
                 )
+                if phase == "restore-drill":
+                    environment["RECOVERY_MEMORY_MIB"] = str(recovery_memory_mib or 4096)
                 command = ["/bin/bash", str(BOOTSTRAP), phase]
                 record_command = str(BOOTSTRAP)
             return operation_guard.run_guarded_process(
@@ -427,6 +448,21 @@ def run_manual(
         os.close(shared_lock)
 
 
+def parse_recovery_memory_mib(raw: str) -> int:
+    if not re.fullmatch(r"[1-9][0-9]{2,3}", raw) or not 768 <= int(raw) <= 4096:
+        raise argparse.ArgumentTypeError("recovery memory must be canonical MiB 768..4096")
+    return int(raw)
+
+
+def validate_recovery_memory_mib(phase: str, value: int | None) -> None:
+    if value is None:
+        return
+    if phase != "restore-drill":
+        raise RuntimeError("recovery memory is valid only for restore-drill")
+    if type(value) is not int or not 768 <= value <= 4096:
+        raise RuntimeError("recovery memory must be integer MiB 768..4096")
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--phase", choices=tuple(PHASE_TIMEOUTS), required=True)
@@ -436,12 +472,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--expected-release-sha256", required=True)
     parser.add_argument("--backup-id", default="")
     parser.add_argument("--target-time", default="")
+    parser.add_argument("--recovery-memory-mib", type=parse_recovery_memory_mib, default=None)
     parser.add_argument(
         "--expected-database-role",
         choices=("primary", "standby"),
         default="",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if args.recovery_memory_mib is not None and args.phase != "restore-drill":
+        parser.error("recovery memory is valid only for restore-drill")
+    return args
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -456,6 +496,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             expected_release_sha256=args.expected_release_sha256,
             backup_id=args.backup_id,
             target_time=args.target_time,
+            recovery_memory_mib=args.recovery_memory_mib,
             expected_database_role=args.expected_database_role,
         )
     except (OSError, RuntimeError) as exc:

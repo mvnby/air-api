@@ -19,8 +19,8 @@ DEPLOY_MIN_AVAILABLE_MEMORY_KIB="${API_DEPLOY_MIN_AVAILABLE_MEMORY_KIB:-${defaul
 deploy_capacity_meminfo_value() {
   local key="$1"
   awk -v key="${key}:" '
-    $1 == key { value = $2; matches += 1 }
-    END { if (matches != 1 || value !~ /^[0-9]+$/) exit 1; print value }
+    $1 == key { value = $2; matches += 1; if (NF != 3 || $3 != "kB") invalid = 1 }
+    END { if (invalid || matches != 1 || value !~ /^[0-9]+$/ || length(value) > 12) exit 1; print value }
   ' "${DEPLOY_CAPACITY_MEMINFO_FILE}"
 }
 

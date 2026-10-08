@@ -25,6 +25,7 @@ jobs:
       actions: read
     outputs:
       docs_only: ${{ steps.scope.outputs.docs_only }}
+      pitr_capacity_proof: ${{ steps.pitr-proof.outputs.run }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -51,6 +52,36 @@ jobs:
 
       - name: Check changed documentation
         run: python3 scripts/ci/check_documentation.py --changes-json "$RUNNER_TEMP/change-scope.json"
+
+      - name: Select PITR capacity proof from complete diff
+        id: pitr-proof
+        run: |
+          python3 - <<'PYSELECT'
+          import json
+          import os
+          from pathlib import Path
+
+          data = json.loads((Path(os.environ["RUNNER_TEMP"]) / "change-scope.json").read_text())
+          changes = data["changes"]
+          assert data["schema"] == 1 and isinstance(changes, list)
+          paths = {change["path"] for change in changes}
+          relevant = {
+              ".github/workflows/ci.yml",
+              ".github/workflows/postgres-pitr-restore-drill.yml",
+              "scripts/ci/prove_pitr_recovery_capacity.py",
+              "scripts/ha/restore_postgres_pitr_drill.sh",
+              "scripts/ha/require_deploy_capacity.sh",
+              "scripts/ha/run_postgres_pitr_manual.py",
+              "scripts/ha/run_postgres_pitr_workflow.py",
+              "scripts/ha/run_postgres_pitr_tool.py",
+              "tests/unit/test_postgres_pitr_drill_capacity.py",
+          }
+          selected = not paths or bool(paths & relevant) or any(
+              path.startswith("scripts/ha/postgres_pitr_") for path in paths
+          )
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
+              output.write(f"run={'true' if selected else 'false'}\n")
+          PYSELECT
 
   manager-dist:
     needs: changes
@@ -308,6 +339,21 @@ jobs:
         run: |
           scripts/ci/wait_for_stable_postgres.sh db air_conditioners postgres
           scripts/ci/wait_for_stable_postgres.sh db_test air_conditioners_test postgres
+
+      - name: Prove constrained physical PITR recovery
+        id: pitr-capacity
+        if: matrix.suite == 'unit' && needs.changes.outputs.pitr_capacity_proof != 'false'
+        timeout-minutes: 12
+        run: sudo python3 -B scripts/ci/prove_pitr_recovery_capacity.py --evidence-path "${PWD}/pitr-recovery-capacity.json"
+
+      - name: Upload physical PITR capacity proof
+        if: always() && matrix.suite == 'unit' && needs.changes.outputs.pitr_capacity_proof != 'false'
+        uses: actions/upload-artifact@v7
+        with:
+          name: pitr-recovery-capacity-${{ github.run_id }}
+          path: pitr-recovery-capacity.json
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Run ${{ matrix.suite }} Tests
         run: |

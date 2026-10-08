@@ -14,6 +14,7 @@ RESTORE_MOUNT_PATH="${RESTORE_MOUNT_PATH:-/pitr-restore}"
 TARGET_TIME="${TARGET_TIME:-${PITR_RESTORE_TARGET_TIME:-}}"
 BACKUP_ID="${BACKUP_ID:-${PITR_RESTORE_BACKUP_ID:-}}"
 REQUIRE_WAL="${REQUIRE_WAL:-${PITR_RESTORE_REQUIRE_WAL:-true}}"
+RECOVERY_MEMORY_MIB="${RECOVERY_MEMORY_MIB:-4096}"
 EXPECT_RECOVERY_PAUSED="${EXPECT_RECOVERY_PAUSED:-true}"
 START_TIMEOUT_SECONDS="${START_TIMEOUT_SECONDS:-180}"
 ARCHIVE_TIMEOUT_SECONDS="${ARCHIVE_TIMEOUT_SECONDS:-180}"
@@ -71,6 +72,109 @@ sanitize_restored_config() {
     rm -- "${path}"
   fi
 }
+
+# These functions are also sourced by the isolated CI recovery proof. Sourcing
+# defines the real production commands without executing the operational driver.
+validate_drill_memory_mib() {
+  [[ "$1" =~ ^[1-9][0-9]{2,3}$ ]] && (( $1 >= 768 && $1 <= 4096 )) || {
+    echo "Recovery memory must be canonical MiB in the range 768..4096" >&2
+    return 1
+  }
+}
+
+require_drill_capacity() {
+  local recovery_memory_mib="$1"
+  local helper="${2:-/usr/local/libexec/mvn-pitr/require_deploy_capacity.sh}"
+  local API_DEPLOY_MEMINFO_FILE="${3:-/proc/meminfo}"
+  local largest_stage_mib=768 # Isolated restore/upload tool; verify uses 512MiB.
+  validate_drill_memory_mib "${recovery_memory_mib}" || return 1
+  (( recovery_memory_mib <= largest_stage_mib )) || largest_stage_mib="${recovery_memory_mib}"
+  local API_DEPLOY_CAPACITY_PROFILE=primary
+  local API_DEPLOY_MIN_AVAILABLE_MEMORY_KIB=$(( (largest_stage_mib + 512) * 1024 ))
+  local API_DEPLOY_MIN_FREE_SWAP_KIB=262144
+  local DEPLOY_CAPACITY_MEMINFO_FILE DEPLOY_CAPACITY_PROFILE DEPLOY_MIN_FREE_SWAP_KIB
+  local DEPLOY_MIN_AVAILABLE_MEMORY_KIB default_min_available_memory_kib
+  # Keep the existing deployment guard's 512MiB reserve beyond the largest
+  # sequential cgroup. Swap is never counted as available physical memory.
+  source "${helper}" || return 1
+  require_deploy_capacity
+}
+
+verify_drill_basebackup() {
+  local container="$1" target_dir="$2" run_dir="$3"
+  docker run --pull never --rm \
+    --name "${container}-verify" \
+    --label "com.mvn.pitr.operation=${PITR_OPERATION_ID}" \
+    --label "com.mvn.pitr.phase=restore-verify" \
+    --network none \
+    --read-only \
+    --user 0:0 \
+    --cap-drop ALL \
+    --security-opt no-new-privileges:true \
+    --pids-limit 64 \
+    --memory 512m \
+    --cpus 1.0 \
+    --entrypoint pg_verifybackup \
+    --mount "type=bind,source=${target_dir}/data,target=/var/lib/postgresql/data,readonly" \
+    --mount "type=bind,source=${target_dir}/downloads/backup_manifest,target=/pitr-control/backup_manifest,readonly" \
+    "${POSTGRES_IMAGE}" \
+    --exit-on-error \
+    --no-parse-wal \
+    --manifest-path=/pitr-control/backup_manifest \
+    /var/lib/postgresql/data >"${run_dir}/pg_verifybackup.log" 2>&1
+}
+
+start_drill_recovery() {
+  local container="$1" target_dir="$2" recovery_memory_mib="$3"
+  validate_drill_memory_mib "${recovery_memory_mib}" || return 1
+  docker run --pull never -d \
+    --name "${container}" \
+    --label "com.mvn.pitr.operation=${PITR_OPERATION_ID}" \
+    --label "com.mvn.pitr.phase=restore-drill" \
+    --network none \
+    --read-only \
+    --cap-drop ALL \
+    --cap-add CHOWN \
+    --cap-add DAC_OVERRIDE \
+    --cap-add SETGID \
+    --cap-add SETUID \
+    --security-opt no-new-privileges:true \
+    --pids-limit 256 \
+    --memory "${recovery_memory_mib}m" \
+    --memory-swap "${recovery_memory_mib}m" \
+    --cpus 2.0 \
+    --shm-size 256m \
+    --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m \
+    --tmpfs /var/run/postgresql:rw,nosuid,nodev,size=16m \
+    --mount "type=bind,source=${target_dir}/data,target=/var/lib/postgresql/data" \
+    --volume "${target_dir}/wal:${RESTORE_MOUNT_PATH}/wal:ro" \
+    --volume "${target_dir}/control:/pitr-control:ro" \
+    "${POSTGRES_IMAGE}" \
+    postgres \
+    -c "config_file=/pitr-control/postgresql.conf" \
+    -c "data_directory=/var/lib/postgresql/data" \
+    -c "listen_addresses=" \
+    -c "unix_socket_directories=/var/run/postgresql" \
+    -c "hba_file=/pitr-control/pg_hba.conf" \
+    -c "ident_file=/pitr-control/pg_ident.conf" \
+    -c "shared_preload_libraries=" \
+    -c "session_preload_libraries=" \
+    -c "local_preload_libraries=" \
+    -c "dynamic_library_path=" \
+    -c "jit=off" \
+    -c "archive_command=" \
+    -c "archive_library=" \
+    -c "archive_cleanup_command=" \
+    -c "recovery_end_command=" \
+    -c "primary_conninfo=" \
+    -c "primary_slot_name=" \
+    -c "ssl_passphrase_command=" \
+    -c "ssl=off" >/dev/null
+}
+
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
+  return 0
+fi
 
 target_mode="restore_point"
 target_epoch=""
@@ -169,6 +273,9 @@ if [[ "${DOCKER_CONTEXT:-}" != "default" ]]; then
   exit 1
 fi
 
+require_drill_capacity "${RECOVERY_MEMORY_MIB}"
+log "resource_envelope recovery_memory_mib=${RECOVERY_MEMORY_MIB} host_reserve_mib=512 tool_memory_mib=768 verify_memory_mib=512"
+
 cd "${PROJECT_DIR}"
 BACKEND_IMAGE="$(
   "${RUNTIME_CHECK_HELPER}" \
@@ -247,6 +354,7 @@ if [[ "${target_mode}" == "time" ]]; then
     exit 1
   fi
 else
+  require_drill_capacity "${RECOVERY_MEMORY_MIB}"
   target_name="mvn_pitr_${PITR_OPERATION_ID}"
   point_state="$(
     "${COMPOSE[@]}" exec -T "${DB_SERVICE}" psql -v ON_ERROR_STOP=1 \
@@ -280,6 +388,7 @@ fi
 # original history chain in PGDATA but not in the new remote archive.  Reuse
 # the image-pinned, create-only archive helper to stage every ancestor before
 # the strict remote lineage check.  This is required for both target modes.
+require_drill_capacity "${RECOVERY_MEMORY_MIB}"
 history_output="$(
   "${COMPOSE[@]}" exec -T --user \
     "${POSTGRES_CONTAINER_UID}:${POSTGRES_CONTAINER_GID}" \
@@ -323,6 +432,7 @@ if ! is_unsigned_int "${validated_history_count}"; then
   exit 1
 fi
 log "staged_timeline_history_files=${staged_history_count} validated_lineage_history_files=${validated_history_count} required_end_timeline=${required_end_wal:0:8}"
+require_drill_capacity "${RECOVERY_MEMORY_MIB}"
 "${TOOL_RUNNER}" --phase wal-upload --data-dir "${archive_dir}"
 log "target_mode=${target_mode} target_time=${TARGET_TIME:-<none>} target_name=${target_name:-<none>} target_lsn=${target_lsn:-<none>} expected_system_identifier=${live_system_identifier} required_end_wal=${required_end_wal}"
 
@@ -373,6 +483,7 @@ if [[ -n "${BACKUP_ID}" ]]; then
 fi
 
 log "preparing isolated PITR restore under ${target_dir}"
+require_drill_capacity "${RECOVERY_MEMORY_MIB}"
 "${TOOL_RUNNER}" "${prepare_args[@]}" | tee "${run_dir}/prepare.log"
 
 if [[ ! -d "${target_dir}/data" ]]; then
@@ -397,26 +508,8 @@ if [[ -L "${target_dir}/control" || ! -d "${target_dir}/control" ||
 fi
 
 log "verifying extracted basebackup against PostgreSQL backup_manifest"
-if ! docker run --pull never --rm \
-  --name "${container}-verify" \
-  --label "com.mvn.pitr.operation=${PITR_OPERATION_ID}" \
-  --label "com.mvn.pitr.phase=restore-verify" \
-  --network none \
-  --read-only \
-  --user 0:0 \
-  --cap-drop ALL \
-  --security-opt no-new-privileges:true \
-  --pids-limit 64 \
-  --memory 512m \
-  --cpus 1.0 \
-  --entrypoint pg_verifybackup \
-  --mount "type=bind,source=${target_dir}/data,target=/var/lib/postgresql/data,readonly" \
-  --mount "type=bind,source=${target_dir}/downloads/backup_manifest,target=/pitr-control/backup_manifest,readonly" \
-  "${POSTGRES_IMAGE}" \
-  --exit-on-error \
-  --no-parse-wal \
-  --manifest-path=/pitr-control/backup_manifest \
-  /var/lib/postgresql/data >"${run_dir}/pg_verifybackup.log" 2>&1; then
+require_drill_capacity "${RECOVERY_MEMORY_MIB}"
+if ! verify_drill_basebackup "${container}" "${target_dir}" "${run_dir}"; then
   tail -n 160 "${run_dir}/pg_verifybackup.log" || true
   echo "pg_verifybackup rejected the extracted PITR basebackup" >&2
   exit 1
@@ -452,49 +545,8 @@ find "${target_dir}/control" -mindepth 1 -maxdepth 1 -type f -exec chmod 0400 {}
 log "downloaded_wal_files=${wal_count}"
 
 log "starting network-isolated disposable PostgreSQL container"
-docker run --pull never -d \
-  --name "${container}" \
-  --label "com.mvn.pitr.operation=${PITR_OPERATION_ID}" \
-  --label "com.mvn.pitr.phase=restore-drill" \
-  --network none \
-  --read-only \
-  --cap-drop ALL \
-  --cap-add CHOWN \
-  --cap-add DAC_OVERRIDE \
-  --cap-add SETGID \
-  --cap-add SETUID \
-  --security-opt no-new-privileges:true \
-  --pids-limit 256 \
-  --memory 4g \
-  --memory-swap 4g \
-  --cpus 2.0 \
-  --shm-size 256m \
-  --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m \
-  --tmpfs /var/run/postgresql:rw,nosuid,nodev,size=16m \
-  --mount "type=bind,source=${target_dir}/data,target=/var/lib/postgresql/data" \
-  --volume "${target_dir}/wal:${RESTORE_MOUNT_PATH}/wal:ro" \
-  --volume "${target_dir}/control:/pitr-control:ro" \
-  "${POSTGRES_IMAGE}" \
-  postgres \
-  -c "config_file=/pitr-control/postgresql.conf" \
-  -c "data_directory=/var/lib/postgresql/data" \
-  -c "listen_addresses=" \
-  -c "unix_socket_directories=/var/run/postgresql" \
-  -c "hba_file=/pitr-control/pg_hba.conf" \
-  -c "ident_file=/pitr-control/pg_ident.conf" \
-  -c "shared_preload_libraries=" \
-  -c "session_preload_libraries=" \
-  -c "local_preload_libraries=" \
-  -c "dynamic_library_path=" \
-  -c "jit=off" \
-  -c "archive_command=" \
-  -c "archive_library=" \
-  -c "archive_cleanup_command=" \
-  -c "recovery_end_command=" \
-  -c "primary_conninfo=" \
-  -c "primary_slot_name=" \
-  -c "ssl_passphrase_command=" \
-  -c "ssl=off" >/dev/null
+require_drill_capacity "${RECOVERY_MEMORY_MIB}"
+start_drill_recovery "${container}" "${target_dir}" "${RECOVERY_MEMORY_MIB}"
 
 if [[ "${target_mode}" == "time" ]]; then
   configured_target_sql="extract(epoch FROM current_setting('recovery_target_time')::timestamptz)::bigint::text"
