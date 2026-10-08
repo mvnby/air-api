@@ -208,7 +208,8 @@ def prove(evidence):
                      corrupted_backup_rejected=True, target_reached_and_paused=True,
                      post_backup_rows=66560, synthetic_checksum=checksum,
                      after_target_rows=0, recovery_settings=settings, image_ref=image,
-                     source_revision=run(['git','-C',str(REPO),'rev-parse','HEAD']).stdout.strip())
+                     source_revision=run(['git', '-c', f'safe.directory={REPO}',
+                             '-C', str(REPO), 'rev-parse', 'HEAD']).stdout.strip())
     except Exception as exc:
         proof['error'] = str(exc)
         for name in containers:
