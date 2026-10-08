@@ -589,7 +589,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       const payload = { ...JSON.parse(JSON.stringify(draftPayload.value)) as typeof draftPayload.value,
         legal_entity_id: selectedLegalEntityId.value };
       const contextKey = JSON.stringify({ payload, customer: customerContextKey.value });
-      if (['contract', 'invoice'].includes(payload.document_type)) {
+      if (['contract', 'invoice', 'act'].includes(payload.document_type)) {
         const readiness = await ManagerDocumentSystemService.checkManagerManagedDocumentReadiness(orderId, payload);
         if (!isCurrent()) return;
         if (contextKey !== JSON.stringify({ payload: draftPayload.value, customer: customerContextKey.value })) {
@@ -627,7 +627,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
 
   const checkDocumentReadiness = async (document: ManagedDocumentItem, action = beginIssueAction(document)) => {
     if (!action.canIssue()) return false;
-    if (document.status !== 'draft' || !['contract', 'invoice'].includes(document.doc_type)) return true;
+    if (document.status !== 'draft' || !['contract', 'invoice', 'act'].includes(document.doc_type)) return true;
     busy.value = true;
     try {
       const readiness = await ManagerDocumentSystemService.getManagerManagedDocumentReadiness(document.id);

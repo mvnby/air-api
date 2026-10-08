@@ -17,8 +17,10 @@ from models import (
     OrderDocument,
     OrderProductLink,
     OrderProposal,
+    OrderServiceLink,
     OrderStatus,
     Product,
+    Service,
     Storefront,
     Tenant,
 )
@@ -33,6 +35,7 @@ from modules.documents.application import (
     NativeTemplateVersionService,
 )
 from modules.documents.domain import (
+    ActTerms,
     BusinessDocumentTerms,
     DocumentNumberScope,
     PaymentScheduleItem,
@@ -86,7 +89,7 @@ def _template_docx() -> bytes:
     return output.getvalue()
 
 
-async def _seed(db, tmp_path):
+async def _seed(db, tmp_path, *, document_type="contract"):
     customer = Customer(
         tenant_id=1,
         name="ООО Клиент",
@@ -142,6 +145,54 @@ async def _seed(db, tmp_path):
     await db.commit()
 
     scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
+    if document_type == "act":
+        service = Service(
+            title="Монтаж кондиционера", slug="readiness-act-service", base_price=350
+        )
+        alternative = OrderProposal(
+            order_id=order.id, name="Альтернатива", is_selected=False
+        )
+        db.add_all([service, alternative])
+        await db.flush()
+        db.add_all(
+            [
+                OrderServiceLink(
+                    order_id=order.id,
+                    proposal_id=proposal.id,
+                    service_id=service.id,
+                    title=service.title,
+                    quantity=1,
+                    price=350,
+                    cost=200,
+                ),
+                OrderServiceLink(
+                    order_id=order.id,
+                    proposal_id=alternative.id,
+                    service_id=service.id,
+                    title="Услуга другого предложения",
+                    quantity=1,
+                    price=999,
+                    cost=200,
+                ),
+            ]
+        )
+        basis = OrderDocument(
+            tenant_id=1,
+            legal_entity_id=issuer.id,
+            order_id=order.id,
+            proposal_id=proposal.id,
+            doc_type="contract",
+            status="issued",
+            number="Д-001",
+            internal_reference="act-basis-contract",
+            official_date=date(2026, 8, 20),
+            render_snapshot={"meta": {"document_role_type": "executor_payer"}},
+            google_file_id=None,
+            google_edit_url=None,
+        )
+        db.add(basis)
+        await db.commit()
+        db.info["test_act_basis"] = basis
     private = LocalPrivateAttachmentStorage(tmp_path / "private-documents")
     template_storage = PrivateTemplateSourceStorage(private)
     artifact_storage = PrivateDocumentArtifactStorage(private)
@@ -150,7 +201,7 @@ async def _seed(db, tmp_path):
         tenant_scope=scope,
         legal_entity_id=issuer.id,
         name="Договор поставки",
-        doc_type="contract",
+        doc_type=document_type,
     )
     version = await NativeTemplateVersionService.upload_native_docx_version(
         db,
@@ -200,6 +251,7 @@ async def _draft(
     issue_date=date(2026, 8, 26),
     replaces=None,
     allow_incomplete=False,
+    document_type="contract",
 ):
     return await ManagedDocumentService.create_draft(
         db,
@@ -207,14 +259,17 @@ async def _draft(
         selection=DocumentContextSelection(
             order_id=order.id,
             legal_entity_id=issuer.id,
-            document_type="contract",
+            document_type=document_type,
             issue_date=issue_date,
             business_terms=BusinessDocumentTerms(
                 contract_scenario="services",
-                payment_schedule=(
-                    PaymentScheduleItem(Decimal("100"), "before_work"),
-                ),
-            ),
+                payment_schedule=(PaymentScheduleItem(Decimal("100"), "before_work"),),
+            )
+            if document_type == "contract"
+            else None,
+            act_terms=ActTerms(claims_status="none")
+            if document_type == "act"
+            else None,
         ),
         replaces_document_id=replaces,
         allow_incomplete_customer=allow_incomplete,
@@ -716,19 +771,22 @@ async def test_only_one_active_replacement_can_exist_for_a_document(db, tmp_path
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("document_type", ["contract", "act"])
 @pytest.mark.parametrize(
     "cached",
     [None, "malformed", {"checked": True, "can_issue": True, "missing_fields": []}],
 )
 async def test_incomplete_customer_issue_uses_frozen_facts_before_any_reservation_or_artifact(
-    db, tmp_path, cached
+    db, tmp_path, cached, document_type
 ):
     from copy import deepcopy
     from modules.documents.application.customer_readiness import (
         check_saved_document_readiness,
     )
 
-    scope, order, issuer, templates, artifacts = await _seed(db, tmp_path)
+    scope, order, issuer, templates, artifacts = await _seed(
+        db, tmp_path, document_type=document_type
+    )
     customer = await db.get(Customer, order.customer_id)
     customer.name = ""
     customer.full_legal_name = ""
@@ -737,14 +795,39 @@ async def test_incomplete_customer_issue_uses_frozen_facts_before_any_reservatio
     with pytest.raises(
         ManagedDocumentConflictError, match="Полное наименование клиента"
     ):
-        await _draft(db, scope=scope, order=order, issuer=issuer)
-    assert not (await db.execute(select(OrderDocument))).scalars().all()
+        await _draft(
+            db, scope=scope, order=order, issuer=issuer, document_type=document_type
+        )
+    assert (
+        not (
+            await db.execute(
+                select(OrderDocument).where(OrderDocument.doc_type == document_type)
+            )
+        )
+        .scalars()
+        .all()
+    )
     draft = await _draft(
-        db, scope=scope, order=order, issuer=issuer, allow_incomplete=True
+        db,
+        scope=scope,
+        order=order,
+        issuer=issuer,
+        allow_incomplete=True,
+        document_type=document_type,
     )
     saved = deepcopy(draft.render_snapshot)
     assert saved["values"]["customer.full_name"] == ""
     assert saved["meta"]["customer_readiness"]["can_issue"] is False
+    if document_type == "act":
+        basis = db.info["test_act_basis"]
+        assert saved["meta"]["base_document_id"] == basis.id
+        assert saved["meta"]["document_role_type"] == "executor_payer"
+        assert [row["line.title"] for row in saved["table_rows"]["lines"]] == [
+            "Монтаж кондиционера"
+        ]
+        assert basis.render_snapshot == {
+            "meta": {"document_role_type": "executor_payer"}
+        }
     patched = deepcopy(saved)
     if cached is None:
         patched["meta"].pop("customer_readiness")
@@ -779,7 +862,9 @@ async def test_incomplete_customer_issue_uses_frozen_facts_before_any_reservatio
     assert not (await db.execute(select(DocumentNumberSequence))).scalars().all()
     assert not (await db.execute(select(DocumentArtifact))).scalars().all()
     assert draft.status == "draft" and draft.official_number is None
-    fresh = await _draft(db, scope=scope, order=order, issuer=issuer)
+    fresh = await _draft(
+        db, scope=scope, order=order, issuer=issuer, document_type=document_type
+    )
     assert fresh.render_snapshot["meta"]["customer_readiness"]["can_issue"] is True
     assert (
         fresh.render_snapshot["values"]["customer.full_name"] == "Заполненная карточка"
@@ -787,19 +872,22 @@ async def test_incomplete_customer_issue_uses_frozen_facts_before_any_reservatio
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("document_type", ["contract", "act"])
 async def test_preflight_template_change_is_rechecked_and_saved_draft_keeps_its_version(
-    db, tmp_path
+    db, tmp_path, document_type
 ):
     from modules.documents.application.customer_readiness import (
         check_selection_readiness,
         check_saved_document_readiness,
     )
 
-    scope, order, issuer, templates, artifacts = await _seed(db, tmp_path)
+    scope, order, issuer, templates, artifacts = await _seed(
+        db, tmp_path, document_type=document_type
+    )
     selection = DocumentContextSelection(
         order_id=order.id,
         legal_entity_id=issuer.id,
-        document_type="contract",
+        document_type=document_type,
         issue_date=date(2026, 8, 26),
         business_terms=BusinessDocumentTerms(
             contract_scenario="services",
@@ -808,7 +896,10 @@ async def test_preflight_template_change_is_rechecked_and_saved_draft_keeps_its_
                     share_percent=Decimal("100"), due_event="before_work"
                 ),
             ),
-        ),
+        )
+        if document_type == "contract"
+        else None,
+        act_terms=ActTerms(claims_status="none") if document_type == "act" else None,
     )
     checked = await check_selection_readiness(
         db,
@@ -818,7 +909,9 @@ async def test_preflight_template_change_is_rechecked_and_saved_draft_keeps_its_
         template_storage=templates,
     )
     assert checked["can_issue"] is True
-    complete_draft = await _draft(db, scope=scope, order=order, issuer=issuer)
+    complete_draft = await _draft(
+        db, scope=scope, order=order, issuer=issuer, document_type=document_type
+    )
     document = Document(BytesIO(_template_docx()))
     document.add_paragraph("Адрес: {{ customer.legal_address }}")
     source = BytesIO()
@@ -855,9 +948,16 @@ async def test_preflight_template_change_is_rechecked_and_saved_draft_keeps_its_
         version_id=version.id,
     )
     with pytest.raises(ManagedDocumentConflictError, match="Юридический адрес клиента"):
-        await _draft(db, scope=scope, order=order, issuer=issuer)
+        await _draft(
+            db, scope=scope, order=order, issuer=issuer, document_type=document_type
+        )
     incomplete = await _draft(
-        db, scope=scope, order=order, issuer=issuer, allow_incomplete=True
+        db,
+        scope=scope,
+        order=order,
+        issuer=issuer,
+        allow_incomplete=True,
+        document_type=document_type,
     )
     assert incomplete.template_version_id == version.id
     assert (

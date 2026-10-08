@@ -80,7 +80,10 @@ def fields(result):
         ("individual", "self", set()),
     ],
 )
-def test_only_effective_frozen_signing_branch_is_required(entity, mode, expected):
+@pytest.mark.parametrize("document_type", ["contract", "act"])
+def test_only_effective_frozen_signing_branch_is_required(
+    entity, mode, expected, document_type
+):
     source = source_bytes(
         source_document(
             "{{#if customer.organization_statutory_body}}{{ customer.signer_position }} "
@@ -92,7 +95,7 @@ def test_only_effective_frozen_signing_branch_is_required(entity, mode, expected
     frozen = snapshot(entity, mode)
     original = deepcopy(frozen)
     result = snapshot_customer_readiness(
-        frozen, source=source, document_type="contract"
+        frozen, source=source, document_type=document_type
     )
     assert fields(result) == expected
     assert result["can_issue"] is not bool(expected)
@@ -125,16 +128,19 @@ def test_missing_facts_in_body_table_header_footer_and_optional_contacts(empty):
     )
 
 
-def test_empty_card_does_not_block_template_without_required_customer_fields():
+@pytest.mark.parametrize("document_type", ["contract", "act"])
+def test_empty_card_does_not_block_template_without_required_customer_fields(
+    document_type,
+):
     frozen = snapshot()
     source = source_bytes(source_document("{{ document.type }} {{ customer.email }}"))
     result = snapshot_customer_readiness(
-        frozen, source=source, document_type="contract"
+        frozen, source=source, document_type=document_type
     )
     assert result["can_issue"] and fields(result) == {"customer.email"}
     assert mark_incomplete_docx(source, result) == source
     assert (
-        snapshot_customer_readiness(frozen, source=source, document_type="act")[
+        snapshot_customer_readiness(frozen, source=source, document_type="offer")[
             "checked"
         ]
         is False
@@ -150,7 +156,10 @@ def test_historical_literal_basis_is_a_present_fact_without_provenance_guessing(
     assert result["can_issue"]
 
 
-def test_actual_render_ignores_cache_keeps_facts_and_marks_every_header_variant():
+@pytest.mark.parametrize("document_type", ["contract", "act"])
+def test_actual_render_ignores_cache_keeps_facts_and_marks_every_header_variant(
+    document_type,
+):
     document = source_document(
         "Клиент: {{ customer.full_name }}", "Адрес: {{ customer.legal_address }}"
     )
@@ -173,7 +182,7 @@ def test_actual_render_ignores_cache_keeps_facts_and_marks_every_header_variant(
         placeholder_schema={"fields": ["customer.full_name", "customer.legal_address"]},
     )
     template, context = build_render_inputs(
-        template=SimpleNamespace(id=1, doc_type="contract"),
+        template=SimpleNamespace(id=1, doc_type=document_type),
         version=version,
         source=source_bytes(document),
         snapshot=frozen,

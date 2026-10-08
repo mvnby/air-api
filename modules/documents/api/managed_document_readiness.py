@@ -1,4 +1,4 @@
-"""Read-only requirements for one selected native contract/invoice action."""
+"""Read-only requirements for one selected native contract/invoice/act action."""
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
