@@ -103,3 +103,62 @@ def test_native_known_signing_facts_keep_text_and_formatting():
     output = Document(BytesIO(NativeDocxRenderer().render(template, context).content))
     assert [p.text for p in output.paragraphs] == ["представителя", "Доверенности № 7"]
     assert output.paragraphs[0].runs[0].bold is True
+
+
+@pytest.mark.parametrize(
+    "entity,mode",
+    [("organization", "statutory_body"), ("organization", "power_of_attorney"),
+     ("individual_entrepreneur", "power_of_attorney"), ("individual", "power_of_attorney"),
+     ("individual_entrepreneur", "self"), ("individual", "self")],
+)
+@pytest.mark.parametrize("name", [None, "", "  ", "Иванова Ивана Ивановича"])
+def test_conditional_preamble_and_signature_name_remain_usable_when_signer_unknown(entity, mode, name):
+    from copy import deepcopy
+    from modules.documents.domain.party import party_conditions
+    from modules.documents.domain.customer_signing import CUSTOMER_NAME_LINE
+
+    document = Document()
+    document.add_paragraph(
+        "Заказчик"
+        "{{#if customer.organization_statutory_body}}, в лице {{ customer.signer_position }} "
+        "{{ customer.signer_name }}, действующего на основании {{ customer.acting_basis }}"
+        "{{/if customer.organization_statutory_body}}"
+        "{{#if customer.signs_by_power_of_attorney}}, в лице {{ customer.signer_name }}, "
+        "действующего на основании {{ customer.acting_basis }}"
+        "{{/if customer.signs_by_power_of_attorney}}"
+        "{{#if customer.signs_self}}, подписывающий договор лично{{/if customer.signs_self}}."
+    )
+    document.add_table(rows=1, cols=1).cell(0, 0).text = "{{ customer.signer_name }}"
+    buffer = BytesIO()
+    document.save(buffer)
+    snapshot = {
+        "values": {"customer.entity_type": entity, "customer.signing_mode": mode,
+                   "customer.signer_position": "", "customer.signer_name": name,
+                   "customer.acting_basis": ""},
+        "conditions": party_conditions("customer", entity_type=entity, signing_mode=mode),
+    }
+    before = deepcopy(snapshot)
+    condition_catalog = ["customer.organization_statutory_body", "customer.signs_by_power_of_attorney",
+                         "customer.signs_self"]
+    template, context = build_render_inputs(
+        template=SimpleNamespace(id=1),
+        version=SimpleNamespace(version=1, source_filename="contract.docx", placeholder_schema={
+            "fields": ["customer.signer_position", "customer.signer_name", "customer.acting_basis"],
+            "conditions": condition_catalog,
+        }),
+        source=buffer.getvalue(), snapshot=snapshot,
+    )
+    output = Document(BytesIO(NativeDocxRenderer().render(template, context).content))
+    preamble = output.paragraphs[0].text
+    known_name = name if name and name.strip() else ""
+    expected_name = known_name or (CUSTOMER_NAME_LINE if mode != "self" else "")
+    assert output.tables[0].cell(0, 0).text == expected_name
+    if mode == "self":
+        assert preamble == "Заказчик, подписывающий договор лично."
+        assert CUSTOMER_NAME_LINE not in preamble
+    else:
+        assert expected_name in preamble
+        assert "в лице ," not in preamble
+        assert "на основании ," not in preamble
+    assert snapshot == before
+    assert dict(context.conditions) == {key: before["conditions"][key] for key in condition_catalog}

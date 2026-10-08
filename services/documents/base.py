@@ -326,6 +326,7 @@ class BaseDocumentStrategy(ABC):
                 ),
                 signing_mode=getattr(c, "signing_mode", None),
                 signer_position=c.signer_position,
+                signer_name=c.signer_name,
                 acting_basis=c.acting_basis,
             )
 
@@ -336,7 +337,7 @@ class BaseDocumentStrategy(ABC):
                 "{{inn}}": c.inn or "-",
                 "{{address}}": c.legal_address or c.actual_address or "-",
                 "{{signer_position}}": signing["signer_position"],
-                "{{signer_name}}": c.signer_name or "_______________________________________",
+                "{{signer_name}}": signing["signer_name"],
                 "{{acting_basis}}": signing["acting_basis"],
                 "{{bank_name}}": c.bank_name or "-",
                 "{{iban}}": c.iban or "-",

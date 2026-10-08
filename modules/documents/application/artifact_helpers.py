@@ -52,6 +52,7 @@ def build_render_inputs(
             entity_type=snapshot_values["customer.entity_type"],
             signing_mode=snapshot_values.get("customer.signing_mode"),
             signer_position=snapshot_values.get("customer.signer_position"),
+            signer_name=snapshot_values.get("customer.signer_name"),
             acting_basis=snapshot_values.get("customer.acting_basis"),
         )
         for field, value in signing.items():

@@ -41,9 +41,10 @@ Use the party conditions instead of writing one fixed preamble:
 Unknown customer signer position and authority basis remain empty strings in
 customer records and new native snapshots. Native DOCX/PDF and legacy Google
 outputs show handwriting lines with hints for applicable missing signing fields:
-position for an organization, authority basis for a representative. Personal
-signatures of individuals and entrepreneurs request neither field. The position
-hint asks for the genitive case so the contract preamble stays grammatical.
+position for an organization, name and authority basis for a representative. Personal
+signatures of individuals and entrepreneurs request no representative fields.
+The position and name hints ask for the genitive case so the contract preamble
+stays grammatical.
 Known values are preserved. These output hints never become stored requisites.
 Customer creation and OCR confirmation never infer “директора” or “Устава” from
 missing, null, blank or an empty “действующий на основании” phrase. On update,

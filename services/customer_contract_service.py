@@ -84,6 +84,7 @@ class CustomerContractService:
             ),
             signing_mode=customer.signing_mode,
             signer_position=customer.signer_position,
+            signer_name=customer.signer_name,
             acting_basis=customer.acting_basis,
         )
         client_name = customer.full_legal_name if is_business and customer.full_legal_name else customer.name
@@ -94,7 +95,7 @@ class CustomerContractService:
             "{{inn}}": customer.inn or "-",
             "{{address}}": customer.legal_address or customer.actual_address or "-",
             "{{signer_position}}": signing["signer_position"],
-            "{{signer_name}}": customer.signer_name or "_______________________________________",
+            "{{signer_name}}": signing["signer_name"],
             "{{acting_basis}}": signing["acting_basis"],
             "{{bank_name}}": customer.bank_name or "-",
             "{{iban}}": customer.iban or "-",
