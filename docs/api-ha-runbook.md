@@ -582,6 +582,174 @@ Do not set `POSTGRES_PITR_REQUIRED=true` until both the strict freshness check
 and a physical restore drill pass. After that, leave it true so the daily drill
 keeps proving that basebackups plus archived WAL can actually be restored.
 
+### Host assets only: reviewed rollout and recovery (issue #893)
+
+Use this procedure for an existing, configured PITR cluster whose installed
+helpers lag behind the exact workflow bundle. Application image deployment does
+not install these files. This procedure keeps WAL compression at `none`; gzip,
+archive cleanup/pruning and R2 lifecycle changes need separate approval.
+It is distinct from the full `migrate-cluster` transaction above: do not run
+provisioning, secret/config migration or manually stop the role agents to refresh
+helpers.
+
+Read-only evidence at 2026-10-08 10:56–10:58 UTC, checked against main
+`060c247a2848e8c185bbef66e1f236dd469caa0f`:
+
+| Node / project | Installed finalized release | Expected release at checked main |
+| --- | --- | --- |
+| `mvn-api` / `/opt/air-api` | `083e2bfb884d0b34b0aa5cee4b9c79ee838e0e78af244cadb14dbdba6ac6e2e0` | `5b43d4b6401683534c8bdf9d92113d919541eab3517f1f6d01bc03194cea380e` |
+| `zakup` / `/opt/mvn-reserve` | `2fdf2d225f44ee4bb3ea166714392ec211528a81fdcc98de07fcbe8e67ad7726` | `12e457a2e71055abe2bf6a6095026338e5cb0e5c1b8ea858e2476a97516cb5c5` |
+
+Both September 27 manifests were canonical version 1, had all 37 matching
+root-owned files/modes/hashes and no maintenance marker, active release journal
+or operation record. Their Compose hashes matched this checkout: Netherlands
+`e2e4fa4426fb0e2a04c3359824a5f98cde6016e87773b9fa8f1c355bc3877766`,
+Belarus `bf8077fd5ceccd97331eb75ca7bf0008895b5bed5d5f4dd4ae7311ac6c08a5f7`;
+both profiles were `canary`. The sole primary was `zakup`, with `mvn-api`
+synchronously streaming, timeline 29, system identifier
+`7657288033494519840`. Primary timers were enabled/active; standby timers were
+disabled/inactive. The primary's 04:20 basebackup and 10:56 WAL job succeeded;
+`pg_stat_archiver` had 5913 archived segments and zero failures. These are
+dated observations, not prerequisites that can be assumed later.
+
+[PITR Check 37736904262](https://github.com/mvnby/air-api/actions/runs/37736904262),
+at `015990df4574185ddfcdcde1a887c1def338a5cd`, rejected the expected finalized
+release before checking remote archive freshness. This explains the PITR
+monitoring gate failure; distinguish downstream readiness/status alerts from
+independent archiver failures, missing remote WAL or an invalid restore chain.
+The [October 7 physical drill](https://github.com/mvnby/air-api/actions/runs/37616390488)
+recovered to its generated restore point on timeline 29 and checked 147 public
+tables. It proves that tested chain and time only, not current recoverability or
+the new helper release.
+
+**Plan and approval gate.** The
+[host-assets workflow](../.github/workflows/rollout-postgres-pitr-host-assets.yml)
+is apply-only: dispatching it immediately permits host writes. It has no
+`plan`/`apply` input or plan-digest artifact. First prepare and review an
+external operator record containing the exact 40-character main SHA, CI evidence,
+both installed and expected digests, per-file changes, Compose comparison,
+topology, timer/operation state, disk headroom and recovery decision. Offline
+bundle derivation reads checkout files only; do not print their base64 contents:
+
+```bash
+git rev-parse HEAD
+git status --short
+python3 - <<'PY'
+import json
+from scripts.ha.pitr_pinned_ssh import PATRONI_NODES
+from scripts.ha.pitr_remote_execution import prepare_host_release_bundles
+from scripts.ha.pitr_target_compose import validate_target_compose_bundles
+
+bundles = prepare_host_release_bundles(PATRONI_NODES)
+print("profile", validate_target_compose_bundles(PATRONI_NODES, bundles))
+for node in PATRONI_NODES:
+    bundle = json.loads(bundles[node.project_dir])
+    print(node.alias, "release_sha256", bundle["release_sha256"])
+    for item in bundle["files"]:
+        print(item["path"], oct(item["mode"]), item["sha256"])
+PY
+```
+
+Use a clean checkout of the selected main SHA; recompute if main or any bundle
+source changes. Record successful application CI for the helper implementation
+and the required CI for the selected SHA; a documentation-only run alone does
+not validate helper code. Explicit approval must cover the exact two-node
+host installation and a separate disposable restore drill. Read-only diagnosis
+or approval of this document does not authorize either operation.
+
+Before apply, re-probe both pinned SSH host identities and healthy Patroni/DCS
+topology; confirm one primary, matching identifier/timeline and synchronous
+standby. Confirm the old manifest against its own complete files, owner/mode,
+and each target Compose digest against the installed Compose. Require unchanged
+communications profile, canonical immutable image/runtime ownership, configured
+private PITR destination, healthy agents, correct timer fencing, no foreign
+maintenance/journal/operation state and sufficient disk/memory for queued WAL
+and the drill's selected chain. The observed Belarus root filesystem was 92%
+used with about 4.7 GiB available; remeasure and honor the drill resource preflight,
+without deleting archive or business data. Freeze application and role/profile
+deployments through rollout and postchecks; workflow concurrency is
+`postgres-pitr-host-operations`, not the application release concurrency group.
+
+**Approved apply.** Only after the preceding gate, dispatch from `main` with
+`confirm_sha` equal to the exact reviewed main SHA. This workflow has no
+`target_release_sha` input: dispatch revision, checked-out asset sources and
+`confirm_sha` must be the same main SHA. The dated source SHA/digests above are
+evidence, not a future installation selector. A moved main fails the gate;
+repeat the read-only host review and offline derivation for the new main before
+requesting approval, instead of changing the confirmation blindly.
+
+```bash
+gh workflow run rollout-postgres-pitr-host-assets.yml --repo mvnby/air-api \
+  --ref main -f confirm_sha="<reviewed 40-character main SHA>"
+```
+
+The controller probes roles before/after every operation and applies current
+standby before current primary on a fresh rollout. A retry resumes/reopens
+existing same-transaction peers before fresh peers. Each remote action takes
+the shared PITR lock and the node's canonical `.deploy.lock`, refuses foreign
+operation records, and uses a durable transaction-owned maintenance marker.
+Scheduled jobs use these locks and reject the marker; active role agents fence
+PITR timers during maintenance. Keep those agents running. This host-only path
+does not execute the full migration's role-agent stop/provision windows or
+alter DCS/PostgreSQL/archive settings. It writes attested files, reloads systemd,
+finalizes standby then primary, proves both release manifests, then runs strict
+primary verification. Save the run ID, exact SHA, generated transaction ID,
+both resulting digests and sanitized log artifact.
+
+**Postchecks and release gate.** Require both manifests to match the reviewed
+bundles, all file hashes/modes/ownership, unchanged Compose/profile/topology and
+runtime identities, no residual marker/journal/operation state, active primary
+timers and disabled/inactive standby timers. Run strict PITR check, then the
+separately approved physical drill from the same unchanged main revision:
+
+```bash
+gh workflow run check-postgres-pitr.yml --repo mvnby/air-api \
+  --ref main -f required=true
+gh workflow run postgres-pitr-restore-drill.yml --repo mvnby/air-api \
+  --ref main -f required=true -f require_wal=true
+```
+
+Dispatch sequentially and wait for actual completion. Verify each run's SHA and
+that the check/drill ran; scheduled maintenance skips or a green summary alone
+do not count. Keep strict defaults: expected archived WAL in private R2, no
+unresolved archiver failure, bounded local backlog and fresh basebackup. The
+drill must validate basebackup artifacts, lineage/history and complete WAL
+through the generated restore point (or separately reviewed explicit UTC
+target), recover in its disposable PostgreSQL runtime, prove the expected
+identifier/target and tables, and clean its own runtime successfully. It never
+replaces production data. The rollout workflow finalizes before this drill;
+workflow success alone is not acceptance of recoverability. Finish HA readiness,
+replication and API `/api/health`, `/api/v1/products?limit=5` and
+`/api/v1/filters/config` checks, then observe timers/backlog and alerts for
+30 minutes before lifting the deployment freeze.
+
+**Recovery and stop criteria.** Before the first apply attempt, a failed
+precondition has no release installation to undo; retain evidence and correct
+the plan. From the first attempted apply, including a lost SSH response, the
+controller is roll-forward only. Rerun the same workflow run/attempt at its same
+SHA: its transaction ID is derived from repository, run ID and SHA, so a new
+dispatch would create a different transaction. Do not remove markers/manifests,
+copy individual helpers, start timers manually or force another transaction.
+
+A finalized peer cannot be rolled back by the release executor; finalize removes
+its transaction snapshots. An active journal's lower-level rollback support is
+not a cluster rollback command for this controller. If roll-forward cannot
+safely complete or new helpers must be reverted, stop for a separate reviewed
+recovery change: preserve compatible readers and prepare a new exact main
+bundle/transaction restoring the known-good implementation under the same
+locks/fencing and verification gates. Never claim that selecting an old image
+or old workflow SHA reverts these host files. If a mandatory reversible
+pre-finalize rollback or machine-enforced plan/approval gate is required, first
+implement and review a separate controller/workflow change; this procedure does
+not supply either.
+
+Stop on unreachable/ambiguous topology, role/timeline/identifier drift, SSH pin
+mismatch, foreign durable state, unknown file generation, changed Compose/profile,
+insufficient resources, failed fencing, failed strict remote/archive check or
+failed drill. Keep the freeze and same-transaction evidence; resume only after
+fresh proof and an approved recovery decision. Gzip activation, prune/delete,
+R2 lifecycle changes and production restore remain separately gated.
+
 ### Opt-in WAL gzip storage (issue #893, compression stage)
 
 WAL compression is **off by default**. The uploader and attested tool runner
