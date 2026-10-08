@@ -67,7 +67,7 @@ def test_disposable_postgres_has_no_network_or_database_password():
     assert "--cap-drop ALL" in source
     assert "--security-opt no-new-privileges:true" in source
     assert "--pids-limit 256" in source
-    assert "--memory 4g" in source
+    assert '--memory "${recovery_memory_mib}m"' in source
     assert "--cpus 2.0" in source
     assert "--tmpfs /tmp:" in source
     assert "--tmpfs /var/run/postgresql:" in source

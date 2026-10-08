@@ -45,7 +45,10 @@ def test_ci_parallelizes_isolated_lanes_behind_required_test_gate():
         "matrix": {"suite": ["unit", "integration"]},
     }
     assert jobs["python-tests"]["timeout-minutes"] == "${{ matrix.suite == 'unit' && 75 || 60 }}"
-    assert jobs["changes"]["outputs"] == {"docs_only": "${{ steps.scope.outputs.docs_only }}"}
+    assert jobs["changes"]["outputs"] == {
+        "docs_only": "${{ steps.scope.outputs.docs_only }}",
+        "pitr_capacity_proof": "${{ steps.pitr-proof.outputs.run }}",
+    }
     assert jobs["changes"]["permissions"]["actions"] == "read"
     scope = next(step for step in jobs["changes"]["steps"] if step.get("id") == "scope")
     assert 'elif [ "$GITHUB_EVENT_NAME" = "push" ]' in scope["run"]
