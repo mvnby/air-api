@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { ArrowRight, Check, Clock3, MoreVertical, Pause, Pencil, Play, Save, Trash2, Undo2, X } from 'lucide-vue-next';
 import OrderMoney from './OrderMoney.vue';
+import MoneyText from '../money/MoneyText.vue';
 import { ORDER_WORKFLOW_OPTIONS, type OrderWorkflowType, type OrderWorkspaceViewModel } from './order-workspace';
 import { STICKY_HEADER_RESIZE_DURATION_MS } from '../../composables/useSmartStickyHeader';
 
@@ -298,7 +299,7 @@ const onWorkflowChange = async (event: Event) => {
         :title="viewModel.nextAction.label"
         @click="emit('next')"
       >
-        <span class="truncate">{{ viewModel.nextAction.label }}</span>
+        <span class="truncate"><MoneyText :text="viewModel.nextAction.label" /></span>
         <ArrowRight :size="14" class="shrink-0" aria-hidden="true" />
       </button>
     </div>
@@ -312,7 +313,7 @@ const onWorkflowChange = async (event: Event) => {
     </div>
 
     <div v-if="!effectiveCompact && !workspace" class="mt-2.5 flex items-center gap-2">
-      <button type="button" class="btn-mini min-w-0 flex-1 justify-center text-xs sm:flex-none" @click="emit('next')">{{ viewModel.nextAction.label }}</button>
+      <button type="button" class="btn-mini min-w-0 flex-1 justify-center text-xs sm:flex-none" @click="emit('next')"><MoneyText :text="viewModel.nextAction.label" /></button>
       <button v-if="balance > 0" type="button" class="btn-mini-outline hidden h-9 text-xs sm:inline-flex" @click="emit('payments')">Внести оплату</button>
       <div v-if="dirty" class="flex shrink-0 items-center gap-1.5">
         <button type="button" class="btn-mini-outline h-9 w-9 justify-center p-0" :disabled="saving" title="Отменить изменения" aria-label="Отменить изменения" @click="emit('discard')">

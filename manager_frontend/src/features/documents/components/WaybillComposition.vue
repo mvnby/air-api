@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { formatMoney } from '../model/document-formatters';
+import { formatMoneyAmount } from '../model/document-formatters';
+import MoneyAmount from '../../../components/money/MoneyAmount.vue';
 import type { WaybillProductLine } from '../model/document-types';
 import {
   addWaybillComponent,
@@ -33,7 +34,7 @@ defineProps<{ lines: WaybillProductLine[] }>();
           <div class="min-w-0">
             <p class="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{{ line.product_query || 'Товар' }}</p>
             <p class="text-xs text-slate-500 dark:text-slate-400">
-              {{ line.logistics_components?.length || 0 }} поз. · {{ formatMoney(line.price) }} за комплект · кол-во {{ line.quantity }}
+              {{ line.logistics_components?.length || 0 }} поз. · <MoneyAmount :value="line.price" :formatted-value="formatMoneyAmount(line.price)" /> за комплект · кол-во {{ line.quantity }}
             </p>
           </div>
           <span
@@ -84,15 +85,15 @@ defineProps<{ lines: WaybillProductLine[] }>();
               <option value="other">прочее</option>
             </select>
             <div class="flex items-center text-xs font-semibold text-slate-600 dark:text-slate-300 md:col-span-4">
-              По строке: {{ formatMoney(component.unit_price * component.quantity_per_parent * line.quantity) }}
+              По строке: <MoneyAmount :value="component.unit_price * component.quantity_per_parent * line.quantity" :formatted-value="formatMoneyAmount(component.unit_price * component.quantity_per_parent * line.quantity)" />
             </div>
           </div>
 
           <div class="flex flex-wrap items-center justify-between gap-2">
             <p v-if="lineLogisticsHasMismatch(line)" class="text-xs font-semibold text-amber-700 dark:text-amber-300">
-              Состав: {{ formatMoney(lineLogisticsPerParentTotal(line)) }}, товар: {{ formatMoney(line.price) }}.
+              Состав: <MoneyAmount :value="lineLogisticsPerParentTotal(line)" :formatted-value="formatMoneyAmount(lineLogisticsPerParentTotal(line))" />, товар: <MoneyAmount :value="line.price" :formatted-value="formatMoneyAmount(line.price)" />.
             </p>
-            <span v-else class="text-xs text-brand-700 dark:text-brand-300">Состав: {{ formatMoney(lineLogisticsPerParentTotal(line)) }}.</span>
+            <span v-else class="text-xs text-brand-700 dark:text-brand-300">Состав: <MoneyAmount :value="lineLogisticsPerParentTotal(line)" :formatted-value="formatMoneyAmount(lineLogisticsPerParentTotal(line))" />.</span>
             <button
               type="button"
               class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"

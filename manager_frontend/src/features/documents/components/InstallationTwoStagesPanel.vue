@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import MoneyAmount from '../../../components/money/MoneyAmount.vue';
+import BynSymbol from '../../../components/money/BynSymbol.vue';
 import type { ConsumerDocumentTerms } from '../model/consumer-document-terms';
 import {
   calculateInstallationTwoStages,
-  formatByn,
+  formatBynAmount,
 } from '../model/installation-two-stages';
 
 const props = defineProps<{
@@ -70,7 +72,7 @@ const secondStageDescription = computed(() => (
 
     <div v-if="terms.installation_two_stages" class="mt-4 grid gap-3 sm:grid-cols-2">
       <p class="sm:col-span-2 text-xs leading-5 text-brand-900/75 dark:text-brand-200/75" data-testid="installation-two-stages-description">
-        Сумма выбранного предложения: {{ formatByn(proposalTotalCents) }}. Первый этап: {{ firstStageDescription }}. Второй: {{ secondStageDescription }} после ремонта по договорённости.
+        Сумма выбранного предложения: <MoneyAmount :value="proposalTotalCents === null ? null : proposalTotalCents / 100" :formatted-value="formatBynAmount(proposalTotalCents)" />. Первый этап: {{ firstStageDescription }}. Второй: {{ secondStageDescription }} после ремонта по договорённости.
       </p>
       <div class="sm:col-span-2">
         <span class="text-xs font-semibold text-brand-950/80 dark:text-brand-100/80">Первый этап</span>
@@ -98,7 +100,7 @@ const secondStageDescription = computed(() => (
         </div>
       </div>
       <label class="consumer-field">
-        <span>К оплате за первый этап, BYN</span>
+        <span>К оплате за первый этап, <BynSymbol /><span class="sr-only">BYN</span></span>
         <input
           :value="terms.installation_first_stage_amount || ''"
           class="consumer-input"
@@ -109,9 +111,9 @@ const secondStageDescription = computed(() => (
         />
       </label>
       <label class="consumer-field">
-        <span>К оплате за второй этап, BYN</span>
+        <span>К оплате за второй этап, <BynSymbol /><span class="sr-only">BYN</span></span>
         <input
-          :value="formatByn(calculation.remainingCents)"
+          :value="formatBynAmount(calculation.remainingCents)"
           class="consumer-input bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
           data-testid="installation-second-stage-amount"
           readonly

@@ -98,7 +98,7 @@ describe('consumer installation documents', () => {
     const wrapper = await mountConsumerWorkspace();
     await wrapper.get('[data-testid="installation-two-stages-toggle"]').trigger('click');
     await wrapper.get('[data-testid="installation-first-stage-amount"]').setValue('3000,00');
-    expect(wrapper.get<HTMLInputElement>('[data-testid="installation-second-stage-amount"]').element.value).toBe('140,00 BYN');
+    expect(wrapper.get<HTMLInputElement>('[data-testid="installation-second-stage-amount"]').element.value).toBe('140,00');
     await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
     await flushPromises();
     expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenCalledWith(42, expect.objectContaining({ consumer_terms: expect.objectContaining({ installation_two_stages: true, installation_outdoor_unit_in_first_stage: true, installation_first_stage_amount: '3000.00' }) }));
@@ -119,7 +119,7 @@ describe('consumer installation documents', () => {
 
     expect(wrapper.get('[data-testid="installation-outdoor-second-stage"]').attributes('aria-pressed')).toBe('true');
     expect(wrapper.get('[data-testid="installation-two-stages-description"]').text()).toContain('Второй: внутренний и наружный блоки, подключение и пусконаладка');
-    expect(wrapper.get<HTMLInputElement>('[data-testid="installation-second-stage-amount"]').element.value).toBe('140,00 BYN');
+    expect(wrapper.get<HTMLInputElement>('[data-testid="installation-second-stage-amount"]').element.value).toBe('140,00');
 
     await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
     await flushPromises();

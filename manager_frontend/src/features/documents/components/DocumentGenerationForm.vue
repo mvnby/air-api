@@ -4,7 +4,8 @@ import type { OrderCustomerBrief } from '../../../client';
 import AdditionalConditionsLibrary from '../../../components/orders/AdditionalConditionsLibrary.vue';
 import AddressSuggestInput from '../../../components/ui/AddressSuggestInput.vue';
 import { DOCUMENT_FILE_ACCEPT, DOCUMENT_ROLE_OPTIONS, DOCUMENT_TYPES } from '../model/document-constants';
-import { formatMoney, getRoleLabel } from '../model/document-formatters';
+import { formatMoneyAmount, getRoleLabel } from '../model/document-formatters';
+import MoneyAmount from '../../../components/money/MoneyAmount.vue';
 import WaybillComposition from './WaybillComposition.vue';
 import { DocumentGenerationContextKey, type DocumentGenerationContext } from '../model/document-generation-context';
 import { getCustomerDocumentWarnings } from '../model/customer-document-readiness';
@@ -317,7 +318,7 @@ const openCustomerProfile = () => {
                   <span class="min-w-0 flex-1">
                     <span class="block font-medium text-slate-800 dark:text-slate-100">{{ line.service_title }}</span>
                     <span class="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                      <span>{{ line.quantity }} шт. · {{ formatMoney(line.line_total) }}</span>
+                      <span>{{ line.quantity }} шт. · <MoneyAmount :value="line.line_total" :formatted-value="formatMoneyAmount(line.line_total)" /></span>
                       <span class="inline-flex items-center gap-1 rounded-md bg-white px-2 py-1 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-700">
                         <span>В акт</span>
                         <input

@@ -2,7 +2,8 @@ import type { ManagerOrderDocumentItem } from '../../../client';
 import { CLOSING_DOCUMENT_TYPES, DOCUMENT_ROLE_OPTIONS, DOCUMENT_TYPES } from './document-constants';
 import type { DocumentRoleType } from './document-types';
 
-export const formatMoney = (value: number | null | undefined) => `${Number(value || 0).toLocaleString('ru-RU')} BYN`;
+export const formatMoneyAmount = (value: number | null | undefined) => Number(value || 0).toLocaleString('ru-RU');
+export const formatMoney = (value: number | null | undefined) => `${formatMoneyAmount(value)} BYN`;
 
 export const normalizeRoleType = (value: unknown): DocumentRoleType => {
   const raw = String(value || '').trim();

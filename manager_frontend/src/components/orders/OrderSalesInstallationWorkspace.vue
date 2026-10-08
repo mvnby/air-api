@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ArrowRight, CreditCard, FileText, PackageCheck, Wrench } from 'lucide-vue-next';
+import MoneyText from '../money/MoneyText.vue';
 import type { OrderWorkspaceLane, OrderWorkspaceTarget } from './order-workspace';
 
 defineProps<{
@@ -44,8 +45,8 @@ const toneClasses = {
         <component :is="icons[lane.id]" :size="18" class="mt-0.5 shrink-0" aria-hidden="true" />
         <span class="flex min-w-0 flex-1 flex-col self-stretch">
           <span class="block text-[11px] font-semibold uppercase tracking-[0.08em] opacity-70">{{ lane.label }}</span>
-          <span class="mt-0.5 block text-sm font-semibold">{{ lane.status }}</span>
-          <span class="mt-1 block text-xs opacity-75">{{ lane.detail }}</span>
+          <span class="mt-0.5 block text-sm font-semibold"><MoneyText :text="lane.status" /></span>
+          <span class="mt-1 block text-xs opacity-75"><MoneyText :text="lane.detail" /></span>
           <span class="mt-auto inline-flex items-center gap-1 pt-2 text-xs font-semibold">
             {{ lane.actionLabel }}
             <ArrowRight :size="13" aria-hidden="true" />
