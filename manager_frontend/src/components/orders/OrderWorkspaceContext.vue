@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Building2, ChevronDown, MapPin, WalletCards } from 'lucide-vue-next';
-import { formatMoney } from './order-utils';
+import OrderMoney from './OrderMoney.vue';
 
 defineProps<{
   customerName: string;
@@ -47,8 +47,8 @@ const emit = defineEmits<{
       <WalletCards :size="17" class="mt-0.5 shrink-0 text-slate-400" aria-hidden="true" />
       <span class="min-w-0">
         <span class="block text-xs font-medium text-slate-500 dark:text-slate-400">Расчёты</span>
-        <span class="block font-semibold text-slate-900 dark:text-white">{{ formatMoney(paid) }} из {{ formatMoney(total) }}</span>
-        <span class="block text-xs" :class="balance > 0 ? 'text-rose-600 dark:text-rose-300' : 'text-emerald-700 dark:text-emerald-300'">{{ balance > 0 ? `Остаток ${formatMoney(balance)}` : 'Оплачено' }}</span>
+        <span class="relative block font-semibold text-slate-900 dark:text-white"><OrderMoney :value="paid" /> из <OrderMoney :value="total" /></span>
+        <span class="relative block text-xs" :class="balance > 0 ? 'text-rose-600 dark:text-rose-300' : 'text-emerald-700 dark:text-emerald-300'"><template v-if="balance > 0">Остаток <OrderMoney :value="balance" /></template><template v-else>Оплачено</template></span>
       </span>
     </button>
   </aside>
