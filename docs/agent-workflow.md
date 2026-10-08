@@ -60,6 +60,27 @@ test, CI result, merged commit and successful deployment are different evidence;
 do not imply one proves the others. If blocked, name the missing input or failed
 gate and preserve the next actionable step.
 
+### Scope and stopping rule
+
+Before implementation, freeze a small observable acceptance checklist for the
+current issue or release slice, its owning paths and required checks. Separate
+the slice from the remaining epic scope. A bounded cycle ends when its agreed
+packages have been accepted and released; do not start another package merely
+because a worker becomes available.
+
+Use one implementation owner and, when warranted, one independent acceptance
+pass. Fix failures of the agreed criteria and regressions introduced by the
+change. Record optional polish, unrelated defects and broader refactors in the
+backlog; they do not extend the current package automatically. After a correction,
+recheck the affected behavior and mandatory gates, retaining unchanged evidence.
+After two unsuccessful acceptance returns, the coordinator must diagnose the
+repeated cause and choose a different approach or a smaller complete slice
+before another attempt. This limit never waives a failing release gate.
+
+Once the checklist, required CI and applicable deployment/runtime checks pass,
+record completion and stop. Reopen the package only for new evidence of an unmet
+criterion or a regression; another possible improvement is a separate task.
+
 ## Delegation and effort
 
 Choose from models actually available in the current environment. Keep model
