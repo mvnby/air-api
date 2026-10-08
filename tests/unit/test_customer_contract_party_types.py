@@ -1,5 +1,10 @@
 from datetime import datetime
 
+import pytest
+
+from modules.documents.domain.customer_signing import CUSTOMER_POSITION_LINE, CUSTOMER_BASIS_LINE
+from services.documents.standard import GeneralDocStrategy
+
 from models import Customer, CustomerContract, CustomerType
 from services.customer_contract_service import CustomerContractService
 
@@ -48,6 +53,9 @@ def test_company_keeps_representative_requisites() -> None:
     assert CustomerContractService._is_business_customer(customer)
     assert replacements["{{signer_position}}"] == "директора"
     assert replacements["{{acting_basis}}"] == "Устава"
+    order_replacements = GeneralDocStrategy(None, 1)._append_customer_variables({}, customer)
+    assert order_replacements["{{signer_position}}"] == "директора"
+    assert order_replacements["{{acting_basis}}"] == "Устава"
 
 
 def test_individual_is_not_a_business_party() -> None:
@@ -59,3 +67,33 @@ def test_individual_is_not_a_business_party() -> None:
     )
 
     assert not CustomerContractService._is_business_customer(customer)
+
+
+@pytest.mark.parametrize("position,basis", [(None, None), ("", ""), ("  ", "\t")])
+def test_contract_and_order_documents_leave_handwriting_lines_for_unknown_facts(position, basis):
+    customer = Customer(
+        tenant_id=1, name="ООО Клиент", phone="", type=CustomerType.company,
+        signer_position=position, acting_basis=basis,
+    )
+    expected = {"{{signer_position}}": CUSTOMER_POSITION_LINE, "{{acting_basis}}": CUSTOMER_BASIS_LINE}
+    contract = CustomerContractService._build_replacements(customer, _contract())
+    order = GeneralDocStrategy(None, 1)._append_customer_variables({}, customer)
+    for values in (contract, order):
+        assert {key: values[key] for key in expected} == expected
+    assert customer.signer_position == position
+    assert customer.acting_basis == basis
+
+
+@pytest.mark.parametrize("party", [CustomerType.individual, CustomerType.individual_entrepreneur])
+@pytest.mark.parametrize("mode", ["self", "power_of_attorney"])
+def test_non_company_signing_does_not_request_organization_position(party, mode):
+    customer = Customer(
+        tenant_id=1, name="Иванов Иван Иванович", phone="", type=party,
+        signing_mode=mode, signer_position="директора", acting_basis="",
+    )
+    for values in (
+        CustomerContractService._build_replacements(customer, _contract()),
+        GeneralDocStrategy(None, 1)._append_customer_variables({}, customer),
+    ):
+        assert values["{{signer_position}}"] == ""
+        assert values["{{acting_basis}}"] == ("" if mode == "self" else CUSTOMER_BASIS_LINE)

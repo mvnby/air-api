@@ -329,9 +329,9 @@ class CustomerRequisitesRecognitionService:
             "- inn: только УНП 9 цифр или null.\n"
             "- iban: BY-счет без пробелов или null.\n"
             "- bic: латиница/цифры верхним регистром или null.\n"
-            "- signer_position: должность подписанта в родительном падеже: директора, генерального директора, заместителя директора.\n"
+            "- signer_position: только явно указанная должность подписанта в родительном падеже; если её нет, null.\n"
             "- signer_name: ФИО подписанта строго в родительном падеже, например Дмитриенко Сергея Александровича.\n"
-            "- acting_basis: только основание без слов 'действующий на основании', например Устава, доверенности.\n"
+            "- acting_basis: только явно указанное основание без слов 'действующий на основании'; если его нет, null. Не предполагай Устав или доверенность.\n"
             "- phone_raw: как в документе. phone: нормализованный международный номер только если уверен, иначе null.\n"
             "- extra: положи okpo, bank_address и любые полезные реквизиты, которых нет в основных ключах.\n\n"
             "OCR-текст:\n"
@@ -392,11 +392,11 @@ class CustomerRequisitesRecognitionService:
     def _normalize_acting_basis(cls, value: Optional[str]) -> Optional[str]:
         text = cls._clean_text(value, max_length=160)
         if not text:
-            return "Устава"
+            return None
         text = re.sub(r"(?i)\bдействующ(ий|ая|его|егося)\b", "", text)
         text = re.sub(r"(?i)\bна\s+основании\b", "", text)
         text = re.sub(r"[.,]+$", "", text).strip()
-        return text[:1].upper() + text[1:] if text else "Устава"
+        return text[:1].upper() + text[1:] if text else None
 
     @classmethod
     def normalize_phone(cls, phone_raw: Optional[str], context: str = "") -> Optional[str]:
@@ -655,9 +655,9 @@ class CustomerRequisitesRecognitionService:
             "bank_name": extracted.get("bank_name"),
             "bic": extracted.get("bic"),
             "iban": extracted.get("iban"),
-            "signer_position": extracted.get("signer_position") or "директора",
+            "signer_position": cls._clean_text(extracted.get("signer_position"), max_length=120) or "",
             "signer_name": extracted.get("signer_name"),
-            "acting_basis": extracted.get("acting_basis") or "Устава",
+            "acting_basis": cls._clean_text(extracted.get("acting_basis"), max_length=160) or "",
         }
 
     @classmethod

@@ -39,9 +39,15 @@ Use the party conditions instead of writing one fixed preamble:
 - `seller.signs_by_power_of_attorney` / `customer.signs_by_power_of_attorney`
 
 Unknown customer signer position and authority basis remain empty strings in
-new native snapshots and rendered placeholders. Customer creation never infers
-“директора” or “Устава” from missing, null or blank input. On update, omitted
-fields preserve stored values; explicit null or blank input clears them.
+customer records and new native snapshots. Native DOCX/PDF and legacy Google
+outputs show handwriting lines with hints for applicable missing signing fields:
+position for an organization, authority basis for a representative. Personal
+signatures of individuals and entrepreneurs request neither field. The position
+hint asks for the genitive case so the contract preamble stays grammatical.
+Known values are preserved. These output hints never become stored requisites.
+Customer creation and OCR confirmation never infer “директора” or “Устава” from
+missing, null, blank or an empty “действующий на основании” phrase. On update,
+omitted fields preserve stored values; explicit null or blank input clears them.
 Customer party type and signing mode still follow their existing rules.
 Existing customer values and frozen/issued snapshots are not rewritten: an old
 “директора” or “Устава” may be an explicitly confirmed fact.
@@ -74,6 +80,12 @@ previous rendering. B2C order-acts and regulated TN-2/TTN-1 labels are unchanged
 For precise placement, templates may instead use `{{ seller.role_nom }}` and
 `{{ customer.role_nom }}`. The suffixes `gen`, `dat`, `acc`, `ins`, and `prep`
 provide the other cases; `{{ document.role_type }}` exposes the frozen pair code.
+
+Handwriting hints replace placeholders only; they do not rewrite literal
+preamble text. Use the party conditions above to include a representative phrase
+only for the appropriate signing mode. A legacy Google template with a fixed
+representative preamble still needs a suitable template for a personal signature.
+Private templates are not rewritten by this change.
 
 ### Conditions and formatting
 
