@@ -14,7 +14,8 @@
     "3": "Content/media, settings/access, tasks/calendar, services/equipment and operations; reviewed 2026-10-07 from a3e79e89",
     "4": "Linked incoming clarification and read-only editable preview, scope/version/replay contract; reviewed 2026-10-07 for issue 1084",
     "5": "Standalone maintenance observations and private photos; role/scope/context/version/replay contract reviewed 2026-10-07 for issue 1085",
-    "6": "Explicit maintenance defect-act preparation; scoped versions, idempotency, immutable snapshot and native lifecycle reviewed 2026-10-08"
+    "6": "Explicit maintenance defect-act preparation; scoped versions, idempotency, immutable snapshot and native lifecycle reviewed 2026-10-08",
+    "7": "Native contract/invoice customer readiness; scoped current/frozen factual context, effective DOCX fields, read-only results and authoritative creation/issue checks reviewed 2026-10-08 for issue 831"
   },
   "operations": {
     "modules/documents/api/condition_presets.py": [
@@ -49,6 +50,10 @@
       ["GET /api/manager/document-system/documents/{document_id}/google-edit-session", "get_manager_managed_document_google_edit_session", false, 2],
       ["POST /api/manager/document-system/documents/{document_id}/google-edit-session", "create_manager_managed_document_google_edit_session", false, 2],
       ["POST /api/manager/document-system/documents/{document_id}/google-edit-session/sync", "sync_manager_managed_document_google_edit_session", false, 2]
+    ],
+    "modules/documents/api/managed_document_readiness.py": [
+      ["GET /api/manager/document-system/documents/{document_id}/readiness", "get_manager_managed_document_readiness", false, 7],
+      ["POST /api/manager/document-system/orders/{order_id}/documents/readiness", "check_manager_managed_document_readiness", false, 7]
     ],
     "modules/documents/api/managed_documents_artifacts.py": [
       ["DELETE /api/manager/document-system/documents/{document_id}/draft", "delete_manager_managed_document_draft", false, 2],

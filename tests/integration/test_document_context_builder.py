@@ -853,13 +853,20 @@ async def test_unknown_customer_signing_requisites_render_lines_and_preserve_iss
             ),
             source=source.getvalue(), snapshot=facts,
         )
+    from modules.documents.application.customer_readiness import INCOMPLETE_DRAFT_MARKER
+
+    original_facts = deepcopy(snapshot)
     template, render_context = inputs(snapshot)
+    assert snapshot == original_facts
     renderer = NativeDocxRenderer()
     rendered = renderer.render(template, render_context)
     result = Document(BytesIO(rendered.content))
     assert [p.text for p in result.paragraphs] == [
+        INCOMPLETE_DRAFT_MARKER,
         f"Должность: [{CUSTOMER_POSITION_LINE}]", f"Основание: [{CUSTOMER_BASIS_LINE}]",
     ]
+    assert result.sections[0].header.paragraphs[0].text == INCOMPLETE_DRAFT_MARKER
+    assert snapshot == original_facts
     assert not result.tables
     (tmp_path / "unknown-signing.docx").write_bytes(rendered.content)
     old_template, old_context = inputs(issued.render_snapshot)

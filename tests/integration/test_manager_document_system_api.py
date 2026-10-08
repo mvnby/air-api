@@ -760,6 +760,12 @@ async def test_selected_customer_readiness_blocks_issue_before_google_and_number
         async_client, headers, legal_entity_id=issuer_id
     )
     order = await _seed_order(db)
+    customer = await db.get(Customer, order.customer_id)
+    # The shared seed defaults to an individual despite its company-like name.
+    # This regression exercises company fields and labels explicitly.
+    customer.type = "company"
+    db.add(customer)
+    await db.commit()
     payload = {
         "legal_entity_id": issuer_id,
         "document_type": "contract",
