@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import BynSymbol from '../components/money/BynSymbol.vue';
+import MoneyAmount from '../components/money/MoneyAmount.vue';
 import { onMounted, ref } from 'vue';
 import { getApiErrorMessage } from '../utils/api-errors';
 import {
@@ -20,15 +22,6 @@ const search = ref('');
 const searchResults = ref<InstallationDiscountProduct[]>([]);
 const searching = ref(false);
 const draftDiscounts = ref<Record<number, number>>({});
-
-const formatAmount = (value: number | null | undefined) => {
-  if (value === null || value === undefined) return 'нет данных';
-  return `${new Intl.NumberFormat('ru-BY', { maximumFractionDigits: 2 }).format(value)} BYN`;
-};
-
-const configuredDiscountLabel = (amount: number) => (
-  amount === 0 ? 'Без скидки (0 BYN)' : `${formatAmount(amount)}`
-);
 
 const statusMeta: Record<InstallationDiscountStatus, { label: string; className: string }> = {
   legacy: { label: 'Старая схема', className: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200' },
@@ -206,12 +199,12 @@ onMounted(load);
 
       <div class="mt-5 grid gap-4 md:grid-cols-3">
         <label class="block">
-          <span class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Скидка по умолчанию, BYN</span>
+          <span class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Скидка по умолчанию <BynSymbol /><span class="sr-only"> BYN</span></span>
           <input v-model.number="policy.default_discount" type="number" min="0" step="1" class="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white" />
-          <span class="mt-1 block text-xs text-gray-500">{{ configuredDiscountLabel(policy.default_discount) }}</span>
+          <span class="mt-1 block text-xs text-gray-500"><span v-if="policy.default_discount === 0">Без скидки (</span><MoneyAmount :value="policy.default_discount" /><span v-if="policy.default_discount === 0">)</span></span>
         </label>
         <label class="block">
-          <span class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Минимальная маржа, BYN</span>
+          <span class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Минимальная маржа <BynSymbol /><span class="sr-only"> BYN</span></span>
           <input v-model.number="policy.minimum_margin" type="number" min="0" step="1" class="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white" />
           <span class="mt-1 block text-xs text-gray-500">Ниже этого уровня скидка не применяется.</span>
         </label>
@@ -242,9 +235,12 @@ onMounted(load);
           <img v-if="product.main_image" :src="product.main_image" :alt="product.title" class="h-10 w-10 rounded-md object-cover" />
           <div class="min-w-48 flex-1">
             <div class="text-sm font-semibold text-gray-900 dark:text-white">{{ product.title }}</div>
-            <div class="text-xs text-gray-500 dark:text-slate-400">{{ product.slug }} · {{ formatAmount(product.retail_price) }}</div>
+            <div class="text-xs text-gray-500 dark:text-slate-400">{{ product.slug }} · <MoneyAmount v-if="product.retail_price != null" :value="product.retail_price" /><span v-else>нет данных</span></div>
           </div>
-          <input v-model.number="draftDiscounts[product.product_id]" type="number" min="0" step="1" class="h-9 w-28 rounded-lg border border-gray-300 bg-white px-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white" :aria-label="`Скидка для ${product.title}`" />
+          <div class="inline-flex shrink-0 items-baseline gap-2">
+            <input v-model.number="draftDiscounts[product.product_id]" type="number" min="0" step="1" class="h-9 w-28 rounded-lg border border-gray-300 bg-white px-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white" :aria-label="`Скидка для ${product.title}, BYN`" />
+            <BynSymbol /><span class="sr-only"> BYN</span>
+          </div>
           <button type="button" class="h-9 rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white hover:bg-brand-500 disabled:opacity-60" :disabled="savingProductId === product.product_id" @click="saveOverride(product)">
             {{ product.has_override ? 'Сохранить' : 'Добавить' }}
           </button>
@@ -283,16 +279,19 @@ onMounted(load);
           </div>
 
           <div class="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-5">
-            <div><div class="text-xs text-gray-500">Розничная цена</div><div class="font-medium text-gray-900 dark:text-white">{{ formatAmount(product.retail_price) }}</div></div>
-            <div><div class="text-xs text-gray-500">Себестоимость</div><div class="font-medium text-gray-900 dark:text-white">{{ formatAmount(product.purchase_cost) }}</div></div>
-            <div><div class="text-xs text-gray-500">Маржа товара</div><div class="font-medium text-gray-900 dark:text-white">{{ formatAmount(product.margin) }}</div></div>
-            <div><div class="text-xs text-gray-500">Задано</div><div class="font-medium text-gray-900 dark:text-white">{{ configuredDiscountLabel(product.configured_discount) }}</div></div>
-            <div><div class="text-xs text-gray-500">Применится</div><div class="font-medium text-brand-700 dark:text-brand-300">{{ configuredDiscountLabel(product.applied_discount) }}</div></div>
+            <div><div class="text-xs text-gray-500">Розничная цена</div><div class="font-medium text-gray-900 dark:text-white"><MoneyAmount v-if="product.retail_price != null" :value="product.retail_price" /><span v-else>нет данных</span></div></div>
+            <div><div class="text-xs text-gray-500">Себестоимость</div><div class="font-medium text-gray-900 dark:text-white"><MoneyAmount v-if="product.purchase_cost != null" :value="product.purchase_cost" /><span v-else>нет данных</span></div></div>
+            <div><div class="text-xs text-gray-500">Маржа товара</div><div class="font-medium text-gray-900 dark:text-white"><MoneyAmount v-if="product.margin != null" :value="product.margin" /><span v-else>нет данных</span></div></div>
+            <div><div class="text-xs text-gray-500">Задано</div><div class="font-medium text-gray-900 dark:text-white"><span v-if="product.configured_discount === 0">Без скидки (</span><MoneyAmount :value="product.configured_discount" /><span v-if="product.configured_discount === 0">)</span></div></div>
+            <div><div class="text-xs text-gray-500">Применится</div><div class="font-medium text-brand-700 dark:text-brand-300"><span v-if="product.applied_discount === 0">Без скидки (</span><MoneyAmount :value="product.applied_discount" /><span v-if="product.applied_discount === 0">)</span></div></div>
           </div>
 
           <p class="mt-3 text-xs text-gray-500 dark:text-slate-400">{{ product.status_note }}</p>
           <div class="mt-4 flex flex-wrap items-center gap-2">
-            <input v-model.number="draftDiscounts[product.product_id]" type="number" min="0" step="1" class="h-9 w-28 rounded-lg border border-gray-300 bg-white px-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white" :aria-label="`Скидка для ${product.title}`" />
+            <div class="inline-flex shrink-0 items-baseline gap-2">
+              <input v-model.number="draftDiscounts[product.product_id]" type="number" min="0" step="1" class="h-9 w-28 rounded-lg border border-gray-300 bg-white px-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white" :aria-label="`Скидка для ${product.title}, BYN`" />
+              <BynSymbol /><span class="sr-only"> BYN</span>
+            </div>
             <button type="button" class="h-9 rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white hover:bg-brand-500 disabled:opacity-60" :disabled="savingProductId === product.product_id" @click="saveOverride(product)">Сохранить</button>
             <button type="button" class="h-9 rounded-lg border border-gray-300 px-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700" :disabled="savingProductId === product.product_id" @click="inheritDefault(product)">Наследовать общую</button>
           </div>

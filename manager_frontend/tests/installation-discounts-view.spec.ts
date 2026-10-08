@@ -78,7 +78,7 @@ describe('installation discounts manager view', () => {
     await search.setValue('pular');
     await wrapper.get('form').trigger('submit');
     await flushPromises();
-    await wrapper.get('input[aria-label="Скидка для Gree Pular 09"]').setValue(150);
+    await wrapper.get('input[aria-label="Скидка для Gree Pular 09, BYN"]').setValue(150);
     await wrapper.findAll('button').find((button) => button.text() === 'Добавить')!.trigger('click');
     await flushPromises();
     expect(mocks.saveProductOverride).toHaveBeenCalledWith(13, 150);

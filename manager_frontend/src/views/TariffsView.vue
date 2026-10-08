@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MoneyAmount from '../components/money/MoneyAmount.vue';
 import { computed, onMounted, ref } from 'vue';
 import { api } from '../api';
 import type {
@@ -161,8 +162,6 @@ const matcherSummary = (candidate: InstallationLegacyCandidate) => {
     ? ` · вес ${weightKind} ${match.weight_min_kg ?? '0'}–${match.weight_max_kg ?? '∞'} кг` : '';
   return `${match.product_kind === 'multi_split_system' ? 'Мультисплит' : indoorTypesLabel(match.indoor_type || '')} · ${capacity} · ${pipes}${weight}`;
 };
-const candidatePrice = (candidate: InstallationLegacyCandidate) =>
-  `${candidate.mode === 'quote' ? 'По запросу · черновая база' : candidate.mode === 'from' ? 'База от' : 'База'} ${money(candidate.base_price)} BYN · доп. трасса ${candidate.route_extra_price == null ? 'не задана' : `${money(candidate.route_extra_price)} BYN/м`}`;
 const candidatePriceReview = (row: InstallationLegacyComparisonRow, candidate: InstallationLegacyCandidate) => {
   if (candidate.mode === 'quote') return 'Цена по запросу: числовое сравнение не применяется';
   if (candidate.mode === 'from') return 'Цена «от» — нижняя граница, не точное совпадение';
@@ -389,7 +388,7 @@ onMounted(() => { void loadTariffs(); void loadComparison(); });
                 </button>
               </td>
               <td class="px-4 py-3 text-sm font-medium text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
-                {{ tariff.base_price }} BYN
+                <MoneyAmount :value="tariff.base_price" :formatted-value="String(tariff.base_price)" />
               </td>
               <td v-if="shouldShowRouteColumn" class="px-4 py-3 text-sm text-gray-700 dark:text-slate-300 whitespace-nowrap">
                 {{ tariff.included_route_meters }} м
@@ -465,7 +464,7 @@ onMounted(() => { void loadTariffs(); void loadComparison(); });
                 <div>
                   <div class="text-sm font-semibold text-gray-900 dark:text-slate-100">{{ rule.name }}</div>
                   <div class="text-xs text-gray-500 dark:text-slate-400">
-                    {{ rule.component_code || 'Без смысла компонента' }} · {{ rule.unit_price }} BYN/{{ rule.unit }}
+                    {{ rule.component_code || 'Без смысла компонента' }} · <MoneyAmount :value="rule.unit_price" :formatted-value="String(rule.unit_price)" />/{{ rule.unit }}
                   </div>
                   <div class="text-xs text-gray-500 dark:text-slate-400 mt-1">{{ rule.line_template }}</div>
                 </div>
@@ -509,8 +508,8 @@ onMounted(() => { void loadTariffs(); void loadComparison(); });
           <div>
             <div class="text-xs font-semibold uppercase text-gray-500 dark:text-slate-400">Старая расценка</div>
             <div class="mt-1 font-medium">{{ row.legacy_category }} · {{ row.legacy_power_range }}</div>
-            <div class="mt-1">База {{ money(row.legacy_base_price) }} BYN</div>
-            <div>Доп. трасса {{ money(row.legacy_route_extra_price) }} BYN/м</div>
+            <div class="mt-1">База <MoneyAmount :value="row.legacy_base_price == null ? null : Number(row.legacy_base_price)" :formatted-value="money(row.legacy_base_price)" /></div>
+            <div>Доп. трасса <MoneyAmount :value="row.legacy_route_extra_price == null ? null : Number(row.legacy_route_extra_price)" :formatted-value="money(row.legacy_route_extra_price)" />/м</div>
           </div>
           <div>
             <div class="text-xs font-semibold uppercase text-gray-500 dark:text-slate-400">Кандидаты черновика — только по категории</div>
@@ -518,7 +517,12 @@ onMounted(() => { void loadTariffs(); void loadComparison(); });
             <div v-else class="mt-2 space-y-2">
               <div v-for="candidate in row.candidates" :key="candidate.tariff_code" class="rounded-lg bg-gray-50 p-2 dark:bg-slate-900/50">
                 <div class="font-medium" :title="candidate.tariff_code">{{ candidateName(candidate) }} <span class="ml-1 text-xs font-normal text-blue-700 dark:text-blue-300">Черновик</span></div>
-                <div class="mt-1">{{ candidatePrice(candidate) }}</div>
+                <div class="mt-1">
+                  {{ candidate.mode === 'quote' ? 'По запросу · черновая база' : candidate.mode === 'from' ? 'База от' : 'База' }}
+                  <MoneyAmount :value="candidate.base_price == null ? null : Number(candidate.base_price)" :formatted-value="money(candidate.base_price)" />
+                  · доп. трасса <span v-if="candidate.route_extra_price == null">не задана</span>
+                  <template v-else><MoneyAmount :value="Number(candidate.route_extra_price)" :formatted-value="money(candidate.route_extra_price)" />/м</template>
+                </div>
                 <div class="text-xs text-gray-600 dark:text-slate-300">{{ matcherSummary(candidate) }}</div>
                 <div class="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300">{{ candidatePriceReview(row, candidate) }}</div>
               </div>

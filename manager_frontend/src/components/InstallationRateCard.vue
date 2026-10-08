@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MoneyAmount from './money/MoneyAmount.vue';
 import { computed } from 'vue';
 import type { ManagerInstallationRateResponse } from '../client';
 
@@ -89,10 +90,10 @@ const mappingTarget = computed(() => (
 
     <div class="mt-4">
       <div class="text-2xl font-bold text-gray-900 dark:text-white">
-        <span v-if="isManualQuote">от </span>{{ rate.base_price }} BYN
+        <span v-if="isManualQuote">от </span><MoneyAmount :value="rate.base_price" :formatted-value="String(rate.base_price)" />
       </div>
       <div v-if="isAutomatic" class="mt-1 text-xs text-gray-500 dark:text-slate-400">
-        Включено {{ rate.included_pipe_meters }} м · далее {{ rate.extra_pipe_price }} BYN/м
+        Включено {{ rate.included_pipe_meters }} м · далее <MoneyAmount :value="rate.extra_pipe_price" :formatted-value="String(rate.extra_pipe_price)" />/м
       </div>
       <div v-else-if="isManualQuote" class="mt-1 text-xs text-gray-500 dark:text-slate-400">
         Ориентир для витрины · точную стоимость подтвердит менеджер

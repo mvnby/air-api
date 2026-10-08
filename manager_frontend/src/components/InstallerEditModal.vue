@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BynSymbol from './money/BynSymbol.vue';
 import { ref, watch } from 'vue';
 import { api, type ManagerStaffCreatePayload, type ManagerStaffResponse, type ManagerStaffUpdatePayload } from '../api';
 import { getApiErrorMessage } from '../utils/api-errors';
@@ -206,7 +207,7 @@ const submit = async () => {
                                 </label>
 
                                 <label class="block">
-                                    <span class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Базовая ставка, BYN</span>
+                                    <span class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Базовая ставка <BynSymbol /><span class="sr-only"> BYN</span></span>
                                     <input v-model.number="formData.default_rate" type="number" class="field-input" placeholder="Например, 350" :disabled="loading || !formData.is_assignable_installer" />
                                 </label>
                             </div>
