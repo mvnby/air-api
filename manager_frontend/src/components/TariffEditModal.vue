@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BynSymbol from './money/BynSymbol.vue';
 import { computed, ref, watch } from 'vue';
 import { api } from '../api';
 import type {
@@ -360,7 +361,7 @@ const submit = async () => {
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <label class="block">
-                <span class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Базовая цена (BYN)</span>
+                <span class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Базовая цена <BynSymbol /><span class="sr-only"> BYN</span></span>
                 <input
                   v-model.number="formData.base_price"
                   type="number"

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BynSymbol from './money/BynSymbol.vue';
 import { computed, ref, watch } from 'vue';
 import { api } from '../api';
 import type {
@@ -131,7 +132,7 @@ const submit = async () => {
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <label class="block">
                 <span class="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-300">
-                  {{ isAutomatic ? 'Цена монтажа (BYN)' : 'Цена на витрине «от» (BYN)' }}
+                  {{ isAutomatic ? 'Цена монтажа' : 'Цена на витрине «от»' }} <BynSymbol /><span class="sr-only"> BYN</span>
                 </span>
                 <input
                   v-model.number="formData.base_price"
@@ -154,7 +155,7 @@ const submit = async () => {
               </label>
 
               <label class="block sm:col-span-2">
-                <span class="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-300">Дополнительный метр трассы (BYN)</span>
+                <span class="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-300">Дополнительный метр трассы <BynSymbol /><span class="sr-only"> BYN</span></span>
                 <input
                   v-model.number="formData.extra_pipe_price"
                   type="number"

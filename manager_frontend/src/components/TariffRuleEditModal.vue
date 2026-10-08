@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BynSymbol from './money/BynSymbol.vue';
 import { computed, ref, watch } from 'vue';
 import { api } from '../api';
 import type {
@@ -518,7 +519,7 @@ const insertPlaceholder = async (token: string) => {
                 />
               </label>
               <label class="block">
-                <span class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Цена за единицу (BYN)</span>
+                <span class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Цена за единицу <BynSymbol /><span class="sr-only"> BYN</span></span>
                 <input
                   v-model.number="formData.unit_price"
                   type="number"

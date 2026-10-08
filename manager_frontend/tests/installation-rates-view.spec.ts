@@ -4,16 +4,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   listRates: vi.fn(),
   updateRate: vi.fn(),
+  listStaff: vi.fn(),
 }));
 
 vi.mock('../src/api', () => ({
   api: {
     listManagerInstallationRates: mocks.listRates,
+    listManagerStaff: mocks.listStaff,
     updateManagerInstallationRate: mocks.updateRate,
   },
 }));
 
 import InstallationRateEditModal from '../src/components/InstallationRateEditModal.vue';
+import InstallersView from '../src/views/InstallersView.vue';
 import InstallationRatesView from '../src/views/InstallationRatesView.vue';
 
 const wallRate = {
@@ -127,5 +130,21 @@ describe('public installation rates manager UX', () => {
     expect(wrapper.text()).not.toContain('Публичные монтажные тарифы не найдены');
     expect(wrapper.text()).not.toContain('Точное совпадение');
     expect(mocks.updateRate).not.toHaveBeenCalled();
+  });
+});
+
+describe('installer rate presentation', () => {
+  it('distinguishes zero, kopecks, negative rates and a missing rate', async () => {
+    mocks.listStaff.mockResolvedValue({ items: [0, 12.345, -5, null].map((default_rate, id) => ({
+      id, display_name: `Сотрудник ${id}`, primary_role: 'installer', status: 'active', default_rate,
+      is_assignable_installer: true,
+    })) });
+    const wrapper = mount(InstallersView, { global: { stubs: { InstallerEditModal: true } } });
+    await flushPromises();
+    expect(wrapper.text()).toContain('0 BYN');
+    expect(wrapper.text()).toContain('12.345 BYN');
+    expect(wrapper.text()).toContain('-5 BYN');
+    expect(wrapper.text().match(/Ставка не задана/g)).toHaveLength(1);
+    expect(wrapper.findAll('svg[aria-hidden="true"]')).toHaveLength(3);
   });
 });

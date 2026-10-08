@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MoneyAmount from '../components/money/MoneyAmount.vue';
 import { onMounted, ref } from 'vue';
 import { api, type ManagerStaffResponse } from '../api';
 import { getApiErrorMessage } from '../utils/api-errors';
@@ -173,7 +174,7 @@ onMounted(() => {
                                     <span v-if="item.is_assignable_installer" class="font-medium text-emerald-600 dark:text-emerald-400">Можно назначать</span>
                                     <span v-else class="text-gray-500 dark:text-slate-500">Офисный профиль</span>
                                     <div class="text-xs text-gray-500 dark:text-slate-500">
-                                        {{ item.default_rate ? item.default_rate + ' BYN' : 'Ставка не задана' }}
+                                        <MoneyAmount v-if="item.default_rate != null" :value="item.default_rate" :formatted-value="String(item.default_rate)" /><span v-else>Ставка не задана</span>
                                     </div>
                                 </div>
                             </td>
