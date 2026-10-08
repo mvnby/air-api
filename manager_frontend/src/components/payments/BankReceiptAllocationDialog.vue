@@ -7,6 +7,8 @@ import type {
   BankReceiptAllocationPayload,
 } from '../../client';
 import { useDialogA11y } from '../../composables/useDialogA11y';
+import BynSymbol from '../money/BynSymbol.vue';
+import MoneyAmount from '../money/MoneyAmount.vue';
 
 type AllocationRow = BankReceiptAllocationOrderResponse & {
   selected: boolean;
@@ -154,7 +156,7 @@ const save = () => {
               </h2>
             </div>
             <p v-if="detail" class="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              Поступление #{{ detail.receipt_id }} · {{ money(detail.receipt_amount) }} {{ currency }}
+              Поступление #{{ detail.receipt_id }} · <MoneyAmount :value="Number(detail.receipt_amount || 0)" :currency="currency" :formatted-value="money(detail.receipt_amount)" />
             </p>
           </div>
           <button
@@ -179,15 +181,15 @@ const save = () => {
             <div class="mb-4 grid grid-cols-3 gap-2 text-center text-sm">
               <div class="rounded-md bg-slate-50 px-2 py-2 dark:bg-slate-800">
                 <div class="text-xs text-slate-500 dark:text-slate-400">Поступило</div>
-                <div class="mt-0.5 font-semibold text-slate-950 dark:text-white">{{ money(detail.receipt_amount) }}</div>
+                <div class="mt-0.5 font-semibold text-slate-950 dark:text-white"><MoneyAmount :value="Number(detail.receipt_amount || 0)" :currency="currency" :formatted-value="money(detail.receipt_amount)" /></div>
               </div>
               <div class="rounded-md bg-brand-50 px-2 py-2 dark:bg-brand-950/40">
                 <div class="text-xs text-brand-700 dark:text-brand-300">Распределено</div>
-                <div class="mt-0.5 font-semibold text-brand-900 dark:text-brand-100">{{ money(allocated) }}</div>
+                <div class="mt-0.5 font-semibold text-brand-900 dark:text-brand-100"><MoneyAmount :value="allocated" :currency="currency" :formatted-value="money(allocated)" /></div>
               </div>
               <div class="rounded-md bg-amber-50 px-2 py-2 dark:bg-amber-950/40">
                 <div class="text-xs text-amber-700 dark:text-amber-300">Остаток</div>
-                <div class="mt-0.5 font-semibold text-amber-900 dark:text-amber-100">{{ money(remainder) }}</div>
+                <div class="mt-0.5 font-semibold text-amber-900 dark:text-amber-100"><MoneyAmount :value="remainder" :currency="currency" :formatted-value="money(remainder)" /></div>
               </div>
             </div>
 
@@ -225,13 +227,13 @@ const save = () => {
                       #{{ row.order_id }} · {{ row.title || 'Заказ' }}
                     </div>
                     <div class="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                      Долг до поступления: {{ money(row.balance_due_before_receipt) }} {{ currency }}
+                      Долг до поступления: <MoneyAmount :value="Number(row.balance_due_before_receipt || 0)" :currency="currency" :formatted-value="money(row.balance_due_before_receipt)" />
                       <span v-if="row.current_allocation">
-                        · сейчас отнесено {{ money(row.current_allocation) }}
+                        · сейчас отнесено <MoneyAmount :value="Number(row.current_allocation || 0)" :currency="currency" :formatted-value="money(row.current_allocation)" />
                       </span>
                     </div>
                     <div v-if="row.selected" class="mt-1 text-xs font-medium text-brand-700 dark:text-brand-300">
-                      После распределения останется {{ money(Math.max(0, row.balance_due_before_receipt - Number(row.amount || 0))) }} {{ currency }}
+                      После распределения останется <MoneyAmount :value="Math.max(0, row.balance_due_before_receipt - Number(row.amount || 0))" :currency="currency" :formatted-value="money(Math.max(0, row.balance_due_before_receipt - Number(row.amount || 0)))" />
                     </div>
                   </div>
                 </div>
@@ -246,7 +248,7 @@ const save = () => {
                       step="0.01"
                       :disabled="!row.selected"
                     />
-                    <span class="shrink-0 text-slate-500">{{ currency }}</span>
+                    <span class="shrink-0 text-slate-500"><template v-if="currency === 'BYN'"><BynSymbol /><span class="sr-only"> BYN</span></template><template v-else>{{ currency }}</template></span>
                   </div>
                 </label>
               </div>
@@ -259,7 +261,7 @@ const save = () => {
               {{ validationError || error }}
             </p>
             <p v-else-if="remainder > 0" class="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-              Остаток {{ money(remainder) }} {{ currency }} сохранится как нераспределённая переплата контрагента.
+              Остаток <MoneyAmount :value="remainder" :currency="currency" :formatted-value="money(remainder)" /> сохранится как нераспределённая переплата контрагента.
             </p>
           </template>
           <p v-else-if="error" class="rounded-md bg-red-50 px-3 py-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-200">

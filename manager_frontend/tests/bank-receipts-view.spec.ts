@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BankReceiptResponse } from '../src/client';
 import { ManagerMailService } from '../src/client';
 import MoneyAmount from '../src/components/money/MoneyAmount.vue';
+import BankReceiptAllocationDialog from '../src/components/payments/BankReceiptAllocationDialog.vue';
 import BankReceiptsView from '../src/views/BankReceiptsView.vue';
 
 vi.mock('../src/client', () => ({
@@ -108,6 +109,74 @@ describe('bank receipt monetary display', () => {
     const money = wrapper.findComponent(MoneyAmount);
     expect(money.text()).toBe(`${new Intl.NumberFormat('ru-BY', { maximumFractionDigits: 2 }).format(amount)} BYN`);
     expect(money.find('svg[aria-hidden="true"]').exists()).toBe(true);
+  });
+
+  it('shows official BYN signs throughout allocation amounts and keeps foreign currency text', () => {
+    const detail = {
+      receipt_id: 141127,
+      status: 'partially_allocated',
+      currency: 'BYN' as const,
+      receipt_amount: 1460,
+      allocated_amount: 10,
+      unallocated_amount: 1450,
+      orders: [{
+        order_id: 279,
+        title: 'Установка оборудования',
+        customer_name: 'ООО Пример',
+        status: 'execution',
+        created_at: '2026-09-01T10:00:00Z',
+        total_amount: 150,
+        total_payments: 100,
+        balance_due_before_receipt: 50,
+        current_allocation: 10,
+        resulting_balance_due: 40,
+      }],
+    };
+    const wrapper = mount(BankReceiptAllocationDialog, {
+      props: { open: true, detail, loading: false, saving: false },
+      attachTo: document.body,
+    });
+    const money = wrapper.findAllComponents(MoneyAmount);
+
+    expect(money.map((amount) => amount.text())).toEqual([
+      '1 460 BYN', '1 460 BYN', '10 BYN', '1 450 BYN', '50 BYN', '10 BYN', '40 BYN', '1 450 BYN',
+    ]);
+    expect(money.every((amount) => amount.find('svg[aria-hidden="true"]').exists())).toBe(true);
+    expect(money.every((amount) => amount.get('.sr-only').text() === 'BYN')).toBe(true);
+    const inputCurrency = document.body.querySelector('input[type="number"]')!.parentElement!;
+    expect(inputCurrency.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    expect(inputCurrency.querySelector('.sr-only')?.textContent).toBe(' BYN');
+    expect(document.body.textContent).toContain('Долг до поступления: 50 BYN');
+    expect(document.body.textContent).toContain('сейчас отнесено 10 BYN');
+    expect(document.body.textContent).toContain('После распределения останется 40 BYN');
+    wrapper.unmount();
+
+    const foreignWrapper = mount(BankReceiptAllocationDialog, {
+      props: { open: true, detail: { ...detail, currency: 'USD' }, loading: false, saving: false },
+      attachTo: document.body,
+    });
+    expect(foreignWrapper.findAllComponents(MoneyAmount).every((amount) => !amount.find('svg').exists())).toBe(true);
+    expect(document.body.textContent).toContain('1 460 USD');
+    expect(document.body.querySelector('input[type="number"]')!.parentElement!.textContent).toContain('USD');
+    foreignWrapper.unmount();
+  });
+
+  it.each([0, -12.5, 12.345, 1234567890.12])('preserves allocation display precision for BYN %s', (amount) => {
+    const wrapper = mount(BankReceiptAllocationDialog, {
+      props: {
+        open: true,
+        detail: { receipt_id: 1, status: 'requires_review', currency: 'BYN', receipt_amount: amount,
+          allocated_amount: 0, unallocated_amount: amount, orders: [] },
+        loading: false,
+        saving: false,
+      },
+      attachTo: document.body,
+    });
+    const formatted = new Intl.NumberFormat('ru-BY', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(amount);
+    expect(wrapper.findAllComponents(MoneyAmount).slice(0, 2).map((value) => value.text())).toEqual([
+      `${formatted} BYN`, `${formatted} BYN`,
+    ]);
+    wrapper.unmount();
   });
 
   it.each([null, undefined, NaN, Infinity])('keeps missing/invalid %s distinct from zero', async (amount) => {
