@@ -47,6 +47,7 @@ class MaintenanceObservationItem(MaintenanceObservationContent):
     updated_at: datetime
     updated_by: str
     version: int
+    resolution: dict | None = None
 
 
 class MaintenanceObservationRevisionItem(BaseModel):

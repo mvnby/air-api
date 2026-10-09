@@ -247,6 +247,9 @@ class EquipmentHistoryService:
             notes=payload.get("notes"),
         )
         if existing_history is not None:
+            from models import MaintenanceResolution
+            if await session.scalar(select(MaintenanceResolution.id).where(MaintenanceResolution.history_id == existing_history.id)):
+                raise ValueError('Подтверждённый ремонт по замечанию ТО сохраняется неизменным; новое событие запишите отдельно')
             history_payload = EquipmentService._preserve_omitted_repair_history_overrides(
                 existing_history,
                 history_payload,

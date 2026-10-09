@@ -1,14 +1,20 @@
 <script setup lang="ts">
-import { toRef } from 'vue';
+import { ref, toRef } from 'vue';
+import MaintenanceObservationsPanel from '../maintenance-observations/MaintenanceObservationsPanel.vue';
 import type { ManagerCatalogCustomerItemResponse } from '../../client';
 import EquipmentAttachmentsPanel from '../equipment/EquipmentAttachmentsPanel.vue';
 import EquipmentWarrantyPanel from '../equipment/EquipmentWarrantyPanel.vue';
 import { useCustomerEquipmentPanel } from './useCustomerEquipmentPanel';
+const maintenanceBranchId = ref<number | null>(null);
 const props = defineProps<{ customer: ManagerCatalogCustomerItemResponse }>();
 const { equipment, includeArchivedEquipment, equipmentLoading, loadCustomerEquipment, openEquipmentCreateForm, equipmentError, showEquipmentForm, saveEquipment, equipmentFormTitle, equipmentForm, EQUIPMENT_SOURCE_OPTIONS, equipmentSaving, editingEquipmentId, selectedEquipmentId, selectEquipment, equipmentTitle, warrantyStatusClass, equipmentWarrantyView, equipmentSubtitle, equipmentBranchLabel, equipmentSourceLabel, formatDateOnly, openEquipmentEditForm, equipmentActionId, toggleEquipmentArchive, equipmentHistoryLoading, selectedEquipmentDetail, openHistoryCreateForm, updateSelectedCoverage, openComponentCreateForm, showComponentForm, saveEquipmentComponent, componentForm, EQUIPMENT_COMPONENT_OPTIONS, canManagePlatform, componentSaving, editingComponentId, componentTypeLabel, componentTitle, componentLine, openComponentEditForm, componentActionId, toggleEquipmentComponentArchive, showHistoryForm, createEquipmentHistory, historyForm, EQUIPMENT_EVENT_OPTIONS, historySaving, equipmentEventLabel, formatDate, historyLine } = useCustomerEquipmentPanel(toRef(props, 'customer'));
 </script>
 <template>
 <section class="customer-section">
+  <div class="mb-4 space-y-2">
+    <label class="field-label">Замечания по объекту<select v-model="maintenanceBranchId" class="field-input"><option :value="null">Все объекты клиента</option><option v-for="branch in customer.branches || []" :key="branch.id" :value="branch.id">{{ branch.name || branch.delivery_address || `Объект #${branch.id}` }}</option></select></label>
+    <MaintenanceObservationsPanel :customer-id="customer.id" :customer-branch-id="maintenanceBranchId" />
+  </div>
           <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h2 class="flex items-center gap-2 text-lg font-bold">
               <span class="material-icons-round text-brand-500">precision_manufacturing</span>

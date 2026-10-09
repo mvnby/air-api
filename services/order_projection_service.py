@@ -92,6 +92,7 @@ class OrderProjectionService:
             "title": OrderService._display_order_title(order),
             "workflow_type": OrderService._normalize_workflow_type(getattr(order, "workflow_type", None)),
             "repair_meta": OrderService._get_repair_meta(order),
+            "maintenance_source_order_id": (order.technical_meta or {}).get("maintenance_source_order_id"),
             "manager_labels": OrderService._get_manager_labels(order),
             "created_at": order.created_at,
             "updated_at": order.updated_at,

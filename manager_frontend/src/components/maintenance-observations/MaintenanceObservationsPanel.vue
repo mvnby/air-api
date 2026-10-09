@@ -9,6 +9,7 @@ import {
 import { getApiErrorMessage } from '../../utils/api-errors';
 import { listAllCustomerEquipment } from '../equipment/loadAllCustomerEquipment';
 import MaintenanceDefectActsPanel from './MaintenanceDefectActsPanel.vue';
+import MaintenanceOffersPanel from './MaintenanceOffersPanel.vue';
 import ServiceAttachmentViewer from '../service-attachments/ServiceAttachmentViewer.vue';
 import type { ServiceAttachmentItem } from '../service-attachments/types';
 
@@ -64,7 +65,9 @@ async function load(more = false) {
     const offset = more ? items.value.length : 0;
     const response = props.orderId !== undefined
       ? await api.listManagerOrderMaintenanceObservations(props.orderId, 50, offset)
-      : await api.listManagerEquipmentMaintenanceObservations(props.equipmentId!, 50, offset);
+      : props.equipmentId !== undefined
+        ? await api.listManagerEquipmentMaintenanceObservations(props.equipmentId, 50, offset)
+        : await api.listManagerCustomerMaintenanceObservations(props.customerId!, props.customerBranchId, 50, offset);
     if (version !== requestVersion) return;
     items.value = more ? [...items.value, ...response.items] : response.items;
     total.value = response.total;
@@ -148,7 +151,7 @@ async function save() {
     if (detail.value && photos.value.length) error.value += ` Замечание #${detail.value.id} сохранено; повторите загрузку оставшихся фото.`;
   } finally { if (version === requestVersion) saving.value = false; }
 }
-watch(() => [props.orderId, props.equipmentId], () => {
+watch(() => [props.orderId, props.equipmentId, props.customerId, props.customerBranchId], () => {
   requestVersion++; selectedIds.value = []; actLocked.value = false; loaded.value = false; loading.value = false; saving.value = false;
   items.value = []; total.value = 0; detail.value = null; editing.value = false;
   error.value = ''; message.value = ''; pendingCreate.value = null; photos.value = []; equipment.value = [];
@@ -171,10 +174,11 @@ onBeforeUnmount(() => { requestVersion++; });
         <div v-for="item in items" :key="item.id" class="flex min-w-0 items-start gap-2">
           <label v-if="orderId" class="shrink-0 pt-3"><input :form="formOwner" v-model="selectedIds" :value="item.id" type="checkbox" :aria-label="`Выбрать замечание #${item.id} для акта`" :disabled="locked || loading" class="h-5 w-5" /></label>
         <button type="button" class="w-full rounded-lg border border-gray-200 p-3 text-left disabled:opacity-50 dark:border-slate-600" :disabled="locked || loading" @click="open(item.id)">
-          <span class="block text-sm font-semibold text-gray-950 dark:text-white">#{{ item.id }} · {{ item.equipment_description }}</span>
+          <span class="block text-sm font-semibold text-gray-950 dark:text-white">#{{ item.id }} · {{ item.equipment_description }} · {{ item.resolution ? 'Устранено' : 'Не устранено' }}</span>
           <span class="mt-1 block whitespace-pre-wrap break-words text-sm text-gray-700 dark:text-slate-200">{{ item.facts }}</span>
           <span class="mt-1 block text-xs text-gray-500">ТО #{{ item.source_order_id }} · {{ dateLabel(item.observed_at) }} · {{ item.created_by }}</span>
         </button>
+        <a :href="`/manager/orders/kanban?orderId=${item.source_order_id}`" class="shrink-0 text-xs text-blue-600" target="_blank" rel="noopener">Исходное ТО и согласование ↗</a>
         </div>
       </div>
       <button v-if="items.length < total" type="button" class="observation-button" :disabled="loading || locked" @click="load(true)">Показать ещё</button>
@@ -182,7 +186,7 @@ onBeforeUnmount(() => { requestVersion++; });
       <div v-if="editing || detail" class="space-y-3 rounded-lg bg-gray-50 p-3 dark:bg-slate-900/40">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <h3 class="font-semibold text-gray-950 dark:text-white">{{ detail ? `Замечание #${detail.id}` : 'Новое замечание' }}</h3>
-          <button v-if="detail && !editing" type="button" class="observation-button" :disabled="locked" @click="edit">Уточнить замечание</button>
+          <button v-if="detail && !editing && !detail.resolution" type="button" class="observation-button" :disabled="locked" @click="edit">Уточнить замечание</button>
         </div>
         <template v-if="detail">
           <p class="text-xs text-gray-500">ТО #{{ detail.source_order_id }} · {{ detail.created_by }} · {{ dateLabel(detail.created_at) }} · Версия {{ detail.version }}</p>
@@ -218,6 +222,7 @@ onBeforeUnmount(() => { requestVersion++; });
       </div>
       <p v-if="error" role="alert" class="text-sm text-red-700 dark:text-red-300">{{ error }}</p>
       <button v-if="error && !editing" type="button" class="observation-button" :disabled="loading" @click="load()">Обновить список</button>
+      <MaintenanceOffersPanel v-if="orderId" :order-id="orderId" :observations="items" @refresh="load()" />
       <p v-if="message" role="status" class="text-sm text-emerald-700 dark:text-emerald-300">{{ message }}</p>
     </div>
     <ServiceAttachmentViewer v-model="viewerId" :items="photoItems" />

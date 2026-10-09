@@ -8,8 +8,14 @@ import type { MaintenanceDefectActItem } from '../models/MaintenanceDefectActIte
 import type { MaintenanceDefectActList } from '../models/MaintenanceDefectActList';
 import type { MaintenanceObservationDetail } from '../models/MaintenanceObservationDetail';
 import type { MaintenanceObservationList } from '../models/MaintenanceObservationList';
+import type { MaintenanceOfferCommand } from '../models/MaintenanceOfferCommand';
+import type { MaintenanceOfferItem } from '../models/MaintenanceOfferItem';
+import type { MaintenanceOfferList } from '../models/MaintenanceOfferList';
+import type { MaintenanceWorkspaceItem } from '../models/MaintenanceWorkspaceItem';
 import type { ManagerServiceAttachmentItemResponse } from '../models/ManagerServiceAttachmentItemResponse';
 import type { PrepareMaintenanceDefectAct } from '../models/PrepareMaintenanceDefectAct';
+import type { PrepareMaintenanceOffer } from '../models/PrepareMaintenanceOffer';
+import type { ResolveMaintenanceObservation } from '../models/ResolveMaintenanceObservation';
 import type { UpdateMaintenanceObservation } from '../models/UpdateMaintenanceObservation';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
@@ -250,6 +256,181 @@ export class ManagerMaintenanceObservationsService {
                 'order_id': orderId,
             },
             query: {
+                'limit': limit,
+                'offset': offset,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Maintenance Workspace
+     * Explicitly create/reuse the same scoped repair card. No execution, crew, slot or document is assigned.
+     * Idempotent by source order; inaccessible source is 404, incompatible context 400/409.
+     * See [maintenance workflow](https://github.com/mvnby/air-api/blob/main/docs/equipment-maintenance.md).
+     * @param orderId
+     * @returns MaintenanceWorkspaceItem Successful Response
+     * @throws ApiError
+     */
+    public static prepareManagerMaintenanceWorkspace(
+        orderId: number,
+    ): CancelablePromise<MaintenanceWorkspaceItem> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/orders/{order_id}/maintenance-workspace',
+            path: {
+                'order_id': orderId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Maintenance Offers
+     * Read scoped immutable commercial versions, decisions and resolutions. Pagination limit 1–100.
+     * No lifecycle mutation; inaccessible source/continuation returns 404.
+     * See [maintenance workflow](https://github.com/mvnby/air-api/blob/main/docs/equipment-maintenance.md).
+     * @param orderId
+     * @param limit
+     * @param offset
+     * @returns MaintenanceOfferList Successful Response
+     * @throws ApiError
+     */
+    public static listManagerMaintenanceOffers(
+        orderId: number,
+        limit: number = 50,
+        offset?: number,
+    ): CancelablePromise<MaintenanceOfferList> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/orders/{order_id}/maintenance-offers',
+            path: {
+                'order_id': orderId,
+            },
+            query: {
+                'limit': limit,
+                'offset': offset,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Prepare Offer
+     * Freeze real ordinary proposal lines and selected finding revisions in a draft. Manager scope required.
+     * Same command key/content replays, different content or stale revision returns 409. Mixed context returns 400.
+     * No issue, send, consent, execution or resolution is implicit.
+     * See [maintenance workflow](https://github.com/mvnby/air-api/blob/main/docs/equipment-maintenance.md).
+     * @param orderId
+     * @param requestBody
+     * @returns MaintenanceOfferItem Successful Response
+     * @throws ApiError
+     */
+    public static prepareManagerMaintenanceOffer(
+        orderId: number,
+        requestBody: PrepareMaintenanceOffer,
+    ): CancelablePromise<MaintenanceOfferItem> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/orders/{order_id}/maintenance-offers',
+            path: {
+                'order_id': orderId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Offer Command
+     * Explicit audited issue/send/answer/continue, with command key and expected version. Send records actual
+     * delivery evidence; it does not contact a customer. Continue uses only the approved subset on the same repair card.
+     * Manager tenant/storefront required; inaccessible context 404, stale/conflicting version 409, invalid subset 400.
+     * See [maintenance workflow](https://github.com/mvnby/air-api/blob/main/docs/equipment-maintenance.md).
+     * @param orderId
+     * @param offerId
+     * @param requestBody
+     * @returns MaintenanceOfferItem Successful Response
+     * @throws ApiError
+     */
+    public static commandManagerMaintenanceOffer(
+        orderId: number,
+        offerId: number,
+        requestBody: MaintenanceOfferCommand,
+    ): CancelablePromise<MaintenanceOfferItem> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/orders/{order_id}/maintenance-offers/{offer_id}/commands',
+            path: {
+                'order_id': orderId,
+                'offer_id': offerId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Resolve Observation
+     * Explicit confirmation of actual repair with actor/time/evidence, separate from commercial consent.
+     * Writes equipment REPAIR history when equipment is known. Scoped manager access required, 404 inaccessible,
+     * 409 stale/conflicting/unauthorized work; identical command is replay-safe.
+     * See [maintenance workflow](https://github.com/mvnby/air-api/blob/main/docs/equipment-maintenance.md).
+     * @param observationId
+     * @param requestBody
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static resolveManagerMaintenanceObservation(
+        observationId: number,
+        requestBody: ResolveMaintenanceObservation,
+    ): CancelablePromise<Record<string, any>> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/maintenance-observations/{observation_id}/resolution',
+            path: {
+                'observation_id': observationId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Customer Observations
+     * List scoped findings including unknown equipment at a customer/object. Manager ownership required;
+     * inaccessible customer returns 404. Optional branch filter and limit 1–100, offset pagination.
+     * See [maintenance workflow](https://github.com/mvnby/air-api/blob/main/docs/equipment-maintenance.md).
+     * @param customerId
+     * @param branchId
+     * @param limit
+     * @param offset
+     * @returns MaintenanceObservationList Successful Response
+     * @throws ApiError
+     */
+    public static listManagerCustomerMaintenanceObservations(
+        customerId: number,
+        branchId?: (number | null),
+        limit: number = 50,
+        offset?: number,
+    ): CancelablePromise<MaintenanceObservationList> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/customers/{customer_id}/maintenance-observations',
+            path: {
+                'customer_id': customerId,
+            },
+            query: {
+                'branch_id': branchId,
                 'limit': limit,
                 'offset': offset,
             },

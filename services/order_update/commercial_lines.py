@@ -58,6 +58,8 @@ async def apply_commercial_lines(context: OrderUpdateContext) -> None:
     )
     if not target_proposal:
         raise ValueError("Proposal not found")
+    from services.maintenance_commercial_guard import guard_lines
+    await guard_lines(context.session, context.order_id, target_proposal_id)
     if normalize_proposal_status(target_proposal.status) in {
         PROPOSAL_STATUS_SENT,
         PROPOSAL_STATUS_APPROVED,

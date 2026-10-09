@@ -570,6 +570,7 @@ class OrderProposalListResponse(BaseModel):
 
 
 class ManagerOrderDetailResponse(ManagerOrderListItemResponse):
+    maintenance_source_order_id: Optional[int] = None
     incoming_context: Optional[IncomingOrderContext] = None
     source_enrichment: Optional[ManagerOrderSourceEnrichment] = None
     contact_name: Optional[str] = None

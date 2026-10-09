@@ -695,6 +695,7 @@ const saveContextObject = async (draft: { address: string; branchId: number | nu
                 @reload="emit('reload', order.id)"
                 @error="setToast($event, 'error')"
               />
+              <a v-if="order?.maintenance_source_order_id" :href="`/manager/orders/kanban?orderId=${order.maintenance_source_order_id}`" class="block mt-4 text-sm text-blue-600" target="_blank" rel="noopener">Исходное ТО #{{ order.maintenance_source_order_id }} · предложения, согласование и устранение ↗</a>
               <MaintenanceObservationsPanel v-if="order?.workflow_type === 'maintenance'" :key="`observations-${order.id}`" class="mt-4" :order-id="order.id" :customer-id="order.customer?.id" :customer-branch-id="order.customer_branch?.id" />
               <EmailContractReviewLauncher v-if="order && order.attachment_count" :order-id="order.id" />
               <OrderAttachmentsPanel v-if="order" :key="`order-attachments-${order.id}`" class="mt-4" :order-id="order.id" :initial-count="order.attachment_count" :equipment-options="linkedEquipmentOptions" @need-equipment-options="equipmentPanelRef?.ensureLoaded()" @error="setToast($event, 'error')" />
