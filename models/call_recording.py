@@ -58,6 +58,8 @@ class CallRecording(SQLModel, table=True):
     transcription_provider: str | None = None
     transcription_model: str | None = None
     transcription_operation: str | None = None
+    soniox_file_id: str | None = None
+    soniox_api_base_url: str | None = None
     transcription_submitted_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True)))
     structure: dict | None = Field(default=None, sa_column=Column(JSON))
     stage_attempts: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))

@@ -1,10 +1,11 @@
-import { flushPromises, mount } from '@vue/test-utils';
+import { DOMWrapper, flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CallDriveStatus, CallRecordingResponse } from '../src/client';
 
-const mocks = vi.hoisted(() => ({ status: vi.fn(), list: vi.fn(), get: vi.fn(), authorize: vi.fn(), folder: vi.fn(), disconnect: vi.fn(), poll: vi.fn(), retry: vi.fn(), metadata: vi.fn(), adopt: vi.fn() }));
+const mocks = vi.hoisted(() => ({ status: vi.fn(), list: vi.fn(), get: vi.fn(), authorize: vi.fn(), folder: vi.fn(), disconnect: vi.fn(), poll: vi.fn(), retry: vi.fn(), metadata: vi.fn(), adopt: vi.fn(), driveFiles: vi.fn() }));
 vi.mock('../src/services/call-recordings-api', async (original) => ({ ...(await original<typeof import('../src/services/call-recordings-api')>()), callRecordingsApi: mocks }));
 import CallRecordingsView from '../src/views/CallRecordingsView.vue';
+import CallRecordingPicker from '../src/components/calls/CallRecordingPicker.vue';
 import CallProposalCard from '../src/components/calls/CallProposalCard.vue';
 import { callErrorLabel, driveId } from '../src/services/call-recordings-api';
 
@@ -19,6 +20,8 @@ beforeEach(() => {
   mocks.status.mockResolvedValue(connection());
   mocks.list.mockResolvedValue({ items: [recording()], total: 1 });
   mocks.get.mockResolvedValue(recording());
+  mocks.driveFiles.mockResolvedValue({ items: [{ file_id: 'picked-file-000001', filename: 'Вызов Дима_261008_170514.m4a', source_url: 'https://drive.google.com/file/d/picked-file-000001/view', call_occurred_at: '2026-10-08T14:05:14Z', contact: 'Дима', phone: null, size: 500 }], next_page_token: null });
+  mocks.poll.mockResolvedValue({ observed: 1, queued: 0, has_more: false });
   mocks.adopt.mockResolvedValue({ resource_type: 'personal_task', resource_id: 12, resource_url: '/manager/tasks?taskId=12' });
 });
 
@@ -73,6 +76,138 @@ describe('call recording review', () => {
     expect(wrapper.text()).toContain('разберите запись вручную');
     expect(wrapper.text()).not.toContain('Повторить незавершённый этап');
     expect(mocks.retry).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it.each([false, true])('saves Soniox without changing automatic checking: %s', async (auto) => {
+    mocks.status.mockResolvedValue({ ...connection(), auto_poll_enabled: auto, soniox_configured: true });
+    mocks.folder.mockResolvedValue({ ...connection(), auto_poll_enabled: auto, transcription_provider: 'soniox', soniox_configured: true });
+    const wrapper = mount(CallRecordingsView);
+    await flushPromises();
+    await wrapper.get('[aria-label="Провайдер распознавания"]').setValue('soniox');
+    expect(wrapper.text()).toContain('результат появляется после завершения обработки');
+    await wrapper.get('[aria-label="Папка записей"]').setValue('https://drive.google.com/drive/folders/chosen-folder-000001');
+    await wrapper.get('[aria-label="Папка записей"]').trigger('submit');
+    await flushPromises();
+    expect(mocks.folder).toHaveBeenCalledWith('chosen-folder-000001', auto, 'soniox');
+    expect(mocks.poll).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('explains Soniox waiting without a Google deadline', async () => {
+    const value = { ...recording(), state: 'waiting_transcription', stage: 'transcribe', transcription_provider: 'soniox', transcription_model: 'stt-async-v4' };
+    mocks.list.mockResolvedValue({ items: [value], total: 1 }); mocks.get.mockResolvedValue(value);
+    const wrapper = mount(CallRecordingsView);
+    await flushPromises();
+    await wrapper.findAll('button').find(button => button.text().includes('Тестовая запись'))!.trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('уже отправлена в Soniox');
+    expect(wrapper.text()).not.toContain('24 часов');
+    expect(mocks.retry).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it.each(['call_soniox_submission_uncertain', 'call_soniox_wait_expired', 'call_soniox_operation_failed', 'call_soniox_invalid_audio'])('blocks another Soniox submission for %s', async (code) => {
+    mocks.get.mockResolvedValue({ ...recording(), state: 'manual_review', stage: 'transcribe', transcription_provider: 'soniox', last_error_code: code });
+    const wrapper = mount(CallRecordingsView);
+    await flushPromises();
+    await wrapper.findAll('button').find(button => button.text().includes('Тестовая запись'))!.trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).not.toContain('Повторить незавершённый этап');
+    expect(wrapper.text()).toContain(callErrorLabel(code));
+    wrapper.unmount();
+  });
+
+  it('reads the folder and selects one file before an explicit check', async () => {
+    const wrapper = mount(CallRecordingsView);
+    const dialog = new DOMWrapper(document.body);
+    await flushPromises();
+    expect(mocks.driveFiles).not.toHaveBeenCalled();
+    await wrapper.get('[data-testid="choose-drive-recording"]').trigger('click');
+    await flushPromises();
+    expect(mocks.driveFiles).toHaveBeenCalledTimes(1);
+    expect(mocks.poll).not.toHaveBeenCalled();
+    await dialog.get('[data-testid="drive-file-option"]').trigger('click');
+    await dialog.get('[data-testid="select-drive-recording"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="picked-drive-recording"]').text()).toContain('Дима');
+    expect(mocks.poll).not.toHaveBeenCalled();
+    await wrapper.get('[data-testid="start-picked-recording"]').trigger('click');
+    await flushPromises();
+    expect(mocks.poll).toHaveBeenCalledWith('picked-file-000001');
+    expect(mocks.poll).toHaveBeenCalledTimes(1);
+    wrapper.unmount();
+  });
+
+  it('filters by inclusive Minsk dates and contact, resets a stale selection', async () => {
+    const wrapper = mount(CallRecordingPicker, { props: { open: true, folderName: 'Звонки' } });
+    const dialog = new DOMWrapper(document.body);
+    await flushPromises();
+    await dialog.get('[data-testid="drive-file-option"]').trigger('click');
+    await dialog.get('[aria-label="Режим выбора даты"]').setValue('range');
+    await dialog.get('[aria-label="Дата начала"]').setValue('2026-10-01');
+    await dialog.get('[aria-label="Дата окончания"]').setValue('2026-10-08');
+    await dialog.get('[aria-label="Имя контакта или номер"]').setValue(' +375 (29) 123-45-67 ');
+    expect(dialog.get('[data-testid="select-drive-recording"]').attributes('disabled')).toBeDefined();
+    expect(mocks.driveFiles).toHaveBeenCalledTimes(1);
+    await dialog.get('form').trigger('submit');
+    await flushPromises();
+    expect(mocks.driveFiles).toHaveBeenLastCalledWith({ date_from: '2026-10-01', date_to: '2026-10-08', query: '+375 (29) 123-45-67' });
+    expect(mocks.poll).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('continues an empty filtered page and preserves results after a load-more error', async () => {
+    mocks.driveFiles.mockResolvedValueOnce({ items: [], next_page_token: 'page-two' }).mockRejectedValueOnce(new Error('Drive недоступен')).mockResolvedValueOnce({ items: [{ file_id: 'unknown-file-0001', filename: 'Без даты.m4a', call_occurred_at: null, contact: null, phone: null, source_url: '', size: null }], next_page_token: 'page-three' }).mockRejectedValueOnce(new Error('Временно недоступно'));
+    const wrapper = mount(CallRecordingPicker, { props: { open: true, folderName: 'Звонки' } });
+    const dialog = new DOMWrapper(document.body);
+    await flushPromises();
+    expect(dialog.text()).not.toContain('Записи не найдены');
+    expect(dialog.get('[data-testid="more-drive-recordings"]').text()).toBe('Продолжить поиск');
+    await dialog.get('[data-testid="more-drive-recordings"]').trigger('click'); await flushPromises();
+    expect(dialog.get('[role="alert"]').text()).toContain('Drive недоступен');
+    expect(mocks.driveFiles).toHaveBeenLastCalledWith(expect.objectContaining({ page_token: 'page-two' }));
+    await dialog.get('[data-testid="more-drive-recordings"]').trigger('click'); await flushPromises();
+    expect(dialog.text()).toContain('Дата звонка неизвестна');
+    await dialog.get('[data-testid="more-drive-recordings"]').trigger('click'); await flushPromises();
+    expect(dialog.text()).toContain('Без даты.m4a');
+    expect(dialog.get('[role="alert"]').text()).toContain('Временно недоступно');
+    expect(mocks.poll).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('searches all time without date parameters and makes a phone-only contact the primary label', async () => {
+    mocks.driveFiles.mockResolvedValue({ items: [{ file_id: 'phone-file-00001', filename: 'Запись вызова +375291234567_261008_091013.m4a', contact: null, phone: '+375291234567', call_occurred_at: null, source_url: '', size: null }], next_page_token: null });
+    const wrapper = mount(CallRecordingPicker, { props: { open: true, folderName: 'Звонки' } });
+    const dialog = new DOMWrapper(document.body);
+    await flushPromises();
+    await dialog.get('[aria-label="Режим выбора даты"]').setValue('all');
+    await dialog.get('[aria-label="Имя контакта или номер"]').setValue('+37529');
+    expect(dialog.find('[aria-label="Дата начала"]').exists()).toBe(false);
+    expect(dialog.find('[aria-label="Дата окончания"]').exists()).toBe(false);
+    await dialog.get('form').trigger('submit');
+    await flushPromises();
+    expect(mocks.driveFiles).toHaveBeenLastCalledWith({ query: '+37529' });
+    const row = dialog.get('[data-testid="drive-file-option"]');
+    expect(row.findAll('span.block')[0]!.text()).toBe('+375291234567');
+    expect(row.text()).toContain('Запись вызова +375291234567_261008_091013.m4a');
+    expect(mocks.poll).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('sorts appended files by call time and deduplicates their Drive ids', async () => {
+    const file = { filename: 'Звонок.m4a', contact: null, phone: null, source_url: '', size: null };
+    mocks.driveFiles.mockResolvedValueOnce({ items: [{ ...file, file_id: 'unknown', call_occurred_at: null }, { ...file, file_id: 'older', call_occurred_at: '2026-10-01T07:00:00Z' }], next_page_token: 'next' }).mockResolvedValueOnce({ items: [{ ...file, file_id: 'newer', call_occurred_at: '2026-10-08T07:00:00Z' }, { ...file, file_id: 'older', call_occurred_at: '2026-10-01T07:00:00Z' }], next_page_token: null });
+    const wrapper = mount(CallRecordingPicker, { props: { open: true, folderName: 'Звонки' } });
+    const dialog = new DOMWrapper(document.body);
+    await flushPromises();
+    await dialog.get('[data-testid="more-drive-recordings"]').trigger('click');
+    await flushPromises();
+    const rows = dialog.findAll('[data-testid="drive-file-option"]');
+    expect(rows).toHaveLength(3);
+    expect(rows[0]!.text()).toContain('2026-10-08 10:00');
+    expect(rows[1]!.text()).toContain('2026-10-01 10:00');
+    expect(rows[2]!.text()).toContain('Дата звонка неизвестна');
     wrapper.unmount();
   });
 

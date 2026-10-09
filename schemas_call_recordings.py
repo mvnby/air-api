@@ -13,9 +13,10 @@ class CallDriveStatus(BaseModel):
     connected: bool
     pipeline_enabled: bool
     transcription_configured: bool
-    transcription_provider: Literal["groq", "google_batch"] = "groq"
+    transcription_provider: Literal["groq", "google_batch", "soniox"] = "groq"
     google_batch_configured: bool = False
     groq_configured: bool = False
+    soniox_configured: bool = False
     account_label: str | None = None
     folder_id: str | None = None
     folder_name: str | None = None
@@ -35,7 +36,7 @@ class CallFolderPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
     folder_id: str = Field(pattern=r"^[A-Za-z0-9_-]{10,160}$")
     auto_poll_enabled: bool = False
-    transcription_provider: Literal["groq", "google_batch"] | None = None
+    transcription_provider: Literal["groq", "google_batch", "soniox"] | None = None
 
 
 class CallPollPayload(BaseModel):
@@ -47,6 +48,21 @@ class CallPollResponse(BaseModel):
     observed: int
     queued: int
     has_more: bool
+
+
+class CallDriveFileResponse(BaseModel):
+    file_id: str
+    filename: str
+    source_url: str
+    call_occurred_at: datetime | None
+    contact: str | None
+    phone: str | None
+    size: int | None
+
+
+class CallDriveFileListResponse(BaseModel):
+    items: list[CallDriveFileResponse]
+    next_page_token: str | None = None
 
 
 class CallRecordingMetadataPayload(BaseModel):

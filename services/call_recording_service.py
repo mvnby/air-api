@@ -90,6 +90,14 @@ class CallRecordingService:
                 call_time = samsung_call_time(metadata["name"])
                 row = CallRecording(connection_id=connection.id, file_id=metadata["id"], source_version=version, source_checksum=metadata["md5Checksum"], source_size=int(metadata["size"]), source_url=f"https://drive.google.com/file/d/{metadata['id']}/view", filename=str(metadata["name"])[:300], mime_type=metadata["mimeType"], source_modified_at=modified, call_occurred_at=call_time, time_source="samsung_filename" if call_time else "unknown", observed_at=now, created_at=now)
                 prior = await session.scalar(select(CallRecording).where(CallRecording.connection_id == connection.id, CallRecording.file_id == row.file_id, CallRecording.source_checksum == row.source_checksum).order_by(CallRecording.id.desc()).limit(1))
+                if (prior and (prior.transcription_provider == "soniox" or
+                               (prior.transcription_provider is None and connection.transcription_provider == "soniox"))
+                        and (prior.transcript is None or prior.soniox_file_id is not None)):
+                    # One row owns the mutable Soniox job/input. A metadata-only
+                    # revision must not create another paid job or cleanup owner.
+                    if file_id:
+                        raise CallDriveError("call_soniox_source_busy", "Предыдущая версия этой записи ещё обрабатывается в Soniox. Дождитесь результата и очистки временного файла; при ошибке разберите исходное задание.", status_code=409)
+                    continue
                 if prior:
                     # A metadata-only revision needs fresh source-clock review,
                     # but identical bytes reuse successful paid checkpoints.
@@ -196,6 +204,8 @@ class CallRecordingService:
         row = await cls.get_row(session, actor, recording_id, for_update=True)
         if row.version != payload.expected_version or row.state not in {"failed", "reconnect_required", "manual_review"}:
             raise CallDriveError("call_retry_conflict", "Повтор недоступен для текущей версии", status_code=409)
+        if row.last_error_code in {"call_soniox_submission_uncertain", "call_soniox_wait_expired", "call_soniox_operation_failed"} or (row.last_error_code == "call_soniox_invalid_audio" and row.transcription_operation):
+            raise CallDriveError(row.last_error_code, "Задание Soniox требует ручного разбора", status_code=409)
         if row.stage_attempts.get(row.stage, 0) >= 3:
             raise CallDriveError("call_stage_exhausted", "Лимит попыток этапа исчерпан: разберите запись вручную", status_code=409)
         if row.job_event_id:

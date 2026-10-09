@@ -132,6 +132,8 @@ export type { CalendarEventResponse } from './models/CalendarEventResponse';
 export type { CalendarEventType } from './models/CalendarEventType';
 export type { CallAdoptionResponse } from './models/CallAdoptionResponse';
 export type { CallAdoptPayload } from './models/CallAdoptPayload';
+export type { CallDriveFileListResponse } from './models/CallDriveFileListResponse';
+export type { CallDriveFileResponse } from './models/CallDriveFileResponse';
 export type { CallDriveStatus } from './models/CallDriveStatus';
 export type { CallFolderPayload } from './models/CallFolderPayload';
 export type { CallPollPayload } from './models/CallPollPayload';
