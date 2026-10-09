@@ -45,3 +45,17 @@ def test_ci_cache_keeps_database_versions_and_pdf_renderer_digest():
         canonical = image.removeprefix("mirror.gcr.io/").removeprefix("library/")
         assert canonical == source[name]["image"]
         assert set(ci[name]) == {"image"}
+
+
+@pytest.mark.parametrize("filename, count", [("ci.yml", 2), ("deploy-api-patroni.yml", 1)])
+def test_builder_bootstrap_uses_verified_cached_image(filename, count):
+    from pathlib import Path
+
+    jobs = yaml.safe_load(Path(".github/workflows", filename).read_text())["jobs"]
+    builders = [step for job in jobs.values() for step in job.get("steps", [])
+                if step.get("uses", "").startswith("docker/setup-buildx-action@")]
+    assert len(builders) == count
+    for step in builders:
+        assert step["with"]["driver-opts"] == (
+            "image=mirror.gcr.io/moby/buildkit:buildx-stable-1@sha256:"
+            "cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea")
