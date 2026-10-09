@@ -18,6 +18,8 @@ os.environ.update(
         "ADMIN_IDS": "",
         "ADMIN_ID": "0",
         "BOT_ENABLED": "false",
+        "CALL_RECORDINGS_ENABLED": "false",
+        "CALL_RECORDINGS_TRANSCRIPTION_API_KEY": "",
         "SCHEDULER_ENABLED": "false",
         "COMMUNICATIONS_WORKER_ENABLED": "false",
         "COMMUNICATIONS_WORKER_ALLOW_ALL_MODE": "false",

@@ -2,8 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { IncomingPreview } from './IncomingPreview';
-export type IncomingResponse = {
+export type IncomingFields = {
     request_text: string;
     name?: (string | null);
     phone?: (string | null);
@@ -22,21 +21,5 @@ export type IncomingResponse = {
      * Explicit instruction to save one linked clarification task. On creation, omission also recognizes standalone positive address/call instructions; false disables that text inference. MCP requires task-write scope when a task is requested.
      */
     clarification_requested?: (boolean | null);
-    preview?: (IncomingPreview | null);
-    lead_id: number;
-    version: number;
-    intake_state: 'needs_contact' | 'needs_details' | 'ready_for_review';
-    missing_fields: Array<string>;
-    source_occurred_at: (string | null);
-    source_timezone: string;
-    original_text: string;
-    /**
-     * Original call/source URL saved by the trusted ingestion command; Google access remains independent. Reading never downloads audio.
-     */
-    source_url?: (string | null);
-    date_precision?: ('date' | 'datetime' | null);
-    field_sources?: Record<string, string>;
-    clarification_task_id?: (number | null);
-    manager_url: string;
 };
 

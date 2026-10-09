@@ -176,6 +176,8 @@ class SchedulerService:
 
         # Recover durable repair AI jobs after request/process failures.
         tasks.append(asyncio.create_task(self._repair_diagnostic_ai_job_loop()))
+        if settings.CALL_RECORDINGS_ENABLED:
+            tasks.append(asyncio.create_task(self._call_recording_loop()))
 
         # Enforce the documented public-write replay horizon in bounded batches.
         tasks.append(asyncio.create_task(self._public_write_receipt_retention_loop()))
@@ -480,6 +482,16 @@ class SchedulerService:
             except Exception:
                 logger.exception("Repair diagnostic AI job loop error")
                 await asyncio.sleep(30)
+
+    async def _call_recording_loop(self):
+        from services.call_recording_job_service import CallRecordingJobService
+        while True:
+            try:
+                await CallRecordingJobService.poll_auto_connections()
+                await CallRecordingJobService.process_batch(worker_id="scheduler-call-recordings", limit=3)
+            except Exception:
+                logger.warning("CALL_RECORDING worker_failed")
+            await asyncio.sleep(30)
 
     async def _public_write_receipt_retention_loop(self):
         from services.public_write_idempotency_retention_service import (

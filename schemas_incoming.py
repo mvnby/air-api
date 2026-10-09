@@ -85,6 +85,7 @@ class IncomingResponse(IncomingFields):
     source_occurred_at: datetime | None
     source_timezone: str
     original_text: str
+    source_url: str | None = Field(default=None, description="Original call/source URL saved by the trusted ingestion command; Google access remains independent. Reading never downloads audio.")
     date_precision: Literal["date", "datetime"] | None = None
     field_sources: dict[str, str] = Field(default_factory=dict)
     clarification_task_id: int | None = None

@@ -12,6 +12,8 @@ from sqlmodel import select
 
 from core.config import settings
 from models import AnalyticsConnection, DocumentDriveConnection, PlatformAIConnection
+from models.call_recording import CallDriveConnection
+from services.call_drive_connection_service import CallDriveCredentialCipher, CallDriveConnectionService
 from models.deepseek_connection import DeepSeekConnection
 from models.jev_shadow import JevConnection
 from services.jev_connection_service import JevCredentialCipher, JevCredentialError
@@ -39,8 +41,8 @@ _MAX_ROWS = 10_000
 
 @dataclass(frozen=True, slots=True)
 class _RotationRecord:
-    domain: Literal["analytics", "document_drive", "platform_ai", "deepseek", "jev"]
-    row: AnalyticsConnection | DocumentDriveConnection | PlatformAIConnection | DeepSeekConnection | JevConnection
+    domain: Literal["analytics", "document_drive", "platform_ai", "deepseek", "jev", "call_drive"]
+    row: AnalyticsConnection | DocumentDriveConnection | PlatformAIConnection | DeepSeekConnection | JevConnection | CallDriveConnection
     source: Literal["active", "retained", "legacy", "unreadable"]
     credentials: dict[str, Any] | str | None
     needs_rewrap: bool
@@ -50,8 +52,8 @@ class _RotationRecord:
             "domain": self.domain,
             "id": int(self.row.id or 0),
             "tenant_id": int(self.row.tenant_id) if not isinstance(self.row, (PlatformAIConnection, DeepSeekConnection, JevConnection)) else None,
-            "provider": "jev" if isinstance(self.row, JevConnection) else "deepseek" if isinstance(self.row, DeepSeekConnection) else "zaprosu" if isinstance(self.row, PlatformAIConnection) else str(self.row.provider),
-            "status": ("active" if self.row.enabled else "disabled") if isinstance(self.row, (PlatformAIConnection, DeepSeekConnection, JevConnection)) else str(self.row.status),
+            "provider": "call_drive" if isinstance(self.row, CallDriveConnection) else "jev" if isinstance(self.row, JevConnection) else "deepseek" if isinstance(self.row, DeepSeekConnection) else "zaprosu" if isinstance(self.row, PlatformAIConnection) else str(self.row.provider),
+            "status": "active" if isinstance(self.row, CallDriveConnection) else ("active" if self.row.enabled else "disabled") if isinstance(self.row, (PlatformAIConnection, DeepSeekConnection, JevConnection)) else str(self.row.status),
             "source": self.source,
             "needs_rewrap": self.needs_rewrap,
             "ciphertext_sha256": hashlib.sha256(
@@ -61,7 +63,7 @@ class _RotationRecord:
                 self.row.credentials_fingerprint.encode("utf-8")
             ).hexdigest(),
         }
-        if isinstance(self.row, AnalyticsConnection):
+        if isinstance(self.row, (AnalyticsConnection, CallDriveConnection)):
             value["storefront_id"] = int(self.row.storefront_id)
         return value
 
@@ -140,18 +142,21 @@ class IntegrationCredentialRotationService:
         ai_query = select(PlatformAIConnection).order_by(PlatformAIConnection.id)
         deepseek_query = select(DeepSeekConnection).where(DeepSeekConnection.encrypted_credentials.is_not(None)).order_by(DeepSeekConnection.id)
         jev_query = select(JevConnection).where(JevConnection.encrypted_credentials.is_not(None)).order_by(JevConnection.id)
+        calls_query = select(CallDriveConnection).where(CallDriveConnection.encrypted_credentials.is_not(None)).order_by(CallDriveConnection.id)
         if for_update:
             analytics_query = analytics_query.with_for_update()
             drive_query = drive_query.with_for_update()
             ai_query = ai_query.with_for_update()
             deepseek_query = deepseek_query.with_for_update()
             jev_query = jev_query.with_for_update()
+            calls_query = calls_query.with_for_update()
         analytics_rows = (await session.execute(analytics_query)).scalars().all()
         drive_rows = (await session.execute(drive_query)).scalars().all()
         ai_rows = (await session.execute(ai_query)).scalars().all()
         deepseek_rows = (await session.execute(deepseek_query)).scalars().all()
         jev_rows = (await session.execute(jev_query)).scalars().all()
-        if len(analytics_rows) + len(drive_rows) + len(ai_rows) + len(deepseek_rows) + len(jev_rows) > _MAX_ROWS:
+        calls_rows = (await session.execute(calls_query)).scalars().all()
+        if len(analytics_rows) + len(drive_rows) + len(ai_rows) + len(deepseek_rows) + len(jev_rows) + len(calls_rows) > _MAX_ROWS:
             raise IntegrationCredentialRotationBlockedError(
                 "Credential row limit exceeded"
             )
@@ -160,7 +165,17 @@ class IntegrationCredentialRotationService:
         records.extend(cls._ai_record(row) for row in ai_rows)
         records.extend(cls._deepseek_record(row) for row in deepseek_rows)
         records.extend(cls._jev_record(row) for row in jev_rows)
+        records.extend(cls._call_record(row) for row in calls_rows)
         return records
+
+    @staticmethod
+    def _call_record(row: CallDriveConnection) -> _RotationRecord:
+        try:
+            credentials, decrypted = CallDriveCredentialCipher.decrypt_with_source(row.encrypted_credentials, tenant_id=row.tenant_id, provider=CallDriveConnectionService.cipher_provider(row))
+        except DocumentDriveConnectionError:
+            return _RotationRecord("call_drive", row, "unreadable", None, False)
+        matches = decrypted.source == "active" and hmac.compare_digest(row.credentials_fingerprint, CallDriveCredentialCipher.fingerprint(credentials))
+        return _RotationRecord("call_drive", row, decrypted.source, credentials, not matches)
 
     @staticmethod
     def _jev_record(row: JevConnection) -> _RotationRecord:
@@ -316,6 +331,10 @@ class IntegrationCredentialRotationService:
             raise IntegrationCredentialRotationBlockedError(
                 "Credential row cannot be rewrapped"
             )
+        if isinstance(record.row, CallDriveConnection):
+            record.row.encrypted_credentials = CallDriveCredentialCipher.encrypt(credentials, tenant_id=record.row.tenant_id, provider=CallDriveConnectionService.cipher_provider(record.row))
+            record.row.credentials_fingerprint = CallDriveCredentialCipher.fingerprint(credentials)
+            return
         if isinstance(record.row, AnalyticsConnection):
             record.row.encrypted_credentials = AnalyticsCredentialCipher.encrypt(
                 credentials,

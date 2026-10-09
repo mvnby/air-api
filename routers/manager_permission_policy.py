@@ -338,7 +338,23 @@ STOREFRONT_OWNER_OPERATION_IDS = frozenset(
 )
 
 
+CALL_RECORDING_OPERATION_IDS = frozenset({
+    operation_ids.GET_MANAGER_CALL_DRIVE_STATUS,
+    operation_ids.GET_MANAGER_CALL_DRIVE_AUTHORIZATION_URL,
+    operation_ids.CONFIGURE_MANAGER_CALL_DRIVE_FOLDER,
+    operation_ids.DISCONNECT_MANAGER_CALL_DRIVE,
+    operation_ids.POLL_MANAGER_CALL_RECORDINGS,
+    operation_ids.LIST_MANAGER_CALL_RECORDINGS,
+    operation_ids.GET_MANAGER_CALL_RECORDING,
+    operation_ids.UPDATE_MANAGER_CALL_RECORDING_METADATA,
+    operation_ids.RETRY_MANAGER_CALL_RECORDING,
+    operation_ids.ADOPT_MANAGER_CALL_PROPOSAL,
+})
+
+
 def required_permission_dependency(operation_id: str | None):
+    if operation_id in CALL_RECORDING_OPERATION_IDS:
+        return require_manager_access
     if operation_id in SOURCE_EQUIPMENT_OPERATION_IDS:
         return require_manager_access
     if operation_id in CATALOG_DECISION_OPERATION_IDS:

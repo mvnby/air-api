@@ -51,8 +51,9 @@ class BotVoiceTranscriptionProvider:
         content: bytes,
         filename: str,
         mime_type: str,
+        configuration: tuple[str, str, str, float] | None = None,
     ) -> str:
-        api_url, api_key, model, timeout_seconds = cls._configuration()
+        api_url, api_key, model, timeout_seconds = configuration or cls._configuration()
         try:
             async with asyncio.timeout(timeout_seconds):
                 async with httpx.AsyncClient(timeout=timeout_seconds) as client:

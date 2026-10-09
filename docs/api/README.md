@@ -38,6 +38,7 @@
 | Заказы | `POST /api/v1/orders`, `/api/manager/orders/*` | [api_orders.py](../../routers/api_orders.py), [manager_orders.py](../../routers/manager_orders.py), [рабочая область заказа](../order-workspace-usability.md) |
 | Документы заказа и шаблоны | `/api/manager/orders/{order_id}/documents`, `/api/manager/document-system/*` | [manager_docs.py](../../routers/manager_docs.py), [модуль документов](../../modules/documents/api/router.py), [архитектура](../document-module-architecture.md) |
 | Поручения и календарь | `/api/manager/personal-tasks/*`, `GET /api/manager/calendar/events` | [manager_personal_tasks.py](../../routers/manager_personal_tasks.py), [manager_calendar.py](../../routers/manager_calendar.py), [контракт первого MCP-выпуска](../chatgpt-connector-handoff.md#что-выпущено-и-можно-подключать) |
+| Личные записи звонков | `/api/manager/call-recordings/*` | [manager_call_recordings.py](../../routers/manager_call_recordings.py), [записи звонков](../call-recordings.md); отдельный readonly Drive OAuth, личный staff/tenant/storefront scope, выключенный по умолчанию pipeline и явное adoption |
 | Настройки и доступ | `/api/manager/settings/*`, `/api/manager/storefront-settings/*`, `GET /api/manager/me` | [manager_settings.py](../../routers/manager_settings.py), [manager_storefront_settings.py](../../routers/manager_storefront_settings.py), [manager_auth.py](../../routers/manager_auth.py), [доступ](authentication.md#manager) |
 
 ## Где смотреть актуальный контракт
@@ -96,7 +97,7 @@ request/response, права и исключения: универсальног
 ## Как поддерживать контракт при развитии API
 
 [Инвентаризация и критерии готовности](documentation-coverage.md) фиксируют
-точный перечень 588 HTTP-операций и завершённые этапы проверки по областям.
+точный перечень 598 HTTP-операций и завершённые этапы проверки по областям.
 Непустой `description` сам по себе не означает полноту контракта.
 
 - Для новой или изменённой операции описывайте назначение, права и область

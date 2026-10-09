@@ -212,6 +212,7 @@ class IncomingCommandService:
             source_occurred_at=meta.get("source_occurred_at"),
             source_timezone=meta.get("source_timezone", "Europe/Minsk"),
             original_text=meta.get("original_text", lead.request_text),
+            source_url=meta.get("source_url"),
             date_precision=meta.get("date_precision"),
             field_sources=meta.get("field_sources", {}),
             call_before_visit=meta.get("call_before_visit"),
