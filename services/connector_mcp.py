@@ -27,7 +27,7 @@ from services.personal_task_service import (
 from services.public_write_idempotency_service import (
     PublicWriteIdempotencyConflict, PublicWriteIdempotencyUnavailable,
 )
-from services.connector_file_service import ConnectorFileError
+from services.connector_file_service import ConnectorFileError, ConnectorFileUnavailable
 from services.maintenance_observation_service import ObservationConflict, ObservationNotFound
 from modules.documents.application.errors import ManagedDocumentConflictError, ManagedDocumentNotFoundError
 
@@ -131,6 +131,8 @@ class ConnectorMCPApplication:
             return _tool_error("retryable", "Kitlane is busy; retry with the same key and payload", status=503)
         except PermissionError:
             return _tool_error("access_denied", "This action is unavailable to this account", status=403)
+        except ConnectorFileUnavailable as exc:
+            return _tool_error("retryable", str(exc), status=503)
         except ConnectorFileError as exc:
             return _tool_error("invalid_file", str(exc))
         except (ValidationError, ValueError):

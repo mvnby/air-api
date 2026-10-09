@@ -23,6 +23,10 @@ class ConnectorFileError(ValueError):
     """Safe error text contains no download URL, signed query or source content."""
 
 
+class ConnectorFileUnavailable(RuntimeError):
+    """Transient delivery failure; safe to retry the same file and command key."""
+
+
 class _PinnedResolver(AbstractResolver):
     def __init__(self, host, addresses):
         self.host, self.addresses = host, addresses
@@ -75,10 +79,12 @@ class ConnectorFileService:
             if not addresses or any(not ipaddress.ip_address(address).is_global for address in addresses):
                 raise ConnectorFileError("ChatGPT photo source resolved outside the public network")
             return addresses
-        except (OSError, TimeoutError, ValueError) as exc:
+        except (OSError, TimeoutError):
+            raise ConnectorFileUnavailable("ChatGPT photo delivery is unavailable; retry the same file and key") from None
+        except ValueError as exc:
             if isinstance(exc, ConnectorFileError):
                 raise
-            raise ConnectorFileError("ChatGPT photo delivery is unavailable; retry the same file and key") from None
+            raise ConnectorFileError("ChatGPT photo source did not resolve to valid public addresses") from None
 
     @staticmethod
     def validate_image(content):
@@ -107,6 +113,8 @@ class ConnectorFileService:
                     timeout=aiohttp.ClientTimeout(total=15, connect=5, sock_read=5),
                     headers={"Accept": "image/jpeg, image/png, image/webp"}) as client:
                 async with client.get(file.download_url, allow_redirects=False) as response:
+                    if response.status == 429 or 500 <= response.status <= 599:
+                        raise ConnectorFileUnavailable("ChatGPT photo delivery is unavailable; retry the same file and key")
                     if response.status != 200:
                         raise ConnectorFileError("ChatGPT photo link is unavailable; refresh the same file and retry the same key")
                     declared = response.content_length
@@ -127,7 +135,9 @@ class ConnectorFileService:
                     extension = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}[mime]
                     filename = file.file_name or f"{file.file_id}.{extension}"
                     return content, filename, mime
-        except (aiohttp.ClientError, TimeoutError, ValueError) as exc:
+        except (aiohttp.ClientError, TimeoutError):
+            raise ConnectorFileUnavailable("ChatGPT photo delivery failed; retry the same file and key") from None
+        except ValueError as exc:
             if isinstance(exc, ConnectorFileError):
                 raise
-            raise ConnectorFileError("ChatGPT photo delivery failed; retry the same file and key") from None
+            raise ConnectorFileError("ChatGPT photo delivery returned an invalid response") from None

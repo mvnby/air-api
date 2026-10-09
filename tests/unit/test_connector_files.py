@@ -2,11 +2,12 @@
 import socket
 from contextlib import asynccontextmanager
 
+import aiohttp
 import pytest
 
 from core.config import settings
 from schemas_connector_maintenance import OpenAIFile
-from services.connector_file_service import ConnectorFileError, ConnectorFileService, _PinnedResolver
+from services.connector_file_service import ConnectorFileError, ConnectorFileService, ConnectorFileUnavailable, _PinnedResolver
 from services.connector_mcp_tools import TOOLS
 from tests.integration.test_maintenance_observations_api import image_bytes
 
@@ -113,3 +114,44 @@ async def test_download_disallows_redirects_and_bounds_verified_content(monkeypa
         content, filename, kind = await ConnectorFileService.download(file())
         assert content == body and filename == 'file-123.png' and kind == 'image/png'
     assert calls == ['delivery.example']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failure', [OSError('provider DNS failed'), TimeoutError('provider DNS timed out')])
+async def test_transient_dns_failure_is_retryable(monkeypatch, failure):
+    async def resolve(*args, **kwargs):
+        raise failure
+    monkeypatch.setattr('asyncio.BaseEventLoop.getaddrinfo', resolve)
+    with pytest.raises(ConnectorFileUnavailable, match='retry the same file and key'):
+        await ConnectorFileService.public_addresses('delivery.example')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failure', [
+    429, 500, 503, 599,
+    aiohttp.ClientConnectionError('https://delivery.example/photo?signature=secret'),
+    TimeoutError('https://delivery.example/photo?signature=secret'),
+])
+async def test_transient_provider_failure_is_retryable_without_source_secrets(monkeypatch, failure):
+    monkeypatch.setattr(settings, 'CONNECTOR_CHATGPT_FILE_HOSTS', ['delivery.example'])
+    async def addresses(host):
+        return ['8.8.8.8']
+    monkeypatch.setattr(ConnectorFileService, 'public_addresses', addresses)
+    class Client:
+        def __init__(self, **kwargs):
+            self.connector = kwargs['connector']
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            await self.connector.close()
+        @asynccontextmanager
+        async def get(self, url, **kwargs):
+            if isinstance(failure, Exception):
+                raise failure
+            class Response:
+                status = failure
+            yield Response()
+    monkeypatch.setattr('services.connector_file_service.aiohttp.ClientSession', Client)
+    with pytest.raises(ConnectorFileUnavailable, match='retry the same file and key') as caught:
+        await ConnectorFileService.download(file())
+    assert 'signature' not in str(caught.value) and 'delivery.example' not in str(caught.value)

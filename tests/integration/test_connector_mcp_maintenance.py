@@ -3,6 +3,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from urllib.parse import parse_qs, urlsplit
 
+import aiohttp
 import httpx
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,13 +14,15 @@ from starlette.routing import Route
 from core.config import settings
 from core.security import AuthenticatedUser
 from models import (CommandAuditEvent, Customer, CustomerEquipment, DocumentLegalEntity, EquipmentServiceHistory,
-    MaintenanceObservation, MaintenanceOffer, MaintenanceOfferEvent, MaintenanceResolution,
-    Order, OrderProposal, OrderServiceLink, OrderStatus, StaffUser, Storefront, Tenant, TenantMembership)
+    MaintenanceObservation, MaintenanceObservationPhoto, MaintenanceOffer, MaintenanceOfferEvent, MaintenanceResolution,
+    Order, OrderProposal, OrderServiceLink, OrderStatus, PublicWriteIdempotency, ServiceAttachment, StaffUser,
+    Storefront, Tenant, TenantMembership)
 from models.connector_auth import ConnectorGrant
 from models.tenancy import TenantScope
 from schemas_connector_maintenance import FindingCreateInput
 from services.connector_auth_policy import CLIENT_ID, pkce, resource
 from services.connector_auth_service import ConnectorAuthService
+from services.connector_file_service import ConnectorFileService
 from services.connector_maintenance_service import ConnectorMaintenanceService
 from services.connector_mcp import ConnectorMCPApplication
 from tests.integration.test_maintenance_observations_api import context, image_bytes, payload
@@ -277,6 +280,73 @@ async def test_photo_private_ownership_refreshed_credentials_and_no_url_receipt(
     from models import PublicWriteIdempotency
     receipts = (await db.execute(select(PublicWriteIdempotency))).scalars().all()
     assert all('private-first' not in str(row.response_body) and 'private-refreshed' not in str(row.response_body) for row in receipts)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failure', [429, 503, 'connection'])
+async def test_photo_transient_delivery_failure_then_same_key_retry_commits_once(maintenance_db, tmp_path, monkeypatch, caplog, failure):
+    db = maintenance_db
+    caplog.set_level('INFO')
+    monkeypatch.setattr(settings, 'SERVICE_ATTACHMENT_LOCAL_DIR', str(tmp_path))
+    monkeypatch.setattr(settings, 'CONNECTOR_CHATGPT_FILE_HOSTS', ['delivery.example'])
+    source, _, _ = await context(db)
+    token, _, _, _ = await grant(db)
+    requests = []
+    body = image_bytes()
+    async def addresses(host):
+        return ['8.8.8.8']
+    monkeypatch.setattr(ConnectorFileService, 'public_addresses', addresses)
+    class Content:
+        async def iter_chunked(self, size):
+            yield body
+    class Response:
+        content = Content()
+        content_length = len(body)
+        headers = {'Content-Type': 'image/png'}
+    class Client:
+        def __init__(self, **kwargs):
+            self.connector = kwargs['connector']
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            await self.connector.close()
+        @asynccontextmanager
+        async def get(self, url, **kwargs):
+            requests.append(url)
+            if len(requests) == 1 and failure == 'connection':
+                raise aiohttp.ClientConnectionError(url)
+            response = Response()
+            response.status = failure if len(requests) == 1 else 200
+            yield response
+    monkeypatch.setattr('services.connector_file_service.aiohttp.ClientSession', Client)
+    receipt_query = select(PublicWriteIdempotency).where(
+        PublicWriteIdempotency.command_name == 'authenticated:maintenance.photo.upload')
+    audit_query = select(func.count()).select_from(CommandAuditEvent).where(
+        CommandAuditEvent.operation == 'maintenance.photo.upload')
+    async with client_for(db, token) as client:
+        finding = success(await call(client, 'create_maintenance_finding', finding_args(source.id)))['result']
+        photo_args = dict(observation_id=finding['id'], idempotency_key='maintenance-photo-transient-0001', file={
+            'file_id': 'file-inspection', 'download_url': 'https://delivery.example/photo?signature=private-retry',
+            'file_name': 'inspection.png', 'mime_type': 'image/png'})
+        failed = await call(client, 'upload_maintenance_finding_photo', photo_args)
+        assert failed['isError'] and failed['structuredContent']['error']['code'] == 'retryable'
+        assert failed['structuredContent']['error']['status'] == 503
+        assert 'private-retry' not in str(failed) and 'delivery.example' not in str(failed)
+        assert await db.scalar(select(func.count()).select_from(MaintenanceObservationPhoto)) == 0
+        assert await db.scalar(select(func.count()).select_from(ServiceAttachment)) == 0
+        assert not (await db.execute(receipt_query)).scalars().all()
+        assert await db.scalar(audit_query) == 0
+        saved = success(await call(client, 'upload_maintenance_finding_photo', photo_args))
+        assert not saved['replayed']
+        replay = success(await call(client, 'upload_maintenance_finding_photo', photo_args))
+        assert replay['replayed'] and replay['result']['id'] == saved['result']['id']
+    assert len(requests) == 2
+    assert await db.scalar(select(func.count()).select_from(MaintenanceObservationPhoto)) == 1
+    assert await db.scalar(select(func.count()).select_from(ServiceAttachment)) == 1
+    assert await db.scalar(audit_query) == 1
+    receipts = (await db.execute(receipt_query)).scalars().all()
+    assert len(receipts) == 1 and receipts[0].completed_at is not None
+    assert 'private-retry' not in str(receipts[0].response_body) and 'private-retry' not in caplog.text
 
 
 @pytest.mark.asyncio
