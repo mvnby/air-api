@@ -157,6 +157,11 @@ jobs:
           npm ci
           npm run build
 
+      - name: Configure Docker Hub cache on hosted runner
+        run: |
+          sudo python3 scripts/ci/configure_docker_registry_mirror.py /etc/docker/daemon.json
+          sudo systemctl restart docker
+
       - name: Lowercase Repo Name
         id: prep
         run: echo "repo=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"

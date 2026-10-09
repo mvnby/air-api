@@ -1,0 +1,33 @@
+import json
+
+import pytest
+
+from scripts.ci.configure_docker_registry_mirror import MIRROR, configure
+
+
+def test_new_config_and_repeated_setup(tmp_path):
+    path = tmp_path / "docker" / "daemon.json"
+    configure(path)
+    first = path.read_bytes()
+    configure(path)
+    assert path.read_bytes() == first
+    assert json.loads(first) == {"registry-mirrors": [MIRROR]}
+
+
+def test_existing_options_and_other_mirrors_survive(tmp_path):
+    path = tmp_path / "daemon.json"
+    original = {"features": {"containerd-snapshotter": True},
+                "log-driver": "local", "registry-mirrors": ["https://other.example", MIRROR]}
+    path.write_text(json.dumps(original))
+    configure(path)
+    assert json.loads(path.read_text()) == {
+        **original, "registry-mirrors": [MIRROR, "https://other.example"]}
+
+
+@pytest.mark.parametrize("content", ["{invalid", "[]", '{"registry-mirrors": "bad"}', '{"registry-mirrors": [1]}'])
+def test_invalid_config_is_never_overwritten(tmp_path, content):
+    path = tmp_path / "daemon.json"
+    path.write_text(content)
+    with pytest.raises(ValueError):
+        configure(path)
+    assert path.read_text() == content
