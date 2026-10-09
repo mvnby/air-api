@@ -46,7 +46,7 @@ async def respond(operation):
 @router.get("/connection", response_model=CallDriveStatus, operation_id=operation_ids.GET_MANAGER_CALL_DRIVE_STATUS)
 async def connection_status(actor: CommandActor = Depends(caller), session: AsyncSession = Depends(get_session)):
     """Read personal call-Drive connection readiness and fixed processing limits. Requires
-    live Manager membership; scope is the current staff user plus tenant/storefront,
+    live Manager membership and explicit private-pilot access; scope is the current staff user plus tenant/storefront,
     including owners (no access to another user's calls). Returns no credentials. Does
     not contact Drive, poll recordings or charge AI. Default pipeline is disabled.
     [Call contract](https://github.com/mvnby/air-api/blob/main/docs/call-recordings.md).
@@ -91,7 +91,7 @@ async def oauth_callback(request: Request, code: str = "", state: str = "", erro
         except (DocumentDriveConnectionError, PermissionError):
             await session.rollback()
     message = "Личный Google Диск подключён. Выберите папку записей." if success else "Подключение не завершено. Вернитесь в записи звонков и попробуйте снова."
-    return HTMLResponse(f'<!doctype html><html lang="ru"><body><p>{message}</p><a href="/manager/calls">Записи звонков</a></body></html>', status_code=200 if success else 400)
+    return HTMLResponse(f'<!doctype html><html lang="ru"><body><p>{message}</p><a href="/manager/settings/calls">Записи звонков</a></body></html>', status_code=200 if success else 400)
 
 
 @router.put("/connection/folder", response_model=CallDriveStatus, operation_id=operation_ids.CONFIGURE_MANAGER_CALL_DRIVE_FOLDER)

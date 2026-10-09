@@ -143,7 +143,7 @@ class CallRecordingJobService(RepairDiagnosticAiJobService):
 
     @classmethod
     async def poll_auto_connections(cls, *, session_factory=None):
-        if not settings.CALL_RECORDINGS_ENABLED:
+        if not settings.CALL_RECORDINGS_ENABLED or not settings.CALL_RECORDINGS_PILOT_STAFF_IDS:
             return 0
         from core.command_actor import CommandActor
         from models import StaffUser
@@ -151,7 +151,7 @@ class CallRecordingJobService(RepairDiagnosticAiJobService):
         from services.call_recording_service import CallRecordingService
         factory = session_factory or async_session_maker
         async with factory() as session:
-            rows = (await session.scalars(select(CallDriveConnection).where(CallDriveConnection.auto_poll_enabled.is_(True), CallDriveConnection.encrypted_credentials.is_not(None), CallDriveConnection.folder_id.is_not(None), or_(CallDriveConnection.last_polled_at.is_(None), CallDriveConnection.last_polled_at < datetime.now(timezone.utc) - timedelta(seconds=60))).limit(3))).all()
+            rows = (await session.scalars(select(CallDriveConnection).where(CallDriveConnection.staff_user_id.in_(settings.CALL_RECORDINGS_PILOT_STAFF_IDS), CallDriveConnection.auto_poll_enabled.is_(True), CallDriveConnection.encrypted_credentials.is_not(None), CallDriveConnection.folder_id.is_not(None), or_(CallDriveConnection.last_polled_at.is_(None), CallDriveConnection.last_polled_at < datetime.now(timezone.utc) - timedelta(seconds=60))).limit(3))).all()
             snapshots = [row.model_dump() for row in rows]
         for row in snapshots:
             async with factory() as session:

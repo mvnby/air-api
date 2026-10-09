@@ -23,6 +23,59 @@ beforeEach(() => {
 });
 
 describe('call recording review', () => {
+  it('keeps an existing connection compact and waits for an explicit selection', async () => {
+    const wrapper = mount(CallRecordingsView);
+    await flushPromises();
+    expect(wrapper.get('[data-testid="call-setup"] details').attributes('open')).toBeUndefined();
+    expect(wrapper.get('[data-testid="call-selection-empty"]').text()).toContain('Выберите запись');
+    expect(mocks.get).not.toHaveBeenCalled();
+    const row = wrapper.findAll('button').find(button => button.text().includes('Тестовая запись'))!;
+    expect(row.attributes('aria-pressed')).toBe('false');
+    await row.trigger('click');
+    await flushPromises();
+    expect(row.attributes('aria-pressed')).toBe('true');
+    expect(wrapper.find('[data-testid="call-selection-empty"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('shows loading and an actionable empty list without processing files', async () => {
+    let resolveList!: (value: { items: CallRecordingResponse[]; total: number }) => void;
+    mocks.list.mockImplementationOnce(() => new Promise(resolve => { resolveList = resolve; }));
+    const wrapper = mount(CallRecordingsView);
+    await flushPromises();
+    expect(wrapper.text()).toContain('Загружаем подключение и записи');
+    resolveList({ items: [], total: 0 });
+    await flushPromises();
+    expect(wrapper.text()).toContain('Пока нет записей для разбора');
+    expect(wrapper.text()).toContain('Проверьте файл вручную');
+    expect(mocks.poll).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('toggles automatic checking directly while preserving the selected provider', async () => {
+    mocks.folder.mockResolvedValue({ ...connection(), auto_poll_enabled: true });
+    const wrapper = mount(CallRecordingsView);
+    await flushPromises();
+    await wrapper.get('[data-testid="call-setup"] input[type="checkbox"]').setValue(true);
+    await flushPromises();
+    expect(mocks.folder).toHaveBeenCalledWith('chosen-folder-000001', true, 'groq');
+    expect(wrapper.text()).toContain('Автопроверка включена');
+    expect(mocks.poll).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('does not offer resubmission when the Google wait deadline expired', async () => {
+    mocks.get.mockResolvedValue({ ...recording(), state: 'manual_review', stage: 'transcribe', last_error_code: 'call_google_wait_expired' });
+    const wrapper = mount(CallRecordingsView);
+    await flushPromises();
+    await wrapper.findAll('button').find(button => button.text().includes('Тестовая запись'))!.trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('разберите запись вручную');
+    expect(wrapper.text()).not.toContain('Повторить незавершённый этап');
+    expect(mocks.retry).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
   it('saves Google batch selection without enabling automatic polling', async () => {
     mocks.folder.mockResolvedValue({ ...connection(), transcription_provider: 'google_batch', transcription_configured: true, transcription_model: 'google-batch' });
     const wrapper = mount(CallRecordingsView);

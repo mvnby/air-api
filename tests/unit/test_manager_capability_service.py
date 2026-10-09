@@ -1,3 +1,8 @@
+from dataclasses import replace
+
+import pytest
+
+from core.config import settings
 from core.security import AuthenticatedUser
 from services.manager_capability_service import ManagerCapabilityService
 
@@ -27,10 +32,13 @@ def test_non_system_manager_gets_only_tenant_work_capabilities():
     ]
 
 
-def test_system_owner_gets_platform_staff_and_infrastructure_capabilities():
+def test_system_owner_gets_standard_capabilities_without_private_pilot():
     assert ManagerCapabilityService.for_auth(
         _auth(role="owner", is_system=True)
-    ) == list(ManagerCapabilityService.ORDERED_CAPABILITIES)
+    ) == [
+        capability for capability in ManagerCapabilityService.ORDERED_CAPABILITIES
+        if capability != ManagerCapabilityService.CALL_RECORDINGS_MANAGE
+    ]
 
 
 def test_non_system_owner_does_not_gain_platform_capabilities():
@@ -44,3 +52,19 @@ def test_non_system_owner_does_not_gain_platform_capabilities():
     assert "services.manage" in capabilities
     assert "platform.manage" not in capabilities
     assert "infrastructure.manage" not in capabilities
+
+
+@pytest.mark.parametrize("role", ["owner", "admin", "manager"])
+@pytest.mark.parametrize("is_system", [True, False])
+def test_private_calls_require_explicit_staff_access_even_for_owners(monkeypatch, role, is_system):
+    auth = _auth(role=role, is_system=is_system)
+    monkeypatch.setattr(settings, "CALL_RECORDINGS_PILOT_STAFF_IDS", [])
+    assert "call_recordings.manage" not in ManagerCapabilityService.for_auth(auth)
+    monkeypatch.setattr(settings, "CALL_RECORDINGS_PILOT_STAFF_IDS", [4])
+    assert "call_recordings.manage" not in ManagerCapabilityService.for_auth(auth)
+    assert "call_recordings.manage" in ManagerCapabilityService.for_auth(replace(auth, staff_user_id=4))
+
+
+def test_private_calls_do_not_restore_a_revoked_manager_role(monkeypatch):
+    monkeypatch.setattr(settings, "CALL_RECORDINGS_PILOT_STAFF_IDS", [1])
+    assert "call_recordings.manage" not in ManagerCapabilityService.for_auth(_auth(role="installer", is_system=True))
