@@ -74,6 +74,7 @@ const subjectTouched = ref(false);
 const bodyTouched = ref(false);
 let composeRequestId = 0;
 let resettingSelection = false;
+let templateExplicitlyChosen = false;
 
 const selectedDocuments = computed(() => {
   const selected = new Set(selectedDocumentIds.value);
@@ -139,6 +140,7 @@ const refreshDefaults = () => {
   certificateOptions.value = [];
   void loadCertificateOptions().catch((err) => { error.value = getApiErrorMessage(err); });
   toEmail.value = props.order.customer?.email || '';
+  templateExplicitlyChosen = false;
   templateKey.value = props.documents.length ? 'auto' : 'request_requisites';
   subject.value = buildSubject();
   bodyText.value = buildBody();
@@ -181,6 +183,7 @@ const applyTemplate = async (force = false) => {
 };
 
 const changeTemplate = () => {
+  templateExplicitlyChosen = true;
   resettingSelection = true;
   if (templateKey.value === 'request_requisites' || templateKey.value === 'request_signer') {
     selectedDocumentIds.value = [];
@@ -209,6 +212,9 @@ watch(
 
 watch([selectedDocumentIds, registrationCertificateId], () => {
   if (!props.modelValue || resettingSelection) return;
+  if (!props.documents.length && !templateExplicitlyChosen) {
+    templateKey.value = registrationCertificateId.value ? 'auto' : 'request_requisites';
+  }
   if (templateKey.value === 'custom') return;
   void applyTemplate(false);
 });

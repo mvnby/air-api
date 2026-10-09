@@ -142,9 +142,15 @@ async def test_certificate_only_compose_send_history_immutable(
         tenant_scope=tenant_scope,
         order_id=order.id,
         document_ids=[],
+        template_key="auto",
         registration_certificate_id=first.id,
     )
+    assert composed["template_key"] == "documents"
     assert "Свидетельство о регистрации" in composed["subject"]
+    assert "Направляем свидетельство о регистрации" in composed["body_text"]
+    assert "Документ приложен к письму." in composed["body_text"]
+    assert "Запрос реквизитов" not in composed["subject"]
+    assert "просим дополнительно сообщить" not in composed["body_text"]
     captured = []
     monkeypatch.setattr(
         MailSmtpService,
