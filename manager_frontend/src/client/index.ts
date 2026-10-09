@@ -52,6 +52,7 @@ export type { Body_upload_manager_maintenance_observation_photo } from './models
 export type { Body_upload_manager_native_template_version } from './models/Body_upload_manager_native_template_version';
 export type { Body_upload_manager_order_attachment } from './models/Body_upload_manager_order_attachment';
 export type { Body_upload_manager_order_document } from './models/Body_upload_manager_order_document';
+export type { Body_upload_manager_registration_certificate } from './models/Body_upload_manager_registration_certificate';
 export type { Body_upload_manager_storefront_logo } from './models/Body_upload_manager_storefront_logo';
 export type { Body_upload_media_assets } from './models/Body_upload_media_assets';
 export type { BotApiHealthResponse } from './models/BotApiHealthResponse';
@@ -701,6 +702,7 @@ export type { OutgoingEmailDetailResponse } from './models/OutgoingEmailDetailRe
 export type { OutgoingEmailListResponse } from './models/OutgoingEmailListResponse';
 export type { OutgoingEmailResponse } from './models/OutgoingEmailResponse';
 export type { OutgoingEmailSendPayload } from './models/OutgoingEmailSendPayload';
+export type { ParticipantStatementPayload } from './models/ParticipantStatementPayload';
 export type { PaymentBankReceiptResponse } from './models/PaymentBankReceiptResponse';
 export type { PaymentCreatePayload } from './models/PaymentCreatePayload';
 export type { PaymentCurrency } from './models/PaymentCurrency';
@@ -786,6 +788,7 @@ export type { PublicServiceTariffRuleResponse } from './models/PublicServiceTari
 export type { PublicStorefrontContextResponse } from './models/PublicStorefrontContextResponse';
 export type { PublicWriteIdempotencyErrorResponse } from './models/PublicWriteIdempotencyErrorResponse';
 export type { PublicWriteRequestErrorResponse } from './models/PublicWriteRequestErrorResponse';
+export type { RegistrationCertificateItem } from './models/RegistrationCertificateItem';
 export type { RepairDiagnosticLeadResponse } from './models/RepairDiagnosticLeadResponse';
 export type { ResolveMaintenanceObservation } from './models/ResolveMaintenanceObservation';
 export type { ServiceCatalogCounts } from './models/ServiceCatalogCounts';
@@ -873,6 +876,10 @@ export type { TemplateExternalEditSyncPayload } from './models/TemplateExternalE
 export type { TemplateExternalEditSyncResponse } from './models/TemplateExternalEditSyncResponse';
 export type { TenderLeadPushResult } from './models/TenderLeadPushResult';
 export type { TenderProfile } from './models/TenderProfile';
+export type { TenderWorkflowIdentity } from './models/TenderWorkflowIdentity';
+export type { TenderWorkflowLinkPayload } from './models/TenderWorkflowLinkPayload';
+export type { TenderWorkflowPayload } from './models/TenderWorkflowPayload';
+export type { TenderWorkflowResponse } from './models/TenderWorkflowResponse';
 export type { TransportTermsPayload } from './models/TransportTermsPayload';
 export type { TypedInstallationProfile_Input } from './models/TypedInstallationProfile_Input';
 export type { TypedInstallationProfile_Output } from './models/TypedInstallationProfile_Output';
@@ -953,6 +960,7 @@ export { ManagerTagsService } from './services/ManagerTagsService';
 export { ManagerTariffsService } from './services/ManagerTariffsService';
 export { ManagerTenantCatalogService } from './services/ManagerTenantCatalogService';
 export { ManagerTenantOffersService } from './services/ManagerTenantOffersService';
+export { ManagerTenderWorkflowService } from './services/ManagerTenderWorkflowService';
 export { ManagerWarrantiesService } from './services/ManagerWarrantiesService';
 export { ManagerYandexBusinessService } from './services/ManagerYandexBusinessService';
 export { MultiSplitService } from './services/MultiSplitService';

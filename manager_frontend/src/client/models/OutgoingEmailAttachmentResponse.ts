@@ -10,5 +10,9 @@ export type OutgoingEmailAttachmentResponse = {
     document_id?: (number | null);
     document_type?: (string | null);
     document_number?: (string | null);
+    registration_certificate_id?: (string | null);
+    legal_entity_id?: (number | null);
+    checksum_sha256?: (string | null);
+    attachment_type?: (string | null);
 };
 

@@ -2,6 +2,7 @@
 
 from modules.documents.application.context_builder import DocumentContextSelection
 from .schemas import ManagedDocumentDraftPayload
+from modules.documents.domain.participant_statement import ParticipantStatement
 from modules.documents.domain import (
     ActTerms,
     BusinessDocumentTerms,
@@ -18,6 +19,8 @@ def selection_from_payload(order_id: int, payload: ManagedDocumentDraftPayload) 
         legal_entity_id=payload.legal_entity_id,
         issue_date=payload.issue_date,
         issue_city=payload.issue_city,
+        participant_statement=(ParticipantStatement(**payload.participant_statement.model_dump())
+            if payload.participant_statement is not None else None),
         proposal_id=payload.proposal_id,
         base_document_id=payload.base_document_id,
         base_customer_contract_id=payload.base_customer_contract_id,

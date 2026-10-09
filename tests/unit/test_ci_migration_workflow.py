@@ -197,8 +197,12 @@ def test_ci_uses_dependency_cache_and_isolated_compose_cleanup():
     assert workflow.count('docker build --pull --tag "${CI_APP_IMAGE}" .') == 2
 
     compose_override = yaml.safe_load(CI_COMPOSE_OVERRIDE.read_text(encoding="utf-8"))
+    source_services = yaml.safe_load(Path("docker-compose.yml").read_text(encoding="utf-8"))["services"]
     assert compose_override == {
         "services": {
-            "app": {"image": "${CI_APP_IMAGE:?CI_APP_IMAGE must be set for CI}"}
+            "app": {"image": "${CI_APP_IMAGE:?CI_APP_IMAGE must be set for CI}"},
+            "db": {"image": f"mirror.gcr.io/library/{source_services['db']['image']}"},
+            "db_test": {"image": f"mirror.gcr.io/library/{source_services['db_test']['image']}"},
+            "gotenberg": {"image": f"mirror.gcr.io/{source_services['gotenberg']['image']}"},
         }
     }

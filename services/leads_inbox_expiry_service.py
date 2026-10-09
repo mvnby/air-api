@@ -40,10 +40,12 @@ class LeadsInboxExpiryService:
         return LeadsInboxService.deadline_value(meta)
 
     @classmethod
-    def eligible(cls, order, state, *, now):
+    def eligible(cls, order, state, *, now, context=None, has_publications=False):
         if order.status != OrderStatus.NEW_LEAD or order.linked_order_id is not None or (state and state.archived_at):
             return None
-        deadline = cls.trusted_deadline(order)
+        if has_publications or (context and context.stage in ("submitted", "completed")):
+            return None
+        deadline = context.deadline_at if context and context.deadline_manual else cls.trusted_deadline(order)
         if deadline is None or now < deadline + timedelta(hours=24):
             return None
         restored = state.restored_deadline_at if state else None
@@ -83,7 +85,13 @@ class LeadsInboxExpiryService:
                 continue
             state = (await session.execute(select(InboxTriageState).where(InboxTriageState.entity_kind == "order",
                 InboxTriageState.entity_id == root.id).execution_options(populate_existing=True))).scalar_one_or_none()
-            deadline = cls.eligible(order, state, now=now)
+            from models.tender_workflow import TenderWorkflowLink
+            from services.tender_workflow_service import TenderWorkflowService
+            context = await TenderWorkflowService.context(session, root.id, scope)
+            publication = (await session.execute(select(TenderWorkflowLink.publication_order_id).where(
+                TenderWorkflowLink.price_order_id == root.id, TenderWorkflowService.scope(TenderWorkflowLink, scope))
+                .limit(1))).first()
+            deadline = cls.eligible(order, state, now=now, context=context, has_publications=publication is not None)
             if deadline is None:
                 continue
             candidates.append({"order_id": root.id, "tenant_id": root.tenant_id,

@@ -125,7 +125,9 @@ class OrderEmailTemplateService:
             business_required = [
                 (
                     "full_legal_name",
-                    "полное наименование ИП" if is_entrepreneur else "полное наименование организации",
+                    "полное наименование ИП"
+                    if is_entrepreneur
+                    else "полное наименование организации",
                     customer.full_legal_name,
                 ),
                 ("inn", "УНП", customer.inn),
@@ -140,14 +142,21 @@ class OrderEmailTemplateService:
                 ("signer_name", "ФИО подписанта", customer.signer_name),
             ]
             signs_personally = (
-                is_entrepreneur
-                and str(customer.signing_mode or "").strip() == "self"
+                is_entrepreneur and str(customer.signing_mode or "").strip() == "self"
             )
             if not signs_personally:
                 business_required.extend(
                     [
-                        ("signer_position", "должность подписанта", customer.signer_position),
-                        ("acting_basis", "основание полномочий подписанта", customer.acting_basis),
+                        (
+                            "signer_position",
+                            "должность подписанта",
+                            customer.signer_position,
+                        ),
+                        (
+                            "acting_basis",
+                            "основание полномочий подписанта",
+                            customer.acting_basis,
+                        ),
                     ]
                 )
             required = [*business_required, *required]
@@ -195,6 +204,7 @@ class OrderEmailTemplateService:
         *,
         tenant_scope: TenantScope,
         documents: List[OrderDocument],
+        legal_entity_id: int | None = None,
     ) -> str:
         if tenant_scope.is_system:
             return "Мастер Воздуха"
@@ -208,7 +218,9 @@ class OrderEmailTemplateService:
             DocumentLegalEntity.tenant_id == tenant_scope.tenant_id,
             DocumentLegalEntity.status == "active",
         )
-        if len(legal_entity_ids) == 1:
+        if legal_entity_id is not None:
+            statement = statement.where(DocumentLegalEntity.id == legal_entity_id)
+        elif len(legal_entity_ids) == 1:
             statement = statement.where(
                 DocumentLegalEntity.id == next(iter(legal_entity_ids))
             )
@@ -257,6 +269,8 @@ class OrderEmailTemplateService:
         order_id: int,
         document_ids: List[int],
         template_key: str = "auto",
+        registration_certificate_id: str | None = None,
+        legal_entity_id: int | None = None,
     ) -> Dict[str, Any]:
         if template_key not in cls.TEMPLATE_KEYS:
             raise ValueError("Unknown email template")
@@ -289,9 +303,27 @@ class OrderEmailTemplateService:
                 raise ValueError(f"Document {document_id} not found on order")
             documents.append(document)
 
-        selected_template = cls._select_template(template_key, [item.doc_type for item in documents])
-        option = next(item for item in cls.TEMPLATE_OPTIONS if item.key == selected_template)
-        if option.requires_documents and not documents:
+        certificate = None
+        if registration_certificate_id is not None:
+            from services.legal_entity_attachment_service import (
+                LegalEntityAttachmentService,
+            )
+
+            certificate = await LegalEntityAttachmentService.resolve_for_mail(
+                session,
+                tenant_scope,
+                registration_certificate_id,
+                documents,
+                legal_entity_id,
+            )
+
+        selected_template = cls._select_template(
+            template_key, [item.doc_type for item in documents]
+        )
+        option = next(
+            item for item in cls.TEMPLATE_OPTIONS if item.key == selected_template
+        )
+        if option.requires_documents and not documents and certificate is None:
             raise ValueError("Select at least one document")
 
         missing = cls._missing_requisites(order)
@@ -302,6 +334,9 @@ class OrderEmailTemplateService:
             session,
             tenant_scope=tenant_scope,
             documents=documents,
+            legal_entity_id=certificate.legal_entity_id
+            if certificate is not None
+            else None,
         )
 
         if selected_template == "request_requisites":
@@ -318,13 +353,10 @@ class OrderEmailTemplateService:
             )
         elif selected_template == "custom":
             subject = f"По заказу #{order.id}"
-            body_text = "\n".join(
-                ["Добрый день!", "", "", "С уважением,", sender_name]
-            )
+            body_text = "\n".join(["Добрый день!", "", "", "С уважением,", sender_name])
         else:
             body_labels = [
-                cls.DOCUMENT_LABELS.get(item.doc_type, "документ")
-                for item in documents
+                cls.DOCUMENT_LABELS.get(item.doc_type, "документ") for item in documents
             ]
             subject_labels = [
                 cls.SUBJECT_DOCUMENT_LABELS.get(item.doc_type, "Документ")
@@ -335,14 +367,31 @@ class OrderEmailTemplateService:
             if len(set(item.doc_type for item in documents)) > 2:
                 subject_document_label = "Документы"
             elif subject_document_label:
-                subject_document_label = subject_document_label[:1].upper() + subject_document_label[1:]
-            subject = f"{subject_document_label} на {scenario}"
+                subject_document_label = (
+                    subject_document_label[:1].upper() + subject_document_label[1:]
+                )
+            if certificate is not None:
+                body_document_label = cls._join_labels(
+                    [*body_labels, "свидетельство о регистрации"]
+                )
+                subject_document_label = (
+                    "Документы" if documents else "Свидетельство о регистрации"
+                )
+            subject = (
+                f"{subject_document_label} по заказу #{order.id}"
+                if certificate is not None
+                else f"{subject_document_label} на {scenario}"
+            )
             body_text = "\n".join(
                 [
                     "Добрый день!",
                     "",
-                    f"Направляем {body_document_label} на {scenario}.",
-                    "Документ приложен к письму." if len(documents) == 1 else "Документы приложены к письму.",
+                    f"Направляем {body_document_label} по заказу #{order.id}."
+                    if certificate is not None
+                    else f"Направляем {body_document_label} на {scenario}.",
+                    "Документ приложен к письму."
+                    if len(documents) + int(certificate is not None) == 1
+                    else "Документы приложены к письму.",
                     "",
                     "С уважением,",
                     sender_name,

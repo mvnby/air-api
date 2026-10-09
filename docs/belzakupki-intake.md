@@ -235,6 +235,46 @@ restores it on success or failure. It does not change Caddy, PostgreSQL, Redis,
 or Belzakupki API routing. A busy worker must finish gracefully within the
 configured wait or the deployment aborts; the guard never forces a job kill.
 
+## Procurement stages and price enquiry history
+
+Manager can explicitly associate an announced procurement with an earlier
+price enquiry, including an archived enquiry or one already qualified into an
+order. The two Orders retain their source IDs, proposals, documents, statuses
+and archive history. The inbox and order workspace show navigation in both
+directions. A manager can remove the association; its creation and removal are
+audited on both records. Buyer names and similar titles never establish a link
+automatically. An unmarked source can be explicitly marked as a price enquiry
+when selecting it.
+
+Business stages are price enquiry, price sent, announced/preparing, submitted
+and completed. The current stage's deadline is optional and displayed in Minsk
+time. Manual context is stored separately from importer metadata and used by
+deadline sorting before pagination. The original publication and source dates
+remain available. A linked price enquiry, an already submitted bid or a
+completed procurement is excluded from automatic missed-deadline archiving.
+Other incoming cards retain the existing 24-hour grace and restore policy.
+
+`GET/PATCH /api/manager/orders/{order_id}/tender-workflow` reads or updates the
+scoped context. The `/price-enquiries` child route lists bounded candidates;
+`PUT/DELETE /price-enquiry` creates or removes an explicit association. Commands
+lock both Orders in ascending ID order and preserve tenant/storefront boundaries.
+Repeated association with the same target or repeated removal is safe; changing
+the target requires removing the existing association first.
+
+### Release scope and rollback
+
+Acceptance covers explicit linking/unlinking, archived/qualified sources,
+independent deadlines, importer preservation, scope isolation and the existing
+document/email workflows. Platform submission, automatic matching, reminders
+and AI qualification are outside this release.
+
+The additive migrations `t1089chain01` and `t1089scan02` create independent
+context/link and registration-certificate tables without backfilling Orders or
+replacing business documents. Deploy through the normal migration/image gates.
+Application rollback can leave the new tables in place. Do not downgrade/drop
+them in production after use: that would discard manually saved history and
+certificate metadata.
+
 ## Verification
 
 Before activation, verify source API 401 without a key, a scoped successful page

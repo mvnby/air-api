@@ -5,6 +5,7 @@
 import type { InboxRelatedRequest } from './InboxRelatedRequest';
 import type { LeadsInboxArchiveResponse } from './LeadsInboxArchiveResponse';
 import type { LeadsInboxTenderResponse } from './LeadsInboxTenderResponse';
+import type { TenderWorkflowResponse } from './TenderWorkflowResponse';
 export type LeadsInboxItemResponse = {
     id: number;
     entity_kind?: 'order' | 'lead';
@@ -46,6 +47,7 @@ export type LeadsInboxItemResponse = {
     marketing_source?: (string | null);
     attachment_count?: number;
     tender?: (LeadsInboxTenderResponse | null);
+    tender_workflow?: (TenderWorkflowResponse | null);
     commercial_terms_summary?: Array<string>;
     intake_state?: ('needs_contact' | 'needs_details' | 'ready_for_review' | null);
     intake_version?: (number | null);

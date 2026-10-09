@@ -88,6 +88,12 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   const businessTerms = ref<BusinessDocumentTerms>(createDefaultBusinessDocumentTerms());
   const actTerms = ref<ActTerms>(createDefaultActTerms());
   const transportTerms = ref<TransportTerms>(createDefaultTransportTerms());
+  const participantStatement = ref({ procedure_reference: '', lot: '', buyer_name: '', declaration_text: '' });
+  const participantStatementConfirmations = ref<Record<number, boolean>>({});
+  watch(() => input.orderId(), () => {
+    participantStatement.value = { procedure_reference: '', lot: '', buyer_name: '', declaration_text: '' };
+    participantStatementConfirmations.value = {};
+  }, { flush: 'sync' });
   const consumerDefaultsLoading = ref(false);
   const consumerDefaultsLoaded = ref(false);
   const busy = ref(false);
@@ -326,6 +332,14 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       }
     }
     if (installationTwoStagesError.value) return installationTwoStagesError.value;
+    if (documentType.value === 'participant_statement') {
+      const statement = participantStatement.value;
+      if (!statement.procedure_reference.trim() || !statement.lot.trim()
+        || !statement.buyer_name.trim() || !statement.declaration_text.trim()) {
+        return 'Заполните процедуру, лот, заказчика и текст заявления';
+      }
+      if (!selectedTemplateId.value) return '';
+    }
     if (!selectedTemplateId.value) return 'Нет шаблона для этого типа';
     if (!selectedTemplateHasActiveVersion.value) return 'У шаблона нет активной DOCX-версии';
     if (['act', 'tn2', 'ttn1'].includes(documentType.value) && !baseDocumentId.value && !baseCustomerContractId.value) {
@@ -539,6 +553,8 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
 
   const draftPayload = computed(() => ({
     legal_entity_id: selectedLegalEntityId.value,
+    participant_statement: documentType.value === 'participant_statement'
+      ? { ...participantStatement.value } : undefined,
     document_type: documentType.value,
     issue_date: issueDate.value,
     issue_city: issueCity.value.trim() || null,
@@ -614,6 +630,10 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       resetBusinessTerms();
       resetActTerms();
       resetTransportTerms();
+      if (documentType.value === 'participant_statement') {
+        participantStatement.value.declaration_text = '';
+        void loadTemplates();
+      }
       await loadDocuments(isCurrent);
       if (!isCurrent()) return;
       input.refresh();
@@ -649,9 +669,16 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
 
   const issue = async (document: ManagedDocumentItem, action = beginIssueAction(document)) => {
     if (!action.canIssue() || issueBlockedReason.value) return;
+    if (document.doc_type === 'participant_statement' && !participantStatementConfirmations.value[document.id]) {
+      input.notify('Подтвердите проверку текста и фактов заявления перед выпуском.', 'error');
+      return;
+    }
     busy.value = true;
     try {
-      await awaitMutation(ManagerDocumentSystemService.issueManagerManagedDocument(document.id), action.isCurrent);
+      const request = document.doc_type === 'participant_statement'
+        ? ManagerDocumentSystemService.issueManagerManagedDocument(document.id, true)
+        : ManagerDocumentSystemService.issueManagerManagedDocument(document.id);
+      await awaitMutation(request, action.isCurrent);
       if (!action.isCurrent()) return;
       await loadDocuments();
       if (!action.isCurrent()) return;
@@ -718,6 +745,9 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     resetBusinessTerms();
     resetActTerms();
     resetTransportTerms();
+    if (document.doc_type === 'participant_statement' && document.participant_statement) {
+      participantStatement.value = { ...document.participant_statement };
+    }
     preferredTemplateId = document.document_template_id || null;
     documentType.value = document.doc_type;
     selectedLegalEntityId.value = document.legal_entity_id || selectedLegalEntityId.value;
@@ -819,6 +849,8 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     selectedLegalEntityId,
     selectedGoodsWarrantyDefault,
     selectedTemplateId,
+    participantStatement,
+    participantStatementConfirmations,
     templates,
     templatesLoading,
     transportTerms,

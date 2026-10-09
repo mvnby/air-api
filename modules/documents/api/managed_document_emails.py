@@ -57,6 +57,8 @@ async def compose_native_order_email(
             tenant_scope=auth.tenant_scope(),
             order_id=order_id,
             document_ids=payload.document_ids,
+            registration_certificate_id=payload.registration_certificate_id,
+            legal_entity_id=payload.legal_entity_id,
             template_key=payload.template_key,
         )
     except ValueError as exc:
@@ -113,6 +115,8 @@ async def send_native_order_email(
             body_html=payload.body_html,
             reply_to=payload.reply_to,
             document_ids=payload.document_ids,
+            registration_certificate_id=payload.registration_certificate_id,
+            legal_entity_id=payload.legal_entity_id,
         )
     except PartnerTenantSmtpUnavailableError as exc:
         raise _email_error(

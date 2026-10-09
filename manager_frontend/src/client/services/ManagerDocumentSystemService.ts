@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { Body_upload_manager_document_facsimile } from '../models/Body_upload_manager_document_facsimile';
 import type { Body_upload_manager_native_template_version } from '../models/Body_upload_manager_native_template_version';
+import type { Body_upload_manager_registration_certificate } from '../models/Body_upload_manager_registration_certificate';
 import type { ConditionPresetItem } from '../models/ConditionPresetItem';
 import type { ConditionPresetList } from '../models/ConditionPresetList';
 import type { ConditionPresetPayload } from '../models/ConditionPresetPayload';
@@ -40,6 +41,7 @@ import type { OrderEmailComposePayload } from '../models/OrderEmailComposePayloa
 import type { OrderEmailComposeResponse } from '../models/OrderEmailComposeResponse';
 import type { OrderEmailSendPayload } from '../models/OrderEmailSendPayload';
 import type { OutgoingEmailResponse } from '../models/OutgoingEmailResponse';
+import type { RegistrationCertificateItem } from '../models/RegistrationCertificateItem';
 import type { TemplateExternalEditSyncPayload } from '../models/TemplateExternalEditSyncPayload';
 import type { TemplateExternalEditSyncResponse } from '../models/TemplateExternalEditSyncResponse';
 import type { CancelablePromise } from '../core/CancelablePromise';
@@ -1154,7 +1156,10 @@ export class ManagerDocumentSystemService {
     /**
      * Issue Managed Document
      * Issue a current-tenant managed draft by reserving its official number and rendering
-     * immutable DOCX/PDF artifacts. Saved external edits must be synchronized and their remote
+     * immutable DOCX/PDF artifacts. Participant statements require explicit factual
+     * confirmation of the current text using participant_statement_confirmed=true;
+     * the issuing actor, timestamp and exact artifact checksums are frozen in the snapshot.
+     * Saved external edits must be synchronized and their remote
      * revision verified first. Missing document returns 404, state/edit conflicts 409 and
      * generation failure 503. A failed render retains its reservation; retry the same document
      * rather than creating a new draft. Already issued/sent/signed records reuse their
@@ -1164,17 +1169,22 @@ export class ManagerDocumentSystemService {
      * Access requires an authenticated Manager session/JWT and live membership; see [Manager
      * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param documentId
+     * @param participantStatementConfirmed
      * @returns ManagedDocumentItem Successful Response
      * @throws ApiError
      */
     public static issueManagerManagedDocument(
         documentId: number,
+        participantStatementConfirmed: boolean = false,
     ): CancelablePromise<ManagedDocumentItem> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/manager/document-system/documents/{document_id}/issue',
             path: {
                 'document_id': documentId,
+            },
+            query: {
+                'participant_statement_confirmed': participantStatementConfirmed,
             },
             errors: {
                 422: `Validation Error`,
@@ -1343,6 +1353,128 @@ export class ManagerDocumentSystemService {
             url: '/api/manager/document-system/documents/{document_id}/readiness',
             path: {
                 'document_id': documentId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * List Certificates
+     * List private immutable registration certificate versions for a legal entity in the
+     * current tenant. Managers may read; foreign/missing issuers return 404. Limit is
+     * clamped to 1..100, current version first. Read only; no storage locations are exposed.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * @param legalEntityId
+     * @param limit
+     * @returns RegistrationCertificateItem Successful Response
+     * @throws ApiError
+     */
+    public static listManagerRegistrationCertificates(
+        legalEntityId: number,
+        limit: number = 100,
+    ): CancelablePromise<Array<RegistrationCertificateItem>> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/document-system/legal-entities/{legal_entity_id}/registration-certificates',
+            path: {
+                'legal_entity_id': legalEntityId,
+            },
+            query: {
+                'limit': limit,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Upload Certificate
+     * Owner/admin uploads a private registration certificate for an own-tenant legal entity
+     * and makes the new immutable version current. Actual PDF/JPEG/PNG is validated,
+     * including parser integrity; encrypted/empty PDF, invalid image, file over 10 MB or
+     * image over 20 million pixels returns 400. Missing/foreign entity returns 404,
+     * manager-only or demo writes return 403. Name is sanitized using the actual file type.
+     * Replacement never deletes previous bytes or mail metadata. Concurrent writes are
+     * serialized per issuer. No caller replay receipt: reload versions before repeating an
+     * upload after an uncertain response.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * @param legalEntityId
+     * @param formData
+     * @returns RegistrationCertificateItem Successful Response
+     * @throws ApiError
+     */
+    public static uploadManagerRegistrationCertificate(
+        legalEntityId: number,
+        formData: Body_upload_manager_registration_certificate,
+    ): CancelablePromise<RegistrationCertificateItem> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/document-system/legal-entities/{legal_entity_id}/registration-certificates',
+            path: {
+                'legal_entity_id': legalEntityId,
+            },
+            formData: formData,
+            mediaType: 'multipart/form-data',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Select Certificate
+     * Owner/admin selects an immutable registration certificate version owned by the current
+     * tenant as current for its original issuer, retaining every other version and earlier
+     * mail attachments. Missing/foreign version returns 404; manager-only or demo writes
+     * return 403. The issuer row serializes concurrent selection/replacement; repeating the
+     * same selection is safe and no mail is sent.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * @param attachmentId
+     * @returns RegistrationCertificateItem Successful Response
+     * @throws ApiError
+     */
+    public static selectManagerRegistrationCertificate(
+        attachmentId: string,
+    ): CancelablePromise<RegistrationCertificateItem> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/manager/document-system/registration-certificates/{attachment_id}/current',
+            path: {
+                'attachment_id': attachmentId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Download Certificate
+     * Download an immutable private registration certificate owned by the current tenant.
+     * Managers can download current and historical versions; missing/foreign versions
+     * return 404 and unavailable or checksum-mismatched storage returns 409. Returns actual
+     * PDF/JPEG/PNG bytes with a safe original filename and private no-store cache headers.
+     * Storage keys and public media URLs are never exposed. Read only; retry is safe.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * @param attachmentId
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static downloadManagerRegistrationCertificate(
+        attachmentId: string,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/document-system/registration-certificates/{attachment_id}/download',
+            path: {
+                'attachment_id': attachmentId,
             },
             errors: {
                 422: `Validation Error`,

@@ -10,6 +10,44 @@ from schemas_common import Meta
 
 RefusalReason = Literal["profile", "region", "terms", "capacity", "unclear", "other"]
 ArchiveOutcome = Literal["refusal", "spam", "duplicate", "deadline_expired", "legacy_lost", "linked"]
+TenderStage = Literal["price_request", "price_sent", "announced", "submitted", "completed"]
+
+
+class TenderWorkflowIdentity(BaseModel):
+    order_id: int
+    title: str | None = None
+    external_id: str | None = None
+    source: str | None = None
+    source_url: str | None = None
+    status: str
+    archived: bool = False
+    stage: TenderStage | None = None
+    deadline_at: datetime | None = None
+
+
+class TenderWorkflowResponse(BaseModel):
+    order_id: int
+    stage: TenderStage | None = None
+    deadline_at: datetime | None = None
+    deadline_manual: bool = False
+    price_enquiry: TenderWorkflowIdentity | None = None
+    publications: list[TenderWorkflowIdentity] = Field(default_factory=list)
+    history: list["LeadsInboxHistoryResponse"] = Field(default_factory=list)
+
+
+class TenderWorkflowPayload(BaseModel):
+    stage: TenderStage
+    deadline_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def validate_deadline(self):
+        if self.deadline_at is not None and self.deadline_at.tzinfo is None:
+            raise ValueError("Срок этапа должен включать часовой пояс")
+        return self
+
+
+class TenderWorkflowLinkPayload(BaseModel):
+    price_order_id: int = Field(gt=0)
 
 
 class LeadsCounterResponse(BaseModel):
@@ -97,6 +135,7 @@ class LeadsInboxItemResponse(BaseModel):
     marketing_source: str | None = None
     attachment_count: int = 0
     tender: LeadsInboxTenderResponse | None = None
+    tender_workflow: TenderWorkflowResponse | None = None
     commercial_terms_summary: list[str] = Field(default_factory=list)
     intake_state: Literal["needs_contact", "needs_details", "ready_for_review"] | None = None
     intake_version: int | None = None

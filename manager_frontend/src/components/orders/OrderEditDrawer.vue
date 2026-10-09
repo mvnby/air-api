@@ -10,6 +10,7 @@ import OrderSalesInstallationWorkspace from './OrderSalesInstallationWorkspace.v
 import OrderPaymentsPanel from './OrderPaymentsPanel.vue';
 import OrderWebsiteIntakePanel from './OrderWebsiteIntakePanel.vue';
 import OrderIncomingContext from './OrderIncomingContext.vue';
+import TenderWorkflowPanel from './TenderWorkflowPanel.vue';
 import OrderPlanningPanel from './OrderPlanningPanel.vue';
 import OrderRepairPanel from './OrderRepairPanel.vue';
 import OrderCustomerContext from './OrderCustomerContext.vue';
@@ -607,6 +608,7 @@ const saveContextObject = async (draft: { address: string; branchId: number | nu
             {{ displayFormError }}
           </p>
           <fieldset :disabled="proposalActionLoading || installationAttaching || sourceApplying" class="min-w-0">
+            <TenderWorkflowPanel v-if="order && !proposalClientPreview && (order.lead_source === 'email' || order.lead_source === 'belzakupki')" :order-id="order.id" />
             <section v-show="activeWorkspaceSection === 'proposal'" class="min-w-0" data-order-usage="workspace-proposal-panel">
               <OrderManagerLabels v-show="!proposalClientPreview" v-model="managerLabels" />
               <OrderProposalWorkspace

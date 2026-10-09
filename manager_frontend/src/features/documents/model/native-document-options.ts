@@ -2,6 +2,7 @@ import type { ManagedDocumentItem } from '../../../client';
 
 export const BUSINESS_NATIVE_DOCUMENT_TYPES = [
   { value: 'offer', label: 'Коммерческое предложение' },
+  { value: 'participant_statement', label: 'Заявление участника' },
   { value: 'invoice', label: 'Счёт' },
   { value: 'contract', label: 'Договор' },
   { value: 'act', label: 'Акт' },

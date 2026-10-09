@@ -15593,7 +15593,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|invoice|maintenance_defect_act|offer|tn2|ttn1)$",
+              "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|invoice|maintenance_defect_act|offer|participant_statement|tn2|ttn1)$",
               "title": "Doc Type"
             }
           }
@@ -16736,7 +16736,7 @@
           "manager-document-system"
         ],
         "summary": "Issue Managed Document",
-        "description": "Issue a current-tenant managed draft by reserving its official number and rendering\nimmutable DOCX/PDF artifacts. Saved external edits must be synchronized and their remote\nrevision verified first. Missing document returns 404, state/edit conflicts 409 and\ngeneration failure 503. A failed render retains its reservation; retry the same document\nrather than creating a new draft. Already issued/sent/signed records reuse their\nissuance result. See the [document lifecycle\ncontract](https://github.com/mvnby/air-api/blob/main/docs/document-module-architecture.md).\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Issue a current-tenant managed draft by reserving its official number and rendering\nimmutable DOCX/PDF artifacts. Participant statements require explicit factual\nconfirmation of the current text using participant_statement_confirmed=true;\nthe issuing actor, timestamp and exact artifact checksums are frozen in the snapshot.\nSaved external edits must be synchronized and their remote\nrevision verified first. Missing document returns 404, state/edit conflicts 409 and\ngeneration failure 503. A failed render retains its reservation; retry the same document\nrather than creating a new draft. Already issued/sent/signed records reuse their\nissuance result. See the [document lifecycle\ncontract](https://github.com/mvnby/air-api/blob/main/docs/document-module-architecture.md).\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "issue_manager_managed_document",
         "security": [
           {
@@ -16751,6 +16751,16 @@
             "schema": {
               "type": "integer",
               "title": "Document Id"
+            }
+          },
+          {
+            "name": "participant_statement_confirmed",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Participant Statement Confirmed"
             }
           }
         ],
@@ -17068,6 +17078,218 @@
                 "schema": {
                   "$ref": "#/components/schemas/DocumentCustomerReadiness"
                 }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/document-system/legal-entities/{legal_entity_id}/registration-certificates": {
+      "get": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "List Certificates",
+        "description": "List private immutable registration certificate versions for a legal entity in the\ncurrent tenant. Managers may read; foreign/missing issuers return 404. Limit is\nclamped to 1..100, current version first. Read only; no storage locations are exposed.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "operationId": "list_manager_registration_certificates",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "legal_entity_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Legal Entity Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RegistrationCertificateItem"
+                  },
+                  "title": "Response List Manager Registration Certificates"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Upload Certificate",
+        "description": "Owner/admin uploads a private registration certificate for an own-tenant legal entity\nand makes the new immutable version current. Actual PDF/JPEG/PNG is validated,\nincluding parser integrity; encrypted/empty PDF, invalid image, file over 10 MB or\nimage over 20 million pixels returns 400. Missing/foreign entity returns 404,\nmanager-only or demo writes return 403. Name is sanitized using the actual file type.\nReplacement never deletes previous bytes or mail metadata. Concurrent writes are\nserialized per issuer. No caller replay receipt: reload versions before repeating an\nupload after an uncertain response.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "operationId": "upload_manager_registration_certificate",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "legal_entity_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Legal Entity Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_manager_registration_certificate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistrationCertificateItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/document-system/registration-certificates/{attachment_id}/current": {
+      "put": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Select Certificate",
+        "description": "Owner/admin selects an immutable registration certificate version owned by the current\ntenant as current for its original issuer, retaining every other version and earlier\nmail attachments. Missing/foreign version returns 404; manager-only or demo writes\nreturn 403. The issuer row serializes concurrent selection/replacement; repeating the\nsame selection is safe and no mail is sent.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "operationId": "select_manager_registration_certificate",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "attachment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Attachment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistrationCertificateItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/document-system/registration-certificates/{attachment_id}/download": {
+      "get": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Download Certificate",
+        "description": "Download an immutable private registration certificate owned by the current tenant.\nManagers can download current and historical versions; missing/foreign versions\nreturn 404 and unavailable or checksum-mismatched storage returns 409. Returns actual\nPDF/JPEG/PNG bytes with a safe original filename and private no-store cache headers.\nStorage keys and public media URLs are never exposed. Read only; retry is safe.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "operationId": "download_manager_registration_certificate",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "attachment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Attachment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -19020,6 +19242,295 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/tender-workflow": {
+      "get": {
+        "tags": [
+          "manager-tender-workflow"
+        ],
+        "summary": "Get Workflow",
+        "description": "Read manual tender stage/current deadline and associated distinct Orders in the current tenant/storefront,\nincluding qualified and archived email/Bel tender sources. Source external IDs, statuses, archives,\ndocuments and proposals remain independent. Returns at most 100 latest stage/link audit events;\nreading neither marks an inbox record read nor creates associations. Missing/ineligible or foreign\nOrder returns 404; a continuation email already linked to another Order returns 409.\n\nRequires authenticated Manager session/JWT, live membership and scoped order-read permission; see\n[Manager access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "operationId": "get_manager_tender_workflow",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenderWorkflowResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "manager-tender-workflow"
+        ],
+        "summary": "Set Workflow",
+        "description": "Set the business stage and current stage deadline for an email/Bel tender Order in the current\ntenant/storefront, including qualified/archived sources. Audit author/time and before/after values;\nthe importer cannot overwrite this separate manual context. Explicit null clears the current\ndeadline; omission preserves it on the same stage and clears it on a stage change. Does not submit\nto a procurement platform or change Order status/archive. Missing/foreign Order returns 404,\nstage-role conflict on an existing association returns 409, demo mutation 403 and invalid stage\nor timezone-less deadline 422. Same-value repeat is idempotent; no replay receipt is provided.\n\nRequires authenticated Manager session/JWT, live membership and scoped order-update permission; see\n[Manager access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "operationId": "set_manager_tender_workflow",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenderWorkflowPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenderWorkflowResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/tender-workflow/price-enquiries": {
+      "get": {
+        "tags": [
+          "manager-tender-workflow"
+        ],
+        "summary": "Candidates",
+        "description": "Search previous email/Bel tender Orders only within the current tenant/storefront, including\nqualified and archived records. Include unmarked sources and explicitly marked price_request/\nprice_sent sources; selecting an unmarked candidate requires an explicit stage command before\nassociation. Buyer/title similarity never creates a match. Search is at most 200 characters;\nlimit is 1..100 (default 20), ordered newest first. Missing/foreign current Order returns 404,\nineligible continuation email 409 and invalid query 422. Read-only and does not mark read.\n\nRequires authenticated Manager session/JWT, live membership and scoped order-read permission; see\n[Manager access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "operationId": "list_manager_tender_price_enquiries",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TenderWorkflowIdentity"
+                  },
+                  "title": "Response List Manager Tender Price Enquiries"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/tender-workflow/price-enquiry": {
+      "put": {
+        "tags": [
+          "manager-tender-workflow"
+        ],
+        "summary": "Associate",
+        "description": "Associate a later email/Bel tender publication with one manually marked price_request/price_sent\nOrder in the same tenant/storefront, including qualified/archived enquiries with different external\nIDs. Audit both identities and preserve their independent documents/proposals/status/archive.\nAn unmarked publication gains announced stage and retains its source deadline. No automatic\nmatch or platform submission. Missing/foreign endpoint returns 404; self-link, role conflict,\ncycles/chains or replacing another link returns 409; demo mutation 403 and invalid payload 422.\nRepeating the same pair is idempotent without a replay receipt; remove the current link before\nselecting another price enquiry.\n\nRequires authenticated Manager session/JWT, live membership and scoped order-update permission; see\n[Manager access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "operationId": "link_manager_tender_price_enquiry",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenderWorkflowLinkPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenderWorkflowResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "manager-tender-workflow"
+        ],
+        "summary": "Dissociate",
+        "description": "Remove only the publication's manual price-enquiry association in the current tenant/storefront.\nAudit both records and retain original identities, stages/deadlines, documents, proposals, status,\narchives and earlier history. Missing/foreign Order returns 404; ineligible continuation email or\nconcurrently replaced association 409 and demo mutation 403. Repeating an already removed link\nis idempotent without a replay receipt.\n\nRequires authenticated Manager session/JWT, live membership and scoped order-update permission; see\n[Manager access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "operationId": "unlink_manager_tender_price_enquiry",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenderWorkflowResponse"
+                }
               }
             }
           },
@@ -36217,6 +36728,20 @@
         ],
         "title": "Body_upload_manager_order_document"
       },
+      "Body_upload_manager_registration_certificate": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_manager_registration_certificate"
+      },
       "Body_upload_manager_storefront_logo": {
         "properties": {
           "file": {
@@ -51837,6 +52362,16 @@
               }
             ]
           },
+          "tender_workflow": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TenderWorkflowResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "commercial_terms_summary": {
             "items": {
               "type": "string"
@@ -52432,6 +52967,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/LeadsInboxTenderResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tender_workflow": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TenderWorkflowResponse"
               },
               {
                 "type": "null"
@@ -53425,7 +53970,7 @@
           },
           "document_type": {
             "type": "string",
-            "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|invoice|maintenance_defect_act|offer|tn2|ttn1)$",
+            "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|invoice|maintenance_defect_act|offer|participant_statement|tn2|ttn1)$",
             "title": "Document Type"
           },
           "issue_date": {
@@ -53615,6 +54160,16 @@
                 "type": "null"
               }
             ]
+          },
+          "participant_statement": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ParticipantStatementPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -53628,6 +54183,16 @@
       },
       "ManagedDocumentItem": {
         "properties": {
+          "participant_statement": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ParticipantStatementPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "customer_readiness": {
             "anyOf": [
               {
@@ -76435,7 +77000,7 @@
           },
           "doc_type": {
             "type": "string",
-            "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|invoice|maintenance_defect_act|offer|tn2|ttn1)$",
+            "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|invoice|maintenance_defect_act|offer|participant_statement|tn2|ttn1)$",
             "title": "Doc Type"
           },
           "description": {
@@ -77438,6 +78003,31 @@
             "type": "array",
             "title": "Document Ids"
           },
+          "registration_certificate_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32,
+                "minLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registration Certificate Id"
+          },
+          "legal_entity_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legal Entity Id"
+          },
           "template_key": {
             "type": "string",
             "title": "Template Key",
@@ -77565,6 +78155,31 @@
             },
             "type": "array",
             "title": "Document Ids"
+          },
+          "registration_certificate_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32,
+                "minLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registration Certificate Id"
+          },
+          "legal_entity_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legal Entity Id"
           }
         },
         "type": "object",
@@ -78831,6 +79446,50 @@
               }
             ],
             "title": "Document Number"
+          },
+          "registration_certificate_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registration Certificate Id"
+          },
+          "legal_entity_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legal Entity Id"
+          },
+          "checksum_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checksum Sha256"
+          },
+          "attachment_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attachment Type"
           }
         },
         "type": "object",
@@ -79310,6 +79969,43 @@
           "subject"
         ],
         "title": "OutgoingEmailSendPayload"
+      },
+      "ParticipantStatementPayload": {
+        "properties": {
+          "procedure_reference": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Procedure Reference"
+          },
+          "lot": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Lot"
+          },
+          "buyer_name": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Buyer Name"
+          },
+          "declaration_text": {
+            "type": "string",
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Declaration Text"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "procedure_reference",
+          "lot",
+          "buyer_name",
+          "declaration_text"
+        ],
+        "title": "ParticipantStatementPayload"
       },
       "PaymentBankReceiptResponse": {
         "properties": {
@@ -84700,6 +85396,55 @@
         ],
         "title": "PublicWriteRequestErrorResponse"
       },
+      "RegistrationCertificateItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "legal_entity_id": {
+            "type": "integer",
+            "title": "Legal Entity Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "mime_type": {
+            "type": "string",
+            "title": "Mime Type"
+          },
+          "checksum_sha256": {
+            "type": "string",
+            "title": "Checksum Sha256"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "is_current": {
+            "type": "boolean",
+            "title": "Is Current"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "legal_entity_id",
+          "filename",
+          "mime_type",
+          "checksum_sha256",
+          "size_bytes",
+          "is_current",
+          "created_at"
+        ],
+        "title": "RegistrationCertificateItem"
+      },
       "RepairDiagnosticLeadResponse": {
         "properties": {
           "order_id": {
@@ -90019,6 +90764,221 @@
           "name"
         ],
         "title": "TenderProfile"
+      },
+      "TenderWorkflowIdentity": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "external_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Id"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "archived": {
+            "type": "boolean",
+            "title": "Archived",
+            "default": false
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "price_request",
+                  "price_sent",
+                  "announced",
+                  "submitted",
+                  "completed"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
+          "deadline_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id",
+          "status"
+        ],
+        "title": "TenderWorkflowIdentity"
+      },
+      "TenderWorkflowLinkPayload": {
+        "properties": {
+          "price_order_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Price Order Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "price_order_id"
+        ],
+        "title": "TenderWorkflowLinkPayload"
+      },
+      "TenderWorkflowPayload": {
+        "properties": {
+          "stage": {
+            "type": "string",
+            "enum": [
+              "price_request",
+              "price_sent",
+              "announced",
+              "submitted",
+              "completed"
+            ],
+            "title": "Stage"
+          },
+          "deadline_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stage"
+        ],
+        "title": "TenderWorkflowPayload"
+      },
+      "TenderWorkflowResponse": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "price_request",
+                  "price_sent",
+                  "announced",
+                  "submitted",
+                  "completed"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
+          "deadline_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline At"
+          },
+          "deadline_manual": {
+            "type": "boolean",
+            "title": "Deadline Manual",
+            "default": false
+          },
+          "price_enquiry": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TenderWorkflowIdentity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "publications": {
+            "items": {
+              "$ref": "#/components/schemas/TenderWorkflowIdentity"
+            },
+            "type": "array",
+            "title": "Publications"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/LeadsInboxHistoryResponse"
+            },
+            "type": "array",
+            "title": "History"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id"
+        ],
+        "title": "TenderWorkflowResponse"
       },
       "TransportTermsPayload": {
         "properties": {

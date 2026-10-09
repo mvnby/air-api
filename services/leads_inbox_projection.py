@@ -23,7 +23,7 @@ class LeadsInboxProjection:
 
     @classmethod
     def item(cls, order, *, state=None, read=None, attachment_count=0,
-             no_answer_count=0, no_answer_at=None, auto_archive_enabled=False):
+             no_answer_count=0, no_answer_at=None, auto_archive_enabled=False, tender_workflow=None):
         from services.order_commercial_terms_service import commercial_terms_summary
         from services.leads_inbox_expiry_service import LeadsInboxExpiryService
 
@@ -46,6 +46,11 @@ class LeadsInboxProjection:
             archive = LeadsInboxArchiveResponse(outcome="legacy_lost", note=order.reject_reason)
         active = order.status == "new_lead" and order.linked_order_id is None and archive is None
         trusted_deadline = LeadsInboxExpiryService.trusted_deadline(order)
+        if tender_workflow:
+            if tender_workflow.deadline_manual:
+                trusted_deadline = tender_workflow.deadline_at
+            if tender_workflow.publications or tender_workflow.stage in ("submitted", "completed"):
+                auto_archive_enabled = False
         suppressed_deadline = state.restored_deadline_at if state else None
         auto_archive_at = None
         if auto_archive_enabled and active and trusted_deadline and suppressed_deadline != trusted_deadline:
@@ -58,13 +63,14 @@ class LeadsInboxProjection:
         return LeadsInboxItemResponse(
             id=order.id, status="linked" if order.linked_order_id else getattr(order.status, "value", order.status),
             is_new=active and not is_read, is_read=is_read, read_at=read.read_at if read else None,
-            source_kind="tender" if tender or order.lead_source == LeadSource.BELZAKUPKI else "customer_request",
+            source_kind="tender" if tender or tender_workflow or order.lead_source == LeadSource.BELZAKUPKI else "customer_request",
             title=title, summary=summary[:500] if summary else None,
             budget_amount=cls.number(tender_meta.get("estimated_value") if order.lead_source == LeadSource.BELZAKUPKI else meta.get("budget_amount")),
             budget_currency=cls._clean_order_title(tender_meta.get("currency") if order.lead_source == LeadSource.BELZAKUPKI else meta.get("budget_currency")),
             quantity=cls.number(tender_meta.get("quantity") if order.lead_source == LeadSource.BELZAKUPKI else meta.get("quantity")),
             location=cls._clean_order_title(order.delivery_address or tender_meta.get("location") or meta.get("location")),
-            deadline_at=tender.deadline_at if tender else None, archive=archive, auto_archive_at=auto_archive_at,
+            deadline_at=tender_workflow.deadline_at if tender_workflow else tender.deadline_at if tender else None,
+            archive=archive, auto_archive_at=auto_archive_at,
             linked_order_id=order.linked_order_id, customer_id=order.customer_id,
             customer_name=cls._lead_inbox_customer_name(order),
             phone=order.customer.phone if order.customer else None,
@@ -85,6 +91,7 @@ class LeadsInboxProjection:
             equipment_class=cls._lead_inbox_meta_text(order, "equipment_class"),
             marketing_source=cls._lead_inbox_meta_text(order, "marketing_source"),
             attachment_count=attachment_count, tender=tender,
+            tender_workflow=tender_workflow,
             commercial_terms_summary=commercial_terms_summary(order),
         )
 

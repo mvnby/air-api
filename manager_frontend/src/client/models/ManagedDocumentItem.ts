@@ -4,7 +4,9 @@
 /* eslint-disable */
 import type { DocumentCustomerReadiness } from './DocumentCustomerReadiness';
 import type { ManagedDocumentArtifactItem } from './ManagedDocumentArtifactItem';
+import type { ParticipantStatementPayload } from './ParticipantStatementPayload';
 export type ManagedDocumentItem = {
+    participant_statement?: (ParticipantStatementPayload | null);
     customer_readiness?: (DocumentCustomerReadiness | null);
     maintenance_source_order_id?: (number | null);
     document_role_type?: ('seller_buyer' | 'executor_customer' | 'contractor_customer' | 'seller_payer' | 'executor_payer' | null);

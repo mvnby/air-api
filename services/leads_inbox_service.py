@@ -98,15 +98,24 @@ class LeadsInboxService:
 
     @staticmethod
     def deadline_columns():
+        from models.tender_workflow import TenderWorkflowContext
         tender, manual = Order.technical_meta["belzakupki"]["tender"], Order.technical_meta["inbox_tender"]
+        context_filter = (TenderWorkflowContext.order_id == Order.id,
+            TenderWorkflowContext.tenant_id == Order.tenant_id, TenderWorkflowContext.storefront_id == Order.storefront_id)
         return [tender["deadline_at"].as_string().label("deadline_at"),
             tender["deadline_kind"].as_string().label("deadline_kind"),
             manual["deadline_at"].as_string().label("manual_deadline_at"),
             manual["confirmed"].as_json().label("manual_confirmed"),
-            manual["is_tender"].as_json().label("manual_is_tender")]
+            manual["is_tender"].as_json().label("manual_is_tender"),
+            select(TenderWorkflowContext.deadline_at).where(*context_filter).correlate(Order)
+                .scalar_subquery().label("workflow_deadline_at"),
+            select(TenderWorkflowContext.deadline_manual).where(*context_filter).correlate(Order)
+                .scalar_subquery().label("workflow_deadline_manual")]
 
     @classmethod
     def root_deadline(cls, row):
+        if getattr(row, "workflow_deadline_manual", False):
+            return row.workflow_deadline_at
         return cls.deadline_fields(row.deadline_at, row.deadline_kind, row.manual_deadline_at,
             row.manual_confirmed, row.manual_is_tender)
 
@@ -157,9 +166,12 @@ class LeadsInboxService:
                 InboxEvent.tenant_id == tenant_scope.tenant_id, InboxEvent.storefront_id == tenant_scope.storefront_id,
                 InboxEvent.kind == "no_answer").group_by(InboxEvent.entity_id))).all()
         followups = {row[0]: (row[1], row[2]) for row in events}
+        from services.tender_workflow_service import TenderWorkflowService
+        workflows = await TenderWorkflowService.project_orders(session, [row[0] for row in rows], tenant_scope)
         return [LeadsInboxProjection.item(order, state=state, read=read,
             attachment_count=attachments.get(order.id, 0),
             auto_archive_enabled=mode == "execute",
+            tender_workflow=workflows.get(order.id),
             no_answer_count=followups.get(order.id, (0, None))[0],
             no_answer_at=followups.get(order.id, (0, None))[1]) for order, state, read in rows]
 

@@ -103,6 +103,8 @@ from .service_asset import (
 from .staff import StaffUser
 from .storage_maintenance import StorageReconciliationCursor
 from .belzakupki import BelzakupkiImportCheckpoint
+from .tender_workflow import TenderWorkflowContext, TenderWorkflowLink
+from .legal_entity_attachment import LegalEntityAttachment
 from .tenancy import (
     Storefront,
     StorefrontDomain,

@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ManagerDocumentSystemService,
   ManagerMailService,
@@ -15,6 +15,10 @@ const order = {
     email: 'client@example.com',
   },
 } as ManagerOrderDetailResponse;
+
+beforeEach(() => {
+  vi.spyOn(ManagerDocumentSystemService, 'listManagerDocumentLegalEntities').mockResolvedValue({ items: [] });
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -55,7 +59,7 @@ describe('DocumentSendModal', () => {
 
     expect(ManagerDocumentSystemService.composeManagerNativeOrderEmail).toHaveBeenCalledWith(
       42,
-      { document_ids: [77], template_key: 'auto' },
+      { document_ids: [77], template_key: 'auto', registration_certificate_id: null, legal_entity_id: null },
     );
     expect(ManagerDocumentSystemService.composeManagerNativeOrderEmail).toHaveBeenCalledTimes(1);
     expect(document.body.textContent).toContain('Договор D-2026-12');

@@ -12,6 +12,7 @@ from modules.documents.domain import (
     WAYBILL_DOCUMENT_TYPES,
 )
 from .business_schemas import ActTermsPayload, BusinessDocumentTermsPayload
+from .participant_statement_schemas import ParticipantStatementPayload
 
 
 DocumentPartyRoleType = Literal[
@@ -316,9 +317,12 @@ class ManagedDocumentDraftPayload(BaseModel):
     business_terms: BusinessDocumentTermsPayload | None = None
     act_terms: ActTermsPayload | None = None
     transport_terms: "TransportTermsPayload | None" = None
+    participant_statement: ParticipantStatementPayload | None = None
 
     @model_validator(mode="after")
     def validate_terms_scope(self) -> "ManagedDocumentDraftPayload":
+        if (self.document_type == "participant_statement") != (self.participant_statement is not None):
+            raise ValueError("Реквизиты заявления участника обязательны только для заявления")
         if (
             self.consumer_terms is not None
             and self.document_type not in B2C_NATIVE_DOCUMENT_TYPES
@@ -457,6 +461,7 @@ class ManagedDocumentReadinessResponse(DocumentCustomerReadiness):
 
 
 class ManagedDocumentItem(BaseModel):
+    participant_statement: ParticipantStatementPayload | None = None
     customer_readiness: DocumentCustomerReadiness | None = None
     maintenance_source_order_id: int | None = None
     document_role_type: DocumentPartyRoleType | None = None

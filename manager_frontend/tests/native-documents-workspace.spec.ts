@@ -1107,3 +1107,42 @@ describe('Selected native customer requirements', () => {
     }
   });
 });
+
+
+describe('Participant statement workspace', () => {
+  it('creates a statement using the built-in form and manager supplied facts', async () => {
+    vi.mocked(ManagerDocumentSystemService.listManagerNativeDocumentTemplates).mockResolvedValue({ items: [] });
+    const wrapper = await mountWorkspace();
+    await wrapper.get('[data-testid="native-document-type-participant_statement"]').trigger('click');
+    await flushPromises();
+    const button = wrapper.get('[data-testid="create-native-draft"]');
+    expect(button.attributes('disabled')).toBeDefined();
+    await wrapper.get('[data-testid="participant-statement-procedure"]').setValue('2026-42');
+    await wrapper.get('[data-testid="participant-statement-lot"]').setValue('1');
+    await wrapper.get('[data-testid="participant-statement-buyer"]').setValue('Заказчик');
+    await wrapper.get('[data-testid="participant-statement-text"]').setValue('Подтверждённый текст по требованиям заказчика.');
+    expect(button.attributes('disabled')).toBeUndefined();
+    await button.trigger('click');
+    await flushPromises();
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenCalledWith(42,
+      expect.objectContaining({ document_type: 'participant_statement', template_id: null,
+        participant_statement: { procedure_reference: '2026-42', lot: '1', buyer_name: 'Заказчик',
+          declaration_text: 'Подтверждённый текст по требованиям заказчика.' } }));
+  });
+
+  it('requires an explicit factual confirmation at issue', async () => {
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({ items: [{
+      id: 55, order_id: 42, legal_entity_id: 5, doc_type: 'participant_statement', status: 'draft',
+      provider: 'native', display_number: 'doc_statement', internal_reference: 'doc_statement',
+      date: NOW, created_at: NOW, document_template_id: 100, template_version_id: 101, artifacts: [],
+    }] });
+    const wrapper = await mountWorkspace();
+    const issue = wrapper.findAll('button').find((button) => button.text() === 'Выпустить')!;
+    expect(issue.attributes('disabled')).toBeDefined();
+    await wrapper.get('[data-testid="participant-statement-confirm-55"]').setValue(true);
+    expect(issue.attributes('disabled')).toBeUndefined();
+    await issue.trigger('click');
+    await flushPromises();
+    expect(ManagerDocumentSystemService.issueManagerManagedDocument).toHaveBeenCalledWith(55, true);
+  });
+});

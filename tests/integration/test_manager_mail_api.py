@@ -743,6 +743,8 @@ async def test_manager_mail_composes_adaptive_order_email(async_client, monkeypa
         assert kwargs == {
             "order_id": 123,
             "document_ids": [10, 11],
+            "registration_certificate_id": None,
+            "legal_entity_id": None,
             "template_key": "auto",
         }
         return {
