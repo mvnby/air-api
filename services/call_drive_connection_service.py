@@ -1,5 +1,6 @@
 """Personal OAuth credentials never confer access to another staff member's calls."""
 
+import asyncio
 from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +13,14 @@ from models.call_recording import CallDriveConnection
 from schemas_call_recordings import CallDriveStatus, CallFolderPayload
 from services.call_drive_provider import CallDriveError, get_call_drive_provider
 from services.document_drive_contracts import DocumentDriveCredentialCipher, DocumentDriveConnectionError
+
+
+async def call_speech_readiness():
+    from services.call_google_batch_transcription import GoogleCallBatchTranscriptionProvider
+    return {
+        "groq": bool(settings.CALL_RECORDINGS_TRANSCRIPTION_API_KEY.strip()),
+        "google_batch": await asyncio.to_thread(GoogleCallBatchTranscriptionProvider.is_configured),
+    }
 
 
 class CallDriveCredentialCipher(DocumentDriveCredentialCipher):
@@ -59,7 +68,10 @@ class CallDriveConnectionService:
                 CallDriveCredentialCipher.decrypt(row.encrypted_credentials, tenant_id=row.tenant_id, provider=cls.cipher_provider(row))
             except DocumentDriveConnectionError as exc:
                 error, connected = exc.code, False
-        return CallDriveStatus(connected=connected, pipeline_enabled=settings.CALL_RECORDINGS_ENABLED, transcription_configured=bool(settings.CALL_RECORDINGS_TRANSCRIPTION_API_KEY.strip()), account_label=row.account_label if row else None, folder_id=row.folder_id if row else None, folder_name=row.folder_name if row else None, folder_url=f"https://drive.google.com/drive/folders/{row.folder_id}" if row and row.folder_id else None, auto_poll_enabled=row.auto_poll_enabled if row else False, last_error_code=error, transcription_model=settings.CALL_RECORDINGS_TRANSCRIPTION_MODEL, structure_model=settings.DEEPSEEK_MODEL)
+        provider = row.transcription_provider if row else "groq"
+        readiness = await call_speech_readiness()
+        model = settings.CALL_RECORDINGS_GOOGLE_MODEL if provider == "google_batch" else settings.CALL_RECORDINGS_TRANSCRIPTION_MODEL
+        return CallDriveStatus(connected=connected, pipeline_enabled=settings.CALL_RECORDINGS_ENABLED, transcription_configured=readiness[provider], transcription_provider=provider, google_batch_configured=readiness["google_batch"], groq_configured=readiness["groq"], account_label=row.account_label if row else None, folder_id=row.folder_id if row else None, folder_name=row.folder_name if row else None, folder_url=f"https://drive.google.com/drive/folders/{row.folder_id}" if row and row.folder_id else None, auto_poll_enabled=row.auto_poll_enabled if row else False, last_error_code=error, transcription_model=model, structure_model=settings.DEEPSEEK_MODEL)
 
     @classmethod
     async def authorize(cls, session, actor, credentials, *, provider=None):
@@ -112,6 +124,8 @@ class CallDriveConnectionService:
             row.page_token = None
         row.folder_id, row.folder_name = payload.folder_id, str(folder.get("name") or "Папка записей")[:300]
         row.auto_poll_enabled = payload.auto_poll_enabled
+        if payload.transcription_provider is not None:
+            row.transcription_provider = payload.transcription_provider
         session.add(row)
         await session.commit()
         return await cls.status(session, actor)

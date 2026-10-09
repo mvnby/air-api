@@ -10,6 +10,7 @@ const status = ref<CallDriveStatus | null>(null);
 const recordings = ref<CallRecordingResponse[]>([]);
 const selected = ref<CallRecordingResponse | null>(null);
 const folder = ref('');
+const transcriptionProvider = ref<'groq' | 'google_batch'>('groq');
 const pilotFile = ref('');
 const sourceTime = ref('');
 const sourcePhone = ref('');
@@ -20,7 +21,8 @@ const offset = ref(0);
 const total = ref(0);
 const readOnly = useDemoReadOnly();
 const canProcess = computed(() => status.value?.pipeline_enabled && status.value.connected && status.value.folder_id && !readOnly.value);
-const canRetry = computed(() => selected.value && ['failed', 'reconnect_required', 'manual_review'].includes(selected.value.state));
+const selectedProviderReady = computed(() => transcriptionProvider.value === 'google_batch' ? status.value?.google_batch_configured : status.value?.groq_configured);
+const canRetry = computed(() => selected.value && selected.value.last_error_code !== 'call_google_wait_expired' && ['failed', 'reconnect_required', 'manual_review'].includes(selected.value.state));
 async function action(operation: () => Promise<void>) {
   if (busy.value) return;
   busy.value = true; error.value = ''; notice.value = '';
@@ -30,6 +32,7 @@ async function action(operation: () => Promise<void>) {
 async function load() {
   const [connection, list] = await Promise.all([api.status(), api.list(offset.value)]);
   status.value = connection; recordings.value = list.items; total.value = list.total;
+  transcriptionProvider.value = connection.transcription_provider || 'groq';
   if (!folder.value) folder.value = connection.folder_url || '';
   if (selected.value) await openRecording(selected.value.id);
 }
@@ -39,8 +42,8 @@ async function openRecording(id: number) {
   sourcePhone.value = selected.value.phone || '';
 }
 async function connect() { await action(async () => { const value = await api.authorize(); window.open(value.url, '_blank', 'noopener'); notice.value = 'Завершите подключение Google и обновите эту страницу.'; }); }
-async function saveFolder() { await action(async () => { const id = driveId(folder.value); if (!id) throw new Error('Вставьте ссылку на папку Google Диска'); status.value = await api.folder(id, false); notice.value = 'Папка сохранена. Автоматическая проверка выключена.'; }); }
-async function toggleAuto(event: Event) { const enabled = (event.target as HTMLInputElement).checked; await action(async () => { status.value = await api.folder(status.value!.folder_id!, enabled); }); }
+async function saveFolder() { await action(async () => { const id = driveId(folder.value); if (!id) throw new Error('Вставьте ссылку на папку Google Диска'); status.value = await api.folder(id, status.value?.auto_poll_enabled ?? false, transcriptionProvider.value); notice.value = 'Папка и способ распознавания сохранены.'; }); }
+async function toggleAuto(event: Event) { const enabled = (event.target as HTMLInputElement).checked; await action(async () => { status.value = await api.folder(status.value!.folder_id!, enabled, transcriptionProvider.value); }); }
 async function poll() { await action(async () => { const id = pilotFile.value ? driveId(pilotFile.value) : null; if (pilotFile.value && !id) throw new Error('Вставьте ссылку на запись Google Диска'); const result = await api.poll(id); await load(); notice.value = `Проверено: ${result.observed}. В очереди: ${result.queued}. Для готовности файла нужны две проверки с интервалом не менее минуты.`; }); }
 async function retry() { await action(async () => { selected.value = await api.retry(selected.value!.id, selected.value!.version); await load(); }); }
 async function saveMetadata() { await action(async () => { selected.value = await api.metadata(selected.value!.id, selected.value!.version, minskIso(sourceTime.value), sourcePhone.value.trim() || null); notice.value = 'Исходные данные сохранены. Повторите незавершённый этап, чтобы обновить предложения.'; }); }
@@ -57,7 +60,9 @@ onMounted(() => action(load));
       <h2 class="font-semibold">Личный Google Диск</h2>
       <p>{{ status.connected ? `Подключён: ${status.account_label || 'Google Диск'}` : 'Подключение для записей отсутствует' }}</p>
       <p v-if="!status.pipeline_enabled" class="text-amber-700">Обработка записей выключена на сервере. Подключение само по себе не запускает обработку.</p>
-      <p v-if="!status.transcription_configured" class="text-amber-700">Распознавание речи требует настройки на сервере.</p>
+      <label class="block">Распознавание речи<select v-model="transcriptionProvider" class="ml-2 border rounded p-2" aria-label="Провайдер распознавания"><option value="google_batch">Google — отложенная обработка</option><option value="groq">Groq — Whisper</option></select></label>
+      <p :class="selectedProviderReady ? 'text-sm text-green-700' : 'text-sm text-amber-700'">{{ selectedProviderReady ? 'Выбранный провайдер настроен.' : 'Выбранный провайдер не настроен на сервере.' }}</p>
+      <p class="text-sm text-gray-500">{{ transcriptionProvider === 'google_batch' ? 'Результат может появиться в течение 24 часов.' : 'Используется Whisper через Groq.' }}</p>
       <div class="flex gap-3"><button class="border rounded px-3 py-2" :disabled="busy || readOnly" @click="connect">{{ status.connected ? 'Переподключить Google' : 'Подключить Google' }}</button><button v-if="status.connected" class="border rounded px-3 py-2" :disabled="busy || readOnly" @click="action(async () => { status = await api.disconnect(); })">Отключить</button></div>
       <form v-if="status.connected" class="flex flex-wrap gap-2" @submit.prevent="saveFolder"><input v-model="folder" class="border rounded p-2 flex-1" aria-label="Папка записей" placeholder="Ссылка на выбранную папку Google Диска" /><button :disabled="busy || readOnly" class="border rounded px-3 py-2">Сохранить папку</button></form>
       <a v-if="status.folder_url" :href="status.folder_url" target="_blank" rel="noopener" class="text-blue-600">{{ status.folder_name || 'Открыть папку' }}</a>
@@ -72,7 +77,7 @@ onMounted(() => action(load));
         <div class="flex gap-3"><button :disabled="busy || offset === 0" @click="action(async () => { offset -= 50; await load(); })">Назад</button><button :disabled="busy || offset + 50 >= total" @click="action(async () => { offset += 50; await load(); })">Далее</button></div>
       </section>
       <section v-if="selected" class="space-y-4" data-testid="call-review">
-        <div class="rounded-xl border p-4 space-y-3"><h2 class="font-semibold break-words">{{ selected.filename }}</h2><p>{{ callStateLabel(selected.state) }} · {{ callStageLabel(selected.stage) }}</p><a :href="selected.source_url" target="_blank" rel="noopener" class="text-blue-600">Открыть исходную запись</a><p class="text-sm text-gray-500">Время звонка: {{ selected.call_occurred_at ? minskDateTime(selected.call_occurred_at).replace('T', ' ') + ' (Минск)' : 'Неизвестно — уточните вручную' }}. {{ selected.time_source === 'samsung_filename' ? 'Из имени записи Samsung.' : selected.time_source === 'manual' ? 'Указано вручную.' : '' }} Телефон: {{ selected.phone || 'не подтверждён' }}.</p>
+        <div class="rounded-xl border p-4 space-y-3"><h2 class="font-semibold break-words">{{ selected.filename }}</h2><p>{{ callStateLabel(selected.state) }} · {{ callStageLabel(selected.stage) }}</p><p v-if="selected.state === 'waiting_transcription'" class="text-sm text-blue-700">Запись уже отправлена в Google на распознавание. Обновите список позже; повторная отправка не требуется.</p><p v-if="selected.transcription_provider || selected.transcription_model" class="text-sm text-gray-500">Распознавание этой записи: {{ selected.transcription_provider === 'google_batch' ? 'Google Speech' : selected.transcription_provider === 'groq' ? 'Groq' : selected.transcription_provider }}<span v-if="selected.transcription_model"> · {{ selected.transcription_model }}</span></p><a :href="selected.source_url" target="_blank" rel="noopener" class="text-blue-600">Открыть исходную запись</a><p class="text-sm text-gray-500">Время звонка: {{ selected.call_occurred_at ? minskDateTime(selected.call_occurred_at).replace('T', ' ') + ' (Минск)' : 'Неизвестно — уточните вручную' }}. {{ selected.time_source === 'samsung_filename' ? 'Из имени записи Samsung.' : selected.time_source === 'manual' ? 'Указано вручную.' : '' }} Телефон: {{ selected.phone || 'не подтверждён' }}.</p>
           <p v-if="selected.last_error_code" class="text-amber-700">Не завершён этап «{{ callStageLabel(selected.stage) }}»: {{ callErrorLabel(selected.last_error_code) }}. Успешные этапы сохраняются.</p>
           <button v-if="canRetry" :disabled="busy || !canProcess" class="border rounded px-3 py-2" @click="retry">Повторить незавершённый этап</button>
           <details><summary>Уточнить исходные данные</summary><form class="mt-3 space-y-2" @submit.prevent="saveMetadata"><label class="block">Дата и время звонка (Минск)<input v-model="sourceTime" type="datetime-local" class="border rounded p-2" /></label><label class="block">Подтверждённый телефон<input v-model="sourcePhone" class="border rounded p-2" /></label><button class="border rounded px-3 py-2" :disabled="busy || readOnly || ['queued', 'processing'].includes(selected.state)">Сохранить исходные данные</button></form></details>

@@ -18,7 +18,7 @@ export const driveId = (value: string): string => {
 export const callRecordingsApi = {
   status: () => request<CallDriveStatus>(OpenAPI, { method: 'GET', url: `${base}/connection` }),
   authorize: () => request<{ url: string }>(OpenAPI, { method: 'GET', url: `${base}/authorization-url` }),
-  folder: (folderId: string, autoPollEnabled: boolean) => request<CallDriveStatus>(OpenAPI, { method: 'PUT', url: `${base}/connection/folder`, body: { folder_id: folderId, auto_poll_enabled: autoPollEnabled }, mediaType: 'application/json' }),
+  folder: (folderId: string, autoPollEnabled: boolean, transcriptionProvider?: 'groq' | 'google_batch') => request<CallDriveStatus>(OpenAPI, { method: 'PUT', url: `${base}/connection/folder`, body: { folder_id: folderId, auto_poll_enabled: autoPollEnabled, ...(transcriptionProvider ? { transcription_provider: transcriptionProvider } : {}) }, mediaType: 'application/json' }),
   disconnect: () => request<CallDriveStatus>(OpenAPI, { method: 'DELETE', url: `${base}/connection` }),
   poll: (fileId: string | null) => request<CallPollResponse>(OpenAPI, { method: 'POST', url: `${base}/poll`, body: { file_id: fileId }, mediaType: 'application/json' }),
   list: (offset = 0) => request<CallRecordingListResponse>(OpenAPI, { method: 'GET', url: base, query: { limit: 50, offset } }),
@@ -28,7 +28,7 @@ export const callRecordingsApi = {
   adopt: (id: number, proposalId: number, payload: CallAdoptPayload) => request<CallAdoptionResponse>(OpenAPI, { method: 'POST', url: `${base}/${id}/proposals/${proposalId}/adopt`, body: payload, mediaType: 'application/json' }),
 };
 
-export const callStateLabel = (state: string) => ({ observing: 'Проверяется завершение загрузки', queued: 'В очереди', processing: 'Обрабатывается', ready_for_review: 'Готово к разбору', failed: 'Ошибка этапа', reconnect_required: 'Требуется подключение или настройка', manual_review: 'Нужен ручной разбор' })[state] || state;
+export const callStateLabel = (state: string) => ({ observing: 'Проверяется завершение загрузки', queued: 'В очереди', processing: 'Обрабатывается', waiting_transcription: 'Ожидает результат распознавания Google (до 24 часов)', ready_for_review: 'Готово к разбору', failed: 'Ошибка этапа', reconnect_required: 'Требуется подключение или настройка', manual_review: 'Нужен ручной разбор' })[state] || state;
 export const callStageLabel = (stage: string) => ({ download: 'Получение и проверка аудио', transcribe: 'Распознавание речи', structure: 'Разбор договорённостей', proposals: 'Предлагаемые действия' })[stage] || stage;
 export const callErrorLabel = (code: string) => ({
   google_drive_access_denied: 'Google отклонил доступ — переподключите аккаунт',
@@ -37,6 +37,12 @@ export const callErrorLabel = (code: string) => ({
   credential_encryption_unavailable: 'Хранилище подключений временно недоступно',
   call_connection_changed: 'Подключение или папка изменились',
   call_transcription_not_configured: 'Распознавание речи не настроено',
+  call_google_not_configured: 'Google Speech не настроен на сервере',
+  call_google_access_denied: 'Google Speech отклонил доступ — проверьте настройку сервера',
+  call_google_provider_error: 'Google Speech не смог обработать запись',
+  call_google_invalid_audio: 'Google Speech не смог прочитать аудио',
+  call_google_operation_failed: 'Задание Google Speech завершилось ошибкой',
+  call_google_wait_expired: 'Google Speech не завершил распознавание в пределах срока — разберите запись вручную',
   not_configured: 'AI для разбора не настроен',
   authentication_rejected: 'Провайдер отклонил доступ — проверьте настройку AI',
   call_source_changed: 'Исходный файл изменился — проверьте папку ещё раз',

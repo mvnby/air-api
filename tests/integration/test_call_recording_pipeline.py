@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import re
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -165,7 +166,7 @@ async def test_list_does_not_read_saved_audio_or_paid_checkpoints(context, db_en
     reads = [statement for statement in statements if "from call_recording" in statement]
     assert any("call_recording.id" in statement for statement in reads)
     for column in ("downloaded_audio", "transcript", "structure"):
-        assert not any(f"call_recording.{column}" in statement for statement in reads)
+        assert not any(re.search(rf"\bcall_recording\.{column}\b", statement) for statement in reads)
     async with factory() as session:
         assert (await session.get(CallRecording, recording_id)).downloaded_audio == checkpoint
 
@@ -507,3 +508,163 @@ async def test_call_credential_is_in_health_and_rotation_registry(context):
         session.add(connection)
         await session.commit()
         assert (await integration_credential_health(session))["unreadable"] == 1
+
+
+async def google_runner(context, monkeypatch, *, poll_results=None, structure_errors=0):
+    from services.call_google_batch_transcription import GoogleCallBatchTranscriptionProvider as google
+    factory, actor, provider = context
+    calls = {"submit": 0, "poll": 0, "delete": 0, "structure": 0}
+    results = list(poll_results or [])
+    monkeypatch.setattr(google, "is_configured", lambda: True)
+    async with factory() as session:
+        status = await CallDriveConnectionService.configure(session, actor, CallFolderPayload(folder_id=FOLDER_ID, transcription_provider="google_batch"), provider=provider)
+        assert status.transcription_provider == "google_batch" and status.transcription_configured
+        assert not status.auto_poll_enabled
+
+    async def submit(**kwargs):
+        calls["submit"] += 1
+        assert kwargs["content"] == CONTENT and len(kwargs["source_id"]) == 64
+        return "projects/airconditionersbot/locations/eu/operations/test-operation"
+
+    async def poll(**kwargs):
+        calls["poll"] += 1
+        assert kwargs["operation_name"].endswith("/test-operation")
+        value = results.pop(0) if results else None
+        if isinstance(value, Exception):
+            raise value
+        return value
+
+    async def delete(**kwargs):
+        calls["delete"] += 1
+        async with factory() as session:
+            row = await session.scalar(select(CallRecording).where(CallRecording.transcription_operation.is_not(None)))
+            assert row.transcript == TRANSCRIPT and row.downloaded_audio is None
+        return True
+
+    async def normalize(**kwargs):
+        return BotNormalizedVoiceAudio(CONTENT, "call.wav", "audio/wav", 75)
+
+    async def extract(**kwargs):
+        calls["structure"] += 1
+        if calls["structure"] <= structure_errors:
+            raise TimeoutError("private provider message must not be stored")
+        return ExtractedCall(summary="Поручение", actions=[{"kind": "task", "text": "Дослать фото свидетельства", "evidence": "Дослать фото свидетельства"}])
+
+    monkeypatch.setattr(google, "submit", submit)
+    monkeypatch.setattr(google, "poll", poll)
+    monkeypatch.setattr(google, "delete_audio", delete)
+
+    async def run(**kwargs):
+        await CallRecordingPipeline.run(**kwargs, provider=provider, normalizer=normalize, extractor=extract)
+    return run, calls
+
+
+async def make_google_event_available(factory, recording_id):
+    async with factory() as session:
+        row = await session.get(CallRecording, recording_id)
+        event = await session.get(IntegrationOutboxEvent, row.job_event_id)
+        event.available_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+        session.add(event)
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_google_wait_is_durable_and_does_not_exhaust_or_resubmit(context, monkeypatch):
+    factory, actor, provider = context
+    run, calls = await google_runner(context, monkeypatch, poll_results=[None] * 10 + [TRANSCRIPT])
+    recording_id = await queue(context)
+    assert await CallRecordingJobService.process_batch(worker_id="google-first", limit=1, session_factory=factory, runner=run) == 1
+    async with factory() as session:
+        row = await session.get(CallRecording, recording_id)
+        assert row.state == "waiting_transcription" and row.transcription_operation
+        assert row.stage_attempts == {"download": 1, "transcribe": 1}
+        operation = row.transcription_operation
+        # Changing the folder preference cannot change an already submitted job.
+        await CallDriveConnectionService.configure(session, actor, CallFolderPayload(folder_id=FOLDER_ID, transcription_provider="groq"), provider=provider)
+    for index in range(10):
+        await make_google_event_available(factory, recording_id)
+        await CallRecordingJobService.process_batch(worker_id=f"google-restart-{index}", limit=1, session_factory=factory, runner=run)
+        async with factory() as session:
+            row = await session.get(CallRecording, recording_id)
+            event = await session.get(IntegrationOutboxEvent, row.job_event_id)
+            assert row.state == "waiting_transcription" and row.last_error_code is None
+            assert row.transcription_operation == operation and row.transcription_provider == "google_batch"
+            assert row.stage_attempts["transcribe"] == 1 and event.attempts == 0
+    await make_google_event_available(factory, recording_id)
+    await CallRecordingJobService.process_batch(worker_id="google-ready", limit=1, session_factory=factory, runner=run)
+    async with factory() as session:
+        detail = await CallRecordingService.get(session, actor, recording_id)
+        assert detail.state == "ready_for_review" and detail.transcript == TRANSCRIPT
+        assert detail.transcription_provider == "google_batch" and detail.transcription_model == "chirp_3"
+        assert len(detail.proposals) == 1 and detail.stage_attempts["transcribe"] == 1
+        assert await count(session, Lead) == await count(session, PersonalTask) == 0
+    assert calls == {"submit": 1, "poll": 11, "delete": 1, "structure": 1} and provider.downloads == 1
+
+
+@pytest.mark.asyncio
+async def test_google_wait_deadline_stops_without_new_paid_submission(context, monkeypatch):
+    factory, actor, provider = context
+    run, calls = await google_runner(context, monkeypatch)
+    recording_id = await queue(context)
+    await CallRecordingJobService.process_batch(worker_id="google-first", limit=1, session_factory=factory, runner=run)
+    async with factory() as session:
+        row = await session.get(CallRecording, recording_id)
+        row.transcription_submitted_at = datetime.now(timezone.utc) - timedelta(hours=27)
+        session.add(row)
+        await session.commit()
+    await make_google_event_available(factory, recording_id)
+    await CallRecordingJobService.process_batch(worker_id="google-expired", limit=1, session_factory=factory, runner=run)
+    async with factory() as session:
+        row = await session.get(CallRecording, recording_id)
+        event = await session.get(IntegrationOutboxEvent, row.job_event_id)
+        assert row.state == "manual_review" and row.last_error_code == "call_google_wait_expired"
+        assert event.status == "dead" and row.stage_attempts["transcribe"] == 1
+    assert calls["submit"] == 1 and calls["poll"] == calls["structure"] == 0
+
+
+@pytest.mark.asyncio
+async def test_google_poll_failure_recovers_the_same_operation(context, monkeypatch):
+    factory, actor, provider = context
+    run, calls = await google_runner(context, monkeypatch, poll_results=[CallDriveError("call_google_provider_error", "redacted"), None, TRANSCRIPT])
+    recording_id = await queue(context)
+    await CallRecordingJobService.process_batch(worker_id="google-first", limit=1, session_factory=factory, runner=run)
+    for index in range(3):
+        await make_google_event_available(factory, recording_id)
+        await CallRecordingJobService.process_batch(worker_id=f"google-recovery-{index}", limit=1, session_factory=factory, runner=run)
+    async with factory() as session:
+        row = await session.get(CallRecording, recording_id)
+        assert row.state == "ready_for_review" and row.stage_attempts["transcribe"] == 1
+    assert calls == {"submit": 1, "poll": 3, "delete": 1, "structure": 1}
+
+
+@pytest.mark.asyncio
+async def test_google_saved_operation_does_not_remove_structure_retry_limit(context, monkeypatch):
+    factory, actor, provider = context
+    run, calls = await google_runner(context, monkeypatch, poll_results=[TRANSCRIPT], structure_errors=3)
+    recording_id = await queue(context)
+    await CallRecordingJobService.process_batch(worker_id="google-first", limit=1, session_factory=factory, runner=run)
+    for index in range(3):
+        await make_google_event_available(factory, recording_id)
+        await CallRecordingJobService.process_batch(worker_id=f"google-structure-{index}", limit=1, session_factory=factory, runner=run)
+    async with factory() as session:
+        row = await session.get(CallRecording, recording_id)
+        event = await session.get(IntegrationOutboxEvent, row.job_event_id)
+        assert row.state == "manual_review" and row.stage_attempts["structure"] == 3
+        assert row.transcript == TRANSCRIPT and event.status == "dead"
+    assert calls == {"submit": 1, "poll": 1, "delete": 1, "structure": 3}
+
+
+@pytest.mark.asyncio
+async def test_google_disconnected_source_cannot_continue_provider_calls(context, monkeypatch):
+    factory, actor, provider = context
+    run, calls = await google_runner(context, monkeypatch, poll_results=[TRANSCRIPT])
+    recording_id = await queue(context)
+    await CallRecordingJobService.process_batch(worker_id="google-first", limit=1, session_factory=factory, runner=run)
+    async with factory() as session:
+        await CallDriveConnectionService.disconnect(session, actor)
+    await make_google_event_available(factory, recording_id)
+    await CallRecordingJobService.process_batch(worker_id="google-disconnected", limit=1, session_factory=factory, runner=run)
+    async with factory() as session:
+        row = await session.get(CallRecording, recording_id)
+        assert row.state == "reconnect_required" and row.last_error_code == "call_drive_not_connected"
+    assert calls["submit"] == 1 and calls["poll"] == calls["structure"] == 0

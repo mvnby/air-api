@@ -22,6 +22,8 @@ export type CallRecordingResponse = {
     stage_attempts: Record<string, any>;
     last_error_code: (string | null);
     transcript?: (string | null);
+    transcription_provider?: (string | null);
+    transcription_model?: (string | null);
     structure?: (Record<string, any> | null);
     audio_duration_seconds: (number | null);
     proposals?: Array<CallProposalResponse>;

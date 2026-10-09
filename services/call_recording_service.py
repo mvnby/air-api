@@ -94,6 +94,7 @@ class CallRecordingService:
                     # A metadata-only revision needs fresh source-clock review,
                     # but identical bytes reuse successful paid checkpoints.
                     row.transcript, row.structure = prior.transcript, prior.structure
+                    row.transcription_provider, row.transcription_model = prior.transcription_provider, prior.transcription_model
                     row.downloaded_audio = prior.downloaded_audio
                     row.audio_duration_seconds = prior.audio_duration_seconds
                 session.add(row)

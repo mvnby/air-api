@@ -22,6 +22,7 @@ class CallDriveConnection(SQLModel, table=True):
     folder_id: str | None = None
     folder_name: str | None = None
     auto_poll_enabled: bool = False
+    transcription_provider: str = "groq"
     page_token: str | None = None
     last_error_code: str | None = None
     last_polled_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True)))
@@ -54,6 +55,10 @@ class CallRecording(SQLModel, table=True):
     downloaded_audio: bytes | None = Field(default=None, sa_column=Column(LargeBinary))
     audio_duration_seconds: float | None = None
     transcript: str | None = Field(default=None, sa_column=Column(Text))
+    transcription_provider: str | None = None
+    transcription_model: str | None = None
+    transcription_operation: str | None = None
+    transcription_submitted_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True)))
     structure: dict | None = Field(default=None, sa_column=Column(JSON))
     stage_attempts: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
     last_error_code: str | None = None
