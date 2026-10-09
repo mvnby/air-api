@@ -1,7 +1,7 @@
 """Lease-fenced checkpoints; speech and structured extraction retry separately."""
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlmodel import select
 
@@ -22,6 +22,15 @@ class CallLeaseLost(RuntimeError):
     code = "call_lease_lost"
 
 
+class CallTranscriptionPending(RuntimeError):
+    """A saved Google operation is still running; this is not a failed attempt."""
+    code = "call_google_pending"
+
+
+def google_audio_source_id(snapshot):
+    return hashlib.sha256(f"call:{snapshot['id']}:{snapshot['connection_id']}:{snapshot['source_checksum']}".encode()).hexdigest()
+
+
 async def fenced_recording(session, claim):
     event = await session.scalar(select(IntegrationOutboxEvent).where(IntegrationOutboxEvent.event_id == claim.event_id, IntegrationOutboxEvent.status == "processing", IntegrationOutboxEvent.lease_token == claim.lease_token, IntegrationOutboxEvent.worker_id == claim.worker_id, IntegrationOutboxEvent.lease_expires_at > datetime.now(timezone.utc)).with_for_update())
     if event is None:
@@ -37,6 +46,7 @@ class CallRecordingPipeline:
     async def run(cls, *, claim, session_factory, provider=None, normalizer=None, transcriber=None, extractor=None):
         CallDriveConnectionService.require_enabled()
         normalizer = normalizer or normalize_call_audio
+        injected_transcriber = transcriber is not None
         transcriber = transcriber or cls.transcribe
         extractor = extractor or extract_call
         async with session_factory() as session:
@@ -63,7 +73,14 @@ class CallRecordingPipeline:
                     row.stage = "download"
                 stage = row.stage
                 attempts = dict(row.stage_attempts)
-                if stage != "proposals":
+                connection = await session.get(CallDriveConnection, claim.connection_id, populate_existing=True)
+                if not connection.encrypted_credentials:
+                    raise CallDriveError("call_drive_not_connected", "Подключение записей отключено", status_code=409)
+                if stage == "transcribe" and row.transcription_provider is None:
+                    row.transcription_provider = connection.transcription_provider
+                    row.transcription_model = settings.CALL_RECORDINGS_GOOGLE_MODEL if row.transcription_provider == "google_batch" else settings.CALL_RECORDINGS_TRANSCRIPTION_MODEL
+                polling_google = stage == "transcribe" and row.transcription_provider == "google_batch" and row.transcription_operation is not None
+                if stage != "proposals" and not polling_google:
                     if attempts.get(stage, 0) >= 3:
                         raise CallDriveError("call_stage_exhausted", "Лимит попыток этапа исчерпан")
                     attempts[stage] = attempts.get(stage, 0) + 1
@@ -72,7 +89,6 @@ class CallRecordingPipeline:
                 row.version += 1
                 row.updated_at = datetime.now(timezone.utc)
                 snapshot = row.model_dump()
-                connection = await session.get(CallDriveConnection, claim.connection_id)
                 selected_folder = connection.folder_id
                 session.add(row)
                 await session.commit()
@@ -94,7 +110,31 @@ class CallRecordingPipeline:
                     raise CallDriveError("call_source_changed", "Запись изменилась при скачивании", status_code=409)
                 result = await normalizer(content=content, filename=snapshot["filename"], mime_type=snapshot["mime_type"])
             elif stage == "transcribe":
-                result = await transcriber(content=snapshot["downloaded_audio"], filename="recording.wav", mime_type="audio/wav")
+                if snapshot["transcription_provider"] == "google_batch" and not injected_transcriber:
+                    from services.call_google_batch_transcription import GoogleCallBatchTranscriptionProvider
+                    source_id = google_audio_source_id(snapshot)
+                    if snapshot["transcription_operation"] is None:
+                        operation = await GoogleCallBatchTranscriptionProvider.submit(content=snapshot["downloaded_audio"], source_id=source_id)
+                        async with session_factory() as session:
+                            row = await fenced_recording(session, claim)
+                            await require_live_call_actor(session, actor, write=True)
+                            connection = await session.get(CallDriveConnection, claim.connection_id, populate_existing=True)
+                            if not connection.encrypted_credentials or connection.folder_id != selected_folder:
+                                raise CallDriveError("call_connection_changed", "Подключение или папка изменились", status_code=409)
+                            row.transcription_operation = operation
+                            row.transcription_submitted_at = datetime.now(timezone.utc)
+                            row.version += 1
+                            session.add(row)
+                            await session.commit()
+                        raise CallTranscriptionPending()
+                    submitted_at = snapshot["transcription_submitted_at"]
+                    if submitted_at is None or datetime.now(timezone.utc) - submitted_at > timedelta(hours=26):
+                        raise CallDriveError("call_google_wait_expired", "Google не завершил распознавание в пределах срока")
+                    result = await GoogleCallBatchTranscriptionProvider.poll(operation_name=snapshot["transcription_operation"], source_id=source_id)
+                    if result is None:
+                        raise CallTranscriptionPending()
+                else:
+                    result = await transcriber(content=snapshot["downloaded_audio"], filename="recording.wav", mime_type="audio/wav")
             elif stage == "structure":
                 result = await extractor(transcript=snapshot["transcript"], call_occurred_at=snapshot["call_occurred_at"])
                 result = result if isinstance(result, ExtractedCall) else ExtractedCall.model_validate(result)
@@ -138,6 +178,8 @@ class CallRecordingPipeline:
                 row.updated_at = datetime.now(timezone.utc)
                 session.add(row)
                 await session.commit()
+            if stage == "transcribe" and snapshot["transcription_provider"] == "google_batch" and not injected_transcriber:
+                await GoogleCallBatchTranscriptionProvider.delete_audio(source_id=source_id)
             if stage == "proposals":
                 return
 

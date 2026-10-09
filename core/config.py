@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     CALL_RECORDINGS_TRANSCRIPTION_API_URL: str = "https://api.groq.com/openai/v1/audio/transcriptions"
     CALL_RECORDINGS_TRANSCRIPTION_API_KEY: str = ""
     CALL_RECORDINGS_TRANSCRIPTION_MODEL: str = "whisper-large-v3-turbo"
+    CALL_RECORDINGS_GOOGLE_CREDENTIALS_FILE: str = ""
+    CALL_RECORDINGS_GOOGLE_PROJECT_ID: str = ""
+    CALL_RECORDINGS_GOOGLE_BUCKET: str = ""
+    CALL_RECORDINGS_GOOGLE_LOCATION: str = "eu"
+    CALL_RECORDINGS_GOOGLE_MODEL: str = "chirp_3"
     CALL_RECORDINGS_OAUTH_REDIRECT_URI: str = ""
     BOT_VOICE_TRANSCRIPTION_API_URL: str = (
         "https://api.groq.com/openai/v1/audio/transcriptions"

@@ -39323,6 +39323,25 @@
             "type": "boolean",
             "title": "Transcription Configured"
           },
+          "transcription_provider": {
+            "type": "string",
+            "enum": [
+              "groq",
+              "google_batch"
+            ],
+            "title": "Transcription Provider",
+            "default": "groq"
+          },
+          "google_batch_configured": {
+            "type": "boolean",
+            "title": "Google Batch Configured",
+            "default": false
+          },
+          "groq_configured": {
+            "type": "boolean",
+            "title": "Groq Configured",
+            "default": false
+          },
           "account_label": {
             "anyOf": [
               {
@@ -39438,6 +39457,21 @@
             "type": "boolean",
             "title": "Auto Poll Enabled",
             "default": false
+          },
+          "transcription_provider": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "groq",
+                  "google_batch"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcription Provider"
           }
         },
         "additionalProperties": false,
@@ -39755,6 +39789,28 @@
               }
             ],
             "title": "Transcript"
+          },
+          "transcription_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcription Provider"
+          },
+          "transcription_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcription Model"
           },
           "structure": {
             "anyOf": [

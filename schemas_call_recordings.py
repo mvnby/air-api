@@ -13,6 +13,9 @@ class CallDriveStatus(BaseModel):
     connected: bool
     pipeline_enabled: bool
     transcription_configured: bool
+    transcription_provider: Literal["groq", "google_batch"] = "groq"
+    google_batch_configured: bool = False
+    groq_configured: bool = False
     account_label: str | None = None
     folder_id: str | None = None
     folder_name: str | None = None
@@ -32,6 +35,7 @@ class CallFolderPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
     folder_id: str = Field(pattern=r"^[A-Za-z0-9_-]{10,160}$")
     auto_poll_enabled: bool = False
+    transcription_provider: Literal["groq", "google_batch"] | None = None
 
 
 class CallPollPayload(BaseModel):
@@ -96,6 +100,8 @@ class CallRecordingResponse(BaseModel):
     stage_attempts: dict
     last_error_code: str | None
     transcript: str | None = None
+    transcription_provider: str | None = None
+    transcription_model: str | None = None
     structure: dict | None = None
     audio_duration_seconds: float | None
     proposals: list[CallProposalResponse] = Field(default_factory=list)

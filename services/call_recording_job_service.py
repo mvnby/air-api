@@ -12,7 +12,7 @@ from core.config import settings
 from core.database import async_session_maker
 from models import IntegrationOutboxEvent
 from models.call_recording import CallDriveConnection, CallRecording
-from services.call_recording_pipeline import CallLeaseLost, CallRecordingPipeline, fenced_recording
+from services.call_recording_pipeline import CallLeaseLost, CallRecordingPipeline, CallTranscriptionPending, fenced_recording
 from services.call_recording_service import CALL_EVENT_TYPE
 from services.repair_diagnostic_ai_job_service import RepairDiagnosticAiJobService
 
@@ -68,15 +68,25 @@ class CallRecordingJobService(RepairDiagnosticAiJobService):
         if error is None:
             event.status, event.published_at = "published", datetime.now(timezone.utc)
             event.last_error_code = event.last_error_message = None
+        elif isinstance(error, CallTranscriptionPending):
+            row.state, row.last_error_code = "waiting_transcription", None
+            row.version += 1
+            row.updated_at = datetime.now(timezone.utc)
+            event.status = "pending"
+            # A status check is neither a failure nor a paid speech submission.
+            event.attempts = max(0, event.attempts - 1)
+            event.available_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+            event.last_error_code = event.last_error_message = None
+            session.add(row)
         else:
             code = str(getattr(error, "code", type(error).__name__))[:100]
             row.last_error_code = code
             row.version += 1
             if isinstance(error, PermissionError):
                 row.state, event.status = "manual_review", "dead"
-            elif code in {"google_drive_access_denied", "call_drive_not_connected", "credentials_unreadable", "credential_encryption_unavailable", "call_connection_changed", "call_transcription_not_configured", "not_configured", "authentication_rejected"}:
+            elif code in {"google_drive_access_denied", "call_drive_not_connected", "credentials_unreadable", "credential_encryption_unavailable", "call_connection_changed", "call_transcription_not_configured", "call_google_not_configured", "call_google_access_denied", "not_configured", "authentication_rejected"}:
                 row.state, event.status = "reconnect_required", "dead"
-            elif row.stage_attempts.get(row.stage, 0) >= 3 or claim.attempts >= claim.max_attempts or code in {"call_source_changed", "call_upload_changed", "call_file_outside_folder", "call_stage_exhausted", "BotVoiceAudioValidationError", "BotVoiceTranscriptionInvalidAudioError"}:
+            elif (row.stage_attempts.get(row.stage, 0) >= 3 and not (row.stage == "transcribe" and row.transcription_operation)) or claim.attempts >= claim.max_attempts or code in {"call_source_changed", "call_upload_changed", "call_file_outside_folder", "call_stage_exhausted", "call_google_wait_expired", "call_google_invalid_audio", "call_google_operation_failed", "BotVoiceAudioValidationError", "BotVoiceTranscriptionInvalidAudioError"}:
                 row.state, event.status = "manual_review", "dead"
             else:
                 row.state, event.status = "failed", "pending"
