@@ -76,6 +76,11 @@ class BelzakupkiImportService:
         return parsed.astimezone(timezone.utc)
 
     @classmethod
+    def _snapshot_datetime(cls, value: Any) -> str | None:
+        parsed = cls._parse_datetime(value)
+        return parsed.isoformat() if parsed is not None else cls._clean_text(value, maximum=80)
+
+    @classmethod
     def _is_accepted(cls, item: dict[str, Any], *, now: datetime) -> bool:
         if not bool(item.get("eligible")):
             return False
@@ -121,7 +126,7 @@ class BelzakupkiImportService:
 
         return {
             "match_id": match_id,
-            "updated_at": cls._clean_text(item.get("updated_at"), maximum=80),
+            "updated_at": cls._snapshot_datetime(item.get("updated_at")),
             "profile": {
                 "id": profile.get("id"),
                 "name": cls._clean_text(profile.get("name"), maximum=500),
@@ -138,9 +143,9 @@ class BelzakupkiImportService:
                 "title": cls._clean_text(tender.get("title"), maximum=1000),
                 "customer_name": cls._clean_text(tender.get("customer_name"), maximum=1000),
                 "url": cls._clean_text(tender.get("url"), maximum=2048),
-                "deadline_at": cls._clean_text(tender.get("deadline_at"), maximum=80),
+                "deadline_at": cls._snapshot_datetime(tender.get("deadline_at")),
                 "deadline_kind": cls._clean_text(tender.get("deadline_kind"), maximum=40) or "submission",
-                "published_at": cls._clean_text(tender.get("published_at"), maximum=80),
+                "published_at": cls._snapshot_datetime(tender.get("published_at")),
                 "estimated_value": tender.get("estimated_value"),
                 "currency": cls._clean_text(tender.get("currency"), maximum=12),
                 "location": cls._clean_text(tender.get("location"), maximum=1000),
@@ -202,10 +207,18 @@ class BelzakupkiImportService:
             "reason": snapshot.get("reason"),
             "ai_analysis": snapshot.get("ai_analysis"),
         }
+        incoming_time = cls._parse_datetime(snapshot.get("updated_at"))
+        tender_time = cls._parse_datetime(existing.get("tender_updated_at"))
+        if tender_time is None:
+            prior_times = [cls._parse_datetime(match.get("updated_at"))
+                           for match in existing_matches.values() if isinstance(match, dict)]
+            tender_time = max((time for time in prior_times if time is not None), default=None)
+        replace_tender = tender_time is None or (incoming_time is not None and incoming_time >= tender_time)
         next_metadata = {
             "source": snapshot["tender"]["source"],
             "external_tender_id": snapshot["tender"]["external_id"],
-            "tender": snapshot["tender"],
+            "tender": snapshot["tender"] if replace_tender else existing.get("tender", snapshot["tender"]),
+            "tender_updated_at": snapshot.get("updated_at") if replace_tender else tender_time.isoformat(),
             "matches": matches,
             "last_synced_at": datetime.now(timezone.utc).isoformat(),
         }
@@ -303,6 +316,13 @@ class BelzakupkiImportService:
         if isinstance(current_match, dict) and current_match.get("fingerprint") == snapshot_fingerprint:
             result.unchanged += 1
             return
+
+        if isinstance(current_match, dict):
+            incoming_time = cls._parse_datetime(snapshot.get("updated_at"))
+            current_time = cls._parse_datetime(current_match.get("updated_at"))
+            if current_time is not None and (incoming_time is None or incoming_time < current_time):
+                result.unchanged += 1
+                return
 
         # Deliberately mutate only source-owned technical metadata.  A manager's
         # title, comment, workflow and status remain untouched after first intake.

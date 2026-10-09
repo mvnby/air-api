@@ -677,6 +677,8 @@ class Settings(BaseSettings):
 
     # Belzakupki opportunities are polled only by the active primary scheduler.
     # The target scope is deliberately opt-in rather than inferred from a request.
+    BELZAKUPKI_LEAD_PUSH_ENABLED: bool = False
+    BELZAKUPKI_LEAD_PUSH_API_KEY: str = Field(default="", repr=False, exclude=True)
     BELZAKUPKI_IMPORT_ENABLED: bool = False
     BELZAKUPKI_API_BASE_URL: str = ""
     BELZAKUPKI_INTEGRATION_KEY: str = Field(default="", repr=False, exclude=True)
