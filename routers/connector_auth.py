@@ -204,6 +204,7 @@ async def authorize(request: Request, session: AsyncSession = Depends(get_sessio
     labels = {
         "kitlane:read": "Читать доступные вам данные Kitlane",
         "kitlane:incoming:write": "Сохранять входящие обращения",
+        "kitlane:maintenance:write": "Сохранять замечания и фото ТО, готовить черновики актов и предложений",
         "kitlane:tasks:write": "Создавать и завершать поручения",
     }
     capabilities = "".join(

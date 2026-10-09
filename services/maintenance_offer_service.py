@@ -74,6 +74,26 @@ class MaintenanceOfferService:
         offers = (await session.execute(query.order_by(MaintenanceOffer.id.desc()).offset(offset).limit(limit))).scalars().all()
         return dict(items=[await cls.item(session, o, continuation) for o in offers], total=total)
 
+    @classmethod
+    async def available_proposals(cls, session, *, source_order_id, scope, limit=20, offset=0):
+        """Read existing priced source lines; never create a proposal or fill missing prices."""
+        _, continuation, order = await cls.context(session, source_order_id, scope)
+        if continuation is None:
+            return dict(continuation_order_id=None, available_proposals=[], proposals_have_more=False)
+        proposals = (await session.execute(select(OrderProposal).where(OrderProposal.order_id == order.id,
+            OrderProposal.is_archived.is_(False)).order_by(OrderProposal.id).offset(offset).limit(limit + 1))).scalars().all()
+        items = []
+        for proposal in proposals[:limit]:
+            lines = await cls.proposal_lines(session, order.id, proposal.id, limit=101)
+            complete = len(lines) <= 100
+            if not complete:
+                lines = []  # Do not expose a truncated composition as a usable draft source.
+            for line in lines:
+                line['data'].pop('cost', None)
+            items.append(dict(proposal_id=proposal.id, name=proposal.name, lines=lines, lines_complete=complete,
+                pricing=dict(target_currency=order.target_currency, target_currency_amount=order.target_currency_amount)))
+        return dict(continuation_order_id=order.id, available_proposals=items, proposals_have_more=len(proposals) > limit)
+
     @staticmethod
     def line_snapshot(line, kind):
         # JSON serialization preserves exact decimal strings and complete priced composition,
@@ -81,10 +101,13 @@ class MaintenanceOfferService:
         return dict(key=f'{kind}:{line.id}', kind=kind, data=line.model_dump(mode='json'))
 
     @staticmethod
-    async def proposal_lines(session, order_id, proposal_id):
+    async def proposal_lines(session, order_id, proposal_id, *, limit=None):
         result = []
         for kind, model in [('product', OrderProductLink), ('service', OrderServiceLink)]:
-            rows = (await session.execute(select(model).where(model.order_id == order_id, model.proposal_id == proposal_id).order_by(model.id))).scalars().all()
+            query = select(model).where(model.order_id == order_id, model.proposal_id == proposal_id).order_by(model.id)
+            if limit is not None:
+                query = query.limit(limit)
+            rows = (await session.execute(query)).scalars().all()
             result.extend(MaintenanceOfferService.line_snapshot(row, kind) for row in rows)
         return sorted(result, key=lambda x: x['key'])
 

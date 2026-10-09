@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 from core.config import settings
 
 CLIENT_ID = "kitlane-chatgpt"
-SCOPES = frozenset({"kitlane:read", "kitlane:incoming:write", "kitlane:tasks:write"})
+SCOPES = frozenset({"kitlane:read", "kitlane:incoming:write", "kitlane:tasks:write", "kitlane:maintenance:write"})
 ROLE_RANK = {"manager": 1, "admin": 2, "owner": 3}
 VERIFIER = re.compile(r"^[A-Za-z0-9._~-]{43,128}$")
 CHALLENGE = re.compile(r"^[A-Za-z0-9_-]{43}$")

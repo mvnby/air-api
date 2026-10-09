@@ -1,17 +1,20 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "kitlane",
-  "version": "1.0.0",
-  "description": "Save customer requests and manage personal tasks in Kitlane.",
+  "version": "1.1.0",
+  "description": "Save requests and tasks, record maintenance findings and prepare drafts in Kitlane.",
   "extensions": {
     "com.openai": {
       "interface": {
         "displayName": "Kitlane",
-        "shortDescription": "Клиенты, входящие обращения и личные поручения",
-        "longDescription": "Сохраняйте обращения клиентов для проверки в Kitlane, находите клиентов и заказы, ведите личные поручения.",
+        "shortDescription": "Заявки, поручения и ТО",
+        "longDescription": "Сохраняйте обращения и поручения, читайте оборудование, фиксируйте замечания ТО и явно готовьте черновики актов и предложений из сохранённых данных.",
         "developerName": "Kitlane",
         "category": "Productivity",
-        "capabilities": ["Read", "Write"],
+        "capabilities": [
+          "Read",
+          "Write"
+        ],
         "defaultPrompt": [
           "Сохрани обращение клиента в Kitlane",
           "Покажи мои поручения на сегодня"
