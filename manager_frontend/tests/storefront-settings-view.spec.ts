@@ -22,6 +22,18 @@ const settings = {
 };
 
 describe('storefront settings', () => {
+  it.each([false, true])('shows the private call entry only with the pilot capability: %s', async canManageCallRecordings => {
+    mocks.get.mockResolvedValue(settings);
+    const wrapper = mount(SettingsView, { props: { canManageCallRecordings }, global: { stubs: { DocumentLegalEntitiesPanel: true } } });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="call-recordings-settings-link"]').exists()).toBe(canManageCallRecordings);
+    if (canManageCallRecordings) {
+      expect(wrapper.get('[data-testid="call-recordings-settings-link"]').attributes('href')).toBe('/manager/settings/calls');
+    } else {
+      expect(wrapper.text()).not.toContain('Записи звонков');
+    }
+  });
+
   it('hydrates settings, switches a service directly and saves the changed binary state', async () => {
     mocks.get.mockResolvedValue(settings); mocks.preview.mockResolvedValue({ source_counts: { services: 5, tariffs: 2, tariff_rules: 3, installation_rates: 1 }, source_fingerprint: 'safe', target_counts: { services: 0, tariffs: 0, tariff_rules: 0, installation_rates: 0 }, can_clone: true });
     mocks.save.mockResolvedValue(settings);

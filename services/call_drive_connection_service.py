@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from core.command_actor import CommandActor
+from core.call_recording_access import has_call_recording_pilot_access
 from core.config import settings
 from models import StaffUser, Storefront, Tenant, TenantMembership
 from models.call_recording import CallDriveConnection
@@ -29,6 +30,8 @@ class CallDriveCredentialCipher(DocumentDriveCredentialCipher):
 
 
 async def require_live_call_actor(session: AsyncSession, actor: CommandActor, *, write: bool = False) -> StaffUser:
+    if not has_call_recording_pilot_access(actor.staff_user_id):
+        raise PermissionError("Записи звонков доступны только участнику закрытого пилота")
     user = await session.get(StaffUser, actor.staff_user_id, populate_existing=True)
     membership = await session.scalar(select(TenantMembership).where(TenantMembership.staff_user_id == actor.staff_user_id, TenantMembership.tenant_id == actor.tenant_scope.tenant_id, TenantMembership.status == "active"))
     tenant = await session.get(Tenant, actor.tenant_scope.tenant_id, populate_existing=True)

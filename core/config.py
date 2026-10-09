@@ -59,6 +59,17 @@ class Settings(BaseSettings):
     # Personal recordings have their own opt-in and credential; bot enablement
     # never starts this source. Limits are fixed in the call contract.
     CALL_RECORDINGS_ENABLED: bool = False
+    # Private pilot access is independent of pipeline enablement and staff role.
+    # Empty means nobody can read, connect or process personal recordings.
+    CALL_RECORDINGS_PILOT_STAFF_IDS: list[int] = []
+
+    @field_validator("CALL_RECORDINGS_PILOT_STAFF_IDS")
+    @classmethod
+    def _validate_call_recordings_pilot_staff_ids(cls, value: list[int]) -> list[int]:
+        if any(staff_id <= 0 for staff_id in value):
+            raise ValueError("Call recording pilot staff IDs must be positive")
+        return sorted(set(value))
+
     CALL_RECORDINGS_TRANSCRIPTION_API_URL: str = "https://api.groq.com/openai/v1/audio/transcriptions"
     CALL_RECORDINGS_TRANSCRIPTION_API_KEY: str = ""
     CALL_RECORDINGS_TRANSCRIPTION_MODEL: str = "whisper-large-v3-turbo"

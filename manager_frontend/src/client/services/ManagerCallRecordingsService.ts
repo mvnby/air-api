@@ -20,7 +20,7 @@ export class ManagerCallRecordingsService {
     /**
      * Connection Status
      * Read personal call-Drive connection readiness and fixed processing limits. Requires
-     * live Manager membership; scope is the current staff user plus tenant/storefront,
+     * live Manager membership and explicit private-pilot access; scope is the current staff user plus tenant/storefront,
      * including owners (no access to another user's calls). Returns no credentials. Does
      * not contact Drive, poll recordings or charge AI. Default pipeline is disabled.
      * [Call contract](https://github.com/mvnby/air-api/blob/main/docs/call-recordings.md).

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from core.security import AuthenticatedUser, MANAGER_ACCESS_ROLES, OWNER_ACCESS_ROLES
+from core.call_recording_access import has_call_recording_pilot_access
 
 
 class ManagerCapabilityService:
@@ -17,6 +18,7 @@ class ManagerCapabilityService:
     DOCUMENTS_MANAGE = "documents.manage"
     SETTINGS_MANAGE = "settings.manage"
     SERVICES_MANAGE = "services.manage"
+    CALL_RECORDINGS_MANAGE = "call_recordings.manage"
 
     ORDERED_CAPABILITIES = (
         CRM_MANAGE,
@@ -30,6 +32,7 @@ class ManagerCapabilityService:
         DOCUMENTS_MANAGE,
         SETTINGS_MANAGE,
         SERVICES_MANAGE,
+        CALL_RECORDINGS_MANAGE,
     )
 
     @classmethod
@@ -37,6 +40,8 @@ class ManagerCapabilityService:
         role = str(auth.role or "").strip().lower()
         capabilities: set[str] = set()
         if role in MANAGER_ACCESS_ROLES:
+            if has_call_recording_pilot_access(auth.staff_user_id):
+                capabilities.add(cls.CALL_RECORDINGS_MANAGE)
             capabilities.update(
                 {
                     cls.CRM_MANAGE,

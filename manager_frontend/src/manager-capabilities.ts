@@ -12,6 +12,7 @@ export const MANAGER_CAPABILITY = {
   documentsManage: 'documents.manage',
   settingsManage: 'settings.manage',
   servicesManage: 'services.manage',
+  callRecordingsManage: 'call_recordings.manage',
 } as const;
 
 export type ManagerCapability = typeof MANAGER_CAPABILITY[keyof typeof MANAGER_CAPABILITY];
@@ -23,6 +24,9 @@ export const hasManagerCapability = (
 
 export const requiredCapabilityForManagerPath = (path: string): ManagerCapability | null => {
   if (path === '/manager' || path === '/manager/' || path === '/manager/profile') return null;
+  if (path.startsWith('/manager/settings/calls') || path.startsWith('/manager/calls')) {
+    return MANAGER_CAPABILITY.callRecordingsManage;
+  }
   if (path.startsWith('/manager/integrations')) {
     return MANAGER_CAPABILITY.analyticsManage;
   }
@@ -34,7 +38,6 @@ export const requiredCapabilityForManagerPath = (path: string): ManagerCapabilit
   }
   if (
     path.startsWith('/manager/tasks')
-    || path.startsWith('/manager/calls')
     || path.startsWith('/manager/leads')
     || path.startsWith('/manager/orders')
     || path.startsWith('/manager/calendar')

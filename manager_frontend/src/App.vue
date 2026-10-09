@@ -126,6 +126,7 @@ const canManagePlatform = computed(() => hasManagerCapability(auth.value, MANAGE
 const canManageInfrastructure = computed(() => hasManagerCapability(auth.value, MANAGER_CAPABILITY.infrastructureManage));
 const canManageDocuments = computed(() => hasManagerCapability(auth.value, MANAGER_CAPABILITY.documentsManage));
 const canManageSettings = computed(() => hasManagerCapability(auth.value, MANAGER_CAPABILITY.settingsManage));
+const canManageCallRecordings = computed(() => hasManagerCapability(auth.value, MANAGER_CAPABILITY.callRecordingsManage));
 const visibleCoreNavItems = computed(() => coreNavItems.filter(
   item => !item.requiredCapability || hasManagerCapability(auth.value, item.requiredCapability),
 ));
@@ -178,7 +179,7 @@ const currentView = computed(() => {
   if (path === '/manager/profile') return 'profile-security';
   if (path.startsWith('/manager/integrations')) return 'analytics-connections';
   if (path.startsWith('/manager/tasks')) return 'personal-tasks';
-  if (path.startsWith('/manager/calls')) return 'call-recordings';
+  if (path.startsWith('/manager/settings/calls') || path.startsWith('/manager/calls')) return 'call-recordings';
   if (path.startsWith('/manager/leads')) return 'leads';
   if (path.startsWith('/manager/orders')) return 'orders';
   if (path.startsWith('/manager/calendar')) return 'calendar';
@@ -572,7 +573,7 @@ watch(currentPath, () => {
       <SettingsBackupView v-else-if="authorizedView === 'settings-backup' && canManageInfrastructure" :key="currentLocation" />
       <DocumentsSettingsView v-else-if="authorizedView === 'settings-documents' && canManageDocuments" :key="currentLocation" />
       <PlatformSettingsView v-else-if="authorizedView === 'settings-platform' && canManageInfrastructure" :key="currentLocation" />
-      <SettingsView v-else-if="authorizedView === 'settings' && canManageSettings" :key="currentLocation" />
+      <SettingsView v-else-if="authorizedView === 'settings' && canManageSettings" :key="currentLocation" :can-manage-call-recordings="canManageCallRecordings" />
       <InstallationRatesView v-else-if="authorizedView === 'installation-rates'" :key="currentLocation" />
       <InstallationDiscountsView v-else-if="authorizedView === 'installation-discounts'" :key="currentLocation" />
       <TariffsView v-else-if="authorizedView === 'tariffs'" :key="currentLocation" />

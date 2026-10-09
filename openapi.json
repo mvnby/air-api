@@ -14116,7 +14116,7 @@
           "manager-call-recordings"
         ],
         "summary": "Connection Status",
-        "description": "Read personal call-Drive connection readiness and fixed processing limits. Requires\nlive Manager membership; scope is the current staff user plus tenant/storefront,\nincluding owners (no access to another user's calls). Returns no credentials. Does\nnot contact Drive, poll recordings or charge AI. Default pipeline is disabled.\n[Call contract](https://github.com/mvnby/air-api/blob/main/docs/call-recordings.md).",
+        "description": "Read personal call-Drive connection readiness and fixed processing limits. Requires\nlive Manager membership and explicit private-pilot access; scope is the current staff user plus tenant/storefront,\nincluding owners (no access to another user's calls). Returns no credentials. Does\nnot contact Drive, poll recordings or charge AI. Default pipeline is disabled.\n[Call contract](https://github.com/mvnby/air-api/blob/main/docs/call-recordings.md).",
         "operationId": "get_manager_call_drive_status",
         "responses": {
           "200": {

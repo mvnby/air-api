@@ -84,7 +84,6 @@ describe('tenant manager capabilities', () => {
       '/manager/catalog-decision',
       '/manager/calendar',
       '/manager/tasks',
-      '/manager/calls',
       '/manager/customers',
       '/manager/equipment',
       '/manager/products',
@@ -101,6 +100,8 @@ describe('tenant manager capabilities', () => {
       '/manager/media',
       '/manager/staff',
       '/manager/settings',
+      '/manager/settings/calls',
+      '/manager/calls',
     ]) {
       expect(isManagerPathAllowed(tenantManagerAuth, path), path).toBe(false);
     }
@@ -112,7 +113,6 @@ describe('tenant manager capabilities', () => {
       'Главная',
       'Поручения',
       'Входящие',
-      'Записи звонков',
       'Заказы',
       'Подбор оборудования',
       'Календарь',
@@ -137,6 +137,8 @@ describe('tenant manager capabilities', () => {
 
     expect(isManagerPathAllowed(partnerOwnerAuth, '/manager/settings/documents')).toBe(true);
     expect(isManagerPathAllowed(partnerOwnerAuth, '/manager/settings')).toBe(true);
+    expect(isManagerPathAllowed(partnerOwnerAuth, '/manager/settings/calls')).toBe(false);
+    expect(isManagerPathAllowed(partnerOwnerAuth, '/manager/calls')).toBe(false);
     expect(isManagerPathAllowed(partnerOwnerAuth, '/manager/settings/platform')).toBe(false);
     expect(isManagerPathAllowed(partnerOwnerAuth, '/manager/tariffs')).toBe(true);
     expect(isManagerPathAllowed(partnerOwnerAuth, '/manager/installation-rates')).toBe(true);
@@ -157,6 +159,13 @@ describe('tenant manager capabilities', () => {
         .filter(item => !item.requiredCapability || partnerOwnerAuth.capabilities.includes(item.requiredCapability))
         .map(item => item.label),
     ).toEqual(expect.arrayContaining(['Тарифы смет', 'Публичный монтаж', 'Сметы услуг']));
+  });
+
+  it('opens private calls only with the server pilot capability, outside the global menu', () => {
+    const pilotAuth = { capabilities: [...tenantManagerAuth.capabilities, MANAGER_CAPABILITY.callRecordingsManage] };
+    expect(isManagerPathAllowed(pilotAuth, '/manager/settings/calls')).toBe(true);
+    expect(isManagerPathAllowed(pilotAuth, '/manager/calls')).toBe(true);
+    expect([...coreNavItems, ...navSections.flatMap(section => section.items)].some(item => item.label === 'Записи звонков')).toBe(false);
   });
 
   it('renders the safe projection without edit, supplier or price controls', async () => {

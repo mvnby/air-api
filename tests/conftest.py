@@ -19,6 +19,7 @@ os.environ.update(
         "ADMIN_ID": "0",
         "BOT_ENABLED": "false",
         "CALL_RECORDINGS_ENABLED": "false",
+        "CALL_RECORDINGS_PILOT_STAFF_IDS": "[]",
         "CALL_RECORDINGS_TRANSCRIPTION_API_KEY": "",
         "CALL_RECORDINGS_GOOGLE_CREDENTIALS_FILE": "",
         "CALL_RECORDINGS_GOOGLE_PROJECT_ID": "",

@@ -80,6 +80,7 @@ async def context(db_engine, monkeypatch):
         user = StaffUser(display_name="Автор звонков", username="call-owner", roles=["manager"], primary_role="manager")
         session.add(user)
         await session.flush()
+        monkeypatch.setattr(settings, "CALL_RECORDINGS_PILOT_STAFF_IDS", [user.id])
         session.add(TenantMembership(staff_user_id=user.id, tenant_id=1, role="manager", status="active"))
         await session.commit()
         actor = CommandActor(user.id, user.username, TenantScope(1, 1, is_system=True), "manager")
@@ -278,7 +279,7 @@ async def test_revoked_drive_retry_preserves_stage_budget(context):
 
 
 @pytest.mark.asyncio
-async def test_private_scope_demotion_and_cipher_are_fail_closed(context):
+async def test_private_scope_demotion_and_cipher_are_fail_closed(context, monkeypatch):
     factory, actor, provider = context
     recording_id = await queue(context)
     async with factory() as session:
@@ -288,6 +289,7 @@ async def test_private_scope_demotion_and_cipher_are_fail_closed(context):
         session.add(TenantMembership(staff_user_id=other.id, tenant_id=1, role="manager", status="active"))
         await session.commit()
         other_actor = replace(actor, staff_user_id=other.id, username=other.username)
+        monkeypatch.setattr(settings, "CALL_RECORDINGS_PILOT_STAFF_IDS", [actor.staff_user_id, other.id])
         with pytest.raises(LookupError):
             await CallRecordingService.get(session, other_actor, recording_id)
         tenant = Tenant(slug="call-other-tenant", display_name="Другая компания")
@@ -315,6 +317,28 @@ async def test_private_scope_demotion_and_cipher_are_fail_closed(context):
     run, calls = runner(context)
     await CallRecordingJobService.process_batch(worker_id="demoted", session_factory=factory, runner=run)
     assert calls == {"normalize": 0, "transcribe": 0, "structure": 0}
+
+
+@pytest.mark.asyncio
+async def test_pilot_revocation_stops_queued_and_automatic_processing(context, monkeypatch):
+    factory, actor, provider = context
+    recording_id = await queue(context)
+    async with factory() as session:
+        connection = await CallDriveConnectionService.get(session, actor)
+        connection.auto_poll_enabled = True
+        session.add(connection)
+        await session.commit()
+    monkeypatch.setattr(settings, "CALL_RECORDINGS_PILOT_STAFF_IDS", [actor.staff_user_id + 1000])
+    async def forbidden_poll(*args, **kwargs):
+        pytest.fail("A revoked source must not poll Drive")
+    monkeypatch.setattr(CallRecordingService, "poll", forbidden_poll)
+    assert await CallRecordingJobService.poll_auto_connections(session_factory=factory) == 0
+    run, calls = runner(context)
+    assert await CallRecordingJobService.process_batch(worker_id="pilot-revoked", session_factory=factory, runner=run) == 1
+    assert provider.downloads == 0 and calls == {"normalize": 0, "transcribe": 0, "structure": 0}
+    async with factory() as session:
+        row = await session.get(CallRecording, recording_id)
+        assert row.state == "manual_review" and row.transcript is None
 
 
 @pytest.mark.asyncio
