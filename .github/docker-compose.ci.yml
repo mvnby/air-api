@@ -1,3 +1,11 @@
 services:
   app:
     image: ${CI_APP_IMAGE:?CI_APP_IMAGE must be set for CI}
+  # Explicit cache references avoid Docker Engine resolving mutable Hub tags
+  # upstream even when registry-mirrors is configured. Keep the source versions.
+  db:
+    image: mirror.gcr.io/library/postgres:15-alpine
+  db_test:
+    image: mirror.gcr.io/library/postgres:15-alpine
+  gotenberg:
+    image: mirror.gcr.io/gotenberg/gotenberg:8.34.0-libreoffice@sha256:3c23aeb3a027a63d7c71745fc9d83724bd58cf9dfa470396ac82c0896028db2a
