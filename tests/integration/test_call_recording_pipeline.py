@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import pytest
-from sqlalchemy import func
+from sqlalchemy import event, func
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlmodel import select
 
@@ -128,6 +128,46 @@ def runner(context, *, structure_fail_once=False):
 
 async def count(session, model):
     return await session.scalar(select(func.count()).select_from(model))
+
+
+@pytest.mark.asyncio
+async def test_list_does_not_read_saved_audio_or_paid_checkpoints(context, db_engine):
+    factory, actor, provider = context
+    recording_id = await queue(context)
+    checkpoint = b"saved-normalized-audio" * 4096
+    async with factory() as session:
+        row = await session.get(CallRecording, recording_id)
+        row.downloaded_audio = checkpoint
+        row.audio_duration_seconds = 75
+        row.state, row.stage = "failed", "transcribe"
+        row.stage_attempts = {"download": 1, "transcribe": 1}
+        source_url = row.source_url
+        session.add(row)
+        await session.commit()
+
+    statements = []
+    def capture(connection, cursor, statement, parameters, execution_context, executemany):
+        statements.append(statement.lower())
+    event.listen(db_engine.sync_engine, "before_cursor_execute", capture)
+    try:
+        # Use a fresh consumer session so the checkpoint cannot come from the
+        # identity map. Any accidental lazy read is included in captured SQL.
+        async with factory() as session:
+            result = await CallRecordingService.list(session, actor, limit=100)
+    finally:
+        event.remove(db_engine.sync_engine, "before_cursor_execute", capture)
+    assert result.total == 1 and len(result.items) == 1
+    item = result.items[0]
+    assert item.id == recording_id and item.source_url == source_url
+    assert item.state == "failed" and item.stage == "transcribe"
+    assert item.audio_duration_seconds == 75 and item.stage_attempts["download"] == 1
+    assert item.transcript is None and item.structure is None and item.proposals == []
+    reads = [statement for statement in statements if "from call_recording" in statement]
+    assert any("call_recording.id" in statement for statement in reads)
+    for column in ("downloaded_audio", "transcript", "structure"):
+        assert not any(f"call_recording.{column}" in statement for statement in reads)
+    async with factory() as session:
+        assert (await session.get(CallRecording, recording_id)).downloaded_audio == checkpoint
 
 
 @pytest.mark.asyncio

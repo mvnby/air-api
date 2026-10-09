@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func
+from sqlalchemy.orm import defer
 from sqlmodel import select
 
 from core.command_actor import CommandActor
@@ -165,7 +166,7 @@ class CallRecordingService:
         await require_live_call_actor(session, actor)
         criteria = (CallDriveConnection.staff_user_id == actor.staff_user_id, CallDriveConnection.tenant_id == actor.tenant_scope.tenant_id, CallDriveConnection.storefront_id == actor.tenant_scope.storefront_id)
         total = await session.scalar(select(func.count()).select_from(CallRecording).join(CallDriveConnection).where(*criteria))
-        rows = (await session.scalars(select(CallRecording).join(CallDriveConnection).where(*criteria).order_by(CallRecording.created_at.desc(), CallRecording.id.desc()).offset(offset).limit(min(100, limit)))).all()
+        rows = (await session.scalars(select(CallRecording).options(defer(CallRecording.downloaded_audio, raiseload=True), defer(CallRecording.transcript, raiseload=True), defer(CallRecording.structure, raiseload=True)).join(CallDriveConnection).where(*criteria).order_by(CallRecording.created_at.desc(), CallRecording.id.desc()).offset(offset).limit(min(100, limit)))).all()
         return CallRecordingListResponse(items=[await cls.project(session, row) for row in rows], total=total)
 
     @classmethod
