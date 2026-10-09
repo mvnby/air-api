@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     MANAGER_BASE_URL: str = "https://api.mvn.by/manager"
     CONNECTOR_PUBLIC_BASE_URL: str = "https://api.mvn.by"
     CONNECTOR_ENABLED: bool = True
+    # Exact ChatGPT file delivery hosts verified by the client pilot. Empty
+    # means uploads fail closed; never use suffix/wildcard CDN permissions.
+    CONNECTOR_CHATGPT_FILE_HOSTS: list[str] = []
     CONNECTOR_REDIRECT_URIS: list[str] = [
         "https://chatgpt.com/connector_platform_oauth_redirect"
     ]

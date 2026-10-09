@@ -259,6 +259,33 @@ async def test_maximum_escaped_unicode_is_accepted_with_finite_body_limit(mcp_cl
     accepted = await client.post("/api/connector/mcp", content=body, headers={"Content-Type": "application/json"})
     assert accepted.status_code == 200
     assert not accepted.json()["result"]["isError"]
-    oversized = await client.post("/api/connector/mcp", content=body + b" " * (256 * 1024), headers={"Content-Type": "application/json"})
+    oversized = await client.post("/api/connector/mcp", content=body + b" " * (512 * 1024), headers={"Content-Type": "application/json"})
     assert oversized.status_code == 413
     assert calls == ["create_incoming"]
+
+
+@pytest.mark.asyncio
+async def test_maximum_escaped_maintenance_fields_fit_the_finite_transport(mcp_client, monkeypatch):
+    from schemas_connector_maintenance import ConnectorFindingResult
+    client, access, _, _ = mcp_client
+    access['token-one'].add('kitlane:maintenance:write')
+    text = '🙂' * 10000
+    arguments = {'order_id': 1, 'idempotency_key': 'maintenance-unicode-0001', 'payload': {
+        'original_comment': text, 'facts': text, 'recommendation': text, 'equipment_description': '🙂' * 2000,
+        'observed_at': '2026-10-09T10:00:00+03:00'}}
+    calls = []
+    async def execute(session, actor, tool, values):
+        inputs = tool.input_model.model_validate(values)
+        calls.append(tool.name)
+        now = datetime.now(timezone.utc)
+        item = ConnectorFindingResult(**inputs.payload.model_dump(), id=1, source_order_id=1, customer_id=1,
+            customer_branch_id=None, origin='chatgpt_maintenance', created_at=now, updated_at=now,
+            created_by='user-1', updated_by='user-1', version=1, manager_url='https://api.mvn.by/manager')
+        return {'result': item.model_dump(mode='json'), 'replayed': False}
+    monkeypatch.setattr('services.connector_mcp.execute_tool', execute)
+    body = json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
+        'name': 'create_maintenance_finding', 'arguments': arguments}}, ensure_ascii=True).encode()
+    assert 256 * 1024 < len(body) < 512 * 1024
+    accepted = await client.post('/api/connector/mcp', content=body, headers={'Content-Type': 'application/json'})
+    assert accepted.status_code == 200 and not accepted.json()['result']['isError']
+    assert calls == ['create_maintenance_finding']

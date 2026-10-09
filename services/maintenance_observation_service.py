@@ -70,7 +70,7 @@ class MaintenanceObservationService:
 
     @classmethod
     async def create(cls, session: AsyncSession, *, order_id: int, payload: CreateMaintenanceObservation,
-                     actor: str, scope: TenantScope):
+                     actor: str, scope: TenantScope, commit: bool = True, origin: str = "manager_maintenance"):
         order = await Access.get_order(session, order_id, tenant_scope=scope, for_update=True, populate_existing=True)
         if order is None:
             raise ObservationNotFound("Order not found")
@@ -90,17 +90,19 @@ class MaintenanceObservationService:
             tenant_id=order.tenant_id, storefront_id=order.storefront_id,
             source_order_id=order_id, customer_id=order.customer_id,
             customer_branch_id=order.customer_branch_id, command_key=key, command_hash=digest,
-            created_by=actor, updated_by=actor, **payload.model_dump(exclude={"command_key"}),
+            created_by=actor, updated_by=actor, origin=origin, **payload.model_dump(exclude={"command_key"}),
         )
         session.add(observation)
         await session.flush()
         session.add(cls.revision(observation, actor))
-        await session.commit()
-        await session.refresh(observation)
+        await session.flush()
+        if commit:
+            await session.commit()
+            await session.refresh(observation)
         return await cls.detail(session, observation, scope)
 
     @classmethod
-    async def update(cls, session, *, observation_id, payload: UpdateMaintenanceObservation, actor, scope):
+    async def update(cls, session, *, observation_id, payload: UpdateMaintenanceObservation, actor, scope, commit=True):
         observation = await cls.get(session, observation_id, scope, lock=True)
         from models import MaintenanceResolution
         if await session.scalar(select(MaintenanceResolution.id).where(MaintenanceResolution.observation_id == observation.id)):
@@ -132,8 +134,10 @@ class MaintenanceObservationService:
         observation.updated_by = actor
         session.add(observation)
         session.add(cls.revision(observation, actor))
-        await session.commit()
-        await session.refresh(observation)
+        await session.flush()
+        if commit:
+            await session.commit()
+            await session.refresh(observation)
         return await cls.detail(session, observation, scope)
 
     @classmethod
@@ -171,7 +175,8 @@ class MaintenanceObservationService:
         return MaintenanceObservationDetail.model_validate(data)
 
     @classmethod
-    async def upload_photo(cls, session, *, observation_id, key, content, filename, mime_type, actor, scope):
+    async def upload_photo(cls, session, *, observation_id, key, content, filename, mime_type, actor, scope, commit=True,
+                           source="manager_maintenance", source_meta=None):
         observation = await cls.get(session, observation_id, scope, lock=True)
         normalized_mime = ServiceAttachmentService._normalize_mime_type(mime_type, filename)
         if not normalized_mime.startswith("image/"):
@@ -191,10 +196,12 @@ class MaintenanceObservationService:
         item = await ServiceAttachmentService.create_and_link_order_attachment(
             session, order_id=observation.source_order_id, content=content, filename=filename,
             mime_type=normalized_mime, category="defect", caption=f"Замечание #{observation.id}",
-            source="manager_maintenance", created_by=actor,
-            source_meta={"maintenance_observation_id": observation.id}, commit=False, tenant_scope=scope,
+            source=source, created_by=actor,
+            source_meta={**(source_meta or {}), "maintenance_observation_id": observation.id}, commit=False, tenant_scope=scope,
         )
         session.add(MaintenanceObservationPhoto(observation_id=observation_id, attachment_id=item["id"],
                                               command_key=str(key), command_hash=digest))
-        await session.commit()
+        await session.flush()
+        if commit:
+            await session.commit()
         return item
