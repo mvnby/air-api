@@ -34,6 +34,7 @@ export const requiredCapabilityForManagerPath = (path: string): ManagerCapabilit
   }
   if (
     path.startsWith('/manager/tasks')
+    || path.startsWith('/manager/calls')
     || path.startsWith('/manager/leads')
     || path.startsWith('/manager/orders')
     || path.startsWith('/manager/calendar')

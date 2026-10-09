@@ -46,6 +46,7 @@ const CustomerProfileView = defineAsyncComponent(() => import('./views/CustomerP
 const OrdersKanbanView = defineAsyncComponent(() => import('./views/OrdersKanbanView.vue'));
 const LeadsView = defineAsyncComponent(() => import('./views/LeadsView.vue'));
 const PersonalTasksView = defineAsyncComponent(() => import('./views/PersonalTasksView.vue'));
+const CallRecordingsView = defineAsyncComponent(() => import('./views/CallRecordingsView.vue'));
 const CalendarDashboard = defineAsyncComponent(() => import('./views/CalendarDashboard.vue'));
 const ManagerHomeView = defineAsyncComponent(() => import('./views/ManagerHome.vue'));
 const InstallersView = defineAsyncComponent(() => import('./views/InstallersView.vue'));
@@ -177,6 +178,7 @@ const currentView = computed(() => {
   if (path === '/manager/profile') return 'profile-security';
   if (path.startsWith('/manager/integrations')) return 'analytics-connections';
   if (path.startsWith('/manager/tasks')) return 'personal-tasks';
+  if (path.startsWith('/manager/calls')) return 'call-recordings';
   if (path.startsWith('/manager/leads')) return 'leads';
   if (path.startsWith('/manager/orders')) return 'orders';
   if (path.startsWith('/manager/calendar')) return 'calendar';
@@ -555,6 +557,7 @@ watch(currentPath, () => {
       <ProfileSecurityView v-else-if="authorizedView === 'profile-security'" :key="currentLocation" @password-changed="handleLogoutSuccess" />
       <AnalyticsConnectionsView v-else-if="authorizedView === 'analytics-connections'" :key="currentLocation" />
       <PersonalTasksView v-else-if="authorizedView === 'personal-tasks'" :key="currentLocation" />
+      <CallRecordingsView v-else-if="authorizedView === 'call-recordings'" :key="currentLocation" />
       <LeadsView v-else-if="authorizedView === 'leads'" :key="currentLocation" />
       <OrdersKanbanView v-else-if="authorizedView === 'orders'" :key="currentLocation" />
       <CalendarDashboard v-else-if="authorizedView === 'calendar'" :key="currentLocation" />

@@ -6,6 +6,8 @@ from sqlmodel import select
 
 from models import AnalyticsConnection
 from models.document_drive_connection import DocumentDriveConnection
+from models.call_recording import CallDriveConnection
+from services.call_drive_connection_service import CallDriveCredentialCipher, CallDriveConnectionService
 from models.platform_ai_connection import PlatformAIConnection
 from models.deepseek_connection import DeepSeekConnection
 from models.jev_shadow import JevConnection
@@ -20,10 +22,10 @@ from services.document_drive_contracts import DocumentDriveConnectionError, Docu
 async def integration_credential_health(session: AsyncSession) -> dict:
     checked = 0
     unreadable = 0
-    for model in (AnalyticsConnection, DocumentDriveConnection, PlatformAIConnection, DeepSeekConnection, JevConnection):
+    for model in (AnalyticsConnection, DocumentDriveConnection, PlatformAIConnection, DeepSeekConnection, JevConnection, CallDriveConnection):
         rows = (await session.execute(select(model))).scalars().all()
         for row in rows:
-            if isinstance(row, (DeepSeekConnection, JevConnection)) and not row.encrypted_credentials:
+            if isinstance(row, (DeepSeekConnection, JevConnection, CallDriveConnection)) and not row.encrypted_credentials:
                 continue
             checked += 1
             try:
@@ -32,6 +34,8 @@ async def integration_credential_health(session: AsyncSession) -> dict:
                         row.encrypted_credentials,
                         tenant_id=row.tenant_id, storefront_id=row.storefront_id, provider=row.provider,
                     )
+                elif isinstance(row, CallDriveConnection):
+                    CallDriveCredentialCipher.decrypt(row.encrypted_credentials, tenant_id=row.tenant_id, provider=CallDriveConnectionService.cipher_provider(row))
                 elif isinstance(row, DocumentDriveConnection):
                     DocumentDriveCredentialCipher.decrypt(
                         row.encrypted_credentials, tenant_id=row.tenant_id, provider=row.provider,

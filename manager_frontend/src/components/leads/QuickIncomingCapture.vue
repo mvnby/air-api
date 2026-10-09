@@ -288,6 +288,7 @@ const reloadActual = async () => {
         <p v-if="preview?.workflow_type" class="mt-2 text-sm">Сценарий: {{ scenarioOptions.find(option => option.service_type === preview?.service_type)?.label || preview.service_type }} · из текста «{{ preview.evidence?.service_type }}» <button type="button" :disabled="saving || requestText !== savedSnapshot?.request_text" data-testid="incoming-use-scenario" class="ml-2 underline" @click="useSuggestedScenario">Использовать</button></p>
         <button type="button" class="mt-2 text-xs underline" :disabled="previewLoading" @click="loadPreview">Обновить предложения</button>
       </section>
+      <a v-if="savedSnapshot?.source_url" :href="savedSnapshot.source_url" target="_blank" rel="noopener" class="text-sm text-blue-600">Исходная запись звонка</a>
       <details v-if="savedSnapshot && savedSnapshot.original_text !== requestText" class="text-sm"><summary>Исходный текст</summary><p class="whitespace-pre-wrap">{{ savedSnapshot.original_text }}</p></details>
       <details :open="Boolean(currentId)" class="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
         <summary class="cursor-pointer text-sm font-semibold text-slate-700 dark:text-slate-200">Контакты и детали</summary>

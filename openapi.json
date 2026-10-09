@@ -14110,6 +14110,472 @@
         ]
       }
     },
+    "/api/manager/call-recordings/connection": {
+      "get": {
+        "tags": [
+          "manager-call-recordings"
+        ],
+        "summary": "Connection Status",
+        "description": "Read personal call-Drive connection readiness and fixed processing limits. Requires\nlive Manager membership; scope is the current staff user plus tenant/storefront,\nincluding owners (no access to another user's calls). Returns no credentials. Does\nnot contact Drive, poll recordings or charge AI. Default pipeline is disabled.\n[Call contract](https://github.com/mvnby/air-api/blob/main/docs/call-recordings.md).",
+        "operationId": "get_manager_call_drive_status",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallDriveStatus"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "manager-call-recordings"
+        ],
+        "summary": "Disconnect",
+        "description": "Remove this user's local call-Drive credential and stop automatic polling. Live\nwritable Manager membership required. Retains source links, transcripts, proposals and\naccepted actions; does not delete Google files or revoke other integrations. Repeating\nthe disconnect is safe. Queued jobs fail closed until explicit reconnection/retry.",
+        "operationId": "disconnect_manager_call_drive",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallDriveStatus"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/call-recordings/authorization-url": {
+      "get": {
+        "tags": [
+          "manager-call-recordings"
+        ],
+        "summary": "Authorization Url",
+        "description": "Start a separate personal Google Drive readonly OAuth grant for the live staff\nactor/current tenant/storefront. State is one-use, expires after 10 minutes, and\ncallback rechecks live role, membership and auth version. Existing document drive.file\ngrants cannot read Samsung uploads. No Shared Drive is required. Does not choose a\nfolder or enable polling; missing server OAuth configuration returns 503/502.\n[Call contract](https://github.com/mvnby/air-api/blob/main/docs/call-recordings.md).",
+        "operationId": "get_manager_call_drive_authorization_url",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentDriveAuthorizationUrlResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/call-recordings/connection/folder": {
+      "put": {
+        "tags": [
+          "manager-call-recordings"
+        ],
+        "summary": "Configure Folder",
+        "description": "Select an existing accessible folder for this staff user's separate readonly\nDrive grant. Live Manager access and writable tenant required. Personal Drive is\nsupported. Verifies folder metadata, never creates a folder or reads audio. Explicit\nauto_poll_enabled opt-in also requires server CALL_RECORDINGS_ENABLED before jobs run;\ndefault false. Folder changes reset scan cursor and retain existing review material.\nSame payload is safe to repeat. Invalid/unavailable folder returns 422/409/502.",
+        "operationId": "configure_manager_call_drive_folder",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CallFolderPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallDriveStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/call-recordings/poll": {
+      "post": {
+        "tags": [
+          "manager-call-recordings"
+        ],
+        "summary": "Poll",
+        "description": "Explicitly observe at most five files from the chosen personal folder (or one\nfile_id for a pilot), using metadata only. Live writable Manager access, separate OAuth\ngrant, selected folder and server-enabled pipeline required. Two observations at least\n60 seconds apart and stable version/checksum/size enqueue a durable job; this response\nis not successful transcription. New versions keep old material. At most 20 new\nrecordings per owner per rolling day. Repeated observations do not duplicate jobs.\nDisabled 503, missing connection/folder or moved/unfinished chosen file 409, rejected\nformat/size 422 and Drive failures 502. Job acceptance remains a separate command.",
+        "operationId": "poll_manager_call_recordings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CallPollPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallPollResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/call-recordings": {
+      "get": {
+        "tags": [
+          "manager-call-recordings"
+        ],
+        "summary": "List Recordings",
+        "description": "List private call versions for the live Manager actor/current tenant/storefront,\nnewest first; limit <=100 and offset pagination, including total. Other staff users,\ncompanies and storefronts are invisible. Returns stage, source link, error code and\npaid-stage attempt counts without transcript/audio bytes. Reading never starts work.",
+        "operationId": "list_manager_call_recordings",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallRecordingListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/call-recordings/{recording_id}": {
+      "get": {
+        "tags": [
+          "manager-call-recordings"
+        ],
+        "summary": "Get Recording",
+        "description": "Read this staff user's scoped source version, transcript, structured review result\nand separately editable proposals with accepted-resource links. Requires live Manager\nrole/membership; missing or inaccessible ID returns 404. Source Google link retains\nGoogle's own access policy. Proposed dates/conditions never confirm visits or facts;\nreading does not accept proposals, send messages or call AI.",
+        "operationId": "get_manager_call_recording",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "recording_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Recording Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallRecordingResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/call-recordings/{recording_id}/metadata": {
+      "patch": {
+        "tags": [
+          "manager-call-recordings"
+        ],
+        "summary": "Update Metadata",
+        "description": "Explicitly correct/clear source call time and phone for this user's recording.\nRequires live writable Manager access and expected_version; busy/stale version 409,\nmissing 404, invalid phone/date 422. Sets time_source=manual (or unknown on null).\nExisting extraction/transcript is preserved; proposal rebuilding needs explicit retry\nand reuses successful paid checkpoints. Retrying a successful write with an old version\nreturns 409; read the current version. Never infers time from processing/sync date.",
+        "operationId": "update_manager_call_recording_metadata",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "recording_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Recording Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CallRecordingMetadataPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallRecordingResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/call-recordings/{recording_id}/retry": {
+      "post": {
+        "tags": [
+          "manager-call-recordings"
+        ],
+        "summary": "Retry",
+        "description": "Explicitly resume a failed/reconnect/manual-review recording at the first unfinished\nstage. Requires live writable scoped Manager access, server opt-in and expected_version.\nRetains successful download/transcription/extraction checkpoints and does not recreate\nadopted incoming/tasks. No reset of the three-attempt paid-stage cap. Busy/stale/ready\nor exhausted stage 409; missing 404; disabled 503. Read current state after ambiguous\nresponse rather than repeating with a stale version. Reconnect OAuth before access retry.",
+        "operationId": "retry_manager_call_recording",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "recording_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Recording Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CallRetryPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallRecordingResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/call-recordings/{recording_id}/proposals/{proposal_id}/adopt": {
+      "post": {
+        "tags": [
+          "manager-call-recordings"
+        ],
+        "summary": "Adopt",
+        "description": "Explicitly adopt ONE edited proposal as a persistent Incoming or personal task,\nusing the shared authenticated commands. Incoming clarification_requested also creates\nits disclosed linked clarification task. Requires current live writable Manager actor,\noriginal private source ownership, ready state and expected_version; foreign/missing\n404, stale/busy or changed accepted payload 409, invalid fields 422 and receipt storage\nunavailable 503 with Retry-After. Durable source/action receipt and domain write/audit\ncommit atomically. Same adoption replays even beyond the ordinary receipt horizon;\nchanged Drive versions cannot reapply accepted actions. Original call time and source\nlink are retained. Does not create an order, confirm a visit or send to a customer.",
+        "operationId": "adopt_manager_call_proposal",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "recording_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Recording Id"
+            }
+          },
+          {
+            "name": "proposal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Proposal Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CallAdoptPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallAdoptionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/document-system/condition-presets": {
       "get": {
         "tags": [
@@ -38780,6 +39246,556 @@
         ],
         "title": "CalendarEventType"
       },
+      "CallAdoptPayload": {
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Version"
+          },
+          "incoming": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IncomingFields"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "task": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PersonalTaskCreatePayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_version"
+        ],
+        "title": "CallAdoptPayload"
+      },
+      "CallAdoptionResponse": {
+        "properties": {
+          "resource_type": {
+            "type": "string",
+            "title": "Resource Type"
+          },
+          "resource_id": {
+            "type": "integer",
+            "title": "Resource Id"
+          },
+          "resource_url": {
+            "type": "string",
+            "title": "Resource Url"
+          },
+          "replayed": {
+            "type": "boolean",
+            "title": "Replayed",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "resource_type",
+          "resource_id",
+          "resource_url"
+        ],
+        "title": "CallAdoptionResponse"
+      },
+      "CallDriveStatus": {
+        "properties": {
+          "connected": {
+            "type": "boolean",
+            "title": "Connected"
+          },
+          "pipeline_enabled": {
+            "type": "boolean",
+            "title": "Pipeline Enabled"
+          },
+          "transcription_configured": {
+            "type": "boolean",
+            "title": "Transcription Configured"
+          },
+          "account_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Label"
+          },
+          "folder_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder Id"
+          },
+          "folder_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder Name"
+          },
+          "folder_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder Url"
+          },
+          "auto_poll_enabled": {
+            "type": "boolean",
+            "title": "Auto Poll Enabled",
+            "default": false
+          },
+          "last_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Code"
+          },
+          "max_bytes": {
+            "type": "integer",
+            "title": "Max Bytes",
+            "default": 10485760
+          },
+          "max_duration_seconds": {
+            "type": "integer",
+            "title": "Max Duration Seconds",
+            "default": 600
+          },
+          "max_files_per_poll": {
+            "type": "integer",
+            "title": "Max Files Per Poll",
+            "default": 5
+          },
+          "max_recordings_per_day": {
+            "type": "integer",
+            "title": "Max Recordings Per Day",
+            "default": 20
+          },
+          "max_stage_attempts": {
+            "type": "integer",
+            "title": "Max Stage Attempts",
+            "default": 3
+          },
+          "transcription_model": {
+            "type": "string",
+            "title": "Transcription Model"
+          },
+          "structure_model": {
+            "type": "string",
+            "title": "Structure Model"
+          }
+        },
+        "type": "object",
+        "required": [
+          "connected",
+          "pipeline_enabled",
+          "transcription_configured",
+          "transcription_model",
+          "structure_model"
+        ],
+        "title": "CallDriveStatus"
+      },
+      "CallFolderPayload": {
+        "properties": {
+          "folder_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{10,160}$",
+            "title": "Folder Id"
+          },
+          "auto_poll_enabled": {
+            "type": "boolean",
+            "title": "Auto Poll Enabled",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "folder_id"
+        ],
+        "title": "CallFolderPayload"
+      },
+      "CallPollPayload": {
+        "properties": {
+          "file_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{10,160}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CallPollPayload"
+      },
+      "CallPollResponse": {
+        "properties": {
+          "observed": {
+            "type": "integer",
+            "title": "Observed"
+          },
+          "queued": {
+            "type": "integer",
+            "title": "Queued"
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More"
+          }
+        },
+        "type": "object",
+        "required": [
+          "observed",
+          "queued",
+          "has_more"
+        ],
+        "title": "CallPollResponse"
+      },
+      "CallProposalResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "incoming",
+              "task",
+              "callback"
+            ],
+            "title": "Kind"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload"
+          },
+          "evidence": {
+            "type": "string",
+            "title": "Evidence"
+          },
+          "needs_clarification": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Needs Clarification"
+          },
+          "accepted_resource_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted Resource Type"
+          },
+          "accepted_resource_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted Resource Id"
+          },
+          "accepted_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "payload",
+          "evidence",
+          "needs_clarification"
+        ],
+        "title": "CallProposalResponse"
+      },
+      "CallRecordingListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CallRecordingResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "CallRecordingListResponse"
+      },
+      "CallRecordingMetadataPayload": {
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Version"
+          },
+          "call_occurred_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Occurred At"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_version"
+        ],
+        "title": "CallRecordingMetadataPayload"
+      },
+      "CallRecordingResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          },
+          "source_version": {
+            "type": "string",
+            "title": "Source Version"
+          },
+          "source_checksum": {
+            "type": "string",
+            "title": "Source Checksum"
+          },
+          "source_size": {
+            "type": "integer",
+            "title": "Source Size"
+          },
+          "source_url": {
+            "type": "string",
+            "title": "Source Url"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "mime_type": {
+            "type": "string",
+            "title": "Mime Type"
+          },
+          "origin": {
+            "type": "string",
+            "title": "Origin"
+          },
+          "call_occurred_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Occurred At"
+          },
+          "time_source": {
+            "type": "string",
+            "title": "Time Source"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "stage_attempts": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Stage Attempts"
+          },
+          "last_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Code"
+          },
+          "transcript": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript"
+          },
+          "structure": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Structure"
+          },
+          "audio_duration_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Duration Seconds"
+          },
+          "proposals": {
+            "items": {
+              "$ref": "#/components/schemas/CallProposalResponse"
+            },
+            "type": "array",
+            "title": "Proposals"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "version",
+          "file_id",
+          "source_version",
+          "source_checksum",
+          "source_size",
+          "source_url",
+          "filename",
+          "mime_type",
+          "origin",
+          "call_occurred_at",
+          "time_source",
+          "phone",
+          "state",
+          "stage",
+          "stage_attempts",
+          "last_error_code",
+          "audio_duration_seconds"
+        ],
+        "title": "CallRecordingResponse"
+      },
+      "CallRetryPayload": {
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_version"
+        ],
+        "title": "CallRetryPayload"
+      },
       "CartItemPayload": {
         "properties": {
           "product_id": {
@@ -46432,6 +47448,164 @@
         ],
         "title": "IncomingCreatePayload"
       },
+      "IncomingFields": {
+        "properties": {
+          "request_text": {
+            "type": "string",
+            "maxLength": 12000,
+            "minLength": 1,
+            "title": "Request Text"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "region_text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region Text"
+          },
+          "workflow_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "sales_installation",
+                  "service_work",
+                  "maintenance",
+                  "repair"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Type"
+          },
+          "service_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "turnkey",
+                  "install_only",
+                  "pre_install",
+                  "maintenance",
+                  "repair",
+                  "dismantling"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Type"
+          },
+          "address_text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address Text"
+          },
+          "requested_time_text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Time Text"
+          },
+          "requested_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested At"
+          },
+          "call_before_visit": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Before Visit",
+            "description": "Prior-call agreement, independent of a confirmed visit or task deadline."
+          },
+          "clarification_requested": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clarification Requested",
+            "description": "Explicit instruction to save one linked clarification task. On creation, omission also recognizes standalone positive address/call instructions; false disables that text inference. MCP requires task-write scope when a task is requested."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "request_text"
+        ],
+        "title": "IncomingFields"
+      },
       "IncomingListResponse": {
         "properties": {
           "items": {
@@ -46949,6 +48123,18 @@
           "original_text": {
             "type": "string",
             "title": "Original Text"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url",
+            "description": "Original call/source URL saved by the trusted ingestion command; Google access remains independent. Reading never downloads audio."
           },
           "date_precision": {
             "anyOf": [

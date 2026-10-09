@@ -51,6 +51,7 @@ from .connector_auth import (
 from .order_workspace_usage import OrderWorkspaceUsageDaily
 from .catalog_workspace_usage import CatalogWorkspaceUsageDaily
 from .document_drive_connection import DocumentDriveConnection
+from .call_recording import CallDriveConnection, CallRecording, CallProposal, CallAdoption
 from .platform_ai_connection import PlatformAIConnection
 from .deepseek_connection import DeepSeekConnection
 from .jev_shadow import JevConnection, JevShadowSample

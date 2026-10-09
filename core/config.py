@@ -56,6 +56,13 @@ class Settings(BaseSettings):
     ]
     BOT_TASK_TIMEZONE: str = "Europe/Minsk"
     BOT_VOICE_TRANSCRIPTION_ENABLED: bool = False
+    # Personal recordings have their own opt-in and credential; bot enablement
+    # never starts this source. Limits are fixed in the call contract.
+    CALL_RECORDINGS_ENABLED: bool = False
+    CALL_RECORDINGS_TRANSCRIPTION_API_URL: str = "https://api.groq.com/openai/v1/audio/transcriptions"
+    CALL_RECORDINGS_TRANSCRIPTION_API_KEY: str = ""
+    CALL_RECORDINGS_TRANSCRIPTION_MODEL: str = "whisper-large-v3-turbo"
+    CALL_RECORDINGS_OAUTH_REDIRECT_URI: str = ""
     BOT_VOICE_TRANSCRIPTION_API_URL: str = (
         "https://api.groq.com/openai/v1/audio/transcriptions"
     )
