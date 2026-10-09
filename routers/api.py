@@ -1,6 +1,8 @@
 """Main API router that composes split public/admin route modules."""
 from fastapi import APIRouter
 
+from routers.integrations_tenders import router as integrations_tenders_router
+
 from routers.api_admin import router as admin_router
 from routers.api_catalog_revision import router as catalog_revision_router
 from routers.api_content import router as content_router
@@ -29,3 +31,5 @@ router.include_router(storefront_settings_router)
 router.include_router(service_pricing_router)
 router.include_router(yandex_business_router)
 router.include_router(multi_split_router)
+
+router.include_router(integrations_tenders_router)

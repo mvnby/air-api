@@ -3,6 +3,82 @@
 Belzakupki is an independent service. Kitlane consumes its tenant/profile-scoped
 HTTP API, without database access or embedding its scraping/OCR dependencies.
 
+## Direct push intake (#849, first release slice)
+
+`POST /api/integrations/tenders/leads` accepts **one native opportunity** from
+the same source contract as the existing pull feed. It uses a separate inbound
+Bearer key, not a Manager token or the outbound `BELZAKUPKI_INTEGRATION_KEY`.
+The endpoint is disabled by default; this release does not configure or activate
+the external publisher. Existing scheduled import settings remain authoritative.
+
+```dotenv
+BELZAKUPKI_LEAD_PUSH_ENABLED=false
+BELZAKUPKI_LEAD_PUSH_API_KEY=
+```
+
+Activation requires a protected dedicated key on both API nodes and the existing
+`BELZAKUPKI_IMPORT_TENANT_SLUG` / `BELZAKUPKI_IMPORT_STOREFRONT_SLUG` destination.
+The destination must be the active system tenant and its active default
+storefront, outside demo read-only mode. The request cannot choose a destination.
+App-role/readiness fencing and the PostgreSQL writable-primary check also apply.
+Disabling the flag and redeploying stops push intake without deleting orders or
+changing pull configuration. No migration is added by this slice.
+
+Example source shape (IDs must come from the producer, never be synthesized):
+
+```json
+{
+  "id": 123,
+  "profile": {"id": 7, "name": "HVAC"},
+  "score": 0.91,
+  "relevance_status": "confirmed",
+  "eligible": true,
+  "reason": "Air conditioning equipment",
+  "updated_at": "2026-10-09T10:00:00+00:00",
+  "tender": {
+    "source": "goszakupki",
+    "external_id": "source-tender-id",
+    "title": "Air conditioning equipment procurement",
+    "customer_name": "Source buyer",
+    "url": "https://example.org/tenders/source-tender-id",
+    "deadline_at": "2026-11-01T10:00:00+00:00"
+  }
+}
+```
+
+The typed schema rejects unknown fields, non-positive or string IDs,
+non-boolean eligibility, naive timestamps, non-finite numbers and unsafe source
+URLs. Source URLs must be HTTP(S), without credentials or whitespace. Serialized
+validated source evidence is limited to 64 KiB; this is a model validation bound,
+not a raw HTTP transport-size limit. Optional fields and their limits are in
+[OpenAPI](../openapi.json).
+
+A successful `200` returns `order_id` (nullable), `outcome` (`created`, `updated`,
+`unchanged` or `skipped`), `source` and `external_id`. Creation follows the same
+eligibility, deadline and `rules_only` rules as pull. Nonactionable new records
+are skipped; existing records receive source updates without reopening workflow.
+Source/external ID under the configured tenant/storefront identifies one order,
+including concurrent pull/push and multiple profile matches. Manager fields and
+reviewed enrichment remain authoritative. Older match updates are ignored;
+an older different profile can be recorded without replacing newer tender data.
+
+Both transports take the same checkpoint lock before upsert. Push may initialize
+the shared checkpoint but never advances an existing pull cursor or its timestamp.
+It performs no source HTTP request, customer creation, qualification, pricing,
+document generation or messaging. Existing optional shadow observation remains
+best effort after commit. Logs contain outcome/failure codes, not source text or
+credentials. Default request-validation errors may echo offending input values;
+the producer must put credentials only in the Authorization header.
+
+Missing/wrong credentials return `401` (`invalid_integration_credentials`) when
+the intake is configured. Disabled/incomplete configuration or an unwritable
+database returns `503` (`tender_intake_unavailable`); unavailable destination
+returns `403` (`tender_intake_scope_denied`); invalid source payload returns `422`.
+The outer HA fence may instead return `503` with `api_write_fenced` before routing.
+Retry a transient failure with the same native opportunity; do not invent a new
+match ID. Wiring the producer and integration settings/status are subsequent
+slices of #849; this endpoint alone does not complete the full integration.
+
 ## Runtime configuration
 
 The active-primary scheduler imports at most one page per interval. Standby
@@ -168,3 +244,8 @@ logs/checkpoint and confirm created orders through the existing inbox API.
 A valid page with no eligible current tenders must create **zero** test or fake
 leads. Idempotency, rollback, scope isolation and concurrency are covered in
 `test_belzakupki_import_service.py` and `test_belzakupki_import_concurrency.py`.
+Direct push contract, no-write gates, shared concurrency and checkpoint
+preservation are covered in `test_belzakupki_intake_schema.py` and
+`test_belzakupki_lead_push.py`. Release acceptance for this disabled slice reads
+configuration/schema and runs public smoke checks; it inserts no production
+test leads.

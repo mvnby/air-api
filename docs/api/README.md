@@ -11,6 +11,7 @@
 | Manager UI и авторизованный сотрудник | `/api/manager/*`, вход через `/login/*` | JWT/cookie, живое членство в tenant, роль и права конкретной операции; см. [авторизацию](authentication.md#manager). |
 | Сервис штатного Telegram-бота | `/api/internal/bot/v1/*` | Выделенный `BOT_API_TOKEN`, затем проверка сотрудника в бизнес-операциях; см. [границу бота](../bot-service-boundary.md#ownership). Это не пользовательский или партнёрский токен. |
 | Личное подключение ChatGPT | `/api/connector/mcp` и `/api/connector/oauth/*` | Отдельный OAuth grant с точным MCP resource и scopes; см. [подключение](../chatgpt-connector.md#адрес-и-доступ), [аудит первого выпуска](../chatgpt-connector-handoff.md#что-выпущено-и-можно-подключать). |
+| Сервис Белзакупки, прямой приём | `POST /api/integrations/tenders/leads` | Отдельный серверный Bearer key и фиксированная активная компания/витрина; выключен по умолчанию. Нативный формат, повторы и границы — в [контракте приёма](../belzakupki-intake.md#direct-push-intake-849-first-release-slice). |
 | Внешний поставщик | Публичного supplier API сейчас нет | `/api/manager/suppliers` и связанные пути обслуживают внутреннюю платформу. Требования к возможной интеграции — [ниже](#граница-будущей-интеграции-поставщика). |
 
 Проверенный код регистрации поверхностей —

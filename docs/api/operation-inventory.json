@@ -18,7 +18,8 @@
     "7": "Native contract/invoice customer readiness; scoped current/frozen factual context, effective DOCX fields, read-only results and authoritative creation/issue checks reviewed 2026-10-08 for issue 831",
     "8": "Maintenance commercial continuation; scoped immutable offers, explicit issue/send/consent/continue, idempotency, factual resolution and customer/object navigation reviewed 2026-10-09 for issue 1085",
     "9": "Private staff call Drive pipeline; readonly OAuth, bounded stages, lease/retry, source grounding and explicit shared command adoption reviewed for issue 1086",
-    "10": "Private call folder metadata selection and Soniox readiness/selection; live pilot scope, Samsung call-day/contact/phone filters, bounded continuation and explicit processing boundary reviewed 2026-10-09 for issue 1086"
+    "10": "Private call folder metadata selection and Soniox readiness/selection; live pilot scope, Samsung call-day/contact/phone filters, bounded continuation and explicit processing boundary reviewed 2026-10-09 for issue 1086",
+    "11": "Native tender direct push; dedicated key, fixed active system scope, writable-primary gates, bounded payload, shared pull/push deduplication, staff preservation, stale guards and unchanged pull checkpoint reviewed 2026-10-09 for issue 849"
   },
   "operations": {
     "modules/documents/api/condition_presets.py": [
@@ -168,6 +169,9 @@
       ["POST /api/connector/oauth/revoke", "connector_oauth_revoke", false, 1],
       ["POST /api/connector/oauth/token", "connector_oauth_token", false, 1],
       ["POST /api/manager/connector/grants/{grant_id}/revoke", "manager_connector_revoke", false, 1]
+    ],
+    "routers/integrations_tenders.py": [
+      ["POST /api/integrations/tenders/leads", "push_tender_lead", false, 11]
     ],
     "routers/internal_bot.py": [
       ["GET /api/internal/bot/v1/catalog/products/{product_id}", "get_internal_bot_catalog_product_v1", false, 1],

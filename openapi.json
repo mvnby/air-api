@@ -5008,6 +5008,54 @@
         }
       }
     },
+    "/api/integrations/tenders/leads": {
+      "post": {
+        "tags": [
+          "api",
+          "integrations-tenders"
+        ],
+        "summary": "Push Tender Lead",
+        "description": "Accept one native opportunity using the dedicated Bearer key and server-owned destination.\n\nActivation and writable-primary controls fail closed. Replays deduplicate by source and\nexternal tender ID; source updates preserve staff workflow and reviewed enrichment.\nCreation follows the existing confirmed/eligible/deadline rules. Older updates cannot\nreplace newer source state. Push does not advance the shared pull cursor or timestamp.\nThe validated native model is limited to 64 KiB; IDs are producer-owned and timestamps\nare timezone-aware. Returns a nullable order ID and created/updated/unchanged/skipped.\nConfigured intake rejects missing/wrong keys with 401, invalid destination with 403,\ndisabled/unwritable intake with 503 and malformed payload with 422. The outer HA fence\nmay return its own 503 before routing.\nNo source HTTP request, customer qualification or downstream business action is performed.\n\nSee [intake contract](https://github.com/mvnby/air-api/blob/main/docs/belzakupki-intake.md#direct-push-intake-849-first-release-slice).",
+        "operationId": "push_tender_lead",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NativeOpportunity"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenderLeadPushResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/analytics-connections": {
       "get": {
         "tags": [
@@ -50574,6 +50622,7 @@
         "type": "object",
         "title": "JevUpdate"
       },
+      "JsonValue": {},
       "LeadCreatePayload": {
         "properties": {
           "source": {
@@ -76632,6 +76681,85 @@
         ],
         "title": "NativeDocumentTemplateUpdatePayload"
       },
+      "NativeOpportunity": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "maximum": 9.223372036854776e+18,
+            "exclusiveMinimum": 0.0,
+            "title": "Id"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/TenderProfile"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "relevance_status": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Relevance Status"
+          },
+          "eligible": {
+            "type": "boolean",
+            "title": "Eligible"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "ai_analysis": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Analysis"
+          },
+          "tender": {
+            "$ref": "#/components/schemas/NativeTender"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "profile",
+          "relevance_status",
+          "eligible",
+          "updated_at",
+          "tender"
+        ],
+        "title": "NativeOpportunity"
+      },
       "NativePlaceholderCatalogResponse": {
         "properties": {
           "document_type": {
@@ -76855,6 +76983,195 @@
           "items"
         ],
         "title": "NativeTemplateVersionListResponse"
+      },
+      "NativeTender": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 9.223372036854776e+18,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "source": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Source"
+          },
+          "external_id": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "External Id"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "customer_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Name"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "deadline_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline At"
+          },
+          "deadline_kind": {
+            "type": "string",
+            "maxLength": 40,
+            "title": "Deadline Kind",
+            "default": "submission"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "estimated_value": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Value"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 12
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "contacts": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/JsonValue"
+                  },
+                  "type": "object"
+                },
+                "type": "array",
+                "maxItems": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contacts"
+          },
+          "ai_analysis": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Analysis"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source",
+          "external_id",
+          "title"
+        ],
+        "title": "NativeTender"
       },
       "OrderCustomerBranchBrief": {
         "properties": {
@@ -89639,6 +89956,70 @@
         ],
         "title": "TemplateExternalEditSyncResponse"
       },
+      "TenderLeadPushResult": {
+        "properties": {
+          "order_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Id"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "created",
+              "updated",
+              "unchanged",
+              "skipped"
+            ],
+            "title": "Outcome"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "external_id": {
+            "type": "string",
+            "title": "External Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "order_id",
+          "outcome",
+          "source",
+          "external_id"
+        ],
+        "title": "TenderLeadPushResult"
+      },
+      "TenderProfile": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "maximum": 9.223372036854776e+18,
+            "exclusiveMinimum": 0.0,
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "TenderProfile"
+      },
       "TransportTermsPayload": {
         "properties": {
           "car_model": {
@@ -90715,6 +91096,10 @@
             "tokenUrl": "/login/access-token"
           }
         }
+      },
+      "HTTPBearer": {
+        "type": "http",
+        "scheme": "bearer"
       }
     }
   }
