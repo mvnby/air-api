@@ -20182,6 +20182,396 @@
         }
       }
     },
+    "/api/manager/orders/{order_id}/maintenance-workspace": {
+      "post": {
+        "tags": [
+          "manager-maintenance-observations"
+        ],
+        "summary": "Maintenance Workspace",
+        "description": "Explicitly create/reuse the same scoped repair card. No execution, crew, slot or document is assigned.\nIdempotent by source order; inaccessible source is 404, incompatible context 400/409.\nSee [maintenance workflow](https://github.com/mvnby/air-api/blob/main/docs/equipment-maintenance.md).",
+        "operationId": "prepare_manager_maintenance_workspace",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaintenanceWorkspaceItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/maintenance-offers": {
+      "get": {
+        "tags": [
+          "manager-maintenance-observations"
+        ],
+        "summary": "Maintenance Offers",
+        "description": "Read scoped immutable commercial versions, decisions and resolutions. Pagination limit 1\u2013100.\nNo lifecycle mutation; inaccessible source/continuation returns 404.\nSee [maintenance workflow](https://github.com/mvnby/air-api/blob/main/docs/equipment-maintenance.md).",
+        "operationId": "list_manager_maintenance_offers",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaintenanceOfferList"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "manager-maintenance-observations"
+        ],
+        "summary": "Prepare Offer",
+        "description": "Freeze real ordinary proposal lines and selected finding revisions in a draft. Manager scope required.\nSame command key/content replays, different content or stale revision returns 409. Mixed context returns 400.\nNo issue, send, consent, execution or resolution is implicit.\nSee [maintenance workflow](https://github.com/mvnby/air-api/blob/main/docs/equipment-maintenance.md).",
+        "operationId": "prepare_manager_maintenance_offer",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrepareMaintenanceOffer"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaintenanceOfferItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/maintenance-offers/{offer_id}/commands": {
+      "post": {
+        "tags": [
+          "manager-maintenance-observations"
+        ],
+        "summary": "Offer Command",
+        "description": "Explicit audited issue/send/answer/continue, with command key and expected version. Send records actual\ndelivery evidence; it does not contact a customer. Continue uses only the approved subset on the same repair card.\nManager tenant/storefront required; inaccessible context 404, stale/conflicting version 409, invalid subset 400.\nSee [maintenance workflow](https://github.com/mvnby/air-api/blob/main/docs/equipment-maintenance.md).",
+        "operationId": "command_manager_maintenance_offer",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "offer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Offer Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaintenanceOfferCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaintenanceOfferItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/maintenance-observations/{observation_id}/resolution": {
+      "post": {
+        "tags": [
+          "manager-maintenance-observations"
+        ],
+        "summary": "Resolve Observation",
+        "description": "Explicit confirmation of actual repair with actor/time/evidence, separate from commercial consent.\nWrites equipment REPAIR history when equipment is known. Scoped manager access required, 404 inaccessible,\n409 stale/conflicting/unauthorized work; identical command is replay-safe.\nSee [maintenance workflow](https://github.com/mvnby/air-api/blob/main/docs/equipment-maintenance.md).",
+        "operationId": "resolve_manager_maintenance_observation",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "observation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Observation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveMaintenanceObservation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Resolve Manager Maintenance Observation"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/customers/{customer_id}/maintenance-observations": {
+      "get": {
+        "tags": [
+          "manager-maintenance-observations"
+        ],
+        "summary": "Customer Observations",
+        "description": "List scoped findings including unknown equipment at a customer/object. Manager ownership required;\ninaccessible customer returns 404. Optional branch filter and limit 1\u2013100, offset pagination.\nSee [maintenance workflow](https://github.com/mvnby/air-api/blob/main/docs/equipment-maintenance.md).",
+        "operationId": "list_manager_customer_maintenance_observations",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Customer Id"
+            }
+          },
+          {
+            "name": "branch_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Branch Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaintenanceObservationList"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/orders/{order_id}/equipment-links": {
       "get": {
         "tags": [
@@ -50951,6 +51341,18 @@
             "type": "integer",
             "title": "Version"
           },
+          "resolution": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution"
+          },
           "equipment_link_state": {
             "type": "string",
             "enum": [
@@ -51087,6 +51489,18 @@
           "version": {
             "type": "integer",
             "title": "Version"
+          },
+          "resolution": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution"
           }
         },
         "additionalProperties": false,
@@ -51158,6 +51572,214 @@
           "snapshot"
         ],
         "title": "MaintenanceObservationRevisionItem"
+      },
+      "MaintenanceOfferCommand": {
+        "properties": {
+          "command_key": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Command Key"
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Version"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "issue",
+              "send",
+              "accept",
+              "reject",
+              "defer",
+              "continue"
+            ],
+            "title": "Action"
+          },
+          "source": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Source"
+          },
+          "comment": {
+            "type": "string",
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Comment"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "accepted_lines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Accepted Lines"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "command_key",
+          "expected_version",
+          "action",
+          "source",
+          "comment",
+          "occurred_at"
+        ],
+        "title": "MaintenanceOfferCommand"
+      },
+      "MaintenanceOfferItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "source_order_id": {
+            "type": "integer",
+            "title": "Source Order Id"
+          },
+          "continuation_order_id": {
+            "type": "integer",
+            "title": "Continuation Order Id"
+          },
+          "proposal_id": {
+            "type": "integer",
+            "title": "Proposal Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "snapshot": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Snapshot"
+          },
+          "events": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Events"
+          },
+          "resolutions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Resolutions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "source_order_id",
+          "continuation_order_id",
+          "proposal_id",
+          "version",
+          "state",
+          "snapshot",
+          "events",
+          "resolutions"
+        ],
+        "title": "MaintenanceOfferItem"
+      },
+      "MaintenanceOfferLine": {
+        "properties": {
+          "observation_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Observation Id"
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Version"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "service",
+              "product"
+            ],
+            "title": "Kind"
+          },
+          "line_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Line Id"
+          },
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "diagnosis",
+              "repair"
+            ],
+            "title": "Purpose"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "observation_id",
+          "expected_version",
+          "kind",
+          "line_id",
+          "purpose"
+        ],
+        "title": "MaintenanceOfferLine"
+      },
+      "MaintenanceOfferList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MaintenanceOfferItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "MaintenanceOfferList"
+      },
+      "MaintenanceWorkspaceItem": {
+        "properties": {
+          "source_order_id": {
+            "type": "integer",
+            "title": "Source Order Id"
+          },
+          "continuation_order_id": {
+            "type": "integer",
+            "title": "Continuation Order Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_order_id",
+          "continuation_order_id"
+        ],
+        "title": "MaintenanceWorkspaceItem"
       },
       "ManagedDocumentArtifactAccessResponse": {
         "properties": {
@@ -63733,6 +64355,17 @@
             "type": "number",
             "title": "Balance Due",
             "default": 0.0
+          },
+          "maintenance_source_order_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maintenance Source Order Id"
           },
           "incoming_context": {
             "anyOf": [
@@ -77778,6 +78411,37 @@
         ],
         "title": "PrepareMaintenanceDefectAct"
       },
+      "PrepareMaintenanceOffer": {
+        "properties": {
+          "command_key": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Command Key"
+          },
+          "proposal_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Proposal Id"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/MaintenanceOfferLine"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Lines"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "command_key",
+          "proposal_id",
+          "lines"
+        ],
+        "title": "PrepareMaintenanceOffer"
+      },
       "ProductAvailabilityLeadPayload": {
         "properties": {
           "product_id": {
@@ -82268,6 +82932,46 @@
           "created_at"
         ],
         "title": "RepairDiagnosticLeadResponse"
+      },
+      "ResolveMaintenanceObservation": {
+        "properties": {
+          "command_key": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Command Key"
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Version"
+          },
+          "offer_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Offer Id"
+          },
+          "evidence": {
+            "type": "string",
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Evidence"
+          },
+          "resolved_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Resolved At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "command_key",
+          "expected_version",
+          "offer_id",
+          "evidence",
+          "resolved_at"
+        ],
+        "title": "ResolveMaintenanceObservation"
       },
       "ServiceCatalogCounts": {
         "properties": {

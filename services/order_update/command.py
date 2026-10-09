@@ -39,6 +39,9 @@ class OrderUpdateCommandService:
             if fields_set is None:
                 fields_set = getattr(payload, "__fields_set__", set())
 
+            from services.maintenance_commercial_guard import guard_order_update
+            await guard_order_update(session, order, payload, fields_set)
+
             if "status" in fields_set and getattr(payload, "status", None) is not None:
                 from services.inbox_eligibility import require_unarchived_inbox
                 await require_unarchived_inbox(session, "order", order_id)

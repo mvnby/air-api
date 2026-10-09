@@ -648,6 +648,7 @@ class OrderService:
             is_fully_paid
             and bool(getattr(order, "auto_execution_on_payment", False))
             and status == OrderStatus.NEGOTIATION.value
+            and not (order.technical_meta or {}).get("maintenance_source_order_id")
         ):
             order.status = OrderStatus.EXECUTION
             status = OrderStatus.EXECUTION.value
@@ -1482,6 +1483,8 @@ class OrderService:
         if not order:
             return
         proposal = await OrderService.ensure_default_proposal(session, order)
+        from services.maintenance_commercial_guard import guard_lines
+        await guard_lines(session, order_id, proposal.id)
         # 1. Очищаем старые связи
         await session.execute(delete(OrderProductLink).where(OrderProductLink.order_id == order_id, OrderProductLink.proposal_id == proposal.id))
         await session.execute(delete(OrderServiceLink).where(OrderServiceLink.order_id == order_id, OrderServiceLink.proposal_id == proposal.id))
@@ -1702,6 +1705,9 @@ class OrderService:
             return
         proposal = await OrderService.ensure_default_proposal(session, order)
         
+        from services.maintenance_commercial_guard import guard_lines
+        await guard_lines(session, order_id, proposal.id)
+
         # 1. Clear existing links
         await session.execute(delete(OrderProductLink).where(OrderProductLink.order_id == order_id, OrderProductLink.proposal_id == proposal.id))
         await session.execute(delete(OrderServiceLink).where(OrderServiceLink.order_id == order_id, OrderServiceLink.proposal_id == proposal.id))
@@ -1965,7 +1971,11 @@ class OrderService:
 
     @staticmethod
     async def update_status(session: AsyncSession, order_id: int, new_status: Any) -> bool:
-        """Update order status."""
+        """Update order status, preserving explicit maintenance consent."""
+        from services.maintenance_commercial_guard import continuation_for, approved_proposal_ids
+        if new_status in {OrderStatus.EXECUTION, OrderStatus.CLOSED} and await continuation_for(session, order_id):
+            if not await approved_proposal_ids(session, order_id):
+                raise ValueError('Сначала сохраните согласие клиента и явно продолжите работы по ТО')
         return await OrderDAO.update_status(session, order_id, new_status)
 
     @staticmethod

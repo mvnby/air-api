@@ -147,3 +147,78 @@ async def list_defect_acts(order_id: int, limit: int = Query(50, ge=1, le=100), 
     """
     return await command(session, MaintenanceActPreparationService.list(session, source_order_id=order_id,
                                                                        scope=scope, limit=limit, offset=offset))
+
+
+from api_contracts.maintenance_offers import (PrepareMaintenanceOffer, MaintenanceOfferCommand, ResolveMaintenanceObservation,
+    MaintenanceOfferItem, MaintenanceOfferList, MaintenanceWorkspaceItem)
+from services.maintenance_offer_service import MaintenanceOfferService as Offers
+
+
+@router.post('/orders/{order_id}/maintenance-workspace', response_model=MaintenanceWorkspaceItem,
+             operation_id=operation_ids.PREPARE_MANAGER_MAINTENANCE_WORKSPACE)
+async def maintenance_workspace(order_id: int, actor: str = Depends(get_current_username), session: AsyncSession = Depends(get_session),
+                                scope: TenantScope = Depends(get_current_manager_tenant_scope)):
+    """Explicitly create/reuse the same scoped repair card. No execution, crew, slot or document is assigned.
+    Idempotent by source order; inaccessible source is 404, incompatible context 400/409.
+    See [maintenance workflow](https://github.com/mvnby/air-api/blob/main/docs/equipment-maintenance.md).
+    """
+    return await command(session, Offers.workspace(session, source_order_id=order_id, actor=actor, scope=scope))
+
+
+@router.get('/orders/{order_id}/maintenance-offers', response_model=MaintenanceOfferList,
+            operation_id=operation_ids.LIST_MANAGER_MAINTENANCE_OFFERS)
+async def maintenance_offers(order_id: int, limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0),
+                             session: AsyncSession = Depends(get_session), scope: TenantScope = Depends(get_current_manager_tenant_scope)):
+    """Read scoped immutable commercial versions, decisions and resolutions. Pagination limit 1–100.
+    No lifecycle mutation; inaccessible source/continuation returns 404.
+    See [maintenance workflow](https://github.com/mvnby/air-api/blob/main/docs/equipment-maintenance.md).
+    """
+    return await command(session, Offers.list(session, source_order_id=order_id, scope=scope, limit=limit, offset=offset))
+
+
+@router.post('/orders/{order_id}/maintenance-offers', response_model=MaintenanceOfferItem, status_code=201,
+             operation_id=operation_ids.PREPARE_MANAGER_MAINTENANCE_OFFER)
+async def prepare_offer(order_id: int, payload: PrepareMaintenanceOffer, actor: str = Depends(get_current_username),
+                        session: AsyncSession = Depends(get_session), scope: TenantScope = Depends(get_current_manager_tenant_scope)):
+    """Freeze real ordinary proposal lines and selected finding revisions in a draft. Manager scope required.
+    Same command key/content replays, different content or stale revision returns 409. Mixed context returns 400.
+    No issue, send, consent, execution or resolution is implicit.
+    See [maintenance workflow](https://github.com/mvnby/air-api/blob/main/docs/equipment-maintenance.md).
+    """
+    return await command(session, Offers.prepare(session, source_order_id=order_id, payload=payload, scope=scope, actor=actor))
+
+
+@router.post('/orders/{order_id}/maintenance-offers/{offer_id}/commands', response_model=MaintenanceOfferItem,
+             operation_id=operation_ids.COMMAND_MANAGER_MAINTENANCE_OFFER)
+async def offer_command(order_id: int, offer_id: int, payload: MaintenanceOfferCommand, actor: str = Depends(get_current_username),
+                        session: AsyncSession = Depends(get_session), scope: TenantScope = Depends(get_current_manager_tenant_scope)):
+    """Explicit audited issue/send/answer/continue, with command key and expected version. Send records actual
+    delivery evidence; it does not contact a customer. Continue uses only the approved subset on the same repair card.
+    Manager tenant/storefront required; inaccessible context 404, stale/conflicting version 409, invalid subset 400.
+    See [maintenance workflow](https://github.com/mvnby/air-api/blob/main/docs/equipment-maintenance.md).
+    """
+    return await command(session, Offers.command(session, source_order_id=order_id, offer_id=offer_id, payload=payload, scope=scope, actor=actor))
+
+
+@router.post('/maintenance-observations/{observation_id}/resolution', response_model=dict,
+             operation_id=operation_ids.RESOLVE_MANAGER_MAINTENANCE_OBSERVATION)
+async def resolve_observation(observation_id: int, payload: ResolveMaintenanceObservation, actor: str = Depends(get_current_username),
+                              session: AsyncSession = Depends(get_session), scope: TenantScope = Depends(get_current_manager_tenant_scope)):
+    """Explicit confirmation of actual repair with actor/time/evidence, separate from commercial consent.
+    Writes equipment REPAIR history when equipment is known. Scoped manager access required, 404 inaccessible,
+    409 stale/conflicting/unauthorized work; identical command is replay-safe.
+    See [maintenance workflow](https://github.com/mvnby/air-api/blob/main/docs/equipment-maintenance.md).
+    """
+    return await command(session, Offers.resolve(session, observation_id=observation_id, payload=payload, scope=scope, actor=actor))
+
+
+@router.get('/customers/{customer_id}/maintenance-observations', response_model=MaintenanceObservationList,
+            operation_id=operation_ids.LIST_MANAGER_CUSTOMER_MAINTENANCE_OBSERVATIONS)
+async def customer_observations(customer_id: int, branch_id: int | None = Query(None, gt=0),
+        limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0), session: AsyncSession = Depends(get_session),
+        scope: TenantScope = Depends(get_current_manager_tenant_scope)):
+    """List scoped findings including unknown equipment at a customer/object. Manager ownership required;
+    inaccessible customer returns 404. Optional branch filter and limit 1–100, offset pagination.
+    See [maintenance workflow](https://github.com/mvnby/air-api/blob/main/docs/equipment-maintenance.md).
+    """
+    return await command(session, Service.list(session, scope=scope, customer_id=customer_id, branch_id=branch_id, limit=limit, offset=offset))

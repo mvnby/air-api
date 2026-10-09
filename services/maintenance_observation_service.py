@@ -102,6 +102,9 @@ class MaintenanceObservationService:
     @classmethod
     async def update(cls, session, *, observation_id, payload: UpdateMaintenanceObservation, actor, scope):
         observation = await cls.get(session, observation_id, scope, lock=True)
+        from models import MaintenanceResolution
+        if await session.scalar(select(MaintenanceResolution.id).where(MaintenanceResolution.observation_id == observation.id)):
+            raise ObservationConflict('Устранённое замечание сохраняется как история; новую проблему запишите отдельно')
         if observation.version != payload.expected_version:
             raise ObservationConflict("Замечание уже изменено. Откройте актуальную версию перед сохранением.")
         await cls.validate_context(session, customer_id=observation.customer_id, branch_id=observation.customer_branch_id,
@@ -134,16 +137,27 @@ class MaintenanceObservationService:
         return await cls.detail(session, observation, scope)
 
     @classmethod
-    async def list(cls, session, *, scope, order_id=None, equipment_id=None, limit=50, offset=0):
+    async def list(cls, session, *, scope, order_id=None, equipment_id=None, customer_id=None, branch_id=None, limit=50, offset=0):
         if order_id is not None and await Access.get_order(session, order_id, tenant_scope=scope) is None:
             raise ObservationNotFound("Order not found")
         if equipment_id is not None and await Access.get_equipment(session, equipment_id, tenant_scope=scope) is None:
             raise ObservationNotFound("Equipment not found")
-        return await DAO.list(session, scope, order_id=order_id, equipment_id=equipment_id, limit=limit, offset=offset)
+        if customer_id is not None and await Access.get_customer(session, customer_id, tenant_scope=scope) is None:
+            raise ObservationNotFound("Клиент не найден")
+        result = await DAO.list(session, scope, order_id=order_id, equipment_id=equipment_id, customer_id=customer_id, branch_id=branch_id, limit=limit, offset=offset)
+        from models import MaintenanceResolution
+        ids = [row.id for row in result['items']]
+        resolutions = (await session.execute(select(MaintenanceResolution).where(MaintenanceResolution.observation_id.in_(ids)))).scalars().all() if ids else []
+        by_id = {r.observation_id: r.model_dump(mode='json') for r in resolutions}
+        result['items'] = [{**MaintenanceObservationItem.model_validate(row).model_dump(), 'resolution': by_id.get(row.id)} for row in result['items']]
+        return result
 
     @classmethod
     async def detail(cls, session, observation, scope):
         data = MaintenanceObservationItem.model_validate(observation).model_dump()
+        from models import MaintenanceResolution
+        resolution = await session.scalar(select(MaintenanceResolution).where(MaintenanceResolution.observation_id == observation.id))
+        data['resolution'] = resolution.model_dump(mode='json') if resolution else None
         links = await DAO.photos(session, observation.id)
         order_files = await ServiceAttachmentService.list_order_attachments(session, order_id=observation.source_order_id, tenant_scope=scope)
         ids = {link.attachment_id for link in links}

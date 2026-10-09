@@ -21,6 +21,7 @@ export type MaintenanceObservationDetail = {
     updated_at: string;
     updated_by: string;
     version: number;
+    resolution?: (Record<string, any> | null);
     equipment_link_state?: 'unlinked' | 'current' | 'moved' | 'archived';
     revisions?: Array<MaintenanceObservationRevisionItem>;
     photos?: Array<ManagerServiceAttachmentItemResponse>;

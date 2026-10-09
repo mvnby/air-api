@@ -68,6 +68,7 @@ export type ManagerOrderDetailResponse = {
     execution_status_changed_at?: (string | null);
     total_payments?: number;
     balance_due?: number;
+    maintenance_source_order_id?: (number | null);
     incoming_context?: (IncomingOrderContext | null);
     source_enrichment?: (ManagerOrderSourceEnrichment | null);
     contact_name?: (string | null);

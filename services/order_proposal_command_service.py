@@ -220,6 +220,8 @@ class OrderProposalCommandService:
             fields_set = getattr(payload, "model_fields_set", None)
             if fields_set is None:
                 fields_set = getattr(payload, "__fields_set__", set())
+            from services.maintenance_commercial_guard import guard_proposal
+            await guard_proposal(session, order_id, proposal_id, status=getattr(payload, "status", None), archiving=bool(getattr(payload, "is_archived", False)))
             if "name" in fields_set:
                 proposal.name = OrderService._clean_proposal_name(
                     payload.name,
@@ -311,6 +313,8 @@ class OrderProposalCommandService:
             )
             if not proposal:
                 raise ValueError("Proposal not found")
+            from services.maintenance_commercial_guard import guard_proposal
+            await guard_proposal(session, order_id, proposal_id, selecting=True)
             for item in order.proposals:
                 item.is_selected = item.id == proposal.id
                 session.add(item)

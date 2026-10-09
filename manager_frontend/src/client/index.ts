@@ -317,6 +317,11 @@ export type { MaintenanceObservationDetail } from './models/MaintenanceObservati
 export type { MaintenanceObservationItem } from './models/MaintenanceObservationItem';
 export type { MaintenanceObservationList } from './models/MaintenanceObservationList';
 export type { MaintenanceObservationRevisionItem } from './models/MaintenanceObservationRevisionItem';
+export type { MaintenanceOfferCommand } from './models/MaintenanceOfferCommand';
+export type { MaintenanceOfferItem } from './models/MaintenanceOfferItem';
+export type { MaintenanceOfferLine } from './models/MaintenanceOfferLine';
+export type { MaintenanceOfferList } from './models/MaintenanceOfferList';
+export type { MaintenanceWorkspaceItem } from './models/MaintenanceWorkspaceItem';
 export type { ManagedDocumentArtifactAccessResponse } from './models/ManagedDocumentArtifactAccessResponse';
 export type { ManagedDocumentArtifactItem } from './models/ManagedDocumentArtifactItem';
 export type { ManagedDocumentArtifactListResponse } from './models/ManagedDocumentArtifactListResponse';
@@ -693,6 +698,7 @@ export type { PersonalTaskResponse } from './models/PersonalTaskResponse';
 export type { PersonalTaskStatusPayload } from './models/PersonalTaskStatusPayload';
 export type { PersonalTaskUpdatePayload } from './models/PersonalTaskUpdatePayload';
 export type { PrepareMaintenanceDefectAct } from './models/PrepareMaintenanceDefectAct';
+export type { PrepareMaintenanceOffer } from './models/PrepareMaintenanceOffer';
 export type { ProductAvailabilityLeadPayload } from './models/ProductAvailabilityLeadPayload';
 export type { ProductAvailabilityLeadResponse } from './models/ProductAvailabilityLeadResponse';
 export type { ProductBrandResponse } from './models/ProductBrandResponse';
@@ -764,6 +770,7 @@ export type { PublicStorefrontContextResponse } from './models/PublicStorefrontC
 export type { PublicWriteIdempotencyErrorResponse } from './models/PublicWriteIdempotencyErrorResponse';
 export type { PublicWriteRequestErrorResponse } from './models/PublicWriteRequestErrorResponse';
 export type { RepairDiagnosticLeadResponse } from './models/RepairDiagnosticLeadResponse';
+export type { ResolveMaintenanceObservation } from './models/ResolveMaintenanceObservation';
 export type { ServiceCatalogCounts } from './models/ServiceCatalogCounts';
 export type { ServiceDirectionSetting } from './models/ServiceDirectionSetting';
 export type { ServiceResponse } from './models/ServiceResponse';

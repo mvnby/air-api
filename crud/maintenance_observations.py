@@ -32,12 +32,16 @@ class MaintenanceObservationDAO:
         return (await session.execute(statement)).scalars().first()
 
     @classmethod
-    async def list(cls, session, scope, *, order_id=None, equipment_id=None, limit=50, offset=0):
+    async def list(cls, session, scope, *, order_id=None, equipment_id=None, customer_id=None, branch_id=None, limit=50, offset=0):
         statement = cls.scoped(scope)
         if order_id is not None:
             statement = statement.where(MaintenanceObservation.source_order_id == order_id)
         if equipment_id is not None:
             statement = statement.where(MaintenanceObservation.equipment_id == equipment_id)
+        if customer_id is not None:
+            statement = statement.where(MaintenanceObservation.customer_id == customer_id)
+        if branch_id is not None:
+            statement = statement.where(MaintenanceObservation.customer_branch_id == branch_id)
         total = await session.scalar(select(func.count()).select_from(statement.subquery()))
         items = (await session.execute(statement.order_by(MaintenanceObservation.id.desc()).limit(limit).offset(offset))).scalars().all()
         return {"items": items, "total": total}

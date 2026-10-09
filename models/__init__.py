@@ -318,3 +318,4 @@ __all__ = [
     "WarrantyPolicySeriesLink",
 ]
 from .maintenance_continuation import MaintenanceContinuation, MaintenanceActPreparation, MaintenanceActSource
+from .maintenance_offer import MaintenanceOffer, MaintenanceOfferSource, MaintenanceOfferEvent, MaintenanceResolution

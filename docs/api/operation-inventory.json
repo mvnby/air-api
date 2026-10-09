@@ -15,7 +15,8 @@
     "4": "Linked incoming clarification and read-only editable preview, scope/version/replay contract; reviewed 2026-10-07 for issue 1084",
     "5": "Standalone maintenance observations and private photos; role/scope/context/version/replay contract reviewed 2026-10-07 for issue 1085",
     "6": "Explicit maintenance defect-act preparation; scoped versions, idempotency, immutable snapshot and native lifecycle reviewed 2026-10-08",
-    "7": "Native contract/invoice customer readiness; scoped current/frozen factual context, effective DOCX fields, read-only results and authoritative creation/issue checks reviewed 2026-10-08 for issue 831"
+    "7": "Native contract/invoice customer readiness; scoped current/frozen factual context, effective DOCX fields, read-only results and authoritative creation/issue checks reviewed 2026-10-08 for issue 831",
+    "8": "Maintenance commercial continuation; scoped immutable offers, explicit issue/send/consent/continue, idempotency, factual resolution and customer/object navigation reviewed 2026-10-09 for issue 1085"
   },
   "operations": {
     "modules/documents/api/condition_presets.py": [
@@ -502,7 +503,13 @@
       ["POST /api/manager/maintenance-observations/{observation_id}/photos", "upload_manager_maintenance_observation_photo", false, 5],
       ["POST /api/manager/orders/{order_id}/maintenance-observations", "create_manager_maintenance_observation", false, 5],
       ["POST /api/manager/orders/{order_id}/maintenance-defect-acts", "prepare_manager_maintenance_defect_act", false, 6],
-      ["GET /api/manager/orders/{order_id}/maintenance-defect-acts", "list_manager_maintenance_defect_acts", false, 6]
+      ["GET /api/manager/orders/{order_id}/maintenance-defect-acts", "list_manager_maintenance_defect_acts", false, 6],
+      ["GET /api/manager/customers/{customer_id}/maintenance-observations", "list_manager_customer_maintenance_observations", false, 8],
+      ["GET /api/manager/orders/{order_id}/maintenance-offers", "list_manager_maintenance_offers", false, 8],
+      ["POST /api/manager/maintenance-observations/{observation_id}/resolution", "resolve_manager_maintenance_observation", false, 8],
+      ["POST /api/manager/orders/{order_id}/maintenance-offers", "prepare_manager_maintenance_offer", false, 8],
+      ["POST /api/manager/orders/{order_id}/maintenance-offers/{offer_id}/commands", "command_manager_maintenance_offer", false, 8],
+      ["POST /api/manager/orders/{order_id}/maintenance-workspace", "prepare_manager_maintenance_workspace", false, 8]
     ],
     "routers/manager_mail.py": [
       ["DELETE /api/manager/mail/bank-receipts/{receipt_id}", "delete_manager_bank_receipt", false, 2],

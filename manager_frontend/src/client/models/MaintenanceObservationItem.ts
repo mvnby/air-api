@@ -19,5 +19,6 @@ export type MaintenanceObservationItem = {
     updated_at: string;
     updated_by: string;
     version: number;
+    resolution?: (Record<string, any> | null);
 };
 
