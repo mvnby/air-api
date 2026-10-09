@@ -725,6 +725,8 @@ async def compose_manager_order_email(
             tenant_scope=tenant_scope,
             order_id=order_id,
             document_ids=payload.document_ids,
+            registration_certificate_id=payload.registration_certificate_id,
+            legal_entity_id=payload.legal_entity_id,
             template_key=payload.template_key,
         )
     except Exception as exc:
@@ -769,6 +771,8 @@ async def send_manager_order_email(
             body_html=payload.body_html,
             reply_to=payload.reply_to,
             document_ids=payload.document_ids,
+            registration_certificate_id=payload.registration_certificate_id,
+            legal_entity_id=payload.legal_entity_id,
         )
     except Exception as exc:
         raise manager_http_error(

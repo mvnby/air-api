@@ -36,6 +36,7 @@ from modules.documents.domain import (
     TransportTerms,
     WAYBILL_DOCUMENT_TYPES,
 )
+from modules.documents.domain.participant_statement import ParticipantStatement
 from .business_context import (
     BusinessDocumentContextError,
     build_business_document_context,
@@ -83,6 +84,7 @@ class DocumentContextSelection:
     act_terms: ActTerms | None = None
     transport_terms: TransportTerms | None = None
     maintenance_preparation_id: int | None = None
+    participant_statement: ParticipantStatement | None = None
 
 
 class DocumentContextBuilder:
@@ -132,6 +134,8 @@ class DocumentContextBuilder:
             )
         if document_type == "maintenance_defect_act" and selection.maintenance_preparation_id is None:
             raise DocumentContextError("Подготовьте дефектный акт через выбранные замечания ТО")
+        if (document_type == "participant_statement") != (selection.participant_statement is not None):
+            raise DocumentContextError("Реквизиты заявления участника обязательны только для заявления")
         business_role = cls._business_role(document_type, selection.business_role)
         order = await cls._load_order(
             session,
@@ -453,6 +457,12 @@ class DocumentContextBuilder:
             "table_rows": {"lines": public_rows, **business_context.table_rows},
         }
 
+        if document_type == "participant_statement":
+            try:
+                snapshot["values"].update(selection.participant_statement.values())
+            except ValueError as exc:
+                raise DocumentContextError(str(exc)) from exc
+            snapshot["table_rows"] = {}
         if document_type == "maintenance_defect_act":
             from .maintenance_act_snapshot import extend_maintenance_snapshot
             return await extend_maintenance_snapshot(session, selection=selection, scope=tenant_scope, snapshot=snapshot)

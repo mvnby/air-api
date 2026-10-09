@@ -3,6 +3,7 @@ import { computed, nextTick, ref, watch } from 'vue';
 import { ManagerDocumentSystemService, ManagerMailService } from '../../client';
 import type { ManagerOrderDetailResponse } from '../../client';
 import { getApiErrorMessage } from '../../utils/api-errors';
+import { listCertificates, type RegistrationCertificate } from '../../features/documents/registration-certificates';
 
 type SendableOrderDocument = {
   id: number;
@@ -40,6 +41,16 @@ const DOC_TYPE_LABELS: Record<string, string> = {
 };
 
 const selectedDocumentIds = ref<number[]>([]);
+const registrationCertificateId = ref('');
+const certificateOptions = ref<Array<RegistrationCertificate & { issuerName: string }>>([]);
+async function loadCertificateOptions() {
+  const result = await ManagerDocumentSystemService.listManagerDocumentLegalEntities();
+  const groups = await Promise.all((result.items || []).filter((entity) => entity.status === 'active').map(async (entity) =>
+    (await listCertificates(entity.id)).filter((item) => item.is_current).map((item) => ({ ...item, issuerName: entity.display_name }))));
+  certificateOptions.value = groups.flat();
+}
+const certificateIssuerId = computed(() => certificateOptions.value.find((item) => item.id === registrationCertificateId.value)?.legal_entity_id);
+
 const toEmail = ref('');
 const subject = ref('');
 const bodyText = ref('');
@@ -82,7 +93,7 @@ const documentLabel = (doc: SendableOrderDocument) => {
 
 const templateAvailable = (key: string) => {
   if (['request_requisites', 'request_signer', 'custom'].includes(key)) return true;
-  if (key === 'auto' || key === 'documents') return props.documents.length > 0;
+  if (key === 'auto' || key === 'documents') return props.documents.length > 0 || !!registrationCertificateId.value;
   if (key === 'act') {
     const actTypes = new Set(['act', 'service_act', 'maintenance_service_act', 'defect_act', 'retail_receipt']);
     return props.documents.some((item) => actTypes.has(item.doc_type));
@@ -124,6 +135,9 @@ const buildBody = () => {
 const refreshDefaults = () => {
   resettingSelection = true;
   selectedDocumentIds.value = latestDefaultDocumentIds();
+  registrationCertificateId.value = '';
+  certificateOptions.value = [];
+  void loadCertificateOptions().catch((err) => { error.value = getApiErrorMessage(err); });
   toEmail.value = props.order.customer?.email || '';
   templateKey.value = props.documents.length ? 'auto' : 'request_requisites';
   subject.value = buildSubject();
@@ -145,6 +159,8 @@ const applyTemplate = async (force = false) => {
   try {
     const payload = {
       document_ids: selectedDocumentIds.value,
+      registration_certificate_id: registrationCertificateId.value || null,
+      legal_entity_id: certificateIssuerId.value || null,
       template_key: templateKey.value,
     };
     const result = props.transport === 'native'
@@ -191,7 +207,7 @@ watch(
   },
 );
 
-watch(selectedDocumentIds, () => {
+watch([selectedDocumentIds, registrationCertificateId], () => {
   if (!props.modelValue || resettingSelection) return;
   if (templateKey.value === 'custom') return;
   void applyTemplate(false);
@@ -204,7 +220,7 @@ const close = () => {
 
 const sendEmail = async () => {
   error.value = '';
-  if (documentsRequired.value && !selectedDocumentIds.value.length) {
+  if (documentsRequired.value && !selectedDocumentIds.value.length && !registrationCertificateId.value) {
     error.value = 'Выберите хотя бы один документ';
     return;
   }
@@ -228,6 +244,8 @@ const sendEmail = async () => {
       subject: subject.value.trim(),
       body_text: bodyText.value.trim(),
       document_ids: selectedDocumentIds.value,
+      registration_certificate_id: registrationCertificateId.value || null,
+      legal_entity_id: certificateIssuerId.value || null,
     };
     if (props.transport === 'native') {
       await ManagerDocumentSystemService.sendManagerNativeOrderEmail(props.order.id, payload);
@@ -338,6 +356,15 @@ const sendEmail = async () => {
             </p>
           </div>
 
+          <div>
+            <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Свидетельство о регистрации</label>
+            <select v-model="registrationCertificateId" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800" :disabled="sending">
+              <option value="">Не прикладывать</option>
+              <option v-for="item in certificateOptions" :key="item.id" :value="item.id">{{ item.issuerName }} — {{ item.filename }}</option>
+            </select>
+            <p class="mt-1 text-xs text-slate-500">Можно отправить отдельно. Для комплекта организация должна совпадать с отправителем документов.</p>
+          </div>
+
           <div
             v-if="missingRequisites.length"
             class="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100"
@@ -383,7 +410,7 @@ const sendEmail = async () => {
           <button
             type="button"
             class="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-brand-700 disabled:opacity-50"
-            :disabled="sending || composing || (documentsRequired && !selectedDocumentIds.length)"
+            :disabled="sending || composing || (documentsRequired && !selectedDocumentIds.length && !registrationCertificateId)"
             @click="sendEmail"
           >
             <span v-if="sending" class="material-icons-round animate-spin text-[18px]">loop</span>

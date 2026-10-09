@@ -277,12 +277,16 @@ async def delete_managed_document_draft(
 )
 async def issue_managed_document(
     document_id: int,
+    participant_statement_confirmed: bool = False,
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> ManagedDocumentItem:
     """
     Issue a current-tenant managed draft by reserving its official number and rendering
-    immutable DOCX/PDF artifacts. Saved external edits must be synchronized and their remote
+    immutable DOCX/PDF artifacts. Participant statements require explicit factual
+    confirmation of the current text using participant_statement_confirmed=true;
+    the issuing actor, timestamp and exact artifact checksums are frozen in the snapshot.
+    Saved external edits must be synchronized and their remote
     revision verified first. Missing document returns 404, state/edit conflicts 409 and
     generation failure 503. A failed render retains its reservation; retry the same document
     rather than creating a new draft. Already issued/sent/signed records reuse their
@@ -300,6 +304,7 @@ async def issue_managed_document(
             tenant_scope=auth.tenant_scope(),
             document_id=document_id,
             template_storage=PrivateTemplateSourceStorage(private),
+            participant_statement_confirmed=participant_statement_confirmed,
         )
         from .router import get_google_document_edit_provider
 
@@ -327,6 +332,8 @@ async def issue_managed_document(
             artifact_storage=PrivateDocumentArtifactStorage(private),
             pdf_converter=_legacy_pdf_converter(),
             verified_remote_revision=verified_remote_revision,
+            participant_statement_confirmed=participant_statement_confirmed,
+            participant_statement_confirmed_by=auth.username,
         )
     except ManagedDocumentNotFoundError as exc:
         raise _document_error(
@@ -606,7 +613,13 @@ def _document_item_from_parts(document, artifacts) -> ManagedDocumentItem:
             else "external"
         )
     )
+    statement_values = ((document.render_snapshot or {}).get("values") or {})
     return ManagedDocumentItem(
+        participant_statement=(
+            {name: statement_values.get(f"participant.{name}", "") for name in
+             ("procedure_reference", "lot", "buyer_name", "declaration_text")}
+            if document.doc_type == "participant_statement" else None
+        ),
         maintenance_source_order_id=(
             (document.render_snapshot or {})
             .get("meta", {})

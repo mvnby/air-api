@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, time
+from datetime import datetime, time, timezone
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -198,6 +198,10 @@ class ManagedDocumentService:
         )
         if order is None:
             raise ManagedDocumentNotFoundError("Заказ не найден")
+        if selection.document_type == "participant_statement" and template_id is None:
+            from .participant_statement_template import ensure_initial_participant_template
+            await ensure_initial_participant_template(session, scope=tenant_scope,
+                legal_entity_id=selection.legal_entity_id, storage=template_storage)
         contract_scenario, business_role = resolve_template_use_case(selection)
         template, version = await select_active_native_template(
             session,
@@ -321,11 +325,15 @@ class ManagedDocumentService:
 
     @classmethod
     async def validate_issue_customer_readiness(
-        cls, session, *, tenant_scope, document_id, template_storage
+        cls, session, *, tenant_scope, document_id, template_storage,
+        participant_statement_confirmed=False,
     ):
         document = await cls.get_document(
             session, tenant_scope=tenant_scope, document_id=document_id
         )
+        if (document.doc_type == "participant_statement" and document.status == "draft"
+                and not participant_statement_confirmed):
+            raise ManagedDocumentConflictError("Перед выпуском подтвердите текст заявления, факты и требования конкретной закупки")
         readiness = await check_saved_document_readiness(
             session,
             tenant_scope=tenant_scope,
@@ -346,6 +354,8 @@ class ManagedDocumentService:
         artifact_storage: DocumentArtifactStorage,
         pdf_converter: PdfConverter,
         verified_remote_revision: str | None = None,
+        participant_statement_confirmed: bool = False,
+        participant_statement_confirmed_by: str | None = None,
     ) -> IssuedDocumentResult:
         document = await cls._get_scoped_document(
             session,
@@ -378,6 +388,8 @@ class ManagedDocumentService:
             raise ManagedDocumentConflictError(
                 "У черновика отсутствует снимок или версия шаблона"
             )
+        if document.doc_type == "participant_statement" and not participant_statement_confirmed:
+            raise ManagedDocumentConflictError("Перед выпуском подтвердите текст заявления, факты и требования конкретной закупки")
         readiness = await check_saved_document_readiness(
             session,
             tenant_scope=tenant_scope,
@@ -531,6 +543,16 @@ class ManagedDocumentService:
                 "Статус документа изменился во время генерации"
             )
 
+        if document.doc_type == "participant_statement":
+            from copy import deepcopy
+            confirmed_snapshot = deepcopy(document.render_snapshot)
+            confirmed_snapshot["meta"]["participant_statement_confirmation"] = {
+                "confirmed": True, "confirmed_at": datetime.now(timezone.utc).isoformat(),
+                "confirmed_by": participant_statement_confirmed_by,
+                "issued_docx_checksum": stored_docx.checksum_sha256,
+                "source_docx_checksum": source_artifact.checksum_sha256 if source_artifact else None,
+            }
+            document.render_snapshot = confirmed_snapshot
         existing = await cls._artifacts(session, tenant_scope.tenant_id, document_id)
         existing_kinds = {item.kind for item in existing}
         if "rendered_docx" not in existing_kinds:
@@ -658,7 +680,7 @@ class ManagedDocumentService:
         if for_update:
             statement = statement.with_for_update()
         document = (await session.execute(statement)).scalar_one_or_none()
-        if document is not None and for_update and document.doc_type == "maintenance_defect_act":
+        if document is not None and for_update and document.doc_type in {"maintenance_defect_act", "participant_statement"}:
             await ManagedDocumentService._get_mutable_scoped_order(session, tenant_scope=tenant_scope, order_id=document.order_id, require_mutable=True)
         return document
 

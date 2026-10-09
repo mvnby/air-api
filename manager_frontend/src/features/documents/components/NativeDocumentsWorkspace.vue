@@ -128,6 +128,7 @@ const googleEditor = useGoogleDocumentEditor({
   notify: (message, type = 'success') => emit('toast', { message, type }),
   onSynced: async (target, _result, isCurrent = () => true) => {
     if (target.kind !== 'managed-document' || !isCurrent()) return;
+    workspace.participantStatementConfirmations.value[target.documentId] = false;
     await workspace.loadDocuments(isCurrent);
     if (!isCurrent()) return;
     emit('refresh');
@@ -324,6 +325,11 @@ const issueDocument = async (document: Parameters<typeof workspace.issue>[0]) =>
     if (session?.status === 'changed' && session.can_edit) {
       const synced = await googleEditor.sync(target, action.isCurrent);
       if (!synced || !action.canIssue()) return;
+      if (document.doc_type === 'participant_statement') {
+        workspace.participantStatementConfirmations.value[document.id] = false;
+        emit('toast', { message: 'Текст заявления обновлён из Google Docs. Проверьте предпросмотр и подтвердите актуальные факты перед выпуском.', type: 'success' });
+        return;
+      }
     } else if (session && session.status !== 'ready') {
       emit('toast', {
         message: 'Черновик ещё не синхронизирован с Google Docs',
@@ -361,7 +367,7 @@ const createDraft = async (allowIncomplete = false) => {
 };
 defineExpose({
   openCreate: () => formRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
-  openSend: () => { if (sendableDocuments.value.length && canSendNativeEmail.value) sendOpen.value = true; },
+  openSend: () => { if (access.value.canSend && canSendNativeEmail.value) sendOpen.value = true; },
 });
 </script>
 
@@ -425,6 +431,10 @@ defineExpose({
             </div>
 
             <div class="flex flex-wrap gap-2 sm:justify-end">
+              <label v-if="document.status === 'draft' && document.doc_type === 'participant_statement'" class="flex w-full items-start gap-2 text-sm text-slate-700 dark:text-slate-200">
+                <input v-model="workspace.participantStatementConfirmations.value[document.id]" type="checkbox" :data-testid="`participant-statement-confirm-${document.id}`" />
+                <span>Проверил(а) текущий текст заявления, достоверность фактов и требования этой закупки.</span>
+              </label>
               <button v-if="document.status === 'draft'" class="native-action" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id) || Boolean(workspace.issueBlockedReason.value)" @click="workspace.previewDraft(document)">
                 <span class="material-icons-round text-[17px]">visibility</span>Предпросмотр
               </button>
@@ -441,7 +451,7 @@ defineExpose({
                 @open="googleEditor.open(googleTarget(document.id))"
                 @sync="syncGoogleDocument(document.id)"
               />
-              <button v-if="document.status === 'draft' && access.canCreate" class="native-action-primary" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id) || Boolean(workspace.issueBlockedReason.value) || incompleteDraft(document)" :title="incompleteDraft(document) ? `Не заполнены поля: ${criticalMissingLabels(document)}` : workspace.issueBlockedReason.value" @click="issueDocument(document)">Выпустить</button>
+              <button v-if="document.status === 'draft' && access.canCreate" class="native-action-primary" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id) || Boolean(workspace.issueBlockedReason.value) || incompleteDraft(document) || (document.doc_type === 'participant_statement' && !workspace.participantStatementConfirmations.value[document.id])" :title="incompleteDraft(document) ? `Не заполнены поля: ${criticalMissingLabels(document)}` : workspace.issueBlockedReason.value" @click="issueDocument(document)">Выпустить</button>
               <button v-if="document.status === 'draft' && !document.maintenance_source_order_id && !document.official_number && !document.artifacts?.length && access.canCreate" class="native-action-danger" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id)" @click="workspace.deleteDraft(document)">Удалить черновик</button>
               <button v-if="['issued', 'sent', 'signed'].includes(document.status) && !document.maintenance_source_order_id && access.canReplace" class="native-action" type="button" @click="prepareReplacement(document)">Создать исправленную редакцию</button>
               <a v-if="document.maintenance_source_order_id" :href="`/manager/orders/kanban?orderId=${document.maintenance_source_order_id}`" target="_blank" rel="noopener" class="native-action">Исходное ТО #{{ document.maintenance_source_order_id }} · замечания и новые версии</a>
@@ -465,8 +475,8 @@ defineExpose({
           <p class="mt-1 text-xs text-slate-500">Начните с коммерческого предложения или счёта. Договор можно выбрать отдельно.</p>
         </div>
       </div>
-      <div v-if="access.canSend && sendableDocuments.length && canSendNativeEmail" class="mt-4 flex justify-end border-t border-slate-100 pt-4 dark:border-slate-800">
-        <button class="inline-flex h-10 items-center gap-2 rounded-xl bg-brand-600 px-5 text-sm font-bold text-white hover:bg-brand-700" type="button" data-testid="native-document-email" @click="sendOpen = true"><span class="material-icons-round text-[18px]">send</span>Отправить письмо с документом</button>
+      <div v-if="access.canSend && canSendNativeEmail" class="mt-4 flex justify-end border-t border-slate-100 pt-4 dark:border-slate-800">
+        <button class="inline-flex h-10 items-center gap-2 rounded-xl bg-brand-600 px-5 text-sm font-bold text-white hover:bg-brand-700" type="button" data-testid="native-document-email" @click="sendOpen = true"><span class="material-icons-round text-[18px]">send</span>{{ sendableDocuments.length ? 'Отправить письмо с документом' : 'Отправить письмо' }}</button>
       </div>
       <div v-if="otherContracts.length" class="mt-5" data-testid="saved-order-contracts">
         <DocumentList
@@ -533,9 +543,9 @@ defineExpose({
         <template v-else-if="workspace.legalEntities.value.length">
           <ContractScenarioChooser v-if="workspace.documentType.value === 'contract'" :model-value="workspace.businessTerms.value.contract_scenario" @update:model-value="setContractScenario" @attach-contract="contractSource = 'customer'" />
           <details class="mt-3 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900" data-testid="native-document-options">
-            <summary class="cursor-pointer text-sm font-semibold text-slate-700 dark:text-slate-200">Шаблон и реквизиты <span class="font-normal text-slate-500">· {{ workspace.templates.value.find((item) => item.id === workspace.selectedTemplateId.value)?.name || 'не выбран' }}</span></summary>
+            <summary class="cursor-pointer text-sm font-semibold text-slate-700 dark:text-slate-200">Шаблон и реквизиты <span class="font-normal text-slate-500">· {{ workspace.templates.value.find((item) => item.id === workspace.selectedTemplateId.value)?.name || (workspace.documentType.value === 'participant_statement' ? 'Начальная редактируемая форма' : 'не выбран') }}</span></summary>
             <div class="mt-3 grid gap-3 sm:grid-cols-3">
-              <label class="native-field"><span>Шаблон</span><select v-model="workspace.selectedTemplateId.value" class="native-input" data-testid="native-document-template"><option v-for="template in workspace.templates.value" :key="template.id" :value="template.id">{{ template.name }}</option></select></label>
+              <label class="native-field"><span>Шаблон</span><select v-model="workspace.selectedTemplateId.value" class="native-input" data-testid="native-document-template"><option v-if="workspace.documentType.value === 'participant_statement' && !workspace.templates.value.length" :value="null">Начальная редактируемая форма</option><option v-for="template in workspace.templates.value" :key="template.id" :value="template.id">{{ template.name }}</option></select></label>
               <label class="native-field"><span>Дата документа</span><input v-model="workspace.issueDate.value" class="native-input" data-testid="native-document-issue-date" type="date" /></label>
               <label class="native-field"><span>Город документа</span><input v-model="workspace.issueCity.value" class="native-input" data-testid="native-document-issue-city" placeholder="Витебск" /></label>
             </div>
@@ -576,6 +586,16 @@ defineExpose({
               <button type="button" class="rounded-lg px-3 py-1.5 text-sm font-semibold transition" :class="workspace.businessRole.value === 'offer' ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-300'" @click="workspace.businessRole.value = 'offer'">Счёт-оферта</button>
             </div>
             <p class="mt-1.5 text-xs text-slate-500">{{ workspace.businessRole.value === 'payment_request' ? 'После появления договора закрывающие документы будут ссылаться на договор.' : 'Оферта может сама стать основанием сделки.' }}</p>
+          </div>
+          <div v-if="workspace.documentType.value === 'participant_statement'" class="mt-4 space-y-3" data-testid="participant-statement-fields">
+            <p class="text-sm text-slate-600 dark:text-slate-300">Сверьте форму с требованиями конкретной закупки. Укажите только проверенные факты; сведения о задолженности, судимости и другие заверения автоматически не добавляются.</p>
+            <div class="grid gap-3 sm:grid-cols-2">
+              <label class="native-field"><span>Процедура: номер / ссылка</span><input v-model="workspace.participantStatement.value.procedure_reference" class="native-input" maxlength="1000" data-testid="participant-statement-procedure" /></label>
+              <label class="native-field"><span>Лот</span><input v-model="workspace.participantStatement.value.lot" class="native-input" maxlength="500" data-testid="participant-statement-lot" placeholder="Номер / наименование или «Все лоты»" /></label>
+            </div>
+            <label class="native-field"><span>Заказчик закупки</span><input v-model="workspace.participantStatement.value.buyer_name" class="native-input" maxlength="500" data-testid="participant-statement-buyer" /></label>
+            <label class="native-field"><span>Текст заявления о соответствии</span><textarea v-model="workspace.participantStatement.value.declaration_text" class="native-input participant-statement-text" rows="8" maxlength="20000" data-testid="participant-statement-text" placeholder="Введите подтверждаемые сведения согласно требованиям закупки" /></label>
+            <p class="text-xs text-slate-500">Участник и подписант берутся из выбранного нашего юрлица или ИП. Дата — в реквизитах выше. После создания черновика проверьте предпросмотр; текст можно отредактировать до выпуска.</p>
           </div>
           <ConsumerDocumentTermsPanel
             v-if="isConsumerDocument"
@@ -620,6 +640,7 @@ defineExpose({
 <style scoped>
 .native-field { @apply flex min-w-0 flex-col gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300; }
 .native-input { @apply h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-normal text-slate-900 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-white; }
+.participant-statement-text { height: auto; min-height: 10rem; padding-top: 0.5rem; padding-bottom: 0.5rem; }
 .native-action { @apply inline-flex h-9 items-center justify-center gap-1 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:border-brand-400 hover:text-brand-700 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300; }
 .native-action-primary { @apply inline-flex h-9 items-center justify-center rounded-lg bg-brand-600 px-3 text-xs font-bold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50; }
 .native-action-danger { @apply inline-flex h-9 items-center justify-center rounded-lg border border-rose-200 px-3 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50; }

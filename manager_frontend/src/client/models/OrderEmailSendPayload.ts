@@ -9,5 +9,7 @@ export type OrderEmailSendPayload = {
     body_html?: (string | null);
     reply_to?: (string | null);
     document_ids?: Array<number>;
+    registration_certificate_id?: (string | null);
+    legal_entity_id?: (number | null);
 };
 

@@ -30,6 +30,12 @@ SCALAR_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
     PlaceholderDescriptor(
         "document.official_full_number", "Серия и официальный номер", "Документ"
     ),
+    *(
+        PlaceholderDescriptor(f"participant.{name}", label, "Заявление участника")
+        for name, label in (("procedure_reference", "Номер / ссылка на процедуру закупки"),
+                            ("lot", "Лот"), ("buyer_name", "Заказчик закупки"),
+                            ("declaration_text", "Подтверждаемый текст заявления"))
+    ),
     PlaceholderDescriptor("maintenance.source_order", "Исходное ТО", "Замечания ТО"),
     PlaceholderDescriptor("document.issued_on", "Дата документа", "Документ"),
     PlaceholderDescriptor("document.issue_city", "Город документа", "Документ"),
@@ -375,7 +381,7 @@ PAYMENT_SCHEDULE_ROW_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
 )
 
 SUPPORTED_NATIVE_DOCUMENT_TYPES = (
-    frozenset({"offer", "invoice", "contract", "act", "tn2", "ttn1", "maintenance_defect_act"})
+    frozenset({"offer", "invoice", "contract", "act", "tn2", "ttn1", "maintenance_defect_act", "participant_statement"})
     | B2C_NATIVE_DOCUMENT_TYPES
 )
 

@@ -15,7 +15,10 @@ from modules.documents.application.delivery_service import (
     ManagedDocumentDeliveryService,
 )
 from services.document_service import DocumentService
-from services.order_proposal_lifecycle import PROPOSAL_STATUS_SENT, sync_selected_proposal_status
+from services.order_proposal_lifecycle import (
+    PROPOSAL_STATUS_SENT,
+    sync_selected_proposal_status,
+)
 from services.tenant_entity_access_service import TenantEntityAccessService
 
 
@@ -91,11 +94,15 @@ class MailSmtpService:
         if not settings.MAIL_SMTP_USERNAME or not settings.MAIL_SMTP_PASSWORD:
             raise RuntimeError("SMTP credentials are not configured")
         if settings.MAIL_SMTP_USE_SSL:
-            with smtplib.SMTP_SSL(settings.MAIL_SMTP_HOST, settings.MAIL_SMTP_PORT, timeout=30) as smtp:
+            with smtplib.SMTP_SSL(
+                settings.MAIL_SMTP_HOST, settings.MAIL_SMTP_PORT, timeout=30
+            ) as smtp:
                 smtp.login(settings.MAIL_SMTP_USERNAME, settings.MAIL_SMTP_PASSWORD)
                 smtp.send_message(message)
         else:
-            with smtplib.SMTP(settings.MAIL_SMTP_HOST, settings.MAIL_SMTP_PORT, timeout=30) as smtp:
+            with smtplib.SMTP(
+                settings.MAIL_SMTP_HOST, settings.MAIL_SMTP_PORT, timeout=30
+            ) as smtp:
                 smtp.starttls()
                 smtp.login(settings.MAIL_SMTP_USERNAME, settings.MAIL_SMTP_PASSWORD)
                 smtp.send_message(message)
@@ -175,6 +182,8 @@ class MailSmtpService:
         body_html: Optional[str] = None,
         reply_to: Optional[str] = None,
         document_ids: Optional[List[int]] = None,
+        registration_certificate_id: str | None = None,
+        legal_entity_id: int | None = None,
     ) -> OutgoingEmail:
         if not tenant_scope.is_system:
             raise PartnerTenantSmtpUnavailableError(
@@ -183,7 +192,10 @@ class MailSmtpService:
         normalized_document_ids = list(
             dict.fromkeys(int(value) for value in (document_ids or []))
         )
-        if len(normalized_document_ids) > MAX_ORDER_EMAIL_DOCUMENTS:
+        if (
+            len(normalized_document_ids) + int(registration_certificate_id is not None)
+            > MAX_ORDER_EMAIL_DOCUMENTS
+        ):
             raise ValueError(
                 f"За одно письмо можно отправить не более {MAX_ORDER_EMAIL_DOCUMENTS} документов"
             )
@@ -201,6 +213,7 @@ class MailSmtpService:
         sent_document_types: set[str] = set()
         native_document_ids: list[int] = []
         total_attachment_bytes = 0
+        selected_documents = []
         for doc_id in normalized_document_ids:
             doc = await TenantEntityAccessService.get_order_document(
                 session,
@@ -209,11 +222,10 @@ class MailSmtpService:
             )
             if not doc or doc.order_id != order_id:
                 raise ValueError(f"Document {doc_id} not found on order")
+            selected_documents.append(doc)
             if DocumentService._is_native_managed_document(doc):
                 if doc.status not in {"issued", "sent", "signed"}:
-                    raise ValueError(
-                        f"Document {doc_id} must be issued before sending"
-                    )
+                    raise ValueError(f"Document {doc_id} must be issued before sending")
                 native_document_ids.append(int(doc.id))
             sent_document_types.add(doc.doc_type)
             if doc.doc_type == "offer":
@@ -246,6 +258,41 @@ class MailSmtpService:
                 )
             )
 
+        if registration_certificate_id is not None:
+            from services.legal_entity_attachment_service import (
+                LegalEntityAttachmentService,
+            )
+
+            certificate = await LegalEntityAttachmentService.resolve_for_mail(
+                session,
+                tenant_scope,
+                registration_certificate_id,
+                selected_documents,
+                legal_entity_id,
+            )
+            content = await LegalEntityAttachmentService.read(certificate)
+            total_attachment_bytes += len(content)
+            if (
+                len(content) > MAX_ORDER_EMAIL_ATTACHMENT_BYTES
+                or total_attachment_bytes > MAX_ORDER_EMAIL_TOTAL_ATTACHMENT_BYTES
+            ):
+                raise ValueError(
+                    "Общий размер вложений слишком велик для одного письма"
+                )
+            attachments.append(
+                MailAttachment(
+                    filename=certificate.filename,
+                    content=content,
+                    mime_type=certificate.mime_type,
+                    metadata={
+                        "registration_certificate_id": certificate.id,
+                        "legal_entity_id": certificate.legal_entity_id,
+                        "checksum_sha256": certificate.checksum_sha256,
+                        "attachment_type": "registration_certificate",
+                    },
+                )
+            )
+
         email_row = await MailSmtpService.send_and_record(
             session,
             to_email=to_email,
@@ -268,7 +315,9 @@ class MailSmtpService:
                                 OrderProposal.id.in_(offer_proposal_ids),
                             )
                         )
-                    ).scalars().all()
+                    )
+                    .scalars()
+                    .all()
                 )
             else:
                 proposals = list(
@@ -280,7 +329,9 @@ class MailSmtpService:
                                 OrderProposal.is_archived.is_(False),
                             )
                         )
-                    ).scalars().all()
+                    )
+                    .scalars()
+                    .all()
                 )
             for proposal in proposals:
                 proposal.status = PROPOSAL_STATUS_SENT

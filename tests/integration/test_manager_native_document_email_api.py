@@ -102,6 +102,8 @@ async def test_partner_manager_can_compose_only_in_resolved_tenant(
             "order_id": 42,
             "document_ids": [7],
             "template_key": "auto",
+            "registration_certificate_id": None,
+            "legal_entity_id": None,
         }
         return _compose_response()
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import './documents-settings.css';
+import RegistrationCertificatePanel from './RegistrationCertificatePanel.vue';
 import { OpenAPI, type DocumentLegalEntityItem, type DocumentLegalEntityUpdatePayload } from '../../../client';
 import { getApiErrorMessage } from '../../../utils/api-errors';
 import { useB2BLookup } from '../../../composables/useB2BLookup';
@@ -242,6 +243,7 @@ const uploadFacsimile = async (kind: 'signature' | 'seal', event: Event) => {
       </div>
 
       <form v-if="selectedId" class="grid min-w-0 gap-4 sm:grid-cols-2" @submit.prevent="save">
+        <RegistrationCertificatePanel :legal-entity-id="selectedId" />
         <div class="settings-field sm:col-span-2">
           <span>Факсимиле для PDF</span>
           <p class="mb-2 text-xs font-normal text-slate-500">PNG подписи и печати хранятся приватно. Они используются только для отдельного PDF, исходный выпускной документ не меняется. Замена PNG не переписывает уже подготовленные PDF.</p>

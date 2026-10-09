@@ -5,6 +5,7 @@ import LeadInboxDetails from './LeadInboxDetails.vue';
 import LeadRefusalPanel from './LeadRefusalPanel.vue';
 import { incomingApi, newIncomingIdempotencyKey } from '../../services/incoming-api';
 import { getApiErrorMessage } from '../../utils/api-errors';
+import { tenderStageLabels } from '../../services/tender-workflow';
 const props = defineProps<{ item: InboxItem; isArchive?: boolean; contactSaving?: boolean; quickIncoming?: boolean }>();
 const emit = defineEmits<{
   (e: 'qualify', item: InboxItem): void; (e: 'no-answer', request: InboxContactRequest): void;
@@ -54,7 +55,7 @@ const summary = computed(() => props.item.summary || (props.item.comment?.trim()
 const customer = computed(() => props.item.customer_full_legal_name || props.item.customer_name || 'Клиент не указан');
 const date = (value: string) => { const parsed = new Date(value); return Number.isNaN(parsed.getTime()) ? 'Дата не указана' : parsed.toLocaleString('ru-RU', { timeZone: 'Europe/Minsk', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); };
 const displayDate = computed(() => props.item.source_created_at || props.item.created_at);
-const deadline = computed(() => props.item.deadline_at || props.item.tender?.deadline_at);
+const deadline = computed(() => props.item.tender_workflow ? props.item.tender_workflow.deadline_at : props.item.deadline_at || props.item.tender?.deadline_at);
 const budget = computed(() => props.item.budget_amount == null ? null : new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(props.item.budget_amount));
 const missingFieldNames: Record<string, string> = { contact: 'контакт', address: 'адрес', name: 'имя', phone: 'телефон', email: 'email', address_text: 'адрес', region_text: 'регион', requested_time_text: 'желаемое время' };
 const visibleMissingFields = computed(() => (props.item.missing_fields || []).map(field => missingFieldNames[field] || field));
@@ -95,8 +96,9 @@ const markUnread = async () => { await setRead(false); if (!error.value) expande
     <div class="card-body">
       <div class="card-meta"><span v-if="unread && !isArchive" class="unread-dot" aria-label="Непросмотрено" /><span class="source">{{ sources[item.source || ''] || item.source || 'Источник не указан' }}</span><span class="lead-id">#{{ item.id }}</span><time :datetime="displayDate" class="time">{{ date(displayDate) }}</time></div>
       <div class="headline"><div class="subject"><h2><button type="button" class="title" :title="title" :aria-expanded="expanded" :aria-controls="regionId" @click="toggleDetails">{{ title }}</button></h2><p class="customer">{{ customer }}<span v-if="item.customer_type === 'individual_entrepreneur'"> · ИП</span><span v-if="item.customer_inn"> · УНП {{ item.customer_inn }}</span></p></div><div v-if="budget !== null" class="budget"><small>Бюджет</small><strong>{{ budget }} {{ item.budget_currency || '' }}</strong></div></div>
-      <div v-if="deadline || item.auto_archive_at || item.location || item.quantity != null || item.attachment_count" class="facts"><span v-if="deadline" class="deadline">{{ item.source_kind === 'tender' || item.source === 'belzakupki' ? 'Срок подачи' : 'Срок' }}: {{ date(deadline) }}</span><span v-if="!isArchive && item.auto_archive_at">В архив автоматически: {{ date(item.auto_archive_at) }}</span><span v-if="item.quantity != null">{{ item.quantity }} ед.</span><span v-if="item.location">{{ item.location }}</span><button v-if="item.attachment_count && item.entity_kind !== 'lead'" type="button" :aria-expanded="expanded" :aria-controls="`lead-attachments-${item.id}`" :aria-label="`Показать вложения обращения: ${item.attachment_count}`" @click="toggleDetails">Вложения: {{ item.attachment_count }}</button></div>
+      <div v-if="deadline || item.auto_archive_at || item.location || item.quantity != null || item.attachment_count" class="facts"><span v-if="deadline" class="deadline">{{ item.tender_workflow ? 'Срок этапа' : item.source_kind === 'tender' || item.source === 'belzakupki' ? 'Срок подачи' : 'Срок' }}: {{ date(deadline) }}</span><span v-if="!isArchive && item.auto_archive_at">В архив автоматически: {{ date(item.auto_archive_at) }}</span><span v-if="item.quantity != null">{{ item.quantity }} ед.</span><span v-if="item.location">{{ item.location }}</span><button v-if="item.attachment_count && item.entity_kind !== 'lead'" type="button" :aria-expanded="expanded" :aria-controls="`lead-attachments-${item.id}`" :aria-label="`Показать вложения обращения: ${item.attachment_count}`" @click="toggleDetails">Вложения: {{ item.attachment_count }}</button></div>
       <p v-if="summary" class="blurb">{{ summary }}</p>
+      <p v-if="item.tender_workflow?.stage" class="terms-summary">{{ tenderStageLabels[item.tender_workflow.stage] }}<span v-if="item.tender_workflow.price_enquiry"> · запрос цены #{{ item.tender_workflow.price_enquiry.order_id }}</span><span v-if="item.tender_workflow.publications?.length"> · публикаций: {{ item.tender_workflow.publications?.length }}</span></p>
       <div v-if="quickIncoming" class="quick-intake" data-testid="quick-incoming-state">
         <strong>{{ intakeLabel }}</strong><span v-if="visibleMissingFields.length">Не указано: {{ visibleMissingFields.join(', ') }}</span>
         <p v-if="item.requested_time_text">Пожелание клиента по времени: «{{ item.requested_time_text }}» · это не запись</p>

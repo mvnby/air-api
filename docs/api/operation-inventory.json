@@ -9,6 +9,7 @@
     "reviewed_stage"
   ],
   "review_stages": {
+    "12": "Manual procurement stages/price history, editable participant statement issue confirmation and tenant-private registration certificates/email issuer binding; reviewed 2026-10-09",
     "1": "Public HTTP/helpers, supply, staff bot and OAuth; completed in a3e79e89",
     "2": "Orders/documents, customers/contracts, CRM/mail and catalog; reviewed 2026-10-07 from a3e79e89",
     "3": "Content/media, settings/access, tasks/calendar, services/equipment and operations; reviewed 2026-10-07 from a3e79e89",
@@ -22,6 +23,19 @@
     "11": "Native tender direct push; dedicated key, fixed active system scope, writable-primary gates, bounded payload, shared pull/push deduplication, staff preservation, stale guards and unchanged pull checkpoint reviewed 2026-10-09 for issue 849"
   },
   "operations": {
+    "routers/manager_tender_workflow.py": [
+      ["DELETE /api/manager/orders/{order_id}/tender-workflow/price-enquiry", "unlink_manager_tender_price_enquiry", false, 12],
+      ["GET /api/manager/orders/{order_id}/tender-workflow", "get_manager_tender_workflow", false, 12],
+      ["GET /api/manager/orders/{order_id}/tender-workflow/price-enquiries", "list_manager_tender_price_enquiries", false, 12],
+      ["PATCH /api/manager/orders/{order_id}/tender-workflow", "set_manager_tender_workflow", false, 12],
+      ["PUT /api/manager/orders/{order_id}/tender-workflow/price-enquiry", "link_manager_tender_price_enquiry", false, 12]
+    ],
+    "modules/documents/api/registration_certificates.py": [
+      ["GET /api/manager/document-system/legal-entities/{legal_entity_id}/registration-certificates", "list_manager_registration_certificates", false, 12],
+      ["GET /api/manager/document-system/registration-certificates/{attachment_id}/download", "download_manager_registration_certificate", false, 12],
+      ["POST /api/manager/document-system/legal-entities/{legal_entity_id}/registration-certificates", "upload_manager_registration_certificate", false, 12],
+      ["PUT /api/manager/document-system/registration-certificates/{attachment_id}/current", "select_manager_registration_certificate", false, 12]
+    ],
     "modules/documents/api/condition_presets.py": [
       ["DELETE /api/manager/document-system/condition-presets/{preset_id}", "delete_manager_document_condition_preset", false, 2],
       ["GET /api/manager/document-system/condition-presets", "list_manager_document_condition_presets", false, 2],
@@ -47,8 +61,8 @@
       ["PUT /api/manager/document-system/legal-entities/{legal_entity_id}/number-policies/{document_type}", "upsert_manager_document_number_policy", false, 2]
     ],
     "modules/documents/api/managed_document_emails.py": [
-      ["POST /api/manager/document-system/orders/{order_id}/email", "send_manager_native_order_email", false, 2],
-      ["POST /api/manager/document-system/orders/{order_id}/email/compose", "compose_manager_native_order_email", false, 2]
+      ["POST /api/manager/document-system/orders/{order_id}/email", "send_manager_native_order_email", false, 12],
+      ["POST /api/manager/document-system/orders/{order_id}/email/compose", "compose_manager_native_order_email", false, 12]
     ],
     "modules/documents/api/managed_document_external_edits.py": [
       ["GET /api/manager/document-system/documents/{document_id}/google-edit-session", "get_manager_managed_document_google_edit_session", false, 2],
@@ -66,7 +80,7 @@
       ["GET /api/manager/document-system/documents/{document_id}/artifacts", "list_manager_document_artifacts", false, 2],
       ["GET /api/manager/document-system/documents/{document_id}/preview", "preview_manager_managed_document_draft", false, 2],
       ["GET /api/manager/document-system/orders/{order_id}/documents", "list_manager_managed_order_documents", false, 2],
-      ["POST /api/manager/document-system/documents/{document_id}/issue", "issue_manager_managed_document", false, 2],
+      ["POST /api/manager/document-system/documents/{document_id}/issue", "issue_manager_managed_document", false, 12],
       ["POST /api/manager/document-system/documents/{document_id}/void", "void_manager_managed_document", false, 2],
       ["POST /api/manager/document-system/orders/{order_id}/documents/drafts", "create_manager_managed_document_draft", false, 2]
     ],
@@ -532,8 +546,8 @@
       ["POST /api/manager/mail/bank-receipts/{receipt_id}/attach-group", "attach_manager_bank_receipt_group", false, 2],
       ["POST /api/manager/mail/email/send-test", "send_manager_test_email", false, 2],
       ["POST /api/manager/mail/leads/import", "import_manager_email_leads", false, 2],
-      ["POST /api/manager/mail/orders/{order_id}/compose", "compose_manager_order_email", false, 2],
-      ["POST /api/manager/mail/orders/{order_id}/email", "send_manager_order_email", false, 2],
+      ["POST /api/manager/mail/orders/{order_id}/compose", "compose_manager_order_email", false, 12],
+      ["POST /api/manager/mail/orders/{order_id}/email", "send_manager_order_email", false, 12],
       ["POST /api/manager/mail/outgoing-emails/{email_id}/retry", "retry_manager_outgoing_email", false, 2],
       ["PUT /api/manager/mail/bank-receipts/{receipt_id}/allocations", "replace_manager_bank_receipt_allocations", false, 2]
     ],

@@ -91,7 +91,9 @@ class LeadsInboxCommandService:
             state = state or cls.state(order)
             previous_outcome = state.outcome or "legacy_lost"
             # Suppress the current deadline even when a manual refusal is restored.
-            state.restored_deadline_at = LeadsInboxService.deadline_value(order.technical_meta)
+            from services.tender_workflow_service import TenderWorkflowService
+            context = await TenderWorkflowService.context(session, order_id, tenant_scope)
+            state.restored_deadline_at = TenderWorkflowService.effective_deadline(order, context)
             state.archived_at = state.archived_by = state.outcome = state.reason = state.note = None
             session.add(state)
             session.add(cls.event(order, kind="restore", actor=username, outcome=previous_outcome,

@@ -7,6 +7,7 @@ import EmailContractReviewLauncher from './EmailContractReviewLauncher.vue';
 import EmailLeadOrderLink from './EmailLeadOrderLink.vue';
 import EmailLeadTenderContext from './EmailLeadTenderContext.vue';
 import CommercialTermsPanel from '../orders/CommercialTermsPanel.vue';
+import TenderWorkflowPanel from '../orders/TenderWorkflowPanel.vue';
 const props = defineProps<{ item: InboxItem; history: InboxHistory[]; contactSaving?: boolean }>();
 const emit = defineEmits<{ (e: 'review-source', item: InboxItem): void; (e: 'no-answer', request: InboxContactRequest): void; (e: 'link-changed'): void; (e: 'mark-unread', item: InboxItem): void; (e: 'not-request'): void; (e: 'updated', item: InboxItem, history: InboxHistory[]): void }>();
 const date = (value: string) => new Date(value).toLocaleString('ru-RU', { timeZone: 'Europe/Minsk', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -23,6 +24,7 @@ const historyLabels: Record<string, string> = { no_answer: 'Нет ответа'
         <div class="contacts"><a v-if="item.phone" :href="`tel:${item.phone}`">{{ item.phone }}</a><a v-if="item.email" :href="`mailto:${item.email}`">{{ item.email }}</a><span v-if="item.customer_inn">УНП {{ item.customer_inn }}</span></div>
         <div v-if="item.tender" class="tender-context"><span v-if="item.tender.source">Площадка: {{ item.tender.source }}</span><span v-if="item.tender.profile_name">Профиль: {{ item.tender.profile_name }}</span><span v-if="item.tender.reason">Причина: {{ item.tender.reason }}</span><a v-if="tenderUrl" :href="tenderUrl" target="_blank" rel="noopener noreferrer">Открыть закупку</a></div>
         <EmailLeadTenderContext v-if="item.entity_kind !== 'lead' && item.source === 'email' && !item.archive && !item.linked_order_id" :item="item" @updated="(updated, history) => emit('updated', updated, history)" />
+        <TenderWorkflowPanel v-if="item.entity_kind !== 'lead' && (item.source === 'email' || item.source === 'belzakupki') && !item.linked_order_id" :order-id="item.id" @changed="emit('link-changed')" />
       </div>
       <div v-if="item.entity_kind !== 'lead'">
         <h3>Документы и данные</h3>

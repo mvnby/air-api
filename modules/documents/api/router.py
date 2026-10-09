@@ -24,6 +24,7 @@ from . import (
     managed_document_readiness,
     managed_document_external_edits,
     managed_documents_artifacts,
+    registration_certificates,
     template_external_edits,
     templates_runtime,
 )
@@ -52,6 +53,7 @@ router.include_router(template_external_edits.router)
 router.include_router(managed_document_external_edits.router)
 router.include_router(managed_documents_artifacts.router)
 router.include_router(managed_document_readiness.router)
+router.include_router(registration_certificates.router)
 
 
 async def get_google_document_edit_provider(*, session, tenant_scope):

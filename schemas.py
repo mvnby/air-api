@@ -3691,10 +3691,14 @@ class OutgoingEmailSendPayload(BaseModel):
 
 class OrderEmailSendPayload(OutgoingEmailSendPayload):
     document_ids: List[int] = Field(default_factory=list)
+    registration_certificate_id: Optional[str] = Field(default=None, min_length=32, max_length=32)
+    legal_entity_id: Optional[int] = Field(default=None, gt=0)
 
 
 class OrderEmailComposePayload(BaseModel):
     document_ids: List[int] = Field(default_factory=list)
+    registration_certificate_id: Optional[str] = Field(default=None, min_length=32, max_length=32)
+    legal_entity_id: Optional[int] = Field(default=None, gt=0)
     template_key: str = "auto"
 
 
@@ -3727,6 +3731,10 @@ class OutgoingEmailAttachmentResponse(BaseModel):
     document_id: Optional[int] = None
     document_type: Optional[str] = None
     document_number: Optional[str] = None
+    registration_certificate_id: Optional[str] = None
+    legal_entity_id: Optional[int] = None
+    checksum_sha256: Optional[str] = None
+    attachment_type: Optional[str] = None
 
 
 class OutgoingEmailResponse(BaseModel):
