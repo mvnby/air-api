@@ -17,7 +17,8 @@
     "6": "Explicit maintenance defect-act preparation; scoped versions, idempotency, immutable snapshot and native lifecycle reviewed 2026-10-08",
     "7": "Native contract/invoice customer readiness; scoped current/frozen factual context, effective DOCX fields, read-only results and authoritative creation/issue checks reviewed 2026-10-08 for issue 831",
     "8": "Maintenance commercial continuation; scoped immutable offers, explicit issue/send/consent/continue, idempotency, factual resolution and customer/object navigation reviewed 2026-10-09 for issue 1085",
-    "9": "Private staff call Drive pipeline; readonly OAuth, bounded stages, lease/retry, source grounding and explicit shared command adoption reviewed for issue 1086"
+    "9": "Private staff call Drive pipeline; readonly OAuth, bounded stages, lease/retry, source grounding and explicit shared command adoption reviewed for issue 1086",
+    "10": "Private call folder metadata selection and Soniox readiness/selection; live pilot scope, Samsung call-day/contact/phone filters, bounded continuation and explicit processing boundary reviewed 2026-10-09 for issue 1086"
   },
   "operations": {
     "modules/documents/api/condition_presets.py": [
@@ -814,13 +815,14 @@
       ["DELETE /api/manager/call-recordings/connection", "disconnect_manager_call_drive", false, 9],
       ["GET /api/manager/call-recordings", "list_manager_call_recordings", false, 9],
       ["GET /api/manager/call-recordings/authorization-url", "get_manager_call_drive_authorization_url", false, 9],
-      ["GET /api/manager/call-recordings/connection", "get_manager_call_drive_status", false, 9],
+      ["GET /api/manager/call-recordings/connection", "get_manager_call_drive_status", false, 10],
+      ["GET /api/manager/call-recordings/drive/files", "list_manager_call_drive_files", false, 10],
       ["GET /api/manager/call-recordings/{recording_id}", "get_manager_call_recording", false, 9],
       ["PATCH /api/manager/call-recordings/{recording_id}/metadata", "update_manager_call_recording_metadata", false, 9],
       ["POST /api/manager/call-recordings/poll", "poll_manager_call_recordings", false, 9],
       ["POST /api/manager/call-recordings/{recording_id}/proposals/{proposal_id}/adopt", "adopt_manager_call_proposal", false, 9],
       ["POST /api/manager/call-recordings/{recording_id}/retry", "retry_manager_call_recording", false, 9],
-      ["PUT /api/manager/call-recordings/connection/folder", "configure_manager_call_drive_folder", false, 9]
+      ["PUT /api/manager/call-recordings/connection/folder", "configure_manager_call_drive_folder", false, 10]
     ]
   }
 }
