@@ -43,7 +43,8 @@ def test_late_call_tomorrow_uses_original_time_and_date_only_task_has_no_midnigh
         {"kind": "incoming", "text": "Нужно обслуживание", "evidence": "Нужно обслуживание завтра утром", "requested_time_text": "завтра утром", "service_type": "maintenance", "clarification_requested": True},
         {"kind": "task", "text": "Дослать фото", "evidence": "Дослать фото завтра", "requested_time_text": "завтра"},
     ], source)
-    assert result[0]["payload"]["requested_at"].startswith("2026-10-09")
+    assert result[0]["payload"]["requested_at"] is None
+    assert result[0]["payload"]["requested_time_text"] == "завтра утром"
     assert result[0]["payload"]["clarification_requested"] is True
     assert result[1]["payload"]["due_at"] is None
     assert "Указан только день, время требует уточнения" in result[1]["needs_clarification"]

@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import func
@@ -142,6 +143,8 @@ async def test_stable_drive_file_end_to_end_explicit_multiple_adoptions_and_chan
         assert len(row.proposals) == 3
         assert await count(session, Lead) == await count(session, PersonalTask) == 0
         incoming = row.proposals[0]
+        assert incoming.requested_date.isoformat() == "2026-10-09" and incoming.date_precision == "date"
+        assert incoming.payload["requested_at"] is None
         payload = CallAdoptPayload(expected_version=row.version, incoming=IncomingFields(**incoming.payload))
         created = await CallRecordingService.adopt(session, actor, recording_id, incoming.id, payload)
         replay = await CallRecordingService.adopt(session, actor, recording_id, incoming.id, payload)
@@ -153,7 +156,12 @@ async def test_stable_drive_file_end_to_end_explicit_multiple_adoptions_and_chan
         assert lead.intake_meta["source_occurred_at"].startswith("2026-10-08")
         assert lead.intake_meta["clarification_task_id"]
         assert lead.intake_meta["source_url"] == row.source_url
-        assert (await IncomingCommandService.get(session, actor=actor, lead_id=lead.id)).source_url == row.source_url
+        saved = await IncomingCommandService.get(session, actor=actor, lead_id=lead.id)
+        assert saved.source_url == row.source_url
+        assert saved.date_precision == "date" and saved.requested_time_text == "завтра утром"
+        assert saved.requested_at.astimezone(ZoneInfo("Europe/Minsk")).date().isoformat() == "2026-10-09"
+        assert saved.field_sources["requested_at"] == "text"
+        assert saved.field_sources["requested_time_text"] == "provided"
         task_proposal = row.proposals[1]
         await CallRecordingService.adopt(session, actor, recording_id, task_proposal.id, CallAdoptPayload(expected_version=row.version, task=PersonalTaskCreatePayload(**task_proposal.payload)))
         assert await count(session, PersonalTask) == 2
@@ -171,6 +179,8 @@ async def test_stable_drive_file_end_to_end_explicit_multiple_adoptions_and_chan
     async with factory() as session:
         changed_row = await CallRecordingService.get(session, actor, second_id)
         assert changed_row.proposals[0].accepted_resource_id == created.resource_id
+        assert changed_row.proposals[0].date_precision == "date"
+        assert changed_row.proposals[0].requested_date.isoformat() == "2026-10-09"
         replay = await CallRecordingService.adopt(session, actor, second_id, changed_row.proposals[0].id, CallAdoptPayload(expected_version=changed_row.version, incoming=IncomingFields(**changed_row.proposals[0].payload)))
         assert replay.replayed and await count(session, Lead) == 1
         assert (await CallRecordingService.get(session, actor, recording_id)).transcript == TRANSCRIPT
@@ -314,6 +324,40 @@ async def test_default_off_and_stage_cap_are_not_reset_by_manual_retry(context, 
         await session.commit()
         with pytest.raises(CallDriveError, match="исчерпан"):
             await CallRecordingService.retry(session, actor, recording_id, CallRetryPayload(expected_version=row.version))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("manual_time", [None, "2026-10-11T14:30:00+03:00"])
+async def test_saved_incoming_date_precision_and_accepted_day_survive_source_clock_correction(context, manual_time):
+    factory, actor, provider = context
+    recording_id = await queue(context)
+    run, calls = runner(context)
+    await CallRecordingJobService.process_batch(worker_id="date-review", session_factory=factory, runner=run)
+    expected_day = "2026-10-11" if manual_time else "2026-10-09"
+    precision = "datetime" if manual_time else "date"
+    async with factory() as session:
+        row = await CallRecordingService.get(session, actor, recording_id)
+        proposal = row.proposals[0]
+        fields = IncomingFields(**{**proposal.payload, "requested_at": manual_time})
+        payload = CallAdoptPayload(expected_version=row.version, incoming=fields)
+        adoption = await CallRecordingService.adopt(session, actor, row.id, proposal.id, payload)
+        saved = await IncomingCommandService.get(session, actor=actor, lead_id=adoption.resource_id)
+        assert saved.date_precision == precision and saved.requested_time_text == "завтра утром"
+        assert saved.requested_at.astimezone(ZoneInfo("Europe/Minsk")).date().isoformat() == expected_day
+        if manual_time:
+            assert saved.requested_at == datetime.fromisoformat(manual_time)
+        receipt = await session.scalar(select(CallAdoption).where(CallAdoption.proposal_id == proposal.id))
+        assert receipt.payload == payload.model_dump(mode="json", exclude={"expected_version"})
+        corrected = await CallRecordingService.metadata(session, actor, row.id, CallRecordingMetadataPayload(expected_version=row.version, call_occurred_at=row.call_occurred_at + timedelta(days=7)))
+        await CallRecordingService.retry(session, actor, row.id, CallRetryPayload(expected_version=corrected.version))
+    await CallRecordingJobService.process_batch(worker_id="date-rebuild", session_factory=factory, runner=run)
+    async with factory() as session:
+        row = await CallRecordingService.get(session, actor, recording_id)
+        accepted = row.proposals[0]
+        assert accepted.date_precision == precision and accepted.requested_date.isoformat() == expected_day
+        assert accepted.payload == fields.model_dump(mode="json")
+        assert await count(session, Lead) == 1
+    assert calls == {"normalize": 1, "transcribe": 1, "structure": 1}
 
 
 @pytest.mark.asyncio

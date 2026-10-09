@@ -2,6 +2,7 @@
 
 import hashlib
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func
 from sqlmodel import select
@@ -13,7 +14,7 @@ from schemas_call_recordings import CallAdoptionResponse, CallRecordingResponse,
 from schemas_incoming import IncomingCreatePayload
 from services.call_drive_connection_service import CallDriveConnectionService, require_live_call_actor
 from services.call_drive_provider import CallDriveError, MAX_CALL_BYTES
-from services.call_recording_structure import samsung_call_time
+from services.call_recording_structure import call_requested_time, samsung_call_time
 from services.command_transaction import command_transaction
 from services.incoming_command_service import IncomingCommandService
 from services.personal_task_service import PersonalTaskService
@@ -134,7 +135,25 @@ class CallRecordingService:
             proposals = list((await session.scalars(select(CallProposal).where(CallProposal.recording_id == row.id).order_by(CallProposal.id))).all())
             receipts = list((await session.scalars(select(CallAdoption).where(CallAdoption.connection_id == row.connection_id, CallAdoption.file_id == row.file_id))).all())
             accepted = {receipt.action_key: receipt for receipt in receipts}
-            values["proposals"] = [CallProposalResponse(id=proposal.id, kind=proposal.kind, payload=(accepted[proposal.action_key].payload.get("incoming" if proposal.kind == "incoming" else "task") or proposal.payload) if proposal.action_key in accepted else proposal.payload, evidence=proposal.evidence, needs_clarification=proposal.needs_clarification, accepted_resource_type=accepted[proposal.action_key].resource_type if proposal.action_key in accepted else None, accepted_resource_id=accepted[proposal.action_key].resource_id if proposal.action_key in accepted else None, accepted_url=cls.resource_url(accepted[proposal.action_key].resource_type, accepted[proposal.action_key].resource_id) if proposal.action_key in accepted else None) for proposal in proposals]
+            values["proposals"] = []
+            for proposal in proposals:
+                receipt = accepted.get(proposal.action_key)
+                payload = proposal.payload
+                if receipt:
+                    payload = receipt.payload.get("incoming" if proposal.kind == "incoming" else "task") or proposal.payload
+                desired_at, precision = None, None
+                if proposal.kind == "incoming":
+                    if receipt:
+                        from models import Lead
+                        lead = await session.get(Lead, receipt.resource_id)
+                        meta = (lead.intake_meta or {}) if lead else {}
+                        desired_at = datetime.fromisoformat(meta["requested_at"]) if meta.get("requested_at") else None
+                        precision = meta.get("date_precision")
+                    elif payload.get("requested_at"):
+                        desired_at, precision = datetime.fromisoformat(payload["requested_at"]), "datetime"
+                    else:
+                        desired_at, precision, _ = call_requested_time(payload.get("requested_time_text"), row.call_occurred_at)
+                values["proposals"].append(CallProposalResponse(id=proposal.id, kind=proposal.kind, payload=payload, evidence=proposal.evidence, needs_clarification=proposal.needs_clarification, requested_date=desired_at.astimezone(ZoneInfo("Europe/Minsk")).date() if desired_at else None, date_precision=precision, accepted_resource_type=receipt.resource_type if receipt else None, accepted_resource_id=receipt.resource_id if receipt else None, accepted_url=cls.resource_url(receipt.resource_type, receipt.resource_id) if receipt else None))
         return CallRecordingResponse(**values)
 
     @classmethod
@@ -217,11 +236,17 @@ class CallRecordingService:
                 if payload.incoming is None or payload.task is not None:
                     raise ValueError("Нужны только поля выбранного входящего")
                 data = payload.incoming.model_dump(mode="json")
+                if data["requested_at"] is None:
+                    parsed, precision, date_text = call_requested_time(data["requested_time_text"], row.call_occurred_at)
+                    if parsed and precision == "date":
+                        # Let the shared incoming contract derive a day with
+                        # date precision instead of passing midnight as an hour.
+                        data["requested_time_text"] = date_text
                 outcome = await IncomingCommandService.create(session, actor=trusted_actor, payload=IncomingCreatePayload(**data, source_occurred_at=row.call_occurred_at, source_timezone="Europe/Minsk", source_event_id=f"drive-call:{stable_key}"), idempotency_key=stable_key)
                 resource_type, resource_id = "lead", outcome.value.lead_id
                 from models import Lead
                 lead = await session.get(Lead, resource_id)
-                lead.intake_meta = {**lead.intake_meta, "source_url": row.source_url, "source_file_id": row.file_id, "source_checksum": row.source_checksum, "source_version": row.source_version, "source_recording_id": row.id}
+                lead.intake_meta = {**lead.intake_meta, "requested_time_text": payload.incoming.requested_time_text, "source_url": row.source_url, "source_file_id": row.file_id, "source_checksum": row.source_checksum, "source_version": row.source_version, "source_recording_id": row.id}
                 session.add(lead)
             else:
                 if payload.task is None or payload.incoming is not None:

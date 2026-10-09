@@ -39520,6 +39520,35 @@
             "type": "array",
             "title": "Needs Clarification"
           },
+          "requested_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Date",
+            "description": "Desired Minsk day derived from the original call clock; does not imply an hour or confirmed visit."
+          },
+          "date_precision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "date",
+                  "datetime"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Precision",
+            "description": "Same desired-date precision as IncomingResponse. Date-only proposals leave payload.requested_at empty; an explicit manual timestamp has datetime precision."
+          },
           "accepted_resource_type": {
             "anyOf": [
               {

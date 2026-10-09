@@ -69,6 +69,20 @@ describe('call recording review', () => {
     expect((wrapper.get('input[type="checkbox"]').element as HTMLInputElement).checked).toBe(true);
     wrapper.unmount();
   });
+
+  it.each([false, true])('shows a desired day without inventing an hour; manual time=%s', async (manual) => {
+    const wrapper = mount(CallProposalCard, { props: { proposal: { id: 3, kind: 'incoming', evidence: 'Обслуживание завтра утром', needs_clarification: ['Время требует уточнения'], requested_date: '2026-10-09', date_precision: 'date', payload: { request_text: 'Обслуживание завтра утром', requested_time_text: 'завтра утром', requested_at: null } }, version: 7, disabled: false } });
+    expect(wrapper.get('[data-testid="call-desired-day"]').text()).toContain('09.10.2026');
+    expect(wrapper.text()).not.toContain('00:00');
+    const input = wrapper.get('input[type="datetime-local"]');
+    expect((input.element as HTMLInputElement).value).toBe('');
+    if (manual) await input.setValue('2026-10-09T10:30');
+    await wrapper.get('form').trigger('submit');
+    const payload = wrapper.emitted('adopt')![0]![1] as { incoming: { requested_at: string | null; requested_time_text: string } };
+    expect(payload.incoming.requested_at).toBe(manual ? '2026-10-09T10:30:00+03:00' : null);
+    expect(payload.incoming.requested_time_text).toBe('завтра утром');
+    wrapper.unmount();
+  });
 });
 
 it('only accepts direct Drive ids and Google Drive links', () => {

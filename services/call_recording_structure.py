@@ -66,6 +66,14 @@ uncertainties. Относительную дату оставляй тексто
     return ExtractedCall.model_validate_json(response)
 
 
+def call_requested_time(text: str | None, call_occurred_at: datetime | None):
+    """Keep vague parts of day as text, while parsing only the desired day."""
+    date_text = re.sub(r"\s+(?:утром|днём|днем|вечером)\s*$", "", text or "", flags=re.I)
+    source_time = call_occurred_at.astimezone(ZoneInfo("Europe/Minsk")) if call_occurred_at else None
+    parsed, precision = requested_date(date_text, source_time) if source_time else (None, None)
+    return parsed, precision, date_text
+
+
 def action_proposals(result: ExtractedCall, *, transcript: str, call_occurred_at: datetime | None, manual_phone: str | None) -> list[dict]:
     proposals = []
     seen = set()
@@ -84,10 +92,8 @@ def action_proposals(result: ExtractedCall, *, transcript: str, call_occurred_at
             phone = phone or candidate
         if not phone:
             needs.append("Контакт не подтверждён")
-        source_time = call_occurred_at.astimezone(ZoneInfo("Europe/Minsk")) if call_occurred_at else None
         grounded_time = action.requested_time_text if action.requested_time_text and action.requested_time_text.casefold() in action.evidence.casefold() else None
-        date_text = re.sub(r"\s+(?:утром|днём|днем|вечером)\s*$", "", grounded_time or "", flags=re.I)
-        parsed, precision = requested_date(date_text, source_time) if source_time else (None, None)
+        parsed, precision, _ = call_requested_time(grounded_time, call_occurred_at)
         if action.requested_time_text and (not grounded_time or not parsed):
             needs.append("Дата требует уточнения")
         if parsed and precision == "date":
@@ -102,7 +108,7 @@ def action_proposals(result: ExtractedCall, *, transcript: str, call_occurred_at
             # Incoming's shared deterministic parser can infer dates/phones
             # from request_text too. A model's paraphrase must not provide a
             # second route for fabricated facts: start from actual evidence.
-            payload = IncomingFields(request_text=action.evidence, phone=phone, region_text=region, address_text=address, service_type=action.service_type, requested_time_text=grounded_time, requested_at=parsed, clarification_requested=action.clarification_requested).model_dump(mode="json")
+            payload = IncomingFields(request_text=action.evidence, phone=phone, region_text=region, address_text=address, service_type=action.service_type, requested_time_text=grounded_time, requested_at=parsed if precision == "datetime" else None, clarification_requested=action.clarification_requested).model_dump(mode="json")
         else:
             payload = PersonalTaskCreatePayload(text=action.text, description=action.evidence, due_at=parsed if precision == "datetime" else None).model_dump(mode="json")
         # Evidence identifies one action across repeated extraction and Drive

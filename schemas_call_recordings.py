@@ -1,6 +1,6 @@
 """Calls are private review material; adoption never schedules confirmed work."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
@@ -70,6 +70,8 @@ class CallProposalResponse(BaseModel):
     payload: dict
     evidence: str
     needs_clarification: list[str]
+    requested_date: date | None = Field(default=None, description="Desired Minsk day derived from the original call clock; does not imply an hour or confirmed visit.")
+    date_precision: Literal["date", "datetime"] | None = Field(default=None, description="Same desired-date precision as IncomingResponse. Date-only proposals leave payload.requested_at empty; an explicit manual timestamp has datetime precision.")
     accepted_resource_type: str | None = None
     accepted_resource_id: int | None = None
     accepted_url: str | None = None

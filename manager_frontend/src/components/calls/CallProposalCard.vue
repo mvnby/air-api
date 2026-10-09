@@ -31,7 +31,8 @@ function adopt() {
         <label>Адрес<input v-model="incoming.address_text" class="w-full border rounded p-2" /></label>
         <label>Услуга<select v-model="incoming.service_type" class="w-full border rounded p-2"><option :value="null">Уточнить</option><option value="maintenance">Обслуживание</option><option value="repair">Ремонт</option><option value="turnkey">Монтаж с оборудованием</option><option value="install_only">Монтаж</option><option value="pre_install">Предмонтаж</option><option value="dismantling">Демонтаж</option></select></label>
         <label>Пожелание по времени<input v-model="incoming.requested_time_text" class="w-full border rounded p-2" /></label>
-        <label>Предложенная дата (Минск)<input v-model="requestedTime" type="datetime-local" class="w-full border rounded p-2" /></label>
+        <p v-if="proposal.date_precision === 'date' && proposal.requested_date" data-testid="call-desired-day">Желаемый день (Минск): {{ proposal.requested_date.split('-').reverse().join('.') }}. Точное время не указано.</p>
+        <label>Точное время (Минск, если уточнено)<input v-model="requestedTime" type="datetime-local" class="w-full border rounded p-2" /></label>
       </div>
       <label class="block"><input v-model="incoming.clarification_requested" type="checkbox" /> Также сохранить поручение «Уточнить адрес / созвониться перед выездом»</label>
       <p class="text-sm text-gray-500">Пожелание по времени остаётся пожеланием. Сохранение не подтверждает выезд и не создаёт заказ.</p>
