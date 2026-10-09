@@ -78,6 +78,9 @@ class Settings(BaseSettings):
     CALL_RECORDINGS_GOOGLE_BUCKET: str = ""
     CALL_RECORDINGS_GOOGLE_LOCATION: str = "eu"
     CALL_RECORDINGS_GOOGLE_MODEL: str = "chirp_3"
+    CALL_RECORDINGS_SONIOX_API_KEY: str = ""
+    CALL_RECORDINGS_SONIOX_MODEL: str = "stt-async-v5"
+    CALL_RECORDINGS_SONIOX_API_BASE_URL: str = "https://api.soniox.com"
     CALL_RECORDINGS_OAUTH_REDIRECT_URI: str = ""
     BOT_VOICE_TRANSCRIPTION_API_URL: str = (
         "https://api.groq.com/openai/v1/audio/transcriptions"

@@ -6,9 +6,10 @@ export type CallDriveStatus = {
     connected: boolean;
     pipeline_enabled: boolean;
     transcription_configured: boolean;
-    transcription_provider?: 'groq' | 'google_batch';
+    transcription_provider?: 'groq' | 'google_batch' | 'soniox';
     google_batch_configured?: boolean;
     groq_configured?: boolean;
+    soniox_configured?: boolean;
     account_label?: (string | null);
     folder_id?: (string | null);
     folder_name?: (string | null);

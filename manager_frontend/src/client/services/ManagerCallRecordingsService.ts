@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { CallAdoptionResponse } from '../models/CallAdoptionResponse';
 import type { CallAdoptPayload } from '../models/CallAdoptPayload';
+import type { CallDriveFileListResponse } from '../models/CallDriveFileListResponse';
 import type { CallDriveStatus } from '../models/CallDriveStatus';
 import type { CallFolderPayload } from '../models/CallFolderPayload';
 import type { CallPollPayload } from '../models/CallPollPayload';
@@ -85,6 +86,42 @@ export class ManagerCallRecordingsService {
             url: '/api/manager/call-recordings/connection/folder',
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Drive Files
+     * Read audio metadata only from the current private pilot's selected folder.
+     * Inclusive Minsk call dates and contact/phone are parsed from Samsung filenames;
+     * unknown dates never use Drive sync/modified time. Returns at most 100 matches
+     * and a continuation token, scanning at most five metadata pages per request.
+     * Never downloads audio, advances the automatic cursor, queues AI or adopts work.
+     * Current personal live access is rechecked after provider I/O. OAuth credentials
+     * may be refreshed; no pipeline opt-in or transcription configuration is required.
+     * @param dateFrom
+     * @param dateTo
+     * @param query
+     * @param pageToken
+     * @returns CallDriveFileListResponse Successful Response
+     * @throws ApiError
+     */
+    public static listManagerCallDriveFiles(
+        dateFrom?: (string | null),
+        dateTo?: (string | null),
+        query: string = '',
+        pageToken?: (string | null),
+    ): CancelablePromise<CallDriveFileListResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/call-recordings/drive/files',
+            query: {
+                'date_from': dateFrom,
+                'date_to': dateTo,
+                'query': query,
+                'page_token': pageToken,
+            },
             errors: {
                 422: `Validation Error`,
             },

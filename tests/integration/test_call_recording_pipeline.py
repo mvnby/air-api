@@ -692,3 +692,270 @@ async def test_google_disconnected_source_cannot_continue_provider_calls(context
         row = await session.get(CallRecording, recording_id)
         assert row.state == "reconnect_required" and row.last_error_code == "call_drive_not_connected"
     assert calls["submit"] == 1 and calls["poll"] == calls["structure"] == 0
+
+
+async def soniox_runner(context, monkeypatch, *, poll_results=None, submit_error=None, cleanup_failures=0):
+    from services.call_soniox_transcription import SonioxCallTranscriptionProvider as soniox
+    factory, actor, provider = context
+    monkeypatch.setattr(settings, "CALL_RECORDINGS_SONIOX_API_KEY", "test-only-soniox-key")
+    monkeypatch.setattr(settings, "CALL_RECORDINGS_SONIOX_API_BASE_URL", "https://api.eu.soniox.com")
+    calls = {"upload": 0, "submit": 0, "poll": 0, "cleanup": 0, "structure": 0}
+    results = list(poll_results or [])
+    file_id = "11111111-1111-4111-8111-111111111111"
+    operation = "22222222-2222-4222-8222-222222222222"
+    async with factory() as session:
+        status = await CallDriveConnectionService.configure(session, actor, CallFolderPayload(folder_id=FOLDER_ID, transcription_provider="soniox"), provider=provider)
+        assert status.transcription_provider == "soniox" and status.soniox_configured and status.transcription_configured
+        assert status.transcription_model == "stt-async-v5" and not status.auto_poll_enabled
+
+    async def upload(**kwargs):
+        calls["upload"] += 1
+        assert kwargs["content"] == CONTENT and len(kwargs["source_id"]) == 64
+        assert kwargs["base_url"] == "https://api.eu.soniox.com"
+        return file_id
+
+    async def submit(**kwargs):
+        calls["submit"] += 1
+        assert kwargs["file_id"] == file_id
+        async with factory() as session:
+            row = await session.scalar(select(CallRecording).where(CallRecording.soniox_file_id == file_id))
+            assert row.transcription_submitted_at is not None and row.transcription_operation is None
+        if submit_error:
+            raise submit_error
+        return operation
+
+    async def poll(**kwargs):
+        calls["poll"] += 1
+        assert kwargs["operation_name"] == operation and kwargs["file_id"] == file_id
+        assert kwargs["base_url"] == "https://api.eu.soniox.com" and kwargs["model"] == "stt-async-v5"
+        value = results.pop(0) if results else None
+        if isinstance(value, Exception):
+            raise value
+        return value
+
+    async def cleanup(**kwargs):
+        calls["cleanup"] += 1
+        assert kwargs["operation_name"] == operation and kwargs["file_id"] == file_id
+        async with factory() as session:
+            row = await session.scalar(select(CallRecording).where(CallRecording.transcription_operation == operation))
+            assert row.transcript == TRANSCRIPT and row.downloaded_audio is None
+        return calls["cleanup"] > cleanup_failures
+
+    async def normalize(**kwargs):
+        return BotNormalizedVoiceAudio(CONTENT, "call.wav", "audio/wav", 75)
+
+    async def extract(**kwargs):
+        calls["structure"] += 1
+        async with factory() as session:
+            row = await session.scalar(select(CallRecording).where(CallRecording.transcription_operation == operation))
+            assert row.soniox_file_id is None
+        return ExtractedCall(summary="Поручение", actions=[{"kind": "task", "text": "Дослать фото свидетельства", "evidence": "Дослать фото свидетельства"}])
+
+    monkeypatch.setattr(soniox, "upload", upload)
+    monkeypatch.setattr(soniox, "submit", submit)
+    monkeypatch.setattr(soniox, "poll", poll)
+    monkeypatch.setattr(soniox, "cleanup", cleanup)
+
+    async def run(**kwargs):
+        await CallRecordingPipeline.run(**kwargs, provider=provider, normalizer=normalize, extractor=extract)
+    return run, calls
+
+
+@pytest.mark.asyncio
+async def test_soniox_wait_survives_restarts_and_selection_and_region_changes(context, monkeypatch):
+    factory, actor, provider = context
+    run, calls = await soniox_runner(context, monkeypatch, poll_results=[None]*10 + [TRANSCRIPT])
+    recording_id = await queue(context)
+    await CallRecordingJobService.process_batch(worker_id="soniox-first", limit=1, session_factory=factory, runner=run)
+    async with factory() as session:
+        row = await session.get(CallRecording, recording_id)
+        assert row.state == "waiting_transcription" and row.transcription_operation and row.soniox_file_id
+        assert row.stage_attempts == {"download":1,"transcribe":1}
+        await CallDriveConnectionService.configure(session, actor, CallFolderPayload(folder_id=FOLDER_ID, transcription_provider="groq"), provider=provider)
+    monkeypatch.setattr(settings, "CALL_RECORDINGS_SONIOX_API_BASE_URL", "https://api.soniox.com")
+    monkeypatch.setattr(settings, "CALL_RECORDINGS_SONIOX_MODEL", "stt-async-v6")
+    for index in range(10):
+        await make_google_event_available(factory, recording_id)
+        await CallRecordingJobService.process_batch(worker_id=f"soniox-restart-{index}", limit=1, session_factory=factory, runner=run)
+        async with factory() as session:
+            row = await session.get(CallRecording, recording_id)
+            event = await session.get(IntegrationOutboxEvent, row.job_event_id)
+            assert row.state == "waiting_transcription" and row.transcription_provider == "soniox"
+            assert row.stage_attempts["transcribe"] == 1 and event.attempts == 0
+    await make_google_event_available(factory, recording_id)
+    await CallRecordingJobService.process_batch(worker_id="soniox-ready", limit=1, session_factory=factory, runner=run)
+    async with factory() as session:
+        detail = await CallRecordingService.get(session, actor, recording_id)
+        assert detail.state == "ready_for_review" and detail.transcript == TRANSCRIPT
+        assert detail.transcription_provider == "soniox" and detail.transcription_model == "stt-async-v5"
+        assert await count(session, Lead) == await count(session, PersonalTask) == 0
+    assert calls == {"upload":1,"submit":1,"poll":11,"cleanup":1,"structure":1}
+
+
+@pytest.mark.asyncio
+async def test_soniox_cleanup_retries_durable_transcript_without_speech_or_structure(context, monkeypatch):
+    factory, actor, provider = context
+    run, calls = await soniox_runner(context, monkeypatch, poll_results=[TRANSCRIPT], cleanup_failures=2)
+    recording_id = await queue(context)
+    for index in range(4):
+        await make_google_event_available(factory, recording_id)
+        await CallRecordingJobService.process_batch(worker_id=f"soniox-cleanup-{index}", limit=1, session_factory=factory, runner=run)
+        if index in {1,2}:
+            async with factory() as session:
+                row = await session.get(CallRecording, recording_id)
+                assert row.transcript == TRANSCRIPT and row.stage == "structure" and row.soniox_file_id
+                assert row.last_error_code == "call_soniox_cleanup_pending"
+                assert row.stage_attempts == {"download":1,"transcribe":1}
+                assert calls["structure"] == 0
+    async with factory() as session:
+        row = await session.get(CallRecording, recording_id)
+        assert row.state == "ready_for_review" and row.soniox_file_id is None
+    assert calls == {"upload":1,"submit":1,"poll":1,"cleanup":3,"structure":1}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("submit_error", [CallDriveError("call_soniox_submission_uncertain", "redacted"), TimeoutError("crash gap after accepted POST")])
+async def test_soniox_uncertain_submission_never_creates_another_paid_job(context, monkeypatch, submit_error):
+    factory, actor, provider = context
+    run, calls = await soniox_runner(context, monkeypatch, submit_error=submit_error)
+    recording_id = await queue(context)
+    await CallRecordingJobService.process_batch(worker_id="soniox-uncertain", limit=1, session_factory=factory, runner=run)
+    if isinstance(submit_error, TimeoutError):
+        await make_google_event_available(factory, recording_id)
+        await CallRecordingJobService.process_batch(worker_id="soniox-after-crash", limit=1, session_factory=factory, runner=run)
+    async with factory() as session:
+        row = await session.get(CallRecording, recording_id)
+        event = await session.get(IntegrationOutboxEvent, row.job_event_id)
+        assert row.state == "manual_review" and row.last_error_code == "call_soniox_submission_uncertain"
+        assert row.transcription_submitted_at is not None and row.transcription_operation is None
+        assert row.stage_attempts["transcribe"] == 1 and event.status == "dead"
+        with pytest.raises(CallDriveError) as exc:
+            await CallRecordingService.retry(session, actor, recording_id, CallRetryPayload(expected_version=row.version))
+        assert exc.value.code == "call_soniox_submission_uncertain"
+    assert calls["submit"] == calls["upload"] == 1 and calls["poll"] == calls["cleanup"] == 0
+
+
+@pytest.mark.asyncio
+async def test_soniox_deadline_blocks_retry_without_deleting_running_input(context, monkeypatch):
+    factory, actor, provider = context
+    run, calls = await soniox_runner(context, monkeypatch)
+    recording_id = await queue(context)
+    await CallRecordingJobService.process_batch(worker_id="soniox-wait", limit=1, session_factory=factory, runner=run)
+    async with factory() as session:
+        row = await session.get(CallRecording, recording_id)
+        row.transcription_submitted_at = datetime.now(timezone.utc) - timedelta(hours=27)
+        session.add(row)
+        await session.commit()
+    await make_google_event_available(factory, recording_id)
+    await CallRecordingJobService.process_batch(worker_id="soniox-expired", limit=1, session_factory=factory, runner=run)
+    async with factory() as session:
+        row = await session.get(CallRecording, recording_id)
+        assert row.last_error_code == "call_soniox_wait_expired" and row.state == "manual_review"
+        assert row.soniox_file_id
+        with pytest.raises(CallDriveError):
+            await CallRecordingService.retry(session, actor, recording_id, CallRetryPayload(expected_version=row.version))
+    assert calls == {"upload":1,"submit":1,"poll":0,"cleanup":0,"structure":0}
+
+
+@pytest.mark.asyncio
+async def test_soniox_revoked_private_access_prevents_poll_and_cleanup(context, monkeypatch):
+    factory, actor, provider = context
+    run, calls = await soniox_runner(context, monkeypatch)
+    recording_id = await queue(context)
+    await CallRecordingJobService.process_batch(worker_id="soniox-first", limit=1, session_factory=factory, runner=run)
+    monkeypatch.setattr(settings, "CALL_RECORDINGS_PILOT_STAFF_IDS", [])
+    await make_google_event_available(factory, recording_id)
+    await CallRecordingJobService.process_batch(worker_id="soniox-revoked", limit=1, session_factory=factory, runner=run)
+    async with factory() as session:
+        row = await session.get(CallRecording, recording_id)
+        assert row.state == "manual_review"
+    assert calls["poll"] == calls["cleanup"] == calls["structure"] == 0
+
+
+@pytest.mark.asyncio
+async def test_soniox_poll_failure_recovers_saved_operation(context, monkeypatch):
+    factory, actor, provider = context
+    run, calls = await soniox_runner(context, monkeypatch, poll_results=[CallDriveError("call_soniox_provider_error", "redacted"), None, TRANSCRIPT])
+    recording_id = await queue(context)
+    for index in range(4):
+        await make_google_event_available(factory, recording_id)
+        await CallRecordingJobService.process_batch(worker_id=f"soniox-poll-{index}", limit=1, session_factory=factory, runner=run)
+    async with factory() as session:
+        row = await session.get(CallRecording, recording_id)
+        assert row.state == "ready_for_review" and row.stage_attempts["transcribe"] == 1
+    assert calls == {"upload":1,"submit":1,"poll":3,"cleanup":1,"structure":1}
+
+
+@pytest.mark.asyncio
+async def test_soniox_definitive_rejection_reuses_uploaded_file(context, monkeypatch):
+    from services.call_soniox_transcription import SonioxCallTranscriptionProvider as soniox
+    factory, actor, provider = context
+    run, calls = await soniox_runner(context, monkeypatch, submit_error=CallDriveError("call_soniox_provider_error", "definitive 429"), poll_results=[TRANSCRIPT])
+    recording_id = await queue(context)
+    await CallRecordingJobService.process_batch(worker_id="soniox-rejected", limit=1, session_factory=factory, runner=run)
+    async with factory() as session:
+        row = await session.get(CallRecording, recording_id)
+        assert row.soniox_file_id and row.transcription_submitted_at is None
+    async def submit(**kwargs):
+        calls["submit"] += 1
+        return "22222222-2222-4222-8222-222222222222"
+    monkeypatch.setattr(soniox, "submit", submit)
+    for index in range(2):
+        await make_google_event_available(factory, recording_id)
+        await CallRecordingJobService.process_batch(worker_id=f"soniox-recover-{index}", limit=1, session_factory=factory, runner=run)
+    async with factory() as session:
+        row = await session.get(CallRecording, recording_id)
+        assert row.state == "ready_for_review" and row.stage_attempts["transcribe"] == 2
+    assert calls == {"upload":1,"submit":2,"poll":1,"cleanup":1,"structure":1}
+
+
+@pytest.mark.asyncio
+async def test_soniox_terminal_failure_cleans_own_objects_with_bounded_retry(context, monkeypatch):
+    from services.call_soniox_transcription import SonioxCallTranscriptionProvider as soniox
+    factory, actor, provider = context
+    run, calls = await soniox_runner(context, monkeypatch, poll_results=[CallDriveError("call_soniox_operation_failed", "redacted")]*2)
+    async def cleanup(**kwargs):
+        calls["cleanup"] += 1
+        assert kwargs["operation_name"] == "22222222-2222-4222-8222-222222222222"
+        async with factory() as session:
+            row = await session.scalar(select(CallRecording).where(CallRecording.transcription_operation == kwargs["operation_name"]))
+            assert row.transcript is None
+        return calls["cleanup"] > 1
+    monkeypatch.setattr(soniox, "cleanup", cleanup)
+    recording_id = await queue(context)
+    for index in range(3):
+        await make_google_event_available(factory, recording_id)
+        await CallRecordingJobService.process_batch(worker_id=f"soniox-failed-{index}", limit=1, session_factory=factory, runner=run)
+    async with factory() as session:
+        row = await session.get(CallRecording, recording_id)
+        assert row.state == "manual_review" and row.last_error_code == "call_soniox_operation_failed"
+        assert row.soniox_file_id is None and row.stage_attempts["transcribe"] == 1
+        with pytest.raises(CallDriveError):
+            await CallRecordingService.retry(session, actor, recording_id, CallRetryPayload(expected_version=row.version))
+    assert calls == {"upload":1,"submit":1,"poll":2,"cleanup":2,"structure":0}
+
+
+@pytest.mark.asyncio
+async def test_soniox_lost_lease_after_submission_cannot_write_or_resubmit(context, monkeypatch):
+    from services.call_soniox_transcription import SonioxCallTranscriptionProvider as soniox
+    factory, actor, provider = context
+    run, calls = await soniox_runner(context, monkeypatch)
+    recording_id = await queue(context)
+    async def submit(**kwargs):
+        calls["submit"] += 1
+        async with factory() as session:
+            row = await session.get(CallRecording, recording_id)
+            event = await session.get(IntegrationOutboxEvent, row.job_event_id)
+            event.lease_token = "superseded-lease"
+            event.lease_expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+            session.add(event)
+            await session.commit()
+        return "22222222-2222-4222-8222-222222222222"
+    monkeypatch.setattr(soniox, "submit", submit)
+    await CallRecordingJobService.process_batch(worker_id="soniox-old-lease", limit=1, session_factory=factory, runner=run)
+    await CallRecordingJobService.process_batch(worker_id="soniox-new-lease", limit=1, session_factory=factory, runner=run)
+    async with factory() as session:
+        row = await session.get(CallRecording, recording_id)
+        assert row.state == "manual_review" and row.last_error_code == "call_soniox_submission_uncertain"
+        assert row.transcription_operation is None and row.transcription_submitted_at
+    assert calls["submit"] == calls["upload"] == 1 and calls["cleanup"] == calls["poll"] == 0

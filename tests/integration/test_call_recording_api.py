@@ -126,3 +126,32 @@ async def test_pending_oauth_is_denied_after_pilot_access_is_revoked(context, mo
     async with factory() as session:
         with pytest.raises(PermissionError, match="закрытого пилота"):
             await call_drive_oauth.pending_actor(session, pending)
+
+
+@pytest.mark.asyncio
+async def test_api_selects_soniox_without_enabling_auto_poll_or_exposing_key(context, monkeypatch):
+    from services import call_drive_connection_service
+    factory, actor, provider = context
+    private_key = "test-only-soniox-secret-must-not-appear-in-api"
+    monkeypatch.setattr(settings, "CALL_RECORDINGS_SONIOX_API_KEY", private_key)
+    monkeypatch.setattr(call_drive_connection_service, "get_call_drive_provider", lambda: provider)
+    auth = AuthenticatedUser(username=actor.username, auth_source="staff", staff_user_id=actor.staff_user_id, role="manager", tenant_id=1, storefront_id=1, auth_version=1)
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[require_manager_access] = lambda: auth
+    async def sessions():
+        async with factory() as session:
+            yield session
+    app.dependency_overrides[get_session] = sessions
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test") as client:
+        status = await client.get("/api/manager/call-recordings/connection")
+        assert status.status_code == 200 and status.json()["transcription_provider"] == "groq"
+        selected = await client.put("/api/manager/call-recordings/connection/folder", json={"folder_id":"chosen-folder-00000001", "transcription_provider":"soniox"})
+        assert selected.status_code == 200
+        payload = selected.json()
+        assert payload["transcription_provider"] == "soniox" and payload["soniox_configured"] and payload["transcription_configured"]
+        assert payload["transcription_model"] == "stt-async-v5" and not payload["auto_poll_enabled"]
+        assert private_key not in selected.text and "soniox_file_id" not in selected.text
+        assert (await client.get("/api/manager/call-recordings/connection")).json()["transcription_provider"] == "soniox"
+        invalid = await client.put("/api/manager/call-recordings/connection/folder", json={"folder_id":"chosen-folder-00000001", "transcription_provider":"unknown"})
+        assert invalid.status_code == 422

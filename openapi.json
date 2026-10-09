@@ -14236,6 +14236,108 @@
         ]
       }
     },
+    "/api/manager/call-recordings/drive/files": {
+      "get": {
+        "tags": [
+          "manager-call-recordings"
+        ],
+        "summary": "Drive Files",
+        "description": "Read audio metadata only from the current private pilot's selected folder.\nInclusive Minsk call dates and contact/phone are parsed from Samsung filenames;\nunknown dates never use Drive sync/modified time. Returns at most 100 matches\nand a continuation token, scanning at most five metadata pages per request.\nNever downloads audio, advances the automatic cursor, queues AI or adopts work.\nCurrent personal live access is rechecked after provider I/O. OAuth credentials\nmay be refreshed; no pipeline opt-in or transcription configuration is required.",
+        "operationId": "list_manager_call_drive_files",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date From"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date To"
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100,
+              "default": "",
+              "title": "Query"
+            }
+          },
+          {
+            "name": "page_token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Page Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallDriveFileListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/call-recordings/poll": {
       "post": {
         "tags": [
@@ -39309,6 +39411,105 @@
         ],
         "title": "CallAdoptionResponse"
       },
+      "CallDriveFileListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CallDriveFileResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_page_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Page Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "CallDriveFileListResponse"
+      },
+      "CallDriveFileResponse": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "source_url": {
+            "type": "string",
+            "title": "Source Url"
+          },
+          "call_occurred_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Occurred At"
+          },
+          "contact": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_id",
+          "filename",
+          "source_url",
+          "call_occurred_at",
+          "contact",
+          "phone",
+          "size"
+        ],
+        "title": "CallDriveFileResponse"
+      },
       "CallDriveStatus": {
         "properties": {
           "connected": {
@@ -39327,7 +39528,8 @@
             "type": "string",
             "enum": [
               "groq",
-              "google_batch"
+              "google_batch",
+              "soniox"
             ],
             "title": "Transcription Provider",
             "default": "groq"
@@ -39340,6 +39542,11 @@
           "groq_configured": {
             "type": "boolean",
             "title": "Groq Configured",
+            "default": false
+          },
+          "soniox_configured": {
+            "type": "boolean",
+            "title": "Soniox Configured",
             "default": false
           },
           "account_label": {
@@ -39464,7 +39671,8 @@
                 "type": "string",
                 "enum": [
                   "groq",
-                  "google_batch"
+                  "google_batch",
+                  "soniox"
                 ]
               },
               {

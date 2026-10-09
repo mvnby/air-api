@@ -1,5 +1,7 @@
 """Private staff call review and explicit commands; no automatic adoption."""
 
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse
@@ -10,13 +12,14 @@ from core.database import get_session
 from core.security import AuthenticatedUser, require_manager_access
 from routers.manager_permission_policy import ManagerPermissionRoute
 from routers import manager_operation_ids as operation_ids
-from schemas_call_recordings import CallAdoptPayload, CallAdoptionResponse, CallDriveStatus, CallFolderPayload, CallPollPayload, CallPollResponse, CallRecordingListResponse, CallRecordingMetadataPayload, CallRecordingResponse, CallRetryPayload
+from schemas_call_recordings import CallAdoptPayload, CallAdoptionResponse, CallDriveFileListResponse, CallDriveStatus, CallFolderPayload, CallPollPayload, CallPollResponse, CallRecordingListResponse, CallRecordingMetadataPayload, CallRecordingResponse, CallRetryPayload
 from schemas_document_drive import DocumentDriveAuthorizationUrlResponse
 from services.call_drive_connection_service import CallDriveConnectionService, require_live_call_actor
 from services.call_drive_provider import get_call_drive_provider
 from services.document_drive_contracts import DocumentDriveConnectionError
 from services import call_drive_oauth
 from services.call_recording_service import CallRecordingService
+from services.call_recording_picker import CallRecordingPicker
 from services.public_write_idempotency_service import PublicWriteIdempotencyConflict, PublicWriteIdempotencyUnavailable
 
 router = APIRouter(prefix="/api/manager/call-recordings", tags=["manager-call-recordings"], route_class=ManagerPermissionRoute)
@@ -114,6 +117,25 @@ async def disconnect(actor: CommandActor = Depends(caller), session: AsyncSessio
     the disconnect is safe. Queued jobs fail closed until explicit reconnection/retry.
     """
     return await respond(CallDriveConnectionService.disconnect(session, actor))
+
+
+@router.get("/drive/files", response_model=CallDriveFileListResponse, operation_id=operation_ids.LIST_MANAGER_CALL_DRIVE_FILES)
+async def drive_files(
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    query: str = Query(default="", max_length=100),
+    page_token: str | None = Query(default=None, min_length=1, max_length=2048),
+    actor: CommandActor = Depends(caller), session: AsyncSession = Depends(get_session),
+):
+    """Read audio metadata only from the current private pilot's selected folder.
+    Inclusive Minsk call dates and contact/phone are parsed from Samsung filenames;
+    unknown dates never use Drive sync/modified time. Returns at most 100 matches
+    and a continuation token, scanning at most five metadata pages per request.
+    Never downloads audio, advances the automatic cursor, queues AI or adopts work.
+    Current personal live access is rechecked after provider I/O. OAuth credentials
+    may be refreshed; no pipeline opt-in or transcription configuration is required.
+    """
+    return await respond(CallRecordingPicker.list_files(session, actor, date_from=date_from, date_to=date_to, query=query, page_token=page_token))
 
 
 @router.post("/poll", response_model=CallPollResponse, operation_id=operation_ids.POLL_MANAGER_CALL_RECORDINGS)

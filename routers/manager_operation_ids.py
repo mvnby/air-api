@@ -538,6 +538,7 @@ PATCH_MANAGER_PERSONAL_TASK = "patch_manager_personal_task"
 REOPEN_MANAGER_PERSONAL_TASK = "reopen_manager_personal_task"
 UPDATE_MANAGER_INCOMING = "update_manager_incoming"
 GET_MANAGER_CALL_DRIVE_STATUS = "get_manager_call_drive_status"
+LIST_MANAGER_CALL_DRIVE_FILES = "list_manager_call_drive_files"
 GET_MANAGER_CALL_DRIVE_AUTHORIZATION_URL = "get_manager_call_drive_authorization_url"
 CONFIGURE_MANAGER_CALL_DRIVE_FOLDER = "configure_manager_call_drive_folder"
 DISCONNECT_MANAGER_CALL_DRIVE = "disconnect_manager_call_drive"
@@ -599,6 +600,7 @@ ALL_MANAGER_OPERATION_IDS = (
     UPDATE_MANAGER_INCOMING,
 
     GET_MANAGER_CALL_DRIVE_STATUS,
+    LIST_MANAGER_CALL_DRIVE_FILES,
     GET_MANAGER_CALL_DRIVE_AUTHORIZATION_URL,
     CONFIGURE_MANAGER_CALL_DRIVE_FOLDER,
     DISCONNECT_MANAGER_CALL_DRIVE,

@@ -84,9 +84,9 @@ class CallRecordingJobService(RepairDiagnosticAiJobService):
             row.version += 1
             if isinstance(error, PermissionError):
                 row.state, event.status = "manual_review", "dead"
-            elif code in {"google_drive_access_denied", "call_drive_not_connected", "credentials_unreadable", "credential_encryption_unavailable", "call_connection_changed", "call_transcription_not_configured", "call_google_not_configured", "call_google_access_denied", "not_configured", "authentication_rejected"}:
+            elif code in {"google_drive_access_denied", "call_drive_not_connected", "credentials_unreadable", "credential_encryption_unavailable", "call_connection_changed", "call_transcription_not_configured", "call_google_not_configured", "call_google_access_denied", "call_soniox_not_configured", "call_soniox_access_denied", "not_configured", "authentication_rejected"}:
                 row.state, event.status = "reconnect_required", "dead"
-            elif (row.stage_attempts.get(row.stage, 0) >= 3 and not (row.stage == "transcribe" and row.transcription_operation)) or claim.attempts >= claim.max_attempts or code in {"call_source_changed", "call_upload_changed", "call_file_outside_folder", "call_stage_exhausted", "call_google_wait_expired", "call_google_invalid_audio", "call_google_operation_failed", "BotVoiceAudioValidationError", "BotVoiceTranscriptionInvalidAudioError"}:
+            elif (row.stage_attempts.get(row.stage, 0) >= 3 and not (row.stage == "transcribe" and row.transcription_operation)) or claim.attempts >= claim.max_attempts or code in {"call_source_changed", "call_upload_changed", "call_file_outside_folder", "call_stage_exhausted", "call_google_wait_expired", "call_google_invalid_audio", "call_google_operation_failed", "call_soniox_submission_uncertain", "call_soniox_wait_expired", "call_soniox_operation_failed", "call_soniox_invalid_audio", "BotVoiceAudioValidationError", "BotVoiceTranscriptionInvalidAudioError"}:
                 row.state, event.status = "manual_review", "dead"
             else:
                 row.state, event.status = "failed", "pending"

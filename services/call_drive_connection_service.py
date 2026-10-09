@@ -18,7 +18,9 @@ from services.document_drive_contracts import DocumentDriveCredentialCipher, Doc
 
 async def call_speech_readiness():
     from services.call_google_batch_transcription import GoogleCallBatchTranscriptionProvider
+    from services.call_soniox_transcription import SonioxCallTranscriptionProvider
     return {
+        "soniox": SonioxCallTranscriptionProvider.is_configured(),
         "groq": bool(settings.CALL_RECORDINGS_TRANSCRIPTION_API_KEY.strip()),
         "google_batch": await asyncio.to_thread(GoogleCallBatchTranscriptionProvider.is_configured),
     }
@@ -73,8 +75,8 @@ class CallDriveConnectionService:
                 error, connected = exc.code, False
         provider = row.transcription_provider if row else "groq"
         readiness = await call_speech_readiness()
-        model = settings.CALL_RECORDINGS_GOOGLE_MODEL if provider == "google_batch" else settings.CALL_RECORDINGS_TRANSCRIPTION_MODEL
-        return CallDriveStatus(connected=connected, pipeline_enabled=settings.CALL_RECORDINGS_ENABLED, transcription_configured=readiness[provider], transcription_provider=provider, google_batch_configured=readiness["google_batch"], groq_configured=readiness["groq"], account_label=row.account_label if row else None, folder_id=row.folder_id if row else None, folder_name=row.folder_name if row else None, folder_url=f"https://drive.google.com/drive/folders/{row.folder_id}" if row and row.folder_id else None, auto_poll_enabled=row.auto_poll_enabled if row else False, last_error_code=error, transcription_model=model, structure_model=settings.DEEPSEEK_MODEL)
+        model = {"google_batch": settings.CALL_RECORDINGS_GOOGLE_MODEL, "groq": settings.CALL_RECORDINGS_TRANSCRIPTION_MODEL, "soniox": settings.CALL_RECORDINGS_SONIOX_MODEL}[provider]
+        return CallDriveStatus(connected=connected, pipeline_enabled=settings.CALL_RECORDINGS_ENABLED, transcription_configured=readiness[provider], transcription_provider=provider, google_batch_configured=readiness["google_batch"], groq_configured=readiness["groq"], soniox_configured=readiness["soniox"], account_label=row.account_label if row else None, folder_id=row.folder_id if row else None, folder_name=row.folder_name if row else None, folder_url=f"https://drive.google.com/drive/folders/{row.folder_id}" if row and row.folder_id else None, auto_poll_enabled=row.auto_poll_enabled if row else False, last_error_code=error, transcription_model=model, structure_model=settings.DEEPSEEK_MODEL)
 
     @classmethod
     async def authorize(cls, session, actor, credentials, *, provider=None):

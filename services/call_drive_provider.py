@@ -35,12 +35,14 @@ class GoogleCallDriveAdapter(GoogleDocumentDriveAdapter):
             raise CallDriveError("call_folder_unavailable", "Выберите доступную папку Google Диска")
         return result
 
-    async def list_recordings(self, folder_id: str, *, page_token: str | None = None) -> tuple[list[dict], str | None]:
+    async def list_recordings(self, folder_id: str, *, page_token: str | None = None, page_size: int = 5) -> tuple[list[dict], str | None]:
         if not FILE_ID_PATTERN.fullmatch(folder_id):
             raise CallDriveError("invalid_folder_id", "Некорректная папка")
+        if not 1 <= page_size <= 100:
+            raise ValueError("Drive page size must be between 1 and 100")
         response = await self._request("GET", f"{self.BASE_URL}/files", params={
             "q": f"'{folder_id}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'",
-            "spaces": "drive", "pageSize": "5", "orderBy": "modifiedTime desc",
+            "spaces": "drive", "pageSize": str(page_size), "orderBy": "modifiedTime desc",
             "fields": f"files({CALL_FILE_FIELDS}),nextPageToken",
             "supportsAllDrives": "true", "includeItemsFromAllDrives": "true",
             **({"pageToken": page_token} if page_token else {}),
@@ -48,7 +50,9 @@ class GoogleCallDriveAdapter(GoogleDocumentDriveAdapter):
         if response.status_code != 200:
             raise self._provider_error(response)
         data = response.json()
-        return list(data.get("files") or [])[:5], data.get("nextPageToken")
+        if not isinstance(data, dict) or not isinstance(data.get("files", []), list):
+            raise self._invalid_response()
+        return list(data.get("files") or [])[:page_size], data.get("nextPageToken")
 
     async def download_audio(self, file_id: str) -> bytes:
         if not FILE_ID_PATTERN.fullmatch(file_id):

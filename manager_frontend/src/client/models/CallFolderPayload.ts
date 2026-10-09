@@ -5,6 +5,6 @@
 export type CallFolderPayload = {
     folder_id: string;
     auto_poll_enabled?: boolean;
-    transcription_provider?: ('groq' | 'google_batch' | null);
+    transcription_provider?: ('groq' | 'google_batch' | 'soniox' | null);
 };
 
