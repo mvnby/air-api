@@ -9,6 +9,8 @@ import { managerSession } from '../../../services/manager-session';
 import { useManagedDocumentWorkspace } from '../composables/use-managed-document-workspace';
 import ConsumerDocumentTermsPanel from './ConsumerDocumentTermsPanel.vue';
 import DraftParametersEditor from './DraftParametersEditor.vue';
+import DocumentVersionHistory from './DocumentVersionHistory.vue';
+import { groupDocumentVersions } from '../model/document-version-history';
 import B2BContractTermsPanel from './B2BContractTermsPanel.vue';
 import ContractScenarioChooser from './ContractScenarioChooser.vue';
 import ExternalContractForm from './ExternalContractForm.vue';
@@ -30,6 +32,7 @@ import {
   BUSINESS_NATIVE_DOCUMENT_TYPES,
   CONSUMER_NATIVE_DOCUMENT_TYPES,
   documentTypeName,
+  documentArtifactName,
   managedDocumentStatus,
   managedDocumentStatusClass,
   officialDocumentTitle,
@@ -111,6 +114,7 @@ const contractFileActions = useDocumentFileActions({
   notify: (message, type = 'success') => emit('toast', { message, type }),
 });
 const draftCount = computed(() => workspace.documents.value.filter((document) => document.status === 'draft').length);
+const documentGroups = computed(() => groupDocumentVersions(workspace.documents.value));
 const documentTypes = computed(() => documentAudience.value === 'business'
   ? BUSINESS_NATIVE_DOCUMENT_TYPES : CONSUMER_NATIVE_DOCUMENT_TYPES);
 const documentTypeIcon = (type: string) => ({
@@ -291,9 +295,6 @@ const prepareReplacement = (document: Parameters<typeof workspace.prepareReplace
   syncBasis();
   requestAnimationFrame(() => formRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
 };
-const artifactName = (kind: string) => ({
-  pdf: 'PDF', rendered_docx: 'DOCX', source_docx: 'Исходный DOCX', signed_pdf: 'PDF с подписью и печатью',
-}[kind] || kind);
 const googleTarget = (documentId: number): GoogleDocumentEditTarget => ({
   kind: 'managed-document',
   documentId,
@@ -422,9 +423,9 @@ defineExpose({
         Отправка из CRM появится после подключения почты вашей организации. PDF уже можно скачать и отправить вручную.
       </p>
 
-      <h4 v-if="workspace.documents.value.length" class="mt-5 text-sm font-bold text-slate-800 dark:text-white">{{ draftCount ? 'Проверьте черновик и выпустите' : 'Готовые документы' }}</h4>
+      <h4 v-if="documentGroups.current.length" class="mt-5 text-sm font-bold text-slate-800 dark:text-white">{{ draftCount ? 'Проверьте черновик и выпустите' : 'Готовые документы' }}</h4>
       <div class="mt-3 space-y-3">
-        <article v-for="document in workspace.documents.value" :key="document.id" class="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+        <article v-for="{ document, previousVersions } in documentGroups.current" :key="document.id" class="rounded-xl border border-slate-200 p-4 dark:border-slate-700" :data-testid="`current-document-${document.id}`">
           <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div class="min-w-0">
               <div class="flex flex-wrap items-center gap-2">
@@ -452,7 +453,7 @@ defineExpose({
                 <span class="material-icons-round text-[17px]">visibility</span>Предпросмотр
               </button>
               <button v-for="artifact in document.artifacts" :key="artifact.id" class="native-action" type="button" @click="workspace.downloadArtifact(artifact.id, artifact.filename)">
-                <span class="material-icons-round text-[17px]">download</span>{{ artifactName(artifact.kind) }}
+                <span class="material-icons-round text-[17px]">download</span>{{ documentArtifactName(artifact.kind) }}
               </button>
               <button v-if="access.canCreate && canEditDocumentFacsimile(document)" class="native-action" type="button" :disabled="workspace.busy.value" @click="facsimileTarget = { id: document.id, title: officialDocumentTitle(document) }">
                 <span class="material-icons-round text-[17px]">draw</span>{{ document.artifacts?.some((item) => item.kind === 'signed_pdf') ? 'Изменить размещение' : 'Подготовить PDF с подписью и печатью' }}
@@ -479,10 +480,10 @@ defineExpose({
             <button class="native-action-danger h-10" type="submit" :disabled="workspace.busy.value || !workspace.voidReason.value.trim()">Подтвердить</button>
             <button class="native-action h-10" type="button" @click="workspace.voidTarget.value = null">Отмена</button>
           </form>
-          <p v-if="document.status === 'void'" class="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-            Аннулированный номер и сформированные файлы сохранены в истории. Повторно этот номер не используется.
-          </p>
+          <DocumentVersionHistory :documents="previousVersions" class="mt-3 border-t border-slate-100 pt-2 dark:border-slate-800" :test-id="`previous-versions-${document.id}`" @download="workspace.downloadArtifact" />
         </article>
+
+        <DocumentVersionHistory :key="order.id" :documents="documentGroups.archived" title="История документов" test-id="native-document-history" @download="workspace.downloadArtifact" />
 
         <div v-if="!workspace.documents.value.length" class="rounded-xl border border-dashed border-slate-300 p-8 text-center dark:border-slate-700">
           <span class="material-icons-round text-4xl text-slate-300">description</span>
