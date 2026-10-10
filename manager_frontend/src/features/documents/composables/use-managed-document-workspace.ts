@@ -697,7 +697,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     if (document.status !== 'draft') return;
     if (!await confirmDialog({
       title: 'Удалить черновик?',
-      description: 'Официальный номер ещё не присвоен, поэтому черновик можно удалить без следа в нумерации.',
+      description: 'Черновик и его рабочие файлы будут удалены из CRM. Официальная нумерация не изменится. Если вы открывали его в Google, копия останется в Google Drive.',
       confirmText: 'Удалить черновик',
       variant: 'danger',
     })) return;

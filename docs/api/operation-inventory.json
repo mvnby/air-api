@@ -9,6 +9,7 @@
     "reviewed_stage"
   ],
   "review_stages": {
+    "13": "Draft parameter read/update: tenant/storefront, frozen source facts, optimistic revision, date-only editor preservation and explicit working-copy reset; reviewed 2026-10-10",
     "12": "Manual procurement stages/price history, editable participant statement issue confirmation and tenant-private registration certificates/email issuer binding; reviewed 2026-10-09",
     "1": "Public HTTP/helpers, supply, staff bot and OAuth; completed in a3e79e89",
     "2": "Orders/documents, customers/contracts, CRM/mail and catalog; reviewed 2026-10-07 from a3e79e89",
@@ -72,6 +73,10 @@
     "modules/documents/api/managed_document_readiness.py": [
       ["GET /api/manager/document-system/documents/{document_id}/readiness", "get_manager_managed_document_readiness", false, 7],
       ["POST /api/manager/document-system/orders/{order_id}/documents/readiness", "check_manager_managed_document_readiness", false, 7]
+    ],
+    "modules/documents/api/draft_parameters.py": [
+      ["GET /api/manager/document-system/documents/{document_id}/draft/parameters", "get_manager_managed_document_draft_parameters", false, 13],
+      ["PATCH /api/manager/document-system/documents/{document_id}/draft/parameters", "update_manager_managed_document_draft_parameters", false, 13]
     ],
     "modules/documents/api/managed_documents_artifacts.py": [
       ["DELETE /api/manager/document-system/documents/{document_id}/draft", "delete_manager_managed_document_draft", false, 2],

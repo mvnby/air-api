@@ -55,6 +55,7 @@ from .consumer_equipment import resolve_consumer_equipment_defaults
 from .logistics_rows import build_logistics_rows
 from .transport_context import build_transport_document_context
 from .value_formatters import amount_in_words, money, number_in_words, quantity
+from .draft_parameters import json_terms
 
 
 class DocumentContextError(ValueError):
@@ -451,6 +452,13 @@ class DocumentContextBuilder:
                 "document_role_type": role_type,
                 "document_role_source": role_source,
                 "issue_city": issue_city,
+                "draft_parameters": {
+                    "business_terms": json_terms(resolved_business_terms),
+                    "consumer_terms": json_terms(consumer_terms),
+                    "act_terms": json_terms(selection.act_terms),
+                    "transport_terms": json_terms(selection.transport_terms),
+                    "participant_statement": json_terms(selection.participant_statement),
+                },
             },
             "values": values,
             "conditions": conditions,

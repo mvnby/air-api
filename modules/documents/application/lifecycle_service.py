@@ -14,7 +14,6 @@ from models import (
     Order,
     OrderDocument,
     OrderStatus,
-    MaintenanceActPreparation,
 )
 from models.tenancy import TenantScope
 from modules.documents.domain import (
@@ -297,31 +296,11 @@ class ManagedDocumentService:
         tenant_scope: TenantScope,
         document_id: int,
     ) -> None:
-        """Delete only an unissued native draft without an official artifact."""
-        document = await cls._get_scoped_document(
-            session,
-            tenant_scope=tenant_scope,
-            document_id=document_id,
-            for_update=True,
+        from .draft_mutations import ManagedDocumentDraftMutationService
+
+        await ManagedDocumentDraftMutationService.delete(
+            session, tenant_scope=tenant_scope, document_id=document_id
         )
-        if document is None:
-            raise ManagedDocumentNotFoundError("Документ не найден")
-        if (
-            document.status != DocumentStatus.DRAFT.value
-            or document.official_number
-            or document.issued_at
-        ):
-            raise ManagedDocumentConflictError(
-                "Удалить можно только черновик до присвоения официального номера"
-            )
-        if await cls._artifacts(session, tenant_scope.tenant_id, document_id):
-            raise ManagedDocumentConflictError(
-                "Черновик уже содержит сформированные файлы и должен остаться в истории"
-            )
-        if await session.scalar(select(MaintenanceActPreparation.id).where(MaintenanceActPreparation.document_id == document_id)):
-            raise ManagedDocumentConflictError("Черновик сохраняет связь с замечаниями ТО. Подготовьте новую версию явным действием.")
-        await session.delete(document)
-        await cls._commit(session, "Не удалось удалить черновик документа")
 
     @classmethod
     async def validate_issue_customer_readiness(
