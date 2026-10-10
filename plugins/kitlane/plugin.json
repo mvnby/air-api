@@ -1,14 +1,14 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "kitlane",
-  "version": "1.1.0",
-  "description": "Save requests and tasks, record maintenance findings and prepare drafts in Kitlane.",
+  "version": "1.2.0",
+  "description": "Select catalog equipment, prepare business quote/invoice drafts, save requests and tasks, and record maintenance findings in Kitlane.",
   "extensions": {
     "com.openai": {
       "interface": {
         "displayName": "Kitlane",
-        "shortDescription": "Заявки, поручения и ТО",
-        "longDescription": "Сохраняйте обращения и поручения, читайте оборудование, фиксируйте замечания ТО и явно готовьте черновики актов и предложений из сохранённых данных.",
+        "shortDescription": "Подбор, документы, заявки и ТО",
+        "longDescription": "Подбирайте кондиционеры по характеристикам и бюджету, получайте варианты с ценами и ссылками для мессенджера. Для юрлиц готовьте черновики КП и счетов по выбранному оборудованию. Сохраняйте обращения, поручения и замечания ТО.",
         "developerName": "Kitlane",
         "category": "Productivity",
         "capabilities": [
@@ -17,7 +17,9 @@
         ],
         "defaultPrompt": [
           "Сохрани обращение клиента в Kitlane",
-          "Покажи мои поручения на сегодня"
+          "Покажи мои поручения на сегодня",
+          "Подбери три варианта кондиционера для клиента",
+          "Подготовь КП по выбранному оборудованию"
         ]
       }
     }

@@ -30,12 +30,18 @@ from schemas_connector_maintenance import (
     FindingPhotoInput, FindingPhotoUploadInput, FindingUpdateInput, MaintenanceOrderListInput, OfferPrepareInput,
 )
 from services.connector_maintenance_service import ConnectorMaintenanceService
+from schemas_connector_catalog import (
+    CatalogDocumentInput, CatalogDocumentResult, CatalogIssuersResult, CatalogProduct,
+    CatalogProductInput, CatalogSelectionInput, CatalogSelectionResult,
+)
+from services.connector_catalog_document_service import ConnectorCatalogDocumentService
 
 
 READ_SCOPE = "kitlane:read"
 INCOMING_SCOPE = "kitlane:incoming:write"
 TASK_SCOPE = "kitlane:tasks:write"
 MAINTENANCE_SCOPE = "kitlane:maintenance:write"
+CATALOG_SCOPE = "kitlane:catalog:write"
 
 
 @dataclass(frozen=True)
@@ -100,8 +106,15 @@ _MAINTENANCE_TOOLS = (
     ConnectorTool("list_maintenance_offers", "Read frozen maintenance offers and existing active continuation proposals with real saved source line IDs/prices. Missing pricing/composition must be completed in Manager; never invent an amount. Consent history is separate from actual repair.", MaintenanceOrderListInput, ConnectorOfferList),
     ConnectorTool("prepare_maintenance_offer", "Explicitly freeze a draft from an existing priced continuation proposal. Map every actual line to a finding and current version with diagnosis/repair purpose. Read list_maintenance_offers first. No issue, delivery, consent, execution or resolution is implicit.", OfferPrepareInput, ConnectorWriteResult[ConnectorOfferResult], MAINTENANCE_SCOPE),
 )
-TOOLS = {tool.name: tool for tool in (*_TOOLS, *_MAINTENANCE_TOOLS)}
+_CATALOG_TOOLS = (
+    ConnectorTool("select_catalog_products", "Select up to three complete wall split systems meeting explicit capacity/area, heating, inverter and Wi-Fi requirements. Without a budget return distinct price levels; with a budget return suitable alternatives from different brands. Budget is per unit or total equipment quantity as specified. Return storefront retail prices, website URLs, factual features and copy-ready messenger text. Alternatives are separate options; installation is not included. Never silently relax requirements or call a higher price proof of quality.", CatalogSelectionInput, CatalogSelectionResult),
+    ConnectorTool("get_catalog_product", "Read one currently published product in this storefront with customer-facing price, factual features and public link. Resolve this before quoting an explicit product; no internal costs or supplier details are exposed.", CatalogProductInput, CatalogProduct),
+    ConnectorTool("list_catalog_document_issuers", "List active document issuers in the authenticated company. Confirm the legal entity for a quote/invoice; do not invent its ID.", EmptyInput, CatalogIssuersResult),
+    ConnectorTool("prepare_catalog_document", "On an explicit user request, prepare a native commercial offer or payment invoice DRAFT for a confirmed company/entrepreneur customer and existing negotiation order. Creates one separate unselected proposal from selected catalog product IDs and quantities. All lines are one intended purchase, not competing alternatives; confirm the choice before an invoice. Expected prices guard price changes; authoritative prices are resolved server-side. Does not issue, sign, send, schedule, charge or replace existing documents. Reuse identical key/payload after timeout.", CatalogDocumentInput, ConnectorWriteResult[CatalogDocumentResult], CATALOG_SCOPE),
+)
+TOOLS = {tool.name: tool for tool in (*_TOOLS, *_MAINTENANCE_TOOLS, *_CATALOG_TOOLS)}
 MAINTENANCE_TOOLS = frozenset(tool.name for tool in _MAINTENANCE_TOOLS)
+CATALOG_TOOLS = frozenset(tool.name for tool in _CATALOG_TOOLS)
 
 
 def _task_projection(task: PersonalTaskResponse) -> ConnectorTaskResponse:
@@ -117,7 +130,16 @@ async def execute_tool(
     if hasattr(inputs, "payload"):
         kwargs["payload"] = inputs.payload
     name = tool.name
-    if name in MAINTENANCE_TOOLS:
+    if name in CATALOG_TOOLS:
+        if name == "prepare_catalog_document":
+            outcome = await ConnectorCatalogDocumentService.prepare(session, actor, inputs)
+            result = tool.output_model(result=outcome.value, replayed=outcome.replayed)
+        elif name == "list_catalog_document_issuers":
+            result = await ConnectorCatalogDocumentService.list_issuers(session, actor)
+        else:
+            from services.connector_catalog_selection_service import ConnectorCatalogSelectionService
+            result = await getattr(ConnectorCatalogSelectionService, "select" if name == "select_catalog_products" else "get_product")(session, actor, inputs)
+    elif name in MAINTENANCE_TOOLS:
         if tool.scope == READ_SCOPE:
             result = await ConnectorMaintenanceService.read(session, actor, name, inputs)
             if isinstance(result, CallToolResult):
