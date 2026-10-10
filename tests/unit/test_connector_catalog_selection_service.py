@@ -32,7 +32,7 @@ def test_secondary_projection_never_reads_master_or_supplier_prices():
 def test_client_message_keeps_alternatives_and_installation_separate():
     product = CatalogProduct(
         product_id=1, title="Model", brand="Brand", series=None, unit_price_byn=1200,
-        site_url="https://seller.test/catalog/model", is_inverter=True,
+        site_url="https://seller.test/product/model/", is_inverter=True,
         cooling_power_kw=2.6, area_m2=25, heating_min_c=None, wifi="unknown", availability="on_request",
     )
     options = [CatalogSelectionOption(label="Brand", reason="Match", product=product, quantity=2, equipment_total_byn=2400)]
@@ -43,7 +43,7 @@ def test_client_message_keeps_alternatives_and_installation_separate():
     assert "Монтаж не включён" in text
     assert "Wi-Fi не указан" in text
     assert "обогрев" not in text
-    assert "https://seller.test/catalog/model" in text
+    assert "https://seller.test/product/model/" in text
     assert "Наличие и срок поставки уточняются" in text
 
 
@@ -71,3 +71,19 @@ def test_area_only_bounds_use_the_existing_sizing_ranges():
     assert ConnectorCatalogSelectionService._area_ceiling(CatalogSelectionInput(area_m2=20)) == 24
     assert ConnectorCatalogSelectionService._area_ceiling(CatalogSelectionInput(area_m2=30)) == 32
     assert ConnectorCatalogSelectionService._area_ceiling(CatalogSelectionInput(area_m2=20, cooling_btu_class=12)) is None
+
+
+@pytest.mark.parametrize("site_base", ["https://mvn.by", "https://verified-seller.test"])
+@pytest.mark.parametrize("slug, path", [
+    ("tcc09zhrhdv", "/product/tcc09zhrhdv/"),
+    ("model?query=1", "/product/model%3Fquery%3D1/"),
+])
+def test_product_links_use_authoritative_route_and_encode_slug(site_base, slug, path):
+    row = dict(
+        product_id=1, title="Model", slug=slug, brand=None, series=None,
+        unit_price_byn=1200, is_inverter=True, cooling_power_kw=2.6,
+        area_m2=25, heating_min_c=None, wifi="unknown", enough_stock=False,
+    )
+    product = ConnectorCatalogSelectionService._product(row, site_base)
+    assert product.site_url == f"{site_base}{path}"
+    assert ConnectorCatalogSelectionService._product(row, None).site_url is None

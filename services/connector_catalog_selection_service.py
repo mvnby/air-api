@@ -1,7 +1,6 @@
 """Customer-ready factual choices from the current public storefront catalog."""
 
 from datetime import datetime, timezone
-from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
@@ -16,6 +15,7 @@ from schemas_connector_catalog import (
     CatalogProduct, CatalogProductInput, CatalogSelectionInput,
     CatalogSelectionOption, CatalogSelectionResult,
 )
+from services.catalog_purge_service import build_catalog_purge_paths
 from services.public_catalog_visibility_service import PublicCatalogVisibilityService
 from services.storefront_context_service import InvalidStorefrontHostError, StorefrontContextService
 
@@ -53,10 +53,16 @@ class ConnectorCatalogSelectionService:
 
     @staticmethod
     def _product(row, site_base: str | None) -> CatalogProduct:
+        # Share the existing encoded public product route with catalog
+        # freshness, while keeping the storefront origin separately scoped.
+        product_path = next((
+            path for path in build_catalog_purge_paths(product_slugs=[row["slug"]])
+            if path.startswith("/product/")
+        ), None)
         return CatalogProduct(
             product_id=row["product_id"], title=row["title"], brand=row["brand"], series=row["series"],
             unit_price_byn=row["unit_price_byn"],
-            site_url=f"{site_base}/catalog/{quote(row['slug'], safe='')}" if site_base else None,
+            site_url=f"{site_base}{product_path}" if site_base and product_path else None,
             is_inverter=row["is_inverter"], cooling_power_kw=row["cooling_power_kw"],
             area_m2=row["area_m2"], heating_min_c=row["heating_min_c"], wifi=row["wifi"],
             availability="in_stock" if row["enough_stock"] else "on_request",

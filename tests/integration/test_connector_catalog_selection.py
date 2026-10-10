@@ -71,7 +71,9 @@ async def test_price_tiers_span_full_catalog_and_are_not_quality_claims(db, monk
     assert result.matching_products == 205
     assert [item.product.product_id for item in result.options] == [products[0].id, products[102].id, products[204].id]
     assert [item.label for item in result.options] == ["Бюджетный", "Средний", "Премиальный"]
-    assert all(item.product.site_url.startswith("https://canonical.test/catalog/") for item in result.options)
+    assert [item.product.site_url for item in result.options] == [
+        f"https://canonical.test/product/{product.slug}/" for product in (products[0], products[102], products[204])
+    ]
     assert any("не подтверждает более высокое качество" in warning for warning in result.warnings)
     assert "их суммы не складываются" in result.message_text
 
@@ -236,10 +238,12 @@ async def test_secondary_price_offer_grant_isolation_and_verified_links(db, monk
     assert result.matching_products == 1
     product = result.options[0].product
     assert product.unit_price_byn == 750
-    assert product.site_url == f"https://seller-a.test/catalog/{products[0].slug}"
+    assert product.site_url == f"https://seller-a.test/product/{products[0].slug}/"
     assert "9000" not in result.model_dump_json()
     assert "other-seller" not in result.model_dump_json()
-    assert (await Service.get_product(db, actor, CatalogProductInput(product_id=products[0].id))).unit_price_byn == 750
+    detail = await Service.get_product(db, actor, CatalogProductInput(product_id=products[0].id))
+    assert detail.unit_price_byn == 750
+    assert detail.site_url == product.site_url
     for hidden in products[1:]:
         with pytest.raises(HTTPException) as caught:
             await Service.get_product(db, actor, CatalogProductInput(product_id=hidden.id))
