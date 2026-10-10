@@ -239,10 +239,11 @@ async def delete_managed_document_draft(
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> Response:
     """
-    Delete a scoped unissued native draft, returning 204. A draft with reserved official
-    number, issuance/artifacts or immutable state cannot be deleted (409); missing document
+    Delete a scoped unissued native draft, its working DOCX registry and editor sessions,
+    returning 204. Reserved numbers, issued artifacts or closed orders prevent deletion
+    (409); missing document
     returns 404. Use lifecycle commands for issued records, not this endpoint. A repeat
-    after deletion returns 404.
+    after deletion returns 404. Existing remote Google copies remain in Drive.
 
     Access requires an authenticated Manager session/JWT and live membership; see [Manager
     access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).

@@ -341,6 +341,8 @@ export type { MaintenanceWorkspaceItem } from './models/MaintenanceWorkspaceItem
 export type { ManagedDocumentArtifactAccessResponse } from './models/ManagedDocumentArtifactAccessResponse';
 export type { ManagedDocumentArtifactItem } from './models/ManagedDocumentArtifactItem';
 export type { ManagedDocumentArtifactListResponse } from './models/ManagedDocumentArtifactListResponse';
+export type { ManagedDocumentDraftParameters } from './models/ManagedDocumentDraftParameters';
+export type { ManagedDocumentDraftParameterUpdate } from './models/ManagedDocumentDraftParameterUpdate';
 export type { ManagedDocumentDraftPayload } from './models/ManagedDocumentDraftPayload';
 export type { ManagedDocumentItem } from './models/ManagedDocumentItem';
 export type { ManagedDocumentListResponse } from './models/ManagedDocumentListResponse';

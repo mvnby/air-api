@@ -431,6 +431,38 @@ describe('NativeDocumentsWorkspace', () => {
     expect(ManagerDocumentSystemService.deleteManagerManagedDocumentDraft).toHaveBeenCalledWith(77);
   });
 
+  it('deletes an unissued Google draft with source files after confirmation', async () => {
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments)
+      .mockResolvedValueOnce({
+        items: [{
+          id: 77,
+          order_id: 42,
+          legal_entity_id: 5,
+          doc_type: 'contract',
+          status: 'draft',
+          provider: 'native',
+          internal_reference: 'doc_draft_77',
+          display_number: 'doc_draft_77',
+          date: NOW,
+          created_at: NOW,
+          artifacts: [{ id: 'source-77', kind: 'source_docx', filename: 'draft.docx', is_authoritative: true }],
+        }],
+      })
+      .mockResolvedValue({ items: [] });
+    const wrapper = await mountWorkspace();
+
+    const remove = wrapper.findAll('button').find((button) => button.text() === 'Удалить черновик');
+    expect(remove).toBeDefined();
+    await remove!.trigger('click');
+    await flushPromises();
+
+    expect(confirmDialog).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Удалить черновик?',
+      variant: 'danger',
+    }));
+    expect(ManagerDocumentSystemService.deleteManagerManagedDocumentDraft).toHaveBeenCalledWith(77);
+  });
+
   it('opens a PDF preview for a draft without issuing a number', async () => {
     vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({
       items: [{

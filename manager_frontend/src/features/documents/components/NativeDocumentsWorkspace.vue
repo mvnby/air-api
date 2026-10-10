@@ -8,6 +8,7 @@ import { MANAGER_CAPABILITY, hasManagerCapability } from '../../../manager-capab
 import { managerSession } from '../../../services/manager-session';
 import { useManagedDocumentWorkspace } from '../composables/use-managed-document-workspace';
 import ConsumerDocumentTermsPanel from './ConsumerDocumentTermsPanel.vue';
+import DraftParametersEditor from './DraftParametersEditor.vue';
 import B2BContractTermsPanel from './B2BContractTermsPanel.vue';
 import ContractScenarioChooser from './ContractScenarioChooser.vue';
 import ExternalContractForm from './ExternalContractForm.vue';
@@ -346,6 +347,18 @@ const handleEmailSent = async () => {
   emit('toast', { message: 'Письмо с документами отправлено', type: 'success' });
 };
 
+const editingDraftId = ref<number | null>(null);
+const draftParametersSaved = async (documentId: number) => {
+  editingDraftId.value = null;
+  workspace.participantStatementConfirmations.value[documentId] = false;
+  await workspace.loadDocuments();
+  await googleEditor.loadSession(googleTarget(documentId));
+  emit('refresh');
+};
+const canChangeDraft = (document: Parameters<typeof workspace.issue>[0]) => document.status === 'draft'
+  && !document.official_number && !document.official_date && !document.issued_at
+  && (document.artifacts || []).every((item) => item.kind === 'source_docx');
+
 const createDraft = async (allowIncomplete = false) => {
   if (preparingDraft.value || workspace.busy.value || workspace.draftBlockedReason.value) return;
   preparingDraft.value = true;
@@ -451,14 +464,16 @@ defineExpose({
                 @open="googleEditor.open(googleTarget(document.id))"
                 @sync="syncGoogleDocument(document.id)"
               />
-              <button v-if="document.status === 'draft' && access.canCreate" class="native-action-primary" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id) || Boolean(workspace.issueBlockedReason.value) || incompleteDraft(document) || (document.doc_type === 'participant_statement' && !workspace.participantStatementConfirmations.value[document.id])" :title="incompleteDraft(document) ? `Не заполнены поля: ${criticalMissingLabels(document)}` : workspace.issueBlockedReason.value" @click="issueDocument(document)">Выпустить</button>
-              <button v-if="document.status === 'draft' && !document.maintenance_source_order_id && !document.official_number && !document.artifacts?.length && access.canCreate" class="native-action-danger" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id)" @click="workspace.deleteDraft(document)">Удалить черновик</button>
+              <button v-if="document.status === 'draft' && access.canCreate" class="native-action-primary" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id) || Boolean(workspace.issueBlockedReason.value) || editingDraftId === document.id || incompleteDraft(document) || (document.doc_type === 'participant_statement' && !workspace.participantStatementConfirmations.value[document.id])" :title="incompleteDraft(document) ? `Не заполнены поля: ${criticalMissingLabels(document)}` : workspace.issueBlockedReason.value" @click="issueDocument(document)">Выпустить</button>
+              <button v-if="canChangeDraft(document) && access.canCreate" class="native-action" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id)" @click="editingDraftId = editingDraftId === document.id ? null : document.id">Изменить параметры</button>
+              <button v-if="canChangeDraft(document) && !document.maintenance_source_order_id && access.canDelete" class="native-action-danger" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id)" @click="workspace.deleteDraft(document)">Удалить черновик</button>
               <button v-if="['issued', 'sent', 'signed'].includes(document.status) && !document.maintenance_source_order_id && access.canReplace" class="native-action" type="button" @click="prepareReplacement(document)">Создать исправленную редакцию</button>
               <a v-if="document.maintenance_source_order_id" :href="`/manager/orders/kanban?orderId=${document.maintenance_source_order_id}`" target="_blank" rel="noopener" class="native-action">Исходное ТО #{{ document.maintenance_source_order_id }} · замечания и новые версии</a>
               <button v-if="['issued', 'sent', 'signed'].includes(document.status) && access.canReplace" class="native-action-danger" type="button" @click="workspace.requestVoid(document)">Аннулировать</button>
             </div>
           </div>
 
+          <DraftParametersEditor v-if="editingDraftId === document.id && canChangeDraft(document) && access.canCreate" :key="`${order.id}:${document.id}`" :document="document" :disabled="workspace.busy.value || googleDraftBusy(document.id)" @close="editingDraftId = null" @saved="draftParametersSaved(document.id)" @toast="(message, type) => emit('toast', { message, type })" />
           <form v-if="workspace.voidTarget.value?.id === document.id" class="mt-3 flex flex-col gap-2 rounded-lg bg-rose-50 p-3 sm:flex-row sm:items-end" @submit.prevent="workspace.voidDocument">
             <label class="native-field flex-1"><span>Причина аннулирования</span><input v-model="workspace.voidReason.value" class="native-input" placeholder="Ошибка в реквизитах" /></label>
             <button class="native-action-danger h-10" type="submit" :disabled="workspace.busy.value || !workspace.voidReason.value.trim()">Подтвердить</button>

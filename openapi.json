@@ -14726,6 +14726,110 @@
         }
       }
     },
+    "/api/manager/document-system/documents/{document_id}/draft/parameters": {
+      "get": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Get Draft Parameters",
+        "description": "Read saved parameters and revision of a tenant/storefront-scoped unnumbered draft.\n\nMissing documents return 404; issued/reserved documents return 409. Reading does not\nrefresh facts from live CRM data or change files. Requires authenticated Manager access.",
+        "operationId": "get_manager_managed_document_draft_parameters",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedDocumentDraftParameters"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Update Draft Parameters",
+        "description": "Save parameters on the same tenant/storefront-scoped draft without reserving a number.\n\nexpected_revision prevents overwriting a concurrent edit. A date-only update preserves\nmanual DOCX edits; other changes require reset_editable_copy when a working copy exists.\nConfirmed reset detaches old editor sessions; the next editor open creates a new copy.\nTerm groups replace their saved group. Issued/reserved/closed drafts and stale revisions\nreturn 409, missing documents 404, incompatible terms 400. Requires Manager access.",
+        "operationId": "update_manager_managed_document_draft_parameters",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagedDocumentDraftParameterUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedDocumentItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/document-system/condition-presets": {
       "get": {
         "tags": [
@@ -16695,7 +16799,7 @@
           "manager-document-system"
         ],
         "summary": "Delete Managed Document Draft",
-        "description": "Delete a scoped unissued native draft, returning 204. A draft with reserved official\nnumber, issuance/artifacts or immutable state cannot be deleted (409); missing document\nreturns 404. Use lifecycle commands for issued records, not this endpoint. A repeat\nafter deletion returns 404.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Delete a scoped unissued native draft, its working DOCX registry and editor sessions,\nreturning 204. Reserved numbers, issued artifacts or closed orders prevent deletion\n(409); missing document\nreturns 404. Use lifecycle commands for issued records, not this endpoint. A repeat\nafter deletion returns 404. Existing remote Google copies remain in Drive.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "delete_manager_managed_document_draft",
         "security": [
           {
@@ -53936,6 +54040,201 @@
           "items"
         ],
         "title": "ManagedDocumentArtifactListResponse"
+      },
+      "ManagedDocumentDraftParameterUpdate": {
+        "properties": {
+          "expected_revision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Expected Revision"
+          },
+          "reset_editable_copy": {
+            "type": "boolean",
+            "title": "Reset Editable Copy",
+            "default": false
+          },
+          "issue_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue Date"
+          },
+          "issue_city": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 160
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue City"
+          },
+          "business_terms": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BusinessDocumentTermsPayload-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "consumer_terms": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConsumerDocumentTermsPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "act_terms": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ActTermsPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "transport_terms": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TransportTermsPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "participant_statement": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ParticipantStatementPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_revision"
+        ],
+        "title": "ManagedDocumentDraftParameterUpdate"
+      },
+      "ManagedDocumentDraftParameters": {
+        "properties": {
+          "issue_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Issue Date"
+          },
+          "issue_city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue City"
+          },
+          "business_terms": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BusinessDocumentTermsPayload-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "consumer_terms": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConsumerDocumentTermsPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "act_terms": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ActTermsPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "transport_terms": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TransportTermsPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "participant_statement": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ParticipantStatementPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision": {
+            "type": "string",
+            "title": "Revision"
+          },
+          "has_editable_copy": {
+            "type": "boolean",
+            "title": "Has Editable Copy"
+          },
+          "total_amount": {
+            "type": "string",
+            "title": "Total Amount"
+          },
+          "order_conditions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Conditions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "issue_date",
+          "revision",
+          "has_editable_copy",
+          "total_amount"
+        ],
+        "title": "ManagedDocumentDraftParameters"
       },
       "ManagedDocumentDraftPayload": {
         "properties": {

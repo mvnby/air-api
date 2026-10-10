@@ -25,6 +25,8 @@ import type { DocumentPdfRuntimeStatus } from '../models/DocumentPdfRuntimeStatu
 import type { ExternalEditSessionItem } from '../models/ExternalEditSessionItem';
 import type { ManagedDocumentArtifactAccessResponse } from '../models/ManagedDocumentArtifactAccessResponse';
 import type { ManagedDocumentArtifactListResponse } from '../models/ManagedDocumentArtifactListResponse';
+import type { ManagedDocumentDraftParameters } from '../models/ManagedDocumentDraftParameters';
+import type { ManagedDocumentDraftParameterUpdate } from '../models/ManagedDocumentDraftParameterUpdate';
 import type { ManagedDocumentDraftPayload } from '../models/ManagedDocumentDraftPayload';
 import type { ManagedDocumentItem } from '../models/ManagedDocumentItem';
 import type { ManagedDocumentListResponse } from '../models/ManagedDocumentListResponse';
@@ -48,6 +50,61 @@ import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class ManagerDocumentSystemService {
+    /**
+     * Get Draft Parameters
+     * Read saved parameters and revision of a tenant/storefront-scoped unnumbered draft.
+     *
+     * Missing documents return 404; issued/reserved documents return 409. Reading does not
+     * refresh facts from live CRM data or change files. Requires authenticated Manager access.
+     * @param documentId
+     * @returns ManagedDocumentDraftParameters Successful Response
+     * @throws ApiError
+     */
+    public static getManagerManagedDocumentDraftParameters(
+        documentId: number,
+    ): CancelablePromise<ManagedDocumentDraftParameters> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/document-system/documents/{document_id}/draft/parameters',
+            path: {
+                'document_id': documentId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Update Draft Parameters
+     * Save parameters on the same tenant/storefront-scoped draft without reserving a number.
+     *
+     * expected_revision prevents overwriting a concurrent edit. A date-only update preserves
+     * manual DOCX edits; other changes require reset_editable_copy when a working copy exists.
+     * Confirmed reset detaches old editor sessions; the next editor open creates a new copy.
+     * Term groups replace their saved group. Issued/reserved/closed drafts and stale revisions
+     * return 409, missing documents 404, incompatible terms 400. Requires Manager access.
+     * @param documentId
+     * @param requestBody
+     * @returns ManagedDocumentItem Successful Response
+     * @throws ApiError
+     */
+    public static updateManagerManagedDocumentDraftParameters(
+        documentId: number,
+        requestBody: ManagedDocumentDraftParameterUpdate,
+    ): CancelablePromise<ManagedDocumentItem> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/manager/document-system/documents/{document_id}/draft/parameters',
+            path: {
+                'document_id': documentId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
     /**
      * List Presets
      * List up to 100 reusable document clauses in the current tenant, newest first. Reading
@@ -1128,10 +1185,11 @@ export class ManagerDocumentSystemService {
     }
     /**
      * Delete Managed Document Draft
-     * Delete a scoped unissued native draft, returning 204. A draft with reserved official
-     * number, issuance/artifacts or immutable state cannot be deleted (409); missing document
+     * Delete a scoped unissued native draft, its working DOCX registry and editor sessions,
+     * returning 204. Reserved numbers, issued artifacts or closed orders prevent deletion
+     * (409); missing document
      * returns 404. Use lifecycle commands for issued records, not this endpoint. A repeat
-     * after deletion returns 404.
+     * after deletion returns 404. Existing remote Google copies remain in Drive.
      *
      * Access requires an authenticated Manager session/JWT and live membership; see [Manager
      * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
