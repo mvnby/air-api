@@ -5,9 +5,12 @@ import {
   ManagerDocsService,
   CancelablePromise,
   OpenAPI,
+  type ManagedDocumentItem,
   type ManagerOrderDetailResponse,
 } from '../src/client';
 import NativeDocumentsWorkspace from '../src/features/documents/components/NativeDocumentsWorkspace.vue';
+import DocumentVersionHistory from '../src/features/documents/components/DocumentVersionHistory.vue';
+import { groupDocumentVersions } from '../src/features/documents/model/document-version-history';
 import { googleDocumentEditorApi } from '../src/features/documents/integrations/google-document-editor-api';
 import { managerSession } from '../src/services/manager-session';
 
@@ -60,6 +63,11 @@ const baseOrder = {
 } as ManagerOrderDetailResponse;
 
 const wrappers: VueWrapper[] = [];
+const revision = (id: number, status: string, replaces_document_id: number | null = null, doc_type = 'contract'): ManagedDocumentItem => ({
+  id, order_id: 42, legal_entity_id: 5, doc_type, status, provider: 'native',
+  official_full_number: `Д-2026-${id}`, display_number: `Д-2026-${id}`,
+  date: NOW, created_at: NOW, replaces_document_id, artifacts: [],
+});
 const deferred = <T>() => {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((done) => { resolve = done; });
@@ -343,6 +351,77 @@ describe('NativeDocumentsWorkspace', () => {
     const title = wrapper.findAll('h4').find((item) => item.text().includes('Договор'));
     expect(title?.text()).toBe('Договор · номер ещё не присвоен');
     expect(title?.text()).not.toContain('doc_8c0d3f');
+  });
+
+  it.each(['contract', 'b2c_supply_installation_act', 'maintenance_defect_act'])('keeps the complete %s replacement chain collapsed under its current document', async (type) => {
+    const oldest = { ...revision(81, 'void', null, type), void_reason: 'Ошибка в реквизитах' };
+    const replaced = revision(82, 'replaced', 81, type);
+    const current = revision(83, 'issued', 82, type);
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({ items: [current, replaced, oldest] });
+    const wrapper = await mountWorkspace();
+    expect(wrapper.findAll('article')).toHaveLength(1);
+    expect(wrapper.get('[data-testid="current-document-83"]').text()).toContain('Д-2026-83');
+    const history = wrapper.get('[data-testid="previous-versions-83"]');
+    expect(history.get('summary').text()).toBe('Предыдущие версии (2)');
+    expect(history.attributes('open')).toBeUndefined();
+    expect(history.findAll('li').map((item) => item.attributes('data-testid'))).toEqual(['historical-document-82', 'historical-document-81']);
+    expect(history.text()).toContain('Заменён');
+    expect(history.text()).toContain('Причина аннулирования: Ошибка в реквизитах');
+    expect(history.findAll('button').some((button) => button.text().includes('Создать исправленную редакцию'))).toBe(false);
+    expect(wrapper.find('[data-testid="native-document-history"]').exists()).toBe(false);
+  });
+
+  it('keeps the issued original current while its correction is only a draft', async () => {
+    const current = revision(82, 'issued', 81);
+    const draft = revision(83, 'draft', 82);
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({ items: [draft, current, revision(81, 'replaced')] });
+    const wrapper = await mountWorkspace();
+    expect(wrapper.findAll('article')).toHaveLength(2);
+    expect(wrapper.find('[data-testid="previous-versions-83"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="previous-versions-82"]').text()).toContain('Д-2026-81');
+
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({ items: [revision(83, 'issued', 82), revision(82, 'replaced', 81), revision(81, 'replaced')] });
+    vi.mocked(ManagerDocumentSystemService.issueManagerManagedDocument).mockResolvedValue(revision(83, 'issued', 82));
+    await wrapper.get('[data-testid="current-document-83"]').findAll('button').find((button) => button.text() === 'Выпустить')!.trigger('click');
+    await flushPromises();
+    expect(wrapper.findAll('article')).toHaveLength(1);
+    expect(wrapper.get('[data-testid="previous-versions-83"] summary').text()).toBe('Предыдущие версии (2)');
+  });
+
+  it('retains cancelled documents without an active successor in a collapsed order history', async () => {
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({ items: [revision(81, 'void'), revision(82, 'replaced', 999)] });
+    const wrapper = await mountWorkspace();
+    expect(wrapper.findAll('article')).toHaveLength(0);
+    const history = wrapper.get('[data-testid="native-document-history"]');
+    expect(history.get('summary').text()).toBe('История документов (2)');
+    expect(history.attributes('open')).toBeUndefined();
+    expect(history.findAll('li')).toHaveLength(2);
+    expect(wrapper.text()).not.toContain('Внутренних документов пока нет');
+  });
+
+  it('retains historical files and emits their original IDs for download without mutation actions', async () => {
+    const previous = {
+      ...revision(81, 'replaced'),
+      artifacts: ['pdf', 'rendered_docx', 'source_docx'].map((kind) => ({
+        id: `file-${kind}`, order_document_id: 81, kind, content_type: 'application/octet-stream',
+        filename: `${kind}.file`, checksum_sha256: 'a'.repeat(64), size_bytes: 100, created_at: NOW,
+      })),
+    };
+    const wrapper = mount(DocumentVersionHistory, { props: { documents: [previous] } });
+    wrappers.push(wrapper);
+    const details = wrapper.get('details').element as HTMLDetailsElement;
+    details.open = true;
+    await wrapper.get('details').trigger('toggle');
+    const buttons = wrapper.findAll('button');
+    expect(buttons.map((button) => button.text().replace('download', '').trim())).toEqual(['PDF', 'DOCX', 'Исходный DOCX']);
+    await buttons[0]!.trigger('click');
+    expect(wrapper.emitted('download')).toEqual([['file-pdf', 'pdf.file']]);
+  });
+
+  it('does not lose historical documents when saved links are missing or cyclic', () => {
+    const grouped = groupDocumentVersions([revision(83, 'issued', 82), revision(82, 'replaced', 81), revision(81, 'void', 82), revision(80, 'void', 999)]);
+    expect(grouped.current[0]!.previousVersions.map((item) => item.id)).toEqual([82, 81]);
+    expect(grouped.archived.map((item) => item.id)).toEqual([80]);
   });
 
   it('waits for the order-save barrier before creating a native draft', async () => {

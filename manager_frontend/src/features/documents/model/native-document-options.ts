@@ -47,6 +47,10 @@ export const managedDocumentStatus = (value: string) => ({
   replaced: 'Заменён',
 }[value] || value);
 
+export const documentArtifactName = (kind: string) => ({
+  pdf: 'PDF', rendered_docx: 'DOCX', source_docx: 'Исходный DOCX', signed_pdf: 'PDF с подписью и печатью',
+}[kind] || kind);
+
 export const managedDocumentStatusClass = (value: string) => ({
   draft: 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300',
   issued: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300',
