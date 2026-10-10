@@ -17,6 +17,7 @@ class CatalogDecisionOrderLineService:
         proposal_id: int,
         product_ids: list[int],
         snapshots: dict[int, CatalogDecisionProductSnapshot],
+        quantities: dict[int, int] | None = None,
     ) -> None:
         for product_id in product_ids:
             snapshot = snapshots[product_id]
@@ -25,7 +26,7 @@ class CatalogDecisionOrderLineService:
                     order_id=order_id,
                     proposal_id=proposal_id,
                     product_id=product_id,
-                    quantity=1,
+                    quantity=(quantities or {}).get(product_id, 1),
                     price=snapshot.retail_price_byn,
                     cost=snapshot.purchase_cost_byn,
                     title_snapshot=snapshot.product.title,

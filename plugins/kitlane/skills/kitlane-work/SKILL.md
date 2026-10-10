@@ -1,11 +1,57 @@
 ---
 name: kitlane-work
-description: Save customer requests, manage personal tasks, read equipment and maintenance findings, and explicitly prepare maintenance drafts through connected Kitlane tools. Use for Kitlane work from text, voice transcripts, messages or images.
+description: Select catalog equipment with copy-ready messenger alternatives, prepare business quote/invoice drafts, save customer requests, manage tasks and maintenance through connected Kitlane tools. Use for Kitlane work from text, voice transcripts, messages or images.
 ---
 
 Use the connected Kitlane MCP tools for the user's requested action. The backend
 determines the authenticated person, company, workspace and permissions; never
 ask for an actor or tenant ID as a tool argument.
+
+For an equipment recommendation, use `select_catalog_products` with the stated
+capacity or room area, quantity, inverter, heating temperature and Wi-Fi needs.
+Do not use the public website as a substitute for available catalog tools.
+If size is unknown, ask for room area or capacity. If the budget basis is unclear
+and quantity is greater than one, ask whether it applies per unit or to the whole
+equipment set; do not assume installation is included. Keep all stated hard
+requirements. If no options match, report that and ask which constraint the user
+is willing to change; never silently raise the budget or weaken heating needs.
+
+Without a budget, present the returned lower, middle and upper price alternatives.
+With a budget, present the available alternatives from different brands (three
+when possible, two or one when fewer match). Use the returned reason and known
+facts to explain differences; a higher price alone is not proof of premium quality
+or reliability. Wi-Fi readiness is not built-in Wi-Fi; low-temperature operation
+does not guarantee heat output at that temperature. If asked about a specific
+model, use `get_catalog_product` to verify the current price and public facts.
+
+For a private customer, return `message_text` as one finished copy-ready message
+for WhatsApp, Viber or Telegram, retaining plain website URLs, model/series,
+current BYN equipment price, quantity and basic characteristics. In hosts supporting
+writing blocks, use one chat_message block; otherwise return the plain text.
+Keep alternatives separate and never add their prices into a purchase total.
+Installation is separate unless actual agreed installation prices are obtained
+through their own supported workflow. Unknown stock is on request; do not promise
+delivery dates from catalog availability. No messaging action is implicit.
+
+For a company or entrepreneur, the final business artifact is a native quote
+(`offer`) or invoice (`invoice`) draft. Confirm the CRM customer/order and selected
+products/quantities; read the customer and order rather than assuming party type.
+Use `list_catalog_document_issuers` to select a confirmed issuer. For an invoice,
+confirm the chosen alternative; competing options must not become purchased lines.
+Call `prepare_catalog_document` only on an explicit document preparation request,
+with an existing negotiation order, its customer, issuer, issue date and the latest
+returned unit prices as expected prices. If there is no order, direct the user to
+create/select it in Manager; this tool does not create customers or orders.
+If several alternatives need formal quotes, prepare each explicitly requested
+variant separately with its own key. The backend preserves existing proposals,
+customer party type and documents; a new proposal is left unselected. Return the
+saved document/proposal IDs and Manager link and call the result a draft. A draft
+does not have an issued invoice number and is not sent, signed or payable as an
+issued document. Final review and issuance use the normal Manager workflow.
+If catalog prices changed, refresh the selection and confirm the updated amount.
+Missing requisites or templates require correction in Manager; never bypass
+document readiness. Separate `kitlane:catalog:write` consent is required; existing
+incoming/task/maintenance grants are not expanded automatically.
 
 For an incoming request, preserve the source text in `request_text`. Extract
 only supported facts into name, phone, email, region, address and requested time.

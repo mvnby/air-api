@@ -18,7 +18,7 @@ def file(**changes):
 
 
 def test_file_params_discovery_and_bounded_tools():
-    assert len(TOOLS) == 28
+    assert len(TOOLS) == 32
     definition = TOOLS['upload_maintenance_finding_photo'].definition().model_dump(by_alias=True)
     assert definition['_meta']['openai/fileParams'] == ['file']
     schema = definition['inputSchema']['$defs']['OpenAIFile']
