@@ -101,6 +101,8 @@ from .service_asset import (
     WarrantyPolicySeriesLink,
 )
 from .staff import StaffUser
+from .incoming_mail import IncomingMail, IncomingMailAttachment
+from .mail_workspace import MailAttachmentSnapshot
 from .storage_maintenance import StorageReconciliationCursor
 from .belzakupki import BelzakupkiImportCheckpoint
 from .tender_workflow import TenderWorkflowContext, TenderWorkflowLink
@@ -276,6 +278,9 @@ __all__ = [
     "OrderStatus",
     "OrderWorkStage",
     "OutgoingEmail",
+    "IncomingMail",
+    "IncomingMailAttachment",
+    "MailAttachmentSnapshot",
     "PaymentCurrency",
     "Product",
     "ProductCollection",

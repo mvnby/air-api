@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
+from core.command_actor import CommandActor, get_command_idempotency_key
 from core.manager_api_errors import manager_http_error
 from core.security import AuthenticatedUser, require_manager_access
 from routers.manager_operation_ids import (
@@ -22,6 +23,9 @@ from services.mail_smtp_service import (
     PartnerTenantSmtpUnavailableError,
 )
 from services.order_email_template_service import OrderEmailTemplateService
+from schemas_mail import MailMessageResponse
+from schemas_order_mail import MailOrderDraftPayload
+from services.order_mail_delivery_service import OrderMailDeliveryService
 
 
 router = APIRouter(
@@ -30,6 +34,29 @@ router = APIRouter(
     dependencies=[Depends(require_manager_access)],
     route_class=ManagerPermissionRoute,
 )
+
+
+@router.post("/orders/{order_id}/email/draft", response_model=MailMessageResponse,
+             status_code=201, operation_id="create_manager_native_order_mail_draft")
+async def create_native_order_mail_draft(order_id: int, payload: MailOrderDraftPayload,
+                                         session: AsyncSession = Depends(get_session),
+                                         auth: AuthenticatedUser = Depends(require_manager_access),
+                                         idempotency_key: str = Depends(get_command_idempotency_key)):
+    """Save an incomplete draft with immutable private native/legacy document bytes from an
+    accessible order. Requires live Manager access and Idempotency-Key; company/account,
+    order, issuer and selected files are checked before receipt replay. Native files must
+    be issued; at most 10 files, 10 MiB each and 20 MiB total. Does not send or change
+    document delivery state. The returned mail ID/version and Manager link lead to full
+    preview and separate exact-version approval.
+    """
+    from routers.manager_mail_workspace import ERRORS, _http_error
+
+    try:
+        result = await OrderMailDeliveryService.create_draft(session, actor=CommandActor.from_auth(auth),
+            order_id=order_id, payload=payload, idempotency_key=idempotency_key)
+        return result.value
+    except ERRORS as exc:
+        raise _http_error(exc) from exc
 
 
 @router.post(
@@ -80,14 +107,18 @@ async def send_native_order_email(
     payload: OrderEmailSendPayload,
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ) -> OutgoingEmailResponse:
     """
     Send an email for an accessible order with selected native/legacy document attachments,
     recording outgoing-email state and document delivery. Manager access is required;
     current SMTP sending supports the system tenant only (409
     tenant_email_sender_not_configured for partner tenants). Invalid selection/content
-    returns 400 and send failure 502. No caller idempotency receipt is provided: inspect
-    outgoing-email history before repeating a lost send response. See the [document
+    returns 400 and send failure 502. This compatibility action uses the shared saved
+    content/file snapshot and send fence. Optional Idempotency-Key must be reused with an
+    unchanged request; without it a new request may create a new draft. Uncertain SMTP
+    outcomes remain unknown in outgoing history and require checking before another send.
+    Manager UI uses the separate draft and full-preview flow. See the [document
     lifecycle
     contract](https://github.com/mvnby/air-api/blob/main/docs/document-module-architecture.md).
 
@@ -117,6 +148,8 @@ async def send_native_order_email(
             document_ids=payload.document_ids,
             registration_certificate_id=payload.registration_certificate_id,
             legal_entity_id=payload.legal_entity_id,
+            actor=CommandActor.from_auth(auth),
+            idempotency_key=idempotency_key,
         )
     except PartnerTenantSmtpUnavailableError as exc:
         raise _email_error(

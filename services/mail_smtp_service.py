@@ -1,4 +1,7 @@
 import smtplib
+import asyncio
+import hashlib
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from email.message import EmailMessage
@@ -32,6 +35,10 @@ class MailAttachment:
 
 class PartnerTenantSmtpUnavailableError(RuntimeError):
     """Global MVN SMTP must never impersonate a partner tenant."""
+
+
+class SmtpPartialAcceptanceError(RuntimeError):
+    """Some recipients were accepted: a whole-message retry could duplicate mail."""
 
 
 MAX_ORDER_EMAIL_DOCUMENTS = 10
@@ -98,14 +105,18 @@ class MailSmtpService:
                 settings.MAIL_SMTP_HOST, settings.MAIL_SMTP_PORT, timeout=30
             ) as smtp:
                 smtp.login(settings.MAIL_SMTP_USERNAME, settings.MAIL_SMTP_PASSWORD)
-                smtp.send_message(message)
+                refused = smtp.send_message(message)
+                if refused:
+                    raise SmtpPartialAcceptanceError("Почтовый сервер принял письмо только для части адресатов")
         else:
             with smtplib.SMTP(
                 settings.MAIL_SMTP_HOST, settings.MAIL_SMTP_PORT, timeout=30
             ) as smtp:
                 smtp.starttls()
                 smtp.login(settings.MAIL_SMTP_USERNAME, settings.MAIL_SMTP_PASSWORD)
-                smtp.send_message(message)
+                refused = smtp.send_message(message)
+                if refused:
+                    raise SmtpPartialAcceptanceError("Почтовый сервер принял письмо только для части адресатов")
 
     @staticmethod
     async def send_and_record(
@@ -119,7 +130,31 @@ class MailSmtpService:
         order_id: Optional[int] = None,
         customer_id: Optional[int] = None,
         attachments: Optional[List[MailAttachment]] = None,
+        actor=None,
+        idempotency_key: str | None = None,
     ) -> OutgoingEmail:
+        if actor is not None:
+            from schemas_mail import MailConfirmPayload, MailVersionPayload
+            from services.mail_workspace_service import MailWorkspaceService
+
+            # Legacy explicit Manager send actions share the saved snapshot and
+            # transport. MCP cannot call these Manager-authenticated adapters.
+            key = hashlib.sha256((idempotency_key or uuid.uuid4().hex).encode()).hexdigest()
+            created = await MailWorkspaceService.create_legacy_draft(
+                session, actor=actor, idempotency_key=f"legacy-create-{key}",
+                to_email=to_email, subject=subject, body_text=body_text, body_html=body_html,
+                reply_to=reply_to, order_id=order_id, customer_id=customer_id, attachments=attachments,
+            )
+            saved = await MailWorkspaceService.preview(session, actor=actor, draft_id=created.value.id)
+            if saved.status == "draft":
+                await MailWorkspaceService.confirm(session, actor=actor, draft_id=saved.id,
+                    payload=MailConfirmPayload(expected_version=saved.version, content_hash=saved.content_hash),
+                    idempotency_key=f"legacy-confirm-{key}")
+            result = await MailWorkspaceService.send(session, actor=actor, draft_id=saved.id,
+                payload=MailVersionPayload(expected_version=saved.version), idempotency_key=f"legacy-send-{key}")
+            if result.value.status != "sent":
+                raise RuntimeError(result.value.error or "Не удалось подтвердить принятие письма почтовым сервером")
+            return await session.get(OutgoingEmail, saved.id)
         attachment_meta: List[Dict[str, Any]] = []
         for item in attachments or []:
             attachment_meta.append(
@@ -154,7 +189,7 @@ class MailSmtpService:
                 reply_to=reply_to,
                 attachments=attachments,
             )
-            MailSmtpService.send_message(message)
+            await asyncio.to_thread(MailSmtpService.send_message, message)
         except Exception as exc:
             row.status = "failed"
             row.error = MailSmtpService._sanitize_error(exc)
@@ -171,20 +206,11 @@ class MailSmtpService:
         return row
 
     @staticmethod
-    async def send_order_email(
-        session: AsyncSession,
-        *,
-        tenant_scope: TenantScope,
-        order_id: int,
-        to_email: str,
-        subject: str,
-        body_text: Optional[str] = None,
-        body_html: Optional[str] = None,
-        reply_to: Optional[str] = None,
+    async def prepare_order_attachments(
+        session: AsyncSession, *, tenant_scope: TenantScope, order_id: int,
         document_ids: Optional[List[int]] = None,
-        registration_certificate_id: str | None = None,
-        legal_entity_id: int | None = None,
-    ) -> OutgoingEmail:
+        registration_certificate_id: str | None = None, legal_entity_id: int | None = None,
+    ):
         if not tenant_scope.is_system:
             raise PartnerTenantSmtpUnavailableError(
                 "Отправка через почту «Мастер Воздуха» недоступна партнерскому аккаунту"
@@ -208,10 +234,6 @@ class MailSmtpService:
             raise ValueError("Order not found")
 
         attachments: List[MailAttachment] = []
-        has_offer_document = False
-        offer_proposal_ids: set[int] = set()
-        sent_document_types: set[str] = set()
-        native_document_ids: list[int] = []
         total_attachment_bytes = 0
         selected_documents = []
         for doc_id in normalized_document_ids:
@@ -226,12 +248,6 @@ class MailSmtpService:
             if DocumentService._is_native_managed_document(doc):
                 if doc.status not in {"issued", "sent", "signed"}:
                     raise ValueError(f"Document {doc_id} must be issued before sending")
-                native_document_ids.append(int(doc.id))
-            sent_document_types.add(doc.doc_type)
-            if doc.doc_type == "offer":
-                has_offer_document = True
-                if doc.proposal_id is not None:
-                    offer_proposal_ids.add(doc.proposal_id)
             stream, filename = await DocumentService.get_download_stream(
                 session,
                 doc_id,
@@ -254,6 +270,9 @@ class MailSmtpService:
                         "document_id": int(doc_id),
                         "document_type": doc.doc_type,
                         "document_number": doc.number,
+                        "proposal_id": doc.proposal_id,
+                        "snapshot_version": doc.snapshot_version,
+                        "native": DocumentService._is_native_managed_document(doc),
                     },
                 )
             )
@@ -293,6 +312,29 @@ class MailSmtpService:
                 )
             )
 
+        return order, attachments
+
+    @staticmethod
+    async def send_order_email(
+        session: AsyncSession,
+        *,
+        tenant_scope: TenantScope,
+        order_id: int,
+        to_email: str,
+        subject: str,
+        body_text: Optional[str] = None,
+        body_html: Optional[str] = None,
+        reply_to: Optional[str] = None,
+        document_ids: Optional[List[int]] = None,
+        registration_certificate_id: str | None = None,
+        legal_entity_id: int | None = None,
+        actor=None,
+        idempotency_key: str | None = None,
+    ) -> OutgoingEmail:
+        order, attachments = await MailSmtpService.prepare_order_attachments(
+            session, tenant_scope=tenant_scope, order_id=order_id, document_ids=document_ids,
+            registration_certificate_id=registration_certificate_id, legal_entity_id=legal_entity_id,
+        )
         email_row = await MailSmtpService.send_and_record(
             session,
             to_email=to_email,
@@ -303,7 +345,25 @@ class MailSmtpService:
             order_id=order_id,
             customer_id=order.customer_id,
             attachments=attachments,
+            actor=actor,
+            idempotency_key=idempotency_key,
         )
+        await MailSmtpService.apply_order_delivery(
+            session, tenant_scope=tenant_scope, order=order, attachments=attachments, email_row=email_row,
+        )
+        return email_row
+
+    @staticmethod
+    async def apply_order_delivery(session, *, tenant_scope, order, attachments, email_row):
+        """Project accepted mail onto the existing order/document lifecycle."""
+        order_id = order.id
+        document_metadata = [item.metadata or {} for item in attachments]
+        sent_document_types = {item["document_type"] for item in document_metadata if item.get("document_id")}
+        has_offer_document = "offer" in sent_document_types
+        offer_proposal_ids = {item["proposal_id"] for item in document_metadata
+                              if item.get("document_type") == "offer" and item.get("proposal_id")}
+        native_document_ids = [item["document_id"] for item in document_metadata
+                               if item.get("document_id") and item.get("native")]
         sent_at = email_row.sent_at or datetime.now()
         if has_offer_document:
             if offer_proposal_ids:
@@ -365,4 +425,3 @@ class MailSmtpService:
         elif sent_document_types:
             await session.commit()
             await session.refresh(email_row)
-        return email_row

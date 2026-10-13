@@ -43,6 +43,7 @@ export const requiredCapabilityForManagerPath = (path: string): ManagerCapabilit
     || path.startsWith('/manager/calendar')
     || path.startsWith('/manager/customers')
     || path.startsWith('/manager/equipment')
+    || path.startsWith('/manager/mail')
   ) return MANAGER_CAPABILITY.crmManage;
   if (/^\/manager\/products\/\d+(?:\/|$)/.test(path)) {
     return MANAGER_CAPABILITY.platformManage;

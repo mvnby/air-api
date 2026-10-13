@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.command_actor import CommandActor
 from core.database import get_session
-from services.connector_auth_policy import ConnectorAuthError, issuer, resource
+from services.connector_auth_policy import SCOPES, ConnectorAuthError, issuer, resource
 from services.connector_auth_service import ConnectorAuthService
 
 
@@ -45,11 +45,7 @@ def connector_resource_metadata() -> dict:
     return {
         "resource": resource(),
         "authorization_servers": [issuer()],
-        "scopes_supported": [
-            "kitlane:read",
-            "kitlane:incoming:write",
-            "kitlane:tasks:write",
-        ],
+        "scopes_supported": sorted(SCOPES),
         "bearer_methods_supported": ["header"],
         "resource_name": "Kitlane",
     }

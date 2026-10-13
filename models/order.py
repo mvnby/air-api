@@ -901,8 +901,30 @@ class BankReceipt(SQLModel, table=True):
 
 class OutgoingEmail(SQLModel, table=True):
     __tablename__ = "outgoing_email"
+    __table_args__ = (
+        ForeignKeyConstraint(["tenant_id"], ["tenant.id"], name="fk_outgoing_email_tenant_id"),
+        ForeignKeyConstraint(["storefront_id"], ["storefront.id"], name="fk_outgoing_email_storefront_id"),
+        ForeignKeyConstraint(["created_by_staff_user_id"], ["staff_users.id"], name="fk_outgoing_email_created_by_staff_user_id"),
+        ForeignKeyConstraint(["sent_by_staff_user_id"], ["staff_users.id"], name="fk_outgoing_email_sent_by_staff_user_id"),
+        ForeignKeyConstraint(["confirmed_by_staff_user_id"], ["staff_users.id"], name="fk_outgoing_email_confirmed_by_staff_user_id"),
+    )
 
     id: Optional[int] = Field(default=None, primary_key=True)
+    # Nullable only for pre-workspace history. Legacy rows remain system-owned.
+    tenant_id: Optional[int] = Field(default=None, index=True)
+    storefront_id: Optional[int] = Field(default=None, index=True)
+    account_id: str = Field(default="system", sa_column=Column(String(64), nullable=False, server_default="system"))
+    version: int = Field(default=1, sa_column=Column(Integer, nullable=False, server_default="1"))
+    cc_emails: List[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False, server_default=text("'[]'")))
+    bcc_emails: List[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False, server_default=text("'[]'")))
+    created_by_staff_user_id: Optional[int] = Field(default=None)
+    sent_by_staff_user_id: Optional[int] = Field(default=None)
+    confirmed_version: Optional[int] = None
+    confirmed_hash: Optional[str] = None
+    confirmed_by_staff_user_id: Optional[int] = Field(default=None)
+    confirmed_at: Optional[datetime] = None
+    send_started_at: Optional[datetime] = None
+    send_token: Optional[str] = None
     status: str = Field(default="pending", sa_column=Column(String, index=True))
     retry_of_email_id: Optional[int] = Field(
         default=None, foreign_key="outgoing_email.id", index=True

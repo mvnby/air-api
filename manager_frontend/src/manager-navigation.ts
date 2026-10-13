@@ -106,7 +106,7 @@ export const navSections: NavSection[] = [
     id: 'mail',
     label: 'Почта',
     items: [
-      { path: '/manager/mail/outbox', label: 'Исходящие', icon: Mail, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.platformManage },
+      { path: '/manager/mail', label: 'Почта', icon: Mail, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.crmManage },
     ],
   },
   {

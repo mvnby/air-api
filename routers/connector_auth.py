@@ -207,6 +207,9 @@ async def authorize(request: Request, session: AsyncSession = Depends(get_sessio
         "kitlane:maintenance:write": "Сохранять замечания и фото ТО, готовить черновики актов и предложений",
         "kitlane:catalog:write": "Сохранять выбранное оборудование в отдельный вариант заказа и готовить черновики КП и счетов",
         "kitlane:tasks:write": "Создавать и завершать поручения",
+        "kitlane:mail:read": "Читать доступную почту, черновики и вложения вашей компании",
+        "kitlane:mail:drafts:write": "Создавать, изменять и удалять почтовые черновики и их вложения",
+        "kitlane:mail:send": "Отправлять сохранённые письма после отдельного подтверждения актуальной версии в Manager",
     }
     capabilities = "".join(
         f"<li>{html.escape(labels[scope])}</li>" for scope in pending.scopes

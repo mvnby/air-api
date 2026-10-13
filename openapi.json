@@ -16166,6 +16166,73 @@
         ]
       }
     },
+    "/api/manager/document-system/orders/{order_id}/email/draft": {
+      "post": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Create Native Order Mail Draft",
+        "description": "Save an incomplete draft with immutable private native/legacy document bytes from an\naccessible order. Requires live Manager access and Idempotency-Key; company/account,\norder, issuer and selected files are checked before receipt replay. Native files must\nbe issued; at most 10 files, 10 MiB each and 20 MiB total. Does not send or change\ndocument delivery state. The returned mail ID/version and Manager link lead to full\npreview and separate exact-version approval.",
+        "operationId": "create_manager_native_order_mail_draft",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MailOrderDraftPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailMessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/document-system/orders/{order_id}/email/compose": {
       "post": {
         "tags": [
@@ -16230,7 +16297,7 @@
           "manager-document-system"
         ],
         "summary": "Send Native Order Email",
-        "description": "Send an email for an accessible order with selected native/legacy document attachments,\nrecording outgoing-email state and document delivery. Manager access is required;\ncurrent SMTP sending supports the system tenant only (409\ntenant_email_sender_not_configured for partner tenants). Invalid selection/content\nreturns 400 and send failure 502. No caller idempotency receipt is provided: inspect\noutgoing-email history before repeating a lost send response. See the [document\nlifecycle\ncontract](https://github.com/mvnby/air-api/blob/main/docs/document-module-architecture.md).\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Send an email for an accessible order with selected native/legacy document attachments,\nrecording outgoing-email state and document delivery. Manager access is required;\ncurrent SMTP sending supports the system tenant only (409\ntenant_email_sender_not_configured for partner tenants). Invalid selection/content\nreturns 400 and send failure 502. This compatibility action uses the shared saved\ncontent/file snapshot and send fence. Optional Idempotency-Key must be reused with an\nunchanged request; without it a new request may create a new draft. Uncertain SMTP\noutcomes remain unknown in outgoing history and require checking before another send.\nManager UI uses the separate draft and full-preview flow. See the [document\nlifecycle\ncontract](https://github.com/mvnby/air-api/blob/main/docs/document-module-architecture.md).\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "send_manager_native_order_email",
         "security": [
           {
@@ -16245,6 +16312,22 @@
             "schema": {
               "type": "integer",
               "title": "Order Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
             }
           }
         ],
@@ -23792,6 +23875,73 @@
         }
       }
     },
+    "/api/manager/mail/orders/{order_id}/draft": {
+      "post": {
+        "tags": [
+          "manager/mail"
+        ],
+        "summary": "Create Order Mail Draft",
+        "description": "Save an incomplete draft with immutable private document bytes from an accessible\nsystem-company order. Requires live Manager access and Idempotency-Key; checks the\ncurrent order, issuer and selected document access before receipt replay. At most 10\nfiles, 10 MiB each and 20 MiB total. Does not send or mark documents sent. The returned\nmail ID/version and Manager link lead to full preview and exact-version approval.",
+        "operationId": "create_manager_order_mail_draft",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MailOrderDraftPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailMessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/mail/bank-receipts/import": {
       "post": {
         "tags": [
@@ -24430,7 +24580,7 @@
           "manager/mail"
         ],
         "summary": "List Manager Outgoing Emails",
-        "description": "Page the platform outgoing-email journal with status/order/customer/recipient/text/date\nfilters and limit at most 100. Includes attempts and delivery/error metadata;\nunsupported status or service failure returns 400. Reading does not send or retry\nmessages. Requires system-tenant Manager access. These are platform mail/receipt\nrecords, not a current-storefront-only journal.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Page the platform outgoing-email journal with status/order/customer/recipient/text/date\nfilters and limit at most 100. Includes attempts and delivery/error metadata;\nunsupported status or service failure returns 400. Reading does not send or retry\nmessages. Requires system-tenant Manager access. Mail is limited to the current\ncompany and accessible order/customer context; unrelated companies are excluded.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "list_manager_outgoing_emails",
         "security": [
           {
@@ -24606,7 +24756,7 @@
           "manager/mail"
         ],
         "summary": "Get Manager Outgoing Email",
-        "description": "Read a platform outgoing-email record including stored content/attachment metadata and\nits retry attempts. Missing record or any detail-loading failure is mapped to 404 by\nthis route. Reading is not a delivery confirmation from the recipient\u2019s mailbox and does\nnot retry. Requires system-tenant Manager access. These are platform mail/receipt\nrecords, not a current-storefront-only journal.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Read a platform outgoing-email record including stored content/attachment metadata and\nits retry attempts. Missing record or any detail-loading failure is mapped to 404 by\nthis route. Reading is not a delivery confirmation from the recipient\u2019s mailbox and does\nnot retry. Requires system-tenant Manager access and accessible company/order/customer\ncontext. Sent means SMTP acceptance, not recipient delivery.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "get_manager_outgoing_email",
         "security": [
           {
@@ -24654,7 +24804,7 @@
           "manager/mail"
         ],
         "summary": "List Manager Order Outgoing Emails",
-        "description": "Read the first page of platform outgoing-email history filtered by order ID, with limit\nat most 100. This journal lookup does not perform the tenant/storefront order\nauthorization used by compose/send. Service failure returns 400; an order without\nrecords can return an empty list. Requires system-tenant Manager access. These are\nplatform mail/receipt records, not a current-storefront-only journal.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Read the first page of platform outgoing-email history filtered by order ID, with limit\nat most 100. The linked order must be accessible in the current company/storefront.\nService failure returns 400; an accessible order without records returns an empty\nlist. Requires system-tenant Manager access.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "list_manager_order_outgoing_emails",
         "security": [
           {
@@ -24714,7 +24864,7 @@
           "manager/mail"
         ],
         "summary": "Retry Manager Outgoing Email",
-        "description": "Create a new linked attempt for a failed platform outgoing email using its stored\nrecipient/body; only failed originals are accepted (400 otherwise). Messages with\nattachments cannot be reconstructed by this action: a failed attempt is recorded and\ndocuments must be sent again from the order. SMTP failure can return HTTP success with\nstatus=failed; inspect status/error. No caller replay receipt prevents another attempt.\nRequires system-tenant Manager access. These are platform mail/receipt records, not a\ncurrent-storefront-only journal.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "For new saved-version mail, create a linked draft with identical private files for\nexplicit review in Manager; this action does not send it. Old metadata-only attachments\ncannot be reconstructed and return a recorded failure. The legacy text-only path keeps\nan accepted/in-progress/unknown attempt fence; an uncertain SMTP result is unknown and\nnever silently retried. Only failed originals and accessible company/order/customer\ncontext are accepted. Inspect status/error even on HTTP success.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "retry_manager_outgoing_email",
         "security": [
           {
@@ -24762,17 +24912,40 @@
           "manager/mail"
         ],
         "summary": "Send Manager Test Email",
-        "description": "Send a real message through the configured system SMTP and record the attempt in the\nplatform journal. This is not a dry run despite the test route name. Invalid\nconfiguration/content or SMTP failure returns 400; a failed recorded attempt may already\nexist. No replay receipt is supplied, so inspect the journal before retrying an\nuncertain result. Requires system-tenant Manager access. These are platform mail/receipt\nrecords, not a current-storefront-only journal.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Send a real message through the configured system SMTP and record the attempt in the\nplatform journal. This is not a dry run despite the test route name. Invalid\nconfiguration/content or SMTP failure returns 400; a failed recorded attempt may already\nexist. Uses the shared saved draft/snapshot engine; supply Idempotency-Key for safe\nrequest replay and inspect history on an uncertain result. Requires system-tenant\nManager access. The name does not authorize an unrequested live mail test.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "send_manager_test_email",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/OutgoingEmailSendPayload"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -24795,12 +24968,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/manager/mail/orders/{order_id}/compose": {
@@ -24867,7 +25035,7 @@
           "manager/mail"
         ],
         "summary": "Send Manager Order Email",
-        "description": "Send email with selected documents from an order accessible in the current system\ntenant/storefront and record outgoing history. Requires system-tenant Manager access. At\nmost 10 documents, 10 MB per PDF and 20 MB total; native documents must be issued.\nSuccess can mark native documents/proposals sent and advance negotiation substatus for\noffer/invoice/contract. Invalid context/content or SMTP failure returns 400. No caller\nreplay receipt is supplied: inspect history before repeating an uncertain send.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Send email with selected documents from an order accessible in the current system\ntenant/storefront and record outgoing history. Requires system-tenant Manager access. At\nmost 10 documents, 10 MB per PDF and 20 MB total; native documents must be issued.\nSuccess can mark native documents/proposals sent and advance negotiation substatus for\noffer/invoice/contract. This compatibility action uses the shared saved snapshot and\nsend fence; Idempotency-Key is optional, and unchanged retries must preserve it.\nWithout a key, another explicit request may create a new draft. HTML is converted to\nreviewable plain text and private file bytes are frozen. Invalid context/content or\nSMTP failure returns 400; an uncertain SMTP result remains in history as unknown and\nmust be checked before any new send. Manager UI uses the separate draft/preview flow.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "send_manager_order_email",
         "security": [
           {
@@ -24882,6 +25050,22 @@
             "schema": {
               "type": "integer",
               "title": "Order Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
             }
           }
         ],
@@ -34783,6 +34967,1015 @@
           }
         }
       }
+    },
+    "/api/manager/mail/accounts": {
+      "get": {
+        "tags": [
+          "manager-mail-workspace"
+        ],
+        "summary": "Mail Accounts",
+        "description": "List configured mail accounts available to the current company and live staff identity. Partner companies never borrow the platform SMTP account. No credentials are returned.",
+        "operationId": "list_manager_mail_accounts",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailAccountListResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/mail/messages": {
+      "get": {
+        "tags": [
+          "manager-mail-workspace"
+        ],
+        "summary": "Mail Messages",
+        "description": "Search saved company mail in inbox, outbox or drafts; pagination is capped at 100. Linked order/customer filters require access. Inbox IDs are negative to keep one opaque message namespace.",
+        "operationId": "list_manager_mail_messages",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "folder",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(inbox|outbox|drafts)$",
+              "default": "outbox",
+              "title": "Folder"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 500
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "order_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "customer_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Customer Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailMessageListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/mail/messages/{message_id}": {
+      "get": {
+        "tags": [
+          "manager-mail-workspace"
+        ],
+        "summary": "Mail Message",
+        "description": "Read saved company mail with private attachment download references. Sent/failed/unknown history is immutable; unknown does not authorize a retry. A stale interrupted send is marked unknown.",
+        "operationId": "get_manager_mail_message",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Message Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailMessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/mail/drafts": {
+      "post": {
+        "tags": [
+          "manager-mail-workspace"
+        ],
+        "summary": "Create Mail Draft",
+        "description": "Persist an incomplete draft without sending. Order/customer and recipient are optional. Requires a configured account, live staff membership and Idempotency-Key; replay returns the stored result.",
+        "operationId": "create_manager_mail_draft",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MailDraftCreatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailMessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/mail/drafts/{draft_id}": {
+      "get": {
+        "tags": [
+          "manager-mail-workspace"
+        ],
+        "summary": "Get Mail Draft",
+        "description": "Read the current server-saved outgoing message version. Access requires live staff membership and available linked objects.",
+        "operationId": "get_manager_mail_draft",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Draft Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailMessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "manager-mail-workspace"
+        ],
+        "summary": "Patch Mail Draft",
+        "description": "Save supplied fields of a draft using expected_version and Idempotency-Key. A conflicting edit returns 409/current_version. Every edit invalidates approval; sent history cannot be edited.",
+        "operationId": "patch_manager_mail_draft",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Draft Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MailDraftUpdatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailMessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "manager-mail-workspace"
+        ],
+        "summary": "Delete Mail Draft",
+        "description": "Delete only the current draft and its private files. Requires expected_version and Idempotency-Key. History of sending, sent, failed or unknown messages cannot be deleted.",
+        "operationId": "delete_manager_mail_draft",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Draft Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MailVersionPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailMessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/mail/messages/{message_id}/copy": {
+      "post": {
+        "tags": [
+          "manager-mail-workspace"
+        ],
+        "summary": "Copy Mail Message",
+        "description": "Create a new editable draft using the exact stored files of a sent or definitively failed message. Unknown/pending/sending messages and legacy metadata-only attachments require manual verification instead of blind resend.",
+        "operationId": "copy_manager_mail_message",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Message Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MailVersionPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailMessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/mail/drafts/{draft_id}/attachments": {
+      "post": {
+        "tags": [
+          "manager-mail-workspace"
+        ],
+        "summary": "Upload Mail Attachment",
+        "description": "Save private file bytes on the current draft without sending. At most 10 files, 10 MiB each and 20 MiB total; upload increments version and invalidates approval. Requires Idempotency-Key.",
+        "operationId": "upload_manager_mail_draft_attachment",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Draft Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_manager_mail_draft_attachment"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailMessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/mail/drafts/{draft_id}/attachments/{attachment_id}": {
+      "get": {
+        "tags": [
+          "manager-mail-workspace"
+        ],
+        "summary": "Download Mail Attachment",
+        "description": "Download private immutable attachment bytes after company and message/link checks. Returns no-store/nosniff with attachment disposition; public object paths are never exposed.",
+        "operationId": "download_manager_mail_attachment",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Draft Id"
+            }
+          },
+          {
+            "name": "attachment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Attachment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "manager-mail-workspace"
+        ],
+        "summary": "Delete Mail Attachment",
+        "description": "Remove a private file only from the current draft, incrementing version and invalidating approval. Requires expected_version and Idempotency-Key; sent files stay immutable.",
+        "operationId": "delete_manager_mail_draft_attachment",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Draft Id"
+            }
+          },
+          {
+            "name": "attachment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Attachment Id"
+            }
+          },
+          {
+            "name": "expected_version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Expected Version"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailMessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/mail/drafts/{draft_id}/preview": {
+      "get": {
+        "tags": [
+          "manager-mail-workspace"
+        ],
+        "summary": "Preview Mail Draft",
+        "description": "Return the full saved sender, all recipients, text, private files and content hash for Manager review. A short-lived CSRF token is bound to this Manager credential; MCP never receives approval authority.",
+        "operationId": "preview_manager_mail_draft",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Draft Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailMessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/mail/drafts/{draft_id}/confirm": {
+      "post": {
+        "tags": [
+          "manager-mail-workspace"
+        ],
+        "summary": "Confirm Mail Draft",
+        "description": "Explicitly approve reviewed content_hash/expected_version as the authenticated Manager actor. Requires preview X-CSRF-Token and X-Kitlane-Mail-Approval: manager-review. Approval does not send and cannot be created by MCP.",
+        "operationId": "confirm_manager_mail_draft",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Draft Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MailConfirmPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailMessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/mail/drafts/{draft_id}/send": {
+      "post": {
+        "tags": [
+          "manager-mail-workspace"
+        ],
+        "summary": "Send Mail Draft",
+        "description": "Send the saved, approved exact version once. The committed sending claim fences parallel requests and different keys before SMTP. Sent means SMTP accepted; ambiguous failures return unknown with no blind retry. Requires preview CSRF/approval headers and Idempotency-Key.",
+        "operationId": "send_manager_mail_draft",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Draft Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MailVersionPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailMessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/mail/sync": {
+      "post": {
+        "tags": [
+          "manager/mail"
+        ],
+        "summary": "Sync Mailbox",
+        "description": "Load a bounded page using the configured IMAP account; never creates CRM requests.",
+        "operationId": "sync_manager_mailbox",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IncomingMailSyncPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncomingMailSyncResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/mail/messages/{email_id}/attachments/{attachment_id}": {
+      "get": {
+        "tags": [
+          "manager/mail"
+        ],
+        "summary": "Download Incoming Attachment",
+        "description": "Download only a private attachment of an incoming message accessible to this company.",
+        "operationId": "download_manager_incoming_mail_attachment",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "email_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Email Id"
+            }
+          },
+          {
+            "name": "attachment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Attachment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -36680,6 +37873,26 @@
           "file"
         ],
         "title": "Body_upload_manager_document_facsimile"
+      },
+      "Body_upload_manager_mail_draft_attachment": {
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Version"
+          },
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "expected_version",
+          "file"
+        ],
+        "title": "Body_upload_manager_mail_draft_attachment"
       },
       "Body_upload_manager_maintenance_observation_photo": {
         "properties": {
@@ -48597,6 +49810,41 @@
         ],
         "title": "IncomingListResponse"
       },
+      "IncomingMailSyncPayload": {
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 50
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "IncomingMailSyncPayload"
+      },
+      "IncomingMailSyncResponse": {
+        "properties": {
+          "processed": {
+            "type": "integer",
+            "title": "Processed",
+            "default": 0
+          },
+          "captured": {
+            "type": "integer",
+            "title": "Captured",
+            "default": 0
+          },
+          "skipped": {
+            "type": "integer",
+            "title": "Skipped",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "IncomingMailSyncResponse"
+      },
       "IncomingOrderContext": {
         "properties": {
           "request_text": {
@@ -53302,6 +54550,669 @@
         },
         "type": "object",
         "title": "LeadsInboxTenderResponse"
+      },
+      "MailAccountListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MailAccountResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "MailAccountListResponse"
+      },
+      "MailAccountResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "signature": {
+            "type": "string",
+            "title": "Signature",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "name"
+        ],
+        "title": "MailAccountResponse"
+      },
+      "MailAttachmentResponse": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "mime_type": {
+            "type": "string",
+            "title": "Mime Type",
+            "default": "application/octet-stream"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size",
+            "default": 0
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available",
+            "default": false
+          },
+          "download_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Download Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "filename"
+        ],
+        "title": "MailAttachmentResponse"
+      },
+      "MailConfirmPayload": {
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Version"
+          },
+          "content_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Content Hash"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_version",
+          "content_hash"
+        ],
+        "title": "MailConfirmPayload"
+      },
+      "MailDraftCreatePayload": {
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Account Id",
+            "default": "system"
+          },
+          "to": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "To"
+          },
+          "cc": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Cc"
+          },
+          "bcc": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Bcc"
+          },
+          "subject": {
+            "type": "string",
+            "maxLength": 998,
+            "title": "Subject",
+            "default": ""
+          },
+          "body_text": {
+            "type": "string",
+            "maxLength": 100000,
+            "title": "Body Text",
+            "default": ""
+          },
+          "order_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Id"
+          },
+          "customer_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "MailDraftCreatePayload"
+      },
+      "MailDraftUpdatePayload": {
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Version"
+          },
+          "account_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Id"
+          },
+          "to": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "maxItems": 50
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To"
+          },
+          "cc": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "maxItems": 50
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cc"
+          },
+          "bcc": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "maxItems": 50
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bcc"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 998
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          },
+          "body_text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body Text"
+          },
+          "order_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Id"
+          },
+          "customer_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_version"
+        ],
+        "title": "MailDraftUpdatePayload"
+      },
+      "MailMessageListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MailMessageResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit"
+        ],
+        "title": "MailMessageListResponse"
+      },
+      "MailMessageResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "folder": {
+            "type": "string",
+            "enum": [
+              "inbox",
+              "outbox",
+              "drafts"
+            ],
+            "title": "Folder"
+          },
+          "account_id": {
+            "type": "string",
+            "title": "Account Id",
+            "default": "system"
+          },
+          "sender_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sender Email"
+          },
+          "sender_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sender Name"
+          },
+          "to": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "To"
+          },
+          "cc": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Cc"
+          },
+          "bcc": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Bcc"
+          },
+          "subject": {
+            "type": "string",
+            "title": "Subject",
+            "default": ""
+          },
+          "body_text": {
+            "type": "string",
+            "title": "Body Text",
+            "default": ""
+          },
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/MailAttachmentResponse"
+            },
+            "type": "array",
+            "title": "Attachments"
+          },
+          "order_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Id"
+          },
+          "customer_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Id"
+          },
+          "manager_url": {
+            "type": "string",
+            "title": "Manager Url"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "sent_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sent At"
+          },
+          "confirmed_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed Version"
+          },
+          "content_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Hash"
+          },
+          "csrf_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Csrf Token"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "version",
+          "status",
+          "folder",
+          "manager_url",
+          "created_at"
+        ],
+        "title": "MailMessageResponse"
+      },
+      "MailOrderDraftPayload": {
+        "properties": {
+          "to_email": {
+            "type": "string",
+            "maxLength": 4096,
+            "title": "To Email",
+            "default": ""
+          },
+          "subject": {
+            "type": "string",
+            "maxLength": 998,
+            "title": "Subject",
+            "default": ""
+          },
+          "body_text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body Text"
+          },
+          "body_html": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body Html"
+          },
+          "reply_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 254
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reply To"
+          },
+          "document_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Document Ids"
+          },
+          "registration_certificate_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32,
+                "minLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registration Certificate Id"
+          },
+          "legal_entity_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legal Entity Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "MailOrderDraftPayload"
+      },
+      "MailVersionPayload": {
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_version"
+        ],
+        "title": "MailVersionPayload"
       },
       "MaintenanceActSelectedObservation": {
         "properties": {

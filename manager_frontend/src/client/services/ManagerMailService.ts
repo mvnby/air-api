@@ -13,6 +13,10 @@ import type { BankReceiptStatusPayload } from '../models/BankReceiptStatusPayloa
 import type { BankStatementImportResponse } from '../models/BankStatementImportResponse';
 import type { Body_import_manager_bank_statement } from '../models/Body_import_manager_bank_statement';
 import type { EmailLeadImportJobResponse } from '../models/EmailLeadImportJobResponse';
+import type { IncomingMailSyncPayload } from '../models/IncomingMailSyncPayload';
+import type { IncomingMailSyncResponse } from '../models/IncomingMailSyncResponse';
+import type { MailMessageResponse } from '../models/MailMessageResponse';
+import type { MailOrderDraftPayload } from '../models/MailOrderDraftPayload';
 import type { OrderEmailComposePayload } from '../models/OrderEmailComposePayload';
 import type { OrderEmailComposeResponse } from '../models/OrderEmailComposeResponse';
 import type { OrderEmailSendPayload } from '../models/OrderEmailSendPayload';
@@ -24,6 +28,40 @@ import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class ManagerMailService {
+    /**
+     * Create Order Mail Draft
+     * Save an incomplete draft with immutable private document bytes from an accessible
+     * system-company order. Requires live Manager access and Idempotency-Key; checks the
+     * current order, issuer and selected document access before receipt replay. At most 10
+     * files, 10 MiB each and 20 MiB total. Does not send or mark documents sent. The returned
+     * mail ID/version and Manager link lead to full preview and exact-version approval.
+     * @param orderId
+     * @param idempotencyKey
+     * @param requestBody
+     * @returns MailMessageResponse Successful Response
+     * @throws ApiError
+     */
+    public static createManagerOrderMailDraft(
+        orderId: number,
+        idempotencyKey: string,
+        requestBody: MailOrderDraftPayload,
+    ): CancelablePromise<MailMessageResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/mail/orders/{order_id}/draft',
+            path: {
+                'order_id': orderId,
+            },
+            headers: {
+                'Idempotency-Key': idempotencyKey,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
     /**
      * Import Manager Bank Receipts
      * Synchronously import up to 100 bank-notification messages from the configured IMAP
@@ -369,8 +407,8 @@ export class ManagerMailService {
      * Page the platform outgoing-email journal with status/order/customer/recipient/text/date
      * filters and limit at most 100. Includes attempts and delivery/error metadata;
      * unsupported status or service failure returns 400. Reading does not send or retry
-     * messages. Requires system-tenant Manager access. These are platform mail/receipt
-     * records, not a current-storefront-only journal.
+     * messages. Requires system-tenant Manager access. Mail is limited to the current
+     * company and accessible order/customer context; unrelated companies are excluded.
      *
      * Access requires an authenticated Manager session/JWT and live membership; see [Manager
      * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
@@ -421,8 +459,8 @@ export class ManagerMailService {
      * Read a platform outgoing-email record including stored content/attachment metadata and
      * its retry attempts. Missing record or any detail-loading failure is mapped to 404 by
      * this route. Reading is not a delivery confirmation from the recipient’s mailbox and does
-     * not retry. Requires system-tenant Manager access. These are platform mail/receipt
-     * records, not a current-storefront-only journal.
+     * not retry. Requires system-tenant Manager access and accessible company/order/customer
+     * context. Sent means SMTP acceptance, not recipient delivery.
      *
      * Access requires an authenticated Manager session/JWT and live membership; see [Manager
      * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
@@ -447,10 +485,9 @@ export class ManagerMailService {
     /**
      * List Manager Order Outgoing Emails
      * Read the first page of platform outgoing-email history filtered by order ID, with limit
-     * at most 100. This journal lookup does not perform the tenant/storefront order
-     * authorization used by compose/send. Service failure returns 400; an order without
-     * records can return an empty list. Requires system-tenant Manager access. These are
-     * platform mail/receipt records, not a current-storefront-only journal.
+     * at most 100. The linked order must be accessible in the current company/storefront.
+     * Service failure returns 400; an accessible order without records returns an empty
+     * list. Requires system-tenant Manager access.
      *
      * Access requires an authenticated Manager session/JWT and live membership; see [Manager
      * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
@@ -479,13 +516,12 @@ export class ManagerMailService {
     }
     /**
      * Retry Manager Outgoing Email
-     * Create a new linked attempt for a failed platform outgoing email using its stored
-     * recipient/body; only failed originals are accepted (400 otherwise). Messages with
-     * attachments cannot be reconstructed by this action: a failed attempt is recorded and
-     * documents must be sent again from the order. SMTP failure can return HTTP success with
-     * status=failed; inspect status/error. No caller replay receipt prevents another attempt.
-     * Requires system-tenant Manager access. These are platform mail/receipt records, not a
-     * current-storefront-only journal.
+     * For new saved-version mail, create a linked draft with identical private files for
+     * explicit review in Manager; this action does not send it. Old metadata-only attachments
+     * cannot be reconstructed and return a recorded failure. The legacy text-only path keeps
+     * an accepted/in-progress/unknown attempt fence; an uncertain SMTP result is unknown and
+     * never silently retried. Only failed originals and accessible company/order/customer
+     * context are accepted. Inspect status/error even on HTTP success.
      *
      * Access requires an authenticated Manager session/JWT and live membership; see [Manager
      * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
@@ -512,22 +548,27 @@ export class ManagerMailService {
      * Send a real message through the configured system SMTP and record the attempt in the
      * platform journal. This is not a dry run despite the test route name. Invalid
      * configuration/content or SMTP failure returns 400; a failed recorded attempt may already
-     * exist. No replay receipt is supplied, so inspect the journal before retrying an
-     * uncertain result. Requires system-tenant Manager access. These are platform mail/receipt
-     * records, not a current-storefront-only journal.
+     * exist. Uses the shared saved draft/snapshot engine; supply Idempotency-Key for safe
+     * request replay and inspect history on an uncertain result. Requires system-tenant
+     * Manager access. The name does not authorize an unrequested live mail test.
      *
      * Access requires an authenticated Manager session/JWT and live membership; see [Manager
      * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param requestBody
+     * @param idempotencyKey
      * @returns OutgoingEmailResponse Successful Response
      * @throws ApiError
      */
     public static sendManagerTestEmail(
         requestBody: OutgoingEmailSendPayload,
+        idempotencyKey?: (string | null),
     ): CancelablePromise<OutgoingEmailResponse> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/manager/mail/email/send-test',
+            headers: {
+                'Idempotency-Key': idempotencyKey,
+            },
             body: requestBody,
             mediaType: 'application/json',
             errors: {
@@ -572,19 +613,25 @@ export class ManagerMailService {
      * tenant/storefront and record outgoing history. Requires system-tenant Manager access. At
      * most 10 documents, 10 MB per PDF and 20 MB total; native documents must be issued.
      * Success can mark native documents/proposals sent and advance negotiation substatus for
-     * offer/invoice/contract. Invalid context/content or SMTP failure returns 400. No caller
-     * replay receipt is supplied: inspect history before repeating an uncertain send.
+     * offer/invoice/contract. This compatibility action uses the shared saved snapshot and
+     * send fence; Idempotency-Key is optional, and unchanged retries must preserve it.
+     * Without a key, another explicit request may create a new draft. HTML is converted to
+     * reviewable plain text and private file bytes are frozen. Invalid context/content or
+     * SMTP failure returns 400; an uncertain SMTP result remains in history as unknown and
+     * must be checked before any new send. Manager UI uses the separate draft/preview flow.
      *
      * Access requires an authenticated Manager session/JWT and live membership; see [Manager
      * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param orderId
      * @param requestBody
+     * @param idempotencyKey
      * @returns OutgoingEmailResponse Successful Response
      * @throws ApiError
      */
     public static sendManagerOrderEmail(
         orderId: number,
         requestBody: OrderEmailSendPayload,
+        idempotencyKey?: (string | null),
     ): CancelablePromise<OutgoingEmailResponse> {
         return __request(OpenAPI, {
             method: 'POST',
@@ -592,8 +639,60 @@ export class ManagerMailService {
             path: {
                 'order_id': orderId,
             },
+            headers: {
+                'Idempotency-Key': idempotencyKey,
+            },
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Sync Mailbox
+     * Load a bounded page using the configured IMAP account; never creates CRM requests.
+     * @param idempotencyKey
+     * @param requestBody
+     * @returns IncomingMailSyncResponse Successful Response
+     * @throws ApiError
+     */
+    public static syncManagerMailbox(
+        idempotencyKey: string,
+        requestBody: IncomingMailSyncPayload,
+    ): CancelablePromise<IncomingMailSyncResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/mail/sync',
+            headers: {
+                'Idempotency-Key': idempotencyKey,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Download Incoming Attachment
+     * Download only a private attachment of an incoming message accessible to this company.
+     * @param emailId
+     * @param attachmentId
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static downloadManagerIncomingMailAttachment(
+        emailId: number,
+        attachmentId: number,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/mail/messages/{email_id}/attachments/{attachment_id}',
+            path: {
+                'email_id': emailId,
+                'attachment_id': attachmentId,
+            },
             errors: {
                 422: `Validation Error`,
             },

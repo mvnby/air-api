@@ -16,6 +16,7 @@ from routers import system as system_router
 from routers import connector_auth
 from routers import manager_incoming
 from routers import manager_personal_tasks
+from routers import manager_mail_workspace, manager_incoming_mail
 
 APP_ROUTERS: tuple[APIRouter, ...] = (
     auth_router.router,
@@ -32,6 +33,8 @@ APP_ROUTERS: tuple[APIRouter, ...] = (
     connector_auth.router,
     manager_incoming.router,
     manager_personal_tasks.router,
+    manager_mail_workspace.router,
+    manager_incoming_mail.router,
 )
 
 

@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle2, Clock3, Copy, RefreshCw, XCircle } from 'l
 import { ManagerMailService } from '../../client';
 import type { OutgoingEmailDetailResponse, OutgoingEmailResponse } from '../../client';
 import { getApiErrorMessage } from '../../utils/api-errors';
+import { mailStatusLabel } from '../../services/mail-workspace-api';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -27,7 +28,7 @@ const showAttempts = ref(true);
 const statusLabel = (value?: string | null) => {
   switch (value) {
     case 'sent':
-      return 'Отправлено';
+      return mailStatusLabel('sent');
     case 'failed':
       return 'Ошибка';
     case 'pending':
@@ -226,7 +227,7 @@ watch(
                 <span class="material-icons-round text-[20px]">{{ showHtml ? 'expand_less' : 'expand_more' }}</span>
               </button>
               <div v-if="showHtml" class="border-t border-slate-100 p-3 dark:border-slate-800">
-                <iframe class="h-72 w-full rounded-xl border border-slate-200 bg-white dark:border-slate-700" sandbox="" :srcdoc="email.body_html || ''" />
+                <pre class="max-h-72 overflow-auto whitespace-pre-wrap break-words text-sm">{{ email.body_html }}</pre>
               </div>
             </section>
 
