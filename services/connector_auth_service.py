@@ -4,7 +4,7 @@ import hmac
 from datetime import timedelta
 from urllib.parse import urlencode
 
-from sqlalchemy import select
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.command_actor import CommandActor
@@ -410,7 +410,8 @@ class ConnectorAuthService:
 
     @staticmethod
     async def resolve_actor(
-        session: AsyncSession, token: str, required_scope: str
+        session: AsyncSession, token: str, required_scope: str, *,
+        record_usage: bool = False,
     ) -> CommandActor:
         row = (
             await session.execute(
@@ -434,6 +435,25 @@ class ConnectorAuthService:
             raise ConnectorAuthError(
                 "insufficient_scope", "Required scope was not authorized", 403
             )
+        if record_usage:
+            # Only the clean HTTP authentication session enables this flag.
+            # Business-operation rechecks must never commit pending changes.
+            current = now_utc()
+            cutoff = current - timedelta(minutes=1)
+            if grant.last_used_at is None or utc(grant.last_used_at) <= cutoff:
+                await session.execute(
+                    update(ConnectorGrant)
+                    .where(
+                        ConnectorGrant.id == grant.id,
+                        ConnectorGrant.revoked_at.is_(None),
+                        ConnectorGrant.expires_at > current,
+                        or_(ConnectorGrant.last_used_at.is_(None),
+                            ConnectorGrant.last_used_at <= cutoff),
+                    )
+                    .values(last_used_at=current)
+                    .execution_options(synchronize_session=False)
+                )
+                await session.commit()
         return actor
 
     @staticmethod

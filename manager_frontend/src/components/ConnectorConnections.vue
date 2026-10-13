@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { connectorConnectionsApi, type ConnectorGrant } from '../services/connector-connections-api';
+import ConnectorConnectionCard from './ConnectorConnectionCard.vue';
 
 const grants = ref<ConnectorGrant[]>([]);
 const loading = ref(true);
@@ -20,18 +21,11 @@ const copyServerUrl = async () => {
   }
 };
 let mounted = true;
-const scopeLabels: Record<string, string> = {
-  'kitlane:read': 'Просмотр данных',
-  'kitlane:incoming:write': 'Добавление входящих',
-  'kitlane:tasks:write': 'Создание и изменение личных задач',
-  'kitlane:maintenance:write': 'Замечания, фото и черновики документов ТО',
-  'kitlane:catalog:write': 'Подбор оборудования и черновики КП и счетов',
-  'kitlane:mail:read': 'Чтение почты и вложений',
-  'kitlane:mail:drafts:write': 'Изменение почтовых черновиков и вложений',
-  'kitlane:mail:send': 'Отправка писем после подтверждения в Manager',
-};
-const active = (grant: ConnectorGrant) => !grant.revoked_at && Date.parse(grant.expires_at) > Date.now();
-const dateLabel = (date: string) => new Date(date).toLocaleDateString('ru-RU');
+const currentTime = ref(Date.now());
+let expiryTimer: ReturnType<typeof setInterval> | undefined;
+const active = (grant: ConnectorGrant) => !grant.revoked_at && Date.parse(grant.expires_at) > currentTime.value;
+const activeGrants = computed(() => grants.value.filter(active));
+const historicalGrants = computed(() => grants.value.filter(grant => !active(grant)));
 
 const load = async () => {
   loading.value = true;
@@ -60,8 +54,14 @@ const revoke = async (grant: ConnectorGrant) => {
   }
 };
 
-onMounted(load);
-onUnmounted(() => { mounted = false; });
+onMounted(() => {
+  void load();
+  expiryTimer = setInterval(() => { currentTime.value = Date.now(); }, 30_000);
+});
+onUnmounted(() => {
+  mounted = false;
+  clearInterval(expiryTimer);
+});
 </script>
 
 <template>
@@ -73,20 +73,19 @@ onUnmounted(() => { mounted = false; });
       <p v-if="error" role="alert" class="mt-4 text-sm text-red-700">{{ error }}</p>
       <button v-if="error && !grants.length" type="button" class="mt-2 text-sm font-medium text-brand-700" @click="load">Повторить</button>
       <p v-else-if="!grants.length" class="mt-4 text-sm text-gray-500">Подключений пока нет. Разрешение появится здесь после подключения Kitlane в ChatGPT.</p>
-      <ul v-if="grants.length" class="mt-4 divide-y divide-gray-100">
-        <li v-for="grant in grants" :key="grant.id" class="py-3 first:pt-0 last:pb-0">
-          <div class="flex items-start justify-between gap-4">
-            <div>
-              <p class="font-medium text-gray-900">ChatGPT</p>
-              <p class="mt-1 text-xs text-gray-500">Подключён {{ dateLabel(grant.created_at) }} · {{ grant.revoked_at ? 'Доступ отозван' : active(grant) ? `Доступ до ${dateLabel(grant.expires_at)}` : 'Срок доступа истёк' }}</p>
-            </div>
-            <button v-if="active(grant)" type="button" :data-grant-id="grant.id" :disabled="revoking !== null" class="text-sm font-medium text-red-700 hover:text-red-800 disabled:opacity-50" @click="revoke(grant)">
-              {{ revoking === grant.id ? 'Отключаем…' : 'Отключить' }}
-            </button>
-          </div>
-          <p class="mt-2 text-sm text-gray-600">{{ grant.scopes.map(scope => scopeLabels[scope] || scope).join(' · ') }}</p>
-        </li>
-      </ul>
+      <section v-if="grants.length" data-testid="connector-active" class="mt-4">
+        <h3 class="font-medium text-gray-900">Активные подключения ({{ activeGrants.length }})</h3>
+        <p v-if="!activeGrants.length" class="mt-2 text-sm text-gray-500">Активных подключений нет.</p>
+        <ul v-else class="mt-3 divide-y divide-gray-100">
+          <ConnectorConnectionCard v-for="grant in activeGrants" :key="grant.id" :grant="grant" :active="true" :revoking="revoking" @revoke="revoke" />
+        </ul>
+      </section>
+      <details v-if="historicalGrants.length" data-testid="connector-history" class="mt-4 rounded-lg border border-gray-200 p-4">
+        <summary class="cursor-pointer font-medium text-gray-900">История подключений ({{ historicalGrants.length }})</summary>
+        <ul class="mt-3 divide-y divide-gray-100">
+          <ConnectorConnectionCard v-for="grant in historicalGrants" :key="grant.id" :grant="grant" :active="false" :revoking="revoking" />
+        </ul>
+      </details>
     </div>
     <details data-testid="connector-quickstart" :open="!loading && !error && !grants.length" class="mt-5 rounded-lg border border-gray-200 p-4">
       <summary class="cursor-pointer font-medium text-gray-900">Как подключить Kitlane к ChatGPT</summary>

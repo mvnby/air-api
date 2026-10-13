@@ -40,6 +40,9 @@ class ConnectorGrant(SQLModel, table=True):
     revoked_at: Optional[datetime] = Field(
         default=None, sa_column=Column(DateTime(timezone=True))
     )
+    last_used_at: Optional[datetime] = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
 
 
 class ConnectorConsent(SQLModel, table=True):

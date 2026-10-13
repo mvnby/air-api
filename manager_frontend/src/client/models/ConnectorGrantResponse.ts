@@ -11,5 +11,6 @@ export type ConnectorGrantResponse = {
     created_at: string;
     expires_at: string;
     revoked_at: (string | null);
+    last_used_at?: (string | null);
 };
 

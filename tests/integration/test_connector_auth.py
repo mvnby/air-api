@@ -2,7 +2,8 @@
 
 import asyncio
 import re
-from datetime import timedelta
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -10,6 +11,8 @@ from fastapi import Depends, FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.applications import Starlette
+from starlette.routing import Route
 
 from core.database import get_session
 from core.security import AuthenticatedUser, create_access_token, require_manager_access
@@ -28,6 +31,7 @@ from services.connector_auth_policy import (
     digest,
     pkce,
     resource,
+    utc,
 )
 from services.connector_auth_service import ConnectorAuthService as Auth
 
@@ -100,6 +104,114 @@ async def tokens(db, identity):
         requested_resource=resource(),
         code_verifier=VERIFIER,
     )
+
+
+@pytest.mark.asyncio
+async def test_mcp_usage_is_recorded_independently_and_throttled(db, identity, monkeypatch):
+    issued = await tokens(db, identity)
+    second = await tokens(db, identity)
+    assert all(item.last_used_at is None for item in await Auth.list_grants(db, identity[2]))
+    rotated = await Auth.refresh(db, refresh_token=issued.refresh_token,
+                                 client_id=CLIENT_ID, requested_resource=resource())
+    # Authorizing, refreshing and listing connections are not actual MCP use.
+    await Auth.resolve_actor(db, rotated.access_token, "kitlane:read")
+    assert all(item.last_used_at is None for item in await Auth.list_grants(db, identity[2]))
+    current = now_utc()
+    monkeypatch.setattr("services.connector_auth_service.now_utc", lambda: current)
+    await Auth.resolve_actor(db, rotated.access_token, "kitlane:read", record_usage=True)
+
+    async def recorded():
+        items = await Auth.list_grants(db, identity[2])
+        assert len(items) == 2 and all(item.revoked_at is None for item in items)
+        assert items[0].last_used_at is None  # The other connection is unchanged.
+        return utc(items[1].last_used_at)
+
+    first = await recorded()
+    assert first == current
+    current += timedelta(seconds=30)
+    await Auth.resolve_actor(db, rotated.access_token, "kitlane:read", record_usage=True)
+    assert await recorded() == first
+    current += timedelta(seconds=31)
+    await Auth.resolve_actor(db, rotated.access_token, "kitlane:read", record_usage=True)
+    assert await recorded() == current
+    await Auth.resolve_actor(db, second.access_token, "kitlane:read")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("denial", ["scope", "expired_token", "revoked", "membership"])
+async def test_rejected_requests_cannot_mark_a_connection_used(db, identity, denial):
+    issued = await tokens(db, identity)
+    required_scope = "kitlane:tasks:write" if denial == "scope" else "kitlane:read"
+    if denial == "expired_token":
+        await db.execute(update(ConnectorToken).where(
+            ConnectorToken.token_hash == digest(issued.access_token)
+        ).values(expires_at=now_utc() - timedelta(seconds=1)))
+    elif denial == "revoked":
+        await db.execute(update(ConnectorGrant).values(revoked_at=now_utc()))
+    elif denial == "membership":
+        await db.execute(update(TenantMembership).where(
+            TenantMembership.id == identity[1].id
+        ).values(role="manager"))
+    await db.commit()
+    with pytest.raises(ConnectorAuthError):
+        await Auth.resolve_actor(db, issued.access_token, required_scope, record_usage=True)
+    items = await Auth.list_grants(db, identity[2])
+    assert len(items) == 1 and items[0].last_used_at is None
+
+
+@pytest.mark.asyncio
+async def test_business_recheck_does_not_commit_pending_changes(db, db_engine, identity):
+    issued = await tokens(db, identity)
+    user = identity[0]
+    original = user.display_name
+    user.display_name = "Uncommitted business change"
+    await Auth.resolve_actor(db, issued.access_token, "kitlane:read")
+    async with AsyncSession(db_engine) as observer:
+        assert (await observer.execute(select(StaffUser.display_name).where(
+            StaffUser.id == user.id
+        ))).scalar_one() == original
+    assert (await Auth.list_grants(db, identity[2]))[0].last_used_at is None
+    await db.rollback()
+
+
+@pytest.mark.asyncio
+async def test_real_mcp_request_persists_last_use_for_manager(db, db_engine, identity):
+    from services.connector_mcp import ConnectorMCPApplication
+
+    issued = await tokens(db, identity)
+
+    @asynccontextmanager
+    async def sessions():
+        async with AsyncSession(db_engine, expire_on_commit=False) as session:
+            yield session
+
+    adapter = ConnectorMCPApplication(session_factory=sessions)
+    app = Starlette(routes=[Route("/api/connector/mcp", adapter, methods=["POST"])])
+    async with adapter.lifespan():
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="https://api.mvn.by") as client:
+            response = await client.post("/api/connector/mcp", headers={
+                "Authorization": "Bearer " + issued.access_token,
+                "Accept": "application/json, text/event-stream",
+            }, json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+    assert response.status_code == 200 and response.json()["result"]["tools"]
+    items = await Auth.list_grants(db, identity[2])
+    assert len(items) == 1 and items[0].last_used_at is not None
+    assert items[0].revoked_at is None
+    before_profile = items[0].last_used_at
+
+    manager = FastAPI()
+    manager.include_router(router)
+
+    async def profile_session():
+        yield db
+
+    manager.dependency_overrides[get_session] = profile_session
+    manager.dependency_overrides[require_manager_access] = lambda: identity[2]
+    async with AsyncClient(transport=ASGITransport(app=manager), base_url="https://api.mvn.by") as client:
+        response = await client.get("/api/manager/connector/grants")
+    assert response.status_code == 200
+    assert utc(datetime.fromisoformat(response.json()["items"][0]["last_used_at"])) == utc(before_profile)
+    assert (await Auth.list_grants(db, identity[2]))[0].last_used_at == before_profile
 
 
 @pytest.mark.asyncio

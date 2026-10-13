@@ -34092,7 +34092,7 @@
           "connector-auth"
         ],
         "summary": "Grants",
-        "description": "List OAuth grants belonging to the current authenticated Manager actor and return a\nsession-bound CSRF token for profile revocation. Response is no-store; does not list\nother users\u2019 grants.\n\nSee [connector access and\nscopes](https://github.com/mvnby/air-api/blob/main/docs/chatgpt-connector.md#\u0430\u0434\u0440\u0435\u0441-\u0438-\u0434\u043e\u0441\u0442\u0443\u043f).\nMCP transport and tools/list are outside this HTTP schema.",
+        "description": "List OAuth grants belonging to the current authenticated Manager actor and return a\nsession-bound CSRF token for profile revocation. Response is no-store; does not list\nother users\u2019 grants. Includes active, revoked and expired grants, creation time and\nnullable last authenticated MCP use (recorded at most once per minute). Listing the\nprofile does not count as use and never revokes or replaces grants.\n\nSee [connector access and\nscopes](https://github.com/mvnby/air-api/blob/main/docs/chatgpt-connector.md#\u0430\u0434\u0440\u0435\u0441-\u0438-\u0434\u043e\u0441\u0442\u0443\u043f).\nMCP transport and tools/list are outside this HTTP schema.",
         "operationId": "manager_connector_grants",
         "responses": {
           "200": {
@@ -43851,6 +43851,18 @@
               }
             ],
             "title": "Revoked At"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
           }
         },
         "type": "object",

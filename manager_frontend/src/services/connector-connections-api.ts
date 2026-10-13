@@ -10,6 +10,7 @@ export type ConnectorGrant = {
   created_at: string;
   expires_at: string;
   revoked_at: string | null;
+  last_used_at?: string | null;
 };
 
 type GrantList = { items: ConnectorGrant[]; csrf_token: string };
