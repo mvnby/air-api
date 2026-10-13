@@ -1,4 +1,4 @@
-"""ChatGPT fileParams: fixed operator hosts, pinned DNS and bounded private bytes."""
+"""ChatGPT fileParams: reviewed host policies, pinned DNS and bounded private bytes."""
 import asyncio
 import ipaddress
 import re
@@ -46,6 +46,13 @@ class _PinnedResolver(AbstractResolver):
 
 class ConnectorFileService:
     @staticmethod
+    def is_openai_regional_host(host: str) -> bool:
+        # Native fileParams rotate between regional storage hosts. Match only
+        # their dedicated one-label namespace, never arbitrary oaiusercontent
+        # subdomains, suffixes, extra labels, ports or user-configured patterns.
+        return re.fullmatch(r"sdmntpr[a-z0-9]{2,40}\.oaiusercontent\.com", host) is not None
+
+    @staticmethod
     def validate_source(file: OpenAIFile) -> str:
         try:
             parsed = urlsplit(file.download_url)
@@ -63,7 +70,11 @@ class ConnectorFileService:
             else:
                 raise ConnectorFileError("File source must be a supported ChatGPT file")
             allowed = set(settings.CONNECTOR_CHATGPT_FILE_HOSTS)
-            if not allowed:
+            regional_source = (
+                settings.CONNECTOR_OPENAI_REGIONAL_FILES_ENABLED
+                and ConnectorFileService.is_openai_regional_host(host)
+            )
+            if not allowed and not settings.CONNECTOR_OPENAI_REGIONAL_FILES_ENABLED:
                 # The authenticated caller needs the actual hostname for the
                 # operator's client pilot. Never return the path, signed query,
                 # credentials, file identity or content, and never auto-allow it.
@@ -72,7 +83,7 @@ class ConnectorFileService:
                     f"delivery hostname: {host}. Operator verification is required; "
                     "use private upload in Manager"
                 )
-            if host not in allowed:
+            if host not in allowed and not regional_source:
                 raise ConnectorFileError("File source must be a supported ChatGPT file")
             # Operator configuration also fails closed for IPs, wildcards and URLs.
             if any(not item or "." not in item or item != item.lower() or any(c not in "abcdefghijklmnopqrstuvwxyz0123456789.-" for c in item)

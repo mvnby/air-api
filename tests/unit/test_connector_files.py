@@ -52,6 +52,60 @@ def test_empty_operator_host_evidence_blocks_upload(monkeypatch):
     assert settings.CONNECTOR_CHATGPT_FILE_HOSTS == []
 
 
+@pytest.mark.parametrize('host', [
+    'sdmntprcentralus.oaiusercontent.com', 'sdmntprdenmarkeast.oaiusercontent.com',
+    'sdmntprjapaneast.oaiusercontent.com', 'sdmntprnortheu.oaiusercontent.com',
+])
+def test_native_regional_file_sources_require_explicit_opt_in(monkeypatch, host):
+    monkeypatch.setattr(settings, 'CONNECTOR_CHATGPT_FILE_HOSTS', [])
+    source = file(download_url=f'https://{host}/private-file?signature=secret')
+    monkeypatch.setattr(settings, 'CONNECTOR_OPENAI_REGIONAL_FILES_ENABLED', False)
+    with pytest.raises(ConnectorFileError, match='not configured'):
+        ConnectorFileService.validate_source(source)
+    monkeypatch.setattr(settings, 'CONNECTOR_OPENAI_REGIONAL_FILES_ENABLED', True)
+    assert ConnectorFileService.validate_source(source) == host
+
+
+@pytest.mark.parametrize('url', [
+    'https://oaiusercontent.com/file', 'https://web-sandbox.oaiusercontent.com/file',
+    'https://sdmntpr.oaiusercontent.com/file',
+    'https://sdmntprnortheu.oaiusercontent.com.evil.example/file',
+    'https://evil.sdmntprnortheu.oaiusercontent.com/file',
+    'https://sdmntprnortheu-oaiusercontent.com/file',
+    'https://sdmntprnortheu.oaiusercontent.com:443/file',
+    'https://user:secret@sdmntprnortheu.oaiusercontent.com/file',
+    'https://sdmntprnortheu.oaiusercontent.com/file#secret',
+    'http://sdmntprnortheu.oaiusercontent.com/file', 'https://127.0.0.1/file',
+])
+def test_regional_opt_in_never_allows_other_sources_or_unsafe_urls(monkeypatch, url):
+    monkeypatch.setattr(settings, 'CONNECTOR_CHATGPT_FILE_HOSTS', [])
+    monkeypatch.setattr(settings, 'CONNECTOR_OPENAI_REGIONAL_FILES_ENABLED', True)
+    with pytest.raises(ConnectorFileError):
+        ConnectorFileService.validate_source(file(download_url=url))
+
+
+@pytest.mark.asyncio
+async def test_regional_source_still_rejects_private_dns_before_download(monkeypatch):
+    monkeypatch.setattr(settings, 'CONNECTOR_CHATGPT_FILE_HOSTS', [])
+    monkeypatch.setattr(settings, 'CONNECTOR_OPENAI_REGIONAL_FILES_ENABLED', True)
+    async def resolve(*args, **kwargs):
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('127.0.0.1', 443))]
+    monkeypatch.setattr('asyncio.BaseEventLoop.getaddrinfo', resolve)
+    with pytest.raises(ConnectorFileError, match='public network'):
+        await ConnectorFileService.download_attachment(file(
+            download_url='https://sdmntprnortheu.oaiusercontent.com/file?signature=secret',
+        ))
+
+
+def test_regional_opt_in_does_not_relax_invalid_operator_configuration(monkeypatch):
+    monkeypatch.setattr(settings, 'CONNECTOR_CHATGPT_FILE_HOSTS', ['*.oaiusercontent.com'])
+    monkeypatch.setattr(settings, 'CONNECTOR_OPENAI_REGIONAL_FILES_ENABLED', True)
+    with pytest.raises(ConnectorFileError, match='configuration is invalid'):
+        ConnectorFileService.validate_source(file(
+            download_url='https://sdmntprnortheu.oaiusercontent.com/file',
+        ))
+
+
 @pytest.mark.parametrize('url', [
     'https://user:secret@delivery.example/private?signature=secret',
     'https://delivery.example:443/private?signature=secret',
@@ -102,6 +156,9 @@ async def test_mail_attachment_download_uses_same_pinned_bounded_transport(monke
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('host,regional', [
+    ('delivery.example', False), ('sdmntprnortheu.oaiusercontent.com', True),
+])
 @pytest.mark.parametrize('status,body,mime,limit,expected', [
     (200, image_bytes(), 'image/png', 1024, None),
     (302, image_bytes(), 'image/png', 1024, 'unavailable'),
@@ -109,8 +166,9 @@ async def test_mail_attachment_download_uses_same_pinned_bounded_transport(monke
     (200, image_bytes(), 'text/plain', 1024, 'match'),
     (200, image_bytes(), 'image/png', 1, 'size'),
 ])
-async def test_download_disallows_redirects_and_bounds_verified_content(monkeypatch, status, body, mime, limit, expected):
-    monkeypatch.setattr(settings, 'CONNECTOR_CHATGPT_FILE_HOSTS', ['delivery.example'])
+async def test_download_disallows_redirects_and_bounds_verified_content(monkeypatch, host, regional, status, body, mime, limit, expected):
+    monkeypatch.setattr(settings, 'CONNECTOR_CHATGPT_FILE_HOSTS', [] if regional else [host])
+    monkeypatch.setattr(settings, 'CONNECTOR_OPENAI_REGIONAL_FILES_ENABLED', regional)
     monkeypatch.setattr(settings, 'SERVICE_ATTACHMENT_MAX_SIZE_BYTES', limit)
     calls = []
     async def addresses(host):
@@ -130,6 +188,7 @@ async def test_download_disallows_redirects_and_bounds_verified_content(monkeypa
             assert kwargs['trust_env'] is False
             self.connector = kwargs['connector']
             assert self.connector._resolver.addresses == ['8.8.8.8']
+            assert self.connector._resolver.host == host
         async def __aenter__(self):
             return self
         async def __aexit__(self, *args):
@@ -139,13 +198,14 @@ async def test_download_disallows_redirects_and_bounds_verified_content(monkeypa
             assert kwargs == {'allow_redirects': False}
             yield response
     monkeypatch.setattr('services.connector_file_service.aiohttp.ClientSession', Client)
+    source = file(download_url=f'https://{host}/file-123?signature=secret')
     if expected:
         with pytest.raises(ConnectorFileError, match=expected):
-            await ConnectorFileService.download(file())
+            await ConnectorFileService.download(source)
     else:
-        content, filename, kind = await ConnectorFileService.download(file())
+        content, filename, kind = await ConnectorFileService.download(source)
         assert content == body and filename == 'file-123.png' and kind == 'image/png'
-    assert calls == ['delivery.example']
+    assert calls == [host]
 
 
 @pytest.mark.asyncio
