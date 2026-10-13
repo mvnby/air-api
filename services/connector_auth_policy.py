@@ -33,6 +33,22 @@ def digest(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
+def consent_nonce_hash(value: str) -> str:
+    # Older consumers grant the whole requested scope set. Make the new form's
+    # verifier incompatible with their plain SHA-256 so mixed versions and a
+    # rollback reject the form instead of ignoring unchecked permissions.
+    return hmac.new(settings.SECRET_KEY.encode(),
+                    ("kitlane-permission-choice-v1:" + value).encode(),
+                    hashlib.sha256).hexdigest()
+
+
+def consent_nonce_matches(stored: str, value: str) -> bool:
+    # Pending pre-upgrade forms remain usable; the HTTP adapter defaults them
+    # to basic read unless an explicit selection is supplied.
+    return (hmac.compare_digest(stored, consent_nonce_hash(value))
+            or hmac.compare_digest(stored, digest(value)))
+
+
 def secret(kind: str) -> str:
     return f"kl_{kind}_" + secrets.token_urlsafe(32)
 

@@ -134,6 +134,19 @@ async def test_omitting_selection_does_not_restore_unchecked_send_permission(con
 
 
 @pytest.mark.asyncio
+async def test_pending_pre_upgrade_form_can_finish_with_basic_read(consent_client, db):
+    from services.connector_auth_policy import digest
+    client, _ = consent_client
+    _, form = await screen(client, scopes="kitlane:read kitlane:mail:send")
+    pending = (await db.execute(select(ConnectorConsent).where(ConnectorConsent.id == form["consent_id"]))).scalars().one()
+    pending.csrf_hash = digest(form["csrf_token"])
+    await db.commit()
+    assert (await client.post(AUTHORIZE, data=form)).status_code == 303
+    grant = (await db.execute(select(ConnectorGrant))).scalars().one()
+    assert grant.scopes == ["kitlane:read"]
+
+
+@pytest.mark.asyncio
 async def test_reading_own_consent_cannot_choose_another_company(consent_client, db):
     client, _ = consent_client
     _, form = await screen(client)

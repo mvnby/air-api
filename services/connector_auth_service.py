@@ -25,6 +25,8 @@ from services.connector_auth_policy import (
     ROLE_RANK,
     VERIFIER,
     ConnectorAuthError,
+    consent_nonce_hash,
+    consent_nonce_matches,
     digest,
     pkce,
     resource,
@@ -162,7 +164,7 @@ class ConnectorAuthService:
             auth_version=auth.auth_version,
             role=auth.role,
             session_hash=digest(session_credential),
-            csrf_hash=digest(nonce),
+            csrf_hash=consent_nonce_hash(nonce),
             client_id=client_id,
             redirect_uri=redirect_uri,
             resource=requested_resource,
@@ -203,7 +205,7 @@ class ConnectorAuthService:
             or pending.tenant_id != auth.tenant_id
             or pending.storefront_id != auth.storefront_id
             or not hmac.compare_digest(pending.session_hash, digest(session_credential))
-            or not hmac.compare_digest(pending.csrf_hash, digest(nonce))
+            or not consent_nonce_matches(pending.csrf_hash, nonce)
         ):
             raise ConnectorAuthError(
                 "invalid_request", "Consent expired or session/CSRF mismatch", 403
