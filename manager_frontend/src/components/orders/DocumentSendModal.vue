@@ -4,6 +4,8 @@ import { ManagerDocumentSystemService, ManagerMailService } from '../../client';
 import type { ManagerOrderDetailResponse } from '../../client';
 import { getApiErrorMessage } from '../../utils/api-errors';
 import { listCertificates, type RegistrationCertificate } from '../../features/documents/registration-certificates';
+import { mailApi, type MailAccount, type MailMessage } from '../../services/mail-workspace-api';
+import MailDraftEditor from '../mail/MailDraftEditor.vue';
 
 type SendableOrderDocument = {
   id: number;
@@ -69,6 +71,9 @@ const templateOptions = ref<Array<{ key: string; label: string; requires_documen
 const missingRequisites = ref<Array<{ key: string; label: string }>>([]);
 const error = ref('');
 const sending = ref(false);
+const mailDraft = ref<MailMessage | null>(null);
+const mailAccounts = ref<MailAccount[]>([]);
+const draftEditor = ref<{ save: () => Promise<boolean> } | null>(null);
 const composing = ref(false);
 const subjectTouched = ref(false);
 const bodyTouched = ref(false);
@@ -127,13 +132,11 @@ const buildBody = () => {
     '',
     'Направляем документы по вашему заказу во вложении:',
     ...(lines.length ? lines : ['- документы по заказу']),
-    '',
-    'С уважением,',
-    'Мастер Воздуха',
   ].join('\n');
 };
 
 const refreshDefaults = () => {
+  mailDraft.value = null;
   resettingSelection = true;
   selectedDocumentIds.value = latestDefaultDocumentIds();
   registrationCertificateId.value = '';
@@ -208,6 +211,7 @@ watch(
   (open) => {
     if (open) refreshDefaults();
   },
+  { immediate: true },
 );
 
 watch([selectedDocumentIds, registrationCertificateId], () => {
@@ -219,8 +223,9 @@ watch([selectedDocumentIds, registrationCertificateId], () => {
   void applyTemplate(false);
 });
 
-const close = () => {
+const close = async () => {
   if (sending.value) return;
+  if (draftEditor.value && !await draftEditor.value.save()) return;
   emit('update:modelValue', false);
 };
 
@@ -230,19 +235,6 @@ const sendEmail = async () => {
     error.value = 'Выберите хотя бы один документ';
     return;
   }
-  if (!toEmail.value.trim()) {
-    error.value = 'Укажите email получателя';
-    return;
-  }
-  if (!subject.value.trim()) {
-    error.value = 'Укажите тему письма';
-    return;
-  }
-  if (!bodyText.value.trim()) {
-    error.value = 'Укажите текст письма';
-    return;
-  }
-
   sending.value = true;
   try {
     const payload = {
@@ -253,14 +245,8 @@ const sendEmail = async () => {
       registration_certificate_id: registrationCertificateId.value || null,
       legal_entity_id: certificateIssuerId.value || null,
     };
-    if (props.transport === 'native') {
-      await ManagerDocumentSystemService.sendManagerNativeOrderEmail(props.order.id, payload);
-    } else {
-      await ManagerMailService.sendManagerOrderEmail(props.order.id, payload);
-    }
-    emit('settled');
-    emit('sent');
-    emit('update:modelValue', false);
+    mailAccounts.value = (await mailApi.accounts()).items;
+    mailDraft.value = await mailApi.createOrderDraft(props.order.id, payload, props.transport || 'legacy');
   } catch (err) {
     error.value = getApiErrorMessage(err);
     emit('settled');
@@ -279,7 +265,7 @@ const sendEmail = async () => {
       <div class="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
         <header class="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-700">
           <div>
-            <h3 class="text-lg font-semibold">Отправить документы</h3>
+            <h3 class="text-lg font-semibold">Письмо по заказу</h3>
             <p class="text-sm text-slate-500 dark:text-slate-400">Заказ #{{ order.id }}</p>
           </div>
           <button
@@ -293,7 +279,8 @@ const sendEmail = async () => {
           </button>
         </header>
 
-        <div class="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+        <div v-if="mailDraft" class="flex-1 overflow-y-auto p-4"><MailDraftEditor :key="mailDraft.id" ref="draftEditor" :initial="mailDraft" :accounts="mailAccounts" @saved="mailDraft = $event" @close="close" @deleted="mailDraft = null; close()" @sent="emit('settled'); emit('sent')" /></div>
+        <div v-else class="flex-1 space-y-4 overflow-y-auto px-5 py-4">
           <div>
             <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Получатель</label>
             <input
@@ -404,7 +391,7 @@ const sendEmail = async () => {
           </p>
         </div>
 
-        <footer class="flex flex-col-reverse gap-2 border-t border-slate-200 px-5 py-4 sm:flex-row sm:justify-end dark:border-slate-700">
+        <footer v-if="!mailDraft" class="flex flex-col-reverse gap-2 border-t border-slate-200 px-5 py-4 sm:flex-row sm:justify-end dark:border-slate-700">
           <button
             type="button"
             class="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
@@ -422,7 +409,7 @@ const sendEmail = async () => {
             <span v-if="sending" class="material-icons-round animate-spin text-[18px]">loop</span>
             <span v-else-if="composing" class="material-icons-round animate-spin text-[18px]">loop</span>
             <span v-else class="material-icons-round text-[18px]">send</span>
-            {{ sending ? 'Отправляем...' : composing ? 'Готовим...' : 'Отправить' }}
+            {{ sending ? 'Сохраняем...' : composing ? 'Готовим...' : 'Сохранить и проверить письмо' }}
           </button>
         </footer>
       </div>

@@ -19,14 +19,16 @@ export const useOrderDocumentStatus = ({ order, payments }: UseOrderDocumentStat
   let managedDocumentsRequestId = 0;
   const orderDocuments = computed(() => order.value?.documents || []);
 
-  const documentEmailStatus = computed<'unknown' | 'none' | 'pending' | 'sent' | 'failed'>(() => {
+  const documentEmailStatus = computed<'unknown' | 'none' | 'pending' | 'sending' | 'uncertain' | 'sent' | 'failed'>(() => {
     if (!orderEmailsLoaded.value) return 'unknown';
     const latest = [...orderEmails.value]
-      .filter((email) => Boolean(email.attachments?.length))
+      .filter((email) => email.status !== 'draft' && Boolean(email.attachments?.length))
       .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at))[0];
     if (!latest) return 'none';
     if (latest.status === 'sent') return 'sent';
     if (latest.status === 'pending') return 'pending';
+    if (latest.status === 'sending') return 'sending';
+    if (latest.status === 'unknown') return 'uncertain';
     if (latest.status === 'failed') return 'failed';
     return 'none';
   });

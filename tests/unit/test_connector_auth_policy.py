@@ -78,3 +78,10 @@ def test_predefined_client_resource_and_exact_redirect():
         validate_client("https://evil.example/client.json", resource())
     with pytest.raises(ConnectorAuthError):
         validate_client(CLIENT_ID, resource() + "/other")
+
+
+def test_oauth_resource_discovery_includes_separate_mail_rights():
+    from core.connector_security import connector_resource_metadata
+    from services.connector_auth_policy import SCOPES
+    assert set(connector_resource_metadata()["scopes_supported"]) == SCOPES
+    assert {"kitlane:mail:read", "kitlane:mail:drafts:write", "kitlane:mail:send"} <= SCOPES

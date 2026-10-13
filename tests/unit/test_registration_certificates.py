@@ -4,6 +4,7 @@ import pytest
 from PIL import Image
 from pypdf import PdfWriter
 from sqlalchemy import select
+from core.config import settings
 from models import Customer, DocumentLegalEntity, Order, OrderDocument
 from models.legal_entity_attachment import LegalEntityAttachment
 from models.tenancy import TenantScope
@@ -152,6 +153,8 @@ async def test_certificate_only_compose_send_history_immutable(
     assert "Запрос реквизитов" not in composed["subject"]
     assert "просим дополнительно сообщить" not in composed["body_text"]
     captured = []
+    monkeypatch.setattr(settings, "MAIL_SMTP_USERNAME", "sender@example.com")
+    monkeypatch.setattr(settings, "MAIL_SMTP_PASSWORD", "test-only-password")
     monkeypatch.setattr(
         MailSmtpService,
         "_configured_from_email",

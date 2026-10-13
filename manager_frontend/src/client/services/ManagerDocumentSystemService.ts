@@ -23,6 +23,8 @@ import type { DocumentNumberPolicyListResponse } from '../models/DocumentNumberP
 import type { DocumentNumberPolicyPayload } from '../models/DocumentNumberPolicyPayload';
 import type { DocumentPdfRuntimeStatus } from '../models/DocumentPdfRuntimeStatus';
 import type { ExternalEditSessionItem } from '../models/ExternalEditSessionItem';
+import type { MailMessageResponse } from '../models/MailMessageResponse';
+import type { MailOrderDraftPayload } from '../models/MailOrderDraftPayload';
 import type { ManagedDocumentArtifactAccessResponse } from '../models/ManagedDocumentArtifactAccessResponse';
 import type { ManagedDocumentArtifactListResponse } from '../models/ManagedDocumentArtifactListResponse';
 import type { ManagedDocumentDraftParameters } from '../models/ManagedDocumentDraftParameters';
@@ -824,6 +826,41 @@ export class ManagerDocumentSystemService {
         });
     }
     /**
+     * Create Native Order Mail Draft
+     * Save an incomplete draft with immutable private native/legacy document bytes from an
+     * accessible order. Requires live Manager access and Idempotency-Key; company/account,
+     * order, issuer and selected files are checked before receipt replay. Native files must
+     * be issued; at most 10 files, 10 MiB each and 20 MiB total. Does not send or change
+     * document delivery state. The returned mail ID/version and Manager link lead to full
+     * preview and separate exact-version approval.
+     * @param orderId
+     * @param idempotencyKey
+     * @param requestBody
+     * @returns MailMessageResponse Successful Response
+     * @throws ApiError
+     */
+    public static createManagerNativeOrderMailDraft(
+        orderId: number,
+        idempotencyKey: string,
+        requestBody: MailOrderDraftPayload,
+    ): CancelablePromise<MailMessageResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/document-system/orders/{order_id}/email/draft',
+            path: {
+                'order_id': orderId,
+            },
+            headers: {
+                'Idempotency-Key': idempotencyKey,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * Compose Native Order Email
      * Compose suggested recipient, subject/body and selected document attachments for an
      * accessible order in the current tenant/storefront. Preview only: does not submit email
@@ -859,8 +896,11 @@ export class ManagerDocumentSystemService {
      * recording outgoing-email state and document delivery. Manager access is required;
      * current SMTP sending supports the system tenant only (409
      * tenant_email_sender_not_configured for partner tenants). Invalid selection/content
-     * returns 400 and send failure 502. No caller idempotency receipt is provided: inspect
-     * outgoing-email history before repeating a lost send response. See the [document
+     * returns 400 and send failure 502. This compatibility action uses the shared saved
+     * content/file snapshot and send fence. Optional Idempotency-Key must be reused with an
+     * unchanged request; without it a new request may create a new draft. Uncertain SMTP
+     * outcomes remain unknown in outgoing history and require checking before another send.
+     * Manager UI uses the separate draft and full-preview flow. See the [document
      * lifecycle
      * contract](https://github.com/mvnby/air-api/blob/main/docs/document-module-architecture.md).
      *
@@ -868,18 +908,23 @@ export class ManagerDocumentSystemService {
      * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param orderId
      * @param requestBody
+     * @param idempotencyKey
      * @returns OutgoingEmailResponse Successful Response
      * @throws ApiError
      */
     public static sendManagerNativeOrderEmail(
         orderId: number,
         requestBody: OrderEmailSendPayload,
+        idempotencyKey?: (string | null),
     ): CancelablePromise<OutgoingEmailResponse> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/manager/document-system/orders/{order_id}/email',
             path: {
                 'order_id': orderId,
+            },
+            headers: {
+                'Idempotency-Key': idempotencyKey,
             },
             body: requestBody,
             mediaType: 'application/json',

@@ -18,7 +18,7 @@ def file(**changes):
 
 
 def test_file_params_discovery_and_bounded_tools():
-    assert len(TOOLS) == 32
+    assert len(TOOLS) == 42
     definition = TOOLS['upload_maintenance_finding_photo'].definition().model_dump(by_alias=True)
     assert definition['_meta']['openai/fileParams'] == ['file']
     schema = definition['inputSchema']['$defs']['OpenAIFile']
@@ -67,6 +67,21 @@ async def test_pinned_resolver_cannot_resolve_another_destination():
         await resolver.resolve('other.example', 443)
     with pytest.raises(ConnectorFileError):
         await resolver.resolve('delivery.example', 80)
+
+
+@pytest.mark.asyncio
+async def test_mail_attachment_download_uses_same_pinned_bounded_transport(monkeypatch):
+    monkeypatch.setattr(settings, 'CONNECTOR_CHATGPT_FILE_HOSTS', ['delivery.example'])
+    content = b'%PDF-1.7\nprivate frozen specification'
+    observed = []
+    async def fetch(file, *, limit, accept):
+        observed.append((limit, accept))
+        return content, 'application/pdf'
+    monkeypatch.setattr(ConnectorFileService, '_download_content', fetch)
+    assert await ConnectorFileService.download_attachment(file(mime_type='application/pdf')) == content
+    assert observed[0][0] <= 10 * 1024 * 1024 and observed[0][1] == '*/*'
+    with pytest.raises(ConnectorFileError, match='metadata'):
+        await ConnectorFileService.download_attachment(file(mime_type='application/zip'))
 
 
 @pytest.mark.asyncio

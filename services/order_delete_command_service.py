@@ -17,6 +17,7 @@ from models.order import (
 )
 from models.maintenance_continuation import MaintenanceContinuation
 from models.maintenance_observation import MaintenanceObservation
+from models.incoming_mail import IncomingMail
 from services.command_transaction import command_transaction
 from services.document_service import DocumentService
 from services.order_document_cleanup_service import OrderDocumentCleanupService
@@ -90,6 +91,11 @@ class OrderDeleteCommandService:
             await session.execute(
                 sa.update(OutgoingEmail)
                 .where(OutgoingEmail.order_id == order_id)
+                .values(order_id=None)
+            )
+            await session.execute(
+                sa.update(IncomingMail)
+                .where(IncomingMail.order_id == order_id)
                 .values(order_id=None)
             )
             await session.execute(

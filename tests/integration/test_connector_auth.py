@@ -103,6 +103,38 @@ async def tokens(db, identity):
 
 
 @pytest.mark.asyncio
+async def test_mail_scopes_require_new_consent_and_refresh_cannot_expand(db, identity):
+    old = await tokens(db, identity)
+    for scope in ("kitlane:mail:read", "kitlane:mail:drafts:write", "kitlane:mail:send"):
+        with pytest.raises(ConnectorAuthError) as error:
+            await Auth.resolve_actor(db, old.access_token, scope)
+        assert error.value.error == "insufficient_scope"
+    with pytest.raises(ConnectorAuthError) as error:
+        await Auth.refresh(db, refresh_token=old.refresh_token, client_id=CLIENT_ID,
+                           requested_resource=resource(), scope=old.scope + " kitlane:mail:send")
+    assert error.value.error == "invalid_scope"
+    code = await consent_code(db, identity, scopes="kitlane:read kitlane:mail:read kitlane:mail:drafts:write")
+    draft_only = await Auth.exchange_code(db, code=code, client_id=CLIENT_ID, redirect_uri=REDIRECT,
+                                         requested_resource=resource(), code_verifier=VERIFIER)
+    assert (await Auth.resolve_actor(db, draft_only.access_token, "kitlane:mail:drafts:write")).staff_user_id == identity[0].id
+    with pytest.raises(ConnectorAuthError) as error:
+        await Auth.resolve_actor(db, draft_only.access_token, "kitlane:mail:send")
+    assert error.value.error == "insufficient_scope"
+    send_code = await consent_code(db, identity, scopes="kitlane:read kitlane:mail:send")
+    send = await Auth.exchange_code(db, code=send_code, client_id=CLIENT_ID, redirect_uri=REDIRECT,
+                                   requested_resource=resource(), code_verifier=VERIFIER)
+    assert (await Auth.resolve_actor(db, send.access_token, "kitlane:mail:send")).staff_user_id == identity[0].id
+
+
+@pytest.mark.asyncio
+async def test_demo_cannot_receive_mail_send_scope(db, identity):
+    await db.execute(update(Tenant).where(Tenant.id == 1).values(demo_read_only=True))
+    await db.commit()
+    with pytest.raises(ConnectorAuthError, match="Write access"):
+        await consent_code(db, identity, scopes="kitlane:read kitlane:mail:send")
+
+
+@pytest.mark.asyncio
 async def test_oauth_success_hashes_scope_and_single_use(db, identity):
     code = await consent_code(db, identity)
     result = await Auth.exchange_code(

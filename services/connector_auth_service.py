@@ -106,7 +106,8 @@ class ConnectorAuthService:
         ):
             raise ConnectorAuthError("invalid_grant", "Kitlane access changed", 401)
         if access.tenant_scope.demo_read_only and any(
-            scope.endswith(":write") for scope in snapshot.scopes
+            scope.endswith(":write") or scope == "kitlane:mail:send"
+            for scope in snapshot.scopes
         ):
             raise ConnectorAuthError(
                 "invalid_grant", "Write access is unavailable", 401

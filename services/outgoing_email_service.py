@@ -1,14 +1,19 @@
 from datetime import datetime
+import asyncio
+import uuid
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import Customer, Order, OutgoingEmail
+from models.tenancy import TenantScope
+from crud.mail_workspace import MailWorkspaceDAO
+from services.tenant_entity_access_service import TenantEntityAccessService
 from services.mail_smtp_service import MailSmtpService
 
 
-OUTGOING_EMAIL_STATUSES = {"pending", "sent", "failed"}
+OUTGOING_EMAIL_STATUSES = {"draft", "pending", "sending", "sent", "failed", "unknown"}
 
 
 class OutgoingEmailService:
@@ -23,7 +28,16 @@ class OutgoingEmailService:
         q: Optional[str] = None,
         date_from: Optional[datetime] = None,
         date_to: Optional[datetime] = None,
+        tenant_scope: TenantScope | None = None,
     ):
+        if tenant_scope is not None:
+            stmt = stmt.where(MailWorkspaceDAO.scope_clause(tenant_scope))
+            stmt = stmt.where(or_(OutgoingEmail.order_id.is_(None), OutgoingEmail.order_id.in_(
+                select(Order.id).where(Order.tenant_id == tenant_scope.tenant_id, Order.storefront_id == tenant_scope.storefront_id)
+            )))
+            stmt = stmt.where(or_(OutgoingEmail.customer_id.is_(None), OutgoingEmail.customer_id.in_(
+                select(Customer.id).where(Customer.tenant_id == tenant_scope.tenant_id)
+            )))
         if status:
             stmt = stmt.where(OutgoingEmail.status == status)
         if order_id:
@@ -113,6 +127,7 @@ class OutgoingEmailService:
         q: Optional[str] = None,
         date_from: Optional[datetime] = None,
         date_to: Optional[datetime] = None,
+        tenant_scope: TenantScope | None = None,
     ) -> Tuple[List[Dict[str, Any]], int]:
         if status and status not in OUTGOING_EMAIL_STATUSES:
             raise ValueError("Unknown outgoing email status")
@@ -126,6 +141,7 @@ class OutgoingEmailService:
             q=q,
             date_from=date_from,
             date_to=date_to,
+            tenant_scope=tenant_scope,
         )
         count_stmt = cls._apply_filters(
             select(func.count()).select_from(OutgoingEmail),
@@ -136,6 +152,7 @@ class OutgoingEmailService:
             q=q,
             date_from=date_from,
             date_to=date_to,
+            tenant_scope=tenant_scope,
         )
         total = int((await session.execute(count_stmt)).scalar_one() or 0)
         result = await session.execute(
@@ -147,15 +164,21 @@ class OutgoingEmailService:
         return items, total
 
     @classmethod
-    async def get_email_detail(cls, session: AsyncSession, email_id: int) -> Dict[str, Any]:
-        email = await session.get(OutgoingEmail, email_id)
+    async def get_email_detail(cls, session: AsyncSession, email_id: int, *, tenant_scope: TenantScope | None = None) -> Dict[str, Any]:
+        email = (await MailWorkspaceDAO.get(session, email_id, tenant_scope)
+                 if tenant_scope else await session.get(OutgoingEmail, email_id))
         if not email:
             raise ValueError("Outgoing email not found")
+        if tenant_scope is not None:
+            if email.order_id and not await TenantEntityAccessService.get_order(session, email.order_id, tenant_scope=tenant_scope):
+                raise ValueError("Outgoing email not found")
+            if email.customer_id and not await TenantEntityAccessService.get_customer(session, email.customer_id, tenant_scope=tenant_scope):
+                raise ValueError("Outgoing email not found")
 
         item = (await cls._hydrate_rows(session, [email]))[0]
         root_id = email.retry_of_email_id or email.id
         attempts_result = await session.execute(
-            select(OutgoingEmail)
+            cls._apply_filters(select(OutgoingEmail), tenant_scope=tenant_scope)
             .where(or_(OutgoingEmail.id == root_id, OutgoingEmail.retry_of_email_id == root_id))
             .order_by(OutgoingEmail.created_at.asc(), OutgoingEmail.id.asc())
         )
@@ -163,14 +186,35 @@ class OutgoingEmailService:
         return item
 
     @classmethod
-    async def retry_failed_email(cls, session: AsyncSession, email_id: int) -> Dict[str, Any]:
-        original = await session.get(OutgoingEmail, email_id)
+    async def retry_failed_email(cls, session: AsyncSession, email_id: int, *, actor=None, tenant_scope=None) -> Dict[str, Any]:
+        if tenant_scope is not None:
+            await cls.get_email_detail(session, email_id, tenant_scope=tenant_scope)
+        original = (await MailWorkspaceDAO.get(session, email_id, tenant_scope, lock=True)
+                    if tenant_scope else (await session.execute(select(OutgoingEmail).where(OutgoingEmail.id == email_id).with_for_update())).scalar_one_or_none())
         if not original:
             raise ValueError("Outgoing email not found")
         if original.status != "failed":
             raise ValueError("Only failed emails can be retried")
 
+        snapshots = (await MailWorkspaceDAO.attachments(session, email_id, actor.tenant_scope.tenant_id, include_content=False)
+                     if actor is not None else [])
+        if actor is not None and (original.send_token or snapshots):
+            from schemas_mail import MailVersionPayload
+            from services.mail_workspace_service import MailWorkspaceService
+
+            copied = await MailWorkspaceService.copy_message(session, actor=actor, message_id=email_id,
+                payload=MailVersionPayload(expected_version=original.version), idempotency_key=f"legacy-retry-{uuid.uuid4().hex}")
+            # Saved-version mail requires a new explicit review, never a silent resend.
+            draft = await session.get(OutgoingEmail, copied.value.id)
+            return (await cls._hydrate_rows(session, [draft]))[0]
+
         retry_root_id = original.retry_of_email_id or original.id
+        previous = (await session.execute(cls._apply_filters(select(OutgoingEmail), tenant_scope=tenant_scope).where(
+            OutgoingEmail.retry_of_email_id == retry_root_id,
+            OutgoingEmail.status.in_(["pending", "sending", "sent", "unknown"]),
+        ).order_by(OutgoingEmail.id.desc()).limit(1))).scalar_one_or_none()
+        if previous is not None:
+            return (await cls._hydrate_rows(session, [previous]))[0]
         retry = OutgoingEmail(
             status="pending",
             retry_of_email_id=retry_root_id,
@@ -184,10 +228,13 @@ class OutgoingEmailService:
             from_name=original.from_name,
             reply_to=original.reply_to,
             attachments=original.attachments,
+            tenant_id=original.tenant_id,
+            storefront_id=original.storefront_id,
         )
         session.add(retry)
         await session.flush()
-
+        await session.commit()
+        smtp_started = False
         try:
             if original.attachments:
                 raise RuntimeError(
@@ -202,10 +249,13 @@ class OutgoingEmailService:
                 reply_to=retry.reply_to,
                 attachments=[],
             )
-            MailSmtpService.send_message(message)
+            smtp_started = True
+            await asyncio.to_thread(MailSmtpService.send_message, message)
         except Exception as exc:
-            retry.status = "failed"
-            retry.error = MailSmtpService._sanitize_error(exc)
+            from services.mail_workspace_delivery import MailWorkspaceDelivery
+            retry.status = "unknown" if smtp_started and not MailWorkspaceDelivery._known_rejection(exc) else "failed"
+            retry.error = ("Результат отправки неизвестен. Проверьте журнал почтового сервера перед повтором"
+                           if retry.status == "unknown" else MailSmtpService._sanitize_error(exc))
             session.add(retry)
             await session.commit()
             await session.refresh(retry)

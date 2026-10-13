@@ -9,6 +9,7 @@
     "reviewed_stage"
   ],
   "review_stages": {
+    "14": "Standalone saved mail, private immutable attachment bytes, current company/account/link access, optimistic versions, exact Manager approval with CSRF, durable send fence, unknown SMTP outcome and separate MCP OAuth mail scopes; reviewed 2026-10-13",
     "13": "Draft parameter read/update: tenant/storefront, frozen source facts, optimistic revision, date-only editor preservation and explicit working-copy reset; reviewed 2026-10-10",
     "12": "Manual procurement stages/price history, editable participant statement issue confirmation and tenant-private registration certificates/email issuer binding; reviewed 2026-10-09",
     "1": "Public HTTP/helpers, supply, staff bot and OAuth; completed in a3e79e89",
@@ -24,6 +25,26 @@
     "11": "Native tender direct push; dedicated key, fixed active system scope, writable-primary gates, bounded payload, shared pull/push deduplication, staff preservation, stale guards and unchanged pull checkpoint reviewed 2026-10-09 for issue 849"
   },
   "operations": {
+    "routers/manager_incoming_mail.py": [
+      ["GET /api/manager/mail/messages/{email_id}/attachments/{attachment_id}", "download_manager_incoming_mail_attachment", false, 14],
+      ["POST /api/manager/mail/sync", "sync_manager_mailbox", false, 14]
+    ],
+    "routers/manager_mail_workspace.py": [
+      ["DELETE /api/manager/mail/drafts/{draft_id}", "delete_manager_mail_draft", false, 14],
+      ["DELETE /api/manager/mail/drafts/{draft_id}/attachments/{attachment_id}", "delete_manager_mail_draft_attachment", false, 14],
+      ["GET /api/manager/mail/accounts", "list_manager_mail_accounts", false, 14],
+      ["GET /api/manager/mail/drafts/{draft_id}", "get_manager_mail_draft", false, 14],
+      ["GET /api/manager/mail/drafts/{draft_id}/attachments/{attachment_id}", "download_manager_mail_attachment", false, 14],
+      ["GET /api/manager/mail/drafts/{draft_id}/preview", "preview_manager_mail_draft", false, 14],
+      ["GET /api/manager/mail/messages", "list_manager_mail_messages", false, 14],
+      ["GET /api/manager/mail/messages/{message_id}", "get_manager_mail_message", false, 14],
+      ["PATCH /api/manager/mail/drafts/{draft_id}", "patch_manager_mail_draft", false, 14],
+      ["POST /api/manager/mail/drafts", "create_manager_mail_draft", false, 14],
+      ["POST /api/manager/mail/drafts/{draft_id}/attachments", "upload_manager_mail_draft_attachment", false, 14],
+      ["POST /api/manager/mail/drafts/{draft_id}/confirm", "confirm_manager_mail_draft", false, 14],
+      ["POST /api/manager/mail/drafts/{draft_id}/send", "send_manager_mail_draft", false, 14],
+      ["POST /api/manager/mail/messages/{message_id}/copy", "copy_manager_mail_message", false, 14]
+    ],
     "routers/manager_tender_workflow.py": [
       ["DELETE /api/manager/orders/{order_id}/tender-workflow/price-enquiry", "unlink_manager_tender_price_enquiry", false, 12],
       ["GET /api/manager/orders/{order_id}/tender-workflow", "get_manager_tender_workflow", false, 12],
@@ -62,8 +83,9 @@
       ["PUT /api/manager/document-system/legal-entities/{legal_entity_id}/number-policies/{document_type}", "upsert_manager_document_number_policy", false, 2]
     ],
     "modules/documents/api/managed_document_emails.py": [
-      ["POST /api/manager/document-system/orders/{order_id}/email", "send_manager_native_order_email", false, 12],
-      ["POST /api/manager/document-system/orders/{order_id}/email/compose", "compose_manager_native_order_email", false, 12]
+      ["POST /api/manager/document-system/orders/{order_id}/email", "send_manager_native_order_email", false, 14],
+      ["POST /api/manager/document-system/orders/{order_id}/email/compose", "compose_manager_native_order_email", false, 12],
+      ["POST /api/manager/document-system/orders/{order_id}/email/draft", "create_manager_native_order_mail_draft", false, 14]
     ],
     "modules/documents/api/managed_document_external_edits.py": [
       ["GET /api/manager/document-system/documents/{document_id}/google-edit-session", "get_manager_managed_document_google_edit_session", false, 2],
@@ -541,20 +563,21 @@
       ["GET /api/manager/mail/bank-receipts", "list_manager_bank_receipts", false, 2],
       ["GET /api/manager/mail/bank-receipts/{receipt_id}/allocation", "get_manager_bank_receipt_allocation", false, 2],
       ["GET /api/manager/mail/leads/import/status", "get_manager_email_lead_import_status", false, 2],
-      ["GET /api/manager/mail/orders/{order_id}/outgoing-emails", "list_manager_order_outgoing_emails", false, 2],
-      ["GET /api/manager/mail/outgoing-emails", "list_manager_outgoing_emails", false, 2],
-      ["GET /api/manager/mail/outgoing-emails/{email_id}", "get_manager_outgoing_email", false, 2],
+      ["GET /api/manager/mail/orders/{order_id}/outgoing-emails", "list_manager_order_outgoing_emails", false, 14],
+      ["GET /api/manager/mail/outgoing-emails", "list_manager_outgoing_emails", false, 14],
+      ["GET /api/manager/mail/outgoing-emails/{email_id}", "get_manager_outgoing_email", false, 14],
       ["PATCH /api/manager/mail/bank-receipts/{receipt_id}/status", "patch_manager_bank_receipt_status", false, 2],
       ["POST /api/manager/mail/bank-receipts/import", "import_manager_bank_receipts", false, 2],
       ["POST /api/manager/mail/bank-receipts/import-statement", "import_manager_bank_statement", false, 2],
       ["POST /api/manager/mail/bank-receipts/{receipt_id}/attach", "attach_manager_bank_receipt", false, 2],
       ["POST /api/manager/mail/bank-receipts/{receipt_id}/attach-group", "attach_manager_bank_receipt_group", false, 2],
-      ["POST /api/manager/mail/email/send-test", "send_manager_test_email", false, 2],
+      ["POST /api/manager/mail/email/send-test", "send_manager_test_email", false, 14],
       ["POST /api/manager/mail/leads/import", "import_manager_email_leads", false, 2],
       ["POST /api/manager/mail/orders/{order_id}/compose", "compose_manager_order_email", false, 12],
-      ["POST /api/manager/mail/orders/{order_id}/email", "send_manager_order_email", false, 12],
-      ["POST /api/manager/mail/outgoing-emails/{email_id}/retry", "retry_manager_outgoing_email", false, 2],
-      ["PUT /api/manager/mail/bank-receipts/{receipt_id}/allocations", "replace_manager_bank_receipt_allocations", false, 2]
+      ["POST /api/manager/mail/orders/{order_id}/email", "send_manager_order_email", false, 14],
+      ["POST /api/manager/mail/outgoing-emails/{email_id}/retry", "retry_manager_outgoing_email", false, 14],
+      ["PUT /api/manager/mail/bank-receipts/{receipt_id}/allocations", "replace_manager_bank_receipt_allocations", false, 2],
+      ["POST /api/manager/mail/orders/{order_id}/draft", "create_manager_order_mail_draft", false, 14]
     ],
     "routers/manager_mdv_catalog.py": [
       ["POST /api/manager/catalog/mdv/import/jobs", "start_mdv_catalog_import_job", true, 2],

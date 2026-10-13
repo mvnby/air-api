@@ -19,6 +19,7 @@ from models import (
     OrderStageStatus,
     OrderStatus,
     OutgoingEmail,
+    IncomingMail,
     PaymentCurrency,
     Product,
     Service,
@@ -941,6 +942,9 @@ async def test_service_delete_order_cleans_proposals_and_detaches_audit_rows(sql
     )
     db.add(receipt)
     db.add(email)
+    incoming = IncomingMail(tenant_id=1, source_key="delete-order-incoming", order_id=order.id,
+                            customer_id=customer.id, sender_email="client@example.test", body_text="Original reply")
+    db.add(incoming)
     await db.commit()
 
     assert await OrderService.delete_order(db, order.id, tenant_scope=TEST_TENANT_SCOPE) is True
@@ -956,3 +960,6 @@ async def test_service_delete_order_cleans_proposals_and_detaches_audit_rows(sql
 
     detached_email = (await db.execute(select(OutgoingEmail).where(OutgoingEmail.id == email.id))).scalar_one()
     assert detached_email.order_id is None
+    detached_incoming = await db.get(IncomingMail, incoming.id)
+    await db.refresh(detached_incoming)
+    assert detached_incoming.order_id is None and detached_incoming.body_text == "Original reply"

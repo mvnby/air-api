@@ -231,7 +231,7 @@ async def test_failed_native_email_keeps_document_issued(
     monkeypatch.setattr(DocumentService, "get_download_stream", fake_download)
     monkeypatch.setattr(MailSmtpService, "send_message", failed_send)
 
-    with pytest.raises(RuntimeError, match="SMTP unavailable"):
+    with pytest.raises(RuntimeError, match="Результат отправки неизвестен"):
         await MailSmtpService.send_order_email(
             native_email_session,
             tenant_scope=SYSTEM_SCOPE,

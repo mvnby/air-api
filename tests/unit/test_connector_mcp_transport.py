@@ -121,7 +121,7 @@ async def test_real_sdk_handshake_discovery_and_actor_isolation(mcp_client):
     for tool in tools.values():
         assert "actor" not in tool["inputSchema"].get("properties", {})
         assert "tenant_id" not in tool["inputSchema"].get("properties", {})
-        assert tool["annotations"]["openWorldHint"] is False
+        assert tool["annotations"]["openWorldHint"] is (tool["name"] == "send_mail_draft")
     first = (await _rpc(client, "tools/call", {"name": "get_current_context", "arguments": {}})).json()["result"]
     second = (await _rpc(client, "tools/call", {"name": "get_current_context", "arguments": {}}, token="token-two")).json()["result"]
     assert not first["isError"] and not second["isError"]
@@ -259,7 +259,7 @@ async def test_maximum_escaped_unicode_is_accepted_with_finite_body_limit(mcp_cl
     accepted = await client.post("/api/connector/mcp", content=body, headers={"Content-Type": "application/json"})
     assert accepted.status_code == 200
     assert not accepted.json()["result"]["isError"]
-    oversized = await client.post("/api/connector/mcp", content=body + b" " * (512 * 1024), headers={"Content-Type": "application/json"})
+    oversized = await client.post("/api/connector/mcp", content=body + b" " * (2 * 1024 * 1024), headers={"Content-Type": "application/json"})
     assert oversized.status_code == 413
     assert calls == ["create_incoming"]
 

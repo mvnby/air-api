@@ -5,6 +5,7 @@ import { managerSession } from '../src/services/manager-session';
 import * as certificates from '../src/features/documents/registration-certificates';
 import RegistrationCertificatePanel from '../src/features/documents/settings/RegistrationCertificatePanel.vue';
 import DocumentSendModal from '../src/components/orders/DocumentSendModal.vue';
+import { mailApi, type MailMessage } from '../src/services/mail-workspace-api';
 const item = { id: 'a'.repeat(32), legal_entity_id: 7, filename: 'scan.png', mime_type: 'image/png', checksum_sha256: 'b'.repeat(64), size_bytes: 100, is_current: true, created_at: '2026-10-09T00:00:00Z' };
 const wrappers: ReturnType<typeof mount>[] = [];
 beforeEach(() => {
@@ -44,6 +45,18 @@ describe('registration certificates', () => {
       document_ids: [], document_labels: [], missing_requisites: [],
     }));
     const send = vi.spyOn(ManagerDocumentSystemService, 'sendManagerNativeOrderEmail').mockResolvedValue({} as never);
+    vi.spyOn(mailApi, 'accounts').mockResolvedValue({ items: [{ id: 'system', name: 'ИП Климат', email: 'office@example.com', signature: '' }] });
+    const createDraft = vi.spyOn(mailApi, 'createOrderDraft').mockImplementation(async (_orderId, payload): Promise<MailMessage> => ({
+      id: 80, version: 1, status: 'draft', folder: 'drafts', account_id: 'system',
+      sender_email: 'office@example.com', sender_name: 'ИП Климат',
+      to: payload.to_email ? [payload.to_email] : [], cc: [], bcc: [],
+      subject: payload.subject || '', body_text: payload.body_text || '',
+      attachments: payload.registration_certificate_id ? [{ id: 900, filename: item.filename, mime_type: item.mime_type, size: item.size_bytes, sha256: item.checksum_sha256, available: true, download_url: '/api/manager/mail/drafts/80/attachments/900' }] : [],
+      order_id: 42, customer_id: null, manager_url: '/manager/mail?emailId=80',
+      created_at: item.created_at, updated_at: item.created_at, sent_at: null, error: null,
+      confirmed_version: null,
+    }));
+    const mailSend = vi.spyOn(mailApi, 'send');
     const wrapper = mount(DocumentSendModal, { props: { modelValue: false, transport: 'native', order: { id: 42, customer: { email: 'client@example.com' } } as ManagerOrderDetailResponse, documents: [] }, attachTo: document.body }); wrappers.push(wrapper);
     await wrapper.setProps({ modelValue: true }); await flushPromises();
     const select = document.body.querySelectorAll('select')[1] as HTMLSelectElement;
@@ -51,10 +64,10 @@ describe('registration certificates', () => {
     async function chooseCertificate(id: string) {
       select.value = id; select.dispatchEvent(new Event('change', { bubbles: true })); await flushPromises();
     }
-    return { compose, send, templateSelect, chooseCertificate };
+    return { compose, send, createDraft, mailSend, templateSelect, chooseCertificate };
   }
-  it('automatically composes delivery and enables certificate-only send after choosing it', async () => {
-    const { compose, send, templateSelect, chooseCertificate } = await certificateOnlyModal();
+  it('automatically composes a certificate-only draft and retains its private file in the shared editor', async () => {
+    const { compose, send, createDraft, mailSend, templateSelect, chooseCertificate } = await certificateOnlyModal();
     expect(templateSelect.value).toBe('request_requisites'); expect(send).not.toHaveBeenCalled();
     expect(compose).toHaveBeenCalledTimes(1);
     await chooseCertificate(item.id);
@@ -62,9 +75,16 @@ describe('registration certificates', () => {
     expect(compose).toHaveBeenCalledTimes(2);
     expect(compose).toHaveBeenLastCalledWith(42, expect.objectContaining({ document_ids: [], registration_certificate_id: item.id, legal_entity_id: 7, template_key: 'auto' }));
     expect(document.body.querySelector('textarea')?.value).toBe('Направляем свидетельство во вложении.');
-    const button = Array.from(document.body.querySelectorAll('button')).find((button) => button.textContent?.includes('Отправить'));
+    const button = Array.from(document.body.querySelectorAll('button')).find((button) => button.textContent?.includes('Сохранить и проверить письмо'));
     expect(button).toBeDefined(); expect(button!.disabled).toBe(false); button!.click(); await flushPromises();
-    expect(send).toHaveBeenCalledWith(42, expect.objectContaining({ document_ids: [], registration_certificate_id: item.id, legal_entity_id: 7, subject: 'Свидетельство о регистрации', body_text: 'Направляем свидетельство во вложении.' }));
+    expect(createDraft).toHaveBeenCalledWith(42, expect.objectContaining({ to_email: 'client@example.com', document_ids: [], registration_certificate_id: item.id, legal_entity_id: 7, subject: 'Свидетельство о регистрации', body_text: 'Направляем свидетельство во вложении.' }), 'native');
+    const editor = document.body.querySelector('[aria-label="Редактор черновика"]');
+    expect(editor?.textContent).toContain('Черновик #80');
+    expect(editor?.textContent).toContain('scan.png');
+    expect((editor?.querySelector('input[aria-label="Тема"]') as HTMLInputElement)?.value).toBe('Свидетельство о регистрации');
+    expect((editor?.querySelector('textarea[aria-label="Текст"]') as HTMLTextAreaElement)?.value).toBe('Направляем свидетельство во вложении.');
+    expect(send).not.toHaveBeenCalled();
+    expect(mailSend).not.toHaveBeenCalled();
   });
   it('returns to the initial automatic template when removing the certificate and preserves typed text', async () => {
     const { compose, templateSelect, chooseCertificate } = await certificateOnlyModal();

@@ -59,7 +59,7 @@ const InstallationRatesView = defineAsyncComponent(() => import('./views/Install
 const InstallationDiscountsView = defineAsyncComponent(() => import('./views/InstallationDiscountsView.vue'));
 const ServiceEstimatesView = defineAsyncComponent(() => import('./views/ServiceEstimatesView.vue'));
 const BankReceiptsView = defineAsyncComponent(() => import('./views/BankReceiptsView.vue'));
-const OutgoingEmailsView = defineAsyncComponent(() => import('./views/OutgoingEmailsView.vue'));
+const MailView = defineAsyncComponent(() => import('./views/MailView.vue'));
 const TagsView = defineAsyncComponent(() => import('./views/TagsView.vue'));
 const BrandsView = defineAsyncComponent(() => import('./views/BrandsView.vue'));
 const FeaturesView = defineAsyncComponent(() => import('./views/FeaturesView.vue'));
@@ -199,7 +199,7 @@ const currentView = computed(() => {
   if (path.startsWith('/manager/installation-discounts')) return 'installation-discounts';
   if (path.startsWith('/manager/tariffs')) return 'tariffs';
   if (path.startsWith('/manager/service-estimates')) return 'service-estimates';
-  if (path.startsWith('/manager/mail/outbox')) return 'outgoing-emails';
+  if (path.startsWith('/manager/mail')) return 'mail';
   if (path.startsWith('/manager/payments')) return 'payments';
   if (path.startsWith('/manager/tags')) return 'tags';
   if (path.startsWith('/manager/brands')) return 'brands';
@@ -578,7 +578,7 @@ watch(currentPath, () => {
       <InstallationDiscountsView v-else-if="authorizedView === 'installation-discounts'" :key="currentLocation" />
       <TariffsView v-else-if="authorizedView === 'tariffs'" :key="currentLocation" />
       <ServiceEstimatesView v-else-if="authorizedView === 'service-estimates'" :key="currentLocation" />
-      <OutgoingEmailsView v-else-if="authorizedView === 'outgoing-emails'" :key="currentLocation" />
+      <MailView v-else-if="authorizedView === 'mail'" :key="currentLocation" />
       <BankReceiptsView v-else-if="authorizedView === 'payments'" :key="currentLocation" />
       <TagsView v-else-if="authorizedView === 'tags'" :key="currentLocation" />
       <BrandsView v-else-if="authorizedView === 'brands'" :key="currentLocation" />

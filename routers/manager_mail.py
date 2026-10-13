@@ -1,13 +1,18 @@
 import logging
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Header, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from routers import manager_operation_ids as mail_operation_ids
+
 from core.database import get_session
+from core.command_actor import CommandActor, get_command_idempotency_key
 from core.manager_api_errors import manager_http_error
 from core.manager_error_codes import BAD_REQUEST
 from core.security import (
+    AuthenticatedUser,
+    require_manager_access,
     get_current_manager_tenant_scope,
     require_system_manager_tenant_scope,
 )
@@ -62,6 +67,10 @@ from services.mail_smtp_service import MailSmtpService
 from services.notification_service import NotificationService
 from services.order_email_template_service import OrderEmailTemplateService
 from services.outgoing_email_service import OutgoingEmailService
+from schemas_mail import MailMessageResponse
+from schemas_order_mail import MailOrderDraftPayload
+from services.order_mail_delivery_service import OrderMailDeliveryService
+from services.tenant_entity_access_service import TenantEntityAccessService
 
 
 logger = logging.getLogger(__name__)
@@ -71,6 +80,28 @@ router = APIRouter(
     tags=["manager/mail"],
     dependencies=[Depends(require_system_manager_tenant_scope)],
 )
+
+
+@router.post("/orders/{order_id}/draft", response_model=MailMessageResponse,
+             status_code=201, operation_id=mail_operation_ids.CREATE_MANAGER_ORDER_MAIL_DRAFT)
+async def create_order_mail_draft(order_id: int, payload: MailOrderDraftPayload,
+                                  auth: AuthenticatedUser = Depends(require_manager_access),
+                                  session: AsyncSession = Depends(get_session),
+                                  idempotency_key: str = Depends(get_command_idempotency_key)):
+    """Save an incomplete draft with immutable private document bytes from an accessible
+    system-company order. Requires live Manager access and Idempotency-Key; checks the
+    current order, issuer and selected document access before receipt replay. At most 10
+    files, 10 MiB each and 20 MiB total. Does not send or mark documents sent. The returned
+    mail ID/version and Manager link lead to full preview and exact-version approval.
+    """
+    from routers.manager_mail_workspace import ERRORS, _http_error
+
+    try:
+        result = await OrderMailDeliveryService.create_draft(session, actor=CommandActor.from_auth(auth),
+            order_id=order_id, payload=payload, idempotency_key=idempotency_key)
+        return result.value
+    except ERRORS as exc:
+        raise _http_error(exc) from exc
 
 
 async def _bank_receipt_response(
@@ -533,13 +564,14 @@ async def list_manager_outgoing_emails(
     date_from: datetime | None = None,
     date_to: datetime | None = None,
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     """
     Page the platform outgoing-email journal with status/order/customer/recipient/text/date
     filters and limit at most 100. Includes attempts and delivery/error metadata;
     unsupported status or service failure returns 400. Reading does not send or retry
-    messages. Requires system-tenant Manager access. These are platform mail/receipt
-    records, not a current-storefront-only journal.
+    messages. Requires system-tenant Manager access. Mail is limited to the current
+    company and accessible order/customer context; unrelated companies are excluded.
 
     Access requires an authenticated Manager session/JWT and live membership; see [Manager
     access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
@@ -556,6 +588,7 @@ async def list_manager_outgoing_emails(
             q=q,
             date_from=date_from,
             date_to=date_to,
+            tenant_scope=tenant_scope,
         )
         return OutgoingEmailListResponse(items=items, total=total, page=page, limit=limit)
     except Exception as exc:
@@ -575,19 +608,20 @@ async def list_manager_outgoing_emails(
 async def get_manager_outgoing_email(
     email_id: int,
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     """
     Read a platform outgoing-email record including stored content/attachment metadata and
     its retry attempts. Missing record or any detail-loading failure is mapped to 404 by
     this route. Reading is not a delivery confirmation from the recipient’s mailbox and does
-    not retry. Requires system-tenant Manager access. These are platform mail/receipt
-    records, not a current-storefront-only journal.
+    not retry. Requires system-tenant Manager access and accessible company/order/customer
+    context. Sent means SMTP acceptance, not recipient delivery.
 
     Access requires an authenticated Manager session/JWT and live membership; see [Manager
     access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     try:
-        return await OutgoingEmailService.get_email_detail(session, email_id)
+        return await OutgoingEmailService.get_email_detail(session, email_id, tenant_scope=tenant_scope)
     except Exception as exc:
         raise manager_http_error(
             status_code=404,
@@ -606,19 +640,21 @@ async def list_manager_order_outgoing_emails(
     order_id: int,
     limit: int = Query(20, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     """
     Read the first page of platform outgoing-email history filtered by order ID, with limit
-    at most 100. This journal lookup does not perform the tenant/storefront order
-    authorization used by compose/send. Service failure returns 400; an order without
-    records can return an empty list. Requires system-tenant Manager access. These are
-    platform mail/receipt records, not a current-storefront-only journal.
+    at most 100. The linked order must be accessible in the current company/storefront.
+    Service failure returns 400; an accessible order without records returns an empty
+    list. Requires system-tenant Manager access.
 
     Access requires an authenticated Manager session/JWT and live membership; see [Manager
     access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     try:
-        items, total = await OutgoingEmailService.list_emails(session, page=1, limit=limit, order_id=order_id)
+        if not await TenantEntityAccessService.get_order(session, order_id, tenant_scope=tenant_scope):
+            raise ValueError("Order not found")
+        items, total = await OutgoingEmailService.list_emails(session, page=1, limit=limit, order_id=order_id, tenant_scope=tenant_scope)
         return OutgoingEmailListResponse(items=items, total=total, page=1, limit=limit)
     except Exception as exc:
         raise manager_http_error(
@@ -637,21 +673,22 @@ async def list_manager_order_outgoing_emails(
 async def retry_manager_outgoing_email(
     email_id: int,
     session: AsyncSession = Depends(get_session),
+    auth: AuthenticatedUser = Depends(require_manager_access),
 ):
     """
-    Create a new linked attempt for a failed platform outgoing email using its stored
-    recipient/body; only failed originals are accepted (400 otherwise). Messages with
-    attachments cannot be reconstructed by this action: a failed attempt is recorded and
-    documents must be sent again from the order. SMTP failure can return HTTP success with
-    status=failed; inspect status/error. No caller replay receipt prevents another attempt.
-    Requires system-tenant Manager access. These are platform mail/receipt records, not a
-    current-storefront-only journal.
+    For new saved-version mail, create a linked draft with identical private files for
+    explicit review in Manager; this action does not send it. Old metadata-only attachments
+    cannot be reconstructed and return a recorded failure. The legacy text-only path keeps
+    an accepted/in-progress/unknown attempt fence; an uncertain SMTP result is unknown and
+    never silently retried. Only failed originals and accessible company/order/customer
+    context are accepted. Inspect status/error even on HTTP success.
 
     Access requires an authenticated Manager session/JWT and live membership; see [Manager
     access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     try:
-        return await OutgoingEmailService.retry_failed_email(session, email_id)
+        return await OutgoingEmailService.retry_failed_email(session, email_id,
+            actor=CommandActor.from_auth(auth) if auth.staff_user_id else None, tenant_scope=auth.tenant_scope())
     except Exception as exc:
         raise manager_http_error(
             status_code=400,
@@ -669,14 +706,16 @@ async def retry_manager_outgoing_email(
 async def send_manager_test_email(
     payload: OutgoingEmailSendPayload,
     session: AsyncSession = Depends(get_session),
+    auth: AuthenticatedUser = Depends(require_manager_access),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
     """
     Send a real message through the configured system SMTP and record the attempt in the
     platform journal. This is not a dry run despite the test route name. Invalid
     configuration/content or SMTP failure returns 400; a failed recorded attempt may already
-    exist. No replay receipt is supplied, so inspect the journal before retrying an
-    uncertain result. Requires system-tenant Manager access. These are platform mail/receipt
-    records, not a current-storefront-only journal.
+    exist. Uses the shared saved draft/snapshot engine; supply Idempotency-Key for safe
+    request replay and inspect history on an uncertain result. Requires system-tenant
+    Manager access. The name does not authorize an unrequested live mail test.
 
     Access requires an authenticated Manager session/JWT and live membership; see [Manager
     access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
@@ -689,6 +728,9 @@ async def send_manager_test_email(
             body_text=payload.body_text,
             body_html=payload.body_html,
             reply_to=payload.reply_to,
+            actor=CommandActor.from_auth(auth) if auth.staff_user_id else None,
+            idempotency_key=idempotency_key,
+            tenant_scope=auth.tenant_scope(),
         )
     except Exception as exc:
         raise manager_http_error(
@@ -748,14 +790,20 @@ async def send_manager_order_email(
     payload: OrderEmailSendPayload,
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
+    auth: AuthenticatedUser = Depends(require_manager_access),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
     """
     Send email with selected documents from an order accessible in the current system
     tenant/storefront and record outgoing history. Requires system-tenant Manager access. At
     most 10 documents, 10 MB per PDF and 20 MB total; native documents must be issued.
     Success can mark native documents/proposals sent and advance negotiation substatus for
-    offer/invoice/contract. Invalid context/content or SMTP failure returns 400. No caller
-    replay receipt is supplied: inspect history before repeating an uncertain send.
+    offer/invoice/contract. This compatibility action uses the shared saved snapshot and
+    send fence; Idempotency-Key is optional, and unchanged retries must preserve it.
+    Without a key, another explicit request may create a new draft. HTML is converted to
+    reviewable plain text and private file bytes are frozen. Invalid context/content or
+    SMTP failure returns 400; an uncertain SMTP result remains in history as unknown and
+    must be checked before any new send. Manager UI uses the separate draft/preview flow.
 
     Access requires an authenticated Manager session/JWT and live membership; see [Manager
     access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
@@ -773,6 +821,8 @@ async def send_manager_order_email(
             document_ids=payload.document_ids,
             registration_certificate_id=payload.registration_certificate_id,
             legal_entity_id=payload.legal_entity_id,
+            actor=CommandActor.from_auth(auth) if auth.staff_user_id else None,
+            idempotency_key=idempotency_key,
         )
     except Exception as exc:
         raise manager_http_error(

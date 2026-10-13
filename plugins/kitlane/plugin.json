@@ -1,14 +1,14 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "kitlane",
-  "version": "1.2.0",
-  "description": "Select catalog equipment, prepare business quote/invoice drafts, save requests and tasks, and record maintenance findings in Kitlane.",
+  "version": "1.3.0",
+  "description": "Prepare standalone mail drafts and send exact versions approved in Manager; select catalog equipment, prepare document drafts, save requests and tasks, and record maintenance findings in Kitlane.",
   "extensions": {
     "com.openai": {
       "interface": {
         "displayName": "Kitlane",
-        "shortDescription": "Подбор, документы, заявки и ТО",
-        "longDescription": "Подбирайте кондиционеры по характеристикам и бюджету, получайте варианты с ценами и ссылками для мессенджера. Для юрлиц готовьте черновики КП и счетов по выбранному оборудованию. Сохраняйте обращения, поручения и замечания ТО.",
+        "shortDescription": "Почта, подбор, документы и ТО",
+        "longDescription": "Готовьте самостоятельные почтовые черновики с вложениями и отправляйте только версии, явно подтверждённые в Manager. Подбирайте кондиционеры по характеристикам и бюджету, получайте варианты с ценами и ссылками. Готовьте черновики КП и счетов, сохраняйте обращения, поручения и замечания ТО.",
         "developerName": "Kitlane",
         "category": "Productivity",
         "capabilities": [

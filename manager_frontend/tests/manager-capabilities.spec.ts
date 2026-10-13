@@ -86,6 +86,8 @@ describe('tenant manager capabilities', () => {
       '/manager/tasks',
       '/manager/customers',
       '/manager/equipment',
+      '/manager/mail',
+      '/manager/mail/outbox',
       '/manager/products',
       '/manager/product-collections',
     ]) {
@@ -120,6 +122,7 @@ describe('tenant manager capabilities', () => {
       'Кондиционеры',
       'Подборки',
       'Оборудование',
+      'Почта',
     ]);
   });
 

@@ -1,6 +1,7 @@
 import type { ManagedDocumentItem, ManagerOrderDocumentItem } from '../../client';
 import { EXECUTION_STATUS_LABELS, NEGOTIATION_STATUS_LABELS, formatRelativeAge } from './order-utils';
 import { normalizeProposalStatus, type ProposalLifecycleStatus } from './proposal-lifecycle';
+import { mailStatusLabel } from '../../services/mail-workspace-api';
 
 export type OrderWorkflowType = 'sales_installation' | 'service_work' | 'maintenance' | 'repair';
 export type OrderWorkspaceTarget = 'object' | 'planning' | 'proposal' | 'documents' | 'payments' | 'equipment';
@@ -73,7 +74,7 @@ export type OrderWorkspaceInput = {
   linkedEquipmentCount: number;
   documents: ManagerOrderDocumentItem[];
   managedDocuments?: ManagedDocumentItem[];
-  documentEmailStatus?: 'unknown' | 'none' | 'pending' | 'sent' | 'failed';
+  documentEmailStatus?: 'unknown' | 'none' | 'pending' | 'sending' | 'uncertain' | 'sent' | 'failed';
   sentDocumentTypes?: string[];
   missingReferencedInvoice?: string | null;
   total: number;
@@ -120,9 +121,11 @@ const documentTypesLabel = (documents: ManagerOrderDocumentItem[]) => {
 };
 
 const documentDeliveryLabel = (status: OrderWorkspaceInput['documentEmailStatus']) => ({
-  sent: 'отправлены',
-  pending: 'отправляются',
-  failed: 'ошибка отправки',
+  sent: mailStatusLabel('sent'),
+  pending: mailStatusLabel('pending'),
+  sending: mailStatusLabel('sending'),
+  uncertain: mailStatusLabel('unknown'),
+  failed: mailStatusLabel('failed'),
   unknown: 'история отправки недоступна',
   none: 'нужно проверить и отправить',
 }[status || 'none']);
@@ -156,6 +159,7 @@ export const buildOrderWorkspaceViewModel = (input: OrderWorkspaceInput): OrderW
   const hasManagedDraft = activeManagedDocuments.some((item) => item.status === 'draft');
   const hasManagedIssued = activeManagedDocuments.some((item) => item.status === 'issued');
   const hasManagedSent = activeManagedDocuments.some((item) => ['sent', 'signed'].includes(item.status));
+  const emailNeedsCheck = ['pending', 'sending', 'uncertain'].includes(input.documentEmailStatus || '');
   const documentCount = new Set([...input.documents.map((item) => item.id), ...activeManagedDocuments.map((item) => item.id)]).size;
   if (inExecution && substatus === 'work_done' && !documentCount) blockers.push('Нет закрывающих документов');
   const createdDocumentTypes = new Set(input.documents.map((item) => item.doc_type));
@@ -163,6 +167,7 @@ export const buildOrderWorkspaceViewModel = (input: OrderWorkspaceInput): OrderW
 
   let nextAction: OrderWorkspaceViewModel['nextAction'];
   if (isClosed) nextAction = { label: 'Проверить историю', target: 'documents', tone: 'slate', command: 'open' };
+  else if (emailNeedsCheck) nextAction = { label: input.documentEmailStatus === 'uncertain' ? 'Проверить результат отправки' : 'Проверить отправку документов', target: 'documents', tone: 'amber', command: 'open' };
   else if (!inExecution && (sentDocumentTypes.has('invoice') || substatus === 'awaiting_payment')) nextAction = { label: `Ожидать оплату ${Math.round(input.balance).toLocaleString('ru-RU')} BYN`, target: 'payments', tone: 'emerald', command: 'open' };
   else if (!inExecution && (sentDocumentTypes.has('contract') || substatus === 'awaiting_signature')) nextAction = { label: 'Ожидать подписанный договор', target: 'documents', tone: 'amber', command: 'open' };
   else if (!inExecution && hasManagedIssued) nextAction = { label: 'Отправить документ', target: 'documents', tone: 'teal', command: 'open' };
@@ -196,7 +201,7 @@ export const buildOrderWorkspaceViewModel = (input: OrderWorkspaceInput): OrderW
       ? { label: `Ожидать оплату ${Math.round(input.balance).toLocaleString('ru-RU')} BYN`, target: 'payments', tone: 'emerald', command: 'open' }
       : { label: 'Проверить завершение заказа', target: 'payments', tone: 'emerald', command: 'open' };
     else if (input.documentEmailStatus === 'unknown') nextAction = { label: 'Проверить комплект документов', target: 'documents', tone: 'amber', command: 'open' };
-    else if (input.documentEmailStatus === 'failed') nextAction = { label: 'Повторить отправку документов', target: 'documents', tone: 'rose', command: 'open' };
+    else if (input.documentEmailStatus === 'failed') nextAction = { label: 'Проверить ошибку отправки', target: 'documents', tone: 'rose', command: 'open' };
     else if (input.documentEmailStatus === 'pending') nextAction = { label: 'Проверить отправку документов', target: 'documents', tone: 'amber', command: 'open' };
     else if (input.documentEmailStatus !== 'sent') nextAction = { label: 'Отправить документы', target: 'documents', tone: 'teal', command: 'open' };
     else if (input.balance > 0) nextAction = { label: `Ожидать оплату ${Math.round(input.balance).toLocaleString('ru-RU')} BYN`, target: 'payments', tone: 'emerald', command: 'open' };
@@ -247,6 +252,7 @@ export const buildOrderWorkspaceViewModel = (input: OrderWorkspaceInput): OrderW
         status: documentCount ? `${documentCount} ${plural(documentCount, 'документ', 'документа', 'документов')}` : 'Не созданы',
         detail: input.missingReferencedInvoice
           ? `Счёт ${input.missingReferencedInvoice} из платежа не найден`
+          : emailNeedsCheck ? documentDeliveryLabel(input.documentEmailStatus)
           : hasManagedDraft ? 'Черновик нужно проверить и выпустить'
           : hasManagedIssued ? 'Выпущен · готов к отправке'
           : hasManagedSent ? 'Отправлен клиенту'
@@ -256,7 +262,7 @@ export const buildOrderWorkspaceViewModel = (input: OrderWorkspaceInput): OrderW
         actionLabel: input.missingReferencedInvoice
           ? 'Проверить счёт'
           : documentCount ? 'Открыть комплект' : 'Создать документы',
-        tone: input.missingReferencedInvoice || input.documentEmailStatus === 'failed' ? 'rose' : hasManagedDraft || (!documentCount && input.documentEmailStatus === 'unknown') ? 'amber' : 'teal',
+        tone: input.missingReferencedInvoice || input.documentEmailStatus === 'failed' ? 'rose' : emailNeedsCheck || hasManagedDraft || (!documentCount && input.documentEmailStatus === 'unknown') ? 'amber' : 'teal',
         target: 'documents',
       },
       {
