@@ -21,6 +21,7 @@ class ConnectorGrantResponse(BaseModel):
     created_at: datetime
     expires_at: datetime
     revoked_at: datetime | None
+    last_used_at: datetime | None = None
 
 
 class ConnectorGrantListResponse(BaseModel):

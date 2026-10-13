@@ -148,7 +148,9 @@ export class ConnectorAuthService {
      * Grants
      * List OAuth grants belonging to the current authenticated Manager actor and return a
      * session-bound CSRF token for profile revocation. Response is no-store; does not list
-     * other users’ grants.
+     * other users’ grants. Includes active, revoked and expired grants, creation time and
+     * nullable last authenticated MCP use (recorded at most once per minute). Listing the
+     * profile does not count as use and never revokes or replaces grants.
      *
      * See [connector access and
      * scopes](https://github.com/mvnby/air-api/blob/main/docs/chatgpt-connector.md#адрес-и-доступ).

@@ -31,7 +31,7 @@ async def mcp_client(monkeypatch):
               "token-two": {"kitlane:read"}}
     checks = []
 
-    async def resolve(session, token, required_scope):
+    async def resolve(session, token, required_scope, *, record_usage=False):
         checks.append((token, required_scope))
         if token not in access:
             raise ConnectorAuthError("invalid_token", "Connection revoked", 401)

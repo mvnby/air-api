@@ -181,7 +181,9 @@ class ConnectorMCPApplication:
         token = parts[1]
         try:
             async with self.session_factory() as session:
-                await ConnectorAuthService.resolve_actor(session, token, READ_SCOPE)
+                await ConnectorAuthService.resolve_actor(
+                    session, token, READ_SCOPE, record_usage=True
+                )
         except ConnectorAuthError as exc:
             response = JSONResponse({"error": exc.error}, status_code=exc.status_code,
                                     headers={"WWW-Authenticate": _challenge(READ_SCOPE, exc.error)})
