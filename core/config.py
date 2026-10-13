@@ -49,8 +49,11 @@ class Settings(BaseSettings):
     CONNECTOR_PUBLIC_BASE_URL: str = "https://api.mvn.by"
     CONNECTOR_ENABLED: bool = True
     # Exact ChatGPT file delivery hosts verified by the client pilot. Empty
-    # means uploads fail closed; never use suffix/wildcard CDN permissions.
+    # disables the exact-host path; arbitrary CDN suffixes/wildcards are forbidden.
     CONNECTOR_CHATGPT_FILE_HOSTS: list[str] = []
+    # Separately reviewed opt-in for the native OpenAI regional file-storage
+    # namespace. Exact operator hosts remain available for other verified paths.
+    CONNECTOR_OPENAI_REGIONAL_FILES_ENABLED: bool = False
     CONNECTOR_REDIRECT_URIS: list[str] = [
         "https://chatgpt.com/connector_platform_oauth_redirect"
     ]
