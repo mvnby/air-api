@@ -201,7 +201,8 @@ async def test_owner_and_manager_in_one_company_have_independent_equal_scope_con
         connections.append((user.id, listed["items"][0]["id"]))
     rejected = await client.post(f"/api/manager/connector/grants/{connections[0][1]}/revoke",
                                  headers={"X-CSRF-Token": listed["csrf_token"]})
-    assert rejected.status_code == 403
+    assert rejected.status_code == 404
+    assert rejected.json()["error"] == "access_denied"
     grants = (await db.execute(select(ConnectorGrant))).scalars().all()
     assert len(grants) == 2 and all(grant.revoked_at is None for grant in grants)
     assert {grant.staff_user_id for grant in grants} == {user_id for user_id, _ in connections}
