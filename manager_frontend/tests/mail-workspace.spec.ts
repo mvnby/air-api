@@ -5,6 +5,8 @@ import MailMessageContent from '../src/components/mail/MailMessageContent.vue';
 import MailView from '../src/views/MailView.vue';
 import { mailApi, type MailMessage } from '../src/services/mail-workspace-api';
 import { canNavigateAway } from '../src/services/unsaved-navigation-guard';
+import { ManagerMailService } from '../src/client';
+import OrderEmailHistory from '../src/components/orders/OrderEmailHistory.vue';
 
 const account = { id: 'system', email: 'office@example.com', name: 'Компания', signature: 'С уважением, Компания' };
 const draft = (overrides: Partial<MailMessage> = {}): MailMessage => ({ id: 80, version: 1, status: 'draft', folder: 'drafts', account_id: 'system', sender_email: account.email, sender_name: account.name, to: [], cc: [], bcc: [], subject: '', body_text: '', attachments: [], order_id: null, customer_id: null, manager_url: '/manager/mail?emailId=80', error: null, created_at: '2026-10-13T10:00:00Z', updated_at: '2026-10-13T10:00:00Z', sent_at: null, confirmed_version: null, content_hash: 'sha256-approved', csrf_token: 'csrf-preview', ...overrides });
@@ -19,7 +21,7 @@ beforeEach(() => {
   vi.spyOn(mailApi, 'get').mockResolvedValue(draft());
   vi.spyOn(mailApi, 'create').mockResolvedValue(draft());
   vi.spyOn(mailApi, 'preview').mockResolvedValue(draft({ to: ['supplier@example.com'], subject: 'A2E200-AI38-01', body_text: 'Полный текст запроса' }));
-  vi.spyOn(mailApi, 'confirm').mockResolvedValue(draft({ confirmed_version: 1 }));
+  vi.spyOn(mailApi, 'approve').mockResolvedValue(draft({ confirmed_version: 1 }));
   vi.spyOn(mailApi, 'send').mockResolvedValue(draft({ status: 'sent', folder: 'outbox' }));
 });
 afterEach(() => { wrapper?.unmount(); wrapper = undefined; vi.restoreAllMocks(); vi.useRealTimers(); });
@@ -66,7 +68,7 @@ describe('server-backed mail drafts', () => {
     expect(wrapper.text()).toContain('Черновик изменён в другом окне или ChatGPT');
     expect(wrapper.get('textarea').element.value).toBe('Моя правка');
     expect(button('Проверить и отправить').attributes('disabled')).toBeDefined();
-    expect(mailApi.confirm).not.toHaveBeenCalled();
+    expect(mailApi.approve).not.toHaveBeenCalled();
     expect(mailApi.send).not.toHaveBeenCalled();
   });
 
@@ -83,7 +85,7 @@ describe('server-backed mail drafts', () => {
     expect(wrapper.text()).toContain('specification.pdf');
     await button('Подтверждаю, отправить письмо').trigger('click');
     await flushPromises();
-    expect(mailApi.confirm).toHaveBeenCalledWith(80, 1, 'sha256-approved', 'csrf-preview');
+    expect(mailApi.approve).toHaveBeenCalledWith(80, 1, 'sha256-approved', 'csrf-preview');
     expect(mailApi.send).toHaveBeenCalledOnce();
     expect(mailApi.send).toHaveBeenCalledWith(80, 1, expect.any(String), 'csrf-preview');
     expect(wrapper.text()).toContain('Принято почтовым сервером');
@@ -95,7 +97,7 @@ describe('server-backed mail drafts', () => {
     await button('Проверить и отправить').trigger('click');
     await flushPromises();
     expect(wrapper.text()).toContain('Конфликт изменений');
-    expect(mailApi.confirm).not.toHaveBeenCalled();
+    expect(mailApi.approve).not.toHaveBeenCalled();
     expect(mailApi.send).not.toHaveBeenCalled();
   });
 
@@ -105,7 +107,7 @@ describe('server-backed mail drafts', () => {
     await flushPromises();
     await button('Подтвердить для ChatGPT').trigger('click');
     await flushPromises();
-    expect(mailApi.confirm).toHaveBeenCalledWith(80, 1, 'sha256-approved', 'csrf-preview');
+    expect(mailApi.approve).toHaveBeenCalledWith(80, 1, 'sha256-approved', 'csrf-preview');
     expect(mailApi.send).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('Версия 1 подтверждена и ещё не отправлена');
     await wrapper.get('textarea').setValue('Изменённое письмо');
@@ -113,7 +115,7 @@ describe('server-backed mail drafts', () => {
   });
 
   it('does not send if the exact preview approval becomes stale', async () => {
-    vi.mocked(mailApi.confirm).mockRejectedValue({ status: 409 });
+    vi.mocked(mailApi.approve).mockRejectedValue({ status: 409 });
     wrapper = mount(MailDraftEditor, { props: { initial: draft(), accounts: [account] } });
     await button('Проверить и отправить').trigger('click');
     await flushPromises();
@@ -125,14 +127,14 @@ describe('server-backed mail drafts', () => {
 
   it('ignores a double click while confirmation is in progress', async () => {
     let finish!: (result: MailMessage) => void;
-    vi.mocked(mailApi.confirm).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    vi.mocked(mailApi.approve).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     wrapper = mount(MailDraftEditor, { props: { initial: draft(), accounts: [account] } });
     await button('Проверить и отправить').trigger('click');
     await flushPromises();
     const sendButton = button('Подтверждаю, отправить письмо');
     await sendButton.trigger('click');
     await sendButton.trigger('click');
-    expect(mailApi.confirm).toHaveBeenCalledOnce();
+    expect(mailApi.approve).toHaveBeenCalledOnce();
     finish(draft({ confirmed_version: 1 }));
     await flushPromises();
     expect(mailApi.send).toHaveBeenCalledOnce();
@@ -169,6 +171,24 @@ describe('server-backed mail drafts', () => {
 });
 
 describe('standalone mailbox', () => {
+  it('shows active and uncertain send results in order history without offering a blind retry', async () => {
+    vi.spyOn(ManagerMailService, 'listManagerOrderOutgoingEmails').mockResolvedValue({ items: [
+      { id: 80, status: 'sending', created_at: '2026-10-13T10:00:00Z', subject: 'Документы', recipient_email: 'client@example.com' },
+      { id: 81, status: 'unknown', created_at: '2026-10-13T11:00:00Z', subject: 'Результат требует проверки', recipient_email: 'client@example.com' },
+    ], total: 2, page: 1, limit: 8 });
+    const retry = vi.spyOn(ManagerMailService, 'retryManagerOutgoingEmail');
+    wrapper = mount(OrderEmailHistory, { props: { orderId: 42 } });
+    await flushPromises();
+    await wrapper.get('button[aria-expanded]').trigger('click');
+    expect(wrapper.text()).toContain('Отправляется');
+    expect(wrapper.text()).toContain('Результат требует проверки');
+    expect(wrapper.text()).toContain('Письмо могло быть принято сервером');
+    expect(wrapper.findAll('button').some(item => /Повторить|Retry/.test(item.text()))).toBe(false);
+    await wrapper.findAll('article')[1]!.trigger('click');
+    expect(window.location.pathname + window.location.search).toBe('/manager/mail/outbox?orderId=42&emailId=81');
+    expect(retry).not.toHaveBeenCalled();
+  });
+
   it('loads inbox mail from the existing mailbox only after an explicit refresh', async () => {
     vi.spyOn(mailApi, 'sync').mockResolvedValue({ processed: 1, captured: 1, skipped: 0 });
     wrapper = mount(MailView);

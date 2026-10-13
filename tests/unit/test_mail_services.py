@@ -1755,7 +1755,7 @@ async def test_failed_offer_email_keeps_proposal_ready_to_send(sqlite_session, m
     monkeypatch.setattr("services.mail_smtp_service.DocumentService.get_download_stream", fake_download)
     monkeypatch.setattr(MailSmtpService, "send_message", lambda _message: (_ for _ in ()).throw(OSError("SMTP unavailable")))
 
-    with pytest.raises(RuntimeError, match="SMTP unavailable"):
+    with pytest.raises(RuntimeError, match="Результат отправки неизвестен"):
         await MailSmtpService.send_order_email(
             sqlite_session,
             tenant_scope=TEST_TENANT_SCOPE,
@@ -1772,6 +1772,11 @@ async def test_failed_offer_email_keeps_proposal_ready_to_send(sqlite_session, m
     assert refreshed_order.proposal_sent_at is None
     assert refreshed_order.negotiation_status == "awaiting_offer"
     assert refreshed_proposal.status == "ready_to_send"
+    attempt = (await sqlite_session.execute(select(OutgoingEmail).where(OutgoingEmail.order_id == order.id))).scalar_one()
+    assert attempt.status == "unknown"
+    from models.mail_workspace import MailAttachmentSnapshot
+    snapshot = (await sqlite_session.execute(select(MailAttachmentSnapshot).where(MailAttachmentSnapshot.email_id == attempt.id))).scalar_one()
+    assert snapshot.content == b"%PDF-1.4"
 
 
 @pytest.mark.asyncio

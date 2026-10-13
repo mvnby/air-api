@@ -107,7 +107,7 @@ export function useMailDraft(initial: MailMessage, onSaved: (draft: MailMessage)
     error.value = '';
     let sendStarted = false;
     try {
-      await mailApi.confirm(approved.id, approved.version, approved.content_hash, approved.csrf_token);
+      await mailApi.approve(approved.id, approved.version, approved.content_hash, approved.csrf_token);
       sendStarted = true;
       updateResult(await mailApi.send(approved.id, approved.version, mailCommandKey(), approved.csrf_token));
       preview.value = null;
@@ -132,7 +132,7 @@ export function useMailDraft(initial: MailMessage, onSaved: (draft: MailMessage)
     busy.value = true;
     error.value = '';
     try {
-      updateResult(await mailApi.confirm(approved.id, approved.version, approved.content_hash, approved.csrf_token));
+      updateResult(await mailApi.approve(approved.id, approved.version, approved.content_hash, approved.csrf_token));
       preview.value = null;
     } catch (cause) { fail(cause); preview.value = null; }
     finally { busy.value = false; }

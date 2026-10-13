@@ -520,6 +520,18 @@ const invoiceDocument = {
   number: 'СЧ-101',
   date: '2026-07-23T10:00:00',
 };
+for (const mailStatus of ['sending', 'uncertain'] as const) {
+  for (const status of ['negotiation', 'execution']) {
+    const mailWorkspace = buildOrderWorkspaceViewModel({
+      ...workspaceBase, status, executionStatus: 'awaiting_documents',
+      managedDocuments: [{ id: 201, doc_type: 'invoice', status: 'issued' }] as never,
+      documents: [invoiceDocument], documentEmailStatus: mailStatus,
+    });
+    assert(mailWorkspace.nextAction.label === (mailStatus === 'uncertain' ? 'Проверить результат отправки' : 'Проверить отправку документов'), 'an issued document with an active or uncertain send must lead to checking its outcome instead of another send');
+    assert(mailWorkspace.lanes.find(lane => lane.id === 'documents')?.detail === (mailStatus === 'uncertain' ? 'Результат требует проверки' : 'Отправляется'), 'document lane must show SMTP uncertainty even when the native document is still issued');
+    assert(mailWorkspace.nextAction.command === 'open', 'checking mail must not send or retry it');
+  }
+}
 assert(
   buildOrderWorkspaceViewModel({
     ...workspaceBase,

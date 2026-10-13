@@ -20,6 +20,20 @@ afterEach(() => {
 });
 
 describe('useOrderDocumentStatus', () => {
+  it.each([['sending', 'sending'], ['unknown', 'uncertain']] as const)('keeps %s SMTP attempts distinct from unsent documents and unavailable history', async (mailStatus, expectedStatus) => {
+    const order = ref({ id: 42, documents: [{ id: 1, doc_type: 'invoice', number: 'INV-1' }] } as ManagerOrderDetailResponse);
+    mailMock.listManagerOrderOutgoingEmails.mockResolvedValue({ items: [
+      { id: 10, status: 'draft', created_at: '2026-10-13T11:00:00Z', attachments: [{ filename: 'invoice-INV-1.pdf' }] },
+      { id: 9, status: mailStatus, created_at: '2026-10-13T10:00:00Z', attachments: [{ filename: 'invoice-INV-1.pdf' }] },
+    ] });
+    scope = effectScope();
+    const status = scope.run(() => useOrderDocumentStatus({ order, payments: ref([]) }))!;
+    expect(status.documentEmailStatus.value).toBe('unknown');
+    await status.loadOrderEmails(42);
+    expect(status.documentEmailStatus.value).toBe(expectedStatus);
+    expect(status.sentDocumentTypes.value).toEqual([]);
+  });
+
   it('derives sent document types and detects a payment referencing an absent invoice', async () => {
     const order = ref({
       id: 42,

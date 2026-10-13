@@ -132,6 +132,7 @@ class MailSmtpService:
         attachments: Optional[List[MailAttachment]] = None,
         actor=None,
         idempotency_key: str | None = None,
+        tenant_scope: TenantScope | None = None,
     ) -> OutgoingEmail:
         if actor is not None:
             from schemas_mail import MailConfirmPayload, MailVersionPayload
@@ -166,7 +167,11 @@ class MailSmtpService:
                 }
             )
         row = OutgoingEmail(
-            status="pending",
+            status="sending",
+            send_token=uuid.uuid4().hex,
+            send_started_at=datetime.now(),
+            tenant_id=tenant_scope.tenant_id if tenant_scope else None,
+            storefront_id=tenant_scope.storefront_id if tenant_scope else None,
             order_id=order_id,
             customer_id=customer_id,
             recipient_email=to_email,
@@ -180,6 +185,18 @@ class MailSmtpService:
         )
         session.add(row)
         await session.flush()
+        if tenant_scope is not None:
+            from models.mail_workspace import MailAttachmentSnapshot
+
+            for attachment in attachments or []:
+                session.add(MailAttachmentSnapshot(
+                    tenant_id=tenant_scope.tenant_id, email_id=row.id, filename=attachment.filename,
+                    mime_type=attachment.mime_type, size=len(attachment.content),
+                    sha256=hashlib.sha256(attachment.content).hexdigest(),
+                    source_metadata=attachment.metadata or {}, content=attachment.content,
+                ))
+        await session.commit()
+        smtp_started = False
         try:
             message = MailSmtpService.build_message(
                 to_email=to_email,
@@ -189,10 +206,16 @@ class MailSmtpService:
                 reply_to=reply_to,
                 attachments=attachments,
             )
+            message["Message-ID"] = f"<kitlane-{row.id}-{row.send_token}@{row.from_email.split('@')[-1]}>"
+            if not settings.MAIL_SMTP_USERNAME or not settings.MAIL_SMTP_PASSWORD:
+                raise RuntimeError("SMTP credentials are not configured")
+            smtp_started = True
             await asyncio.to_thread(MailSmtpService.send_message, message)
         except Exception as exc:
-            row.status = "failed"
-            row.error = MailSmtpService._sanitize_error(exc)
+            from services.mail_workspace_delivery import MailWorkspaceDelivery
+            row.status = "unknown" if smtp_started and not MailWorkspaceDelivery._known_rejection(exc) else "failed"
+            row.error = ("Результат отправки неизвестен. Проверьте журнал почтового сервера перед повтором"
+                         if row.status == "unknown" else MailSmtpService._sanitize_error(exc))
             session.add(row)
             await session.commit()
             await session.refresh(row)
@@ -347,6 +370,7 @@ class MailSmtpService:
             attachments=attachments,
             actor=actor,
             idempotency_key=idempotency_key,
+            tenant_scope=tenant_scope,
         )
         await MailSmtpService.apply_order_delivery(
             session, tenant_scope=tenant_scope, order=order, attachments=attachments, email_row=email_row,

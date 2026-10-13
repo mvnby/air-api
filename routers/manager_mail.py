@@ -4,6 +4,8 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, File, Header, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from routers import manager_operation_ids as mail_operation_ids
+
 from core.database import get_session
 from core.command_actor import CommandActor, get_command_idempotency_key
 from core.manager_api_errors import manager_http_error
@@ -81,7 +83,7 @@ router = APIRouter(
 
 
 @router.post("/orders/{order_id}/draft", response_model=MailMessageResponse,
-             status_code=201, operation_id="create_manager_order_mail_draft")
+             status_code=201, operation_id=mail_operation_ids.CREATE_MANAGER_ORDER_MAIL_DRAFT)
 async def create_order_mail_draft(order_id: int, payload: MailOrderDraftPayload,
                                   auth: AuthenticatedUser = Depends(require_manager_access),
                                   session: AsyncSession = Depends(get_session),
@@ -686,7 +688,7 @@ async def retry_manager_outgoing_email(
     """
     try:
         return await OutgoingEmailService.retry_failed_email(session, email_id,
-            actor=CommandActor.from_auth(auth), tenant_scope=auth.tenant_scope())
+            actor=CommandActor.from_auth(auth) if auth.staff_user_id else None, tenant_scope=auth.tenant_scope())
     except Exception as exc:
         raise manager_http_error(
             status_code=400,
@@ -726,8 +728,9 @@ async def send_manager_test_email(
             body_text=payload.body_text,
             body_html=payload.body_html,
             reply_to=payload.reply_to,
-            actor=CommandActor.from_auth(auth),
+            actor=CommandActor.from_auth(auth) if auth.staff_user_id else None,
             idempotency_key=idempotency_key,
+            tenant_scope=auth.tenant_scope(),
         )
     except Exception as exc:
         raise manager_http_error(
@@ -818,7 +821,7 @@ async def send_manager_order_email(
             document_ids=payload.document_ids,
             registration_certificate_id=payload.registration_certificate_id,
             legal_entity_id=payload.legal_entity_id,
-            actor=CommandActor.from_auth(auth),
+            actor=CommandActor.from_auth(auth) if auth.staff_user_id else None,
             idempotency_key=idempotency_key,
         )
     except Exception as exc:

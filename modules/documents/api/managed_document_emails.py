@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+
 from fastapi import APIRouter, Depends, Header
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from routers import manager_operation_ids as mail_operation_ids
 
 from core.database import get_session
 from core.command_actor import CommandActor, get_command_idempotency_key
@@ -37,7 +40,7 @@ router = APIRouter(
 
 
 @router.post("/orders/{order_id}/email/draft", response_model=MailMessageResponse,
-             status_code=201, operation_id="create_manager_native_order_mail_draft")
+             status_code=201, operation_id=mail_operation_ids.CREATE_MANAGER_NATIVE_ORDER_MAIL_DRAFT)
 async def create_native_order_mail_draft(order_id: int, payload: MailOrderDraftPayload,
                                          session: AsyncSession = Depends(get_session),
                                          auth: AuthenticatedUser = Depends(require_manager_access),
@@ -148,7 +151,7 @@ async def send_native_order_email(
             document_ids=payload.document_ids,
             registration_certificate_id=payload.registration_certificate_id,
             legal_entity_id=payload.legal_entity_id,
-            actor=CommandActor.from_auth(auth),
+            actor=CommandActor.from_auth(auth) if auth.staff_user_id else None,
             idempotency_key=idempotency_key,
         )
     except PartnerTenantSmtpUnavailableError as exc:

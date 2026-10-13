@@ -159,3 +159,49 @@ async def test_partial_smtp_acceptance_is_unknown_and_does_not_repeat(mail_db, m
     second = await Mail.send(mail_db, actor=actor, draft_id=draft.id,
         payload=MailVersionPayload(expected_version=draft.version), idempotency_key="partial-send-002")
     assert first.value.status == second.value.status == "unknown" and len(attempts) == 1
+
+
+@pytest.mark.asyncio
+async def test_legacy_mail_adapters_keep_existing_owner_without_inventing_staff(mail_db, monkeypatch):
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+    from core.database import get_session
+    from core.security import AuthenticatedUser, get_current_auth_context
+    from models import OutgoingEmail
+    from routers.manager_mail import router
+    from modules.documents.api.managed_document_emails import router as native_router
+    from services.outgoing_email_service import OutgoingEmailService
+
+    app = FastAPI()
+    app.include_router(router)
+    app.include_router(native_router)
+    auth = AuthenticatedUser(username="legacy-owner", auth_source="legacy", role="owner",
+                             tenant_id=1, storefront_id=1, is_system_tenant=True)
+    async def current_auth():
+        return auth
+    async def session():
+        yield mail_db
+    app.dependency_overrides[get_current_auth_context] = current_auth
+    app.dependency_overrides[get_session] = session
+    calls = []
+    async def send(session, **kwargs):
+        calls.append(kwargs)
+        assert kwargs["actor"] is None
+        return OutgoingEmail(id=99, status="sent", recipient_email=kwargs["to_email"],
+                             subject=kwargs["subject"], body_text=kwargs["body_text"])
+    async def retry(session, email_id, **kwargs):
+        assert kwargs["actor"] is None and kwargs["tenant_scope"].is_system
+        return {"id": 100, "status": "failed", "recipient_email": "client@example.test",
+                "subject": "Existing", "created_at": "2026-10-13T12:00:00"}
+    monkeypatch.setattr(MailSmtpService, "send_and_record", send)
+    monkeypatch.setattr(MailSmtpService, "send_order_email", send)
+    monkeypatch.setattr(OutgoingEmailService, "retry_failed_email", retry)
+    payload = {"to_email": "client@example.test", "subject": "Existing", "body_text": "Old entrypoint"}
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        for path in ("/api/manager/mail/email/send-test", "/api/manager/mail/orders/42/email",
+                     "/api/manager/document-system/orders/42/email"):
+            response = await client.post(path, json=payload)
+            assert response.status_code == 200, response.text
+        response = await client.post("/api/manager/mail/outgoing-emails/99/retry")
+        assert response.status_code == 200, response.text
+    assert len(calls) == 3

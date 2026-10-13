@@ -22,18 +22,7 @@ const expanded = ref(false);
 
 const failedCount = computed(() => emails.value.filter((item) => item.status === 'failed').length);
 
-const statusLabel = (value?: string | null) => {
-  switch (value) {
-    case 'sent':
-      return mailStatusLabel('sent');
-    case 'failed':
-      return 'Ошибка';
-    case 'pending':
-      return 'В очереди';
-    default:
-      return value || '—';
-  }
-};
+const statusLabel = (value?: string | null) => value ? mailStatusLabel(value) : '—';
 
 const statusClass = (value?: string | null) => {
   switch (value) {
@@ -42,6 +31,8 @@ const statusClass = (value?: string | null) => {
     case 'failed':
       return 'border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300';
     case 'pending':
+    case 'sending':
+    case 'unknown':
       return 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300';
     default:
       return 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300';
@@ -51,7 +42,7 @@ const statusClass = (value?: string | null) => {
 const statusIcon = (value?: string | null) => {
   if (value === 'sent') return CheckCircle2;
   if (value === 'failed') return XCircle;
-  if (value === 'pending') return Clock3;
+  if (value === 'pending' || value === 'sending') return Clock3;
   return AlertTriangle;
 };
 
@@ -175,6 +166,7 @@ watch(
               <p class="truncate text-sm font-bold">{{ email.subject }}</p>
               <p class="truncate text-xs text-slate-500 dark:text-slate-400">{{ email.recipient_email }}</p>
               <p v-if="email.error" class="mt-1 line-clamp-2 text-xs font-medium text-red-600 dark:text-red-300">{{ email.error }}</p>
+              <p v-if="email.status === 'unknown'" class="mt-1 text-xs text-amber-700 dark:text-amber-300">Письмо могло быть принято сервером. Откройте его в «Почте» и проверьте результат перед повторной отправкой.</p>
             </div>
             <button v-if="email.error" type="button" class="shrink-0 rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200" title="Скопировать ошибку" @click.stop="copyText(email.error || '')">
               <Copy class="h-4 w-4" />

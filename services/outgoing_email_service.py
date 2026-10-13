@@ -196,7 +196,9 @@ class OutgoingEmailService:
         if original.status != "failed":
             raise ValueError("Only failed emails can be retried")
 
-        if actor is not None and original.send_token:
+        snapshots = (await MailWorkspaceDAO.attachments(session, email_id, actor.tenant_scope.tenant_id, include_content=False)
+                     if actor is not None else [])
+        if actor is not None and (original.send_token or snapshots):
             from schemas_mail import MailVersionPayload
             from services.mail_workspace_service import MailWorkspaceService
 

@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from routers import manager_operation_ids as mail_operation_ids
+
 from core.command_actor import CommandActor, get_command_idempotency_key
 from core.database import get_session
 from core.security import AuthenticatedUser, require_manager_access
@@ -16,7 +18,7 @@ from services.incoming_mail_service import IncomingMailService
 router = APIRouter(prefix="/api/manager/mail", tags=["manager/mail"])
 
 
-@router.post("/sync", response_model=IncomingMailSyncResponse, operation_id="sync_manager_mailbox")
+@router.post("/sync", response_model=IncomingMailSyncResponse, operation_id=mail_operation_ids.SYNC_MANAGER_MAILBOX)
 async def sync_mailbox(payload: IncomingMailSyncPayload,
                        auth: AuthenticatedUser = Depends(require_manager_access),
                        session: AsyncSession = Depends(get_session),
@@ -35,7 +37,7 @@ async def sync_mailbox(payload: IncomingMailSyncPayload,
         raise HTTPException(502, "Не удалось обновить почту. Проверьте настройки подключения") from exc
 
 
-@router.get("/messages/{email_id}/attachments/{attachment_id}", operation_id="download_manager_incoming_mail_attachment")
+@router.get("/messages/{email_id}/attachments/{attachment_id}", operation_id=mail_operation_ids.DOWNLOAD_MANAGER_INCOMING_MAIL_ATTACHMENT)
 async def download_incoming_attachment(email_id: int, attachment_id: int,
                                        auth: AuthenticatedUser = Depends(require_manager_access),
                                        session: AsyncSession = Depends(get_session)):

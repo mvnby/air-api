@@ -47,7 +47,7 @@ export const mailApi = {
   preview(id: number): Promise<MailMessage> {
     return request(OpenAPI, { method: 'GET', url: '/api/manager/mail/drafts/{id}/preview', path: { id } });
   },
-  confirm(id: number, expectedVersion: number, contentHash: string, csrfToken: string): Promise<MailMessage> {
+  approve(id: number, expectedVersion: number, contentHash: string, csrfToken: string): Promise<MailMessage> {
     return request(OpenAPI, { method: 'POST', url: '/api/manager/mail/drafts/{id}/confirm', path: { id }, body: { expected_version: expectedVersion, content_hash: contentHash }, mediaType: 'application/json', headers: { 'Idempotency-Key': mailCommandKey(), 'X-Kitlane-Mail-Approval': 'manager-review', 'X-CSRF-Token': csrfToken } });
   },
   send(id: number, expectedVersion: number, key: string, csrfToken: string): Promise<MailMessage> {
