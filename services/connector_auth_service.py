@@ -21,10 +21,8 @@ from models.staff import StaffUser
 from models.tenancy import Storefront, Tenant, TenantMembership, TenantScope
 from schemas_connector_auth import ConnectorGrantResponse, ConnectorTokenResponse
 from services.connector_auth_policy import (
-    CHALLENGE,
     CLIENT_ID,
     ROLE_RANK,
-    SCOPES,
     VERIFIER,
     ConnectorAuthError,
     digest,
@@ -32,6 +30,7 @@ from services.connector_auth_policy import (
     resource,
     secret,
     utc,
+    validate_authorization_request,
     validate_client,
     validate_redirect,
 )
@@ -139,23 +138,12 @@ class ConnectorAuthService:
         code_challenge_method: str,
         response_type: str,
     ) -> tuple[ConnectorConsent, str]:
-        validate_client(client_id, requested_resource)
-        validate_redirect(redirect_uri)
-        scopes = sorted(set(scope.split()))
-        if "kitlane:read" not in scopes or not set(scopes) <= SCOPES:
-            raise ConnectorAuthError(
-                "invalid_scope", "kitlane:read and supported scopes are required"
-            )
-        if (
-            response_type != "code"
-            or code_challenge_method != "S256"
-            or not CHALLENGE.fullmatch(code_challenge)
-        ):
-            raise ConnectorAuthError(
-                "invalid_request", "Authorization code with PKCE S256 required"
-            )
-        if not state or len(state) > 1024:
-            raise ConnectorAuthError("invalid_request", "Bounded OAuth state required")
+        scopes = validate_authorization_request(
+            client_id=client_id, redirect_uri=redirect_uri,
+            requested_resource=requested_resource, scope=scope, state=state,
+            code_challenge=code_challenge, code_challenge_method=code_challenge_method,
+            response_type=response_type,
+        )
         if (
             not auth.staff_user_id
             or not auth.tenant_membership_id
@@ -197,6 +185,7 @@ class ConnectorAuthService:
         consent_id: str,
         nonce: str,
         allow: bool,
+        selected_scopes: list[str] | None = None,
     ) -> str:
         pending = (
             await session.execute(
@@ -223,6 +212,12 @@ class ConnectorAuthService:
         # Configuration changes must not revive a formerly valid redirect/resource.
         validate_client(pending.client_id, pending.resource)
         validate_redirect(pending.redirect_uri)
+        grant_scopes = pending.scopes
+        if allow and selected_scopes is not None:
+            chosen = set(selected_scopes)
+            if "kitlane:read" not in chosen or not chosen <= set(pending.scopes):
+                raise ConnectorAuthError("invalid_scope", "Consent may only reduce requested scopes")
+            grant_scopes = sorted(chosen)
         pending.consumed_at = now_utc()
         params = {"state": pending.state}
         if allow:
@@ -235,7 +230,7 @@ class ConnectorAuthService:
                 role=pending.role,
                 client_id=pending.client_id,
                 resource=pending.resource,
-                scopes=pending.scopes,
+                scopes=grant_scopes,
                 expires_at=now_utc() + timedelta(days=30),
             )
             session.add(grant)

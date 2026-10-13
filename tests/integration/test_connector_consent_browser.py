@@ -40,14 +40,14 @@ async def consent_client(async_client, db):
     return async_client, claims
 
 
-async def screen(client, state="browser-state", redirect=CALLBACK):
+async def screen(client, state="browser-state", redirect=CALLBACK, scopes="kitlane:read"):
     response = await client.get(
         AUTHORIZE,
         params={
             "client_id": CLIENT_ID,
             "redirect_uri": redirect,
             "resource": resource(),
-            "scope": "kitlane:read",
+            "scope": scopes,
             "state": state,
             "code_challenge": pkce("v" * 64),
             "code_challenge_method": "S256",
@@ -60,6 +60,115 @@ async def screen(client, state="browser-state", redirect=CALLBACK):
         for key in ("consent_id", "csrf_token")
     }
     return response, {**form, "decision": "allow"}
+
+
+@pytest.mark.asyncio
+async def test_login_redirect_preserves_only_valid_oauth_request(consent_client, db):
+    client, _ = consent_client
+    client.cookies.clear()
+    params = dict(client_id=CLIENT_ID, redirect_uri=CALLBACK, resource=resource(),
+                  scope="kitlane:read", state="resume-after-login",
+                  code_challenge=pkce("v" * 64), code_challenge_method="S256",
+                  response_type="code")
+    response = await client.get(AUTHORIZE, params=params, follow_redirects=False)
+    assert response.status_code == 303
+    location = urlsplit(response.headers["location"])
+    assert location.path == "/manager/" and not location.netloc
+    target = parse_qs(location.query)["connector_return"][0]
+    assert urlsplit(target).path == AUTHORIZE
+    assert parse_qs(urlsplit(target).query)["state"] == ["resume-after-login"]
+    assert await grant_count(db) == 0
+    assert not (await db.execute(select(ConnectorConsent.id))).scalars().all()
+    params["redirect_uri"] = "https://evil.example/callback"
+    rejected = await client.get(AUTHORIZE, params=params, follow_redirects=False)
+    assert rejected.status_code == 400 and "location" not in rejected.headers
+
+
+@pytest.mark.asyncio
+async def test_company_and_independent_permissions_are_visible(consent_client):
+    client, _ = consent_client
+    response, _ = await screen(client, scopes="kitlane:read kitlane:mail:read kitlane:mail:drafts:write kitlane:mail:send")
+    assert "Мастер Воздуха" in response.text
+    assert "Компания определена по вашей учётной записи" in response.text
+    assert "Это не разрешает отправку" in response.text
+    assert 'name="scope:kitlane:mail:send" value="allow">' in response.text
+    assert 'name="scope:kitlane:mail:read" value="allow" checked>' in response.text
+
+
+@pytest.mark.asyncio
+async def test_selected_scopes_reach_actual_tokens_and_exclude_send(consent_client, db):
+    from services.connector_auth_service import ConnectorAuthService
+    client, _ = consent_client
+    _, form = await screen(client, scopes="kitlane:read kitlane:mail:read kitlane:mail:drafts:write kitlane:mail:send")
+    form.update(scope_selection="explicit", **{"scope:kitlane:mail:read": "allow", "scope:kitlane:mail:drafts:write": "allow"})
+    response = await client.post(AUTHORIZE, data=form)
+    assert response.status_code == 303
+    code = parse_qs(urlsplit(response.headers["location"]).query)["code"][0]
+    token = await ConnectorAuthService.exchange_code(db, code=code, client_id=CLIENT_ID,
+        redirect_uri=CALLBACK, requested_resource=resource(), code_verifier="v" * 64)
+    assert set(token.scope.split()) == {"kitlane:read", "kitlane:mail:read", "kitlane:mail:drafts:write"}
+    from services.connector_auth_policy import ConnectorAuthError
+    with pytest.raises(ConnectorAuthError) as error:
+        await ConnectorAuthService.resolve_actor(db, token.access_token, "kitlane:mail:send")
+    assert error.value.error == "insufficient_scope"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("permission", ["kitlane:mail:send", "kitlane:admin"])
+async def test_selection_cannot_add_unrequested_or_unknown_permissions(consent_client, db, permission):
+    client, _ = consent_client
+    _, form = await screen(client)
+    form.update(scope_selection="explicit", **{"scope:" + permission: "allow"})
+    response = await client.post(AUTHORIZE, data=form)
+    assert response.status_code == 400 and response.json()["error"] == "invalid_scope"
+    assert await grant_count(db) == 0
+
+
+@pytest.mark.asyncio
+async def test_omitting_selection_does_not_restore_unchecked_send_permission(consent_client, db):
+    client, _ = consent_client
+    _, form = await screen(client, scopes="kitlane:read kitlane:mail:send")
+    assert (await client.post(AUTHORIZE, data=form)).status_code == 303
+    grant = (await db.execute(select(ConnectorGrant))).scalars().one()
+    assert grant.scopes == ["kitlane:read"]
+
+
+@pytest.mark.asyncio
+async def test_reading_own_consent_cannot_choose_another_company(consent_client, db):
+    client, _ = consent_client
+    _, form = await screen(client)
+    form.update(tenant_id="999", storefront_id="999")
+    assert (await client.post(AUTHORIZE, data=form)).status_code == 303
+    grant = (await db.execute(select(ConnectorGrant))).scalars().one()
+    assert grant.tenant_id == 1 and grant.storefront_id == 1
+
+
+@pytest.mark.asyncio
+async def test_owner_and_manager_in_one_company_have_independent_equal_scope_connections(consent_client, db):
+    from services.connector_auth_policy import SCOPES
+    client, _ = consent_client
+    connections = []
+    for role in ("owner", "manager"):
+        user = StaffUser(username="partner-" + role, primary_role=role, roles=[role])
+        db.add(user)
+        await db.flush()
+        db.add(TenantMembership(tenant_id=1, staff_user_id=user.id, role=role))
+        await db.commit()
+        claims = {"sub": user.username, "auth_source": "staff", "staff_user_id": user.id, "auth_version": 1}
+        client.cookies.set("access_token", "Bearer " + create_access_token(claims))
+        _, form = await screen(client, state="partner-" + role, scopes=" ".join(sorted(SCOPES)))
+        form.update(scope_selection="explicit", **{"scope:" + scope: "allow" for scope in SCOPES if scope != "kitlane:read"})
+        assert (await client.post(AUTHORIZE, data=form)).status_code == 303
+        listed = (await client.get("/api/manager/connector/grants")).json()
+        assert len(listed["items"]) == 1
+        assert set(listed["items"][0]["scopes"]) == SCOPES
+        connections.append((user.id, listed["items"][0]["id"]))
+    rejected = await client.post(f"/api/manager/connector/grants/{connections[0][1]}/revoke",
+                                 headers={"X-CSRF-Token": listed["csrf_token"]})
+    assert rejected.status_code == 403
+    grants = (await db.execute(select(ConnectorGrant))).scalars().all()
+    assert len(grants) == 2 and all(grant.revoked_at is None for grant in grants)
+    assert {grant.staff_user_id for grant in grants} == {user_id for user_id, _ in connections}
 
 
 async def grant_count(db):

@@ -4,6 +4,7 @@ import { computed, defineAsyncComponent, nextTick, onMounted, onBeforeUnmount, r
 import { Zap, Loader2, AlertTriangle } from 'lucide-vue-next';
 import { api } from './api';
 import { getApiErrorMessage } from './utils/api-errors';
+import { connectorLoginContinuation, resumeConnectorLogin } from './services/connector-login-continuation';
 import type { TelegramLoginPayload } from './client';
 import UiFeedbackHost from './components/common/UiFeedbackHost.vue';
 import ManagerAccountMenu from './components/manager/ManagerAccountMenu.vue';
@@ -76,6 +77,21 @@ const { isAuthenticated, auth, recoveryRequired } = managerSession;
 const demoReadOnly = useDemoReadOnly();
 const { name: partnerName, logoUrl: partnerLogoUrl, compactLogoUrl: partnerCompactLogoUrl, contextKey: partnerContextKey } = useKitlaneIdentity();
 const showLoginModal = ref(false);
+const connectorReturn = connectorLoginContinuation(window.location.search, window.location.origin);
+const continueConnection = () => {
+  if (!connectorReturn || !auth.value) return false;
+  if (!auth.value.staff_user_id || auth.value.auth_source === 'legacy') {
+    loginError.value = 'Для подключения ChatGPT нужен ваш личный логин Kitlane, выданный владельцем компании.';
+    showLoginModal.value = true;
+    return true;
+  }
+  if (auth.value.must_change_password) {
+    showLoginModal.value = false;
+    navigate('/manager/profile');
+    return true;
+  }
+  return resumeConnectorLogin(connectorReturn, auth.value);
+};
 const loginUsername = ref('');
 const loginPassword = ref('');
 const loginLoading = ref(false);
@@ -314,6 +330,8 @@ const handleLogin = async () => {
   loginError.value = '';
   try {
     await loginManagerWithPassword(loginUsername.value, loginPassword.value);
+    loginPassword.value = '';
+    if (continueConnection()) return;
     enforceAuthorizedLocation();
     showLoginModal.value = false;
     loginPassword.value = '';
@@ -331,6 +349,7 @@ const handleTelegramLogin = async (payload: TelegramLoginPayload) => {
   loginError.value = '';
   try {
     await loginManagerWithTelegram(payload);
+    if (continueConnection()) return;
     enforceAuthorizedLocation();
     showLoginModal.value = false;
     void fetchLeadsCount();
@@ -408,6 +427,7 @@ const fetchLeadsCount = async () => {
 const checkAuth = async () => {
   try {
     await restoreManagerSession();
+    if (continueConnection()) return;
     enforceAuthorizedLocation();
     // Fetch the badge count once authenticated
     void fetchLeadsCount();
@@ -481,6 +501,7 @@ watch(currentPath, () => {
     :error="loginError"
     :telegram-enabled="Boolean(telegramLoginBotUsername)"
     :telegram-loading="telegramLoginLoading"
+    :connector-login="Boolean(connectorReturn)"
     @submit="handleLogin"
   >
     <template #telegram>

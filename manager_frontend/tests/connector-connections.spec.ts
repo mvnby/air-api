@@ -29,6 +29,29 @@ beforeEach(() => {
 afterEach(() => clearManagerSession());
 
 describe('ChatGPT connections in Manager profile', () => {
+  it('offers a short private setup guide with usable copy action', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    mocks.request.mockResolvedValue({ items: [], csrf_token: 'fresh' });
+    const wrapper = mount(ConnectorConnections);
+    await flushPromises();
+    const guide = wrapper.get('[data-testid="connector-quickstart"]');
+    expect(guide.attributes('open')).toBeDefined();
+    expect(guide.text()).toContain('У каждого сотрудника своё подключение');
+    await guide.get('button').trigger('click');
+    await flushPromises();
+    expect(writeText).toHaveBeenCalledWith('https://api.mvn.by/api/connector/mcp');
+    expect(guide.text()).toContain('Адрес скопирован');
+  });
+
+  it('explains all currently issued mail and document permissions', async () => {
+    mocks.request.mockResolvedValue({ items: [{ ...grant(), scopes: ['kitlane:maintenance:write', 'kitlane:catalog:write', 'kitlane:mail:read', 'kitlane:mail:drafts:write', 'kitlane:mail:send'] }], csrf_token: 'fresh' });
+    const wrapper = mount(ConnectorConnections);
+    await flushPromises();
+    expect(wrapper.text()).toContain('Отправка писем после подтверждения в Manager');
+    expect(wrapper.text()).toContain('Подбор оборудования и черновики КП и счетов');
+    expect(wrapper.text()).not.toContain('kitlane:mail:send');
+  });
   it('is reachable by an ordinary named manager through the existing profile', async () => {
     const wrapper = mount(ProfileSecurityView);
     await flushPromises();

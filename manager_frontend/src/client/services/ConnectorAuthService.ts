@@ -64,8 +64,9 @@ export class ConnectorAuthService {
      * Authorize
      * Start a one-time OAuth consent bound to the current authenticated Manager session and
      * render an HTML consent page. Requires the registered client/callback, exact resource,
-     * scopes and PKCE S256; duplicate query parameters are rejected. Missing login returns an
-     * HTML 401; OAuth errors use error/error_description and no-store headers.
+     * scopes and PKCE S256; duplicate query parameters are rejected. A valid request without
+     * login redirects to Manager and resumes after sign-in. OAuth errors use
+     * error/error_description and no-store headers. Company is resolved from live membership.
      *
      * See [connector access and
      * scopes](https://github.com/mvnby/air-api/blob/main/docs/chatgpt-connector.md#адрес-и-доступ).
@@ -82,7 +83,10 @@ export class ConnectorAuthService {
     /**
      * Consent
      * Finish the durable consent using explicit allow/deny, consent_id and its one-time CSRF
-     * token bound to the same live Manager session. Accepts application/x-www-form-urlencoded
+     * token bound to the same live Manager session. scope_selection=explicit and
+     * scope:<name>=allow fields select a subset of requested permissions; cannot expand them.
+     * An allow form without an explicit selection grants only the mandatory kitlane:read.
+     * Accepts application/x-www-form-urlencoded
      * up to 8192 bytes; duplicate parameters are rejected. Success redirects with 303 to the
      * registered callback; OAuth errors use error/error_description. Do not blindly replay a
      * consumed consent.

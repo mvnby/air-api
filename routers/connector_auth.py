@@ -1,7 +1,6 @@
 """OAuth HTTP adapter and an explicit Manager-authenticated consent screen."""
 
-import html
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -15,6 +14,7 @@ from core.security import (
     require_manager_access,
 )
 from routers import manager_operation_ids as operation_ids
+from routers.connector_consent_pages import consent_page
 from schemas_connector_auth import ConnectorGrantListResponse, ConnectorTokenResponse
 from services.connector_auth_policy import (
     SCOPES,
@@ -22,6 +22,7 @@ from services.connector_auth_policy import (
     csrf_token,
     issuer,
     validate_csrf,
+    validate_authorization_request,
 )
 from services.connector_auth_service import ConnectorAuthService
 
@@ -157,8 +158,9 @@ async def authorize(request: Request, session: AsyncSession = Depends(get_sessio
     """
     Start a one-time OAuth consent bound to the current authenticated Manager session and
     render an HTML consent page. Requires the registered client/callback, exact resource,
-    scopes and PKCE S256; duplicate query parameters are rejected. Missing login returns an
-    HTML 401; OAuth errors use error/error_description and no-store headers.
+    scopes and PKCE S256; duplicate query parameters are rejected. A valid request without
+    login redirects to Manager and resumes after sign-in. OAuth errors use
+    error/error_description and no-store headers. Company is resolved from live membership.
 
     See [connector access and
     scopes](https://github.com/mvnby/air-api/blob/main/docs/chatgpt-connector.md#адрес-и-доступ).
@@ -167,24 +169,29 @@ async def authorize(request: Request, session: AsyncSession = Depends(get_sessio
     try:
         # Reject parameter pollution before any state or consent is created.
         params = request.query_params
+        if len(str(params)) > 8192:
+            raise ConnectorAuthError("invalid_request", "Authorization request too large")
         if any(len(params.getlist(key)) != 1 for key in params):
             raise ConnectorAuthError(
                 "invalid_request", "Duplicate authorization parameters"
             )
+        authorization = dict(
+            client_id=params.get("client_id", ""),
+            redirect_uri=params.get("redirect_uri", ""),
+            requested_resource=params.get("resource", ""),
+            scope=params.get("scope", ""), state=params.get("state", ""),
+            code_challenge=params.get("code_challenge", ""),
+            code_challenge_method=params.get("code_challenge_method", ""),
+            response_type=params.get("response_type", ""),
+        )
+        validate_authorization_request(**authorization)
         auth = await get_current_auth_context(request, token=None, session=session)
         auth = await require_manager_access(auth)
         pending, nonce = await ConnectorAuthService.start_consent(
             session,
             auth,
             _credential(request),
-            client_id=params.get("client_id", ""),
-            redirect_uri=params.get("redirect_uri", ""),
-            requested_resource=params.get("resource", ""),
-            scope=params.get("scope", ""),
-            state=params.get("state", ""),
-            code_challenge=params.get("code_challenge", ""),
-            code_challenge_method=params.get("code_challenge_method", ""),
-            response_type=params.get("response_type", ""),
+            **authorization,
         )
         company_name, storefront_name = await ConnectorAuthService.consent_labels(
             session, pending
@@ -192,29 +199,18 @@ async def authorize(request: Request, session: AsyncSession = Depends(get_sessio
         headers = _consent_headers(pending.redirect_uri)
     except HTTPException as exc:
         if exc.status_code == 401:
-            return HTMLResponse(
-                '<!doctype html><html lang="ru"><meta charset="utf-8"><title>Подключить Kitlane</title><h1>Войдите в Kitlane</h1><p>Откройте Manager и войдите в свою учётную запись. Затем вернитесь на эту страницу и обновите её.</p><a href="/manager/" target="_blank" rel="noopener">Открыть Manager</a></html>',
-                status_code=401,
-                headers=HTML_HEADERS,
+            target = "/api/connector/oauth/authorize?" + str(request.query_params)
+            return RedirectResponse(
+                "/manager/?" + urlencode({"connector_return": target}),
+                status_code=303, headers=NO_CACHE,
             )
         raise
     except ConnectorAuthError as exc:
         await session.rollback()
         return _error(exc)
-    labels = {
-        "kitlane:read": "Читать доступные вам данные Kitlane",
-        "kitlane:incoming:write": "Сохранять входящие обращения",
-        "kitlane:maintenance:write": "Сохранять замечания и фото ТО, готовить черновики актов и предложений",
-        "kitlane:catalog:write": "Сохранять выбранное оборудование в отдельный вариант заказа и готовить черновики КП и счетов",
-        "kitlane:tasks:write": "Создавать и завершать поручения",
-        "kitlane:mail:read": "Читать доступную почту, черновики и вложения вашей компании",
-        "kitlane:mail:drafts:write": "Создавать, изменять и удалять почтовые черновики и их вложения",
-        "kitlane:mail:send": "Отправлять сохранённые письма после отдельного подтверждения актуальной версии в Manager",
-    }
-    capabilities = "".join(
-        f"<li>{html.escape(labels[scope])}</li>" for scope in pending.scopes
-    )
-    content = f'''<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Подключить Kitlane</title><body><h1>Подключить Kitlane к ChatGPT</h1><p>Пользователь: {html.escape(auth.display_name or auth.username)}.</p><p>Компания: {html.escape(company_name)}. Витрина: {html.escape(storefront_name)}.</p><ul>{capabilities}</ul><p>Доступ действует 30 дней. Отозвать его можно в Manager.</p><form method="post" action="/api/connector/oauth/authorize"><input type="hidden" name="consent_id" value="{html.escape(pending.id, quote=True)}"><input type="hidden" name="csrf_token" value="{html.escape(nonce, quote=True)}"><button name="decision" value="allow">Подключить</button> <button name="decision" value="deny">Отмена</button></form></body></html>'''
+    content = consent_page(user_name=auth.display_name or auth.username,
+                           company_name=company_name, storefront_name=storefront_name,
+                           pending=pending, nonce=nonce)
     return HTMLResponse(content, headers=headers)
 
 
@@ -226,7 +222,10 @@ async def consent(
 ):
     """
     Finish the durable consent using explicit allow/deny, consent_id and its one-time CSRF
-    token bound to the same live Manager session. Accepts application/x-www-form-urlencoded
+    token bound to the same live Manager session. scope_selection=explicit and
+    scope:<name>=allow fields select a subset of requested permissions; cannot expand them.
+    An allow form without an explicit selection grants only the mandatory kitlane:read.
+    Accepts application/x-www-form-urlencoded
     up to 8192 bytes; duplicate parameters are rejected. Success redirects with 303 to the
     registered callback; OAuth errors use error/error_description. Do not blindly replay a
     consumed consent.
@@ -245,6 +244,16 @@ async def consent(
         # The one-time synchronizer token is validated against durable consent,
         # its Manager session and live actor. A shared cookie would let another
         # open consent page replace this page's nonce.
+        selected_scopes = ["kitlane:read"]
+        if "scope_selection" in form:
+            if form["scope_selection"] != "explicit":
+                raise ConnectorAuthError("invalid_request", "Unknown scope selection")
+            for key, value in form.items():
+                if key.startswith("scope:"):
+                    scope = key[len("scope:"):]
+                    if scope not in SCOPES or value != "allow":
+                        raise ConnectorAuthError("invalid_scope", "Unknown permission")
+                    selected_scopes.append(scope)
         url = await ConnectorAuthService.finish_consent(
             session,
             auth,
@@ -252,6 +261,7 @@ async def consent(
             consent_id=form.get("consent_id", ""),
             nonce=nonce,
             allow=form["decision"] == "allow",
+            selected_scopes=selected_scopes,
         )
     except ConnectorAuthError as exc:
         await session.rollback()

@@ -8,6 +8,7 @@ defineProps<{
   error: string;
   telegramEnabled: boolean;
   telegramLoading: boolean;
+  connectorLogin?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -29,8 +30,9 @@ const emit = defineEmits<{
         <KitlanePlatformBrand :attribution="false" />
       </div>
       <h2 id="manager-login-title" class="mb-6 text-center text-2xl font-bold text-[var(--kitlane-text)]">
-        Вход в менеджер
+        {{ connectorLogin ? 'Вход для подключения ChatGPT' : 'Вход в менеджер' }}
       </h2>
+      <p v-if="connectorLogin" class="mb-5 text-sm text-[var(--kitlane-muted)]">Войдите под своим логином Kitlane. После входа вы увидите свою компанию и сможете выбрать разрешения для ChatGPT.</p>
       <form class="space-y-4" @submit.prevent="emit('submit')">
         <div>
           <label class="mb-1 block text-sm font-medium text-[var(--kitlane-text)]" for="manager-login-username">
