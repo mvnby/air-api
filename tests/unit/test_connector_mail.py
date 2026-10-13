@@ -191,10 +191,12 @@ async def test_mail_attachment_transport_unconfigured_never_mutates(mcp_client, 
         pytest.fail("Unavailable transport must not save a fake attachment")
     monkeypatch.setattr(MailWorkspaceService, "upload_attachment", forbidden_upload)
     arguments = {"draft_id": 17, "expected_version": 4, "idempotency_key": "mail-attachment-0001",
-                 "file": {"file_id": "file-123", "download_url": "https://files.example/spec.pdf"}}
+                 "file": {"file_id": "file-123", "download_url": "https://files.example/private-spec.pdf?signature=private-secret"}}
     result = (await _rpc(client, "tools/call", {"name": "upload_mail_draft_attachment", "arguments": arguments})).json()["result"]
     assert result["structuredContent"]["error"]["code"] == "invalid_file"
     assert "Manager" in str(result)
+    assert "delivery hostname: files.example" in str(result)
+    assert not any(secret in str(result) for secret in ("https://", "private-spec", "signature", "private-secret", "file-123"))
 
 
 @pytest.mark.asyncio
