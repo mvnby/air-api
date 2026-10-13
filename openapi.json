@@ -34005,7 +34005,7 @@
           "connector-auth"
         ],
         "summary": "Authorize",
-        "description": "Start a one-time OAuth consent bound to the current authenticated Manager session and\nrender an HTML consent page. Requires the registered client/callback, exact resource,\nscopes and PKCE S256; duplicate query parameters are rejected. Missing login returns an\nHTML 401; OAuth errors use error/error_description and no-store headers.\n\nSee [connector access and\nscopes](https://github.com/mvnby/air-api/blob/main/docs/chatgpt-connector.md#\u0430\u0434\u0440\u0435\u0441-\u0438-\u0434\u043e\u0441\u0442\u0443\u043f).\nMCP transport and tools/list are outside this HTTP schema.",
+        "description": "Start a one-time OAuth consent bound to the current authenticated Manager session and\nrender an HTML consent page. Requires the registered client/callback, exact resource,\nscopes and PKCE S256; duplicate query parameters are rejected. A valid request without\na usable personal session redirects to Manager and resumes after sign-in or password\nchange. Legacy shared accounts must use a named login. OAuth errors use\nerror/error_description and no-store headers. Company is resolved from live membership.\n\nSee [connector access and\nscopes](https://github.com/mvnby/air-api/blob/main/docs/chatgpt-connector.md#\u0430\u0434\u0440\u0435\u0441-\u0438-\u0434\u043e\u0441\u0442\u0443\u043f).\nMCP transport and tools/list are outside this HTTP schema.",
         "operationId": "connector_oauth_authorize",
         "responses": {
           "200": {
@@ -34025,7 +34025,7 @@
           "connector-auth"
         ],
         "summary": "Consent",
-        "description": "Finish the durable consent using explicit allow/deny, consent_id and its one-time CSRF\ntoken bound to the same live Manager session. Accepts application/x-www-form-urlencoded\nup to 8192 bytes; duplicate parameters are rejected. Success redirects with 303 to the\nregistered callback; OAuth errors use error/error_description. Do not blindly replay a\nconsumed consent.\n\nSee [connector access and\nscopes](https://github.com/mvnby/air-api/blob/main/docs/chatgpt-connector.md#\u0430\u0434\u0440\u0435\u0441-\u0438-\u0434\u043e\u0441\u0442\u0443\u043f).\nMCP transport and tools/list are outside this HTTP schema.",
+        "description": "Finish the durable consent using explicit allow/deny, consent_id and its one-time CSRF\ntoken bound to the same live Manager session. scope_selection=explicit and\nscope:<name>=allow fields select a subset of requested permissions; cannot expand them.\nAn allow form without an explicit selection grants only the mandatory kitlane:read.\nAccepts application/x-www-form-urlencoded\nup to 8192 bytes; duplicate parameters are rejected. Success redirects with 303 to the\nregistered callback; OAuth errors use error/error_description. Do not blindly replay a\nconsumed consent.\n\nSee [connector access and\nscopes](https://github.com/mvnby/air-api/blob/main/docs/chatgpt-connector.md#\u0430\u0434\u0440\u0435\u0441-\u0438-\u0434\u043e\u0441\u0442\u0443\u043f).\nMCP transport and tools/list are outside this HTTP schema.",
         "operationId": "connector_oauth_consent",
         "responses": {
           "200": {

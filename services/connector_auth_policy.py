@@ -33,6 +33,22 @@ def digest(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
+def consent_nonce_hash(value: str) -> str:
+    # Older consumers grant the whole requested scope set. Make the new form's
+    # verifier incompatible with their plain SHA-256 so mixed versions and a
+    # rollback reject the form instead of ignoring unchecked permissions.
+    return hmac.new(settings.SECRET_KEY.encode(),
+                    ("kitlane-permission-choice-v1:" + value).encode(),
+                    hashlib.sha256).hexdigest()
+
+
+def consent_nonce_matches(stored: str, value: str) -> bool:
+    # Pending pre-upgrade forms remain usable; the HTTP adapter defaults them
+    # to basic read unless an explicit selection is supplied.
+    return (hmac.compare_digest(stored, consent_nonce_hash(value))
+            or hmac.compare_digest(stored, digest(value)))
+
+
 def secret(kind: str) -> str:
     return f"kl_{kind}_" + secrets.token_urlsafe(32)
 
@@ -81,6 +97,23 @@ def validate_redirect(redirect_uri: str) -> None:
     )
     if redirect_uri not in allowed:
         raise ConnectorAuthError("invalid_request", "Redirect URI is not registered")
+
+
+def validate_authorization_request(*, client_id, redirect_uri, requested_resource,
+                                   scope, state, code_challenge,
+                                   code_challenge_method, response_type) -> list[str]:
+    """Validate the request before login and again before durable consent."""
+    validate_client(client_id, requested_resource)
+    validate_redirect(redirect_uri)
+    scopes = sorted(set(scope.split()))
+    if "kitlane:read" not in scopes or not set(scopes) <= SCOPES:
+        raise ConnectorAuthError("invalid_scope", "kitlane:read and supported scopes are required")
+    if (response_type != "code" or code_challenge_method != "S256"
+            or not CHALLENGE.fullmatch(code_challenge)):
+        raise ConnectorAuthError("invalid_request", "Authorization code with PKCE S256 required")
+    if not state or len(state) > 1024:
+        raise ConnectorAuthError("invalid_request", "Bounded OAuth state required")
+    return scopes
 
 
 def csrf_token(session_credential: str) -> str:

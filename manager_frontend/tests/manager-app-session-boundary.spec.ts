@@ -14,6 +14,12 @@ const mocks = vi.hoisted(() => ({
   logout: vi.fn(),
   patchManagerOrder: vi.fn(),
   readMe: vi.fn(),
+  resumeConnectorLogin: vi.fn(),
+}));
+
+vi.mock('../src/services/connector-login-continuation', async importOriginal => ({
+  ...await importOriginal<typeof import('../src/services/connector-login-continuation')>(),
+  resumeConnectorLogin: mocks.resumeConnectorLogin,
 }));
 
 vi.mock('../src/api', () => ({
@@ -213,7 +219,7 @@ const mountApp = async (path = '/manager/leads') => {
   const reloadPage = vi.fn();
   wrapper = mount(App, {
     props: { reloadPage },
-    global: { stubs: { UiFeedbackHost: true } },
+    global: { stubs: { UiFeedbackHost: true, ProfileSecurityView: true } },
   });
   await flushPromises();
   await flushPromises();
@@ -248,6 +254,7 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   networkFetch.mockImplementation(async () => okResponse());
   mocks.login.mockResolvedValue({ access_token: 'session', token_type: 'bearer' });
+  mocks.resumeConnectorLogin.mockReturnValue(true);
   mocks.loginTelegram.mockResolvedValue({ access_token: 'session', token_type: 'bearer' });
   mocks.logout.mockResolvedValue(undefined);
   mocks.readMe.mockResolvedValue(oldAuth);
@@ -539,5 +546,45 @@ describe('supplier navigation entry points', () => {
     await suppliers!.trigger('click');
     await flushPromises();
     expect(wrapper!.get('[data-testid="supplier-entry"]').text()).toBe('profile');
+  });
+});
+
+describe('personal connector login continuation', () => {
+  const target = '/api/connector/oauth/authorize?' + new URLSearchParams({
+    client_id: 'kitlane-chatgpt', state: 'resume-test', code_challenge: 'challenge',
+    code_challenge_method: 'S256', response_type: 'code',
+  });
+  const path = '/manager/?' + new URLSearchParams({ connector_return: target });
+
+  it('resumes a restored named session without a manual page refresh', async () => {
+    await mountApp(path);
+    expect(mocks.resumeConnectorLogin).toHaveBeenCalledWith(target, oldAuth);
+  });
+
+  it('shows the connection purpose and resumes after password login', async () => {
+    mocks.readMe.mockRejectedValueOnce(new Error('unauthorized'));
+    await mountApp(path);
+    expect(wrapper!.get('[role="dialog"]').text()).toContain('Вход для подключения ChatGPT');
+    await wrapper!.get('#manager-login-username').setValue('old-owner');
+    await wrapper!.get('#manager-login-password').setValue('local-test-password');
+    await wrapper!.get('form').trigger('submit');
+    await flushPromises();
+    expect(mocks.login).toHaveBeenCalledWith({ username: 'old-owner', password: 'local-test-password' });
+    expect(mocks.resumeConnectorLogin).toHaveBeenCalledWith(target, oldAuth);
+  });
+
+  it('asks a legacy shared account to use a personal login', async () => {
+    mocks.readMe.mockResolvedValue({ ...oldAuth, staff_user_id: undefined, auth_source: 'legacy' });
+    await mountApp(path);
+    expect(mocks.resumeConnectorLogin).not.toHaveBeenCalled();
+    expect(wrapper!.get('[role="dialog"]').text()).toContain('ваш личный логин Kitlane');
+  });
+
+  it('opens the profile before connecting an account with a temporary password', async () => {
+    mocks.readMe.mockResolvedValue({ ...oldAuth, must_change_password: true });
+    await mountApp(path);
+    await flushPromises();
+    expect(mocks.resumeConnectorLogin).not.toHaveBeenCalled();
+    expect(window.location.pathname).toBe('/manager/profile');
   });
 });

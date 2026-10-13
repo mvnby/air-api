@@ -6,11 +6,29 @@ const grants = ref<ConnectorGrant[]>([]);
 const loading = ref(true);
 const revoking = ref<number | null>(null);
 const error = ref('');
+const copied = ref(false);
+const copyError = ref('');
+const serverUrl = 'https://api.mvn.by/api/connector/mcp';
+const copyServerUrl = async () => {
+  copied.value = false;
+  copyError.value = '';
+  try {
+    await navigator.clipboard.writeText(serverUrl);
+    if (mounted) copied.value = true;
+  } catch {
+    if (mounted) copyError.value = 'Не удалось скопировать адрес. Выделите его и скопируйте вручную.';
+  }
+};
 let mounted = true;
 const scopeLabels: Record<string, string> = {
   'kitlane:read': 'Просмотр данных',
   'kitlane:incoming:write': 'Добавление входящих',
   'kitlane:tasks:write': 'Создание и изменение личных задач',
+  'kitlane:maintenance:write': 'Замечания, фото и черновики документов ТО',
+  'kitlane:catalog:write': 'Подбор оборудования и черновики КП и счетов',
+  'kitlane:mail:read': 'Чтение почты и вложений',
+  'kitlane:mail:drafts:write': 'Изменение почтовых черновиков и вложений',
+  'kitlane:mail:send': 'Отправка писем после подтверждения в Manager',
 };
 const active = (grant: ConnectorGrant) => !grant.revoked_at && Date.parse(grant.expires_at) > Date.now();
 const dateLabel = (date: string) => new Date(date).toLocaleDateString('ru-RU');
@@ -70,5 +88,19 @@ onUnmounted(() => { mounted = false; });
         </li>
       </ul>
     </div>
+    <details data-testid="connector-quickstart" :open="!loading && !error && !grants.length" class="mt-5 rounded-lg border border-gray-200 p-4">
+      <summary class="cursor-pointer font-medium text-gray-900">Как подключить Kitlane к ChatGPT</summary>
+      <ol class="mt-3 list-decimal space-y-3 pl-5 text-sm text-gray-700">
+        <li>Используйте свой логин Kitlane, выданный владельцем компании. У каждого сотрудника своё подключение.</li>
+        <li>В ChatGPT откройте «Плагины» → «Добавить свой MCP-сервер». Назовите его Kitlane, вставьте адрес ниже и выберите OAuth. Если запрашивается ID клиента, укажите <code>kitlane-chatgpt</code>; секрет клиента не нужен.</li>
+        <li>Войдите в Kitlane, проверьте название своей компании и выберите нужные разрешения. Для подготовки писем достаточно чтения почты и редактирования черновиков.</li>
+        <li>Вернитесь в ChatGPT и попросите Kitlane показать ваши поручения или подготовить черновик. Подключение появится в списке выше.</li>
+      </ol>
+      <p class="mt-3 break-all rounded bg-gray-50 p-2 font-mono text-xs" data-testid="connector-server-url">{{ serverUrl }}</p>
+      <button type="button" class="mt-2 text-sm font-medium text-brand-700" @click="copyServerUrl">{{ copied ? 'Адрес скопирован' : 'Скопировать адрес сервера' }}</button>
+      <p v-if="copyError" role="alert" class="mt-2 text-sm text-red-700">{{ copyError }}</p>
+      <p class="mt-3 text-xs text-gray-500">Это личное подключение. Доступность добавления своего сервера зависит от вашего аккаунта ChatGPT. Если такой пункт отсутствует, обратитесь к администратору рабочего пространства.</p>
+      <p class="mt-2 text-xs text-gray-500">Для новых разрешений подключитесь заново. Почта доступна после настройки аккаунта вашей компании; подключение ChatGPT само по себе почтовый аккаунт не создаёт.</p>
+    </details>
   </div>
 </template>

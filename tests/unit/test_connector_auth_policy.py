@@ -1,11 +1,15 @@
 """OAuth security policy vectors, independent of the database."""
 
 import pytest
+import hmac
 
 from core.config import settings
 from services.connector_auth_policy import (
     CLIENT_ID,
     ConnectorAuthError,
+    consent_nonce_hash,
+    consent_nonce_matches,
+    digest,
     csrf_token,
     issuer,
     pkce,
@@ -21,6 +25,22 @@ def test_pkce_rfc7636_s256_vector():
         pkce("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")
         == "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
     )
+
+
+def test_permission_choice_form_is_rejected_by_legacy_consent_verifier():
+    nonce = "new-permission-choice-nonce"
+    stored = consent_nonce_hash(nonce)
+    # The pre-choice server checked plain SHA-256 and then granted every
+    # requested scope. It must be unable to consume a new selective form.
+    assert not hmac.compare_digest(stored, digest(nonce))
+    assert consent_nonce_matches(stored, nonce)
+    assert not consent_nonce_matches(stored, nonce + "changed")
+
+
+def test_old_pending_nonce_remains_usable_by_current_consumer():
+    nonce = "pending-before-upgrade"
+    assert consent_nonce_matches(digest(nonce), nonce)
+    assert not consent_nonce_matches(digest(nonce), "other-page")
 
 
 def test_csrf_bound_to_existing_manager_session():
