@@ -87,6 +87,14 @@ def _error(exc: ConnectorAuthError) -> JSONResponse:
     )
 
 
+def _manager_login_redirect(request: Request) -> RedirectResponse:
+    target = "/api/connector/oauth/authorize?" + str(request.query_params)
+    return RedirectResponse(
+        "/manager/?" + urlencode({"connector_return": target}),
+        status_code=303, headers=NO_CACHE,
+    )
+
+
 async def _form(request: Request) -> dict[str, str]:
     content_type = request.headers.get("content-type", "").split(";")[0]
     if content_type != "application/x-www-form-urlencoded":
@@ -159,7 +167,8 @@ async def authorize(request: Request, session: AsyncSession = Depends(get_sessio
     Start a one-time OAuth consent bound to the current authenticated Manager session and
     render an HTML consent page. Requires the registered client/callback, exact resource,
     scopes and PKCE S256; duplicate query parameters are rejected. A valid request without
-    login redirects to Manager and resumes after sign-in. OAuth errors use
+    a usable personal session redirects to Manager and resumes after sign-in or password
+    change. Legacy shared accounts must use a named login. OAuth errors use
     error/error_description and no-store headers. Company is resolved from live membership.
 
     See [connector access and
@@ -187,6 +196,8 @@ async def authorize(request: Request, session: AsyncSession = Depends(get_sessio
         validate_authorization_request(**authorization)
         auth = await get_current_auth_context(request, token=None, session=session)
         auth = await require_manager_access(auth)
+        if not auth.staff_user_id or auth.auth_source == "legacy" or auth.must_change_password:
+            return _manager_login_redirect(request)
         pending, nonce = await ConnectorAuthService.start_consent(
             session,
             auth,
@@ -199,11 +210,7 @@ async def authorize(request: Request, session: AsyncSession = Depends(get_sessio
         headers = _consent_headers(pending.redirect_uri)
     except HTTPException as exc:
         if exc.status_code == 401:
-            target = "/api/connector/oauth/authorize?" + str(request.query_params)
-            return RedirectResponse(
-                "/manager/?" + urlencode({"connector_return": target}),
-                status_code=303, headers=NO_CACHE,
-            )
+            return _manager_login_redirect(request)
         raise
     except ConnectorAuthError as exc:
         await session.rollback()

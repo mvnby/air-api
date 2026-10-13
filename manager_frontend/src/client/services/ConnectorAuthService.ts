@@ -65,7 +65,8 @@ export class ConnectorAuthService {
      * Start a one-time OAuth consent bound to the current authenticated Manager session and
      * render an HTML consent page. Requires the registered client/callback, exact resource,
      * scopes and PKCE S256; duplicate query parameters are rejected. A valid request without
-     * login redirects to Manager and resumes after sign-in. OAuth errors use
+     * a usable personal session redirects to Manager and resumes after sign-in or password
+     * change. Legacy shared accounts must use a named login. OAuth errors use
      * error/error_description and no-store headers. Company is resolved from live membership.
      *
      * See [connector access and

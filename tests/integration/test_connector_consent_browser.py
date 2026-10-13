@@ -85,6 +85,28 @@ async def test_login_redirect_preserves_only_valid_oauth_request(consent_client,
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("account", ["legacy", "temporary_password"])
+async def test_existing_unusable_session_returns_to_personal_login(consent_client, db, account):
+    client, claims = consent_client
+    if account == "legacy":
+        from core.config import settings
+        claims = {"sub": settings.ADMIN_USERNAME, "auth_source": "legacy", "legacy_auth_version": 1}
+        client.cookies.set("access_token", "Bearer " + create_access_token(claims))
+    else:
+        user = await db.get(StaffUser, claims["staff_user_id"])
+        user.must_change_password = True
+        await db.commit()
+    response = await client.get(AUTHORIZE, params={"client_id": CLIENT_ID,
+        "redirect_uri": CALLBACK, "resource": resource(), "scope": "kitlane:read",
+        "state": "personal-login", "code_challenge": pkce("v" * 64),
+        "code_challenge_method": "S256", "response_type": "code"}, follow_redirects=False)
+    assert response.status_code == 303
+    assert urlsplit(response.headers["location"]).path == "/manager/"
+    assert not (await db.execute(select(ConnectorConsent.id))).scalars().all()
+    assert await grant_count(db) == 0
+
+
+@pytest.mark.asyncio
 async def test_company_and_independent_permissions_are_visible(consent_client):
     client, _ = consent_client
     response, _ = await screen(client, scopes="kitlane:read kitlane:mail:read kitlane:mail:drafts:write kitlane:mail:send")
