@@ -39,8 +39,7 @@ REDIRECT = "https://chatgpt.com/connector_platform_oauth_redirect"
 VERIFIER = "s" * 64
 
 
-@pytest.fixture
-async def identity(db):
+async def create_identity(db):
     user = StaffUser(
         display_name="Connector Manager",
         username="connector-manager",
@@ -64,6 +63,19 @@ async def identity(db):
         auth_version=1,
     )
     return user, membership, auth
+
+
+@pytest.fixture
+async def identity(db):
+    return await create_identity(db)
+
+
+@pytest.fixture
+async def committed_identity(db_engine):
+    # The regular db fixture commits only a SAVEPOINT. Independent physical
+    # connections need a real commit to see the identity and issued tokens.
+    async with AsyncSession(db_engine, expire_on_commit=False) as session:
+        yield session, await create_identity(session)
 
 
 async def consent_code(db, identity, *, scopes="kitlane:read kitlane:incoming:write"):
@@ -160,7 +172,8 @@ async def test_rejected_requests_cannot_mark_a_connection_used(db, identity, den
 
 
 @pytest.mark.asyncio
-async def test_business_recheck_does_not_commit_pending_changes(db, db_engine, identity):
+async def test_business_recheck_does_not_commit_pending_changes(db_engine, committed_identity):
+    db, identity = committed_identity
     issued = await tokens(db, identity)
     user = identity[0]
     original = user.display_name
@@ -175,9 +188,10 @@ async def test_business_recheck_does_not_commit_pending_changes(db, db_engine, i
 
 
 @pytest.mark.asyncio
-async def test_real_mcp_request_persists_last_use_for_manager(db, db_engine, identity):
+async def test_real_mcp_request_persists_last_use_for_manager(db_engine, committed_identity):
     from services.connector_mcp import ConnectorMCPApplication
 
+    db, identity = committed_identity
     issued = await tokens(db, identity)
 
     @asynccontextmanager
@@ -203,7 +217,8 @@ async def test_real_mcp_request_persists_last_use_for_manager(db, db_engine, ide
     manager.include_router(router)
 
     async def profile_session():
-        yield db
+        async with sessions() as session:
+            yield session
 
     manager.dependency_overrides[get_session] = profile_session
     manager.dependency_overrides[require_manager_access] = lambda: identity[2]
