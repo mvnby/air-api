@@ -184,7 +184,8 @@ async def test_owner_and_manager_in_one_company_have_independent_equal_scope_con
     client, _ = consent_client
     connections = []
     for role in ("owner", "manager"):
-        user = StaffUser(username="partner-" + role, primary_role=role, roles=[role])
+        user = StaffUser(username="partner-" + role, display_name="Partner " + role,
+                         primary_role=role, roles=[role])
         db.add(user)
         await db.flush()
         db.add(TenantMembership(tenant_id=1, staff_user_id=user.id, role=role))
