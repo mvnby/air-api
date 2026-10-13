@@ -45,8 +45,25 @@ def test_untrusted_urls_fail_closed(monkeypatch, url):
 
 def test_empty_operator_host_evidence_blocks_upload(monkeypatch):
     monkeypatch.setattr(settings, 'CONNECTOR_CHATGPT_FILE_HOSTS', [])
-    with pytest.raises(ConnectorFileError, match='not configured'):
+    with pytest.raises(ConnectorFileError, match='not configured') as caught:
         ConnectorFileService.validate_source(file())
+    assert 'delivery hostname: delivery.example' in str(caught.value)
+    assert not any(secret in str(caught.value) for secret in ('https://', 'file-123', 'signature', 'secret'))
+    assert settings.CONNECTOR_CHATGPT_FILE_HOSTS == []
+
+
+@pytest.mark.parametrize('url', [
+    'https://user:secret@delivery.example/private?signature=secret',
+    'https://delivery.example:443/private?signature=secret',
+    'https://delivery.example/private#secret', 'https://127.0.0.1/private',
+    'https://[::1]/private', 'https://delivery.example/private\nsecret',
+    'https://délivery.example/private', 'https://localhost/private',
+])
+def test_unconfigured_transport_does_not_disclose_invalid_source(monkeypatch, url):
+    monkeypatch.setattr(settings, 'CONNECTOR_CHATGPT_FILE_HOSTS', [])
+    with pytest.raises(ConnectorFileError) as caught:
+        ConnectorFileService.validate_source(file(download_url=url))
+    assert str(caught.value) == 'File source must be a supported ChatGPT file'
 
 
 @pytest.mark.asyncio

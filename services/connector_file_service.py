@@ -1,6 +1,7 @@
 """ChatGPT fileParams: fixed operator hosts, pinned DNS and bounded private bytes."""
 import asyncio
 import ipaddress
+import re
 import socket
 from io import BytesIO
 from urllib.parse import urlsplit
@@ -49,23 +50,35 @@ class ConnectorFileService:
         try:
             parsed = urlsplit(file.download_url)
             host = parsed.hostname or ""
-            allowed = set(settings.CONNECTOR_CHATGPT_FILE_HOSTS)
-            if not allowed:
-                raise ConnectorFileError("ChatGPT file upload is not configured; use private upload in Manager")
-            if (parsed.scheme != "https" or host not in allowed or parsed.port is not None
+            if (parsed.scheme != "https" or parsed.port is not None
                     or parsed.username is not None or parsed.password is not None or parsed.fragment
                     or not parsed.path or "\\" in file.download_url
+                    or not re.fullmatch(r"[a-z0-9.-]{1,253}", host) or "." not in host
                     or any(ch.isspace() or ord(ch) < 32 for ch in file.download_url)):
+                raise ConnectorFileError("File source must be a supported ChatGPT file")
+            try:
+                ipaddress.ip_address(host)
+            except ValueError:
+                pass
+            else:
+                raise ConnectorFileError("File source must be a supported ChatGPT file")
+            allowed = set(settings.CONNECTOR_CHATGPT_FILE_HOSTS)
+            if not allowed:
+                # The authenticated caller needs the actual hostname for the
+                # operator's client pilot. Never return the path, signed query,
+                # credentials, file identity or content, and never auto-allow it.
+                raise ConnectorFileError(
+                    "ChatGPT file upload is not configured; "
+                    f"delivery hostname: {host}. Operator verification is required; "
+                    "use private upload in Manager"
+                )
+            if host not in allowed:
                 raise ConnectorFileError("File source must be a supported ChatGPT file")
             # Operator configuration also fails closed for IPs, wildcards and URLs.
             if any(not item or "." not in item or item != item.lower() or any(c not in "abcdefghijklmnopqrstuvwxyz0123456789.-" for c in item)
                    for item in allowed):
                 raise ConnectorFileError("ChatGPT file delivery configuration is invalid")
-            try:
-                ipaddress.ip_address(host)
-            except ValueError:
-                return host
-            raise ConnectorFileError("File source must be a supported ChatGPT file")
+            return host
         except ValueError as exc:
             if isinstance(exc, ConnectorFileError):
                 raise
