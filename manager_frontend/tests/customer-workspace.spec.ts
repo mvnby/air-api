@@ -20,7 +20,7 @@ const wrappers: VueWrapper[] = [];
 function mountProfile(search = '?customerId=7') {
   window.history.pushState({}, '', `/manager/customers/profile${search}`);
   const wrapper = mount(CustomerProfileView, {
-    global: { stubs: { teleport: true, transition: false, CreateOrderModal: true, CustomerIntakeDialog: true } },
+    global: { stubs: { teleport: true, transition: false, CreateOrderModal: true, CustomerIntakeDialog: true, EnvelopePrintDialog: { props: ['customerId'], template: '<div data-testid="envelope-print" :data-customer-id="customerId" />' } } },
   });
   wrappers.push(wrapper);
   return wrapper;
@@ -69,6 +69,12 @@ afterEach(() => {
 });
 
 describe('CustomerProfileView workspace', () => {
+  it('opens envelope printing for the current customer', async () => {
+    const wrapper = mountProfile(); await flushPromises();
+    await wrapper.findAll('button').find(button => button.text() === 'Печать конверта')!.trigger('click');
+    await vi.waitFor(() => expect(wrapper.find('[data-testid="envelope-print"]').exists()).toBe(true));
+    expect(wrapper.get('[data-testid="envelope-print"]').attributes('data-customer-id')).toBe('7');
+  });
   it('opens on contacts and loads heavy sections only after their tabs are selected', async () => {
     const wrapper = mountProfile();
     await flushPromises();

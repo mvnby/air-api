@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
     ffmpeg \
     postgresql-client \
     poppler-utils \
+    fonts-dejavu-core \
     tesseract-ocr \
     tesseract-ocr-eng \
     tesseract-ocr-rus \

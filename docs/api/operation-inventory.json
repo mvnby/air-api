@@ -9,6 +9,7 @@
     "reviewed_stage"
   ],
   "review_stages": {
+    "15": "DL envelope PDF and explicit Belpost postcode suggestions; current Manager membership and customer tenant scope, reviewed address overrides without writes, bounded provider lookup, manual selection/fallback, embedded Cyrillic and overflow rejection; reviewed 2026-10-15",
     "14": "Standalone saved mail, private immutable attachment bytes, current company/account/link access, optimistic versions, exact Manager approval with CSRF, durable send fence, unknown SMTP outcome and separate MCP OAuth mail scopes; reviewed 2026-10-13",
     "13": "Draft parameter read/update: tenant/storefront, frozen source facts, optimistic revision, date-only editor preservation and explicit working-copy reset; reviewed 2026-10-10",
     "12": "Manual procurement stages/price history, editable participant statement issue confirmation and tenant-private registration certificates/email issuer binding; reviewed 2026-10-09",
@@ -25,6 +26,10 @@
     "11": "Native tender direct push; dedicated key, fixed active system scope, writable-primary gates, bounded payload, shared pull/push deduplication, staff preservation, stale guards and unchanged pull checkpoint reviewed 2026-10-09 for issue 849"
   },
   "operations": {
+    "routers/manager_customer_envelopes.py": [
+      ["POST /api/manager/customers/{customer_id}/envelope-pdf", "print_manager_customer_envelope", false, 15],
+      ["POST /api/manager/customers/{customer_id}/envelope-postcodes", "lookup_manager_customer_postcodes", false, 15]
+    ],
     "routers/manager_incoming_mail.py": [
       ["GET /api/manager/mail/messages/{email_id}/attachments/{attachment_id}", "download_manager_incoming_mail_attachment", false, 14],
       ["POST /api/manager/mail/sync", "sync_manager_mailbox", false, 14]

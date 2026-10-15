@@ -1,0 +1,142 @@
+<script setup lang="ts">
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue';
+import { Download, X } from 'lucide-vue-next';
+import { api } from '../../api';
+import { ManagerDocumentSystemService, type DocumentLegalEntityItem, type EnvelopeParty, type ManagerCatalogCustomerItemResponse } from '../../client';
+import { getApiErrorMessage } from '../../utils/api-errors';
+import { envelopeAddresses, splitPostalAddress } from './envelope-addresses';
+import { downloadEnvelope } from './envelope-print-api';
+import PostcodeLookup from './PostcodeLookup.vue';
+
+const props = defineProps<{ customerId: number; orderAddress?: string }>();
+const emit = defineEmits<{ close: [] }>();
+const customer = ref<ManagerCatalogCustomerItemResponse | null>(null);
+const entities = ref<DocumentLegalEntityItem[]>([]);
+const selectedEntity = ref('');
+const selectedAddress = ref('');
+const recipient = reactive<EnvelopeParty>({ name: '', address: '', postal_code: '' });
+const sender = reactive<EnvelopeParty>({ name: '', address: '', postal_code: '' });
+const loading = ref(true);
+const busy = ref(false);
+const error = ref('');
+const senderWarning = ref('');
+const dialog = ref<HTMLElement | null>(null);
+const previousFocus = document.activeElement as HTMLElement | null;
+const previousOverflow = document.body.style.overflow;
+let alive = true;
+const addresses = computed(() => customer.value ? envelopeAddresses(customer.value, props.orderAddress) : []);
+const missing = computed(() => {
+  const fields: string[] = [];
+  for (const [party, label] of [[recipient, 'получателя'], [sender, 'отправителя']] as const) {
+    if (!party.name.trim()) fields.push(`название / ФИО ${label}`);
+    if (!party.address.trim()) fields.push(`адрес ${label}`);
+    if (!/^[0-9]{6}$/.test(party.postal_code)) fields.push(`индекс ${label} (6 цифр)`);
+  }
+  return fields;
+});
+function chooseAddress() {
+  Object.assign(recipient, splitPostalAddress(addresses.value.find(item => item.id === selectedAddress.value)?.address || ''));
+}
+function chooseSender() {
+  const entity = entities.value.find(item => String(item.id) === selectedEntity.value);
+  sender.name = entity?.legal_name || entity?.display_name || '';
+  Object.assign(sender, splitPostalAddress(entity?.requisites.legal_address || ''));
+}
+function extractIndex(party: EnvelopeParty) {
+  const parsed = splitPostalAddress(party.address);
+  if (parsed.postal_code && (!party.postal_code || party.postal_code === parsed.postal_code)) Object.assign(party, parsed);
+}
+async function load() {
+  loading.value = true; error.value = ''; senderWarning.value = '';
+  const [detail, issuers] = await Promise.allSettled([
+    api.getManagerCustomerDetail(props.customerId),
+    ManagerDocumentSystemService.listManagerDocumentLegalEntities(),
+  ]);
+  if (!alive) return;
+  if (detail.status === 'rejected') { error.value = getApiErrorMessage(detail.reason); loading.value = false; return; }
+  customer.value = detail.value;
+  recipient.name = detail.value.full_legal_name || detail.value.name || '';
+  selectedAddress.value = addresses.value.length === 1 ? addresses.value[0]!.id : addresses.value.length ? '' : 'custom';
+  chooseAddress();
+  if (issuers.status === 'fulfilled') {
+    entities.value = issuers.value.items.filter(item => item.status === 'active');
+    selectedEntity.value = String(entities.value.find(item => item.is_default)?.id || entities.value[0]?.id || '');
+    chooseSender();
+  } else senderWarning.value = 'Не удалось загрузить отправителей. Заполните данные вручную.';
+  loading.value = false;
+}
+async function generate() {
+  if (loading.value || busy.value || !customer.value || !selectedAddress.value || missing.value.length) return;
+  busy.value = true; error.value = '';
+  try {
+    const blob = await downloadEnvelope(props.customerId, { format: 'DL', sender: { ...sender }, recipient: { ...recipient } });
+    if (!alive) return;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url; link.download = `envelope-dl-${props.customerId}.pdf`;
+    document.body.append(link); link.click(); link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  } catch (e) { if (alive) error.value = getApiErrorMessage(e); }
+  finally { if (alive) busy.value = false; }
+}
+function close() { if (!busy.value) emit('close'); }
+function keydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') { event.stopPropagation(); event.preventDefault(); close(); }
+  if (event.key !== 'Tab') return;
+  const elements = [...(dialog.value?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), a[href]') || [])];
+  const first = elements[0], last = elements[elements.length - 1];
+  if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog.value)) { event.preventDefault(); last?.focus(); }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+}
+onMounted(async () => { document.body.style.overflow = 'hidden'; await nextTick(); dialog.value?.focus(); void load(); });
+onUnmounted(() => { alive = false; document.body.style.overflow = previousOverflow; previousFocus?.focus(); });
+</script>
+
+<template>
+  <Teleport to="body">
+    <div class="envelope-overlay" @click.self="close">
+      <section ref="dialog" role="dialog" aria-modal="true" aria-labelledby="envelope-title" tabindex="-1" class="envelope-dialog" @keydown="keydown">
+        <header><div><h2 id="envelope-title">Печать конверта</h2><p>DL · 220 × 110 мм · Беларусь</p></div><button type="button" aria-label="Закрыть печать конверта" :disabled="busy" @click="close"><X :size="20" /></button></header>
+        <p v-if="loading" role="status">Загрузка адресов…</p>
+        <p v-if="error" role="alert" class="envelope-error">{{ error }} <button v-if="!customer && !loading" type="button" @click="load">Повторить</button></p>
+        <form v-if="customer && !loading" @submit.prevent="generate">
+          <div class="envelope-fields">
+            <fieldset :disabled="busy"><legend>Получатель</legend>
+              <label v-if="addresses.length" for="envelope-address">Адрес из карточки<select id="envelope-address" v-model="selectedAddress" required @change="chooseAddress"><option value="" disabled>Выберите адрес</option><option v-for="item in addresses" :key="item.id" :value="item.id">{{ item.label }}: {{ item.address }}</option><option value="custom">Другой адрес — ввести вручную</option></select></label>
+              <label for="envelope-recipient-name">Название / ФИО<input id="envelope-recipient-name" v-model="recipient.name" required maxlength="300" /></label>
+              <label for="envelope-recipient-address">Адрес без индекса<textarea id="envelope-recipient-address" v-model="recipient.address" required maxlength="600" rows="3" @blur="extractIndex(recipient)" /></label>
+              <label for="envelope-recipient-index">Почтовый индекс<input id="envelope-recipient-index" v-model="recipient.postal_code" required inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="6 цифр" /></label>
+              <PostcodeLookup :customer-id="customerId" :address="recipient.address" :disabled="busy" @selected="recipient.postal_code = $event" />
+            </fieldset>
+            <fieldset :disabled="busy"><legend>Отправитель</legend>
+              <label v-if="entities.length" for="envelope-sender">Наши реквизиты<select id="envelope-sender" v-model="selectedEntity" @change="chooseSender"><option v-for="entity in entities" :key="entity.id" :value="String(entity.id)">{{ entity.display_name }}</option><option value="">Другой отправитель</option></select></label>
+              <p v-if="senderWarning" role="status">{{ senderWarning }}</p>
+              <label for="envelope-sender-name">Название / ФИО<input id="envelope-sender-name" v-model="sender.name" required maxlength="300" /></label>
+              <label for="envelope-sender-address">Адрес без индекса<textarea id="envelope-sender-address" v-model="sender.address" required maxlength="600" rows="3" @blur="extractIndex(sender)" /></label>
+              <label for="envelope-sender-index">Почтовый индекс<input id="envelope-sender-index" v-model="sender.postal_code" required inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="6 цифр" /></label>
+              <PostcodeLookup :customer-id="customerId" :address="sender.address" :disabled="busy" @selected="sender.postal_code = $event" />
+            </fieldset>
+          </div>
+          <div class="envelope-preview" aria-label="Расположение адресов на конверте">
+            <div class="preview-sender"><small>Отправитель</small><div>{{ sender.name || 'Название / ФИО' }}</div><div>{{ sender.address || 'Адрес' }}</div><div>{{ sender.postal_code || 'Индекс' }}, Республика Беларусь</div></div>
+            <div class="preview-recipient"><small>Получатель</small><div>{{ recipient.name || 'Название / ФИО' }}</div><div>{{ recipient.address || 'Адрес' }}</div><div>{{ recipient.postal_code || 'Индекс' }}, Республика Беларусь</div></div>
+          </div>
+          <p class="envelope-hint">Печатайте на конверте DL в масштабе 100%, без подгонки под страницу. Перед тиражом проверьте подачу на одном конверте.</p>
+          <p class="envelope-hint">Изменения в этом окне используются только для печати.</p>
+          <p v-if="missing.length" role="status" class="envelope-missing">Укажите: {{ missing.join('; ') }}.</p>
+          <footer><button type="button" class="btn-mini-outline" :disabled="busy" @click="close">Закрыть</button><button type="submit" class="btn-mini" :disabled="busy || missing.length > 0 || !selectedAddress"><Download :size="15" />{{ busy ? 'Формирование…' : 'Скачать PDF для печати' }}</button></footer>
+        </form>
+      </section>
+    </div>
+  </Teleport>
+</template>
+
+<style scoped>
+.envelope-overlay { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; padding: 16px; background: rgb(15 23 42 / 45%); }
+.envelope-dialog { width: min(760px, 100%); max-height: calc(100dvh - 32px); overflow-y: auto; padding: 22px; border-radius: 16px; background: var(--mv-surface, white); color: var(--mv-text, #0f172a); box-shadow: 0 20px 60px #0003; }
+header { display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 18px; } h2 { font-size: 18px; font-weight: 600; } header p, .envelope-hint { color: var(--mv-text-muted, #64748b); font-size: 12px; margin-top: 5px; } header button { padding: 5px; }
+.envelope-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; } fieldset { min-width: 0; } legend { font-weight: 600; font-size: 14px; margin-bottom: 10px; } label { display: block; font-size: 12px; margin-bottom: 10px; } input, textarea, select { display: block; width: 100%; margin-top: 4px; padding: 8px 10px; border: 1px solid var(--mv-border, #cbd5e1); border-radius: 7px; background: var(--mv-surface, white); color: inherit; font: inherit; font-size: 13px; } textarea { resize: vertical; } a { font-size: 12px; color: var(--kitlane-accent-text, #2563eb); } button:disabled { opacity: .5; cursor: default; }
+.envelope-preview { position: relative; width: 100%; aspect-ratio: 2; margin: 18px 0 12px; border: 1px solid #cbd5e1; background: white; color: #111; font-size: clamp(9px, 1.35vw, 12px); line-height: 1.35; overflow: hidden; } .preview-sender, .preview-recipient { position: absolute; overflow-wrap: anywhere; } .preview-sender { left: 4.55%; top: 9%; width: 41.8%; } .preview-recipient { left: 47.7%; top: 49%; width: 47.7%; } .envelope-preview small { display: block; margin-bottom: 3px; color: #475569; font-size: .8em; }
+.envelope-error { color: #dc2626; margin: 10px 0; font-size: 13px; } .envelope-missing { margin-top: 10px; color: var(--mv-text-muted, #64748b); font-size: 12px; } footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; } footer button { display: inline-flex; align-items: center; gap: 6px; }
+@media (max-width: 600px) { .envelope-fields { grid-template-columns: 1fr; gap: 18px; } .envelope-dialog { padding: 16px; } .envelope-preview { font-size: 9px; } footer { flex-wrap: wrap; } }
+</style>

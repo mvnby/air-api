@@ -17,6 +17,7 @@ const props = defineProps<{
   balance: number;
   isWebsiteOrder?: boolean;
   isOnHold?: boolean;
+  canPrintEnvelope?: boolean;
   dirty?: boolean;
   saving?: boolean;
   autosaveEnabled?: boolean;
@@ -38,6 +39,7 @@ const emit = defineEmits<{
   discard: [];
   save: [];
   close: [];
+  envelope: [];
   'toggle-autosave': [];
   'usage-toggle': [];
   'usage-report': [];
@@ -231,6 +233,7 @@ const onWorkflowChange = async (event: Event) => {
             <MoreVertical :size="18" />
           </button>
           <div v-if="menuOpen" class="absolute right-0 top-11 z-50 w-56 rounded-lg border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+            <button v-if="canPrintEnvelope" type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800" @click="emit('envelope'); menuOpen = false">Печать конверта</button>
             <label class="block px-3 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
               Сценарий заказа
               <select :value="workflow" class="field-input mt-1.5 h-8 w-full text-xs" data-order-usage="workflow-change" @change="onWorkflowChange">

@@ -8069,6 +8069,123 @@
         }
       }
     },
+    "/api/manager/customers/{customer_id}/envelope-postcodes": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Lookup Customer Postcodes",
+        "description": "Query the public Belpost address directory on explicit Manager request for a current-\ntenant customer. Returns up to 100 suggestions with served houses for manual selection;\nno candidate is applied or persisted. Missing/inaccessible customers return 404;\nprovider failures return 502 and manual postcode entry remains available.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "operationId": "lookup_manager_customer_postcodes",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Customer Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostcodeSearchPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostcodeSearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/customers/{customer_id}/envelope-pdf": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Print Customer Envelope",
+        "description": "Render a single DL envelope for a current-tenant customer using explicitly reviewed\nsender/recipient names, addresses and six-digit Belarusian postcodes. Missing or\nforeign-tenant customers return 404; overflowing text returns 400. This stateless\nprint operation does not change customer requisites or create a business document.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "operationId": "print_manager_customer_envelope",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Customer Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnvelopePrintPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/products": {
       "post": {
         "tags": [
@@ -47895,6 +48012,58 @@
         ],
         "title": "EmailLeadUnlinkResult"
       },
+      "EnvelopeParty": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "address": {
+            "type": "string",
+            "maxLength": 600,
+            "minLength": 1,
+            "title": "Address"
+          },
+          "postal_code": {
+            "type": "string",
+            "pattern": "^[0-9]{6}$",
+            "title": "Postal Code"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "address",
+          "postal_code"
+        ],
+        "title": "EnvelopeParty"
+      },
+      "EnvelopePrintPayload": {
+        "properties": {
+          "format": {
+            "type": "string",
+            "const": "DL",
+            "title": "Format",
+            "default": "DL"
+          },
+          "sender": {
+            "$ref": "#/components/schemas/EnvelopeParty"
+          },
+          "recipient": {
+            "$ref": "#/components/schemas/EnvelopeParty"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "sender",
+          "recipient"
+        ],
+        "title": "EnvelopePrintPayload"
+      },
       "EquipmentServiceEventType": {
         "type": "string",
         "enum": [
@@ -83075,6 +83244,66 @@
           "expected_version"
         ],
         "title": "PersonalTaskUpdatePayload"
+      },
+      "PostcodeSearchPayload": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "maxLength": 600,
+            "minLength": 3,
+            "title": "Address"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "address"
+        ],
+        "title": "PostcodeSearchPayload"
+      },
+      "PostcodeSearchResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PostcodeSuggestion"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "default": "\u0411\u0435\u043b\u043f\u043e\u0447\u0442\u0430"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "PostcodeSearchResponse"
+      },
+      "PostcodeSuggestion": {
+        "properties": {
+          "postal_code": {
+            "type": "string",
+            "title": "Postal Code"
+          },
+          "address": {
+            "type": "string",
+            "title": "Address"
+          },
+          "buildings": {
+            "type": "string",
+            "title": "Buildings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "postal_code",
+          "address",
+          "buildings"
+        ],
+        "title": "PostcodeSuggestion"
       },
       "PrepareMaintenanceDefectAct": {
         "properties": {
