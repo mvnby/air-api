@@ -246,7 +246,9 @@ export type { EmailLeadLinkPayload } from './models/EmailLeadLinkPayload';
 export type { EmailLeadLinkResult } from './models/EmailLeadLinkResult';
 export type { EmailLeadLinkTarget } from './models/EmailLeadLinkTarget';
 export type { EmailLeadUnlinkResult } from './models/EmailLeadUnlinkResult';
+export type { EnvelopeBranding } from './models/EnvelopeBranding';
 export type { EnvelopeParty } from './models/EnvelopeParty';
+export type { EnvelopePreviewResponse } from './models/EnvelopePreviewResponse';
 export type { EnvelopePrintPayload } from './models/EnvelopePrintPayload';
 export type { EquipmentServiceEventType } from './models/EquipmentServiceEventType';
 export type { ExternalEditSessionItem } from './models/ExternalEditSessionItem';
@@ -733,6 +735,7 @@ export type { PersonalTaskListResponse } from './models/PersonalTaskListResponse
 export type { PersonalTaskResponse } from './models/PersonalTaskResponse';
 export type { PersonalTaskStatusPayload } from './models/PersonalTaskStatusPayload';
 export type { PersonalTaskUpdatePayload } from './models/PersonalTaskUpdatePayload';
+export type { PostalAddressLines } from './models/PostalAddressLines';
 export type { PostcodeSearchPayload } from './models/PostcodeSearchPayload';
 export type { PostcodeSearchResponse } from './models/PostcodeSearchResponse';
 export type { PostcodeSuggestion } from './models/PostcodeSuggestion';

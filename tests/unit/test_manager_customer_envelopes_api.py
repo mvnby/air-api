@@ -34,9 +34,17 @@ async def test_print_route_checks_customer_scope_and_returns_private_pdf(monkeyp
         assert response.headers['cache-control'] == 'no-store'
         get_customer.assert_awaited_once_with(session, 8, tenant_scope=scope)
 
+        preview_url = '/api/manager/customers/8/envelope-preview'
+        preview = await client.post(preview_url, json=payload)
+        assert preview.status_code == 200
+        assert preview.headers['cache-control'] == 'no-store'
+        assert preview.json()['recipient']['postal_line'] == '220030, г. Минск'
+        assert preview.json()['recipient']['delivery_lines'] == ['ул. Ленина, д. 1']
+
         get_customer.return_value = None
         hidden = await client.post(url, json=payload)
         assert hidden.status_code == 404
+        assert (await client.post(preview_url, json=payload)).status_code == 404
         get_customer.return_value = {'id': 8}
 
         too_long = {**party, 'name': 'Ш' * 300, 'address': 'Ш' * 600}

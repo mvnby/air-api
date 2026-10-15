@@ -19,6 +19,8 @@ async def test_envelope_pdf_is_private_and_does_not_edit_customer(async_client, 
     await db.commit()
     url = f'/api/manager/customers/{customer.id}/envelope-pdf'
     assert (await async_client.post(url, json=PAYLOAD)).status_code == 401
+    preview_url = f'/api/manager/customers/{customer.id}/envelope-preview'
+    assert (await async_client.post(preview_url, json=PAYLOAD)).status_code == 401
     postcode_url = f'/api/manager/customers/{customer.id}/envelope-postcodes'
     assert (await async_client.post(postcode_url, json={'address': 'Минск, Ленина'})).status_code == 401
     login = await async_client.post('/login/access-token', data={
@@ -31,6 +33,9 @@ async def test_envelope_pdf_is_private_and_does_not_edit_customer(async_client, 
     assert response.headers['cache-control'] == 'no-store'
     assert 'attachment;' in response.headers['content-disposition']
     assert len(PdfReader(BytesIO(response.content)).pages) == 1
+    preview = await async_client.post(preview_url, json=PAYLOAD, headers=headers)
+    assert preview.status_code == 200
+    assert preview.json()['recipient']['postal_line'] == '220030, г. Минск'
     await db.refresh(customer)
     assert customer.legal_address == 'Сохранённый адрес'
     assert customer.name == 'Клиент'
@@ -47,5 +52,7 @@ async def test_envelope_pdf_is_private_and_does_not_edit_customer(async_client, 
     for customer_id in (foreign.id, 999999999):
         hidden = await async_client.post(f'/api/manager/customers/{customer_id}/envelope-pdf', json=PAYLOAD, headers=headers)
         assert hidden.status_code == 404, hidden.text
+        preview = await async_client.post(f'/api/manager/customers/{customer_id}/envelope-preview', json=PAYLOAD, headers=headers)
+        assert preview.status_code == 404, preview.text
         lookup = await async_client.post(f'/api/manager/customers/{customer_id}/envelope-postcodes', json={'address': 'Минск, Ленина'}, headers=headers)
         assert lookup.status_code == 404, lookup.text

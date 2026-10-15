@@ -8069,6 +8069,64 @@
         }
       }
     },
+    "/api/manager/customers/{customer_id}/envelope-preview": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Preview Customer Envelope",
+        "description": "Normalize reviewed sender and recipient addresses for a current-tenant customer's\nenvelope. Returns the same postal lines used by the PDF and warnings for ambiguous\nfragments; never invents missing settlements or post offices. Missing/inaccessible\ncustomers return 404. No directory request, customer update or document is created.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "operationId": "preview_manager_customer_envelope",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Customer Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnvelopePrintPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvelopePreviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/customers/{customer_id}/envelope-postcodes": {
       "post": {
         "tags": [
@@ -8133,7 +8191,7 @@
           "manager"
         ],
         "summary": "Print Customer Envelope",
-        "description": "Render a single DL envelope for a current-tenant customer using explicitly reviewed\nsender/recipient names, addresses and six-digit Belarusian postcodes. Missing or\nforeign-tenant customers return 404; overflowing text returns 400. This stateless\nprint operation does not change customer requisites or create a business document.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Render a single DL envelope for a current-tenant customer using explicitly reviewed\nsender/recipient names, addresses and six-digit Belarusian postcodes. Orders postal\nlines from specific to general; optional bounded PNG/JPEG branding stays in the\nlower-left area. Missing or\nforeign-tenant customers return 404; overflowing text returns 400. This stateless\nprint operation does not change customer requisites or create a business document.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "print_manager_customer_envelope",
         "security": [
           {
@@ -48012,6 +48070,32 @@
         ],
         "title": "EmailLeadUnlinkResult"
       },
+      "EnvelopeBranding": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "title": "Name",
+            "default": ""
+          },
+          "logo_data_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 350000,
+                "pattern": "^data:image/(?:png|jpeg);base64,[A-Za-z0-9+/=]+$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Data Url"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "EnvelopeBranding"
+      },
       "EnvelopeParty": {
         "properties": {
           "name": {
@@ -48041,6 +48125,22 @@
         ],
         "title": "EnvelopeParty"
       },
+      "EnvelopePreviewResponse": {
+        "properties": {
+          "sender": {
+            "$ref": "#/components/schemas/PostalAddressLines"
+          },
+          "recipient": {
+            "$ref": "#/components/schemas/PostalAddressLines"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sender",
+          "recipient"
+        ],
+        "title": "EnvelopePreviewResponse"
+      },
       "EnvelopePrintPayload": {
         "properties": {
           "format": {
@@ -48054,6 +48154,16 @@
           },
           "recipient": {
             "$ref": "#/components/schemas/EnvelopeParty"
+          },
+          "branding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EnvelopeBranding"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -83244,6 +83354,45 @@
           "expected_version"
         ],
         "title": "PersonalTaskUpdatePayload"
+      },
+      "PostalAddressLines": {
+        "properties": {
+          "delivery_lines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Delivery Lines"
+          },
+          "postal_line": {
+            "type": "string",
+            "title": "Postal Line"
+          },
+          "area_lines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Area Lines"
+          },
+          "country": {
+            "type": "string",
+            "title": "Country",
+            "default": "\u0420\u0435\u0441\u043f\u0443\u0431\u043b\u0438\u043a\u0430 \u0411\u0435\u043b\u0430\u0440\u0443\u0441\u044c"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "postal_line"
+        ],
+        "title": "PostalAddressLines"
       },
       "PostcodeSearchPayload": {
         "properties": {
