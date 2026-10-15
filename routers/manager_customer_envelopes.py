@@ -97,7 +97,8 @@ async def print_customer_envelope(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ) -> Response:
     """
-    Render a single DL envelope for a current-tenant customer using explicitly reviewed
+    Render a single DL (default), C6, C5 or C4 envelope at actual size for a current-tenant
+    customer using explicitly reviewed
     sender/recipient names, addresses and six-digit Belarusian postcodes. Orders postal
     lines from specific to general; optional bounded PNG/JPEG branding stays in the
     lower-left area. Missing or
@@ -117,7 +118,7 @@ async def print_customer_envelope(
         raise manager_http_error(status_code=400, endpoint=PRINT_MANAGER_CUSTOMER_ENVELOPE,
                                  error_code=BAD_REQUEST, message=str(exc)) from exc
     return Response(content, media_type="application/pdf", headers={
-        "Content-Disposition": f'attachment; filename="envelope-dl-{customer_id}.pdf"',
+        "Content-Disposition": f'attachment; filename="envelope-{payload.format.lower()}-{customer_id}.pdf"',
         "Cache-Control": "no-store",
         "X-Content-Type-Options": "nosniff",
     })

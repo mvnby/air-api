@@ -1,8 +1,11 @@
 from unittest.mock import AsyncMock
+from io import BytesIO
 
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 import pytest
+from pypdf import PdfReader
+from reportlab.lib.units import mm
 
 from core.database import get_session
 from core.security import get_current_manager_tenant_scope
@@ -32,7 +35,18 @@ async def test_print_route_checks_customer_scope_and_returns_private_pdf(monkeyp
         assert response.status_code == 200
         assert response.content.startswith(b'%PDF-')
         assert response.headers['cache-control'] == 'no-store'
+        assert response.headers['content-disposition'] == 'attachment; filename="envelope-dl-8.pdf"'
         get_customer.assert_awaited_once_with(session, 8, tenant_scope=scope)
+
+        for code, width, height in [('C6', 162, 114), ('C5', 229, 162), ('C4', 324, 229)]:
+            printed = await client.post(url, json={**payload, 'format': code})
+            assert printed.status_code == 200
+            assert printed.headers['cache-control'] == 'no-store'
+            assert printed.headers['content-disposition'] == f'attachment; filename="envelope-{code.lower()}-8.pdf"'
+            page = PdfReader(BytesIO(printed.content)).pages[0]
+            assert float(page.mediabox.width) == pytest.approx(width * mm, abs=.001)
+            assert float(page.mediabox.height) == pytest.approx(height * mm, abs=.001)
+        assert (await client.post(url, json={**payload, 'format': 'C3'})).status_code == 422
 
         preview_url = '/api/manager/customers/8/envelope-preview'
         preview = await client.post(preview_url, json=payload)

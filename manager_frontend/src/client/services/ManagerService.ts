@@ -981,7 +981,8 @@ export class ManagerService {
     }
     /**
      * Print Customer Envelope
-     * Render a single DL envelope for a current-tenant customer using explicitly reviewed
+     * Render a single DL (default), C6, C5 or C4 envelope at actual size for a current-tenant
+     * customer using explicitly reviewed
      * sender/recipient names, addresses and six-digit Belarusian postcodes. Orders postal
      * lines from specific to general; optional bounded PNG/JPEG branding stays in the
      * lower-left area. Missing or

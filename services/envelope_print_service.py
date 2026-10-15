@@ -1,4 +1,4 @@
-"""Stateless DL printing: no customer edits or business-document lifecycle."""
+"""Stateless envelope printing: no customer edits or business-document lifecycle."""
 
 from __future__ import annotations
 
@@ -24,6 +24,12 @@ from services.envelope_branding_service import (
 from services.postal_address_service import PostalAddressLines, normalize_postal_address
 
 
+EnvelopeFormat = Literal["DL", "C6", "C5", "C4"]
+ENVELOPE_SIZES_MM: dict[EnvelopeFormat, tuple[int, int]] = {
+    "DL": (220, 110), "C6": (162, 114), "C5": (229, 162), "C4": (324, 229),
+}
+
+
 class EnvelopeParty(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
@@ -43,7 +49,7 @@ class EnvelopeParty(BaseModel):
 class EnvelopePrintPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    format: Literal["DL"] = "DL"
+    format: EnvelopeFormat = "DL"
     sender: EnvelopeParty
     recipient: EnvelopeParty
     branding: EnvelopeBranding | None = None
@@ -105,7 +111,7 @@ def _draw_party(
         if total_height <= height:
             break
     else:
-        raise ValueError(f"{label}: текст не помещается на конверте DL. Сократите название или адрес.")
+        raise ValueError(f"{label}: текст не помещается на выбранном конверте. Сократите название или адрес.")
 
     if bottom is not None:
         top = bottom + total_height
@@ -118,8 +124,8 @@ def _draw_party(
         cursor -= gap
 
 
-def _draw_branding(canvas: Canvas, branding: EnvelopeBranding, font: str) -> None:
-    x, bottom, width, height = 8 * mm, 15 * mm, 82 * mm, 18 * mm
+def _draw_branding(canvas: Canvas, branding: EnvelopeBranding, font: str, width: float) -> None:
+    x, bottom, height = 8 * mm, 15 * mm, 18 * mm
     if branding.logo_data_url:
         logo = ImageReader(BytesIO(envelope_logo_bytes(branding.logo_data_url)))
         logo_width, logo_height = logo.getSize()
@@ -139,18 +145,22 @@ def _draw_branding(canvas: Canvas, branding: EnvelopeBranding, font: str) -> Non
 
 
 def render_envelope_pdf(payload: EnvelopePrintPayload) -> bytes:
-    """One landscape 220 x 110 mm page with embedded Cyrillic and blank stamp zone."""
+    """One landscape page at actual envelope size, with a blank upper-right stamp zone."""
+    width, height = ENVELOPE_SIZES_MM[payload.format]
+    extra_height = min(height - 110, 12)
     output = BytesIO()
-    canvas = Canvas(output, pagesize=(220 * mm, 110 * mm), pageCompression=1)
-    canvas.setTitle("Конверт DL")
+    canvas = Canvas(output, pagesize=(width * mm, height * mm), pageCompression=1)
+    canvas.setTitle(f"Конверт {payload.format}")
     canvas.setAuthor("Kitlane")
     font = _font_name()
     _draw_party(canvas, payload.sender, label="Отправитель", x=8 * mm,
-                top=97 * mm, width=94 * mm, height=37 * mm, font=font)
-    _draw_party(canvas, payload.recipient, label="Получатель", x=110 * mm,
-                top=54 * mm, width=102 * mm, height=40 * mm, bottom=14 * mm, font=font)
+                top=(height - 13) * mm, width=(width / 2 - 16) * mm,
+                height=(37 + extra_height) * mm, font=font)
+    _draw_party(canvas, payload.recipient, label="Получатель", x=width / 2 * mm,
+                top=(54 + extra_height) * mm, width=(width / 2 - 8) * mm,
+                height=(40 + extra_height) * mm, bottom=14 * mm, font=font)
     if payload.branding:
-        _draw_branding(canvas, payload.branding, _font_name(True))
+        _draw_branding(canvas, payload.branding, _font_name(True), min(82, width / 2 - 28) * mm)
     canvas.showPage()
     canvas.save()
     return output.getvalue()

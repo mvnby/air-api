@@ -5,9 +5,11 @@ import pytest
 from pydantic import ValidationError
 from pypdf import PdfReader
 from reportlab.lib.units import mm
+from reportlab.pdfbase import pdfmetrics
 from PIL import Image
 
 from services.envelope_print_service import EnvelopeBranding, EnvelopeParty, EnvelopePrintPayload, render_envelope_pdf
+from services.envelope_print_service import _font_name
 
 
 def payload(**recipient_changes):
@@ -56,9 +58,47 @@ def test_excessive_text_is_reported_instead_of_clipped():
 
 def test_unknown_envelope_format_is_rejected():
     data = payload().model_dump()
-    data['format'] = 'C5'
+    data['format'] = 'C3'
     with pytest.raises(ValidationError):
         EnvelopePrintPayload.model_validate(data)
+
+
+@pytest.mark.parametrize('code,width,height', [
+    ('DL', 220, 110), ('C6', 162, 114), ('C5', 229, 162), ('C4', 324, 229),
+])
+def test_formats_print_at_actual_size_with_readable_addresses_and_branding(code, width, height):
+    data = payload(
+        name='Общество с ограниченной ответственностью «Строй Тайм Компани»',
+        address='Минская область, Минский район, д. Боровляны, ул. Центральная, д. 83, оф. 27',
+        postal_code='223053',
+    )
+    data.format = code
+    data.sender.name = 'Индивидуальный предприниматель Янчевич Дмитрий Викторович'
+    data.branding = EnvelopeBranding(name='Наша организация', logo_data_url=logo_data())
+    reader = PdfReader(BytesIO(render_envelope_pdf(data)))
+    assert len(reader.pages) == 1
+    page = reader.pages[0]
+    assert float(page.mediabox.width) == pytest.approx(width * mm, abs=.001)
+    assert float(page.mediabox.height) == pytest.approx(height * mm, abs=.001)
+    assert reader.metadata.title == f'Конверт {code}'
+    fragments = []
+    text = page.extract_text(visitor_text=lambda text, cm, tm, font, size: fragments.append(
+        (text.strip(), cm[4] + tm[4], cm[5] + tm[5], font, size)))
+    for expected in ['Янчевич', 'Строй Тайм', '223053', 'Минский район', 'Минская область', 'Наша организация']:
+        assert expected in text.replace('\n', ' ')
+    assert len(page.images) == 1
+    for content, x, y, font, size in fragments:
+        if not content:
+            continue
+        text_width = pdfmetrics.stringWidth(content, _font_name('Bold' in str(font['/BaseFont'])), size)
+        assert x >= 8 * mm - .01
+        assert x + text_width <= (width - 8) * mm + .01
+        assert size >= (7 if content in ('Отправитель', 'Получатель') else 8.5)
+        # pypdf's visitor misplaces subsequent wrapped lines; use the standalone
+        # postcode to check the recipient's physical position, and render for QA.
+        if content == '223053':
+            assert x == pytest.approx(width / 2 * mm, abs=.001)
+            assert 14 * mm <= y <= (height - 35) * mm
 
 
 def logo_data(size=(80, 30)):
