@@ -60,7 +60,7 @@ const mobileSorts: Array<{ key: CatalogDecisionSort; label: string }> = [
       <button type="button" class="h-10 w-10 shrink-0 rounded-lg border border-gray-200 text-base text-gray-700" :aria-label="direction === 'asc' ? 'Изменить порядок: сейчас по возрастанию' : 'Изменить порядок: сейчас по убыванию'" @click="emit('sort', sort)">{{ direction === 'asc' ? '↑' : '↓' }}</button>
     </section>
 
-    <div v-if="items.length" class="grid gap-2 md:hidden">
+    <div v-if="items.length" class="grid grid-cols-1 gap-2 md:hidden">
       <article v-for="item in items" :key="item.id" class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
         <div class="flex gap-3">
           <img v-if="item.main_image" :src="item.main_image" alt="" class="h-16 w-16 shrink-0 rounded-lg bg-gray-50 object-contain">
