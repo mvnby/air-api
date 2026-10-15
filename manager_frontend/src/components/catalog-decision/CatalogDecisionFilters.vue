@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
+import { ChevronDown, Search, SlidersHorizontal } from 'lucide-vue-next';
 import type { CatalogDecisionFilters as FilterState } from '../../services/catalog-decision-api';
 import BynSymbol from '../money/BynSymbol.vue';
 import EquipmentTypeIcon from './EquipmentTypeIcon.vue';
@@ -37,6 +38,8 @@ const visibleSeries = computed(() => !selectedBrandIds.value.length ? [] : props
 const coolingRange = reactive<RangeDraft>({ min: '', max: '' });
 const retailRange = reactive<RangeDraft>({ min: '', max: '' });
 const showAllBrands = ref(false);
+const expanded = ref(false);
+const extraCount = computed(() => [props.modelValue.indoorFormFactor, props.modelValue.heatingMin, props.modelValue.wifi, props.modelValue.coolingMinKw, props.modelValue.coolingMaxKw, ...(props.modelValue.brandIds ?? []), ...(props.modelValue.seriesIds ?? [])].filter(value => value !== undefined).length);
 const brandSearch = ref('');
 const visibleBrands = computed(() => {
   const query = brandSearch.value.trim().toLocaleLowerCase('ru');
@@ -98,7 +101,7 @@ const setWifi = (wifi: FilterState['wifi'] | undefined) => update({ wifi, hasWif
 <template>
   <section class="space-y-3 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm md:p-4" aria-label="Быстрые фильтры">
     <div class="flex flex-wrap items-center gap-2">
-      <label v-if="!hideSearch" class="relative basis-full sm:basis-72 sm:flex-1"><span class="material-icons-round pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">search</span><input :value="modelValue.search ?? ''" class="w-full rounded-xl border border-gray-200 py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" placeholder="Например, Gree 12" aria-label="Поиск модели, бренда или серии" @input="update({ search: ($event.target as HTMLInputElement).value || undefined })" /></label>
+      <label v-if="!hideSearch" class="relative basis-full sm:basis-72 sm:flex-1"><Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" /><input :value="modelValue.search ?? ''" class="w-full rounded-xl border border-gray-200 py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" placeholder="Например, Gree 12" aria-label="Поиск модели, бренда или серии" @input="update({ search: ($event.target as HTMLInputElement).value || undefined })" /></label>
       <button type="button" :class="modelValue.isInverter ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-gray-200 text-gray-700'" class="inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl border px-3 text-sm transition" :aria-pressed="Boolean(modelValue.isInverter)" @click="update({ isInverter: modelValue.isInverter ? undefined : true })">Только инвертор</button>
       <div class="inline-flex overflow-hidden rounded-xl border border-gray-200" aria-label="Наличие">
         <button type="button" class="min-h-10 border-r border-gray-200 px-3 text-sm transition" :class="!modelValue.includeOrderable ? 'bg-brand-600 text-white' : 'text-gray-700'" :aria-pressed="!modelValue.includeOrderable" @click="update({ includeOrderable: false })">В наличии</button>
@@ -106,6 +109,26 @@ const setWifi = (wifi: FilterState['wifi'] | undefined) => update({ wifi, hasWif
       </div>
     </div>
 
+    <div class="flex flex-wrap items-end gap-x-3 gap-y-3 sm:gap-x-5">
+      <div class="min-w-0 basis-full space-y-1.5 xl:basis-auto xl:flex-1">
+        <p class="text-xs font-semibold text-gray-500">Мощность · тыс. БТЕ/ч</p>
+        <div class="flex flex-wrap gap-1.5">
+          <button v-for="btu in btuGroups.flat()" :key="btu" type="button" class="h-9 min-w-9 rounded-lg border px-2 text-sm font-semibold" :class="(modelValue.coolingBtuClasses ?? []).includes(btu) ? 'border-brand-600 bg-brand-600 text-white' : 'border-gray-200 text-gray-700'" :aria-pressed="(modelValue.coolingBtuClasses ?? []).includes(btu)" @click="toggleList('coolingBtuClasses', btu)">{{ btu }}</button>
+        </div>
+      </div>
+      <div class="space-y-1.5">
+        <p class="flex items-center gap-1 text-xs font-semibold text-gray-500">Бюджет, <BynSymbol /></p>
+        <div class="flex items-center gap-2 text-sm">
+          <input :value="retailRange.min" type="number" min="0" step="1" placeholder="От" aria-label="Бюджет от, BYN" class="w-[4.5rem] rounded-lg border border-gray-200 px-2 py-2 sm:w-24 sm:px-3" :aria-invalid="Boolean(retailRangeError)" @input="updateRange('retail', 'min', ($event.target as HTMLInputElement).value)" />
+          <span aria-hidden="true">—</span>
+          <input :value="retailRange.max" type="number" min="0" step="1" placeholder="До" aria-label="Бюджет до, BYN" class="w-[4.5rem] rounded-lg border border-gray-200 px-2 py-2 sm:w-24 sm:px-3" :aria-invalid="Boolean(retailRangeError)" @input="updateRange('retail', 'max', ($event.target as HTMLInputElement).value)" />
+        </div>
+      </div>
+      <button type="button" class="inline-flex min-h-10 items-center gap-1.5 rounded-xl border px-2.5 text-xs font-semibold sm:gap-2 sm:px-3 sm:text-sm" :class="expanded || extraCount ? 'border-brand-300 bg-brand-50 text-brand-800' : 'border-gray-200 text-gray-700'" :aria-expanded="expanded" aria-controls="catalog-extra-filters" @click="expanded = !expanded"><SlidersHorizontal class="h-4 w-4" />Все фильтры<span v-if="extraCount" class="rounded-full bg-brand-100 px-1.5 text-xs">{{ extraCount }}</span><ChevronDown class="h-4 w-4 transition-transform" :class="expanded ? 'rotate-180' : ''" /></button>
+    </div>
+    <p v-if="retailRangeError" class="text-xs text-red-600" role="alert">{{ retailRangeError }}</p>
+
+    <div v-show="expanded" id="catalog-extra-filters" class="space-y-4 border-t border-gray-100 pt-4">
     <div class="space-y-1.5">
       <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Тип внутреннего блока</p>
       <div class="grid grid-cols-2 gap-1.5 sm:grid-cols-3 xl:grid-cols-6">
@@ -116,11 +139,6 @@ const setWifi = (wifi: FilterState['wifi'] | undefined) => update({ wifi, hasWif
     <div class="grid gap-4 lg:grid-cols-2">
       <div class="space-y-2">
         <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Мощность охлаждения · тыс. БТЕ/ч</p>
-        <div class="flex flex-wrap items-center justify-between gap-1.5">
-          <div v-for="(group, index) in btuGroups" :key="index" class="flex gap-1.5">
-            <button v-for="btu in group" :key="btu" type="button" class="h-10 min-w-10 rounded-full border px-2 text-sm font-semibold transition" :class="(modelValue.coolingBtuClasses ?? []).includes(btu) ? 'border-brand-600 bg-brand-600 text-white' : 'border-gray-200 text-gray-700 hover:border-brand-300'" :aria-pressed="(modelValue.coolingBtuClasses ?? []).includes(btu)" @click="toggleList('coolingBtuClasses', btu)">{{ btu }}</button>
-          </div>
-        </div>
         <div class="flex flex-wrap items-center gap-2 text-sm text-gray-600">
           <span class="w-full text-xs sm:w-auto">Номинальная, кВт</span>
           <input :value="coolingRange.min" type="number" min="0" step="0.1" placeholder="От" aria-label="Мощность охлаждения от, кВт" class="w-24 rounded-lg border border-gray-200 px-3 py-2" :aria-invalid="Boolean(coolingRangeError)" @input="updateRange('cooling', 'min', ($event.target as HTMLInputElement).value)" />
@@ -141,16 +159,6 @@ const setWifi = (wifi: FilterState['wifi'] | undefined) => update({ wifi, hasWif
 
     <div class="grid gap-4 lg:grid-cols-2">
       <div class="space-y-2">
-        <p class="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-gray-500">Бюджет, <span aria-label="белорусский рубль"><BynSymbol /></span></p>
-        <div class="flex flex-wrap items-center gap-2 text-sm text-gray-600">
-          <input :value="retailRange.min" type="number" min="0" step="1" placeholder="От" aria-label="Бюджет от, BYN" class="w-28 rounded-lg border border-gray-200 px-3 py-2" :aria-invalid="Boolean(retailRangeError)" @input="updateRange('retail', 'min', ($event.target as HTMLInputElement).value)" />
-          <span aria-hidden="true">—</span>
-          <input :value="retailRange.max" type="number" min="0" step="1" placeholder="До" aria-label="Бюджет до, BYN" class="w-28 rounded-lg border border-gray-200 px-3 py-2" :aria-invalid="Boolean(retailRangeError)" @input="updateRange('retail', 'max', ($event.target as HTMLInputElement).value)" />
-        </div>
-        <p v-if="retailRangeError" class="text-xs text-red-600" role="alert">{{ retailRangeError }}</p>
-      </div>
-
-      <div class="space-y-2">
         <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Wi‑Fi</p>
         <div class="inline-flex overflow-hidden rounded-xl border border-gray-200" aria-label="Наличие Wi-Fi">
           <button v-for="option in wifiOptions" :key="option.label" type="button" class="min-h-10 border-r border-gray-200 px-3 text-sm last:border-r-0" :class="modelValue.wifi === option.value ? 'bg-brand-600 text-white' : 'text-gray-700'" :aria-pressed="modelValue.wifi === option.value" @click="setWifi(option.value)">{{ option.label }}</button>
@@ -161,12 +169,13 @@ const setWifi = (wifi: FilterState['wifi'] | undefined) => update({ wifi, hasWif
     <div class="space-y-1.5">
       <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Бренды</p>
       <template v-if="brands.length">
-        <label v-if="showAllBrands" class="relative block max-w-xs"><span class="material-icons-round pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-base text-gray-400">search</span><input v-model="brandSearch" type="search" class="w-full rounded-lg border border-gray-200 py-1.5 pl-8 pr-2 text-sm" placeholder="Найти бренд" aria-label="Найти бренд" /></label>
+        <label v-if="showAllBrands" class="relative block max-w-xs"><Search class="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" /><input v-model="brandSearch" type="search" class="w-full rounded-lg border border-gray-200 py-1.5 pl-8 pr-2 text-sm" placeholder="Найти бренд" aria-label="Найти бренд" /></label>
         <div class="flex flex-wrap gap-1.5"><button v-for="brand in visibleBrands" :key="brand.id" type="button" class="rounded-full border px-3 py-1.5 text-sm transition" :class="selectedBrandIds.includes(brand.id) ? 'border-brand-600 bg-brand-600 text-white' : 'border-gray-200 text-gray-700 hover:border-brand-300'" :aria-pressed="selectedBrandIds.includes(brand.id)" @click="toggleBrand(brand.id)">{{ brand.title }}</button><button v-if="hiddenBrandCount && !showAllBrands" type="button" class="rounded-full border border-gray-200 px-3 py-1.5 text-sm text-gray-700 hover:border-brand-300" @click="showAllBrands = true">Ещё {{ hiddenBrandCount }}</button></div>
         <p v-if="showAllBrands && !visibleBrands.length" class="text-sm text-gray-500">Бренд не найден.</p>
       </template>
       <p v-else class="text-sm text-gray-500">Бренды пока не найдены.</p>
     </div>
     <div v-if="selectedBrandIds.length" class="space-y-2 rounded-xl bg-gray-50 p-2.5"><p class="text-xs font-semibold text-gray-600">Серии выбранных брендов</p><div v-for="brand in brands.filter(item => selectedBrandIds.includes(item.id))" :key="brand.id" class="flex items-start gap-2"><span class="w-20 shrink-0 pt-1.5 text-xs font-medium text-gray-500">{{ brand.title }}</span><div class="flex flex-wrap gap-1.5"><button v-for="item in visibleSeries.filter(seriesItem => seriesItem.brandId === brand.id)" :key="item.id" type="button" class="rounded-full border px-2.5 py-1 text-xs transition" :class="(modelValue.seriesIds ?? []).includes(item.id) ? 'border-brand-600 bg-brand-600 text-white' : 'border-gray-200 bg-white text-gray-700'" :aria-pressed="(modelValue.seriesIds ?? []).includes(item.id)" @click="toggleList('seriesIds', item.id)">{{ item.title }}</button><span v-if="!visibleSeries.some(seriesItem => seriesItem.brandId === brand.id)" class="py-1 text-xs text-gray-400">Нет серий в каталоге</span></div></div></div>
+    </div>
   </section>
 </template>

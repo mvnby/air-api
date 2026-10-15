@@ -645,8 +645,13 @@ export type { ManagerTariffServiceKind } from './models/ManagerTariffServiceKind
 export type { ManagerTariffUpdatePayload } from './models/ManagerTariffUpdatePayload';
 export type { ManagerTenantAuditEventListResponse } from './models/ManagerTenantAuditEventListResponse';
 export type { ManagerTenantAuditEventResponse } from './models/ManagerTenantAuditEventResponse';
+export type { ManagerTenantCatalogImageResponse } from './models/ManagerTenantCatalogImageResponse';
 export type { ManagerTenantCatalogListResponse } from './models/ManagerTenantCatalogListResponse';
+export type { ManagerTenantCatalogManualResponse } from './models/ManagerTenantCatalogManualResponse';
+export type { ManagerTenantCatalogProductDetailResponse } from './models/ManagerTenantCatalogProductDetailResponse';
 export type { ManagerTenantCatalogProductResponse } from './models/ManagerTenantCatalogProductResponse';
+export type { ManagerTenantCatalogSpecificationGroupResponse } from './models/ManagerTenantCatalogSpecificationGroupResponse';
+export type { ManagerTenantCatalogSpecificationResponse } from './models/ManagerTenantCatalogSpecificationResponse';
 export type { ManagerTenantOfferListResponse } from './models/ManagerTenantOfferListResponse';
 export type { ManagerTenantOfferResponse } from './models/ManagerTenantOfferResponse';
 export type { ManagerTenantOfferUpdate } from './models/ManagerTenantOfferUpdate';

@@ -9,6 +9,21 @@ const series = [{ id: 10, title: 'MDSAG', brandId: 1 }, { id: 20, title: 'Pular'
 const buttonByText = (wrapper: ReturnType<typeof mount>, text: string) => wrapper.findAll('button').find(button => button.text() === text)!;
 
 describe('CatalogDecisionFilters', () => {
+  it('keeps the result area compact while retaining active advanced criteria', async () => {
+    const wrapper = mount(CatalogDecisionFilters, { props: { modelValue: { heatingMin: -25, brandIds: [1] }, brands, series }, attachTo: document.body });
+    const toggle = wrapper.get('button[aria-controls="catalog-extra-filters"]');
+    expect(toggle.attributes('aria-expanded')).toBe('false');
+    expect(wrapper.get('#catalog-extra-filters').isVisible()).toBe(false);
+    expect(wrapper.get('input[aria-label="Бюджет до, BYN"]').isVisible()).toBe(true);
+    expect(toggle.text()).toContain('2');
+    await toggle.trigger('click');
+    expect(wrapper.get('#catalog-extra-filters').isVisible()).toBe(true);
+    expect(buttonByText(wrapper, '-25 °C').attributes('aria-pressed')).toBe('true');
+    await toggle.trigger('click');
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+    wrapper.unmount();
+  });
+
   it('shows series only for selected brands and keeps brand selection multi-value', async () => {
     const wrapper = mount(CatalogDecisionFilters, { props: { modelValue: { isPublished: true }, brands, series } });
 

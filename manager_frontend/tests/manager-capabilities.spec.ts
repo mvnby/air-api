@@ -23,6 +23,7 @@ import { api } from '../src/api';
 import { managerSession } from '../src/services/manager-session';
 
 const tenantManagerAuth = {
+  username: 'tenant-manager-test', staff_user_id: 7, tenant_id: 2,
   capabilities: [
     MANAGER_CAPABILITY.crmManage,
     MANAGER_CAPABILITY.catalogMasterRead,
@@ -182,7 +183,9 @@ describe('tenant manager capabilities', () => {
     expect(wrapper.text()).toContain('Не разрешён');
     expect(wrapper.text()).not.toContain('Себестоимость');
     expect(wrapper.text()).not.toContain('Поставщик');
-    expect(wrapper.findAll('button').map(button => button.text())).toEqual(['Найти', 'Назад', 'Далее']);
+    expect(wrapper.get('button[aria-label="Открыть карточку Allowed Model"]').text()).toBe('Allowed Model');
+    expect(wrapper.findAll('button').some(button => /Редактировать|Удалить|Изменить цену/.test(button.text()))).toBe(false);
+    wrapper.unmount();
     expect(wrapper.findAll('a')).toHaveLength(0);
   });
 
@@ -212,6 +215,7 @@ describe('tenant manager capabilities', () => {
     await wrapper.get('select[aria-label="Фильтр доступности"]').setValue('allowed');
     await flushPromises();
     expect(mocks.listTenantCatalog).toHaveBeenLastCalledWith(1, 100, 'Daikin', true);
+    wrapper.unmount();
   });
 
   it('removes supplier fields from tenant equipment component commands', () => {

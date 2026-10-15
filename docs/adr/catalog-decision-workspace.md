@@ -148,3 +148,51 @@ send anything to the customer or publish a collection.
 
 `TenantOffer` and `TenantCatalogGrant` remain storefront publication/price
 contracts. Supplier-specific entitlements, if needed, require a separate policy.
+
+## Shared product reader
+
+`GET /api/manager/tenant-catalog/products/{product_id}` is the shared read-only
+card for the master catalog, partner catalog and equipment selection workspace.
+It requires current Manager access and `catalog.master.read`. Partners can
+browse all published master product content, matching the existing tenant
+catalog list. System staff can also read unpublished master products. Missing
+products and unpublished products requested by partners return 404; invalid
+product IDs return 422. Authentication and selected storefront are resolved
+on every request; an inaccessible storefront returns 403.
+
+The explicit response contains plain-text description, deduplicated public
+gallery, validated manual links and grouped technical specifications. The
+shared normalizer resolves legacy aliases; registry definitions supply labels,
+typed values and units. Every populated registered technical field is included,
+with a short `summary_fields` projection for the card header. Unknown metadata
+keys, private normalized helper fields, attachment provenance and raw supplier
+records are excluded. New technical keys must be registered to appear here.
+
+`allowed` and `effective_price` follow the existing tenant catalog offer
+projection for the exact tenant and selected storefront. Missing, inactive,
+unpublished or grant-fenced partner offers do not provide a price. This does
+not hide published master content or create grants/offers. System staff receive
+the master price; unpublished master products have `allowed=false`.
+
+`selection_item` is nullable. Eligible published complete split systems receive
+the existing decision projection with its current storefront/grant checks,
+commercial policy and demo cost masking. Products outside selection scope,
+including components and unpublished master products, receive null. Stock is
+not required for selection. Reading the card changes no catalog, grant, offer
+or basket and remains available in read-only demo accounts; order and collection
+actions repeat their existing server checks.
+
+The owner list opens this reader from the main card/table action; its separate
+edit action keeps the existing editor and saved list context. Partner catalog
+names and images open the same reader. Selection from either catalog stores
+only ID/title in the existing 24-hour account basket. The contextual order
+workspace keeps its separate order/proposal basket and marks existing lines.
+The reader stays open after adding/removing; unavailable products remain
+readable and cannot be added. All current order actions revalidate eligibility.
+
+Search, stock, inverter, capacity and budget remain visible in the compact
+filter bar. Other controls expand through “Все фильтры”; active criteria remain
+visible as removable chips when collapsed, and retain the existing URL contract.
+The narrow-screen sort is one select plus an explicit direction control. Browser
+acceptance fixtures live in
+[the visual checks](../../manager_frontend/tests/visual/catalog-reader/README.md).

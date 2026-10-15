@@ -51,11 +51,13 @@ const mobileSorts: Array<{ key: CatalogDecisionSort; label: string }> = [
 
 <template>
   <div class="space-y-2">
-    <section class="rounded-xl border border-gray-200 bg-white p-3 md:hidden" aria-label="Сортировка каталога">
-      <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Сортировка</p>
-      <div class="flex flex-wrap gap-1.5">
-        <button v-for="item in mobileSorts" :key="item.key" type="button" class="rounded-full border px-2.5 py-1.5 text-xs font-medium transition" :class="sort === item.key ? 'border-brand-600 bg-brand-600 text-white' : 'border-gray-200 text-gray-700'" :aria-pressed="sort === item.key" @click="emit('sort', item.key)">{{ sortLabel(item.key, item.label) }}</button>
-      </div>
+    <section class="flex items-center gap-2 rounded-xl border border-gray-200 bg-white p-3 md:hidden" aria-label="Сортировка каталога">
+      <label class="min-w-0 flex-1 text-xs text-gray-500">Сортировка
+        <select :value="sort" class="ml-2 max-w-[65%] rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm font-medium text-gray-700" aria-label="Сортировать модели" @change="emit('sort', ($event.target as HTMLSelectElement).value as CatalogDecisionSort)">
+          <option v-for="item in mobileSorts" :key="item.key" :value="item.key">{{ item.label }}</option>
+        </select>
+      </label>
+      <button type="button" class="h-10 w-10 shrink-0 rounded-lg border border-gray-200 text-base text-gray-700" :aria-label="direction === 'asc' ? 'Изменить порядок: сейчас по возрастанию' : 'Изменить порядок: сейчас по убыванию'" @click="emit('sort', sort)">{{ direction === 'asc' ? '↑' : '↓' }}</button>
     </section>
 
     <div v-if="items.length" class="grid gap-2 md:hidden">
@@ -80,7 +82,7 @@ const mobileSorts: Array<{ key: CatalogDecisionSort; label: string }> = [
       </article>
     </div>
 
-    <div v-if="items.length" class="hidden overflow-x-auto rounded-xl border border-gray-200 bg-white md:block">
+    <div v-if="items.length" class="relative hidden overflow-x-auto rounded-xl border border-gray-200 bg-white md:block">
       <table class="min-w-full text-left text-sm">
         <thead class="bg-gray-50 text-xs uppercase text-gray-500">
           <tr>
