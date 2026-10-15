@@ -489,7 +489,8 @@ illustrates this distinction: NL lost both quorum peers, while BY and the
 witness retained their etcd leader. NL Patroni demoted itself and BY promoted
 PostgreSQL to timeline 32. External HTTPS on NL continued before demotion.
 The underlying packet-loss mechanism was not established by the available
-logs; no OOM or Docker, database, etcd or WireGuard restart was recorded.
+logs; no OOM, Docker/WireGuard restart or database/etcd container restart was
+recorded. PostgreSQL subsequently restarted during demotion and rejoin.
 Do not label unrelated clock drift or an assumed resource limit as its cause.
 
 When the full check passes, retain the healthy elected primary. Start a fresh
