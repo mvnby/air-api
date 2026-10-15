@@ -15613,7 +15613,7 @@
           "manager-document-system"
         ],
         "summary": "List Document Legal Entities",
-        "description": "List document issuer legal entities owned by the current tenant. Does not list the\nshared supplier directory or other tenants\u2019 requisites.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "List document issuer legal entities owned by the current tenant. Does not list the\nshared supplier directory or other tenants\u2019 requisites. Includes each issuer's saved\nenvelope-only name/logo defaults; embedded logo bytes are never public assets.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "list_manager_document_legal_entities",
         "responses": {
           "200": {
@@ -15638,7 +15638,7 @@
           "manager-document-system"
         ],
         "summary": "Create Document Legal Entity",
-        "description": "Create an issuer legal entity in the current tenant. Requires owner/admin access via\nroute policy. Default-issuer selection is maintained by the service; conflicting\nidentity/default configuration returns 409 and invalid requisites 400. This does not\nprovision an external integration account.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Create an issuer legal entity in the current tenant. Requires owner/admin access via\nroute policy. Default-issuer selection is maintained by the service; conflicting\nidentity/default configuration returns 409 and invalid requisites 400. This does not\nprovision an external integration account. Optional envelope branding is validated\nas bounded PNG/JPEG data and stored separately from business-document requisites.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "create_manager_document_legal_entity",
         "requestBody": {
           "content": {
@@ -15685,7 +15685,7 @@
           "manager-document-system"
         ],
         "summary": "Patch Document Legal Entity",
-        "description": "Patch supplied issuer fields/requisites in the current tenant. Requires owner/admin\naccess. Missing entity returns 404, conflicting identity/default configuration 409 and\ninvalid values 400. Existing issued document snapshots remain independent of updated\nrequisites.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Patch supplied issuer fields/requisites in the current tenant. Requires owner/admin\naccess. Missing entity returns 404, conflicting identity/default configuration 409 and\ninvalid values 400. Existing issued document snapshots remain independent of updated\nrequisites. Envelope branding merges supplied nested fields; null clears all defaults,\nand a null logo removes just the image. Corrupt or excessive logos return 400/422.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "patch_manager_document_legal_entity",
         "security": [
           {
@@ -46679,6 +46679,9 @@
           },
           "requisites": {
             "$ref": "#/components/schemas/DocumentLegalEntityRequisites"
+          },
+          "envelope_branding": {
+            "$ref": "#/components/schemas/EnvelopeBranding"
           }
         },
         "additionalProperties": false,
@@ -46746,6 +46749,9 @@
             },
             "type": "object",
             "title": "Requisites"
+          },
+          "envelope_branding": {
+            "$ref": "#/components/schemas/EnvelopeBranding"
           },
           "status": {
             "type": "string",
@@ -47128,6 +47134,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/DocumentLegalEntityRequisites"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "envelope_branding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EnvelopeBranding"
               },
               {
                 "type": "null"

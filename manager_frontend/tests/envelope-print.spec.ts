@@ -27,6 +27,51 @@ async function open() {
 }
 
 describe('DL envelope preparation', () => {
+  it('waits for logo decoding and ignores an old upload after switching the sender', async () => {
+    let finish!: () => void;
+    vi.stubGlobal('Image', class {
+      src = ''; naturalWidth = 80; naturalHeight = 30;
+      decode() { return new Promise<void>(resolve => { finish = resolve; }); }
+    });
+    vi.mocked(ManagerDocumentSystemService.listManagerDocumentLegalEntities).mockResolvedValue({ items: [
+      entity, { ...entity, id: 3, is_default: false, envelope_branding: { name: 'Вторая марка' } },
+    ] } as never);
+    const w = await open();
+    await w.get('#envelope-address').setValue('legal');
+    const input = w.get('#envelope-brand-logo');
+    Object.defineProperty(input.element, 'files', { value: [new File(['png'], 'logo.png', { type: 'image/png' })], configurable: true });
+    await input.trigger('change');
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    expect(w.get('button[type="submit"]').attributes('disabled')).toBeDefined();
+    await w.get('#envelope-sender').setValue('3');
+    finish(); await flushPromises();
+    expect(w.get('.preview-branding strong').text()).toBe('Вторая марка');
+    expect(w.find('.preview-branding img').exists()).toBe(false);
+    expect(w.get('button[type="submit"]').attributes('disabled')).toBeUndefined();
+  });
+  it('automatically fills each sender branding, preserves saved defaults, and clears them for a custom sender', async () => {
+    const saved = { name: 'Первая марка', logo_data_url: 'data:image/png;base64,dGVzdA==' };
+    vi.mocked(ManagerDocumentSystemService.listManagerDocumentLegalEntities).mockResolvedValue({ items: [
+      { ...entity, envelope_branding: saved },
+      { ...entity, id: 3, is_default: false, display_name: 'Вторая компания', envelope_branding: { name: 'Вторая марка', logo_data_url: null } },
+    ] } as never);
+    const download = vi.spyOn(printing, 'downloadEnvelope').mockRejectedValue(new Error('offline'));
+    const w = await open();
+    await w.get('#envelope-address').setValue('legal');
+    expect(w.get('.preview-branding strong').text()).toBe('Первая марка');
+    expect(w.get('.preview-branding img').attributes('src')).toBe(saved.logo_data_url);
+    await w.get('#envelope-brand-name').setValue('Разовая подпись');
+    await w.get('form').trigger('submit'); await flushPromises();
+    expect(download).toHaveBeenCalledWith(7, expect.objectContaining({ branding: { ...saved, name: 'Разовая подпись' } }));
+    await w.get('#envelope-sender').setValue('3');
+    expect(w.get('.preview-branding strong').text()).toBe('Вторая марка');
+    expect(w.find('.preview-branding img').exists()).toBe(false);
+    await w.get('#envelope-sender').setValue('2');
+    expect(w.get('.preview-branding strong').text()).toBe('Первая марка');
+    expect(saved.name).toBe('Первая марка');
+    await w.get('#envelope-sender').setValue('');
+    expect(w.find('.preview-branding').exists()).toBe(false);
+  });
   it('extracts only an unambiguous standalone postcode', () => {
     expect(splitPostalAddress('Беларусь, 220030, Минск')).toEqual({ address: 'Беларусь, Минск', postal_code: '220030' });
     expect(splitPostalAddress('220030, г. Минск')).toEqual({ address: 'г. Минск', postal_code: '220030' });

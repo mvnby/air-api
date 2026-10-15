@@ -13,6 +13,7 @@ from modules.documents.domain import (
 )
 from .business_schemas import ActTermsPayload, BusinessDocumentTermsPayload
 from .participant_statement_schemas import ParticipantStatementPayload
+from services.envelope_branding_service import EnvelopeBranding
 
 
 DocumentPartyRoleType = Literal[
@@ -78,6 +79,7 @@ class DocumentLegalEntityCreatePayload(BaseModel):
     requisites: DocumentLegalEntityRequisites = Field(
         default_factory=DocumentLegalEntityRequisites
     )
+    envelope_branding: EnvelopeBranding = Field(default_factory=EnvelopeBranding)
 
 
 class DocumentLegalEntityUpdatePayload(BaseModel):
@@ -94,6 +96,7 @@ class DocumentLegalEntityUpdatePayload(BaseModel):
     is_vat_payer: bool | None = None
     is_default: bool | None = None
     requisites: DocumentLegalEntityRequisites | None = None
+    envelope_branding: EnvelopeBranding | None = None
     status: str | None = Field(default=None, pattern="^(active|disabled)$")
 
 
@@ -110,6 +113,7 @@ class DocumentLegalEntityItem(BaseModel):
     is_vat_payer: bool
     is_default: bool
     requisites: dict[str, str]
+    envelope_branding: EnvelopeBranding = Field(default_factory=EnvelopeBranding)
     status: str
     created_at: datetime
     updated_at: datetime

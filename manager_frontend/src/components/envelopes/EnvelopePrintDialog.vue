@@ -19,6 +19,7 @@ const selectedAddress = ref('');
 const recipient = reactive<EnvelopeParty>({ name: '', address: '', postal_code: '' });
 const sender = reactive<EnvelopeParty>({ name: '', address: '', postal_code: '' });
 const branding = ref<EnvelopeBranding>({ name: '', logo_data_url: null });
+const logoLoading = ref(false);
 const normalized = ref<EnvelopePreviewResponse | null>(null);
 const previewError = ref('');
 let previewTimer: ReturnType<typeof setTimeout> | undefined;
@@ -50,6 +51,7 @@ function chooseSender() {
   const entity = entities.value.find(item => String(item.id) === selectedEntity.value);
   sender.name = entity?.legal_name || entity?.display_name || '';
   Object.assign(sender, splitPostalAddress(entity?.requisites.legal_address || ''));
+  branding.value = { name: entity?.envelope_branding?.name || '', logo_data_url: entity?.envelope_branding?.logo_data_url || null };
 }
 function extractIndex(party: EnvelopeParty) {
   const parsed = splitPostalAddress(party.address);
@@ -75,7 +77,7 @@ async function load() {
   loading.value = false;
 }
 async function generate() {
-  if (loading.value || busy.value || !customer.value || missing.value.length) return;
+  if (loading.value || busy.value || logoLoading.value || !customer.value || missing.value.length) return;
   busy.value = true; error.value = '';
   try {
     const blob = await downloadEnvelope(props.customerId, { format: 'DL', sender: { ...sender }, recipient: { ...recipient }, branding: { ...branding.value } });
@@ -139,14 +141,14 @@ onUnmounted(() => { alive = false; clearTimeout(previewTimer); document.body.sty
               <PostcodeLookup :customer-id="customerId" :address="sender.address" :disabled="busy" @selected="sender.postal_code = $event" />
             </fieldset>
           </div>
-          <EnvelopeBrandingFields v-model="branding" :disabled="busy" />
+          <EnvelopeBrandingFields :key="selectedEntity" v-model="branding" :disabled="busy" @loading="logoLoading = $event" />
           <EnvelopePreview :sender="sender" :recipient="recipient" :normalized="normalized" :branding="branding" />
           <p v-if="previewError" role="status" class="envelope-hint">{{ previewError }}</p>
           <template v-if="normalized"><p v-for="(warning, index) in normalized.recipient.warnings" :key="`r-${index}`" role="status" class="envelope-hint">Получатель: {{ warning }}</p><p v-for="(warning, index) in normalized.sender.warnings" :key="`s-${index}`" role="status" class="envelope-hint">Отправитель: {{ warning }}</p></template>
           <p class="envelope-hint">Печатайте на конверте DL в масштабе 100%, без подгонки под страницу. Перед тиражом проверьте подачу на одном конверте.</p>
           <p class="envelope-hint">Изменения в этом окне используются только для печати.</p>
           <p v-if="missing.length" role="status" class="envelope-missing">Укажите: {{ missing.join('; ') }}.</p>
-          <footer><button type="button" class="btn-mini-outline" :disabled="busy" @click="close">Закрыть</button><button type="submit" class="btn-mini" :disabled="busy || missing.length > 0"><Download :size="15" />{{ busy ? 'Формирование…' : 'Скачать PDF для печати' }}</button></footer>
+          <footer><button type="button" class="btn-mini-outline" :disabled="busy" @click="close">Закрыть</button><button type="submit" class="btn-mini" :disabled="busy || logoLoading || missing.length > 0"><Download :size="15" />{{ busy ? 'Формирование…' : 'Скачать PDF для печати' }}</button></footer>
         </form>
       </section>
     </div>

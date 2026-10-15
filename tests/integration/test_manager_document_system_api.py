@@ -1,4 +1,5 @@
 import json
+import base64
 from datetime import date, datetime, timedelta, timezone
 from io import BytesIO
 
@@ -6,6 +7,7 @@ import pytest
 from docx import Document
 from httpx import AsyncClient
 from sqlmodel import select
+from PIL import Image
 
 from core.config import settings
 from core.security import create_access_token
@@ -533,6 +535,40 @@ async def test_document_system_persists_seller_entity_type(async_client: AsyncCl
 
 
 @pytest.mark.asyncio
+async def test_issuer_envelope_branding_roundtrip_and_tenant_isolation(async_client: AsyncClient, db):
+    _, _, owner = await _create_tenant_owner(db, slug='envelope-owner', username='envelope-owner')
+    _, _, other_owner = await _create_tenant_owner(db, slug='envelope-other', username='envelope-other')
+    headers = _staff_headers(owner)
+    other_headers = _staff_headers(other_owner)
+    image = BytesIO()
+    Image.new('RGB', (80, 30), 'blue').save(image, format='PNG')
+    logo = 'data:image/png;base64,' + base64.b64encode(image.getvalue()).decode()
+    branding = {'name': 'Наша марка', 'logo_data_url': logo}
+    created = await async_client.post(f'{BASE}/legal-entities', headers=headers, json={
+        'display_name': 'Наш отправитель', 'envelope_branding': branding, 'requisites': {'city': 'Минск'},
+    })
+    assert created.status_code == 200, created.text
+    assert created.json()['envelope_branding'] == branding
+    entity_id = created.json()['id']
+    listing = await async_client.get(f'{BASE}/legal-entities', headers=headers)
+    assert listing.json()['items'][0]['envelope_branding'] == branding
+    other_listing = await async_client.get(f'{BASE}/legal-entities', headers=other_headers)
+    assert other_listing.json()['items'] == []
+    url = f'{BASE}/legal-entities/{entity_id}'
+    hidden = await async_client.patch(url, headers=other_headers, json={'envelope_branding': {'name': 'Чужая марка'}})
+    assert hidden.status_code == 404
+    updated = await async_client.patch(url, headers=headers, json={'envelope_branding': {'name': 'Новое название'}})
+    assert updated.status_code == 200, updated.text
+    assert updated.json()['envelope_branding'] == {**branding, 'name': 'Новое название'}
+    assert updated.json()['requisites']['city'] == 'Минск'
+    invalid = await async_client.patch(url, headers=headers, json={'envelope_branding': {'logo_data_url': 'data:image/png;base64,bm90LWFuLWltYWdl'}})
+    assert invalid.status_code == 400
+    cleared = await async_client.patch(url, headers=headers, json={'envelope_branding': {'logo_data_url': None}})
+    assert cleared.status_code == 200
+    assert cleared.json()['envelope_branding'] == {'name': 'Новое название', 'logo_data_url': None}
+
+
+@pytest.mark.asyncio
 async def test_document_system_settings_mutations_require_owner(
     async_client: AsyncClient,
     db,
@@ -560,10 +596,15 @@ async def test_document_system_settings_mutations_require_owner(
         headers=headers,
         json={"display_name": "Недоступное юридическое лицо"},
     )
+    write_branding = await async_client.patch(
+        f'{BASE}/legal-entities/999', headers=headers,
+        json={'envelope_branding': {'name': 'Нет прав'}},
+    )
 
     assert read_catalog.status_code == 200
     assert write_template.status_code == 403
     assert write_issuer.status_code == 403
+    assert write_branding.status_code == 403
 
 
 @pytest.mark.asyncio
