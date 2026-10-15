@@ -466,6 +466,37 @@ rollback to the former physical topology, restore PostgreSQL first under the
 cutover rollback procedure, then delete `API_DB_HA_MODE`; do not switch the
 variable while Patroni is still managing either database node.
 
+### Unexpected role change during an API release
+
+The remote `done` message confirms deployment only. The subsequent `verify`
+operation still requires the expected database role, exact API/worker images,
+worker fencing and a stable role agent. A failed verification reports
+`verification_failed` with the failed `check`, exit code, expected role and
+observed initial/final roles. An SSH transport failure reports `ssh_exit`
+even when the remote verifier could not start. Diagnostics must never print
+the shell command, effective Compose environment or credentials.
+
+If the role changed, run the full [production check](#production-monitoring)
+before doing anything else. Preserve the three nodes' etcd logs, both Patroni
+logs and host network/resource records around the incident. Compare host clocks
+with UTC before aligning them with Actions timestamps. A local etcd endpoint
+can time out on a linearizable read because it cannot reach the majority;
+that alone does not prove the local process stopped or the entire quorum failed.
+
+The failed release on 2026-10-15, run
+[`38758168938`](https://github.com/mvnby/air-api/actions/runs/38758168938),
+illustrates this distinction: NL lost both quorum peers, while BY and the
+witness retained their etcd leader. NL Patroni demoted itself and BY promoted
+PostgreSQL to timeline 32. External HTTPS on NL continued before demotion.
+The underlying packet-loss mechanism was not established by the available
+logs; no OOM or Docker, database, etcd or WireGuard restart was recorded.
+Do not label unrelated clock drift or an assumed resource limit as its cause.
+
+When the full check passes, retain the healthy elected primary. Start a fresh
+complete release so both roles are discovered again; rerunning only failed jobs
+can reuse the old role outputs. Do not force failback, weaken lease/fencing
+settings or restart the database to make a stale-role release pass.
+
 ## Exact Patroni Image Rolling Transaction
 
 Use `.github/workflows/rollout-patroni-image.yml` only for the reviewed

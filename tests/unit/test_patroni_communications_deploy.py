@@ -359,6 +359,10 @@ def test_remote_verify_requires_exact_images_runtime_and_closed_gate_profile():
         ("primary", "dormant", "false", False, "wrong_changed_role", "false", 1),
         ("primary", "dormant", "false", False, "always_deferred", "false", 1),
         ("primary", "dormant", "false", False, "verified", "true", 1),
+        ("primary", "dormant", "false", False, "verified", "initial", 1),
+        ("primary", "dormant", "false", False, "verified", "unavailable", 1),
+        ("primary", "dormant", "false", False, "verified", "transport", 255),
+        ("primary", "dormant", "false", False, "verified", "maintenance", 75),
         ("primary", "credentials_unreadable", "false", False, "verified", "false", 1),
     ],
 )
@@ -411,6 +415,7 @@ def test_remote_verify_path_executes_against_canonical_compose(
         fake_bin / "ssh",
         "#!/usr/bin/env bash\n"
         "set -euo pipefail\n"
+        'if [[ "$FINAL_ROLE_FLIP" == "transport" ]]; then exit 255; fi\n'
         'remote_command="${!#}"\n'
         'bash -c "${remote_command}"\n',
     )
@@ -422,6 +427,8 @@ def test_remote_verify_path_executes_against_canonical_compose(
         'count=0; [[ ! -f "$CURL_COUNT" ]] || count="$(cat "$CURL_COUNT")"\n'
         'count=$((count + 1)); printf "%s\\n" "$count" > "$CURL_COUNT"\n'
         'role=primary\n'
+        'if [[ "$FINAL_ROLE_FLIP" == "unavailable" ]]; then exit 28; fi\n'
+        'if [[ "$FINAL_ROLE_FLIP" == "initial" ]]; then role=standby; fi\n'
         'if [[ "$FINAL_ROLE_FLIP" == "true" && "$count" -gt 1 ]]; then role=standby; fi\n'
         'printf \'{"state":"running","role":"%s"}\\n\' "$role"\n',
     )
@@ -492,6 +499,8 @@ def test_remote_verify_path_executes_against_canonical_compose(
     )
     _executable(fake_bin / "sleep", "#!/usr/bin/env bash\nexit 0\n")
     canary_count = tmp_path / "canary-count"
+    if final_role_flip == "maintenance":
+        (tmp_path / "absent-maintenance").touch()
     _executable(
         fake_bin / "timeout",
         "#!/usr/bin/env bash\n"
@@ -568,8 +577,10 @@ def test_remote_verify_path_executes_against_canonical_compose(
     )
 
     assert result.returncode == expected_code, result.stderr
+    assert "test-private-key" not in result.stdout + result.stderr
     if expected_code == 0:
         assert "API/worker parity confirmed" in result.stdout
+        assert "verification_failed" not in result.stdout + result.stderr
         assert "exec app-container python3 scripts/check_integration_credentials.py" in remote_docker_log.read_text()
         assert sum(
             "config --format json" in line
@@ -578,6 +589,32 @@ def test_remote_verify_path_executes_against_canonical_compose(
     else:
         assert "API/worker parity confirmed" not in result.stdout
         assert "error=hidden" not in result.stdout + result.stderr
+        assert f"ssh_exit={expected_code}" in result.stderr
+        if final_role_flip == "transport":
+            assert "verification_failed" not in result.stderr
+            return
+        assert "verification_failed" in result.stderr
+        assert f"exit_code={expected_code}" in result.stderr
+        assert "expected_role=primary" in result.stderr
+        if final_role_flip == "initial":
+            assert "check=initial_patroni_role" in result.stderr
+            assert "observed_role=standby" in result.stderr
+        elif final_role_flip == "unavailable":
+            assert "check=initial_patroni_role" in result.stderr
+            assert "observed_role=unavailable" in result.stderr
+        elif final_role_flip == "true":
+            assert "check=final_patroni_role" in result.stderr
+            assert "observed_role=primary final_role=standby" in result.stderr
+        elif gate_case == "credentials_unreadable":
+            assert "check=integration_credentials" in result.stderr
+        elif final_role_flip == "maintenance":
+            assert "check=maintenance" in result.stderr
+        elif stale_marker:
+            assert "check=worker_release_fence" in result.stderr
+        elif restart_drift == "true":
+            assert "check=role_agent_stability" in result.stderr
+        elif canary_result in {"failed", "empty", "duplicate", "warning", "wrong_changed_role", "always_deferred"}:
+            assert "check=role_agent_canary" in result.stderr
 
 
 def test_release_contract_never_materializes_effective_environment():
