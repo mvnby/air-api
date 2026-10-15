@@ -20,6 +20,7 @@ import type { CustomerRequisitesConfirmPayload } from '../models/CustomerRequisi
 import type { CustomerRequisitesConfirmResponse } from '../models/CustomerRequisitesConfirmResponse';
 import type { CustomerRequisitesRecognitionResponse } from '../models/CustomerRequisitesRecognitionResponse';
 import type { CustomerRequisitesTextPayload } from '../models/CustomerRequisitesTextPayload';
+import type { EnvelopePrintPayload } from '../models/EnvelopePrintPayload';
 import type { ManagerActionMessageResponse } from '../models/ManagerActionMessageResponse';
 import type { ManagerAuthStatusResponse } from '../models/ManagerAuthStatusResponse';
 import type { ManagerBulkDeleteProductsResponse } from '../models/ManagerBulkDeleteProductsResponse';
@@ -68,6 +69,8 @@ import type { ManagerTagGroupResponse } from '../models/ManagerTagGroupResponse'
 import type { MdvCatalogImportPayload } from '../models/MdvCatalogImportPayload';
 import type { MdvCatalogPreviewPayload } from '../models/MdvCatalogPreviewPayload';
 import type { MdvCatalogPreviewResponse } from '../models/MdvCatalogPreviewResponse';
+import type { PostcodeSearchPayload } from '../models/PostcodeSearchPayload';
+import type { PostcodeSearchResponse } from '../models/PostcodeSearchResponse';
 import type { ProductCreate } from '../models/ProductCreate';
 import type { ProductDuplicatePayload } from '../models/ProductDuplicatePayload';
 import type { ProductImageCropPayload } from '../models/ProductImageCropPayload';
@@ -908,6 +911,68 @@ export class ManagerService {
                 'page': page,
                 'limit': limit,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Lookup Customer Postcodes
+     * Query the public Belpost address directory on explicit Manager request for a current-
+     * tenant customer. Returns up to 100 suggestions with served houses for manual selection;
+     * no candidate is applied or persisted. Missing/inaccessible customers return 404;
+     * provider failures return 502 and manual postcode entry remains available.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * @param customerId
+     * @param requestBody
+     * @returns PostcodeSearchResponse Successful Response
+     * @throws ApiError
+     */
+    public static lookupManagerCustomerPostcodes(
+        customerId: number,
+        requestBody: PostcodeSearchPayload,
+    ): CancelablePromise<PostcodeSearchResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/customers/{customer_id}/envelope-postcodes',
+            path: {
+                'customer_id': customerId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Print Customer Envelope
+     * Render a single DL envelope for a current-tenant customer using explicitly reviewed
+     * sender/recipient names, addresses and six-digit Belarusian postcodes. Missing or
+     * foreign-tenant customers return 404; overflowing text returns 400. This stateless
+     * print operation does not change customer requisites or create a business document.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * @param customerId
+     * @param requestBody
+     * @returns binary Successful Response
+     * @throws ApiError
+     */
+    public static printManagerCustomerEnvelope(
+        customerId: number,
+        requestBody: EnvelopePrintPayload,
+    ): CancelablePromise<Blob> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/customers/{customer_id}/envelope-pdf',
+            path: {
+                'customer_id': customerId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

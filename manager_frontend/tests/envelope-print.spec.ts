@@ -1,0 +1,145 @@
+import { DOMWrapper, flushPromises, mount, type VueWrapper } from '@vue/test-utils';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { api } from '../src/api';
+import { ManagerDocumentSystemService, ManagerService, OpenAPI } from '../src/client';
+import EnvelopePrintDialog from '../src/components/envelopes/EnvelopePrintDialog.vue';
+import { envelopeAddresses, splitPostalAddress } from '../src/components/envelopes/envelope-addresses';
+import * as printing from '../src/components/envelopes/envelope-print-api';
+import OrderWorkspaceHeader from '../src/components/orders/OrderWorkspaceHeader.vue';
+import PostcodeLookup from '../src/components/envelopes/PostcodeLookup.vue';
+
+const customer = { id: 7, name: 'Клиент', full_legal_name: 'ООО Клиент', legal_address: '220030, г. Минск, ул. Ленина, 1', actual_address: 'г. Минск, ул. Ленина, 2', branches: [{ id: 9, name: 'Филиал', delivery_address: '210001, г. Витебск, ул. Доватора, 2' }] };
+const entity = { id: 2, display_name: 'Наша компания', legal_name: 'ООО Отправитель', status: 'active', is_default: true, requisites: { legal_address: '220004, г. Минск, ул. Тестовая, 3' } };
+let wrapper: VueWrapper | undefined;
+beforeEach(() => {
+  vi.spyOn(api, 'getManagerCustomerDetail').mockResolvedValue(customer as never);
+  vi.spyOn(ManagerDocumentSystemService, 'listManagerDocumentLegalEntities').mockResolvedValue({ items: [entity] } as never);
+});
+afterEach(() => { wrapper?.unmount(); wrapper = undefined; document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+async function open() {
+  wrapper = mount(EnvelopePrintDialog, { attachTo: document.body, props: { customerId: 7, orderAddress: 'г. Минск, ул. Объектная, 5' } });
+  await vi.waitFor(() => expect(document.querySelector('.envelope-dialog form')).not.toBeNull());
+  return new DOMWrapper(document.querySelector<HTMLElement>('.envelope-dialog')!);
+}
+
+describe('DL envelope preparation', () => {
+  it('extracts only an unambiguous standalone postcode', () => {
+    expect(splitPostalAddress('Беларусь, 220030, Минск')).toEqual({ address: 'Беларусь, Минск', postal_code: '220030' });
+    expect(splitPostalAddress('220030, г. Минск')).toEqual({ address: 'г. Минск', postal_code: '220030' });
+    expect(splitPostalAddress('ул. Тестовая, 1234567').postal_code).toBe('');
+    expect(splitPostalAddress('220030, Минск, 220004').postal_code).toBe('');
+  });
+  it('offers legal, postal, branch and order addresses and requires a selection', async () => {
+    const w = await open();
+    const choices = w.get('#envelope-address');
+    expect(choices.text()).toContain('Юридический адрес');
+    expect(choices.text()).toContain('Фактический / почтовый адрес');
+    expect(choices.text()).toContain('Филиал');
+    expect(choices.text()).toContain('Адрес из заказа');
+    expect(w.get('button[type="submit"]').attributes('disabled')).toBeDefined();
+    await choices.setValue('legal');
+    expect((w.get('#envelope-recipient-index').element as HTMLInputElement).value).toBe('220030');
+    expect((w.get('#envelope-recipient-address').element as HTMLTextAreaElement).value).not.toContain('220030');
+    expect(w.get('button[type="submit"]').attributes('disabled')).toBeUndefined();
+    await choices.setValue('actual');
+    expect((w.get('#envelope-recipient-index').element as HTMLInputElement).value).toBe('');
+    expect(w.text()).toContain('индекс получателя (6 цифр)');
+    expect(w.get('button[type="submit"]').attributes('disabled')).toBeDefined();
+  });
+  it('deduplicates saved addresses', () => {
+    const choices = envelopeAddresses({ ...customer, actual_address: ` ${customer.legal_address} ` } as never, customer.legal_address);
+    expect(choices).toHaveLength(2);
+  });
+  it('allows missing address and sender details to be completed manually', async () => {
+    vi.mocked(api.getManagerCustomerDetail).mockResolvedValue({ ...customer, legal_address: null, actual_address: null, branches: [] } as never);
+    vi.mocked(ManagerDocumentSystemService.listManagerDocumentLegalEntities).mockRejectedValue(new Error('offline'));
+    const w = await open();
+    await w.get('#envelope-address').setValue('custom');
+    await w.get('#envelope-recipient-address').setValue('г. Минск, ул. Новая, 5');
+    await w.get('#envelope-recipient-index').setValue('220030');
+    await w.get('#envelope-sender-name').setValue('Иван Иванов');
+    await w.get('#envelope-sender-address').setValue('г. Минск, ул. Старая, 6');
+    await w.get('#envelope-sender-index').setValue('220004');
+    expect(w.get('button[type="submit"]').attributes('disabled')).toBeUndefined();
+    expect(w.text()).toContain('Заполните данные вручную');
+  });
+  it('submits reviewed data and preserves edits when PDF generation fails', async () => {
+    const download = vi.spyOn(printing, 'downloadEnvelope').mockRejectedValue(new Error('Получатель: текст не помещается'));
+    const w = await open();
+    await w.get('#envelope-address').setValue('legal');
+    await w.get('#envelope-recipient-name').setValue('Для бухгалтерии');
+    await w.get('form').trigger('submit'); await flushPromises();
+    expect(download).toHaveBeenCalledWith(7, expect.objectContaining({ format: 'DL', recipient: { name: 'Для бухгалтерии', address: 'г. Минск, ул. Ленина, 1', postal_code: '220030' } }));
+    expect(w.get('[role="alert"]').text()).toContain('текст не помещается');
+    expect((w.get('#envelope-recipient-name').element as HTMLInputElement).value).toBe('Для бухгалтерии');
+    expect(w.get('button[type="submit"]').attributes('disabled')).toBeUndefined();
+  });
+  it('contains Escape within the print dialog', async () => {
+    const w = await open();
+    await w.trigger('keydown', { key: 'Escape' });
+    expect(wrapper!.emitted('close')).toHaveLength(1);
+  });
+  it('requests Belpost only on demand and applies only the explicitly selected postcode', async () => {
+    const search = vi.spyOn(ManagerService, 'lookupManagerCustomerPostcodes').mockResolvedValue({ items: [
+      { postal_code: '220030', address: 'Минск, ул. Ленина', buildings: '2, 3, 4' },
+      { postal_code: '220008', address: 'Минск, ул. Ленина', buildings: '14' },
+    ], source: 'Белпочта' });
+    const w = await open();
+    await w.get('#envelope-address').setValue('actual');
+    expect(search).not.toHaveBeenCalled();
+    const lookup = wrapper!.findAllComponents(PostcodeLookup)[0]!;
+    await lookup.get('.lookup-toggle').trigger('click');
+    await lookup.get('input').setValue('Минск, улица Ленина');
+    await lookup.get('.btn-mini-outline').trigger('click'); await flushPromises();
+    expect(search).toHaveBeenCalledWith(7, { address: 'Минск, улица Ленина' });
+    expect((w.get('#envelope-recipient-index').element as HTMLInputElement).value).toBe('');
+    expect(lookup.text()).toContain('Дома: 14');
+    await lookup.findAll('li button')[1]!.trigger('click');
+    expect((w.get('#envelope-recipient-index').element as HTMLInputElement).value).toBe('220008');
+  });
+  it('ignores postcode results for an address changed during the lookup', async () => {
+    let resolve!: (value: any) => void;
+    vi.spyOn(ManagerService, 'lookupManagerCustomerPostcodes').mockReturnValue(new Promise(done => { resolve = done; }) as never);
+    const w = await open(); await w.get('#envelope-address').setValue('actual');
+    const lookup = wrapper!.findAllComponents(PostcodeLookup)[0]!;
+    await lookup.get('.lookup-toggle').trigger('click');
+    await lookup.get('.btn-mini-outline').trigger('click');
+    await w.get('#envelope-address').setValue('legal');
+    resolve({ items: [{ postal_code: '999999', address: 'Старый адрес', buildings: '1' }] }); await flushPromises();
+    expect(lookup.findAll('li')).toHaveLength(0);
+    expect((w.get('#envelope-recipient-index').element as HTMLInputElement).value).toBe('220030');
+  });
+  it('keeps manual postcode entry available after a provider error', async () => {
+    vi.spyOn(ManagerService, 'lookupManagerCustomerPostcodes').mockRejectedValue(new Error('Справочник недоступен'));
+    const w = await open(); await w.get('#envelope-address').setValue('actual');
+    const lookup = wrapper!.findAllComponents(PostcodeLookup)[0]!;
+    await lookup.get('.lookup-toggle').trigger('click'); await lookup.get('.btn-mini-outline').trigger('click'); await flushPromises();
+    expect(lookup.get('[role="alert"]').text()).toContain('недоступен');
+    await w.get('#envelope-recipient-index').setValue('220030');
+    expect(w.get('button[type="submit"]').attributes('disabled')).toBeUndefined();
+  });
+  it('sends authenticated PDF requests and returns the response blob', async () => {
+    const oldToken = OpenAPI.TOKEN;
+    OpenAPI.TOKEN = 'test-token';
+    const blob = new Blob(['%PDF-test'], { type: 'application/pdf' });
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, blob: async () => blob });
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const party = { name: 'Тест', address: 'Минск, ул. Тестовая, 1', postal_code: '220030' };
+      expect(await printing.downloadEnvelope(7, { sender: party, recipient: party })).toBe(blob);
+      expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/customers/7/envelope-pdf'), expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer test-token' }), credentials: expect.any(String) }));
+    } finally { OpenAPI.TOKEN = oldToken; }
+  });
+  it('opens printing from the order action menu when a customer is selected', async () => {
+    wrapper = mount(OrderWorkspaceHeader, { props: {
+      title: 'Заказ', workflow: 'supply', viewModel: { stageLabel: 'Новый', nextAction: { label: 'Продолжить' } } as never,
+      total: 0, paid: 0, balance: 0, canPrintEnvelope: true,
+    } });
+    await wrapper.get('[aria-label="Дополнительные действия"]').trigger('click');
+    await wrapper.findAll('button').find(button => button.text() === 'Печать конверта')!.trigger('click');
+    expect(wrapper.emitted('envelope')).toHaveLength(1);
+    await wrapper.setProps({ canPrintEnvelope: false });
+    await wrapper.get('[aria-label="Дополнительные действия"]').trigger('click');
+    expect(wrapper.findAll('button').some(button => button.text() === 'Печать конверта')).toBe(false);
+  });
+});

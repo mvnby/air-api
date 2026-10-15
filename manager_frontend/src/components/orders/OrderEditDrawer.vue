@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onScopeDispose, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, nextTick, onScopeDispose, ref, watch } from 'vue';
 import DealExecutionTab from './DealExecutionTab.vue';
 import OrderAttachmentsPanel from '../service-attachments/OrderAttachmentsPanel.vue';
 import EmailContractReviewLauncher from '../leads/EmailContractReviewLauncher.vue';
@@ -327,6 +327,8 @@ watch(activeWorkspaceSection, (section) => {
   if (section === 'documents') documentsMounted.value = true;
 }, { immediate: true });
 watch(activeProposalId, () => { proposalClientPreview.value = false; });
+const EnvelopePrintDialog = defineAsyncComponent(() => import('../envelopes/EnvelopePrintDialog.vue'));
+const showEnvelope = ref(false);
 const customer = computed(() => props.order?.customer ?? null);
 const customerDisplayName = computed(() => customer.value?.full_legal_name || customer.value?.name || '');
 const compactObjectAddress = computed(() => customerDeliveryAddress.value.trim() || props.order?.customer_branch?.delivery_address || '');
@@ -432,6 +434,7 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   localServerErrors.value = {};
   localFormError.value = '';
   if (initializedOrderId.value !== order.id) {
+    showEnvelope.value = false;
     customerContextTarget.value = null;
     initializedOrderId.value = order.id;
     expandedDrawerSections.value = restoreDrawerSections();
@@ -571,6 +574,8 @@ const saveContextObject = async (draft: { address: string; branchId: number | nu
         :balance="balanceDuePreview"
         :is-website-order="isWebsiteOrder"
         :is-on-hold="order?.is_on_hold"
+        :can-print-envelope="Boolean(customer?.id)"
+        @envelope="showEnvelope = true"
         :dirty="hasUnsavedChanges"
         :saving="saving"
         :autosave-enabled="autosaveEnabled"
@@ -594,6 +599,7 @@ const saveContextObject = async (draft: { address: string; branchId: number | nu
       />
 
       <OrderWorkspaceUsageReport :open="usageReportOpen" @close="usageReportOpen = false" />
+      <EnvelopePrintDialog v-if="showEnvelope && customer?.id" :key="customer.id" :customer-id="customer.id" :order-address="compactObjectAddress" @close="showEnvelope = false" />
 
       <div ref="workspaceScrollContainer" class="grid min-h-0 flex-1 content-start gap-3 overflow-y-auto p-3" :class="proposalClientPreview ? '' : 'lg:grid-cols-[minmax(0,1fr)_18rem]'">
         <div class="min-w-0">

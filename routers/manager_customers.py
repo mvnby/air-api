@@ -78,6 +78,7 @@ from services.customer_service import CustomerService
 from services.document_service import DocumentService
 from services.manager_catalog_service import ManagerCatalogService
 from routers.manager_customer_contacts import router as manager_customer_contacts_router
+from routers.manager_customer_envelopes import router as manager_customer_envelopes_router
 
 
 router = APIRouter()
@@ -850,3 +851,4 @@ async def delete_customer_for_manager(
 
 
 router.include_router(manager_customer_contacts_router)
+router.include_router(manager_customer_envelopes_router)
