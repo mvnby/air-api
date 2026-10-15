@@ -32,6 +32,7 @@ def test_training_sources_are_deterministic_safe_and_render_two_product_rows(tmp
         assert NativeDocxRenderer().validate(template).is_valid
         rendered = NativeDocxRenderer().render(template, RenderContext(values={
             "document.issued_on": "15.10.2026", "document.internal_reference": "УЧ-001",
+            "document.official_full_number": "УЧ-2026-001",
             "seller.legal_name": "[ОБУЧЕНИЕ] Учебная компания Kitlane",
             "customer.full_name": "[ОБУЧЕНИЕ] ООО Пример", "totals.amount": "5310,00",
             "totals.currency": "BYN",
@@ -43,6 +44,7 @@ def test_training_sources_are_deterministic_safe_and_render_two_product_rows(tmp
         assert len(document.tables[0].rows) == 3
         text = "\n".join([p.text for p in document.paragraphs] + [c.text for r in document.tables[0].rows for c in r.cells])
         assert "УЧЕБНЫЙ ОБРАЗЕЦ" in text and "{{" not in text
+        assert "№ УЧ-2026-001 от 15.10.2026" in text
         assert "Учебная модель 1" in text and "Учебная модель 2" in text
 
 

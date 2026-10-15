@@ -49,7 +49,8 @@ def template_bytes(doc_type: str, title: str) -> bytes:
         "Для демонстрации работы CRM Kitlane. Все участники вымышлены. "
         "Образец не предназначен для подписания, оплаты или отправки клиентам."
     )
-    document.add_paragraph("Дата: {{document.issued_on}}    Номер CRM: {{document.internal_reference}}")
+    document.add_paragraph("№ {{document.official_full_number}} от {{document.issued_on}}")
+    document.add_paragraph("Номер CRM: {{document.internal_reference}}")
     document.add_paragraph("Продавец: {{seller.legal_name}}")
     document.add_paragraph("Клиент: {{customer.full_name}}")
     document.add_paragraph("Оборудование", "Heading 1")

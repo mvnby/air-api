@@ -9,7 +9,7 @@
       "doc_type": "offer",
       "contract_scenario": null,
       "source_filename": "training-offer.docx",
-      "sha256": "9794d6253c008e217dde0d84cfbb8232c0c5c2cb505351670e1df2632923b3f1",
+      "sha256": "ecba6220d50c13c707af52099bfec20e7680226b8e1d7c719d73ae0b70c18972",
       "description": "УЧЕБНЫЙ ОБРАЗЕЦ. Вымышленные данные; без подписей и банковских реквизитов.",
       "sort_order": 10
     },
@@ -20,7 +20,7 @@
       "doc_type": "invoice",
       "contract_scenario": null,
       "source_filename": "training-invoice.docx",
-      "sha256": "cfab9d39397b6b1a6d425572a6e06ddf840d6ba51bdb0e260150b813de6d0979",
+      "sha256": "76efb02ab35f95c8619fee79b1fef4b58648acd83f41a2126f607aeb9d561fe3",
       "description": "УЧЕБНЫЙ ОБРАЗЕЦ. Вымышленные данные; без подписей и банковских реквизитов.",
       "sort_order": 20
     },
@@ -31,7 +31,7 @@
       "doc_type": "contract",
       "contract_scenario": null,
       "source_filename": "training-contract.docx",
-      "sha256": "55ded8e68114019920062f74cd5885714e00fdb67b2cb293bfcd5f48b70fe3e2",
+      "sha256": "c65d40626373a60518d308fb83bbf081a3c9cefd5a7d03a34f13b7638b3f0b9f",
       "description": "УЧЕБНЫЙ ОБРАЗЕЦ. Вымышленные данные; без подписей и банковских реквизитов.",
       "sort_order": 30
     }
