@@ -21,8 +21,8 @@ seller legal entity, two synthetic customers (company and individual), one new
 incoming lead, and two negotiation orders. Each order has two draft alternative
 proposals and exactly one selected proposal; all four product lines have
 positive target retail prices and zero purchase/installation costs. Orders have
-a reminder to register customer contract `УЧ-001` dated on the recording day.
-The contract itself is left for the lesson.
+a reminder to create a native contract draft in the order, preview its PDF and
+issue a numbered teaching example. The contract itself is left for the lesson.
 
 All customer names and addresses carry `[ОБУЧЕНИЕ]`; email addresses use
 `example.invalid`, customer phones contain non-routable text and the incoming
@@ -149,13 +149,16 @@ rows and the permanent training marker appear. For the company contract, choose
 the normal `Поставка оборудования` scenario and a complete payment schedule
 (for example, 100% before supply); the ordinary contract preflight still requires
 these business terms. No fake tax/bank details are required by these teaching
-templates, which use only the client's existing full name. During the recording, use the
-company customer's Contracts tab to register `УЧ-001` dated on that day, select
-a proposal and show the appropriate status change. Existing documents in any
-other tenant must never be deleted or regenerated as part of this setup.
+templates, which use only the client's existing full name. During the recording,
+use the company's order → Documents → native contract: create a draft, preview
+the PDF, then issue the teaching example with its automatically assigned official
+number. The customer's separate Contracts tab uses legacy Google generation
+and is not the native registration path. Select a proposal and show the
+appropriate status change. Existing documents in any other tenant must never
+be deleted or regenerated as part of this setup.
 
-The cabinet is ready to record only after staff login, scoped reader, contract
-registration and native preview have actually been verified. `already_created`
+The cabinet is ready to record only after staff login, scoped reader, native
+preview and numbered teaching contract issuance have actually been verified. `already_created`
 proves idempotent setup; it does not claim those later readiness gates passed.
 
 ## Optional live registry lookup for a lesson

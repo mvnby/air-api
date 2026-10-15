@@ -232,8 +232,9 @@ class TenantTrainingSetupService:
                 title=f"{PREFIX} {'Подбор для квартиры' if index == 0 else 'Климат для офиса: подготовка договора'}",
                 status=OrderStatus.NEGOTIATION, delivery_address=customer.actual_address,
                 comment=("Учебная запись: варианты можно менять. Контакты и реквизиты вымышлены. "
-                         "Документы ещё не созданы. Для урока зарегистрировать договор УЧ-001 "
-                         "от даты записи видео в карточке клиента."),
+                         "Документы ещё не созданы. Для урока открыть документы заказа, "
+                         "создать черновик договора, проверить PDF и выпустить учебный образец "
+                         "с номером из учебной серии."),
                 source_fingerprint=cls._fingerprint(tenant_id, storefront_id, index),
                 technical_meta={"training_fixture": OPERATION},
                 total_amount=float(first_price), total_cost=0, margin=float(first_price),
