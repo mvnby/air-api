@@ -339,17 +339,29 @@ if normalized is None:
     raise SystemExit(1)
 print(normalized)
 '
+  verification_rc=0
   verified="$(
     ssh "${SSH_OPTS[@]}" "${REMOTE}" "
       set -euo pipefail
+      verification_stage=maintenance
+      role=unavailable
+      final_role=unavailable
+      expected_role=$(quote "${EXPECTED_ROLE}")
+      # Report the failed invariant, never the command or its environment.
+      trap 'verification_rc=\$?; if test \"\${verification_rc}\" -ne 0; then
+        printf \"[patroni-remote][error] verification_failed check=%s exit_code=%s expected_role=%s observed_role=%s final_role=%s\\n\" \
+          \"\${verification_stage}\" \"\${verification_rc}\" \"\${expected_role}\" \"\${role:-unavailable}\" \"\${final_role:-unavailable}\" >&2
+      fi' EXIT
       if test -e $(quote "${PITR_MAINTENANCE_MARKER}") \
         || test -L $(quote "${PITR_MAINTENANCE_MARKER}"); then
         echo 'PITR release maintenance is active; refusing runtime verification' >&2
         exit 75
       fi
+      verification_stage=initial_patroni_role
       role=\$(curl -fsS --max-time 5 http://127.0.0.1:8008/patroni \
         | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p.get(\"state\")==\"running\"; r=str(p.get(\"role\") or \"\").lower(); m={\"leader\":\"primary\",\"master\":\"primary\",\"primary\":\"primary\",\"replica\":\"standby\",\"standby\":\"standby\"}; n=m.get(r); n or sys.exit(1); print(n)')
       test \"\${role}\" = $(quote "${EXPECTED_ROLE}")
+      verification_stage=canonical_compose
       cd $(quote "${PROJECT_DIR}")
       test -f ${CANONICAL_REMOTE_COMPOSE_FILE}
       test ! -L ${CANONICAL_REMOTE_COMPOSE_FILE}
@@ -363,6 +375,7 @@ print(normalized)
       fi
       export BACKEND_IMAGE=$(quote "${BACKEND_IMAGE}")
       docker_command=docker
+      verification_stage=worker_config
       worker_profile=\$(
         \"\${docker_command}\" compose -f ${CANONICAL_REMOTE_COMPOSE_FILE} --profile bluegreen \
           config --format json \
@@ -373,30 +386,38 @@ print(normalized)
         dormant|canary|active) ;;
         *) exit 1 ;;
       esac
+      verification_stage=app_container
       set -- \$(\"\${docker_command}\" compose -f ${CANONICAL_REMOTE_COMPOSE_FILE} \
         --profile bluegreen ps -q \"\${active_service}\")
       test \"\$#\" -eq 1
       app_id=\"\$1\"
+      verification_stage=worker_container
       set -- \$(\"\${docker_command}\" compose -f ${CANONICAL_REMOTE_COMPOSE_FILE} \
         --profile bluegreen ps -q communications-worker)
       test \"\$#\" -eq 1
       worker_id=\"\$1\"
+      verification_stage=app_image
       test \"\$(\"\${docker_command}\" inspect --format '{{.Config.Image}}|{{.State.Running}}' \"\${app_id}\")\" \
         = $(quote "${BACKEND_IMAGE}|true")
+      verification_stage=worker_image
       test \"\$(\"\${docker_command}\" inspect --format '{{.Config.Image}}|{{.State.Running}}' \"\${worker_id}\")\" \
         = $(quote "${BACKEND_IMAGE}|true")
+      verification_stage=worker_release_fence
       if test -e .ha-communications-worker-release-fenced \
         || test -L .ha-communications-worker-release-fenced; then
         exit 1
       fi
+      verification_stage=worker_runtime
       if ! \"\${docker_command}\" compose -f ${CANONICAL_REMOTE_COMPOSE_FILE} \
         --profile bluegreen exec -T communications-worker \
         python3 -c $(quote "${verify_worker_runtime_code}") \
           \"\${role}\" \"\${worker_profile}\" >/dev/null; then
         exit 1
       fi
+      verification_stage=integration_credentials
       \"\${docker_command}\" exec \"\${app_id}\" \
         python3 scripts/check_integration_credentials.py >/dev/null
+      verification_stage=role_agent_stability
       if ! systemctl is-active --quiet mvn-patroni-role-agent.service; then
         exit 1
       fi
@@ -422,6 +443,7 @@ print(normalized)
         || test \"\${role_agent_restarts_after}\" != \"\${role_agent_restarts_before}\"; then
         exit 1
       fi
+      verification_stage=role_agent_canary
       role_agent_canary_passed=false
       for canary_attempt in 1 2 3; do
         role_agent_canary_rc=0
@@ -446,16 +468,19 @@ print(normalized)
         exit 1
       done
       test \"\${role_agent_canary_passed}\" = true
+      verification_stage=final_patroni_role
       final_role=\$(curl -fsS --max-time 5 http://127.0.0.1:8008/patroni \
         | python3 -c $(quote "${verify_role_code}"))
       if test \"\${final_role}\" != \"\${role}\" \
         || test \"\${final_role}\" != $(quote "${EXPECTED_ROLE}"); then
         exit 1
       fi
+      verification_stage=final_worker_release_fence
       if test -e .ha-communications-worker-release-fenced \
         || test -L .ha-communications-worker-release-fenced; then
         exit 1
       fi
+      verification_stage=final_worker_config
       final_worker_profile=\$(
         \"\${docker_command}\" compose -f ${CANONICAL_REMOTE_COMPOSE_FILE} --profile bluegreen \
           config --format json \
@@ -463,18 +488,21 @@ print(normalized)
             communications-worker \"\${active_service}\" $(quote "${BACKEND_IMAGE}")
       )
       test \"\${final_worker_profile}\" = \"\${worker_profile}\"
+      verification_stage=final_worker_image
       set -- \$(\"\${docker_command}\" compose -f ${CANONICAL_REMOTE_COMPOSE_FILE} \
         --profile bluegreen ps -q communications-worker)
       test \"\$#\" -eq 1
       worker_id=\"\$1\"
       test \"\$(\"\${docker_command}\" inspect --format '{{.Config.Image}}|{{.State.Running}}' \"\${worker_id}\")\" \
         = $(quote "${BACKEND_IMAGE}|true")
+      verification_stage=final_worker_runtime
       if ! \"\${docker_command}\" compose -f ${CANONICAL_REMOTE_COMPOSE_FILE} \
         --profile bluegreen exec -T communications-worker \
         python3 -c $(quote "${verify_worker_runtime_code}") \
           \"\${final_role}\" \"\${worker_profile}\" >/dev/null; then
         exit 1
       fi
+      verification_stage=final_role_agent_stability
       if ! systemctl is-active --quiet mvn-patroni-role-agent.service; then
         exit 1
       fi
@@ -486,7 +514,11 @@ print(normalized)
       fi
       printf 'verified:%s\\n' \"\${role}\"
     "
-  )"
+  )" || verification_rc=$?
+  if (( verification_rc != 0 )); then
+    log error "runtime verification failed on ${NODE_HOST}: ssh_exit=${verification_rc}" >&2
+    exit "${verification_rc}"
+  fi
   [[ "${verified}" == "verified:${EXPECTED_ROLE}" ]] || {
     log error "runtime postcondition verification failed on ${NODE_HOST}"
     exit 1
