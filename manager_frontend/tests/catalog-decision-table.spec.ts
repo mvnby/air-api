@@ -78,7 +78,7 @@ describe('CatalogDecisionTable', () => {
     expect(wrapper.text()).toContain('Сортировка');
     expect(wrapper.text()).toContain('Закупка');
     expect(wrapper.text()).toContain('Маржа %');
-    await wrapper.findAll('button').find(button => button.text() === 'Закупка')!.trigger('click');
+    await wrapper.get('select[aria-label="Сортировать модели"]').setValue('purchase_cost');
     expect(wrapper.emitted('sort')?.at(-1)).toEqual(['purchase_cost']);
   });
 });

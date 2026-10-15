@@ -34000,6 +34000,55 @@
         }
       }
     },
+    "/api/manager/tenant-catalog/products/{product_id}": {
+      "get": {
+        "tags": [
+          "manager tenant catalog"
+        ],
+        "summary": "Get Manager Tenant Catalog Product",
+        "description": "Read one product's plain-text description, public gallery, manuals and complete\ntechnical specifications. Requires Manager access and catalog.master.read capability.\nPartners can browse published master content; allowed and effective_price use only\nthe authenticated tenant's selected storefront and valid offer/grant. System staff\nmay also read unpublished master content. Missing or unpublished partner products\nreturn 404; invalid IDs return 422 and missing capability returns 403.\n\nselection_item is the current eligible published complete-split decision projection,\nincluding its existing demo cost masking. Other products return null. No grants,\noffers, selection or product data are created; GET is safe to repeat, including in\nread-only demo accounts. Source provenance, raw supplier records and credentials\nare excluded from the content projection.\n\nAccess and scope: authenticated tenant and selected storefront; see [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "operationId": "get_manager_tenant_catalog_product",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Product Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerTenantCatalogProductDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/system/rebuild-web/status": {
       "get": {
         "tags": [
@@ -77644,6 +77693,30 @@
         ],
         "title": "ManagerTenantAuditEventResponse"
       },
+      "ManagerTenantCatalogImageResponse": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "alt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alt"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "title": "ManagerTenantCatalogImageResponse"
+      },
       "ManagerTenantCatalogListResponse": {
         "properties": {
           "items": {
@@ -77662,6 +77735,142 @@
           "meta"
         ],
         "title": "ManagerTenantCatalogListResponse"
+      },
+      "ManagerTenantCatalogManualResponse": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "url"
+        ],
+        "title": "ManagerTenantCatalogManualResponse"
+      },
+      "ManagerTenantCatalogProductDetailResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "brand_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand Title"
+          },
+          "series_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Title"
+          },
+          "main_image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Main Image"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Plain text; render as text, never HTML.",
+            "default": ""
+          },
+          "images": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerTenantCatalogImageResponse"
+            },
+            "type": "array",
+            "title": "Images"
+          },
+          "summary_fields": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerTenantCatalogSpecificationResponse"
+            },
+            "type": "array",
+            "title": "Summary Fields"
+          },
+          "specification_groups": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerTenantCatalogSpecificationGroupResponse"
+            },
+            "type": "array",
+            "title": "Specification Groups"
+          },
+          "manuals": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerTenantCatalogManualResponse"
+            },
+            "type": "array",
+            "title": "Manuals"
+          },
+          "effective_price": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Price"
+          },
+          "allowed": {
+            "type": "boolean",
+            "title": "Allowed"
+          },
+          "selection_item": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CatalogDecisionProductResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Current eligible decision projection; absent when selection is unavailable."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "slug",
+          "allowed"
+        ],
+        "title": "ManagerTenantCatalogProductDetailResponse",
+        "description": "Shared product content with only the current storefront's commercial view."
       },
       "ManagerTenantCatalogProductResponse": {
         "properties": {
@@ -77792,6 +78001,65 @@
           "allowed"
         ],
         "title": "ManagerTenantCatalogProductResponse"
+      },
+      "ManagerTenantCatalogSpecificationGroupResponse": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerTenantCatalogSpecificationResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label"
+        ],
+        "title": "ManagerTenantCatalogSpecificationGroupResponse"
+      },
+      "ManagerTenantCatalogSpecificationResponse": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "value"
+        ],
+        "title": "ManagerTenantCatalogSpecificationResponse"
       },
       "ManagerTenantOfferListResponse": {
         "properties": {

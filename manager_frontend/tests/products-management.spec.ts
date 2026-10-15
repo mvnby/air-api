@@ -20,6 +20,7 @@ vi.mock('../src/components/catalog/CatalogUsageReport.vue', () => ({ default: { 
 
 import ProductsView from '../src/views/ProductsView.vue';
 import { catalogManagementApi } from '../src/services/catalog-management-api';
+import CatalogDecisionProductDetailsDialog from '../src/components/catalog-decision/CatalogDecisionProductDetailsDialog.vue';
 
 const filtersStub = {
   name: 'CatalogManagementFilters',
@@ -40,7 +41,7 @@ describe('product management list', () => {
   let wrapper: ReturnType<typeof mount> | undefined;
   const start = async () => {
     history.replaceState({}, '', '/manager/products');
-    wrapper = mount(ProductsView, { global: { stubs: { CatalogManagementFilters: filtersStub } } });
+    wrapper = mount(ProductsView, { global: { stubs: { CatalogManagementFilters: filtersStub, CatalogDecisionProductDetailsDialog: true } } });
     await flushPromises();
     return wrapper;
   };
@@ -91,7 +92,7 @@ describe('product management list', () => {
     expect(view.text()).not.toContain('Stale result');
   });
 
-  it('opens the product workspace from an image click and clears selection on filters', async () => {
+  it('opens the reader from an image click and retains the separate editor action', async () => {
     vi.mocked(catalogManagementApi.list).mockResolvedValue(result([product]));
     const view = await start();
     await view.find('div.absolute button').trigger('click');
@@ -100,6 +101,18 @@ describe('product management list', () => {
     await flushPromises();
     expect(view.text()).not.toContain('Выбрано:');
     await view.find('[title="Открыть товар"]').trigger('click');
+    expect(location.pathname).toBe('/manager/products');
+    expect(view.findComponent(CatalogDecisionProductDetailsDialog).props('item')).toMatchObject({ id: 11 });
+    view.findComponent(CatalogDecisionProductDetailsDialog).vm.$emit('edit', 11);
     expect(location.pathname).toBe('/manager/products/11');
+  });
+
+  it('provides a keyboard-accessible reader button in table mode', async () => {
+    vi.mocked(catalogManagementApi.list).mockResolvedValue(result([product]));
+    const view = await start();
+    await view.get('button[title="Таблица"]').trigger('click');
+    await view.get('button[aria-label="Открыть карточку MDV Aurora 12"]').trigger('click');
+    expect(view.findComponent(CatalogDecisionProductDetailsDialog).props('item')).toMatchObject({ id: 11 });
+    expect(location.pathname).toBe('/manager/products');
   });
 });

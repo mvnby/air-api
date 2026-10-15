@@ -16,6 +16,9 @@ import {
     Star, X, Trash2, Download, Crop, MoreHorizontal, ClipboardPaste,
     Plus, Copy,
 } from 'lucide-vue-next';
+import CatalogDecisionProductDetailsDialog from '../components/catalog-decision/CatalogDecisionProductDetailsDialog.vue';
+import CatalogReaderSelectionNotice from '../components/catalog-decision/CatalogReaderSelectionNotice.vue';
+import { useCatalogReaderSelection } from '../composables/useCatalogReaderSelection';
 import CatalogBulkEditDialog from '../components/CatalogBulkEditDialog.vue';
 import CatalogManagementFilters from '../components/products/CatalogManagementFilters.vue';
 import { catalogManagementApi, defaultManagementFilters, type CatalogManagementFilterState, type CatalogManagementSort } from '../services/catalog-management-api';
@@ -51,6 +54,8 @@ const yandexFeedSettingsOpen = ref(false);
 const canViewUsageReport = computed(() => hasManagerCapability(managerSession.auth.value, MANAGER_CAPABILITY.analyticsManage));
 // Product state
 const products = ref<Product[]>([]);
+const readerItem = ref<Product | null>(null);
+const { items: readerSelection, error: readerSelectionError, toggle: toggleReaderSelection, has: readerHasSelection } = useCatalogReaderSelection();
 const loading = ref(false);
 const showModal = ref(false);
 const selectedProduct = ref<Product | null>(null);
@@ -1497,6 +1502,8 @@ watchDebounced(
       <button v-if="selectedProductIds.size" type="button" class="underline" @click="selectedProductIds.clear()">Снять весь выбор</button>
     </div>
 
+    <CatalogReaderSelectionNotice class="mb-4" :count="readerSelection.length" />
+    <CatalogDecisionProductDetailsDialog :open="Boolean(readerItem)" :item="readerItem" :selected="Boolean(readerItem && readerHasSelection(readerItem.id))" :selection-error="readerSelectionError" @toggle="toggleReaderSelection" @edit="readerItem && openProductWorkspace(readerItem)" @close="readerItem = null" />
     <!-- Product Grid -->
     <div v-if="loading" class="py-20">
       <div class="flex items-center justify-center gap-3 text-gray-500">
@@ -1511,8 +1518,8 @@ watchDebounced(
         <div v-for="product in products" :key="product.id" 
              class="relative cursor-pointer overflow-hidden rounded-lg border-2 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:bg-slate-800"
              :class="selectedProductIds.has(product.id) ? 'border-brand-500 ring-2 ring-brand-100 dark:ring-brand-900/50' : 'border-transparent'"
-             @click="openProductWorkspace(product)"
-             role="link" tabindex="0" @keydown.enter.self="openProductWorkspace(product)"
+             @click="readerItem = product"
+             role="button" tabindex="0" @keydown.enter.self="readerItem = product" @keydown.space.self.prevent="readerItem = product"
         >
              <!-- Selection Checkbox Overlay -->
              <div class="absolute top-2.5 left-2.5 z-10">
@@ -1613,7 +1620,7 @@ watchDebounced(
                     <Images class="h-4 w-4" /> Фото
                 </button>
                 <button type="button" class="inline-flex h-10 items-center justify-center gap-1.5 border-l border-gray-100 text-xs font-semibold text-brand-700 transition hover:bg-brand-50 dark:border-slate-700 dark:text-brand-300 dark:hover:bg-slate-700" @click.stop="openProductWorkspace(product)">
-                    <ExternalLink class="h-4 w-4" /> Открыть
+                    <Edit3 class="h-4 w-4" /> Изменить
                 </button>
                 <details class="relative border-l border-gray-100 dark:border-slate-700" @click.stop>
                     <summary class="flex h-10 w-10 cursor-pointer list-none items-center justify-center text-gray-500 hover:bg-gray-50 dark:text-slate-300 dark:hover:bg-slate-700" title="Дополнительные действия">
@@ -1653,7 +1660,7 @@ watchDebounced(
             <tr v-for="product in products" :key="product.id" 
                 class="cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
                 :class="{ 'bg-brand-50/50 dark:bg-brand-900/20': selectedProductIds.has(product.id) }"
-                @click="openProductWorkspace(product)"
+                @click="readerItem = product"
             >
               <td class="p-4">
                 <button @click.stop="toggleSelection(product.id)" class="text-gray-400 hover:text-gray-600 dark:hover:text-slate-300">
@@ -1670,9 +1677,9 @@ watchDebounced(
                 </div>
               </td>
               <td class="p-4">
-                <div class="text-sm font-medium max-w-xl truncate" :title="product.title">
+                <button type="button" class="max-w-xl text-left text-sm font-medium text-brand-700 hover:underline dark:text-brand-300" :aria-label="`Открыть карточку ${product.title}`" @click.stop="readerItem = product">
                   {{ product.title }}
-                </div>
+                </button>
               </td>
               <td class="p-4">
                 <div class="text-sm font-semibold text-brand-700 dark:text-brand-400">
@@ -1698,7 +1705,7 @@ watchDebounced(
                   <button @click.stop="openSearchModal(product)" class="p-2 hover:text-brand-600 dark:hover:text-brand-400 transition-colors" title="Фото">
                     <Images class="w-4 h-4" />
                   </button>
-                  <button @click.stop="openProductWorkspace(product)" class="p-2 hover:text-brand-600 dark:hover:text-brand-400 transition-colors" title="Открыть товар">
+                  <button @click.stop="openProductWorkspace(product)" class="p-2 hover:text-brand-600 dark:hover:text-brand-400 transition-colors" title="Редактировать товар">
                     <ExternalLink class="w-4 h-4" />
                   </button>
                   <details class="relative" @click.stop>

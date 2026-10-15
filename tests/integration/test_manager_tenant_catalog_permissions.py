@@ -12,7 +12,9 @@ from models import (
     CustomerEquipment,
     EquipmentComponent,
     Product,
+    ProductAttachment,
     ProductCollection,
+    ProductImage,
     ProductSeries,
     StaffUser,
     Storefront,
@@ -23,6 +25,151 @@ from models import (
     TenantOffer,
 )
 from models.supplier import ProductSupplierMapping, SupplierOffer
+
+
+@pytest.mark.asyncio
+async def test_product_reader_has_complete_safe_content_and_current_demo_selection(async_client, db):
+    user, tenant, storefront, _ = await _create_tenant_manager(db)
+    tenant.demo_read_only = True
+    product = Product(
+        title="Reader complete", slug="reader-complete", price=2000,
+        product_kind="complete_split_system", main_image="/media/main.webp",
+        images=["/media/main.webp", "/media/legacy.webp"],
+        description="<p>Тихий <strong>кондиционер</strong></p><script>PRIVATE_SCRIPT</script><p>Для дома</p>",
+        source_url="https://supplier.example/PRIVATE_SOURCE",
+        specs={"area_m2": 35, "capacity_cooling_kw": 3.5, "inverter": True,
+               "__supplier_secret": "PRIVATE_SPEC", "supplier_token": "PRIVATE_TOKEN"},
+    )
+    db.add_all([tenant, product])
+    await db.flush()
+    grant = TenantCatalogGrant(
+        tenant_id=tenant.id, storefront_id=storefront.id, status="active",
+        created_by_username="system:test", updated_by_username="system:test",
+    )
+    supplier = Supplier(name="Reader supplier", code="reader-supplier", is_active=True)
+    db.add_all([grant, supplier])
+    await db.flush()
+    offer = TenantOffer(
+        tenant_id=tenant.id, storefront_id=storefront.id, product_id=product.id,
+        catalog_grant_id=grant.id, price=2200, status="active", is_published=True,
+        created_by_username="system:test", updated_by_username="system:test",
+    )
+    db.add_all([
+        offer,
+        ProductImage(product_id=product.id, url="/media/gallery.webp"),
+        ProductAttachment(product_id=product.id, kind="manual", title="Инструкция", url="/media/manual.pdf", source="PRIVATE_SOURCE"),
+        ProductAttachment(product_id=product.id, kind="manual", title="Unsafe", url="javascript:alert(1)"),
+        ProductAttachment(product_id=product.id, kind="private", title="PRIVATE_ATTACHMENT", url="/media/private.pdf"),
+        SupplierOffer(supplier_id=supplier.id, external_id="READER-1", wholesale_value=700, wholesale_currency="BYN", rrc_byn=2000, qty=0),
+        ProductSupplierMapping(product_id=product.id, supplier_id=supplier.id, external_id="READER-1"),
+    ])
+    await db.commit()
+    response = await async_client.get(f"/api/manager/tenant-catalog/products/{product.id}", headers=_headers(user))
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["description"] == "Тихий кондиционер Для дома"
+    assert [item["url"] for item in payload["images"]] == ["/media/main.webp", "/media/gallery.webp", "/media/legacy.webp"]
+    assert payload["manuals"] == [{"title": "Инструкция", "url": "/media/manual.pdf"}]
+    items = {item["key"]: item for group in payload["specification_groups"] for item in group["items"]}
+    assert items["capacity_cooling_kw"]["value"] == "3.5"
+    assert items["area_m2"]["value"] == "35"
+    assert payload["effective_price"] == 2200
+    assert payload["allowed"] is True
+    assert payload["selection_item"]["id"] == product.id
+    assert payload["selection_item"]["availability"] == "out_of_stock"
+    assert payload["selection_item"]["purchase_cost_byn"] == 1800
+    assert "PRIVATE" not in response.text
+    assert "wholesale" not in response.text
+    assert set(payload) == {
+        "id", "title", "slug", "brand_title", "series_title", "main_image", "description",
+        "images", "summary_fields", "specification_groups", "manuals", "effective_price", "allowed", "selection_item",
+    }
+    assert len((await db.execute(select(TenantOffer))).scalars().all()) == 1
+    assert len((await db.execute(select(TenantCatalogGrant))).scalars().all()) == 1
+
+
+@pytest.mark.asyncio
+async def test_product_reader_keeps_partner_browse_scope_and_offer_grant_fences(async_client, db):
+    user, tenant, storefront, other_storefront = await _create_tenant_manager(db)
+    products = [
+        Product(title=f"Reader {name}", slug=f"reader-{name}", price=2000,
+                product_kind="complete_split_system", is_published=name != "unpublished")
+        for name in ("foreign", "inactive", "disabled", "ungranted", "unpublished", "component")
+    ]
+    products[-1].product_kind = "indoor_unit"
+    db.add_all(products)
+    await db.flush()
+    inactive = TenantCatalogGrant(tenant_id=tenant.id, storefront_id=storefront.id, status="disabled", created_by_username="system:test", updated_by_username="system:test")
+    db.add(inactive)
+    await db.flush()
+    for index, product in enumerate(products):
+        db.add(TenantOffer(
+            tenant_id=tenant.id, storefront_id=other_storefront.id if index == 0 else storefront.id,
+            product_id=product.id, catalog_grant_id=inactive.id if index == 1 else None,
+            price=2200, status="disabled" if index == 2 else "active", is_published=True,
+            created_by_username="system:test", updated_by_username="system:test",
+        ))
+    await db.commit()
+    headers = _headers(user)
+    for index, product in enumerate(products):
+        response = await async_client.get(f"/api/manager/tenant-catalog/products/{product.id}", headers=headers)
+        if index == 4:
+            assert response.status_code == 404, response.text
+            continue
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["selection_item"] is None
+        assert payload["allowed"] is (index in (3, 5))
+        assert payload["effective_price"] == (2200 if index in (3, 5) else None)
+    assert (await async_client.get("/api/manager/tenant-catalog/products/99999", headers=headers)).status_code == 404
+    assert (await async_client.get(f"/api/manager/tenant-catalog/products/{products[0].id}", headers={**headers, "X-MVN-Manager-Storefront": "outside-tenant"})).status_code == 403
+    selected = await async_client.get(f"/api/manager/tenant-catalog/products/{products[0].id}", headers={**headers, "X-MVN-Manager-Storefront": other_storefront.slug})
+    assert selected.status_code == 200
+    assert selected.json()["allowed"] is True
+    assert selected.json()["effective_price"] == 2200
+
+
+@pytest.mark.asyncio
+async def test_product_reader_allows_system_unpublished_content_but_no_selection(async_client, db):
+    from core.config import settings
+    from sqlalchemy.orm.attributes import set_committed_value
+
+    product = Product(title="Reader draft", slug="reader-draft", price=2000,
+                      is_published=False, product_kind="complete_split_system")
+    db.add(product)
+    await db.flush()
+    manual = ProductAttachment(product_id=product.id, title="Legacy manual", url="/media/legacy-manual.pdf")
+    db.add(manual)
+    await db.commit()
+    # Fresh schemas require these fields, but historical reads can contain NULL.
+    # Simulate loaded legacy values without relaxing the physical test schema.
+    set_committed_value(product, "slug", None)
+    set_committed_value(manual, "title", None)
+    login = await async_client.post("/login/access-token", data={"username": settings.ADMIN_USERNAME, "password": settings.ADMIN_PASSWORD})
+    assert login.status_code == 200
+    response = await async_client.get(f"/api/manager/tenant-catalog/products/{product.id}", headers={"Authorization": f"Bearer {login.json()['access_token']}"})
+    assert response.status_code == 200, response.text
+    assert response.json()["allowed"] is False
+    assert response.json()["selection_item"] is None
+    assert response.json()["effective_price"] == 2000
+    assert response.json()["slug"] == ""
+    assert response.json()["manuals"] == [{"title": "Инструкция", "url": "/media/legacy-manual.pdf"}]
+
+
+@pytest.mark.asyncio
+async def test_product_reader_requires_live_manager_access(async_client, db):
+    user, tenant, _, _ = await _create_tenant_manager(db)
+    product = Product(title="Reader access", slug="reader-access", price=1)
+    db.add(product)
+    await db.commit()
+    url = f"/api/manager/tenant-catalog/products/{product.id}"
+    assert (await async_client.get(url)).status_code == 401
+    assert (await async_client.get(url, headers=_headers(user))).status_code == 200
+    membership = (await db.execute(select(TenantMembership).where(TenantMembership.tenant_id == tenant.id, TenantMembership.staff_user_id == user.id))).scalar_one()
+    membership.status = "suspended"
+    db.add(membership)
+    await db.commit()
+    assert (await async_client.get(url, headers=_headers(user))).status_code == 403
 
 
 async def _create_tenant_manager(

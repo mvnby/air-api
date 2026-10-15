@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ManagerTenantCatalogListResponse } from '../models/ManagerTenantCatalogListResponse';
+import type { ManagerTenantCatalogProductDetailResponse } from '../models/ManagerTenantCatalogProductDetailResponse';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -39,6 +40,41 @@ export class ManagerTenantCatalogService {
                 'limit': limit,
                 'search': search,
                 'allowed': allowed,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Manager Tenant Catalog Product
+     * Read one product's plain-text description, public gallery, manuals and complete
+     * technical specifications. Requires Manager access and catalog.master.read capability.
+     * Partners can browse published master content; allowed and effective_price use only
+     * the authenticated tenant's selected storefront and valid offer/grant. System staff
+     * may also read unpublished master content. Missing or unpublished partner products
+     * return 404; invalid IDs return 422 and missing capability returns 403.
+     *
+     * selection_item is the current eligible published complete-split decision projection,
+     * including its existing demo cost masking. Other products return null. No grants,
+     * offers, selection or product data are created; GET is safe to repeat, including in
+     * read-only demo accounts. Source provenance, raw supplier records and credentials
+     * are excluded from the content projection.
+     *
+     * Access and scope: authenticated tenant and selected storefront; see [Manager
+     * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * @param productId
+     * @returns ManagerTenantCatalogProductDetailResponse Successful Response
+     * @throws ApiError
+     */
+    public static getManagerTenantCatalogProduct(
+        productId: number,
+    ): CancelablePromise<ManagerTenantCatalogProductDetailResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/tenant-catalog/products/{product_id}',
+            path: {
+                'product_id': productId,
             },
             errors: {
                 422: `Validation Error`,

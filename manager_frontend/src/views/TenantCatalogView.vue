@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import MoneyAmount from '../components/money/MoneyAmount.vue';
+import CatalogDecisionProductDetailsDialog from '../components/catalog-decision/CatalogDecisionProductDetailsDialog.vue';
+import CatalogReaderSelectionNotice from '../components/catalog-decision/CatalogReaderSelectionNotice.vue';
+import { useCatalogReaderSelection } from '../composables/useCatalogReaderSelection';
 import { computed, onMounted, ref } from 'vue';
 import { Loader2, Search } from 'lucide-vue-next';
 
@@ -8,6 +11,9 @@ import {
   type ManagerTenantCatalogProductResponse,
 } from '../client';
 import { getApiErrorMessage } from '../utils/api-errors';
+
+const detailItem = ref<ManagerTenantCatalogProductResponse | null>(null);
+const { items: readerSelection, error: readerSelectionError, toggle: toggleReaderSelection, has: readerHasSelection } = useCatalogReaderSelection();
 
 const items = ref<ManagerTenantCatalogProductResponse[]>([]);
 const loading = ref(false);
@@ -97,6 +103,7 @@ onMounted(() => {
         </button>
       </form>
 
+      <CatalogReaderSelectionNotice :count="readerSelection.length" />
       <p v-if="error" class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{{ error }}</p>
       <div v-if="loading" class="flex items-center justify-center py-16 text-gray-500">
         <Loader2 class="mr-2 h-5 w-5 animate-spin" /> Загрузка каталога…
@@ -105,10 +112,12 @@ onMounted(() => {
         <div class="border-b border-gray-100 px-4 py-3 text-sm text-gray-500">Найдено: {{ total }}</div>
         <ul class="divide-y divide-gray-100">
           <li v-for="item in items" :key="item.id" class="flex items-center gap-4 p-4">
-            <img v-if="item.main_image" :src="item.main_image" :alt="item.title" class="h-16 w-16 rounded-lg object-contain" />
-            <div v-else class="h-16 w-16 rounded-lg bg-gray-100" />
+            <button type="button" class="shrink-0 rounded-lg focus-visible:outline-brand-600" :aria-label="`Рассмотреть ${item.title}`" @click="detailItem = item">
+              <img v-if="item.main_image" :src="item.main_image" alt="" class="h-16 w-16 rounded-lg object-contain" />
+              <span v-else class="block h-16 w-16 rounded-lg bg-gray-100" />
+            </button>
             <div class="min-w-0 flex-1">
-              <div class="font-semibold text-gray-900">{{ item.title }}</div>
+              <button type="button" class="text-left font-semibold text-brand-700 hover:underline" :aria-label="`Открыть карточку ${item.title}`" @click="detailItem = item">{{ item.title }}</button>
               <div class="mt-1 text-sm text-gray-500">
                 {{ [item.brand_title, item.series_title].filter(Boolean).join(' · ') || 'Без бренда и серии' }}
               </div>
@@ -147,6 +156,7 @@ onMounted(() => {
           </button>
         </div>
       </div>
+      <CatalogDecisionProductDetailsDialog :open="Boolean(detailItem)" :item="detailItem" :selected="Boolean(detailItem && readerHasSelection(detailItem.id))" :selection-error="readerSelectionError" @toggle="toggleReaderSelection" @close="detailItem = null" />
     </div>
   </section>
 </template>
