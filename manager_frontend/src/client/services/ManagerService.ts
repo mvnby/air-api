@@ -20,6 +20,7 @@ import type { CustomerRequisitesConfirmPayload } from '../models/CustomerRequisi
 import type { CustomerRequisitesConfirmResponse } from '../models/CustomerRequisitesConfirmResponse';
 import type { CustomerRequisitesRecognitionResponse } from '../models/CustomerRequisitesRecognitionResponse';
 import type { CustomerRequisitesTextPayload } from '../models/CustomerRequisitesTextPayload';
+import type { EnvelopePreviewResponse } from '../models/EnvelopePreviewResponse';
 import type { EnvelopePrintPayload } from '../models/EnvelopePrintPayload';
 import type { ManagerActionMessageResponse } from '../models/ManagerActionMessageResponse';
 import type { ManagerAuthStatusResponse } from '../models/ManagerAuthStatusResponse';
@@ -917,6 +918,37 @@ export class ManagerService {
         });
     }
     /**
+     * Preview Customer Envelope
+     * Normalize reviewed sender and recipient addresses for a current-tenant customer's
+     * envelope. Returns the same postal lines used by the PDF and warnings for ambiguous
+     * fragments; never invents missing settlements or post offices. Missing/inaccessible
+     * customers return 404. No directory request, customer update or document is created.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * @param customerId
+     * @param requestBody
+     * @returns EnvelopePreviewResponse Successful Response
+     * @throws ApiError
+     */
+    public static previewManagerCustomerEnvelope(
+        customerId: number,
+        requestBody: EnvelopePrintPayload,
+    ): CancelablePromise<EnvelopePreviewResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/customers/{customer_id}/envelope-preview',
+            path: {
+                'customer_id': customerId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * Lookup Customer Postcodes
      * Query the public Belpost address directory on explicit Manager request for a current-
      * tenant customer. Returns up to 100 suggestions with served houses for manual selection;
@@ -950,7 +982,9 @@ export class ManagerService {
     /**
      * Print Customer Envelope
      * Render a single DL envelope for a current-tenant customer using explicitly reviewed
-     * sender/recipient names, addresses and six-digit Belarusian postcodes. Missing or
+     * sender/recipient names, addresses and six-digit Belarusian postcodes. Orders postal
+     * lines from specific to general; optional bounded PNG/JPEG branding stays in the
+     * lower-left area. Missing or
      * foreign-tenant customers return 404; overflowing text returns 400. This stateless
      * print operation does not change customer requisites or create a business document.
      *

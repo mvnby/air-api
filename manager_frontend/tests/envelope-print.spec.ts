@@ -14,6 +14,10 @@ let wrapper: VueWrapper | undefined;
 beforeEach(() => {
   vi.spyOn(api, 'getManagerCustomerDetail').mockResolvedValue(customer as never);
   vi.spyOn(ManagerDocumentSystemService, 'listManagerDocumentLegalEntities').mockResolvedValue({ items: [entity] } as never);
+  vi.spyOn(ManagerService, 'previewManagerCustomerEnvelope').mockImplementation(async (_id, payload) => ({
+    sender: { delivery_lines: [payload.sender.address], postal_line: `${payload.sender.postal_code}, г. Минск`, area_lines: [], country: 'Республика Беларусь', warnings: [] },
+    recipient: { delivery_lines: ['ул. Ленина, 1'], postal_line: `${payload.recipient.postal_code}, г. Минск`, area_lines: [], country: 'Республика Беларусь', warnings: [] },
+  }));
 });
 afterEach(() => { wrapper?.unmount(); wrapper = undefined; document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 async function open() {
@@ -49,6 +53,51 @@ describe('DL envelope preparation', () => {
   it('deduplicates saved addresses', () => {
     const choices = envelopeAddresses({ ...customer, actual_address: ` ${customer.legal_address} ` } as never, customer.legal_address);
     expect(choices).toHaveLength(2);
+  });
+  it('prints a one-time manually typed address without first selecting a saved one', async () => {
+    const download = vi.spyOn(printing, 'downloadEnvelope').mockResolvedValue(new Blob(['%PDF-test']));
+    vi.stubGlobal('URL', { createObjectURL: vi.fn().mockReturnValue('blob:test'), revokeObjectURL: vi.fn() });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const w = await open();
+    await w.get('#envelope-recipient-name').setValue('Директор лично');
+    await w.get('#envelope-recipient-address').setValue('г. Минск, ул. Домашняя, д. 8, кв. 15');
+    await w.get('#envelope-recipient-index').setValue('220040');
+    expect((w.get('#envelope-address').element as HTMLSelectElement).value).toBe('custom');
+    expect(w.get('button[type="submit"]').attributes('disabled')).toBeUndefined();
+    expect((w.get('form').element as HTMLFormElement).checkValidity()).toBe(true);
+    await w.get('form').trigger('submit'); await flushPromises();
+    expect(download).toHaveBeenCalledWith(7, expect.objectContaining({ recipient: { name: 'Директор лично', address: 'г. Минск, ул. Домашняя, д. 8, кв. 15', postal_code: '220040' } }));
+    expect(customer.legal_address).toBe('220030, г. Минск, ул. Ленина, 1');
+  });
+  it('keeps a selected address when switching to manual editing', async () => {
+    const w = await open();
+    await w.get('#envelope-address').setValue('legal');
+    await w.get('#envelope-address').setValue('custom');
+    expect((w.get('#envelope-recipient-address').element as HTMLTextAreaElement).value).toBe('г. Минск, ул. Ленина, 1');
+    await w.get('#envelope-recipient-address').setValue('г. Минск, ул. Ленина, 2');
+    expect(w.get('button[type="submit"]').attributes('disabled')).toBeUndefined();
+  });
+  it('uses server-normalized postal lines in the preview and includes optional branding in PDF', async () => {
+    const download = vi.spyOn(printing, 'downloadEnvelope').mockRejectedValue(new Error('offline'));
+    const w = await open();
+    await w.get('#envelope-address').setValue('legal');
+    await vi.waitFor(() => expect(w.get('.preview-recipient').text()).toContain('220030, г. Минск'));
+    expect(w.get('.preview-recipient strong').text()).toBe('ООО Клиент');
+    await w.get('#envelope-brand-name').setValue('Наша организация');
+    expect(w.get('.preview-branding').text()).toBe('Наша организация');
+    await w.get('form').trigger('submit'); await flushPromises();
+    expect(download).toHaveBeenCalledWith(7, expect.objectContaining({ branding: { name: 'Наша организация', logo_data_url: null } }));
+  });
+  it('discards preview responses for an address edited while the request was running', async () => {
+    let resolve!: (value: any) => void;
+    vi.mocked(ManagerService.previewManagerCustomerEnvelope).mockReturnValueOnce(new Promise(done => { resolve = done; }) as never);
+    const w = await open();
+    await w.get('#envelope-address').setValue('legal');
+    await vi.waitFor(() => expect(ManagerService.previewManagerCustomerEnvelope).toHaveBeenCalledOnce());
+    await w.get('#envelope-recipient-address').setValue('г. Минск, ул. Новая, 5');
+    resolve({ sender: {}, recipient: { postal_line: '999999, Старый адрес', delivery_lines: [], area_lines: [], country: 'Беларусь', warnings: [] } });
+    await flushPromises();
+    expect(w.get('.preview-recipient').text()).not.toContain('Старый адрес');
   });
   it('allows missing address and sender details to be completed manually', async () => {
     vi.mocked(api.getManagerCustomerDetail).mockResolvedValue({ ...customer, legal_address: null, actual_address: null, branches: [] } as never);
