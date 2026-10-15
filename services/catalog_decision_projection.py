@@ -85,7 +85,9 @@ class CatalogDecisionQueryService:
         slug = (await session.execute(
             select(Tenant.slug).where(Tenant.id == tenant_scope.tenant_id)
         )).scalar_one_or_none()
-        return slug == "test1"
+        # The private recording tenant stays writable while using the same
+        # synthetic cost projection as the shared demo. Never match a prefix.
+        return slug in {"test1", "training-kitlane"}
 
     @staticmethod
     def _purchase_cost(demo_cost: bool, metrics, retail):

@@ -1,0 +1,39 @@
+{
+  "bundle_id": "kitlane-training-v1",
+  "description": "Три полностью вымышленных учебных образца",
+  "templates": [
+    {
+      "key": "training-offer",
+      "name": "[ОБУЧЕНИЕ] Коммерческое предложение",
+      "aliases": [],
+      "doc_type": "offer",
+      "contract_scenario": null,
+      "source_filename": "training-offer.docx",
+      "sha256": "ecba6220d50c13c707af52099bfec20e7680226b8e1d7c719d73ae0b70c18972",
+      "description": "УЧЕБНЫЙ ОБРАЗЕЦ. Вымышленные данные; без подписей и банковских реквизитов.",
+      "sort_order": 10
+    },
+    {
+      "key": "training-invoice",
+      "name": "[ОБУЧЕНИЕ] Счёт на оплату",
+      "aliases": [],
+      "doc_type": "invoice",
+      "contract_scenario": null,
+      "source_filename": "training-invoice.docx",
+      "sha256": "76efb02ab35f95c8619fee79b1fef4b58648acd83f41a2126f607aeb9d561fe3",
+      "description": "УЧЕБНЫЙ ОБРАЗЕЦ. Вымышленные данные; без подписей и банковских реквизитов.",
+      "sort_order": 20
+    },
+    {
+      "key": "training-contract",
+      "name": "[ОБУЧЕНИЕ] Договор",
+      "aliases": [],
+      "doc_type": "contract",
+      "contract_scenario": null,
+      "source_filename": "training-contract.docx",
+      "sha256": "c65d40626373a60518d308fb83bbf081a3c9cefd5a7d03a34f13b7638b3f0b9f",
+      "description": "УЧЕБНЫЙ ОБРАЗЕЦ. Вымышленные данные; без подписей и банковских реквизитов.",
+      "sort_order": 30
+    }
+  ]
+}
