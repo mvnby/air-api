@@ -7,9 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 from slugify import slugify
 from sqlmodel import select
+from starlette.concurrency import run_in_threadpool
+from pydantic import ValidationError
 
 from models import DocumentLegalEntity
 from models.tenancy import TenantScope
+from services.envelope_branding_service import validated_envelope_branding
 from modules.documents.domain.party import (
     INDIVIDUAL_ENTREPRENEUR,
     ORGANIZATION,
@@ -67,6 +70,7 @@ class DocumentLegalEntityService:
         is_default: bool,
         requisites: Mapping[str, Any],
         entity_type: str = "organization",
+        envelope_branding: Mapping[str, Any] | None = None,
     ) -> DocumentLegalEntity:
         normalized_name = cls._required_text(display_name, "Название", 200)
         normalized_slug = cls._slug(slug or normalized_name)
@@ -77,6 +81,7 @@ class DocumentLegalEntityService:
             requisites,
             entity_type=normalized_entity_type,
         )
+        normalized_branding = await cls._envelope_branding(envelope_branding)
 
         await cls._lock_tenant(session, tenant_scope.tenant_id)
         existing = await cls.list(session, tenant_scope=tenant_scope)
@@ -94,6 +99,7 @@ class DocumentLegalEntityService:
             is_vat_payer=bool(is_vat_payer),
             is_default=make_default,
             requisites=normalized_requisites,
+            envelope_branding=normalized_branding,
             status="active",
         )
         session.add(entity)
@@ -121,6 +127,14 @@ class DocumentLegalEntityService:
         )
         if entity is None:
             raise DocumentLegalEntityNotFoundError("Юридическое лицо не найдено")
+
+        if "envelope_branding" in changes:
+            branding_changes = changes["envelope_branding"]
+            if branding_changes is not None and not isinstance(branding_changes, Mapping):
+                raise DocumentLegalEntityError("Оформление конверта должно быть объектом")
+            merged = {**(entity.envelope_branding or {}), **branding_changes} if branding_changes is not None else {}
+            branding = await cls._envelope_branding(merged)
+            entity.envelope_branding = branding
 
         if "display_name" in changes:
             entity.display_name = cls._required_text(
@@ -276,6 +290,15 @@ class DocumentLegalEntityService:
         if normalized not in {ORGANIZATION, INDIVIDUAL_ENTREPRENEUR}:
             raise DocumentLegalEntityError("Недопустимый тип продавца")
         return normalized
+
+    @staticmethod
+    async def _envelope_branding(value: Mapping[str, Any] | None) -> dict[str, Any]:
+        try:
+            return await run_in_threadpool(validated_envelope_branding, value or {})
+        except ValidationError as exc:
+            raise DocumentLegalEntityError("Проверьте название и логотип для конвертов") from exc
+        except ValueError as exc:
+            raise DocumentLegalEntityError(str(exc)) from exc
 
     @staticmethod
     def _requisites(

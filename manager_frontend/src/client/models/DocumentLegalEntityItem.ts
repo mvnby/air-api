@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { EnvelopeBranding } from './EnvelopeBranding';
 export type DocumentLegalEntityItem = {
     id: number;
     tenant_id: number;
@@ -13,6 +14,7 @@ export type DocumentLegalEntityItem = {
     is_vat_payer: boolean;
     is_default: boolean;
     requisites: Record<string, string>;
+    envelope_branding?: EnvelopeBranding;
     status: string;
     created_at: string;
     updated_at: string;

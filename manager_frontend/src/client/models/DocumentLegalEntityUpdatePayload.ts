@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { DocumentLegalEntityRequisites } from './DocumentLegalEntityRequisites';
+import type { EnvelopeBranding } from './EnvelopeBranding';
 export type DocumentLegalEntityUpdatePayload = {
     display_name?: (string | null);
     slug?: (string | null);
@@ -12,6 +13,7 @@ export type DocumentLegalEntityUpdatePayload = {
     is_vat_payer?: (boolean | null);
     is_default?: (boolean | null);
     requisites?: (DocumentLegalEntityRequisites | null);
+    envelope_branding?: (EnvelopeBranding | null);
     status?: (string | null);
 };
 

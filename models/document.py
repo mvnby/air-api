@@ -78,6 +78,10 @@ class DocumentLegalEntity(SQLModel, table=True):
     requisites: dict[str, Any] = Field(
         default_factory=dict, sa_column=Column(JSON, nullable=False)
     )
+    envelope_branding: dict[str, Any] = Field(
+        default_factory=dict,
+        sa_column=Column(JSON, nullable=False, server_default=text("'{}'")),
+    )
     status: str = Field(
         default="active", sa_column=Column(String(24), nullable=False, index=True)
     )

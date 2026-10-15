@@ -57,7 +57,8 @@ async def list_document_legal_entities(
 ) -> DocumentLegalEntityListResponse:
     """
     List document issuer legal entities owned by the current tenant. Does not list the
-    shared supplier directory or other tenants’ requisites.
+    shared supplier directory or other tenants’ requisites. Includes each issuer's saved
+    envelope-only name/logo defaults; embedded logo bytes are never public assets.
 
     Access requires an authenticated Manager session/JWT and live membership; see [Manager
     access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
@@ -85,7 +86,8 @@ async def create_document_legal_entity(
     Create an issuer legal entity in the current tenant. Requires owner/admin access via
     route policy. Default-issuer selection is maintained by the service; conflicting
     identity/default configuration returns 409 and invalid requisites 400. This does not
-    provision an external integration account.
+    provision an external integration account. Optional envelope branding is validated
+    as bounded PNG/JPEG data and stored separately from business-document requisites.
 
     Access requires an authenticated Manager session/JWT and live membership; see [Manager
     access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
@@ -102,6 +104,7 @@ async def create_document_legal_entity(
             is_vat_payer=payload.is_vat_payer,
             is_default=payload.is_default,
             requisites=payload.requisites.model_dump(exclude_none=True),
+            envelope_branding=payload.envelope_branding.model_dump(),
         )
     except DocumentLegalEntityConflictError as exc:
         raise manager_http_error(
@@ -135,7 +138,8 @@ async def patch_document_legal_entity(
     Patch supplied issuer fields/requisites in the current tenant. Requires owner/admin
     access. Missing entity returns 404, conflicting identity/default configuration 409 and
     invalid values 400. Existing issued document snapshots remain independent of updated
-    requisites.
+    requisites. Envelope branding merges supplied nested fields; null clears all defaults,
+    and a null logo removes just the image. Corrupt or excessive logos return 400/422.
 
     Access requires an authenticated Manager session/JWT and live membership; see [Manager
     access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).

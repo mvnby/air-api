@@ -1,16 +1,82 @@
 from pathlib import Path
+import base64
+from io import BytesIO
 
 import pytest
+from PIL import Image
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from models import DocumentLegalEntity, Tenant
 from models.tenancy import TenantScope
 from modules.documents.application.legal_entities import (
     DocumentLegalEntityError,
+    DocumentLegalEntityNotFoundError,
     DocumentLegalEntityService,
 )
 from routers import manager_operation_ids as operation_ids
 from routers.manager_permission_policy import STOREFRONT_OWNER_OPERATION_IDS
+
+
+def _logo():
+    output = BytesIO()
+    Image.new('RGB', (80, 30), 'blue').save(output, format='PNG')
+    return 'data:image/png;base64,' + base64.b64encode(output.getvalue()).decode()
+
+
+@pytest.mark.asyncio
+async def test_envelope_branding_persists_per_issuer_and_partial_updates_preserve_logo(tmp_path):
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'branding.db'}")
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    async with engine.begin() as connection:
+        await connection.run_sync(Tenant.__table__.create)
+        await connection.run_sync(DocumentLegalEntity.__table__.create)
+    try:
+        async with sessions() as session:
+            tenant = Tenant(slug='branding', display_name='Branding')
+            other = Tenant(slug='other-branding', display_name='Other')
+            session.add_all([tenant, other])
+            await session.commit()
+            scope = TenantScope(int(tenant.id), 1)
+            issuer = await DocumentLegalEntityService.create(
+                session, tenant_scope=scope, display_name='Организация', slug=None,
+                legal_name=None, unp=None, is_vat_payer=False, is_default=False,
+                requisites={'city': 'Минск'}, envelope_branding={'name': '  Торговая марка ', 'logo_data_url': _logo()},
+            )
+            issuer_id = issuer.id
+        # New session proves this survives reload, rather than staying only in ORM state.
+        async with sessions() as session:
+            issuer = (await DocumentLegalEntityService.list(session, tenant_scope=scope))[0]
+            assert issuer.envelope_branding == {'name': 'Торговая марка', 'logo_data_url': _logo()}
+            assert 'logo_data_url' not in issuer.requisites
+            issuer = await DocumentLegalEntityService.update(
+                session, tenant_scope=scope, legal_entity_id=issuer_id,
+                changes={'envelope_branding': {'name': 'Новое название'}},
+            )
+            assert issuer.envelope_branding == {'name': 'Новое название', 'logo_data_url': _logo()}
+            assert issuer.requisites['city'] == 'Минск'
+            with pytest.raises(DocumentLegalEntityNotFoundError):
+                await DocumentLegalEntityService.update(
+                    session, tenant_scope=TenantScope(int(other.id), 2), legal_entity_id=issuer_id,
+                    changes={'envelope_branding': {'name': 'Чужая организация'}},
+                )
+            assert await DocumentLegalEntityService.list(session, tenant_scope=TenantScope(int(other.id), 2)) == []
+            with pytest.raises(DocumentLegalEntityError, match='прочитать логотип'):
+                await DocumentLegalEntityService.update(
+                    session, tenant_scope=scope, legal_entity_id=issuer_id,
+                    changes={'envelope_branding': {'logo_data_url': 'data:image/png;base64,bm90LWFuLWltYWdl'}},
+                )
+            assert issuer.envelope_branding['logo_data_url'] == _logo()
+            issuer = await DocumentLegalEntityService.update(
+                session, tenant_scope=scope, legal_entity_id=issuer_id,
+                changes={'envelope_branding': {'logo_data_url': None}},
+            )
+            assert issuer.envelope_branding == {'name': 'Новое название', 'logo_data_url': None}
+            issuer = await DocumentLegalEntityService.update(
+                session, tenant_scope=scope, legal_entity_id=issuer_id, changes={'envelope_branding': None},
+            )
+            assert issuer.envelope_branding == {'name': '', 'logo_data_url': None}
+    finally:
+        await engine.dispose()
 
 
 @pytest.mark.asyncio

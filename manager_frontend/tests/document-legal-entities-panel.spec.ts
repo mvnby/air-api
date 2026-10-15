@@ -95,6 +95,23 @@ afterEach(() => {
 });
 
 describe('DocumentLegalEntitiesPanel', () => {
+  it('loads and saves envelope branding with issuer requisites without changing the source object', async () => {
+    const saved = { name: 'Торговая марка', logo_data_url: 'data:image/png;base64,dGVzdA==' };
+    const item = entity({ envelope_branding: saved });
+    const wrapper = mountPanel(item);
+    expect(wrapper.get<HTMLInputElement>('#issuer-envelope-brand-name').element.value).toBe('Торговая марка');
+    expect(wrapper.get('img[alt="Логотип организации для конвертов"]').attributes('src')).toBe(saved.logo_data_url);
+    await wrapper.get('#issuer-envelope-brand-name').setValue('Новое название');
+    await wrapper.get('form.grid').trigger('submit');
+    expect(wrapper.emitted('update')?.[0]).toEqual([7, expect.objectContaining({ envelope_branding: { ...saved, name: 'Новое название' } })]);
+    expect(item.envelope_branding).toEqual(saved);
+    await wrapper.findAll('button').find(button => button.text() === 'Убрать логотип')!.trigger('click');
+    await wrapper.get('form.grid').trigger('submit');
+    expect(wrapper.emitted('update')?.[1]).toEqual([7, expect.objectContaining({ envelope_branding: { name: 'Новое название', logo_data_url: null } })]);
+    await wrapper.setProps({ items: [entity({ id: 8, envelope_branding: { name: 'Вторая компания' } })], selectedId: 8 });
+    expect(wrapper.get<HTMLInputElement>('#issuer-envelope-brand-name').element.value).toBe('Вторая компания');
+    expect(wrapper.find('img[alt="Логотип организации для конвертов"]').exists()).toBe(false);
+  });
   it('persists the direct Organization / IP switch', async () => {
     const wrapper = mountPanel();
     const typeButtons = wrapper.get('[data-testid="seller-entity-type"]').findAll('button');

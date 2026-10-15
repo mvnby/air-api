@@ -2,7 +2,8 @@
 import { computed, ref, watch } from 'vue';
 import './documents-settings.css';
 import RegistrationCertificatePanel from './RegistrationCertificatePanel.vue';
-import { OpenAPI, type DocumentLegalEntityItem, type DocumentLegalEntityUpdatePayload } from '../../../client';
+import { OpenAPI, type DocumentLegalEntityItem, type DocumentLegalEntityUpdatePayload, type EnvelopeBranding } from '../../../client';
+import EnvelopeBrandingFields from '../../../components/envelopes/EnvelopeBrandingFields.vue';
 import { getApiErrorMessage } from '../../../utils/api-errors';
 import { useB2BLookup } from '../../../composables/useB2BLookup';
 import { normalizeIban, normalizeUnp } from '../../../utils/legal-requisites';
@@ -32,6 +33,8 @@ const entityType = ref<SellerEntityType>('organization');
 const isVatPayer = ref(false);
 const city = ref('');
 const legalAddress = ref('');
+const envelopeBranding = ref<EnvelopeBranding>({ name: '', logo_data_url: null });
+const logoLoading = ref(false);
 const bankName = ref('');
 const iban = ref('');
 const bic = ref('');
@@ -86,6 +89,7 @@ const syncForm = () => {
   isVatPayer.value = Boolean(entity?.is_vat_payer);
   city.value = entity?.requisites.city || '';
   legalAddress.value = entity?.requisites.legal_address || '';
+  envelopeBranding.value = { name: entity?.envelope_branding?.name || '', logo_data_url: entity?.envelope_branding?.logo_data_url || null };
   bankName.value = entity?.requisites.bank_name || '';
   iban.value = entity?.requisites.iban || '';
   bic.value = entity?.requisites.bic || '';
@@ -166,7 +170,7 @@ const updateWarrantyMonths = (kind: 'goods' | 'work', event: Event) => {
 };
 
 const save = () => {
-  if (!props.selectedId) return;
+  if (!props.selectedId || props.saving || logoLoading.value) return;
   const requisites = {
     phone: phone.value.trim() || null,
     email: email.value.trim() || null,
@@ -191,6 +195,7 @@ const save = () => {
     entity_type: entityType.value,
     is_vat_payer: isVatPayer.value,
     requisites,
+    envelope_branding: { ...envelopeBranding.value },
   });
 };
 
@@ -244,6 +249,12 @@ const uploadFacsimile = async (kind: 'signature' | 'seal', event: Event) => {
 
       <form v-if="selectedId" class="grid min-w-0 gap-4 sm:grid-cols-2" @submit.prevent="save">
         <RegistrationCertificatePanel :legal-entity-id="selectedId" />
+        <div class="settings-field sm:col-span-2">
+          <span>Печать конвертов</span>
+          <p class="text-xs font-normal text-slate-500">Сохраните оформление вместе с реквизитами — оно будет автоматически подставляться при выборе этого отправителя.</p>
+          <EnvelopeBrandingFields :key="selectedId" v-model="envelopeBranding" :disabled="saving" id-prefix="issuer-envelope-brand" expanded @loading="logoLoading = $event" />
+          <img v-if="envelopeBranding.logo_data_url" :src="envelopeBranding.logo_data_url" alt="Логотип организации для конвертов" class="mt-2 max-h-20 max-w-48 object-contain object-left" />
+        </div>
         <div class="settings-field sm:col-span-2">
           <span>Факсимиле для PDF</span>
           <p class="mb-2 text-xs font-normal text-slate-500">PNG подписи и печати хранятся приватно. Они используются только для отдельного PDF, исходный выпускной документ не меняется. Замена PNG не переписывает уже подготовленные PDF.</p>
@@ -350,7 +361,7 @@ const uploadFacsimile = async (kind: 'signature' | 'seal', event: Event) => {
           <label class="settings-field"><span>Основание полномочий</span><input v-model="actingBasis" data-testid="seller-acting-basis" class="settings-input" :placeholder="isPowerOfAttorney ? 'доверенности № 4 от 01.08.2026' : 'Устава'" /></label>
         </template>
         <div class="flex flex-wrap gap-2 sm:col-span-2">
-          <button class="settings-button-primary" type="submit" :disabled="saving">{{ saving ? 'Сохраняем…' : 'Сохранить реквизиты' }}</button>
+          <button class="settings-button-primary" type="submit" :disabled="saving || logoLoading">{{ saving ? 'Сохраняем…' : 'Сохранить реквизиты' }}</button>
           <button
             v-if="!items.find((item) => item.id === selectedId)?.is_default"
             type="button"

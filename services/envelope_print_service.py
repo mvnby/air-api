@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import base64
-import binascii
 import re
 from functools import lru_cache
 from io import BytesIO
@@ -12,7 +10,6 @@ from typing import Literal
 from xml.sax.saxutils import escape
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from PIL import Image, UnidentifiedImageError
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
@@ -21,6 +18,9 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen.canvas import Canvas
 from reportlab.platypus import Paragraph
 
+from services.envelope_branding_service import (
+    EnvelopeBranding, envelope_logo_bytes, printable_envelope_text,
+)
 from services.postal_address_service import PostalAddressLines, normalize_postal_address
 
 
@@ -31,27 +31,13 @@ class EnvelopeParty(BaseModel):
     address: str = Field(min_length=1, max_length=600)
     postal_code: str = Field(pattern=r"^[0-9]{6}$")
 
-    @field_validator("name", "address")
-    @classmethod
-    def printable_text(cls, value: str) -> str:
-        if any(ord(char) < 32 and not char.isspace() for char in value):
-            raise ValueError("Недопустимые символы в адресных данных")
-        return " ".join(value.split())
+    _printable_fields = field_validator("name", "address")(printable_envelope_text)
 
     @field_validator("address", mode="before")
     @classmethod
     def preserve_address_lines(cls, value: str) -> str:
         # Turn pasted line breaks into delimiters before whitespace is collapsed.
         return ", ".join(line for line in value.splitlines() if line.strip()) if isinstance(value, str) else value
-
-
-class EnvelopeBranding(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-
-    name: str = Field(default="", max_length=100)
-    logo_data_url: str | None = Field(default=None, max_length=350_000, pattern=r"^data:image/(?:png|jpeg);base64,[A-Za-z0-9+/=]+$")
-
-    _printable_name = field_validator("name")(EnvelopeParty.printable_text.__func__)
 
 
 class EnvelopePrintPayload(BaseModel):
@@ -135,22 +121,13 @@ def _draw_party(
 def _draw_branding(canvas: Canvas, branding: EnvelopeBranding, font: str) -> None:
     x, bottom, width, height = 8 * mm, 15 * mm, 82 * mm, 18 * mm
     if branding.logo_data_url:
-        try:
-            data = base64.b64decode(branding.logo_data_url.split(",", 1)[1], validate=True)
-            if len(data) > 256 * 1024:
-                raise ValueError("Логотип: файл должен быть не больше 256 КБ")
-            with Image.open(BytesIO(data)) as logo:
-                if logo.format not in ("PNG", "JPEG") or max(logo.size) > 2000 or min(logo.size) < 1:
-                    raise ValueError("Логотип: нужен PNG или JPEG размером до 2000 × 2000 пикселей")
-                logo.load()
-                scale = min(24 * mm / logo.width, height / logo.height)
-                logo_width, logo_height = logo.width * scale, logo.height * scale
-                canvas.drawImage(ImageReader(logo), x, bottom + (height - logo_height) / 2,
-                                 width=logo_width, height=logo_height, mask="auto")
-            x += 28 * mm
-            width -= 28 * mm
-        except (binascii.Error, UnidentifiedImageError, OSError, Image.DecompressionBombError) as exc:
-            raise ValueError("Не удалось прочитать логотип. Выберите PNG или JPEG.") from exc
+        logo = ImageReader(BytesIO(envelope_logo_bytes(branding.logo_data_url)))
+        logo_width, logo_height = logo.getSize()
+        scale = min(24 * mm / logo_width, height / logo_height)
+        canvas.drawImage(logo, x, bottom + (height - logo_height * scale) / 2,
+                         width=logo_width * scale, height=logo_height * scale, mask="auto")
+        x += 28 * mm
+        width -= 28 * mm
     if branding.name:
         paragraph = Paragraph(escape(branding.name), ParagraphStyle(
             "branding", fontName=font, fontSize=9, leading=11,
