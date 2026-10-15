@@ -163,7 +163,7 @@ proves idempotent setup; it does not claim those later readiness gates passed.
 
 ## Optional live registry lookup for a lesson
 
-Open **Клиенты → Новый клиент → Юрлицо → УНП**. Enter a real number confirmed
+Open **Клиенты → Новый клиент → Вручную → Юрлицо → УНП**. Enter a real number confirmed
 for that recording (candidate `100325912` for a Belarusbank example), then move
 focus out of the field. The form requests the registry and fills the returned
 full name/address; show those details only after an actual successful response
