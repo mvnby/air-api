@@ -9,6 +9,7 @@ import { downloadEnvelope } from './envelope-print-api';
 import PostcodeLookup from './PostcodeLookup.vue';
 import EnvelopePreview from './EnvelopePreview.vue';
 import EnvelopeBrandingFields from './EnvelopeBrandingFields.vue';
+import { envelopeFormats, type EnvelopeFormat } from './envelope-formats';
 
 const props = defineProps<{ customerId: number; orderAddress?: string }>();
 const emit = defineEmits<{ close: [] }>();
@@ -16,6 +17,8 @@ const customer = ref<ManagerCatalogCustomerItemResponse | null>(null);
 const entities = ref<DocumentLegalEntityItem[]>([]);
 const selectedEntity = ref('');
 const selectedAddress = ref('');
+const format = ref<EnvelopeFormat>('DL');
+const size = computed(() => envelopeFormats[format.value]);
 const recipient = reactive<EnvelopeParty>({ name: '', address: '', postal_code: '' });
 const sender = reactive<EnvelopeParty>({ name: '', address: '', postal_code: '' });
 const branding = ref<EnvelopeBranding>({ name: '', logo_data_url: null });
@@ -79,12 +82,13 @@ async function load() {
 async function generate() {
   if (loading.value || busy.value || logoLoading.value || !customer.value || missing.value.length) return;
   busy.value = true; error.value = '';
+  const printFormat = format.value;
   try {
-    const blob = await downloadEnvelope(props.customerId, { format: 'DL', sender: { ...sender }, recipient: { ...recipient }, branding: { ...branding.value } });
+    const blob = await downloadEnvelope(props.customerId, { format: printFormat, sender: { ...sender }, recipient: { ...recipient }, branding: { ...branding.value } });
     if (!alive) return;
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = url; link.download = `envelope-dl-${props.customerId}.pdf`;
+    link.href = url; link.download = `envelope-${printFormat.toLowerCase()}-${props.customerId}.pdf`;
     document.body.append(link); link.click(); link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
   } catch (e) { if (alive) error.value = getApiErrorMessage(e); }
@@ -120,10 +124,11 @@ onUnmounted(() => { alive = false; clearTimeout(previewTimer); document.body.sty
   <Teleport to="body">
     <div class="envelope-overlay" @click.self="close">
       <section ref="dialog" role="dialog" aria-modal="true" aria-labelledby="envelope-title" tabindex="-1" class="envelope-dialog" @keydown="keydown">
-        <header><div><h2 id="envelope-title">Печать конверта</h2><p>DL · 220 × 110 мм · Беларусь</p></div><button type="button" aria-label="Закрыть печать конверта" :disabled="busy" @click="close"><X :size="20" /></button></header>
+        <header><div><h2 id="envelope-title">Печать конверта</h2><p>{{ format }} · {{ size.width }} × {{ size.height }} мм · Беларусь</p></div><button type="button" aria-label="Закрыть печать конверта" :disabled="busy" @click="close"><X :size="20" /></button></header>
         <p v-if="loading" role="status">Загрузка адресов…</p>
         <p v-if="error" role="alert" class="envelope-error">{{ error }} <button v-if="!customer && !loading" type="button" @click="load">Повторить</button></p>
         <form v-if="customer && !loading" @submit.prevent="generate">
+          <label for="envelope-format">Формат конверта<select id="envelope-format" v-model="format" :disabled="busy"><option v-for="(item, code) in envelopeFormats" :key="code" :value="code">{{ code }} · {{ item.width }} × {{ item.height }} мм — {{ item.description }}</option></select></label>
           <div class="envelope-fields">
             <fieldset :disabled="busy"><legend>Получатель</legend>
               <label v-if="addresses.length" for="envelope-address">Адрес из карточки<select id="envelope-address" v-model="selectedAddress" @change="chooseAddress"><option value="" disabled>Выберите адрес или введите ниже</option><option v-for="item in addresses" :key="item.id" :value="item.id">{{ item.label }}: {{ item.address }}</option><option value="custom">Другой адрес — ввести вручную</option></select></label>
@@ -142,10 +147,10 @@ onUnmounted(() => { alive = false; clearTimeout(previewTimer); document.body.sty
             </fieldset>
           </div>
           <EnvelopeBrandingFields :key="selectedEntity" v-model="branding" :disabled="busy" @loading="logoLoading = $event" />
-          <EnvelopePreview :sender="sender" :recipient="recipient" :normalized="normalized" :branding="branding" />
+          <EnvelopePreview :format="format" :sender="sender" :recipient="recipient" :normalized="normalized" :branding="branding" />
           <p v-if="previewError" role="status" class="envelope-hint">{{ previewError }}</p>
           <template v-if="normalized"><p v-for="(warning, index) in normalized.recipient.warnings" :key="`r-${index}`" role="status" class="envelope-hint">Получатель: {{ warning }}</p><p v-for="(warning, index) in normalized.sender.warnings" :key="`s-${index}`" role="status" class="envelope-hint">Отправитель: {{ warning }}</p></template>
-          <p class="envelope-hint">Печатайте на конверте DL в масштабе 100%, без подгонки под страницу. Перед тиражом проверьте подачу на одном конверте.</p>
+          <p class="envelope-hint">В настройках принтера выберите размер {{ size.width }} × {{ size.height }} мм ({{ format }}), альбомную ориентацию и масштаб 100%, без подгонки под страницу. Перед тиражом проверьте подачу на одном конверте.</p>
           <p class="envelope-hint">Изменения в этом окне используются только для печати.</p>
           <p v-if="missing.length" role="status" class="envelope-missing">Укажите: {{ missing.join('; ') }}.</p>
           <footer><button type="button" class="btn-mini-outline" :disabled="busy" @click="close">Закрыть</button><button type="submit" class="btn-mini" :disabled="busy || logoLoading || missing.length > 0"><Download :size="15" />{{ busy ? 'Формирование…' : 'Скачать PDF для печати' }}</button></footer>

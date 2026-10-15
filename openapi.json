@@ -8191,7 +8191,7 @@
           "manager"
         ],
         "summary": "Print Customer Envelope",
-        "description": "Render a single DL envelope for a current-tenant customer using explicitly reviewed\nsender/recipient names, addresses and six-digit Belarusian postcodes. Orders postal\nlines from specific to general; optional bounded PNG/JPEG branding stays in the\nlower-left area. Missing or\nforeign-tenant customers return 404; overflowing text returns 400. This stateless\nprint operation does not change customer requisites or create a business document.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Render a single DL (default), C6, C5 or C4 envelope at actual size for a current-tenant\ncustomer using explicitly reviewed\nsender/recipient names, addresses and six-digit Belarusian postcodes. Orders postal\nlines from specific to general; optional bounded PNG/JPEG branding stays in the\nlower-left area. Missing or\nforeign-tenant customers return 404; overflowing text returns 400. This stateless\nprint operation does not change customer requisites or create a business document.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "print_manager_customer_envelope",
         "security": [
           {
@@ -48210,7 +48210,12 @@
         "properties": {
           "format": {
             "type": "string",
-            "const": "DL",
+            "enum": [
+              "DL",
+              "C6",
+              "C5",
+              "C4"
+            ],
             "title": "Format",
             "default": "DL"
           },

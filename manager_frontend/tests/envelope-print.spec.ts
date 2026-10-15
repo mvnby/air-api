@@ -26,7 +26,30 @@ async function open() {
   return new DOMWrapper(document.querySelector<HTMLElement>('.envelope-dialog')!);
 }
 
-describe('DL envelope preparation', () => {
+describe('envelope preparation', () => {
+  it('defaults to DL and changes format, preview proportions and download without losing one-time data', async () => {
+    const download = vi.spyOn(printing, 'downloadEnvelope').mockResolvedValue(new Blob(['%PDF-test']));
+    vi.stubGlobal('URL', { createObjectURL: vi.fn().mockReturnValue('blob:test'), revokeObjectURL: vi.fn() });
+    const filenames: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { filenames.push(this.download); });
+    const w = await open();
+    expect((w.get('#envelope-format').element as HTMLSelectElement).value).toBe('DL');
+    expect(w.get('#envelope-format').text()).toContain('C5 · 229 × 162 мм — A4, сложенный пополам');
+    await w.get('#envelope-recipient-address').setValue('г. Минск, ул. Домашняя, д. 8');
+    await w.get('#envelope-recipient-index').setValue('220040');
+    await w.get('#envelope-brand-name').setValue('Разовая подпись');
+    for (const [code, width, height] of [['C6', 162, 114], ['C5', 229, 162], ['C4', 324, 229], ['DL', 220, 110]] as const) {
+      await w.get('#envelope-format').setValue(code);
+      expect(w.get('.envelope-preview').attributes('style')).toContain(`aspect-ratio: ${width} / ${height}`);
+      expect(w.get('header p').text()).toContain(`${code} · ${width} × ${height} мм`);
+      await w.get('form').trigger('submit'); await flushPromises();
+      expect(download).toHaveBeenLastCalledWith(7, expect.objectContaining({
+        format: code, recipient: { name: 'ООО Клиент', address: 'г. Минск, ул. Домашняя, д. 8', postal_code: '220040' },
+        branding: { name: 'Разовая подпись', logo_data_url: null },
+      }));
+      expect(filenames.at(-1)).toBe(`envelope-${code.toLowerCase()}-7.pdf`);
+    }
+  });
   it('waits for logo decoding and ignores an old upload after switching the sender', async () => {
     let finish!: () => void;
     vi.stubGlobal('Image', class {
