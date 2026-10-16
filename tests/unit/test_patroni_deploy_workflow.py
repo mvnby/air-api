@@ -80,6 +80,18 @@ def test_patroni_release_orders_migration_replica_then_primary():
     assert "docker compose" not in text
 
 
+def test_backend_release_emits_and_verifies_the_owner_operations_provenance_contract():
+    jobs = _workflow(".github/workflows/deploy-api-patroni.yml")["jobs"]
+    build = jobs["build-backend"]
+    assert _step(build, "Build and push backend")["with"]["provenance"] == "mode=max,version=v1"
+    proof = _step(build, "Verify reviewed backend provenance")
+    assert proof["env"]["REVIEWED_SHA"] == "${{ inputs.deploy_sha }}"
+    assert proof["env"]["EXPECTED_IMAGE"] == "${{ steps.image.outputs.reference }}"
+    assert "_reviewed_backend_image_for_sha(os.environ[\"REVIEWED_SHA\"])" in proof["run"]
+    assert 'actual != os.environ["EXPECTED_IMAGE"]' in proof["run"]
+    assert proof.get("continue-on-error", "false") == "false"
+
+
 def test_patroni_release_keeps_physical_node_identity_across_role_switches():
     jobs = _workflow(".github/workflows/deploy-api-patroni.yml")["jobs"]
     api_jobs = (

@@ -84,6 +84,7 @@ jobs:
         with:
           context: .
           push: true
+          provenance: mode=max,version=v1
           tags: ${{ steps.tag.outputs.tag }}
           cache-from: type=gha,scope=patroni-backend
           cache-to: type=gha,mode=max,scope=patroni-backend
@@ -99,6 +100,25 @@ jobs:
           }
           reference="ghcr.io/${GITHUB_REPOSITORY,,}/backend@${digest}"
           echo "reference=${reference}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify reviewed backend provenance
+        env:
+          REVIEWED_SHA: ${{ inputs.deploy_sha }}
+          EXPECTED_IMAGE: ${{ steps.image.outputs.reference }}
+        run: |
+          python3 -I - <<'PY'
+          import os
+          from pathlib import Path
+          import sys
+
+          sys.path.insert(0, str(Path.cwd()))
+          from scripts.ops.legacy_owner_cutover_workflow import _reviewed_backend_image_for_sha
+
+          actual = _reviewed_backend_image_for_sha(os.environ["REVIEWED_SHA"])
+          if actual != os.environ["EXPECTED_IMAGE"]:
+              raise SystemExit("Reviewed backend provenance resolves to a different image")
+          print("Backend provenance matches the exact reviewed SHA and immutable image")
+          PY
 
   probe-api-node:
     runs-on: ubuntu-latest

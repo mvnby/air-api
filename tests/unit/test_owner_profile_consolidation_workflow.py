@@ -93,3 +93,110 @@ def test_execute_stale_review_never_dispatches_mutation(monkeypatch, tmp_path):
     with pytest.raises(workflow.gates.WorkflowError, match="differs"):
         workflow.execute(args)
     assert actions == ["plan"]
+
+
+@pytest.fixture
+def controller_main(monkeypatch, tmp_path):
+    identity = tmp_path / "identity"
+    identity.write_text("test-only-identity")
+    identity.chmod(0o600)
+    destination = tmp_path / "result.json"
+    node = SimpleNamespace(alias="primary")
+    runtime = SimpleNamespace(image="reviewed-image")
+    monkeypatch.setattr(workflow.sys, "argv", ["controller", "plan", "--identity-file", str(identity),
+                                             "--result-file", str(destination)])
+    monkeypatch.setenv("GITHUB_SHA", "a" * 40)
+    monkeypatch.setattr(workflow.gates, "PATRONI_NODES", [node])
+    monkeypatch.setattr(workflow.gates, "create_context", lambda *a: None)
+    monkeypatch.setattr(workflow.gates, "validate_effective_config", lambda *a: None)
+    monkeypatch.setattr(workflow.gates, "discover_cluster_topology", lambda **kw: SimpleNamespace(primary=node))
+    monkeypatch.setattr(workflow.gates, "_reviewed_backend_image_for_sha", lambda sha: runtime.image)
+    monkeypatch.setattr(workflow.gates, "_runtime_target_command", lambda *a, **kw: "probe")
+    monkeypatch.setattr(workflow.gates, "_parse_runtime_target", lambda raw: runtime)
+    monkeypatch.setattr(workflow, "command", lambda *a: "plan")
+    monkeypatch.setattr(workflow.gates, "_run_remote", lambda *a, **kw: workflow.gates.RemoteOutput(0, json.dumps(result())))
+    monkeypatch.setattr(workflow, "prove", lambda *a, **kw: {})
+    return destination
+
+
+@pytest.mark.parametrize("gate,expected", [
+    ("create_context", "ssh_context"),
+    ("validate_effective_config", "ssh_config"),
+    ("discover_cluster_topology", "topology"),
+    ("_reviewed_backend_image_for_sha", "reviewed_image"),
+    ("_run_remote", "primary_runtime"),
+    ("_parse_runtime_target", "primary_runtime"),
+])
+def test_early_failure_records_only_static_phase(monkeypatch, controller_main, capsys, gate, expected):
+    sentinel = "SECRET_SENTINEL password_hash runtime_binding plan_token challenge"
+    def fail(*args, **kwargs):
+        raise RuntimeError(sentinel)
+    monkeypatch.setattr(workflow.gates, gate, fail)
+    with pytest.raises(SystemExit) as caught:
+        workflow.main()
+    assert caught.value.code == 2
+    captured = capsys.readouterr()
+    saved = controller_main.read_text()
+    assert json.loads(saved) == {
+        "operation": "plan", "outcome": "blocked", "failure_phase": expected,
+        "reviewed_main_sha": "a" * 40,
+    }
+    assert captured.err == f"owner_profile_workflow status=blocked phase={expected}\n"
+    assert not captured.out
+    assert sentinel not in saved + captured.err
+
+
+@pytest.mark.parametrize("transport_failure", [False, True])
+def test_plan_transport_and_result_failures_are_distinct_and_private(
+    monkeypatch, controller_main, capsys, transport_failure,
+):
+    sentinel = "PRIVATE_REMOTE_RESPONSE plan_token runtime_binding password_hash"
+    def remote(node, context, command, **kwargs):
+        if command == "probe":
+            return workflow.gates.RemoteOutput(0, "runtime")
+        if transport_failure:
+            raise RuntimeError(sentinel)
+        return workflow.gates.RemoteOutput(2, sentinel)
+    monkeypatch.setattr(workflow.gates, "_run_remote", remote)
+    with pytest.raises(SystemExit):
+        workflow.main()
+    expected = "primary_plan_transport" if transport_failure else "primary_plan_result"
+    saved = controller_main.read_text()
+    captured = capsys.readouterr()
+    assert json.loads(saved)["failure_phase"] == expected
+    assert f"phase={expected}" in captured.err
+    assert sentinel not in saved + captured.err + captured.out
+
+
+def test_successful_plan_still_writes_sanitized_report(controller_main, capsys):
+    workflow.main()
+    saved = controller_main.read_text()
+    assert json.loads(saved)["result"]["ready"] is True
+    assert json.loads(saved)["outcome"] == "completed"
+    assert "private-plan-token" not in saved
+    assert capsys.readouterr().err == ""
+
+
+def test_unknown_failure_and_artifact_error_do_not_print_exception(monkeypatch, controller_main, capsys):
+    def fail(*args, **kwargs):
+        raise RuntimeError("UNKNOWN_SECRET_SENTINEL")
+    monkeypatch.setattr(workflow, "execute", fail)
+    monkeypatch.setattr(workflow.gates, "_write_result", fail)
+    with pytest.raises(SystemExit):
+        workflow.main()
+    captured = capsys.readouterr()
+    assert captured.err == ("owner_profile_workflow artifact=unavailable\n"
+                            "owner_profile_workflow status=blocked phase=unclassified\n")
+    assert not captured.out
+
+
+def test_failure_preserves_existing_recovery_report(monkeypatch, controller_main, capsys):
+    report = {"operation": "execute", "outcome": "legacy_restored", "proof": {}}
+    controller_main.write_text(json.dumps(report))
+    def fail(args):
+        raise workflow.PhaseError("PRIVATE_UNREVIEWED_PHASE")
+    monkeypatch.setattr(workflow, "execute", fail)
+    with pytest.raises(SystemExit):
+        workflow.main()
+    assert json.loads(controller_main.read_text()) == report
+    assert capsys.readouterr().err == "owner_profile_workflow status=blocked phase=unclassified\n"

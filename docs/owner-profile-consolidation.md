@@ -57,6 +57,13 @@ memberships, installer and avatar; locked state is refreshed before comparing
 the digest. Changes and the audit receipt commit together. A new plan after
 successful consolidation is a no-op; replaying an old plan is stale.
 
+Backend releases explicitly emit SLSA v1 provenance and verify the exact source,
+revision and immutable image before deployment, using the same verifier as this
+operation. An early failure produces a minimal sanitized artifact with a fixed
+`failure_phase` code, such as `reviewed_image` or `primary_plan_transport`;
+exception messages and remote responses remain private. Diagnose that phase
+before retrying; do not bypass a failed image or topology check.
+
 Both-node recovery proof compares a fresh challenge-bound runtime credential
 binding only inside the protected controller. Signed tokens, bindings and
 challenges are removed before artifacts, summaries or console output. Do not

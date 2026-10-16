@@ -2,6 +2,7 @@
 """Fixed reviewed owner consolidation using the established deployment gates."""
 
 import argparse
+from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
@@ -19,6 +20,29 @@ PUBLIC_KEYS = {
     "mode", "ready", "complete", "source_staff_user_id", "target_staff_user_id",
     "blockers", "source_references", "changes", "preserve_target_auth_version", "plan_digest",
 }
+SAFE_PHASES = frozenset({
+    "arguments", "ssh_context", "ssh_config", "topology", "reviewed_image",
+    "primary_runtime", "primary_runtime_match", "preflight_proof", "unclassified",
+    *(f"{role}_{action}_{step}" for role in ("primary", "standby")
+      for action in ("plan", "verify", "execute") for step in ("transport", "result")),
+})
+
+
+class PhaseError(gates.WorkflowError):
+    def __init__(self, phase):
+        self.phase = phase if phase in SAFE_PHASES else "unclassified"
+        super().__init__("Owner profile workflow blocked at " + self.phase)
+
+
+@contextmanager
+def phase(name):
+    """Retain only an internal phase code, never exception or remote details."""
+    try:
+        yield
+    except PhaseError:
+        raise
+    except Exception:
+        raise PhaseError(name) from None
 
 
 def parse_result(output, *, action):
@@ -61,12 +85,14 @@ def command(node, runtime, role, action):
 
 
 def request(node, context, runtime, role, action, payload=None):
-    output = gates._run_remote(
-        node, context, command(node, runtime, role, action),
-        stdin=json.dumps(payload) if payload is not None else None,
-        accepted_statuses=frozenset({0, 2}),
-    )
-    return parse_result(output, action=action)
+    with phase(f"{role}_{action}_transport"):
+        output = gates._run_remote(
+            node, context, command(node, runtime, role, action),
+            stdin=json.dumps(payload) if payload is not None else None,
+            accepted_statuses=frozenset({0, 2}),
+        )
+    with phase(f"{role}_{action}_result"):
+        return parse_result(output, action=action)
 
 
 def prove(context, topology, reviewed_image, challenge, *, complete=None):
@@ -94,37 +120,46 @@ def prove(context, topology, reviewed_image, challenge, *, complete=None):
 
 
 def execute(args):
-    gates._validate_private_file(args.identity_file, description="SSH identity")
-    if not args.result_file.is_absolute():
-        raise gates.WorkflowError("Result path must be absolute")
-    if args.operation == "execute":
-        if not gates.DIGEST_RE.fullmatch(args.reviewed_plan_digest or ""):
-            raise gates.WorkflowError("Execute requires reviewed digest")
-    elif args.reviewed_plan_digest:
-        raise gates.WorkflowError("Plan cannot receive a digest")
+    with phase("arguments"):
+        gates._validate_private_file(args.identity_file, description="SSH identity")
+        if not args.result_file.is_absolute():
+            raise gates.WorkflowError("Result path must be absolute")
+        if args.operation == "execute":
+            if not gates.DIGEST_RE.fullmatch(args.reviewed_plan_digest or ""):
+                raise gates.WorkflowError("Execute requires reviewed digest")
+        elif args.reviewed_plan_digest:
+            raise gates.WorkflowError("Plan cannot receive a digest")
     challenge = secrets.token_hex(32)
     with tempfile.TemporaryDirectory(prefix="owner-profile-ssh-") as name:
         directory = Path(name)
         directory.chmod(0o700)
-        context = gates.create_context(directory, args.identity_file)
-        for node in gates.PATRONI_NODES:
-            gates.validate_effective_config(node, context)
-        topology = gates.discover_cluster_topology(context=context, runner=gates._subprocess_runner)
-        reviewed_image = gates._reviewed_backend_image_for_sha(os.environ.get("GITHUB_SHA", ""))
-        runtime = gates._parse_runtime_target(gates._run_remote(
-            topology.primary, context, gates._runtime_target_command(topology.primary, role="primary"),
-        ).stdout)
-        if runtime.image != reviewed_image:
-            raise gates.WorkflowError("Primary image changed after proof")
+        with phase("ssh_context"):
+            context = gates.create_context(directory, args.identity_file)
+        with phase("ssh_config"):
+            for node in gates.PATRONI_NODES:
+                gates.validate_effective_config(node, context)
+        with phase("topology"):
+            topology = gates.discover_cluster_topology(context=context, runner=gates._subprocess_runner)
+        with phase("reviewed_image"):
+            reviewed_image = gates._reviewed_backend_image_for_sha(os.environ.get("GITHUB_SHA", ""))
+        with phase("primary_runtime"):
+            runtime = gates._parse_runtime_target(gates._run_remote(
+                topology.primary, context, gates._runtime_target_command(topology.primary, role="primary"),
+            ).stdout)
+        with phase("primary_runtime_match"):
+            if runtime.image != reviewed_image:
+                raise gates.WorkflowError("Primary image changed after proof")
         plan = request(topology.primary, context, runtime, "primary", "plan")
         result = plan
         try:
-            proof = prove(context, topology, reviewed_image, challenge)
-        except gates.WorkflowError:
+            with phase("preflight_proof"):
+                proof = prove(context, topology, reviewed_image, challenge)
+        except gates.WorkflowError as exc:
             # Preserve the sanitized blockers/report for review even when a
             # source change makes the operation (and its proof) unavailable.
             artifact = {
                 "operation": args.operation, "outcome": "blocked", "reviewed_main_sha": os.environ.get("GITHUB_SHA"),
+                "failure_phase": exc.phase if isinstance(exc, PhaseError) else "preflight_proof",
                 "result": {**sanitize(plan), "ready": False,
                            "blockers": sorted(set(plan["blockers"] + ["dual_node_proof_failed"]))},
             }
@@ -172,8 +207,23 @@ def main():
     args = parser.parse_args()
     try:
         artifact = execute(args)
-    except Exception:
-        print("owner_profile_workflow status=blocked", file=sys.stderr)
+    except Exception as exc:
+        failed_phase = exc.phase if isinstance(exc, PhaseError) else "unclassified"
+        # Early gate failures previously lost the only useful diagnostic. Keep
+        # an existing detailed/recovery report, or write a fixed minimal one.
+        try:
+            if args.result_file.is_absolute() and not args.result_file.exists():
+                sha = os.environ.get("GITHUB_SHA", "")
+                artifact = {
+                    "operation": args.operation, "outcome": "blocked",
+                    "failure_phase": failed_phase,
+                    "reviewed_main_sha": sha if gates.REVIEWED_SHA_RE.fullmatch(sha) else None,
+                }
+                gates.assert_no_forbidden_artifact_keys(artifact)
+                gates._write_result(args.result_file, artifact)
+        except Exception:
+            print("owner_profile_workflow artifact=unavailable", file=sys.stderr)
+        print(f"owner_profile_workflow status=blocked phase={failed_phase}", file=sys.stderr)
         raise SystemExit(2) from None
     print(json.dumps({"ready": artifact["result"]["ready"], "operation": args.operation}))
     if not artifact["result"]["ready"]:
