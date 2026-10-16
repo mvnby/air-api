@@ -2,8 +2,9 @@
 
 The manual **Consolidate Owner Profile** workflow performs one fixed operation:
 retire StaffUser `1` into the already bound platform owner, StaffUser `4`.
-It runs only after the profile release and migration `t1162profile01` are
-deployed to both API nodes. There is no arbitrary account, host or command input.
+It runs only after the profile release and migration chain through
+`t1162telegram01` (including `t1162profile01`) are deployed to both API nodes.
+There is no arbitrary account, host or command input.
 
 ## Reviewed result
 
@@ -56,6 +57,28 @@ advisory lock. Row locks follow auth state, company, ordered staff rows,
 memberships, installer and avatar; locked state is refreshed before comparing
 the digest. Changes and the audit receipt commit together. A new plan after
 successful consolidation is a no-op; replaying an old plan is stale.
+
+Protected remote calls use the reviewed deployment-lock helper's `exec-wait`:
+it waits at most 30 seconds for the same exclusive lock before running the
+command. This handles the lock contention confirmed during the October 2026
+read-only runtime probes. The command itself is not retried, and helper source,
+ownership, file safety, topology and immutable-image checks remain mandatory.
+
+Failure artifacts retain a fixed `failure_phase` and, where available, an
+allowlisted `diagnostic_code` plus integer `remote_status`. For `primary_runtime`:
+
+| Diagnostic | Meaning |
+| --- | --- |
+| `local_helper_unavailable` / `local_helper_unreviewed` | The controller cannot read or trust its checked-out helper. |
+| `remote_lock_busy` | The helper reported the exact reviewed errno-11 contention error after its bounded wait. |
+| `remote_helper_unreviewed` / `remote_lock_unsafe` | A remote helper or lock safety check failed. |
+| `remote_ssh_failed` / `remote_transport_unavailable` | SSH returned 255 or the controller could not start the transport. |
+| `remote_command_failed` | Other remote failure; status alone does not prove lock contention. |
+| `runtime_response_invalid` / `runtime_image_not_immutable` | The runtime response failed strict parsing or immutable-image validation. |
+
+These codes contain no remote stdout/stderr, command, exception text or
+credentials. Unknown failures remain unclassified; diagnose the stated gate
+before another protected run instead of bypassing it.
 
 Backend releases explicitly emit SLSA v1 provenance and verify the exact source,
 revision and immutable image before deployment, using the same verifier as this

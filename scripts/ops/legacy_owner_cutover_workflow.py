@@ -55,6 +55,53 @@ ARTIFACT_KEYS = {
     "patroni_timeline", "runtime", "result", "proof", "outcome", "recovery",
 }
 MAX_ONE_TIME_CREDENTIAL_BYTES = 256
+DIAGNOSTIC_CODES = frozenset({
+    "local_helper_unreviewed", "local_helper_unavailable", "remote_lock_busy",
+    "remote_helper_unreviewed", "remote_lock_unsafe", "remote_ssh_failed",
+    "remote_command_failed", "remote_transport_unavailable",
+    "runtime_response_invalid", "runtime_image_not_immutable", "unclassified",
+})
+
+
+class WorkflowDiagnosticError(WorkflowError):
+    """Only fixed diagnostic metadata may cross the remote-operation boundary."""
+
+    def __init__(self, code: str, *, remote_status: int | None = None):
+        self.diagnostic_code = code if isinstance(code, str) and code in DIAGNOSTIC_CODES else "unclassified"
+        self.remote_status = remote_status if type(remote_status) is int and -255 <= remote_status <= 255 else None
+        message = ("active API container does not use a reviewed immutable image"
+                   if self.diagnostic_code == "runtime_image_not_immutable"
+                   else "reviewed operation blocked: " + self.diagnostic_code)
+        super().__init__(message)
+
+
+def safe_diagnostic_metadata(error: Exception | None) -> dict[str, Any]:
+    if not isinstance(error, WorkflowDiagnosticError):
+        return {}
+    code = error.diagnostic_code
+    result: dict[str, Any] = {"diagnostic_code": code if isinstance(code, str) and code in DIAGNOSTIC_CODES else "unclassified"}
+    if type(error.remote_status) is int and -255 <= error.remote_status <= 255:
+        result["remote_status"] = error.remote_status
+    return result
+
+
+def _remote_failure_code(returncode: int, stderr: str) -> str:
+    if returncode == 255:
+        return "remote_ssh_failed"
+    # The helper exits 1 for both contention and safety violations. Never infer
+    # contention from status alone or from arbitrary child-command output.
+    if returncode == 1 and isinstance(stderr, str):
+        fixed_errors = {
+            "[Errno 11] Resource temporarily unavailable": "remote_lock_busy",
+            "safe deployment lock helper digest is missing": "remote_helper_unreviewed",
+            "safe deployment lock helper source is unreviewed": "remote_helper_unreviewed",
+            "deployment lock parent directory is unsafe": "remote_lock_unsafe",
+            "deployment lock file is unsafe": "remote_lock_unsafe",
+        }
+        for message, code in fixed_errors.items():
+            if stderr.strip() == "safe_deploy_lock status=failed error=" + message:
+                return code
+    return "remote_command_failed"
 
 
 @dataclass(frozen=True)
@@ -171,14 +218,16 @@ def _runtime_target_command(node: PatroniNode, *, role: str) -> str:
 
 
 def _parse_runtime_target(raw: str) -> RuntimeTarget:
+    if not isinstance(raw, str):
+        raise WorkflowDiagnosticError("runtime_response_invalid")
     fields = raw.split("|")
     if len(fields) != 3:
-        raise WorkflowError("active API runtime identity is invalid")
+        raise WorkflowDiagnosticError("runtime_response_invalid")
     service, container_id, image = fields
     if service not in {"app-blue", "app-green"} or not re.fullmatch(r"[0-9a-f]{64}", container_id):
-        raise WorkflowError("active API runtime identity is invalid")
+        raise WorkflowDiagnosticError("runtime_response_invalid")
     if not IMMUTABLE_BACKEND_RE.fullmatch(image):
-        raise WorkflowError("active API container does not use a reviewed immutable image")
+        raise WorkflowDiagnosticError("runtime_image_not_immutable")
     return RuntimeTarget(service=service, container_id=container_id, image=image)
 
 
@@ -266,22 +315,33 @@ def _run_remote(node: PatroniNode, context: PinnedSshContext, command: str, *, s
                 accepted_statuses: frozenset[int] = frozenset({0})) -> RemoteOutput:
     locked = shlex.join([
         "env", f"API_DEPLOY_LOCK_HELPER_SHA256={_deploy_lock_helper_digest()}", "python3",
-        str(REMOTE_DEPLOY_LOCK_HELPER), "exec", f"{node.project_dir}/.deploy.lock",
+        str(REMOTE_DEPLOY_LOCK_HELPER), "exec-wait", f"{node.project_dir}/.deploy.lock",
         "bash", "-c", command,
     ])
-    result = _subprocess_runner([*ssh_args(node, context), locked], stdin)
+    try:
+        result = _subprocess_runner([*ssh_args(node, context), locked], stdin)
+    except OSError:
+        raise WorkflowDiagnosticError("remote_transport_unavailable") from None
     if result.returncode not in accepted_statuses:
-        raise WorkflowError(f"reviewed operation failed on {node.alias} with status {result.returncode}")
+        raise WorkflowDiagnosticError(
+            _remote_failure_code(result.returncode, result.stderr), remote_status=result.returncode,
+        )
     return RemoteOutput(status=result.returncode, stdout=result.stdout.strip())
 
 
 def _deploy_lock_helper_digest() -> str:
-    metadata = LOCAL_DEPLOY_LOCK_HELPER.lstat()
+    try:
+        metadata = LOCAL_DEPLOY_LOCK_HELPER.lstat()
+    except OSError:
+        raise WorkflowDiagnosticError("local_helper_unavailable") from None
     if (stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode)
             or metadata.st_uid != os.geteuid() or metadata.st_nlink != 1
             or metadata.st_mode & 0o022):
-        raise WorkflowError("local deployment lock helper is unreviewed")
-    return hashlib.sha256(LOCAL_DEPLOY_LOCK_HELPER.read_bytes()).hexdigest()
+        raise WorkflowDiagnosticError("local_helper_unreviewed")
+    try:
+        return hashlib.sha256(LOCAL_DEPLOY_LOCK_HELPER.read_bytes()).hexdigest()
+    except OSError:
+        raise WorkflowDiagnosticError("local_helper_unavailable") from None
 
 
 def _fresh_plan(primary: PatroniNode, context: PinnedSshContext, runtime: RuntimeTarget, *, for_action: str) -> tuple[dict[str, Any], str]:
