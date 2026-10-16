@@ -1,5 +1,6 @@
 """JWT and cookie authentication helpers for protected API endpoints."""
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from fastapi import Depends, HTTPException, status, Request
@@ -38,6 +39,18 @@ reusable_oauth2 = OAuth2PasswordBearer(
 
 
 @dataclass(frozen=True)
+class AuthenticatedIdentity:
+    username: str
+    auth_source: str
+    staff_user_id: int | None = None
+    display_name: str | None = None
+    auth_version: int | None = None
+    must_change_password: bool = False
+    can_change_password: bool = False
+    is_platform_owner: bool = False
+
+
+@dataclass(frozen=True)
 class AuthenticatedUser:
     username: str
     auth_source: str
@@ -54,6 +67,7 @@ class AuthenticatedUser:
     demo_read_only: bool = False
     is_platform_owner: bool = False
     permissions: tuple[str, ...] = ()
+    access_kind: str = "membership"
 
     def tenant_scope(self) -> TenantScope:
         if not self.tenant_id or not self.storefront_id:
@@ -119,11 +133,11 @@ async def _resolve_requested_manager_storefront(
         ) from exc
 
 
-async def get_current_auth_context(
+async def get_current_identity(
     request: Request,
     token: Optional[str] = Depends(reusable_oauth2),
     session: AsyncSession = Depends(get_session),
-) -> AuthenticatedUser:
+) -> AuthenticatedIdentity:
     """
     Unified Dependency for Authentication.
     Checks:
@@ -141,7 +155,11 @@ async def get_current_auth_context(
         auth_source = str(payload.get("auth_source") or "legacy")
         staff_user_id = payload.get("staff_user_id")
         if staff_user_id is not None:
-            staff_user = await StaffUserService.get_by_id(session, int(staff_user_id))
+            try:
+                staff_user_id = int(staff_user_id)
+            except (TypeError, ValueError):
+                raise HTTPException(401, detail="Invalid user") from None
+            staff_user = await StaffUserService.get_by_id(session, staff_user_id)
             if staff_user is None or not StaffUserService.is_active(staff_user):
                 raise HTTPException(status_code=401, detail="Invalid user")
             try:
@@ -165,40 +183,14 @@ async def get_current_auth_context(
                 session, state=legacy_owner_state, user=staff_user,
             ):
                 raise HTTPException(status_code=401, detail="Invalid owner profile")
-            try:
-                access = await ManagerTenantAccessResolver.resolve(
-                    session,
-                    staff_user_id=int(staff_user.id or 0),
-                )
-            except ManagerTenantAccessResolutionError as exc:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Active tenant membership required",
-                ) from exc
-            tenant_scope = await _resolve_requested_manager_storefront(
-                session,
-                request,
-                access.tenant_scope,
-            )
-            enforce_demo_read_only(request, demo_read_only=tenant_scope.demo_read_only)
-            return AuthenticatedUser(
-                username=username,
-                staff_user_id=int(staff_user.id or 0),
-                role=access.role,
-                display_name=staff_user.display_name,
-                auth_source=auth_source,
-                tenant_id=tenant_scope.tenant_id,
-                storefront_id=tenant_scope.storefront_id,
-                tenant_membership_id=access.membership_id,
-                is_system_tenant=tenant_scope.is_system,
-                auth_version=token_auth_version,
-                must_change_password=bool(staff_user.must_change_password),
-                can_change_password=bool(staff_user.password_hash) and not tenant_scope.demo_read_only,
-                demo_read_only=tenant_scope.demo_read_only,
+            return AuthenticatedIdentity(
+                username=username, staff_user_id=int(staff_user.id),
+                display_name=staff_user.display_name, auth_source=auth_source,
+                auth_version=token_auth_version, must_change_password=bool(staff_user.must_change_password),
+                can_change_password=bool(staff_user.password_hash),
                 is_platform_owner=LegacyOwnerAuthGuard.allows_bound_staff(
-                    legacy_owner_state, staff_user_id=int(staff_user.id or 0)
+                    legacy_owner_state, staff_user_id=int(staff_user.id)
                 ),
-                permissions=access.permissions,
             )
 
         if not LegacyOwnerAuthGuard.configured_username_matches(username):
@@ -211,27 +203,89 @@ async def get_current_auth_context(
         ):
             raise HTTPException(status_code=401, detail="Invalid user")
 
-        tenant_scope = await SystemTenantScopeResolver.resolve(session)
-        tenant_scope = await _resolve_requested_manager_storefront(
-            session,
-            request,
-            tenant_scope,
-        )
-        return AuthenticatedUser(
-            username=username,
-            auth_source="legacy",
-            role="owner",
-            tenant_id=tenant_scope.tenant_id,
-            storefront_id=tenant_scope.storefront_id,
-            is_system_tenant=tenant_scope.is_system,
-            auth_version=int(legacy_owner_state.legacy_token_version),
-            is_platform_owner=True,
+        return AuthenticatedIdentity(
+            username=username, auth_source="legacy",
+            auth_version=int(legacy_owner_state.legacy_token_version), is_platform_owner=True,
         )
 
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
     except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Could not validate credentials")
+
+
+MANAGER_TENANT_HEADER = "X-MVN-Manager-Tenant"
+
+
+def requested_manager_tenant(value: str | None) -> int | None:
+    if value is None:
+        return None
+    if not re.fullmatch(r"[1-9][0-9]{0,18}", value) or int(value) > 2**63 - 1:
+        raise HTTPException(403, detail={"code": "company_access_denied"})
+    return int(value)
+
+
+async def resolve_identity_tenant_access(session, identity, *, tenant_id=None, personal=False):
+    try:
+        if identity.staff_user_id is None:
+            if not identity.is_platform_owner:
+                raise ManagerTenantAccessResolutionError("Staff identity required")
+            scope = await SystemTenantScopeResolver.resolve(session)
+            if personal or tenant_id is None or tenant_id == scope.tenant_id:
+                from services.manager_tenant_access_service import ManagerTenantAccess
+                return ManagerTenantAccess(None, "owner", scope)
+        else:
+            if personal:
+                return await ManagerTenantAccessResolver.personal(session, staff_user_id=identity.staff_user_id)
+            try:
+                return await ManagerTenantAccessResolver.resolve(session, staff_user_id=identity.staff_user_id, tenant_id=tenant_id)
+            except ManagerTenantAccessResolutionError:
+                if not identity.is_platform_owner or tenant_id is None:
+                    raise
+        if identity.is_platform_owner and tenant_id is not None:
+            return await ManagerTenantAccessResolver.platform_support(session, tenant_id=tenant_id)
+        raise ManagerTenantAccessResolutionError("Active company required")
+    except ManagerTenantAccessResolutionError as exc:
+        code = "company_selection_required" if tenant_id is None and exc.code == "company_selection_required" else "company_access_denied"
+        raise HTTPException(409 if code == "company_selection_required" else 403, detail={"code": code}) from exc
+
+
+def scoped_identity(identity, access, scope):
+    return AuthenticatedUser(
+        **{**asdict(identity), "can_change_password": identity.can_change_password and not scope.demo_read_only},
+        role=access.role, tenant_id=scope.tenant_id, storefront_id=scope.storefront_id,
+        tenant_membership_id=access.membership_id, is_system_tenant=scope.is_system,
+        demo_read_only=scope.demo_read_only, permissions=access.permissions, access_kind=access.access_kind,
+    )
+
+
+async def get_current_auth_context(
+    request: Request, token: Optional[str] = Depends(reusable_oauth2), session: AsyncSession = Depends(get_session),
+) -> AuthenticatedUser:
+    identity = await get_current_identity(request, token, session)
+    access = await resolve_identity_tenant_access(
+        session, identity, tenant_id=requested_manager_tenant(request.headers.get(MANAGER_TENANT_HEADER)),
+    )
+    scope = await _resolve_requested_manager_storefront(session, request, access.tenant_scope)
+    enforce_demo_read_only(request, demo_read_only=scope.demo_read_only)
+    return scoped_identity(identity, access, scope)
+
+
+async def get_current_platform_identity(
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> AuthenticatedIdentity:
+    if not identity.is_platform_owner:
+        raise HTTPException(403, detail="Platform owner access required")
+    return identity
+
+
+async def require_personal_workspace_access(
+    request: Request, identity: AuthenticatedIdentity = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_session),
+) -> AuthenticatedUser:
+    access = await resolve_identity_tenant_access(session, identity, personal=True)
+    enforce_demo_read_only(request, demo_read_only=access.tenant_scope.demo_read_only)
+    return scoped_identity(identity, access, access.tenant_scope)
 
 
 def _normalized_role(auth: AuthenticatedUser) -> str:

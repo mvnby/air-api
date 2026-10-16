@@ -19,10 +19,10 @@ class StaffAvatarError(ValueError):
     pass
 
 
-def staff_avatar_url(user: StaffUser) -> str | None:
+def staff_avatar_url(user: StaffUser, *, tenant_id: int) -> str | None:
     if not user.avatar_version:
         return None
-    return f"/api/manager/staff/{user.id}/avatar?v={user.avatar_version}"
+    return f"/api/manager/staff/{user.id}/avatar?tenant_id={tenant_id}&v={user.avatar_version}"
 
 
 def sanitize_staff_avatar(content: bytes) -> tuple[bytes, str]:

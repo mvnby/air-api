@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type BotCuratedProductsRequest = {
+    expected_context_version?: (number | null);
     telegram_id: number;
     area: number;
     is_inverter: boolean;

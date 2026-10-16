@@ -5,7 +5,7 @@ vi.mock('../src/services/manager-telegram', async original => ({ ...await origin
 vi.mock('../src/services/manager-profile', () => ({ managerProfileApi: { get: mocks.profileGet, update: mocks.profileUpdate }, refreshManagerIdentity: mocks.refresh }));
 import TelegramAccountPanel from '../src/components/profile/TelegramAccountPanel.vue';
 import { managerSession } from '../src/services/manager-session';
-const profile = { staff_user_id: 7, display_name: 'Мария', username: 'maria', phone: null, email: null, avatar_url: null, updated_at: 'v1', telegram_linked: false, telegram_username: null, telegram_notifications_enabled: false };
+const profile = { can_change_password: true, must_change_password: false, personal_read_only: false, staff_user_id: 7, display_name: 'Мария', username: 'maria', phone: null, email: null, avatar_url: null, updated_at: 'v1', telegram_linked: false, telegram_username: null, telegram_notifications_enabled: false };
 const challenge = { challenge_id: 'challenge-id', expires_at: new Date(Date.now() + 300_000).toISOString(), status: 'pending', deep_link: 'https://t.me/kitlane_test_bot?start=proof', telegram: null };
 const button = (wrapper: ReturnType<typeof mount>, text: string) => wrapper.findAll('button').find(item => item.text() === text)!;
 describe('personal Telegram link', () => {
@@ -45,8 +45,8 @@ describe('personal Telegram link', () => {
     expect(mocks.disconnect).toHaveBeenCalledWith('personal password'); expect(mocks.refresh).toHaveBeenCalledOnce(); wrapper.unmount();
   });
   it('does not offer disconnect without an alternate credential', () => {
-    managerSession.auth.value = { can_change_password: false } as any;
-    const wrapper = mount(TelegramAccountPanel, { props: { profile: { ...profile, telegram_linked: true } } });
+    managerSession.auth.value = { can_change_password: true } as any;
+    const wrapper = mount(TelegramAccountPanel, { props: { profile: { ...profile, can_change_password: false, telegram_linked: true } } });
     expect(button(wrapper, 'Отключить Telegram').attributes('disabled')).toBeDefined(); expect(wrapper.find('form').exists()).toBe(false); wrapper.unmount();
   });
 });

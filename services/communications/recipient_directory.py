@@ -3,12 +3,11 @@ from __future__ import annotations
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from core.config import settings
 from models import StaffUser, Storefront, TenantMembership
 from services.communications.canary_errors import CommunicationsCanarySafetyError
 from services.communications.contracts import CommunicationRecipientV1
 from services.staff_user_service import StaffUserService
-from services.staff_telegram_notifications import notifications_enabled, legacy_recipient_ids
+from services.staff_telegram_notifications import notifications_enabled
 
 
 class ManagementRecipientDirectory:
@@ -16,61 +15,33 @@ class ManagementRecipientDirectory:
     async def list_telegram(
         session: AsyncSession,
     ) -> list[CommunicationRecipientV1]:
-        result = await session.execute(
-            select(StaffUser)
-            .where(StaffUser.telegram_id.is_not(None))
-            .order_by(StaffUser.id.asc())
-        )
-        staff_users = list(result.scalars().all())
-
-        recipients: list[CommunicationRecipientV1] = []
-        seen_destinations: set[str] = set()
-        # ADMIN_IDS is a compatibility bridge only. A legacy value must not
-        # silently re-enable an inactive, blocked, or otherwise ineligible
-        # database-backed StaffUser.
-        database_destinations = {
-            str(int(staff_user.telegram_id))
-            for staff_user in staff_users
-            if staff_user.telegram_id is not None
-        }
-        for staff_user in staff_users:
-            if not StaffUserService.can_receive_admin_notifications(staff_user):
+        from services.tenant_scope_service import SystemTenantScopeResolver, TenantScopeResolutionError
+        from models.tenancy import Tenant
+        try:
+            scope = await SystemTenantScopeResolver.resolve(session)
+        except TenantScopeResolutionError:
+            return []
+        rows = (await session.execute(select(StaffUser, TenantMembership)
+            .join(TenantMembership, TenantMembership.staff_user_id == StaffUser.id)
+            .join(Tenant, Tenant.id == TenantMembership.tenant_id)
+            .join(Storefront, Storefront.tenant_id == Tenant.id)
+            .where(Tenant.id == scope.tenant_id, Tenant.status == 'active', Storefront.id == scope.storefront_id,
+                   Storefront.status == 'active', TenantMembership.status == 'active',
+                   TenantMembership.role.in_(['owner', 'admin', 'manager']), StaffUser.telegram_id.is_not(None))
+            .order_by(StaffUser.id).execution_options(populate_existing=True))).all()
+        recipients = []
+        seen = set()
+        for user, membership in rows:
+            if not StaffUserService.is_active(user) or not notifications_enabled(user):
                 continue
-            if staff_user.id is None or staff_user.telegram_id is None:
+            destination = str(int(user.telegram_id))
+            if destination in seen or destination == '0':
                 continue
-            destination = str(int(staff_user.telegram_id))
-            if destination in seen_destinations:
-                continue
-            seen_destinations.add(destination)
-            recipients.append(
-                CommunicationRecipientV1(
-                    recipient_key=f"staff:{staff_user.id}",
-                    destination=destination,
-                    source="staff",
-                    staff_user_id=int(staff_user.id),
-                )
-            )
-
-        if recipients:
-            return recipients
-
-        for telegram_id in await legacy_recipient_ids(session, settings.admin_list):
-            destination = str(int(telegram_id))
-            if (
-                destination in database_destinations
-                or destination in seen_destinations
-                or destination == "0"
-            ):
-                continue
-            seen_destinations.add(destination)
-            recipients.append(
-                CommunicationRecipientV1(
-                    recipient_key=f"legacy-telegram:{destination}",
-                    destination=destination,
-                    source="legacy",
-                )
-            )
+            seen.add(destination)
+            recipients.append(CommunicationRecipientV1(recipient_key=f'staff:{user.id}', destination=destination,
+                              source='staff', staff_user_id=int(user.id)))
         return recipients
+
 
 
 class InstallationEstimateOwnerRecipientDirectory:
@@ -155,8 +126,10 @@ class TenantWebsiteManagementRecipientDirectory:
     ) -> list[CommunicationRecipientV1]:
         normalized_tenant_id = int(tenant_id)
         normalized_storefront_id = int(storefront_id)
+        from models.tenancy import Tenant
         storefront_exists = await session.scalar(
-            select(Storefront.id).where(
+            select(Storefront.id).join(Tenant, Tenant.id == Storefront.tenant_id).where(
+                Tenant.status == "active", Storefront.status == "active",
                 Storefront.id == normalized_storefront_id,
                 Storefront.tenant_id == normalized_tenant_id,
             )
@@ -181,7 +154,7 @@ class TenantWebsiteManagementRecipientDirectory:
                     ),
                     StaffUser.status == StaffUserService.STATUS_ACTIVE,
                 )
-                .order_by(StaffUser.id.asc())
+                .order_by(StaffUser.id.asc()).execution_options(populate_existing=True)
             )
         ).all()
 
@@ -189,7 +162,7 @@ class TenantWebsiteManagementRecipientDirectory:
         recipient_keys: set[str] = set()
         destinations: set[str] = set()
         for membership, staff_user in rows:
-            if not notifications_enabled(staff_user):
+            if not StaffUserService.is_active(staff_user) or not notifications_enabled(staff_user):
                 continue
             if (
                 membership.staff_user_id is None

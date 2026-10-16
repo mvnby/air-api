@@ -11,6 +11,13 @@ MANAGER_UPDATE_OWN_PROFILE = "manager_update_own_profile"
 MANAGER_UPLOAD_OWN_AVATAR = "manager_upload_own_avatar"
 MANAGER_DELETE_OWN_AVATAR = "manager_delete_own_avatar"
 MANAGER_READ_STAFF_AVATAR = "manager_read_staff_avatar"
+MANAGER_LIST_ACCOUNT_COMPANIES = "manager_list_account_companies"
+MANAGER_LIST_PLATFORM_COMPANIES = "manager_list_platform_companies"
+MANAGER_UPDATE_PLATFORM_COMPANY = "manager_update_platform_company"
+MANAGER_LIST_COMPANY_SITES = "manager_list_company_sites"
+MANAGER_CREATE_STAFF_INVITATION = "manager_create_staff_invitation"
+MANAGER_LIST_STAFF_INVITATIONS = "manager_list_staff_invitations"
+MANAGER_REVOKE_STAFF_INVITATION = "manager_revoke_staff_invitation"
 LIST_MANAGER_STOREFRONTS = "list_manager_storefronts"
 LIST_MANAGER_ACCESS = "list_manager_access"
 UPDATE_MANAGER_ACCESS = "update_manager_access"
@@ -612,6 +619,13 @@ CREATE_MANAGER_ORDER_MAIL_DRAFT = "create_manager_order_mail_draft"
 CREATE_MANAGER_NATIVE_ORDER_MAIL_DRAFT = "create_manager_native_order_mail_draft"
 
 ALL_MANAGER_OPERATION_IDS = (
+    MANAGER_LIST_ACCOUNT_COMPANIES,
+    MANAGER_LIST_PLATFORM_COMPANIES,
+    MANAGER_UPDATE_PLATFORM_COMPANY,
+    MANAGER_LIST_COMPANY_SITES,
+    MANAGER_CREATE_STAFF_INVITATION,
+    MANAGER_LIST_STAFF_INVITATIONS,
+    MANAGER_REVOKE_STAFF_INVITATION,
     LIST_MANAGER_MAIL_ACCOUNTS,
     LIST_MANAGER_MAIL_MESSAGES,
     GET_MANAGER_MAIL_MESSAGE,

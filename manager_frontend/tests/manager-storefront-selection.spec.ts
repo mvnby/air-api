@@ -1,16 +1,19 @@
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { registerUnsavedNavigationGuard } from '../src/services/unsaved-navigation-guard';
 import ManagerStorefrontSwitcher from '../src/components/manager/ManagerStorefrontSwitcher.vue';
 import type { ManagerStorefrontResponse } from '../src/client';
 import {
   MANAGER_STOREFRONT_HEADER,
+  MANAGER_TENANT_HEADER,
+  ManagerContextError,
   ManagerStorefrontSelection,
   createManagerStorefrontHeaderResolver,
   getManagerStorefrontRequestHeaders,
   installManagerStorefrontFetchScope,
   managerStorefrontSelection,
-  managerStorefrontStorageKey,
+  managerContextStorageKey,
 } from '../src/services/manager-storefront-selection';
 
 type AuthIdentity = {
@@ -156,95 +159,60 @@ describe('manager storefront request scope', () => {
   });
 });
 
-describe('ManagerStorefrontSelection', () => {
-  it('isolates persisted choices by tenant and authenticated user', async () => {
+const choices = { ...auth, is_platform_owner: false, default_tenant_id: 7, items: [
+  { tenant_id: 7, slug: 'first', display_name: 'Первая', role: 'owner', membership_id: 1, access_kind: 'membership' as const, is_system: false, demo_read_only: false, default_storefront_slug: 'main' },
+  { tenant_id: 8, slug: 'second', display_name: 'Вторая', role: 'manager', membership_id: 2, access_kind: 'membership' as const, is_system: false, demo_read_only: false, default_storefront_slug: 'minsk' },
+], total: 2, page: 1, limit: 100 };
+const sites = async () => ({ items: [mainStorefront, orshaStorefront].map((site, id) => ({ ...site, id, status: 'active', city: site.city || null, domains: [] })) });
+
+describe('company and site bootstrap', () => {
+  it('uses a person-scoped tab choice after validating it against available companies and sites', async () => {
     const { storage, values } = createStorage();
+    values.set(managerContextStorageKey(auth), JSON.stringify({ tenant_id: 7, site: 'orsha' }));
     const selection = new ManagerStorefrontSelection(() => storage, vi.fn());
-    const firstKey = managerStorefrontStorageKey(auth);
-    const otherUser = { ...auth, staff_user_id: 43, username: 'other-manager' };
-    const otherKey = managerStorefrontStorageKey(otherUser);
-    values.set(firstKey, 'orsha');
-    values.set(otherKey, 'minsk');
-
-    await selection.initialize(auth, async () => ({
-      items: [
-        { ...mainStorefront, is_current: false },
-        { ...orshaStorefront, is_current: true },
-      ],
-    }));
-    expect(selection.selectedSlug.value).toBe('orsha');
-
-    selection.prepareAuthentication();
-    await selection.initialize(otherUser, async () => ({
-      items: [
-        { ...mainStorefront, is_current: false },
-        { ...minskStorefront, is_current: true },
-      ],
-    }));
-    expect(selection.selectedSlug.value).toBe('minsk');
-    expect(firstKey).not.toBe(otherKey);
-    expect(values.get(firstKey)).toBe('orsha');
+    await selection.initializeContext(async () => choices, sites, '');
+    expect(selection.selectedTenantId.value).toBe(7); expect(selection.selectedSlug.value).toBe('orsha');
+    expect(managerContextStorageKey({ ...auth, tenant_id: 999 })).toBe(managerContextStorageKey(auth));
+    expect(managerContextStorageKey({ ...auth, staff_user_id: 43 })).not.toBe(managerContextStorageKey(auth));
   });
-
-  it('drops malformed storage before discovery', async () => {
-    const { storage, values } = createStorage();
-    const selection = new ManagerStorefrontSelection(() => storage, vi.fn());
-    const key = managerStorefrontStorageKey(auth);
-    values.set(key, 'BAD / SLUG');
-    const selectedDuringLoad: Array<string | null> = [];
-
-    await selection.initialize(auth, async () => {
-      selectedDuringLoad.push(selection.selectedSlug.value);
-      return { items: [mainStorefront] };
-    });
-
-    expect(selectedDuringLoad).toEqual([null]);
-    expect(selection.selectedSlug.value).toBe('main');
-    expect(values.get(key)).toBe('main');
+  it.each(['?company=999', '?company=0', '?company=7x', '?company=7&company=8', '?company=7&site=main&site=orsha', '?company=99999999999999999', '?company=7&site=foreign', '?company=7&site=MAIN', '?site=bad%2Fslug'])('denies explicit invalid context %s', async query => {
+    const selection = new ManagerStorefrontSelection(() => createStorage().storage, vi.fn());
+    await expect(selection.initializeContext(async () => choices, sites, query)).rejects.toBeInstanceOf(ManagerContextError);
+    expect(selection.selectedTenantId.value).toBeNull(); expect(selection.selectedSlug.value).toBeNull();
   });
-
-  it.each([401, 403])('recovers once from stale selection after HTTP %s', async (status) => {
-    const { storage, values } = createStorage();
-    const selection = new ManagerStorefrontSelection(() => storage, vi.fn());
-    const key = managerStorefrontStorageKey(auth);
-    values.set(key, 'removed-storefront');
-    const attempts: Array<string | null> = [];
-
-    await selection.initialize(auth, async () => {
-      attempts.push(selection.selectedSlug.value);
-      if (attempts.length === 1) throw { status };
-      return { items: [mainStorefront] };
-    });
-
-    expect(attempts).toEqual(['removed-storefront', null]);
-    expect(selection.selectedSlug.value).toBe('main');
-    expect(values.get(key)).toBe('main');
+  it('does not call a business endpoint for a forbidden explicit company', async () => {
+    const loadSites = vi.fn(sites), selection = new ManagerStorefrontSelection();
+    await expect(selection.initializeContext(async () => choices, loadSites, '?company=999')).rejects.toThrow('Нет доступа');
+    expect(loadSites).not.toHaveBeenCalled();
   });
-
-  it('never retries a rejected fallback more than once', async () => {
-    const { storage, values } = createStorage();
-    const selection = new ManagerStorefrontSelection(() => storage, vi.fn());
-    values.set(managerStorefrontStorageKey(auth), 'removed-storefront');
-    const loader = vi.fn().mockRejectedValue({ status: 403 });
-
-    await expect(selection.initialize(auth, loader)).rejects.toEqual({ status: 403 });
-    expect(loader).toHaveBeenCalledTimes(2);
-    expect(selection.selectedSlug.value).toBeNull();
+  it('recovers stale storage but never rewrites an explicit invalid URL to the default', async () => {
+    const { storage, values } = createStorage(), selection = new ManagerStorefrontSelection(() => storage);
+    values.set(managerContextStorageKey(auth), JSON.stringify({ tenant_id: 999, site: 'foreign' }));
+    await selection.initializeContext(async () => choices, sites, '');
+    expect(selection.selectedTenantId.value).toBe(7); expect(selection.selectedSlug.value).toBe('main');
   });
-
-  it('persists a validated choice and reloads exactly once', async () => {
-    const { storage, values } = createStorage();
-    const reload = vi.fn();
-    const selection = new ManagerStorefrontSelection(() => storage, reload);
-    await selection.initialize(auth, async () => ({ items: [mainStorefront, orshaStorefront] }));
-
-    expect(selection.switchTo('orsha')).toBe(true);
-    expect(selection.selectedSlug.value).toBe('orsha');
-    expect(values.get(managerStorefrontStorageKey(auth))).toBe('orsha');
-    expect(reload).toHaveBeenCalledTimes(1);
-    expect(selection.switchTo('orsha')).toBe(false);
-    expect(selection.switchTo('foreign')).toBe(false);
-    expect(reload).toHaveBeenCalledTimes(1);
+  it('keeps a zero-membership person outside business screens', async () => {
+    const selection = new ManagerStorefrontSelection(), loadSites = vi.fn(sites);
+    await expect(selection.initializeContext(async () => ({ ...choices, items: [], total: 0, default_tenant_id: null }), loadSites, '')).rejects.toThrow('приглашение');
+    expect(loadSites).not.toHaveBeenCalled();
+  });
+  it('checks unsaved edits before changing storage or URL and preserves old live context until reload', async () => {
+    const { storage, values } = createStorage(), reload = vi.fn(), selection = new ManagerStorefrontSelection(() => storage, reload);
+    window.history.replaceState({}, '', '/manager/orders?company=7&site=main&tab=active');
+    await selection.initializeContext(async () => choices, sites, window.location.search);
+    const snapshot = values.get(managerContextStorageKey(auth));
+    const unregister = registerUnsavedNavigationGuard(() => false);
+    expect(await selection.switchTo('orsha')).toBe(false); expect(values.get(managerContextStorageKey(auth))).toBe(snapshot); expect(window.location.search).toContain('company=7'); expect(reload).not.toHaveBeenCalled(); unregister();
+    expect(await selection.switchTo('orsha')).toBe(true);
+    expect(selection.selectedSlug.value).toBe('main'); expect(selection.selectedTenantId.value).toBe(7);
+    expect(JSON.parse(values.get(managerContextStorageKey(auth))!)).toEqual({ tenant_id: 7, site: 'orsha' });
+    expect(window.location.search).toBe('?tab=active'); expect(reload).toHaveBeenCalledOnce();
+    expect(await selection.switchCompany(8)).toBe(false);
+  });
+  it('never includes business context on personal or public requests', () => {
+    managerStorefrontSelection.selectedTenantId.value = 7; managerStorefrontSelection.selectedSlug.value = 'main';
+    expect(getManagerStorefrontRequestHeaders('/api/manager/orders')).toEqual({ [MANAGER_TENANT_HEADER]: '7', [MANAGER_STOREFRONT_HEADER]: 'main' });
+    for (const url of ['/api/manager/account/companies', '/api/manager/account/profile/avatar', '/api/manager/account/telegram/link-challenges', '/api/account/invitations/accept']) expect(getManagerStorefrontRequestHeaders(url)).toEqual({});
   });
 });
 
@@ -297,8 +265,8 @@ describe('ManagerStorefrontSwitcher', () => {
 
     const badge = wrapper.get('[data-testid="collapsed-storefront-badge"]');
     expect(badge.text()).toBe('ОР');
-    expect(badge.attributes('title')).toBe('Витрина: MVN Орша, Орша');
-    expect(badge.attributes('aria-label')).toBe('Текущая витрина: MVN Орша, Орша');
+    expect(badge.attributes('title')).toBe('Сайт: MVN Орша, Орша');
+    expect(badge.attributes('aria-label')).toBe('Текущий сайт: MVN Орша, Орша');
     expect(badge.classes()).toContain('md:flex');
   });
 });

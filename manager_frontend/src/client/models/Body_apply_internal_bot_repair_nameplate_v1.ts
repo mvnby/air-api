@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type Body_apply_internal_bot_repair_nameplate_v1 = {
+    expected_context_version?: (number | null);
     telegram_id: number;
     order_id: number;
     file_id: string;

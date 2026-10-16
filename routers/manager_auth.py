@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api_contracts.manager_storefronts import ManagerStorefrontListResponse
 from core.database import get_session
 from core.auth_cookie import clear_auth_cookie
-from core.security import AuthenticatedUser, require_manager_access, require_workspace_access
+from core.security import AuthenticatedUser, require_manager_access, require_workspace_access, require_personal_workspace_access
 from routers.manager_operation_ids import (
     CHANGE_MANAGER_ACCOUNT_PASSWORD,
     LIST_MANAGER_STOREFRONTS,
@@ -43,7 +43,7 @@ async def check_auth_status(
         "staff_user_id": auth.staff_user_id,
         "role": auth.role,
         "display_name": auth.display_name,
-        "avatar_url": staff_avatar_url(user) if user is not None else None,
+        "avatar_url": staff_avatar_url(user, tenant_id=auth.tenant_id) if user is not None else None,
         "auth_source": auth.auth_source,
         "tenant_id": auth.tenant_id,
         "storefront_id": auth.storefront_id,
@@ -54,6 +54,7 @@ async def check_auth_status(
         "must_change_password": auth.must_change_password,
         "demo_read_only": auth.demo_read_only,
         "is_platform_owner": auth.is_platform_owner,
+        "access_kind": auth.access_kind,
     }
 
 
@@ -66,7 +67,7 @@ async def change_account_password(
     payload: ManagerPasswordChangePayload,
     response: Response,
     session: AsyncSession = Depends(get_session),
-    auth: AuthenticatedUser = Depends(require_workspace_access),
+    auth: AuthenticatedUser = Depends(require_personal_workspace_access),
 ) -> None:
     """
     Change the current staff account password using its current password and record the
@@ -92,6 +93,7 @@ async def change_account_password(
             tenant_scope=auth.tenant_scope(),
             current_password=payload.current_password,
             new_password=payload.new_password,
+            expected_auth_version=auth.auth_version,
         )
     except ManagerAccountCredentialError as exc:
         await session.rollback()

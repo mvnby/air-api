@@ -13,7 +13,8 @@ from models import BotFsmState, Customer
 from services.bot_quick_order_api_service import BotQuickOrderApiService
 from services.bot_quick_order_service import BotQuickOrderService
 from services.order_scenarios import SCENARIOS
-from services.tenant_scope_service import SystemTenantScopeResolver, tenant_scope_clause
+from services.bot_business_context import resolve_bot_scope
+from services.tenant_scope_service import tenant_scope_clause
 from core.input_validation import normalize_phone_digits
 
 
@@ -52,6 +53,13 @@ class BotQuickOrderDraftService:
         row = (await session.execute(stmt)).scalars().first()
         if row is None:
             raise BotQuickOrderDraftNotFoundError("Черновик не найден")
+        selection = session.info.get("bot_selection")
+        saved = (row.data or {}).get("context")
+        if selection is not None:
+            current = [selection.tenant_id, selection.storefront_id, selection.context_version]
+            if saved != current and not (saved is None and selection.canonical and selection.context_version == 0):
+                from services.bot_staff_selection_service import context_changed
+                raise context_changed()
         return row
 
     @staticmethod
@@ -86,7 +94,7 @@ class BotQuickOrderDraftService:
         cls, session: AsyncSession, *, telegram_id: int, text: str, customer_id: int | None = None
     ) -> dict:
         await BotQuickOrderApiService._require_manager(session, telegram_id)
-        tenant_scope = await SystemTenantScopeResolver.resolve(session)
+        tenant_scope = await resolve_bot_scope(session, telegram_id)
         customer = None
         if customer_id is not None:
             customer = (
@@ -124,6 +132,8 @@ class BotQuickOrderDraftService:
             state="active",
             data={
                 "version": 1, "status": "active",
+                "context": ([tenant_scope.tenant_id, tenant_scope.storefront_id,
+                             session.info["bot_selection"].context_version] if session.info.get("bot_selection") else None),
                 "draft": draft.model_dump(mode="json"),
                 "expires_at": expires_at.isoformat(),
             },
@@ -140,7 +150,7 @@ class BotQuickOrderDraftService:
     @classmethod
     async def search_customers(cls, session: AsyncSession, *, telegram_id: int, query: str) -> dict:
         await BotQuickOrderApiService._require_manager(session, telegram_id)
-        scope = await SystemTenantScopeResolver.resolve(session)
+        scope = await resolve_bot_scope(session, telegram_id)
         value = query.strip()
         if len(value) < 3:
             raise ValueError("Введите не менее трёх символов")
@@ -202,7 +212,7 @@ class BotQuickOrderDraftService:
         if "customer_id" in parsed_changes and parsed_changes["customer_id"] is None:
             raise ValueError("Для нового клиента начните новый черновик")
         if "customer_id" in parsed_changes and parsed_changes["customer_id"] is not None:
-            scope = await SystemTenantScopeResolver.resolve(session)
+            scope = await resolve_bot_scope(session, telegram_id)
             customer = (
                 await session.execute(select(Customer).where(
                     Customer.id == int(parsed_changes["customer_id"]),

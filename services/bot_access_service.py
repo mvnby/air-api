@@ -4,10 +4,8 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from core.config import settings
-from models import StaffUser, TenantMembership
+from models import StaffUser
 from services.staff_user_service import StaffUserService
-from services.staff_telegram_notifications import legacy_telegram_allowed
 from services.legacy_owner_auth_guard import LegacyOwnerAuthGuard
 from services.legacy_owner_auth_state_service import (
     LegacyOwnerAuthStateUnavailableError,
@@ -15,10 +13,7 @@ from services.legacy_owner_auth_state_service import (
 from services.legacy_owner_managed_identity_service import (
     LegacyOwnerManagedIdentityService,
 )
-from services.tenant_scope_service import (
-    SystemTenantScopeResolver,
-    TenantScopeResolutionError,
-)
+
 
 
 @dataclass
@@ -31,6 +26,9 @@ class BotAccessContext:
     legacy_installer_id: Optional[int] = None
     is_platform_owner: bool = False
     permissions: tuple[str, ...] = ()
+    selection: object | None = None
+    staff_user_id: int | None = None
+    selection_unavailable: bool = False
 
     @property
     def is_manager(self) -> bool:
@@ -52,6 +50,7 @@ class BotAccessService:
     async def get_context(
         session: AsyncSession,
         telegram_id: int | str | None,
+        *, ignore_selection: bool = False,
     ) -> BotAccessContext:
         try:
             normalized_telegram_id = int(telegram_id) if telegram_id is not None else 0
@@ -66,7 +65,7 @@ class BotAccessService:
             await session.execute(
                 select(StaffUser)
                 .where(StaffUser.telegram_id == normalized_telegram_id)
-                .order_by(StaffUser.id.asc())
+                .order_by(StaffUser.id.asc()).execution_options(populate_existing=True)
             )
         ).scalars().first()
         if user is not None:
@@ -99,28 +98,23 @@ class BotAccessService:
                 username=str(user.username or ""),
             ):
                 return context
-            try:
-                tenant_scope = await SystemTenantScopeResolver.resolve(session)
-            except TenantScopeResolutionError:
+            from services.bot_staff_selection_service import BotStaffSelectionService
+            selection = await BotStaffSelectionService.resolve(session, int(user.id), ignore_selection=ignore_selection)
+            if selection is None:
+                # Keep company selection recoverable without granting any CRM role.
+                available = await BotStaffSelectionService.resolve(session, int(user.id), ignore_selection=True)
+                return BotAccessContext(telegram_id=normalized_telegram_id, staff_user_id=int(user.id),
+                                        display_name=user.display_name, selection=available,
+                                        selection_unavailable=True)
+            if not StaffUserService.is_active(user):
                 return context
-            memberships = list((
-                await session.execute(
-                    select(TenantMembership).where(
-                        TenantMembership.staff_user_id == int(user.id or 0),
-                    )
-                )
-            ).scalars().all())
-            membership = next(
-                (
-                    item
-                    for item in memberships
-                    if item.tenant_id == tenant_scope.tenant_id
-                    and item.status == "active"
-                ),
-                None,
-            )
-            if membership is None:
-                return context
+            issued = session.info.get("bot_selection")
+            if issued is not None:
+                if issued.staff_user_id != int(user.id) or (issued.tenant_id, issued.storefront_id, issued.context_version) != (selection.tenant_id, selection.storefront_id, selection.context_version):
+                    from services.bot_staff_selection_service import context_changed
+                    raise context_changed()
+                if issued.role != selection.role or issued.permissions != selection.permissions:
+                    return context
             is_bound_owner = (
                 legacy_owner_state.owner_staff_user_id is not None
                 and int(legacy_owner_state.owner_staff_user_id) == int(user.id or 0)
@@ -131,33 +125,23 @@ class BotAccessService:
                 user=user,
             ):
                 return context
-            roles = StaffUserService.normalize_roles(user.roles)
-            primary_role = StaffUserService.normalize_primary_role(
-                membership.role
-            )
-            if primary_role not in roles:
-                roles.append(primary_role)
+            primary_role = StaffUserService.normalize_primary_role(selection.role)
+            roles = [primary_role]
+            # The old global executor assignment belongs exclusively to mvn/main.
+            legacy_installer_id = user.legacy_installer_id if selection.canonical and primary_role in {"owner", "admin", "manager", "installer"} else None
             return BotAccessContext(
                 telegram_id=normalized_telegram_id,
                 is_staff=True,
                 display_name=user.display_name,
                 primary_role=primary_role,
                 roles=roles,
-                legacy_installer_id=user.legacy_installer_id,
+                legacy_installer_id=legacy_installer_id,
+                selection=selection,
+                staff_user_id=int(user.id),
                 is_platform_owner=LegacyOwnerAuthGuard.allows_bound_staff(
                     legacy_owner_state, staff_user_id=int(user.id or 0),
                 ),
-                permissions=tuple(membership.permissions or ()),
-            )
-
-        if (settings.is_admin_user(normalized_telegram_id)
-                and await legacy_telegram_allowed(session, normalized_telegram_id)):
-            return BotAccessContext(
-                telegram_id=normalized_telegram_id,
-                is_staff=True,
-                display_name="Администратор",
-                primary_role=StaffUserService.ROLE_OWNER,
-                roles=[StaffUserService.ROLE_OWNER],
+                permissions=selection.permissions,
             )
 
         return context

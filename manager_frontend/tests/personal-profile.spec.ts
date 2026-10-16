@@ -6,7 +6,7 @@ vi.mock('../src/components/profile/AvatarCropDialog.vue', () => ({ default: { na
 vi.mock('../src/components/profile/TelegramAccountPanel.vue', () => ({ default: { template: '<div />' } }));
 import PersonalProfilePanel from '../src/components/profile/PersonalProfilePanel.vue';
 import { managerSession } from '../src/services/manager-session';
-const profile = { staff_user_id: 7, display_name: 'Мария Иванова', username: 'maria', phone: '+375291234567', email: null, avatar_url: '/api/manager/staff/7/avatar?v=first', updated_at: '2026-10-16T12:00:00Z', telegram_linked: false, telegram_username: null, telegram_notifications_enabled: false };
+const profile = { can_change_password: true, must_change_password: false, personal_read_only: false, staff_user_id: 7, display_name: 'Мария Иванова', username: 'maria', phone: '+375291234567', email: null, avatar_url: '/api/manager/staff/7/avatar?tenant_id=2&v=first', updated_at: '2026-10-16T12:00:00Z', telegram_linked: false, telegram_username: null, telegram_notifications_enabled: false };
 const start = async () => { const wrapper = mount(PersonalProfilePanel); await flushPromises(); return wrapper; };
 describe('self profile', () => {
   beforeEach(() => {
@@ -36,7 +36,7 @@ describe('self profile', () => {
   });
   it('uploads the prepared crop with optimistic version and updates avatar in session', async () => {
     const wrapper = await start(); const file = new File(['prepared'], 'avatar.webp', { type: 'image/webp' });
-    mocks.uploadAvatar.mockResolvedValue({ ...profile, avatar_url: '/api/manager/staff/7/avatar?v=second' });
+    mocks.uploadAvatar.mockResolvedValue({ ...profile, avatar_url: '/api/manager/staff/7/avatar?tenant_id=2&v=second' });
     wrapper.getComponent({ name: 'AvatarCropDialog' }).vm.$emit('save', file); await flushPromises();
     expect(mocks.uploadAvatar).toHaveBeenCalledWith(file, profile.updated_at);
     expect((managerSession.auth.value as any).avatar_url).toContain('v=second'); wrapper.unmount();
@@ -58,6 +58,13 @@ describe('self profile', () => {
       expect(wrapper.getComponent({ name: 'AvatarCropDialog' }).props('file')).toBeNull();
     }
     expect(mocks.uploadAvatar).not.toHaveBeenCalled(); wrapper.unmount();
+  });
+
+  it('honors personal read-only flags and allows personal writes from an unrelated demo company', async () => {
+    managerSession.auth.value = { ...managerSession.auth.value!, demo_read_only: true };
+    const editable = await start(); expect(editable.get('input[type="tel"]').attributes('disabled')).toBeUndefined(); editable.unmount();
+    mocks.get.mockResolvedValue({ ...profile, personal_read_only: true });
+    const wrapper = await start(); expect(wrapper.get('input[type="tel"]').attributes('disabled')).toBeDefined(); await wrapper.get('form').trigger('submit'); expect(mocks.update).not.toHaveBeenCalled(); wrapper.unmount();
   });
 
   it('does not fetch or edit a legacy shared account', async () => {

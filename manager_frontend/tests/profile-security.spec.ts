@@ -13,6 +13,7 @@ vi.mock('../src/client', () => ({
   },
 }));
 
+import { ownProfileState } from '../src/services/manager-profile';
 import ProfileSecurityView from '../src/views/ProfileSecurityView.vue';
 import { isManagerPathAllowed } from '../src/manager-capabilities';
 import { passwordPolicyMessage } from '../src/services/manager-account-security';
@@ -33,6 +34,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   managerSession.isAuthenticated.value = true;
   managerSession.auth.value = { ...staffAuth };
+  ownProfileState.value = { staff_user_id: 7, can_change_password: true, must_change_password: false, personal_read_only: false } as any;
 });
 
 afterEach(() => clearManagerSession());
@@ -42,6 +44,15 @@ describe('ProfileSecurityView', () => {
     expect(isManagerPathAllowed(staffAuth, '/manager/profile')).toBe(true);
     const wrapper = mount(ProfileSecurityView);
     expect(wrapper.get('h1').text()).toBe('Профиль / Безопасность');
+  });
+
+  it('uses personal password eligibility even while a selected demo company makes business auth read-only', () => {
+    managerSession.auth.value = { ...staffAuth, demo_read_only: true, can_change_password: false };
+    const wrapper = mount(ProfileSecurityView); expect(wrapper.find('#current-password').exists()).toBe(true); wrapper.unmount();
+  });
+  it('disables password changes for a personally read-only account despite company eligibility', () => {
+    ownProfileState.value = { ...ownProfileState.value!, personal_read_only: true };
+    const wrapper = mount(ProfileSecurityView); expect(wrapper.find('form').exists()).toBe(false); wrapper.unmount();
   });
 
   it('generates a policy-compliant password with browser crypto', async () => {
@@ -208,6 +219,7 @@ describe('ProfileSecurityView', () => {
       auth_source: 'legacy',
       can_change_password: false,
     };
+    ownProfileState.value = null;
     const wrapper = mount(ProfileSecurityView);
 
     expect(wrapper.get('[data-testid="password-change-unavailable"]').text()).toContain('недоступна');

@@ -648,7 +648,13 @@ class BotProductSelectionService:
         query: str,
         *,
         limit_per_tier: int = 1,
+        tenant_scope=None,
     ) -> dict[str, Any]:
+        curated = ProductService.get_curated
+        if tenant_scope is not None and not tenant_scope.is_system:
+            from services.bot_tenant_catalog_service import BotTenantCatalogService
+            async def curated(session, **kwargs):
+                return await BotTenantCatalogService.products(session, tenant_scope, **kwargs)
         rules = await cls.get_selection_rules(session)
         parsed = cls.parse_selection_request(query, rules)
         targets = cls._group_targets(parsed["targets"])
@@ -673,7 +679,7 @@ class BotProductSelectionService:
             }
             seen_ids: set[int] = set()
             for tier_key, label, options in tiers:
-                products = await ProductService.get_curated(
+                products = await curated(
                     session,
                     area=target["area"],
                     area_min=target["area_min"],

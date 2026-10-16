@@ -13,6 +13,9 @@ class ManagerOwnProfileResponse(BaseModel):
     email: str | None = None
     avatar_url: str | None = None
     updated_at: datetime
+    can_change_password: bool = False
+    must_change_password: bool = False
+    personal_read_only: bool = False
     telegram_linked: bool
     telegram_username: str | None = None
     telegram_notifications_enabled: bool

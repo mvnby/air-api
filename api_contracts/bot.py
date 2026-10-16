@@ -46,6 +46,10 @@ class BotTelegramLoginDecisionResponse(BaseModel):
     status: Literal["approved", "denied"]
 
 
+class BotBusinessRequest(BaseModel):
+    expected_context_version: int | None = Field(default=None, ge=0)
+
+
 class BotStaffContextResponse(BaseModel):
     telegram_id: int = Field(ge=1)
     is_staff: bool = False
@@ -55,6 +59,46 @@ class BotStaffContextResponse(BaseModel):
     legacy_installer_id: int | None = None
     is_manager: bool = False
     is_executor: bool = False
+    staff_user_id: int | None = None
+    tenant_id: int | None = None
+    tenant_slug: str | None = None
+    tenant_name: str | None = None
+    storefront_id: int | None = None
+    storefront_slug: str | None = None
+    storefront_name: str | None = None
+    context_version: int | None = None
+    can_switch_context: bool = False
+
+
+class BotStaffSiteChoice(BaseModel):
+    storefront_id: int
+    storefront_slug: str
+    storefront_name: str
+    is_default: bool
+
+
+class BotStaffCompanyChoice(BaseModel):
+    tenant_id: int
+    tenant_slug: str
+    tenant_name: str
+    primary_role: str
+    permissions: list[str]
+    storefronts: list[BotStaffSiteChoice]
+
+
+class BotStaffContextChoicesResponse(BaseModel):
+    context_version: int
+    choices: list[BotStaffCompanyChoice]
+    offset: int
+    limit: int
+    total: int
+
+
+class BotStaffContextSelectRequest(BaseModel):
+    telegram_id: int = Field(gt=0)
+    tenant_id: int = Field(gt=0)
+    storefront_slug: str = Field(min_length=1, max_length=64)
+    expected_context_version: int = Field(ge=0)
 
 
 class BotCatalogSpecsResponse(BaseModel):
@@ -77,7 +121,7 @@ class BotCatalogProductResponse(BaseModel):
     availability_status: str = "out_of_stock"
 
 
-class BotCatalogSearchRequest(BaseModel):
+class BotCatalogSearchRequest(BotBusinessRequest):
     telegram_id: int = Field(ge=1)
     query: str = Field(min_length=1, max_length=100)
     limit: int = Field(default=5, ge=1, le=10)
@@ -91,7 +135,7 @@ class BotCatalogProductLookupResponse(BaseModel):
     product: BotCatalogProductResponse | None = None
 
 
-class BotTaskListRequest(BaseModel):
+class BotTaskListRequest(BotBusinessRequest):
     telegram_id: int = Field(ge=1)
     limit: int = Field(default=10, ge=1, le=20)
     date_from: datetime | None = None
@@ -142,7 +186,7 @@ class BotTaskListResponse(BaseModel):
     items: list[BotTaskResponse] = Field(default_factory=list)
 
 
-class BotTaskStatusUpdateRequest(BaseModel):
+class BotTaskStatusUpdateRequest(BotBusinessRequest):
     telegram_id: int = Field(ge=1)
     status: Literal["in_progress", "completed"]
 
@@ -153,7 +197,7 @@ class BotTaskStatusUpdateResponse(BaseModel):
     changed: bool
 
 
-class BotTaskReportSaveRequest(BaseModel):
+class BotTaskReportSaveRequest(BotBusinessRequest):
     telegram_id: int = Field(ge=1)
     report: str = Field(min_length=1, max_length=12_000)
 
@@ -220,7 +264,7 @@ class BotQuickOrderDraft(BaseModel):
     address_check: BotQuickOrderAddressCheck | None = None
 
 
-class BotQuickOrderParseRequest(BaseModel):
+class BotQuickOrderParseRequest(BotBusinessRequest):
     telegram_id: int = Field(ge=1)
     text: str = Field(min_length=1, max_length=12_000)
 
@@ -242,7 +286,7 @@ class BotVoiceQuickOrderParseResponse(BaseModel):
     draft: BotQuickOrderDraft
 
 
-class BotQuickOrderCreateRequest(BaseModel):
+class BotQuickOrderCreateRequest(BotBusinessRequest):
     telegram_id: int = Field(ge=1)
     idempotency_key: str = Field(
         min_length=1,
@@ -258,20 +302,20 @@ class BotQuickOrderCreateResponse(BaseModel):
     created: bool
 
 
-class BotQuickOrderDraftStartRequest(BaseModel):
+class BotQuickOrderDraftStartRequest(BotBusinessRequest):
     telegram_id: int = Field(ge=1)
     text: str = Field(default="", max_length=12_000)
     customer_id: int | None = Field(default=None, ge=1)
 
 
-class BotQuickOrderDraftPatchRequest(BaseModel):
+class BotQuickOrderDraftPatchRequest(BotBusinessRequest):
     telegram_id: int = Field(ge=1)
     expected_version: int = Field(ge=1)
     text: str | None = Field(default=None, max_length=12_000)
     changes: dict[str, Any] = Field(default_factory=dict)
 
 
-class BotQuickOrderDraftActionRequest(BaseModel):
+class BotQuickOrderDraftActionRequest(BotBusinessRequest):
     telegram_id: int = Field(ge=1)
     expected_version: int = Field(ge=1)
 
@@ -292,7 +336,7 @@ class BotQuickOrderScenarioOption(BaseModel):
     service_type: BotQuickOrderServiceType | None = None
 
 
-class BotQuickOrderCustomerSearchRequest(BaseModel):
+class BotQuickOrderCustomerSearchRequest(BotBusinessRequest):
     telegram_id: int = Field(ge=1)
     query: str = Field(min_length=3, max_length=100)
 
@@ -329,7 +373,7 @@ class BotCustomerRequisitesRecognitionResponse(BaseModel):
     created_at: datetime
 
 
-class BotCustomerRequisitesTextRequest(BaseModel):
+class BotCustomerRequisitesTextRequest(BotBusinessRequest):
     telegram_id: int = Field(ge=1)
     text: str = Field(min_length=20, max_length=12_000)
     telegram_chat_id: int | None = None
@@ -344,7 +388,7 @@ class BotCustomerRequisitesTextRequest(BaseModel):
         return normalized
 
 
-class BotCustomerRequisitesActionRequest(BaseModel):
+class BotCustomerRequisitesActionRequest(BotBusinessRequest):
     telegram_id: int = Field(ge=1)
     action: Literal["create", "update", "use", "cancel"]
 
@@ -368,7 +412,7 @@ class BotOrderBriefResponse(BaseModel):
     created_at: datetime | None = None
 
 
-class BotOrderListRequest(BaseModel):
+class BotOrderListRequest(BotBusinessRequest):
     telegram_id: int = Field(ge=1)
     limit: int = Field(default=5, ge=1, le=10)
 
@@ -396,7 +440,7 @@ class BotNameplateApplyResponse(BaseModel):
     result: dict[str, Any]
 
 
-class BotProductSelectionRequest(BaseModel):
+class BotProductSelectionRequest(BotBusinessRequest):
     telegram_id: int = Field(ge=1)
     query: str = Field(min_length=1, max_length=1000)
 
@@ -413,7 +457,7 @@ class BotProductSelectionResponse(BaseModel):
     selection: dict[str, Any]
 
 
-class BotCuratedProductsRequest(BaseModel):
+class BotCuratedProductsRequest(BotBusinessRequest):
     telegram_id: int = Field(ge=1)
     area: int = Field(ge=8, le=200)
     is_inverter: bool
@@ -425,12 +469,12 @@ class BotCuratedProductsResponse(BaseModel):
     items: list[BotCatalogProductResponse] = Field(default_factory=list)
 
 
-class BotProductPriceUpdateRequest(BaseModel):
+class BotProductPriceUpdateRequest(BotBusinessRequest):
     telegram_id: int = Field(ge=1)
     price: int = Field(ge=0, le=10_000_000)
 
 
-class BotProductMutationRequest(BaseModel):
+class BotProductMutationRequest(BotBusinessRequest):
     telegram_id: int = Field(ge=1)
 
 
@@ -439,7 +483,7 @@ class BotProductMutationResponse(BaseModel):
     changed: bool
 
 
-class BotRepairDraftRequest(BaseModel):
+class BotRepairDraftRequest(BotBusinessRequest):
     telegram_id: int = Field(ge=1)
     order_id: int = Field(ge=1)
     comment: str | None = Field(default=None, max_length=4000)
@@ -450,7 +494,7 @@ class BotRepairDraftResponse(BaseModel):
     draft: dict[str, Any]
 
 
-class BotRepairApplyRequest(BaseModel):
+class BotRepairApplyRequest(BotBusinessRequest):
     telegram_id: int = Field(ge=1)
     order_id: int = Field(ge=1)
     repair_meta_draft: dict[str, Any]
@@ -464,6 +508,8 @@ class BotRepairApplyResponse(BaseModel):
 
 
 class BotFsmStateGetRequest(BaseModel):
+    telegram_id: int | None = Field(default=None, gt=0)
+    expected_context_version: int | None = Field(default=None, ge=0)
     storage_key: str = Field(min_length=1, max_length=1000)
 
 
@@ -473,6 +519,8 @@ class BotFsmStateResponse(BaseModel):
 
 
 class BotFsmStateUpdateRequest(BaseModel):
+    telegram_id: int | None = Field(default=None, gt=0)
+    expected_context_version: int | None = Field(default=None, ge=0)
     storage_key: str = Field(min_length=1, max_length=1000)
     bot_id: int
     chat_id: int
@@ -504,6 +552,8 @@ class BotStaffNotificationPayload(BaseModel):
         "assigned", "rescheduled", "canceled", "departure_reminder"
     ]
     staff_user_id: int = Field(ge=1)
+    tenant_id: int | None = Field(default=None, gt=0)
+    storefront_id: int | None = Field(default=None, gt=0)
     stage_id: int = Field(ge=1)
     order_id: int = Field(ge=1)
     stage_name: str

@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type BotCustomerRequisitesTextRequest = {
+    expected_context_version?: (number | null);
     telegram_id: number;
     text: string;
     telegram_chat_id?: (number | null);

@@ -6,6 +6,7 @@ from httpx import ASGITransport, AsyncClient
 
 from core.config import settings
 from core.database import get_session
+from services.bot_business_context import bind_bot_business_context, get_bot_request_scope
 from core.tenant_scope import get_system_tenant_scope
 from main import app
 from services.bot_access_service import BotAccessContext, BotAccessService
@@ -42,11 +43,17 @@ TEST_TENANT_SCOPE = TenantScope(
 
 @pytest.fixture(autouse=True)
 def _system_tenant_scope_override():
+    # These router units isolate service forwarding; real context authorization
+    # is exercised through HTTP in test_bot_staff_selection.py.
+    app.dependency_overrides[bind_bot_business_context] = lambda: None
+    app.dependency_overrides[get_bot_request_scope] = lambda: TEST_TENANT_SCOPE
     app.dependency_overrides[get_system_tenant_scope] = lambda: TEST_TENANT_SCOPE
     try:
         yield
     finally:
         app.dependency_overrides.pop(get_system_tenant_scope, None)
+        app.dependency_overrides.pop(bind_bot_business_context, None)
+        app.dependency_overrides.pop(get_bot_request_scope, None)
 
 
 async def _request(
@@ -264,6 +271,8 @@ async def test_internal_bot_staff_context_maps_backend_permissions(monkeypatch):
         "legacy_installer_id": 42,
         "is_manager": False,
         "is_executor": True,
+        **dict.fromkeys(('staff_user_id','tenant_id','tenant_slug','tenant_name','storefront_id','storefront_slug','storefront_name','context_version')),
+        "can_switch_context": False,
     }
 
 

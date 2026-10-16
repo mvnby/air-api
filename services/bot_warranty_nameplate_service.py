@@ -29,7 +29,7 @@ from services.private_attachment_storage_service import sha256_bytes
 from services.service_attachment_service import ServiceAttachmentService
 from services.staff_user_service import StaffUserService
 from services.tenant_entity_access_service import TenantEntityAccessService
-from services.tenant_scope_service import tenant_scope_clause
+from services.tenant_scope_service import storefront_scope_clause
 
 
 class BotWarrantyNameplateService:
@@ -91,6 +91,8 @@ class BotWarrantyNameplateService:
         *,
         tenant_scope: TenantScope,
     ) -> Optional[int]:
+        if not tenant_scope.is_system or tenant_scope.is_canonical_storefront is False:
+            return None
         try:
             normalized_telegram_id = int(telegram_user_id) if telegram_user_id is not None else 0
         except (TypeError, ValueError):
@@ -109,6 +111,7 @@ class BotWarrantyNameplateService:
             .where(
                 TenantMembership.tenant_id == tenant_scope.tenant_id,
                 TenantMembership.status == "active",
+                TenantMembership.role.in_(["owner", "admin", "manager", "installer"]),
             )
             .order_by(StaffUser.id.asc())
             .limit(1)
@@ -147,7 +150,7 @@ class BotWarrantyNameplateService:
         base_filters = [
             Order.status == OrderStatus.EXECUTION,
             Order.workflow_type.in_(sorted(cls.ORDER_WORKFLOWS)),
-            tenant_scope_clause(Order, tenant_scope),
+            storefront_scope_clause(Order, tenant_scope),
             TenantEntityAccessService.order_customer_clause(tenant_scope),
         ]
         if not can_attach_any:

@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type BotQuickOrderDraftStartRequest = {
+    expected_context_version?: (number | null);
     telegram_id: number;
     text?: string;
     customer_id?: (number | null);

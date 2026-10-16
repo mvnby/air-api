@@ -64,7 +64,7 @@ async def test_profile_pg_timestamp_photo_and_cross_company_access(async_client,
     await db.commit()
     other = await staff_token(async_client, db, username="profile-other", scope=TenantScope(tenant_id=partner.id, storefront_id=site.id))
     denied = await async_client.get(url, headers={**other, "If-None-Match": etag})
-    assert denied.status_code == 404
+    assert denied.status_code == 403
     assert (await async_client.get("/api/manager/account/profile", headers=other)).json()["staff_user_id"] != own_id
     removed = await async_client.request("DELETE", "/api/manager/account/profile/avatar", headers=headers,
                                         json={"expected_updated_at": uploaded.json()["updated_at"]})

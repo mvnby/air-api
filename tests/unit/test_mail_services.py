@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel, select
 
 from core.config import settings
-from models import BankReceipt, Customer, LeadSource, Order, OrderAttachmentLink, OrderDocument, OrderProposal, OrderServiceLink, OrderStatus, OutgoingEmail, Payment, PaymentCurrency, PaymentType, ServiceAttachment
+from models import StaffUser, TenantMembership, Tenant, Storefront, BankReceipt, Customer, LeadSource, Order, OrderAttachmentLink, OrderDocument, OrderProposal, OrderServiceLink, OrderStatus, OutgoingEmail, Payment, PaymentCurrency, PaymentType, ServiceAttachment
 from services.bank_email_parser_service import BankEmailParserService
 from services.bank_receipt_allocation_service import BankReceiptAllocationService
 from services.bank_receipt_service import BankReceiptService
@@ -1401,8 +1401,26 @@ async def test_bank_statement_import_creates_missing_and_flags_duplicate_receipt
     assert megahand.match_meta["source"] == "bank_statement_csv"
 
 
+async def _seed_notification_audience(session):
+    session.add_all([Tenant(id=1, slug='mvn', display_name='MVN', is_system=True),
+                     Tenant(id=2, slug='partner', display_name='Partner'),
+                     Storefront(id=1, tenant_id=1, slug='main', display_name='Main', status='active', is_default=True),
+                     Storefront(id=2, tenant_id=2, slug='main', display_name='Partner', status='active', is_default=True)])
+    entries = [(101, 1, 'owner', True), (202, 1, 'manager', True),
+               (303, 1, 'owner', False), (404, 2, 'owner', True),
+               (505, 1, 'catalog_editor', True)]
+    for telegram_id, tenant_id, role, consent in entries:
+        user = StaffUser(display_name=f'Staff {telegram_id}', telegram_id=telegram_id,
+                         primary_role='owner', roles=['owner'], telegram_notifications_enabled=consent)
+        session.add(user)
+        await session.flush()
+        session.add(TenantMembership(tenant_id=tenant_id, staff_user_id=user.id, role=role))
+    await session.commit()
+
+
 @pytest.mark.asyncio
 async def test_bank_receipt_import_notification_counts_confirmed_admins(sqlite_session, monkeypatch, caplog):
+    await _seed_notification_audience(sqlite_session)
     receipt = BankReceipt(
         status="requires_review",
         operation_type="incoming_funds",
@@ -1445,7 +1463,7 @@ async def test_bank_receipt_import_notification_counts_confirmed_admins(sqlite_s
         sent.append((user_id, text))
         return user_id == 101
 
-    monkeypatch.setattr(settings, "ADMIN_IDS", "101,202")
+    monkeypatch.setattr(settings, "ADMIN_IDS", "101,202,303,404,505,606")
     monkeypatch.setattr(settings, "ADMIN_ID", 0)
     monkeypatch.setattr(BotService, "send_message", fake_send_message)
 
@@ -1470,6 +1488,7 @@ async def test_bank_receipt_import_notification_counts_confirmed_admins(sqlite_s
 
 @pytest.mark.asyncio
 async def test_email_lead_import_notification_counts_confirmed_admins(sqlite_session, monkeypatch, caplog):
+    await _seed_notification_audience(sqlite_session)
     order = Order(
         tenant_id=1,
         storefront_id=1,
@@ -1492,7 +1511,7 @@ async def test_email_lead_import_notification_counts_confirmed_admins(sqlite_ses
         sent.append((user_id, text))
         return user_id == 101
 
-    monkeypatch.setattr(settings, "ADMIN_IDS", "101,202")
+    monkeypatch.setattr(settings, "ADMIN_IDS", "101,202,303,404,505,606")
     monkeypatch.setattr(settings, "ADMIN_ID", 0)
     monkeypatch.setattr(BotService, "send_message", fake_send_message)
 

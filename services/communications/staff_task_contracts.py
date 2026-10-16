@@ -22,6 +22,8 @@ class StaffTaskNotificationPayloadV1(BaseModel):
 
     event_kind: StaffTaskEventKind
     staff_user_id: int = Field(gt=0)
+    tenant_id: int | None = Field(default=None, gt=0)
+    storefront_id: int | None = Field(default=None, gt=0)
     stage_id: int = Field(gt=0)
     order_id: int = Field(gt=0)
     stage_name: str = Field(min_length=1, max_length=200)

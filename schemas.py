@@ -794,6 +794,7 @@ class DocumentTemplateUpdatePayload(BaseModel):
 # --- MANAGER AUTH ---
 
 class ManagerAuthStatusResponse(BaseModel):
+    access_kind: Literal["membership", "platform_support"] = "membership"
     username: str
     status: str
     staff_user_id: Optional[int] = None

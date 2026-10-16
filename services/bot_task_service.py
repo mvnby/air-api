@@ -21,7 +21,7 @@ from models import (
 from models.tenancy import TenantScope
 from services.staff_user_service import StaffUserService
 from services.tenant_entity_access_service import TenantEntityAccessService
-from services.tenant_scope_service import tenant_scope_clause
+from services.tenant_scope_service import storefront_scope_clause
 
 
 class BotTaskService:
@@ -125,7 +125,7 @@ class BotTaskService:
             OrderWorkStage.start_time.is_not(None),
             OrderWorkStage.start_time >= range_start,
             OrderWorkStage.start_time <= range_end,
-            tenant_scope_clause(Order, tenant_scope),
+            storefront_scope_clause(Order, tenant_scope),
             TenantEntityAccessService.order_customer_clause(tenant_scope),
         ]
         if requested_statuses:
@@ -163,7 +163,7 @@ class BotTaskService:
             .join(OrderInstaller, OrderInstaller.order_id == Order.id)
             .outerjoin(Customer, Customer.id == Order.customer_id)
             .where(OrderInstaller.installer_id == installer_id)
-            .where(tenant_scope_clause(Order, tenant_scope))
+            .where(storefront_scope_clause(Order, tenant_scope))
             .where(TenantEntityAccessService.order_customer_clause(tenant_scope))
             .where(Order.status.in_(list(cls.ACTIVE_ORDER_STATUSES)))
             .where(Order.installation_date.is_not(None))
@@ -200,11 +200,14 @@ class BotTaskService:
         return value.astimezone(local_timezone).replace(tzinfo=None)
 
     @staticmethod
-    def _manager_url(order_id: int) -> str:
+    def _manager_url(order_id: int, *, tenant_scope=None, storefront_slug: str | None = None) -> str:
         base_url = str(
             settings.MANAGER_BASE_URL or "https://api.mvn.by/manager"
         ).rstrip("/")
-        return f"{base_url}/orders/kanban?{urlencode({'orderId': order_id})}"
+        params = {'orderId': order_id}
+        if tenant_scope is not None and storefront_slug:
+            params.update(company=tenant_scope.tenant_id, site=storefront_slug)
+        return f"{base_url}/orders/kanban?{urlencode(params)}"
 
     @staticmethod
     def _customer_phone(order: Order) -> str | None:

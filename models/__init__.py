@@ -36,6 +36,8 @@ from .feature import (
     LegacyProductSeriesFeatureLink,
 )
 from .bot_fsm import BotFsmState, BotRuntimeLease
+from .bot_staff_selection import BotStaffSelection
+from .staff_invitation import StaffInvitation
 from .bot_voice import BotVoiceTranscriptionAudit
 from .storefront_settings import StorefrontSettings
 from .yandex_business import YandexBusinessFeedSettings
@@ -305,6 +307,8 @@ __all__ = [
     "TagGroup",
     "Tenant",
     "TenantAuditEvent",
+    "BotStaffSelection",
+    "StaffInvitation",
     "TenantCatalogGrant",
     "TenantDemoFixtureState",
     "TenantMembership",

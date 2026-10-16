@@ -14,7 +14,9 @@ export class InternalBotV1RuntimeService {
     /**
      * Get Fsm State
      * Read durable bot FSM state by service storage_key; missing state is state=null/data={}.
-     * This service primitive does not authorize a Telegram actor and is not a tenant CRM read.
+     * Optional telegram_id and expected_context_version validate the actor's fresh selected
+     * context. Legacy opaque service keys retain primitive compatibility without CRM grants;
+     * company-picker ctxcb state remains readable for recovery from an unavailable selection.
      *
      * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
      * checks are separate. See [bot
@@ -40,7 +42,9 @@ export class InternalBotV1RuntimeService {
      * Update Fsm State
      * Update the service-owned FSM row under storage_key. write_state and write_data choose
      * which parts to replace; data is replaced, not merged. Empty state/data removes the row.
-     * No Telegram actor check or caller-supplied version precondition is provided.
+     * Optional telegram_id and expected_context_version fence writes to a fresh selected
+     * context. Legacy keys cannot write after the actor switches context. Recovery ctxcb
+     * records permit only company-picker callbacks and never grant access to CRM data.
      *
      * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
      * checks are separate. See [bot

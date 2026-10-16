@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type Body_recognize_internal_bot_customer_requisites_file_v1 = {
+    expected_context_version?: (number | null);
     telegram_id: number;
     telegram_chat_id?: (number | null);
     telegram_message_id?: (number | null);

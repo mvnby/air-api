@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type BotCatalogSearchRequest = {
+    expected_context_version?: (number | null);
     telegram_id: number;
     query: string;
     limit?: number;

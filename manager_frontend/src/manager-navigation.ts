@@ -92,6 +92,7 @@ export const navSections: NavSection[] = [
     id: 'team',
     label: 'Команда',
     items: [
+      { path: '/manager/company/sites', label: 'Сайты компании', icon: Building2, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.staffManage },
       { path: '/manager/staff', label: 'Сотрудники', icon: Users, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.staffManage },
     ],
   },
@@ -115,6 +116,7 @@ export const navSections: NavSection[] = [
     items: [
       { path: '/manager/settings', label: 'Настройки', icon: Settings, match: 'exact', requiredCapability: MANAGER_CAPABILITY.settingsManage },
       { path: '/manager/settings/documents', label: 'Документы CRM', icon: ReceiptText, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.documentsManage },
+      { path: '/manager/platform/companies', label: 'Компании платформы', icon: Building2, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.platformCompaniesManage },
       { path: '/manager/platform/access', label: 'Доступ к каталогу', icon: ShieldCheck, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.infrastructureManage },
       { path: '/manager/settings/platform', label: 'Платформа', icon: Settings, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.infrastructureManage },
       { path: '/manager/settings/backup', label: 'DR / Бэкапы', icon: Database, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.infrastructureManage },

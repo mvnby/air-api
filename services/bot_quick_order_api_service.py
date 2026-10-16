@@ -12,7 +12,7 @@ from models import Order
 from services.bot_access_service import BotAccessService
 from services.bot_quick_order_service import BotQuickOrderService
 from services.order_scenarios import WORKFLOW_LABELS
-from services.tenant_scope_service import SystemTenantScopeResolver
+from services.bot_business_context import resolve_bot_scope
 
 
 class BotQuickOrderAccessDeniedError(PermissionError):
@@ -36,7 +36,7 @@ class BotQuickOrderApiService:
         draft: BotQuickOrderDraft,
     ) -> BotQuickOrderCreateResult:
         await BotQuickOrderApiService._require_manager(session, telegram_id)
-        tenant_scope = await SystemTenantScopeResolver.resolve(session)
+        tenant_scope = await resolve_bot_scope(session, telegram_id)
         order_data = await BotQuickOrderService.create_order_from_draft(
             session,
             draft.model_dump(mode="json", exclude={"service_label"}),
@@ -121,7 +121,10 @@ class BotQuickOrderApiService:
         text: str,
     ) -> dict[str, Any]:
         await cls._require_manager(session, telegram_id)
-        return cls._draft_projection(await BotQuickOrderService.parse_text(text))
+        result = cls._draft_projection(await BotQuickOrderService.parse_text(text))
+        from services.bot_staff_selection_service import BotStaffSelectionService
+        await BotStaffSelectionService.revalidate(session)
+        return result
 
     @classmethod
     async def create_for_manager(
@@ -132,6 +135,9 @@ class BotQuickOrderApiService:
         idempotency_key: str,
         draft: BotQuickOrderDraft,
     ) -> BotQuickOrderCreateResult:
+        await cls._require_manager(session, telegram_id)
+        scope = await resolve_bot_scope(session, telegram_id)
+        idempotency_key = f"{scope.tenant_id}:{scope.storefront_id}:{idempotency_key}"
         source_fingerprint = cls._request_fingerprint(
             telegram_id=telegram_id,
             idempotency_key=idempotency_key,
@@ -154,6 +160,10 @@ class BotQuickOrderApiService:
             await connection.commit()
             try:
                 async with AsyncSession(bind=connection, expire_on_commit=False) as locked_session:
+                    from services.bot_staff_selection_service import BotStaffSelectionService
+                    if session.info.get("bot_selection") is not None:
+                        locked_session.info["bot_selection"] = session.info["bot_selection"]
+                        BotStaffSelectionService.install_commit_guard(locked_session)
                     return await cls._create_locked(
                         locked_session,
                         telegram_id=telegram_id,

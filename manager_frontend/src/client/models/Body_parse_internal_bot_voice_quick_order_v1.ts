@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type Body_parse_internal_bot_voice_quick_order_v1 = {
+    expected_context_version?: (number | null);
     telegram_id: number;
     telegram_chat_id: number;
     telegram_message_id: number;

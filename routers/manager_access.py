@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api_contracts.manager_access import ManagerAccessItem, ManagerAccessList, ManagerAccessUpdate
 from core.database import get_session
-from core.security import AuthenticatedUser, require_system_owner_access
+from core.security import AuthenticatedIdentity, get_current_platform_identity
 from routers.manager_operation_ids import LIST_MANAGER_ACCESS, UPDATE_MANAGER_ACCESS
 from services.manager_access_service import ManagerAccessConflict, ManagerAccessService
 
@@ -17,7 +17,7 @@ async def list_manager_access(
     page: int = Query(1, ge=1), limit: int = Query(50, ge=1, le=100),
     search: str | None = Query(None, max_length=200),
     session: AsyncSession = Depends(get_session),
-    auth: AuthenticatedUser = Depends(require_system_owner_access),
+    auth: AuthenticatedIdentity = Depends(get_current_platform_identity),
 ):
     """List company memberships and delegated catalog permissions for the platform owner.
 
@@ -31,7 +31,7 @@ async def list_manager_access(
 async def update_manager_access(
     membership_id: int, payload: ManagerAccessUpdate,
     session: AsyncSession = Depends(get_session),
-    auth: AuthenticatedUser = Depends(require_system_owner_access),
+    auth: AuthenticatedIdentity = Depends(get_current_platform_identity),
 ):
     """Replace explicit catalog edit/delete grants for one company membership.
 

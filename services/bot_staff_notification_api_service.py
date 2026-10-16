@@ -8,7 +8,7 @@ from datetime import datetime
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import OrderStageStatus, OrderWorkStage, StaffUser
+from models import OrderStageStatus, OrderWorkStage
 from services.communications.delivery_service import (
     ClaimedCommunicationDelivery,
     CommunicationDeliveryLeaseLost,
@@ -88,6 +88,9 @@ class BotStaffNotificationApiService:
             or str(int(staff_user.telegram_id)) != claim.destination
             or staff_user.legacy_installer_id is None
         ):
+            return False
+        from services.bot_notification_access import task_notification_allowed
+        if not await task_notification_allowed(session, staff_user, payload):
             return False
         stage = await session.get(OrderWorkStage, payload.stage_id)
         if (

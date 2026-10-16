@@ -13,6 +13,7 @@ from api_contracts.bot import (
 )
 from core.bot_api_security import require_bot_api_token
 from core.database import get_session
+from services.bot_business_context import bind_bot_business_context
 from routers.internal_bot_common import parse_json_object, read_bot_upload
 from services.bot_api_access import BotUseCaseAccessDeniedError
 from services.bot_media_api_service import BotMediaApiService
@@ -21,7 +22,7 @@ from services.bot_media_api_service import BotMediaApiService
 router = APIRouter(
     prefix="/api/internal/bot/v1",
     tags=["internal bot v1 media"],
-    dependencies=[Depends(require_bot_api_token)],
+    dependencies=[Depends(require_bot_api_token), Depends(bind_bot_business_context, scope="function")],
 )
 
 
@@ -69,6 +70,7 @@ async def list_recent_orders(
 )
 async def attach_order_file(
     order_id: int = Path(ge=1),
+    expected_context_version: int | None = Form(default=None, ge=0),
     telegram_id: int = Form(ge=1),
     file_id: str = Form(min_length=1, max_length=500),
     telegram_chat_id: int | None = Form(default=None),
@@ -143,6 +145,7 @@ async def list_repair_nameplate_orders(
     operation_id="recognize_internal_bot_repair_nameplate_v1",
 )
 async def recognize_repair_nameplate(
+    expected_context_version: int | None = Form(default=None, ge=0),
     telegram_id: int = Form(ge=1),
     order_id: int = Form(ge=1),
     file: UploadFile = File(),
@@ -180,6 +183,7 @@ async def recognize_repair_nameplate(
     operation_id="apply_internal_bot_repair_nameplate_v1",
 )
 async def apply_repair_nameplate(
+    expected_context_version: int | None = Form(default=None, ge=0),
     telegram_id: int = Form(ge=1),
     order_id: int = Form(ge=1),
     file_id: str = Form(min_length=1, max_length=500),
@@ -261,6 +265,7 @@ async def list_warranty_nameplate_orders(
     operation_id="recognize_internal_bot_warranty_nameplate_v1",
 )
 async def recognize_warranty_nameplate(
+    expected_context_version: int | None = Form(default=None, ge=0),
     telegram_id: int = Form(ge=1),
     order_id: int = Form(ge=1),
     unit_type: str = Form(pattern=r"^(indoor_unit|outdoor_unit)$"),
@@ -300,6 +305,7 @@ async def recognize_warranty_nameplate(
     operation_id="apply_internal_bot_warranty_nameplate_v1",
 )
 async def apply_warranty_nameplate(
+    expected_context_version: int | None = Form(default=None, ge=0),
     telegram_id: int = Form(ge=1),
     order_id: int = Form(ge=1),
     unit_type: str = Form(pattern=r"^(indoor_unit|outdoor_unit)$"),

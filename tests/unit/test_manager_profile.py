@@ -12,7 +12,7 @@ from sqlmodel import SQLModel, select
 
 from api_contracts.manager_profile import ManagerOwnProfileUpdate
 from core.database import get_session
-from core.security import AuthenticatedUser, require_workspace_access
+from core.security import AuthenticatedUser, require_personal_workspace_access, get_current_identity
 from models import LegacyOwnerAuthState, StaffAvatar, StaffUser, Storefront, Tenant, TenantAuditEvent, TenantMembership
 from routers.manager_profile import router
 from services.staff_avatar_service import StaffAvatarError, sanitize_staff_avatar
@@ -93,7 +93,8 @@ async def profile_context(tmp_path):
         app = FastAPI()
         app.include_router(router)
         app.dependency_overrides[get_session] = lambda: session
-        app.dependency_overrides[require_workspace_access] = lambda: context["auth"]
+        app.dependency_overrides[require_personal_workspace_access] = lambda: context["auth"]
+        app.dependency_overrides[get_current_identity] = lambda: context["auth"]
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             yield context, session, client
     await engine.dispose()
@@ -152,23 +153,26 @@ async def test_private_avatar_acl_precedes_etag_and_historical_member_allowed(pr
     assert result.status_code == 200, result.text
     avatar_profile = result.json()
     url = avatar_profile["avatar_url"]
-    assert url.startswith("/api/manager/staff/10/avatar?v=")
+    assert url.startswith("/api/manager/staff/10/avatar?tenant_id=1&v=")
     photo = await client.get(url)
     assert photo.status_code == 200 and photo.headers["content-type"] == "image/webp"
     assert photo.headers["cache-control"] == "private, no-cache"
     etag = photo.headers["etag"]
     assert (await client.get(url, headers={"If-None-Match": etag})).status_code == 304
     context["auth"] = replace(original_auth, staff_user_id=11, tenant_id=2, storefront_id=2)
-    assert (await client.get(url, headers={"If-None-Match": etag})).status_code == 404
+    assert (await client.get(url, headers={"If-None-Match": etag})).status_code == 403
     context["auth"] = replace(context["auth"], is_platform_owner=True)
     assert (await client.get(url)).status_code == 200
     context["auth"] = original_auth
     member = await session.scalar(select(TenantMembership).where(TenantMembership.staff_user_id == 10))
     member.status = "disabled"
+    session.add(TenantMembership(tenant_id=1, staff_user_id=11, role="manager"))
+    context["auth"] = replace(original_auth, staff_user_id=11)
     session.add(member)
     await session.commit()
     assert (await client.get(url)).status_code == 200  # Historical order photos remain available.
     member.status = "active"
+    context["auth"] = original_auth
     session.add(member)
     await session.commit()
     removed = await client.request("DELETE", "/api/manager/account/profile/avatar",

@@ -2,7 +2,6 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import StaffUser
 from services.communications.contracts import CommunicationRecipientV1
 from services.communications.staff_task_contracts import (
     StaffTaskNotificationPayloadV1,
@@ -25,6 +24,9 @@ class StaffTaskRecipientDirectory:
             or staff_user.telegram_id is None
             or staff_user.legacy_installer_id is None
         ):
+            return []
+        from services.bot_notification_access import task_notification_allowed
+        if not await task_notification_allowed(session, staff_user, payload):
             return []
         telegram_id = int(staff_user.telegram_id)
         if telegram_id == 0:

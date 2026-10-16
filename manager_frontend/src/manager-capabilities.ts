@@ -8,6 +8,7 @@ export const MANAGER_CAPABILITY = {
   storefrontOffersRead: 'storefront.offers.read',
   storefrontCollectionsManage: 'storefront.collections.manage',
   platformManage: 'platform.manage',
+  platformCompaniesManage: 'platform.companies.manage',
   staffManage: 'staff.manage',
   infrastructureManage: 'infrastructure.manage',
   analyticsManage: 'analytics.manage',
@@ -20,9 +21,9 @@ export const MANAGER_CAPABILITY = {
 export type ManagerCapability = typeof MANAGER_CAPABILITY[keyof typeof MANAGER_CAPABILITY];
 
 export const hasManagerCapability = (
-  auth: Pick<ManagerAuthStatusResponse, 'capabilities'> | null | undefined,
+  auth: Pick<ManagerAuthStatusResponse, 'capabilities'> & Partial<Pick<ManagerAuthStatusResponse, 'is_system_tenant'>> | null | undefined,
   capability: ManagerCapability,
-): boolean => Boolean(auth?.capabilities?.includes(capability));
+): boolean => Boolean(auth?.capabilities?.includes(capability) && (![MANAGER_CAPABILITY.platformManage, MANAGER_CAPABILITY.infrastructureManage].some(value => value === capability) || auth.is_system_tenant !== false));
 
 export const requiredCapabilityForManagerPath = (path: string): ManagerCapability | null => {
   if (path === '/manager' || path === '/manager/' || path === '/manager/profile') return null;
@@ -35,6 +36,8 @@ export const requiredCapabilityForManagerPath = (path: string): ManagerCapabilit
   if (path.startsWith('/manager/settings/documents')) {
     return MANAGER_CAPABILITY.documentsManage;
   }
+  if (path.startsWith('/manager/platform/companies')) return MANAGER_CAPABILITY.platformCompaniesManage;
+  if (path.startsWith('/manager/company/sites')) return MANAGER_CAPABILITY.staffManage;
   if (path.startsWith('/manager/platform/access')) return MANAGER_CAPABILITY.infrastructureManage;
   if (path.startsWith('/manager/brands') || path.startsWith('/manager/features') || path.startsWith('/manager/tags')) {
     return MANAGER_CAPABILITY.catalogMasterEdit;

@@ -95,17 +95,22 @@ export class ManagerProfileService {
      * Historical memberships retain photo visibility on old orders. Platform owners
      * can read across companies. Photos are private and revalidated on every request.
      * @param staffUserId
+     * @param tenantId
      * @returns any Successful Response
      * @throws ApiError
      */
     public static managerReadStaffAvatar(
         staffUserId: number,
+        tenantId: number,
     ): CancelablePromise<any> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/manager/staff/{staff_user_id}/avatar',
             path: {
                 'staff_user_id': staffUserId,
+            },
+            query: {
+                'tenant_id': tenantId,
             },
             errors: {
                 304: `Not Modified`,

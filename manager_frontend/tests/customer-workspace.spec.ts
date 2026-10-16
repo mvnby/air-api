@@ -9,6 +9,7 @@ import CustomerDetailsPanel from '../src/components/customers/CustomerDetailsPan
 import CustomerContactsPanel from '../src/components/customers/CustomerContactsPanel.vue';
 import CustomerIntakeDialog from '../src/components/customers/CustomerIntakeDialog.vue';
 import { clearManagerSession } from '../src/services/manager-session';
+import { managerCompaniesApi } from '../src/services/manager-companies';
 import { storefrontSettingsApi } from '../src/features/settings/storefront-settings-api';
 
 const customer = {
@@ -46,6 +47,8 @@ async function editContact(wrapper: VueWrapper) {
 beforeEach(() => {
   clearManagerSession();
   window.localStorage.clear();
+  window.sessionStorage.clear();
+  vi.spyOn(managerCompaniesApi, 'choices').mockResolvedValue({ staff_user_id: null, username: 'manager', default_tenant_id: 1, is_platform_owner: false, items: [{ tenant_id: 1, slug: 'mvn', display_name: 'MVN', role: 'manager', membership_id: 1, access_kind: 'membership', is_system: false, demo_read_only: false, default_storefront_slug: 'mvn' }], total: 1, page: 1, limit: 100 });
   window.history.pushState({}, '', '/manager/customers');
   vi.spyOn(ManagerService, 'readUserMe').mockResolvedValue({ username: 'manager', role: 'manager', tenant_id: 1, storefront_id: 1, capabilities: ['crm.manage'] } as never);
   vi.spyOn(ManagerService, 'listManagerStorefronts').mockResolvedValue({ items: [{ slug: 'mvn', display_name: 'MVN', is_current: true, is_default: true }] } as never);

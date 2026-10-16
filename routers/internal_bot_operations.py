@@ -19,6 +19,7 @@ from api_contracts.bot import (
 )
 from core.bot_api_security import require_bot_api_token
 from core.database import get_session
+from services.bot_business_context import bind_bot_business_context
 from services.bot_api_access import BotUseCaseAccessDeniedError
 from services.bot_catalog_operations_api_service import BotCatalogOperationsApiService
 from services.bot_repair_context_api_service import BotRepairContextApiService
@@ -27,7 +28,7 @@ from services.bot_repair_context_api_service import BotRepairContextApiService
 router = APIRouter(
     prefix="/api/internal/bot/v1",
     tags=["internal bot v1 operations"],
-    dependencies=[Depends(require_bot_api_token)],
+    dependencies=[Depends(require_bot_api_token), Depends(bind_bot_business_context, scope="function")],
 )
 
 

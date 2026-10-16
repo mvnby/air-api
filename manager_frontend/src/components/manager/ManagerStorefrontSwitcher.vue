@@ -36,15 +36,15 @@ const compactLabel = computed(() => {
 <template>
   <section
     v-if="currentStorefront"
-    aria-label="Текущая витрина"
+    aria-label="Текущий сайт"
     :class="collapsed ? 'md:flex md:justify-center' : ''"
   >
     <div
       v-if="collapsed"
       data-testid="collapsed-storefront-badge"
       class="hidden h-9 min-w-9 items-center justify-center rounded-lg kitlane-storefront-badge border px-1 text-[11px] font-bold md:flex"
-      :title="`Витрина: ${storefrontLabel(currentStorefront)}`"
-      :aria-label="`Текущая витрина: ${storefrontLabel(currentStorefront)}`"
+      :title="`Сайт: ${storefrontLabel(currentStorefront)}`"
+      :aria-label="`Текущий сайт: ${storefrontLabel(currentStorefront)}`"
     >
       {{ compactLabel }}
     </div>
@@ -54,7 +54,7 @@ const compactLabel = computed(() => {
       :class="collapsed ? 'md:hidden' : ''"
     >
       <div class="min-w-0 px-1">
-        <div class="text-[10px] font-bold uppercase tracking-[0.16em] kitlane-storefront-muted">Витрина</div>
+        <div class="text-[10px] font-bold uppercase tracking-[0.16em] kitlane-storefront-muted">Сайт</div>
         <div class="truncate text-xs font-semibold kitlane-storefront-text" :title="currentStorefront.display_name">
           {{ currentStorefront.display_name }}
         </div>
@@ -68,7 +68,7 @@ const compactLabel = computed(() => {
         class="mt-2 grid gap-1 rounded-lg p-1"
         :class="storefronts.length === 2 ? 'grid-cols-2' : 'grid-cols-1'"
         role="group"
-        aria-label="Выбор витрины"
+        aria-label="Выбор сайта"
       >
         <button
           v-for="storefront in storefronts"

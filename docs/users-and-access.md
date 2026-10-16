@@ -107,13 +107,63 @@ the other profile's personal data and retires that identity as historical.
 Authentication never follows historical aliases. See the dedicated
 [consolidation procedure](owner-profile-consolidation.md).
 
-## Subsequent authorized stages
+## Stage 3: companies, sites and invitations
 
-1. **Company and team administration:** invitations, account participation,
-   explicit multi-company request context, partner/storefront overview and
-   tenant-aware bot access. Move company-specific worker settings out of the
-   shared personal identity before enabling shared workers across companies.
-2. **Order responsibility:** a responsible sales manager, avatar/name in lists
+The company/site selectors use the live account bootstrap and explicit scoped
+request headers. A person's roles are evaluated in the selected membership;
+roles from another company are never combined. The platform owner can support
+active partners without accumulating owner memberships. Personal profile,
+Telegram and password settings continue to use the actual personal membership.
+See the [selection contract](manager-storefront-selector-contract.md).
+
+**Companies and sites** gives the platform owner a paginated directory of all
+partners, including disabled/demo companies, their owners, active staff counts,
+sites and domain states. The owner can change a company name and enable/disable
+it with an optimistic timestamp and an atomic audit. The canonical system company
+cannot be disabled. Disabling blocks fresh company requests; it does not delete
+data or remove already cached public pages. Site/domain entries are read-only:
+there is no implicit DNS change, provisioning or catalog grant.
+
+Company owners/admins see their own sites, including draft/disabled sites, and
+manage staff through invitations. An invitation is a single-use link valid for
+seven days, stored only as a token hash. The owner copies and delivers it; creating
+one does not send a message. Previewing it does not join the company. Acceptance
+requires a new person's chosen login/password or an existing person's live
+session/explicit credentials; email matching never attaches an account.
+
+Acceptance rechecks the inviter's current authority and allowed role, company
+status and recipient identity under transaction locks. Revoked, expired, consumed
+or stale-authority invitations cannot grant access. No invitation upgrades an
+existing membership or adds shared-catalog permissions. Blocked and merged
+identities cannot accept. An inactive person with every former membership disabled
+can return only with the correct existing password and a valid invitation; the
+authentication version rotates and former memberships/grants remain disabled.
+
+Shared installer/rate settings are still global legacy fields. A worker with
+those settings cannot join a second company until membership-specific worker
+settings are implemented. The bound platform owner similarly retains one actual
+canonical membership and uses support contexts elsewhere.
+
+The staff bot keeps its own selected company/site and a monotonic context version.
+Only actual active memberships are available in the bot; virtual operator support
+is web-only. Business operations check the issued context version, fresh company,
+membership role and site; switching invalidates old action buttons and drafts.
+Slow OCR/voice work rechecks the captured context before persistence. Notifications
+check access in the event's own company/site independently of the bot selection.
+Personal Telegram linking/login and the single polling lease remain separate.
+
+Migrations `t1164team01` and `t1164bot01` add invitations and bot selection without
+provisioning memberships or changing existing assignments. Release the compatible
+standalone bot first, then the API/Manager release; check the live bot contract
+and polling lease after both releases. Required proof includes company isolation,
+invite consumption/revocation and concurrent acceptance, stale bot actions,
+Manager bootstrap/unsaved navigation, migration/client checks and normal smoke
+checks. Keep additive tables during rollback; do not activate multi-company work
+through an older API with ambiguous membership resolution.
+
+## Subsequent authorized stage
+
+1. **Order responsibility:** a responsible sales manager, avatar/name in lists
    and kanban, personal filtering and audited reassignment; work-stage executors
    remain separate assignments.
 

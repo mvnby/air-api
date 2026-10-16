@@ -20,7 +20,7 @@ from services.private_attachment_storage_service import sha256_bytes
 from services.service_attachment_service import ServiceAttachmentService
 from services.staff_user_service import StaffUserService
 from services.tenant_entity_access_service import TenantEntityAccessService
-from services.tenant_scope_service import tenant_scope_clause
+from services.tenant_scope_service import storefront_scope_clause
 
 
 class BotOrderAttachmentService:
@@ -184,7 +184,7 @@ class BotOrderAttachmentService:
             .outerjoin(Customer, Customer.id == Order.customer_id)
             .where(
                 Order.status.in_(list(cls.ACTIVE_STATUSES)),
-                tenant_scope_clause(Order, tenant_scope),
+                storefront_scope_clause(Order, tenant_scope),
                 TenantEntityAccessService.order_customer_clause(tenant_scope),
             )
             .options(selectinload(Order.customer))
@@ -213,6 +213,8 @@ class BotOrderAttachmentService:
             return False
         if can_attach_any:
             return True
+        if not tenant_scope.is_system or tenant_scope.is_canonical_storefront is False:
+            return False
 
         try:
             normalized_telegram_id = int(telegram_user_id) if telegram_user_id is not None else 0
@@ -232,6 +234,7 @@ class BotOrderAttachmentService:
             .where(
                 TenantMembership.tenant_id == tenant_scope.tenant_id,
                 TenantMembership.status == "active",
+                TenantMembership.role.in_(["owner", "admin", "manager", "installer"]),
             )
             .order_by(StaffUser.id.asc())
         )

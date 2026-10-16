@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type BotRepairDraftRequest = {
+    expected_context_version?: (number | null);
     telegram_id: number;
     order_id: number;
     comment?: (string | null);

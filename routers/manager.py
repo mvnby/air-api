@@ -1,6 +1,9 @@
 from fastapi import APIRouter
 
 from routers import manager_auth
+from routers import manager_account_companies
+from routers import manager_platform_companies
+from routers import manager_staff_invitations
 from routers import manager_access
 from routers import manager_analytics_connections
 from routers import manager_backups
@@ -62,6 +65,10 @@ from modules.documents.api import router as manager_document_system_router
 
 
 router = APIRouter()
+router.include_router(manager_account_companies.router)
+router.include_router(manager_platform_companies.router)
+router.include_router(manager_staff_invitations.router)
+router.include_router(manager_staff_invitations.public_router)
 router.include_router(manager_access.router)
 router.include_router(manager_analytics_connections.router)
 router.include_router(manager_backups.router)

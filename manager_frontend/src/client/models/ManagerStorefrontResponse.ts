@@ -3,6 +3,8 @@
 /* tslint:disable */
 /* eslint-disable */
 export type ManagerStorefrontResponse = {
+    id: number;
+    primary_hostname?: (string | null);
     slug: string;
     display_name: string;
     city?: (string | null);

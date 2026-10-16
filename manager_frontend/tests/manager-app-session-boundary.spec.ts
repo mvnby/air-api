@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   getManagerOrders: vi.fn(),
   getWebRebuildStatus: vi.fn(),
   listStorefronts: vi.fn(),
+  companies: vi.fn(),
+  sites: vi.fn(),
   login: vi.fn(),
   loginTelegram: vi.fn(),
   logout: vi.fn(),
@@ -21,6 +23,8 @@ vi.mock('../src/services/connector-login-continuation', async importOriginal => 
   ...await importOriginal<typeof import('../src/services/connector-login-continuation')>(),
   resumeConnectorLogin: mocks.resumeConnectorLogin,
 }));
+
+vi.mock('../src/services/manager-companies', () => ({ managerCompaniesApi: { choices: mocks.companies, sites: mocks.sites } }));
 
 vi.mock('../src/api', () => ({
   api: {
@@ -110,6 +114,8 @@ vi.mock('../src/views/SupplierFeedsView.vue', () => ({
 }));
 
 import App from '../src/App.vue';
+import { managerProfileApi } from '../src/services/manager-profile';
+import { managerInvitationsApi } from '../src/services/manager-invitations';
 import { useOrderDrawerSaving } from '../src/composables/useOrderDrawerSaving';
 import { clearManagerSession, managerSession, recoverManagerSessionFromUnauthorized } from '../src/services/manager-session';
 import {
@@ -166,6 +172,9 @@ const newStorefronts = {
     is_current: true,
   }],
 };
+
+const companyChoices = (auth: typeof oldAuth, sites: typeof oldStorefronts) => ({ ...auth, default_tenant_id: auth.tenant_id, items: [{ tenant_id: auth.tenant_id, slug: 'company', display_name: 'Компания', role: auth.role, membership_id: 1, access_kind: 'membership', is_system: auth.is_system_tenant, demo_read_only: false, default_storefront_slug: sites.items[0]!.slug }], total: 1, page: 1, limit: 100 });
+const companySites = (sites: typeof oldStorefronts) => ({ items: sites.items.map(site => ({ ...site, id: 1, status: 'active', domains: [] })) });
 
 const oldLead = {
   id: 55,
@@ -257,6 +266,9 @@ beforeEach(() => {
   mocks.resumeConnectorLogin.mockReturnValue(true);
   mocks.loginTelegram.mockResolvedValue({ access_token: 'session', token_type: 'bearer' });
   mocks.logout.mockResolvedValue(undefined);
+  vi.spyOn(managerProfileApi, 'get').mockResolvedValue({ staff_user_id: 10, display_name: 'Old owner', username: 'old-owner', can_change_password: true, must_change_password: false, personal_read_only: false } as never);
+  mocks.companies.mockResolvedValue(companyChoices(oldAuth, oldStorefronts));
+  mocks.sites.mockResolvedValue(companySites(oldStorefronts));
   mocks.readMe.mockResolvedValue(oldAuth);
   mocks.listStorefronts.mockResolvedValue(oldStorefronts);
   mocks.getLeadsCounter.mockResolvedValue({ count: 7 });
@@ -439,6 +451,8 @@ describe('App Manager session boundary', () => {
     networkFetch.mockImplementation(async () => unauthorizedResponse());
     await expireFromLeadInbox();
 
+    mocks.companies.mockResolvedValue(companyChoices(newAuth, newStorefronts));
+    mocks.sites.mockResolvedValue(companySites(newStorefronts));
     mocks.readMe.mockResolvedValue(newAuth);
     mocks.listStorefronts.mockResolvedValue(newStorefronts);
     await wrapper!.get('input[placeholder="Логин"]').setValue('new-manager');
@@ -558,7 +572,7 @@ describe('personal connector login continuation', () => {
 
   it('resumes a restored named session without a manual page refresh', async () => {
     await mountApp(path);
-    expect(mocks.resumeConnectorLogin).toHaveBeenCalledWith(target, oldAuth);
+    expect(mocks.resumeConnectorLogin).toHaveBeenCalledWith(target, expect.objectContaining({ username: oldAuth.username, tenant_id: oldAuth.tenant_id, can_change_password: true, must_change_password: false }));
   });
 
   it('shows the connection purpose and resumes after password login', async () => {
@@ -570,7 +584,7 @@ describe('personal connector login continuation', () => {
     await wrapper!.get('form').trigger('submit');
     await flushPromises();
     expect(mocks.login).toHaveBeenCalledWith({ username: 'old-owner', password: 'local-test-password' });
-    expect(mocks.resumeConnectorLogin).toHaveBeenCalledWith(target, oldAuth);
+    expect(mocks.resumeConnectorLogin).toHaveBeenCalledWith(target, expect.objectContaining({ username: oldAuth.username, tenant_id: oldAuth.tenant_id, can_change_password: true, must_change_password: false }));
   });
 
   it('asks a legacy shared account to use a personal login', async () => {
@@ -581,10 +595,63 @@ describe('personal connector login continuation', () => {
   });
 
   it('opens the profile before connecting an account with a temporary password', async () => {
-    mocks.readMe.mockResolvedValue({ ...oldAuth, must_change_password: true });
+    mocks.readMe.mockResolvedValue({ ...oldAuth, must_change_password: false });
+    vi.mocked(managerProfileApi.get).mockResolvedValue({ staff_user_id: 10, must_change_password: true, can_change_password: true, personal_read_only: false } as never);
     await mountApp(path);
     await flushPromises();
     expect(mocks.resumeConnectorLogin).not.toHaveBeenCalled();
     expect(window.location.pathname).toBe('/manager/profile');
+  });
+});
+
+
+describe('company bootstrap and public invitation boundary', () => {
+  it('does not mount orders or call /me before company discovery finishes', async () => {
+    let resolve: ((value: unknown) => void) | undefined;
+    mocks.companies.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+    await mountApp('/manager/orders?company=1&site=old-city');
+    expect(mocks.readMe).not.toHaveBeenCalled(); expect(mocks.getManagerOrders).not.toHaveBeenCalled(); expect(wrapper!.find('[data-testid="manager-root"]').exists()).toBe(false);
+    resolve!(companyChoices(oldAuth, oldStorefronts)); await flushPromises(); await flushPromises();
+    expect(mocks.readMe).toHaveBeenCalledOnce(); expect(managerSession.isAuthenticated.value).toBe(true);
+  });
+  it('bootstraps an ordinary manager through allowed storefront discovery while restricted company sites deny access', async () => {
+    mocks.companies.mockResolvedValue(companyChoices(newAuth, newStorefronts));
+    mocks.sites.mockRejectedValue({ status: 403 });
+    mocks.listStorefronts.mockResolvedValue(newStorefronts);
+    mocks.readMe.mockImplementation(async () => {
+      expect(mocks.listStorefronts).toHaveBeenCalledOnce();
+      expect(managerStorefrontSelection.selectedTenantId.value).toBe(2);
+      expect(managerStorefrontSelection.selectedSlug.value).toBe('minsk');
+      return newAuth;
+    });
+    await mountApp('/manager/orders?company=2&site=minsk');
+    expect(mocks.sites).not.toHaveBeenCalled(); expect(mocks.getManagerOrders).toHaveBeenCalled(); expect(managerSession.isAuthenticated.value).toBe(true);
+  });
+  it('keeps business screens closed if /me returns a different company than the validated selection', async () => {
+    mocks.readMe.mockResolvedValue(newAuth);
+    await mountApp('/manager/orders?company=1&site=old-city');
+    expect(wrapper!.text()).toContain('Сервер не подтвердил выбранную компанию'); expect(mocks.getManagerOrders).not.toHaveBeenCalled(); expect(managerSession.isAuthenticated.value).toBe(false);
+  });
+  it('denies an explicit unknown company without requesting orders or silently opening the default', async () => {
+    await mountApp('/manager/orders?company=999&site=old-city');
+    expect(wrapper!.text()).toContain('Компания или сайт недоступны'); expect(mocks.readMe).not.toHaveBeenCalled(); expect(mocks.getManagerOrders).not.toHaveBeenCalled(); expect(mocks.sites).not.toHaveBeenCalled();
+  });
+  it('removes the invite token before preview and bypasses normal company bootstrap', async () => {
+    const preview = vi.spyOn(managerInvitationsApi, 'preview').mockImplementation(async token => {
+      expect(token).toBe('private-token-01234567890123456789'); expect(window.location.hash).toBe('');
+      return { company_name: 'Новая компания', role: 'manager', expires_at: '2099-01-01T00:00:00Z' };
+    });
+    const accept = vi.spyOn(managerInvitationsApi, 'accept').mockRejectedValue({ status: 409, body: { detail: 'Ссылка уже использована' } });
+    mocks.companies.mockRejectedValue({ status: 403 });
+    const inviteUrl = '/manager/invite#token=private-token-01234567890123456789';
+    await mountApp(inviteUrl);
+    expect(preview).toHaveBeenCalledOnce(); expect(wrapper!.text()).toContain('Новая компания'); expect(mocks.readMe).not.toHaveBeenCalled(); expect(mocks.getManagerOrders).not.toHaveBeenCalled(); expect(wrapper!.find('[role="dialog"]').exists()).toBe(false);
+    expect(JSON.stringify(window.sessionStorage)).not.toContain('private-token'); expect(JSON.stringify(window.localStorage)).not.toContain('private-token');
+    await wrapper!.get('input[value="existing_credentials"]').setValue(true);
+    await wrapper!.get('input[autocomplete="username"]').setValue('maria');
+    await wrapper!.get('input[type="password"]').setValue('personal-password');
+    await wrapper!.get('form').trigger('submit'); await flushPromises();
+    expect(accept).toHaveBeenCalledWith({ token: 'private-token-01234567890123456789', mode: 'existing_credentials', username: 'maria', password: 'personal-password' });
+    preview.mockRestore(); accept.mockRestore();
   });
 });

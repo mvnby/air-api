@@ -3,13 +3,54 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlmodel import SQLModel
+
+from models import StaffUser, TenantMembership, Tenant, Storefront
 
 from core.config import settings
 from services.notification_service import NotificationService
+from services.tenant_entity_access_service import TenantEntityAccessService
 
 from models.tenancy import TenantScope
 
 TEST_TENANT_SCOPE = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
+
+
+@pytest.fixture
+async def notification_session():
+    engine = create_async_engine('sqlite+aiosqlite://')
+    async with engine.begin() as connection:
+        await connection.run_sync(lambda conn: SQLModel.metadata.create_all(conn, tables=[
+            Tenant.__table__, Storefront.__table__, StaffUser.__table__, TenantMembership.__table__,
+        ]))
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        session.add_all([Tenant(id=1, slug='mvn', display_name='MVN', is_system=True),
+                         Tenant(id=2, slug='partner', display_name='Partner'),
+                         Storefront(id=1, tenant_id=1, slug='main', display_name='Main', status='active', is_default=True),
+                         Storefront(id=2, tenant_id=2, slug='main', display_name='Partner', status='active', is_default=True)])
+        await session.commit()
+        yield session
+    await engine.dispose()
+
+
+async def _seed_notification_audience(session, telegram_ids):
+    entries = [(telegram_id, 1, role, True, 'active') for telegram_id, role in
+               zip(telegram_ids, ('owner', 'admin', 'manager'))]
+    # Global owner roles and ADMIN_IDS must not override company membership,
+    # catalog-only access, notification opt-out or inactive identity status.
+    entries += [(90, 1, 'catalog_editor', True, 'active'),
+                (91, 2, 'owner', True, 'active'),
+                (92, 1, 'owner', False, 'active'),
+                (93, 1, 'owner', True, 'inactive')]
+    for telegram_id, tenant_id, role, consent, status in entries:
+        user = StaffUser(display_name=f'Staff {telegram_id}', telegram_id=telegram_id,
+                         primary_role='owner', roles=['owner'], status=status,
+                         telegram_notifications_enabled=consent)
+        session.add(user)
+        await session.flush()
+        session.add(TenantMembership(tenant_id=tenant_id, staff_user_id=user.id, role=role))
+    await session.commit()
 
 
 class _DummyResult:
@@ -86,8 +127,8 @@ async def test_notify_admins_new_order_warns_for_missing_order(monkeypatch, capl
 
 
 @pytest.mark.asyncio
-async def test_notify_admins_new_order_sends_to_admins(monkeypatch):
-    monkeypatch.setattr(settings, "ADMIN_IDS", "10,11", raising=False)
+async def test_notify_admins_new_order_sends_to_admins(monkeypatch, notification_session):
+    monkeypatch.setattr(settings, "ADMIN_IDS", "10,11,90,91,92,93,999", raising=False)
     monkeypatch.setattr(settings, "ADMIN_ID", 12, raising=False)
 
     order = SimpleNamespace(
@@ -106,7 +147,9 @@ async def test_notify_admins_new_order_sends_to_admins(monkeypatch):
             ),
         ],
     )
-    session = _DummySession(order=order)
+    session = notification_session
+    await _seed_notification_audience(session, [10, 11, 12])
+    monkeypatch.setattr(TenantEntityAccessService, 'get_order', AsyncMock(return_value=order))
     send_mock = AsyncMock(return_value=True)
     monkeypatch.setattr("services.notification_service.BotService.send_message", send_mock)
 
@@ -119,7 +162,7 @@ async def test_notify_admins_new_order_sends_to_admins(monkeypatch):
         tenant_scope=TEST_TENANT_SCOPE,
     )
 
-    assert send_mock.await_count == 3
+    assert [call.args[0] for call in send_mock.await_args_list] == [10, 11, 12]
     sent_text = send_mock.await_args_list[0].args[1]
     assert "НОВЫЙ ЗАКАЗ #77" in sent_text
     assert "Ivan &lt;script&gt;" in sent_text
@@ -130,8 +173,8 @@ async def test_notify_admins_new_order_sends_to_admins(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_notify_admins_staff_order_created_counts_only_confirmed_delivery(monkeypatch, caplog):
-    monkeypatch.setattr(settings, "ADMIN_IDS", "10,11", raising=False)
+async def test_notify_admins_staff_order_created_counts_only_confirmed_delivery(monkeypatch, caplog, notification_session):
+    monkeypatch.setattr(settings, "ADMIN_IDS", "10,11,90,91,92,93,999", raising=False)
     monkeypatch.setattr(settings, "ADMIN_ID", 0, raising=False)
 
     order = SimpleNamespace(
@@ -143,7 +186,9 @@ async def test_notify_admins_staff_order_created_counts_only_confirmed_delivery(
         technical_meta={"service_type": "maintenance"},
         customer=SimpleNamespace(name="Иван", phone="+375 29 123-45-67"),
     )
-    session = _DummySession(order=order)
+    session = notification_session
+    await _seed_notification_audience(session, [10, 11])
+    monkeypatch.setattr(TenantEntityAccessService, 'get_order', AsyncMock(return_value=order))
     send_mock = AsyncMock(side_effect=[True, False])
     monkeypatch.setattr("services.notification_service.BotService.send_rich_message", send_mock)
 
@@ -156,6 +201,7 @@ async def test_notify_admins_staff_order_created_counts_only_confirmed_delivery(
         )
 
     assert sent == 1
+    assert [call.args[0] for call in send_mock.await_args_list] == [10, 11]
     rich_text = send_mock.await_args_list[0].args[1]
     fallback_text = send_mock.await_args_list[0].kwargs["fallback_text"]
     assert "<h3>Новый рабочий заказ #88</h3>" in rich_text
@@ -168,8 +214,8 @@ async def test_notify_admins_staff_order_created_counts_only_confirmed_delivery(
 
 
 @pytest.mark.asyncio
-async def test_notify_admins_work_stage_status_changed_counts_only_confirmed_delivery(monkeypatch, caplog):
-    monkeypatch.setattr(settings, "ADMIN_IDS", "10,11", raising=False)
+async def test_notify_admins_work_stage_status_changed_counts_only_confirmed_delivery(monkeypatch, caplog, notification_session):
+    monkeypatch.setattr(settings, "ADMIN_IDS", "10,11,90,91,92,93,999", raising=False)
     monkeypatch.setattr(settings, "ADMIN_ID", 0, raising=False)
 
     stage = SimpleNamespace(
@@ -187,7 +233,9 @@ async def test_notify_admins_work_stage_status_changed_counts_only_confirmed_del
             customer=SimpleNamespace(name="Иван", phone="+375 29 123-45-67"),
         ),
     )
-    session = _DummySession(order=stage)
+    session = notification_session
+    await _seed_notification_audience(session, [10, 11])
+    monkeypatch.setattr(TenantEntityAccessService, 'get_order_stage', AsyncMock(return_value=stage))
     send_mock = AsyncMock(side_effect=[True, False])
     monkeypatch.setattr("services.notification_service.BotService.send_rich_message", send_mock)
 
@@ -195,6 +243,7 @@ async def test_notify_admins_work_stage_status_changed_counts_only_confirmed_del
         sent = await NotificationService.notify_admins_work_stage_status_changed(session, stage_id=5, tenant_scope=TEST_TENANT_SCOPE)
 
     assert sent == 1
+    assert [call.args[0] for call in send_mock.await_args_list] == [10, 11]
     rich_text = send_mock.await_args_list[0].args[1]
     fallback_text = send_mock.await_args_list[0].kwargs["fallback_text"]
     assert "<h3>Задача #5: выполнена</h3>" in rich_text
