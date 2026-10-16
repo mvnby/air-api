@@ -18,6 +18,8 @@ from routers.manager_operation_ids import (
 )
 from services.legacy_owner_managed_identity_service import LegacyOwnerManagedIdentityError
 from services.manager_profile_service import ManagerProfileError, ManagerProfileService
+from services.account_access_service import AccountAccessResolver
+from services.manager_tenant_access_service import ManagerTenantAccessResolutionError
 from services.staff_avatar_service import (
     MAX_AVATAR_INPUT_BYTES, StaffAvatarError, StaffAvatarService, sanitize_staff_avatar,
 )
@@ -123,7 +125,13 @@ async def read_staff_avatar(
     Historical memberships retain photo visibility on old orders. Platform owners
     can read across companies. Photos are private and revalidated on every request.
     """
-    access = await resolve_identity_tenant_access(session, identity, tenant_id=tenant_id)
+    if identity.staff_user_id == staff_user_id and not identity.is_platform_owner:
+        try:
+            access = await AccountAccessResolver.resolve(session, staff_user_id=staff_user_id, tenant_id=tenant_id)
+        except ManagerTenantAccessResolutionError as exc:
+            raise HTTPException(403, detail={"code": "company_access_denied"}) from exc
+    else:
+        access = await resolve_identity_tenant_access(session, identity, tenant_id=tenant_id)
     avatar = await StaffAvatarService.read(
         session, staff_user_id=staff_user_id, viewer_tenant_id=access.tenant_scope.tenant_id,
         is_platform_owner=identity.is_platform_owner,

@@ -190,9 +190,10 @@ async def list_internal_bot_my_tasks(
     tenant_scope: TenantScope = Depends(get_bot_request_scope),
 ) -> BotTaskListResponse:
     """
-    Read work stages assigned to the actor’s linked installer in the system tenant, with
-    optional date/status filters. Active staff access is required (403 otherwise); staff
-    without an installer linkage receive an empty list.
+    Read the actor's active explicit assignments in the selected company/site, with
+    optional date/status filters. Requires a real eligible membership and active worker
+    profile. Payroll/legacy installer links grant no access. Only published instructions
+    and the safe installer projection are returned; work_url opens My Work, never CRM.
 
     Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
     checks are separate. See [bot
@@ -227,10 +228,11 @@ async def update_internal_bot_task_status(
     tenant_scope: TenantScope = Depends(get_bot_request_scope),
 ) -> BotTaskStatusUpdateResponse:
     """
-    Set the status of a stage assigned to the actor’s installer in the system tenant.
+    Set the status of an explicitly assigned stage in the selected company/site.
     Missing/inaccessible/unassigned stage returns 403; an invalid state transition returns
     409. changed reports whether a transition occurred; this is not a generic idempotency
-    receipt.
+    receipt. Membership, worker profile and unrevoked assignment are revalidated under
+    ordered locks; completed stages permit idempotent completion but cannot be reopened.
 
     Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
     checks are separate. See [bot
@@ -267,7 +269,9 @@ async def save_internal_bot_task_report(
     tenant_scope: TenantScope = Depends(get_bot_request_scope),
 ) -> BotTaskReportSaveResponse:
     """
-    Save a normalized installer report on the actor’s assigned stage in the system tenant.
+    Save a normalized report on the actor's explicitly assigned stage in the selected
+    company/site. Active membership/profile and an unrevoked assignment are required.
+    Completed stages retain this existing report action; canceled/closed work is denied.
     Missing/inaccessible stage returns 403. Repeating the same normalized report returns
     changed=false.
 
@@ -308,8 +312,10 @@ async def attach_internal_bot_task_stage_file(
     tenant_scope: TenantScope = Depends(get_bot_request_scope),
 ) -> BotTaskAttachmentResponse:
     """
-    Attach a nonempty file of at most 10 MB to the actor’s assigned stage in the system
-    tenant. Inaccessible stage returns 403, empty content 422 and oversize content 413.
+    Attach a nonempty file of at most 10 MB to the actor's explicitly assigned stage in
+    the selected company/site. Current membership/profile/assignment access is required,
+    including on retries; legacy payroll links do not grant access. Inaccessible stage
+    returns 403, empty content 422 and oversize content 413.
     file_id provides attachment deduplication; inspect already_attached on retries.
 
     Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor

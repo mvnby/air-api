@@ -4,8 +4,10 @@ import hashlib
 import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from typing import get_args
 
 from sqlmodel import select
+from api_contracts.manager_invitations import InvitationRole
 from crud.staff_invitation import StaffInvitationDAO
 from crud.tenancy import TenancyDAO
 from core.request_context import current_request_id
@@ -60,6 +62,8 @@ class CredentialProof:
 
 
 class StaffInvitationService:
+    ALLOWED_ROLES = frozenset(get_args(InvitationRole))
+
     @staticmethod
     def status(row):
         if row.accepted_at:
@@ -87,6 +91,8 @@ class StaffInvitationService:
 
     @staticmethod
     async def _inviter(session, *, state, tenant, user, memberships, role, expected_version=None):
+        if role not in StaffInvitationService.ALLOWED_ROLES:
+            raise StaffInvitationError("invitation_role_invalid", "Выберите доступную роль сотрудника", 400)
         if (user is None or not StaffUserService.is_active(user) or user.must_change_password
                 or (expected_version is not None and user.auth_version != expected_version)
                 or not LegacyOwnerAuthGuard.allows_staff_identity(state, staff_user_id=user.id, username=user.username or "")):

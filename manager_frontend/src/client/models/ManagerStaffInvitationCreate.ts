@@ -3,6 +3,6 @@
 /* tslint:disable */
 /* eslint-disable */
 export type ManagerStaffInvitationCreate = {
-    role: 'owner' | 'admin' | 'manager' | 'catalog_editor';
+    role: 'owner' | 'admin' | 'manager' | 'catalog_editor' | 'installer';
 };
 

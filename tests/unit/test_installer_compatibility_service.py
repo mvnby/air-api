@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel, select
 
-from models import Installer, LegacyOwnerAuthState, Order, OrderInstaller, StaffUser, TenantAuditEvent, TenantMembership
+from models import Installer, LegacyOwnerAuthState, Order, OrderInstaller, StaffUser, TenantAuditEvent, TenantMembership, Tenant, Storefront
 from schemas import ManagerInstallerCreatePayload, ManagerInstallerUpdatePayload, ManagerOrderUpdatePayload, ManagerStaffCreatePayload
 from services.installer_service import ManagerInstallerService
 from services.order_service import OrderService
@@ -45,6 +45,9 @@ async def sqlite_installer_session(tmp_path: Path):
 
     session_factory = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
     async with session_factory() as session:
+        session.add(Tenant(id=1, slug="mvn", display_name="MVN", is_system=True))
+        await session.flush()
+        session.add(Storefront(id=1, tenant_id=1, slug="main", display_name="Main", status="active"))
         session.add(LegacyOwnerAuthState())
         await session.commit()
         yield session

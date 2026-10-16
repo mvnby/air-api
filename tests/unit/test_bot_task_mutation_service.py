@@ -18,6 +18,15 @@ TEST_TENANT_SCOPE = TenantScope(
 )
 
 
+@pytest.fixture(autouse=True)
+def explicit_assignment(monkeypatch):
+    assignment = AsyncMock(return_value=SimpleNamespace(order_id=42))
+    monkeypatch.setattr(
+        "services.bot_task_mutation_service.WorkerAssignmentAccessService.get_for_stage", assignment,
+    )
+    return assignment
+
+
 class _ScalarResult:
     def __init__(self, stage):
         self._stage = stage
@@ -51,6 +60,7 @@ class _FakeSession:
 async def test_task_status_mutation_is_locked_idempotent_and_notifies_once(monkeypatch):
     stage = SimpleNamespace(
         id=10,
+        order_id=42,
         installer_id=7,
         status=OrderStageStatus.PLANNED,
         installer_report=None,
@@ -61,7 +71,7 @@ async def test_task_status_mutation_is_locked_idempotent_and_notifies_once(monke
     )
     notify = AsyncMock(return_value=1)
     monkeypatch.setattr(
-        "services.bot_task_mutation_service.BotAccessService.get_context",
+        "services.bot_task_mutation_service.bot_worker_auth",
         get_context,
     )
     monkeypatch.setattr(
@@ -101,13 +111,14 @@ async def test_task_status_mutation_is_locked_idempotent_and_notifies_once(monke
 async def test_completed_task_cannot_be_reopened_by_stale_accept(monkeypatch):
     stage = SimpleNamespace(
         id=10,
+        order_id=42,
         installer_id=7,
         status=OrderStageStatus.COMPLETED,
         installer_report=None,
     )
     session = _FakeSession(stage)
     monkeypatch.setattr(
-        "services.bot_task_mutation_service.BotAccessService.get_context",
+        "services.bot_task_mutation_service.bot_worker_auth",
         AsyncMock(return_value=SimpleNamespace(is_staff=True, legacy_installer_id=7)),
     )
 
@@ -128,13 +139,14 @@ async def test_completed_task_cannot_be_reopened_by_stale_accept(monkeypatch):
 async def test_task_report_mutation_is_normalized_and_idempotent(monkeypatch):
     stage = SimpleNamespace(
         id=10,
+        order_id=42,
         installer_id=7,
         status=OrderStageStatus.IN_PROGRESS,
         installer_report=None,
     )
     session = _FakeSession(stage)
     monkeypatch.setattr(
-        "services.bot_task_mutation_service.BotAccessService.get_context",
+        "services.bot_task_mutation_service.bot_worker_auth",
         AsyncMock(return_value=SimpleNamespace(is_staff=True, legacy_installer_id=7)),
     )
 

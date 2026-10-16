@@ -4,7 +4,7 @@
 /* eslint-disable */
 export type ManagerStaffInvitationCreated = {
     id: number;
-    role: 'owner' | 'admin' | 'manager' | 'catalog_editor';
+    role: 'owner' | 'admin' | 'manager' | 'catalog_editor' | 'installer';
     expires_at: string;
     invite_url: string;
 };

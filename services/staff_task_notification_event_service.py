@@ -18,7 +18,7 @@ from models import (
     TenantMembership,
 )
 from models.tenancy import TenantScope
-from services.bot_task_service import BotTaskService
+from services.installer_work_urls import installer_work_url
 from services.communications.outbox_service import IntegrationOutboxService
 from services.communications.staff_task_contracts import (
     STAFF_TASK_EVENT_TYPES,
@@ -96,6 +96,10 @@ class StaffTaskNotificationEventService:
         ).scalars().first()
         if membership is None or membership.role not in {"owner", "admin", "manager", "installer"}:
             return False
+        from services.bot_notification_access import task_notification_assignment
+        assignment = await task_notification_assignment(session, staff_user, scope=tenant_scope, stage_id=int(stage.id))
+        if assignment is None:
+            return False
         order_row = (
             await session.execute(
                 select(Order.customer_id, Order.delivery_address).where(
@@ -128,18 +132,19 @@ class StaffTaskNotificationEventService:
         payload = StaffTaskNotificationPayloadV1(
             event_kind=event_kind,
             staff_user_id=int(staff_user.id),
+            assignment_id=assignment.id,
             tenant_id=tenant_scope.tenant_id,
             storefront_id=tenant_scope.storefront_id,
             stage_id=int(stage.id),
             order_id=int(stage.order_id),
-            stage_name=stage.name,
+            stage_name=assignment.title,
             status=cls._status_text(stage),
             start_time=stage.start_time,
             end_time=stage.end_time,
             address=order_row.delivery_address,
             customer_name=customer_row.name if customer_row else None,
             customer_phone=customer_row.phone if customer_row else None,
-            manager_url=BotTaskService._manager_url(int(stage.order_id), tenant_scope=tenant_scope, storefront_slug=storefront.slug),
+            manager_url=installer_work_url(assignment.id, tenant_id=tenant_scope.tenant_id, storefront_slug=storefront.slug),
             change_fields=tuple(change_fields),
             reminder_offset_minutes=reminder_offset_minutes,
         )
@@ -155,6 +160,7 @@ class StaffTaskNotificationEventService:
                     tenant_scope.tenant_id,
                     int(stage.id),
                     int(staff_user.id),
+                    assignment.id,
                     *identity,
                 ],
             ),

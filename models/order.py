@@ -293,6 +293,7 @@ class DocumentTemplate(SQLModel, table=True):
 class OrderWorkStage(SQLModel, table=True):
     __tablename__ = "order_work_stage"
     __table_args__ = (
+        UniqueConstraint("id", "order_id", name="uq_work_stage_id_order"),
         Index(
             "uq_unassigned_order_work_stage_schedule",
             "order_id",

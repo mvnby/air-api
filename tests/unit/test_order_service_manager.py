@@ -12,6 +12,7 @@ from models import (
     Customer,
     CustomerType,
     Installer,
+    LegacyOwnerAuthState,
     Order,
     OrderServiceLink,
     OrderWorkStage,
@@ -24,6 +25,8 @@ from models import (
     Product,
     Service,
     ServiceTariff,
+    Storefront,
+    Tenant,
 )
 from schemas import ManagerOrderUpdatePayload, OrderWorkStageCreatePayload, OrderWorkStageUpdatePayload, PaymentCreatePayload
 from services.order_service import OrderService
@@ -45,6 +48,13 @@ async def sqlite_order_session(tmp_path: Path):
 
     session_factory = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
     async with session_factory() as session:
+        session.add(Tenant(id=1, slug="mvn", display_name="MVN", is_system=True))
+        await session.flush()
+        session.add_all([
+            Storefront(id=1, tenant_id=1, slug="main", display_name="Main", status="active"),
+            LegacyOwnerAuthState(id=1),
+        ])
+        await session.commit()
         yield session
 
     await engine.dispose()

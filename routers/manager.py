@@ -35,6 +35,7 @@ from routers import manager_account_telegram
 from routers import manager_mdv_catalog
 from routers import manager_orders
 from routers import manager_order_responsibility
+from routers import installer_auth, installer_workspace, manager_installer_workspace
 from routers import manager_commercial_terms
 from routers import manager_belzakupki_enrichment
 from routers import manager_tender_workflow
@@ -93,6 +94,9 @@ router.include_router(manager_call_recordings.router)
 router.include_router(manager_document_system_router)
 router.include_router(manager_orders.router)
 router.include_router(manager_order_responsibility.router)
+router.include_router(installer_auth.router)
+router.include_router(installer_workspace.router)
+router.include_router(manager_installer_workspace.router)
 router.include_router(manager_belzakupki_enrichment.router)
 router.include_router(manager_tender_workflow.router)
 router.include_router(manager_commercial_terms.router)

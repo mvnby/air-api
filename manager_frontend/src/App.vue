@@ -29,6 +29,7 @@ import {
 import { useDemoReadOnly } from './services/manager-demo';
 import {
   coreNavItems,
+  installerWorkNavItem,
   defaultExpandedNavSections,
   navSections,
   type NavItem,
@@ -39,7 +40,9 @@ import {
   MANAGER_CAPABILITY,
   hasManagerCapability,
   isManagerPathAllowed,
+  canReadOwnInstallerWorks,
 } from './manager-capabilities';
+const InstallerWorksView = defineAsyncComponent(() => import('./views/InstallerWorksView.vue'));
 const ProductsView = defineAsyncComponent(() => import('./views/ProductsView.vue'));
 const TenantCatalogView = defineAsyncComponent(() => import('./views/TenantCatalogView.vue'));
 const CatalogDecisionWorkspaceView = defineAsyncComponent(() => import('./views/CatalogDecisionWorkspaceView.vue'));
@@ -151,9 +154,12 @@ const canManageInfrastructure = computed(() => hasManagerCapability(auth.value, 
 const canManageDocuments = computed(() => hasManagerCapability(auth.value, MANAGER_CAPABILITY.documentsManage));
 const canManageSettings = computed(() => hasManagerCapability(auth.value, MANAGER_CAPABILITY.settingsManage));
 const canManageCallRecordings = computed(() => hasManagerCapability(auth.value, MANAGER_CAPABILITY.callRecordingsManage));
-const visibleCoreNavItems = computed(() => coreNavItems.filter(
-  item => !item.requiredCapability || hasManagerCapability(auth.value, item.requiredCapability),
-));
+const isInstallerWorkspace = computed(() => hasManagerCapability(auth.value, MANAGER_CAPABILITY.installerWorksRead));
+const visibleCoreNavItems = computed(() => [
+  ...coreNavItems.filter(item => (!isInstallerWorkspace.value || item.path !== '/manager')
+    && (!item.requiredCapability || hasManagerCapability(auth.value, item.requiredCapability))),
+  ...(canReadOwnInstallerWorks(auth.value) ? [installerWorkNavItem] : []),
+]);
 const visibleNavSections = computed<NavSection[]>(() => navSections
   .map(section => ({
     ...section,
@@ -197,11 +203,12 @@ const toggleNavSection = (sectionId: NavSectionId) => {
     [sectionId]: !expandedNavSections.value[sectionId],
   };
 };
-const defaultView = computed(() => hasManagerCapability(auth.value, MANAGER_CAPABILITY.crmManage)
+const defaultView = computed(() => isInstallerWorkspace.value ? 'installer-works' : hasManagerCapability(auth.value, MANAGER_CAPABILITY.crmManage)
   ? 'home' : canEditCatalog.value ? 'products' : 'profile-security');
 const currentView = computed(() => {
   const path = currentPath.value;
   if (path === '/manager' || path === '/manager/') return defaultView.value;
+  if (path === '/manager/my-work' || path.startsWith('/manager/my-work/')) return 'installer-works';
   if (path === '/manager/profile') return 'profile-security';
   if (path.startsWith('/manager/integrations')) return 'analytics-connections';
   if (path.startsWith('/manager/tasks')) return 'personal-tasks';
@@ -305,6 +312,10 @@ const navigate = async (path: string) => {
   isMobileNavOpen.value = false;
 };
 const enforceAuthorizedLocation = () => {
+  if (isAuthenticated.value && isInstallerWorkspace.value && currentPath.value === '/manager') {
+    navigate('/manager/my-work');
+    return true;
+  }
   if (
     isAuthenticated.value
     && !isManagerPathAllowed(auth.value, currentPath.value)
@@ -564,7 +575,8 @@ watch(currentPath, () => {
         Демонстрационная компания: рабочие данные доступны только для просмотра.
       </div>
 
-      <ManagerHomeView v-if="authorizedView === 'home'" :key="currentLocation" />
+      <InstallerWorksView v-if="authorizedView === 'installer-works'" :key="currentLocation" />
+      <ManagerHomeView v-else-if="authorizedView === 'home'" :key="currentLocation" />
       <ProfileSecurityView v-else-if="authorizedView === 'profile-security'" :key="currentLocation" @password-changed="handleLogoutSuccess" />
       <AnalyticsConnectionsView v-else-if="authorizedView === 'analytics-connections'" :key="currentLocation" />
       <PersonalTasksView v-else-if="authorizedView === 'personal-tasks'" :key="currentLocation" />

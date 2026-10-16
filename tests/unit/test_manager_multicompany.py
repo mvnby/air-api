@@ -140,7 +140,7 @@ async def test_photo_company_query_is_authoritative_even_with_other_headers(mult
 
 
 @pytest.mark.asyncio
-async def test_password_and_telegram_login_need_any_real_workspace_not_singleton(multi_db):
+async def test_password_and_telegram_login_need_any_real_account_membership_not_singleton(multi_db):
     from routers.auth import router as login_router
     from services.credential_service import CredentialService
     from services.staff_telegram_service import StaffTelegramService
@@ -160,6 +160,12 @@ async def test_password_and_telegram_login_need_any_real_workspace_not_singleton
         for membership in (await session.execute(select(TenantMembership).where(TenantMembership.staff_user_id == 10))).scalars():
             membership.role = "installer"
         await session.commit()
+        installer = await client.post("/login/access-token", data={"username": "person", "password": "workspace-password"})
+        assert installer.status_code == 200
+        assert (await StaffTelegramService._login_user(session, 1010)).id == 10
+        for membership in (await session.execute(select(TenantMembership).where(TenantMembership.staff_user_id == 10))).scalars():
+            membership.status = "disabled"
+        await session.commit()
         denied = await client.post("/login/access-token", data={"username": "person", "password": "workspace-password"})
         assert denied.status_code == 400
         with pytest.raises(StaffTelegramError):
@@ -167,8 +173,8 @@ async def test_password_and_telegram_login_need_any_real_workspace_not_singleton
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("membership_state", ["disabled", "installer"])
-async def test_signed_widget_rejects_no_workspace_and_accepts_multiple(multi_db, monkeypatch, membership_state):
+@pytest.mark.parametrize("membership_state", ["disabled", "unsupported"])
+async def test_signed_widget_rejects_no_account_access_and_accepts_multiple(multi_db, monkeypatch, membership_state):
     import hashlib
     import hmac
     import time
@@ -197,7 +203,7 @@ async def test_signed_widget_rejects_no_workspace_and_accepts_multiple(multi_db,
             if membership_state == "disabled":
                 membership.status = "disabled"
             else:
-                membership.role = "installer"
+                membership.role = "unsupported"
         await session.commit()
         denied = await client.post("/login/telegram", json=signed_payload("After"))
         assert denied.status_code == 401

@@ -1,13 +1,13 @@
 """Company bootstrap reads the person, never the browser's selected scope."""
 from collections import Counter
 from crud.tenancy import TenancyDAO
-from services.manager_tenant_access_service import ManagerTenantAccessResolver
+from services.account_access_service import AccountAccessResolver
 
 
 class ManagerAccountCompaniesService:
     @staticmethod
     async def list(session, *, identity, page, limit):
-        actual = await ManagerTenantAccessResolver.candidates(session, staff_user_id=identity.staff_user_id) if identity.staff_user_id else []
+        actual = await AccountAccessResolver.candidates(session, staff_user_id=identity.staff_user_id) if identity.staff_user_id else []
         counts = Counter(row.tenant_id for row in actual)
         actual = {row.tenant_id: row for row in actual if counts[row.tenant_id] == 1}
         defaults = await TenancyDAO.active_company_defaults(session, tenant_ids=None if identity.is_platform_owner else list(actual))

@@ -1,6 +1,6 @@
 import { OpenAPI, type ManagerStaffResponse, type ManagerStaffInvitationItem, type StaffInvitationPreview, type StaffInvitationAcceptExisting, type StaffInvitationAcceptNew, type StaffInvitationAcceptCredentials } from '../client';
 import { request } from '../client/core/request';
-export const teamRoles = { owner: 'Владелец', admin: 'Администратор', manager: 'Менеджер', catalog_editor: 'Редактор каталога' } as const;
+export const teamRoles = { owner: 'Владелец', admin: 'Администратор', manager: 'Менеджер', catalog_editor: 'Редактор каталога', installer: 'Монтажник' } as const;
 export type InviteRole = keyof typeof teamRoles;
 export type TeamInvitation = ManagerStaffInvitationItem;
 export type InvitationPreview = StaffInvitationPreview;

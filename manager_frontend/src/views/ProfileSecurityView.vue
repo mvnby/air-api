@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { Check, Clipboard, Eye, EyeOff, KeyRound, Loader2, RefreshCw } from 'lucide-vue-next';
 
+import { hasManagerCapability, MANAGER_CAPABILITY } from '../manager-capabilities';
 import { ManagerService } from '../client';
 import ConnectorConnections from '../components/ConnectorConnections.vue';
 import { clearManagerSession, managerSession } from '../services/manager-session';
@@ -177,6 +178,6 @@ const submit = async () => {
         </button>
       </form>
     </div>
-    <ConnectorConnections v-if="account?.staff_user_id && account?.auth_source !== 'legacy'" />
+    <ConnectorConnections v-if="account?.staff_user_id && !hasManagerCapability(account, MANAGER_CAPABILITY.installerWorksRead) && account?.auth_source !== 'legacy'" />
   </section>
 </template>

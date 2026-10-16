@@ -12,11 +12,12 @@ export type BotTaskResponse = {
     stage_id?: (number | null);
     title: string;
     status: string;
-    start_time: string;
+    start_time?: (string | null);
     address?: (string | null);
     customer_name?: string;
     customer_phone?: (string | null);
     comment?: (string | null);
     manager_url?: (string | null);
+    work_url?: (string | null);
 };
 

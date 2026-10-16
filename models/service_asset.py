@@ -46,6 +46,7 @@ class ServiceAttachment(SQLModel, table=True):
 class OrderAttachmentLink(SQLModel, table=True):
     __tablename__ = "order_attachment_link"
     __table_args__ = (
+        UniqueConstraint("id", "order_id", name="uq_order_attachment_link_id_order"),
         UniqueConstraint("order_id", "attachment_id", name="uq_order_attachment_link"),
         ForeignKeyConstraint(
             ["origin_order_id"], ["order.id"],

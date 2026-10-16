@@ -25,6 +25,7 @@ from services.staff_user_service import StaffUserService
 from services.legacy_owner_auth_guard import LegacyOwnerAuthGuard
 from services.legacy_owner_managed_identity_service import LegacyOwnerManagedIdentityService
 from services.tenant_scope_service import SystemTenantScopeResolver
+from services.account_access_service import AccountAccessResolver, InstallerTenantAccessResolver
 
 # JWT CONFIG
 # TODO: Move to settings in the future
@@ -236,7 +237,7 @@ async def resolve_identity_tenant_access(session, identity, *, tenant_id=None, p
                 return ManagerTenantAccess(None, "owner", scope)
         else:
             if personal:
-                return await ManagerTenantAccessResolver.personal(session, staff_user_id=identity.staff_user_id)
+                return await AccountAccessResolver.personal(session, staff_user_id=identity.staff_user_id)
             try:
                 return await ManagerTenantAccessResolver.resolve(session, staff_user_id=identity.staff_user_id, tenant_id=tenant_id)
             except ManagerTenantAccessResolutionError:
@@ -271,6 +272,26 @@ async def get_current_auth_context(
     return scoped_identity(identity, access, scope)
 
 
+async def get_current_installer_context(
+    request: Request, identity: AuthenticatedIdentity = Depends(get_current_identity),
+    session: AsyncSession = Depends(get_session),
+) -> AuthenticatedUser:
+    """Resolve only a real selected company; no Manager or virtual support grant."""
+    if identity.staff_user_id is None:
+        raise HTTPException(403, detail={"code": "company_access_denied"})
+    tenant_id = requested_manager_tenant(request.headers.get(MANAGER_TENANT_HEADER))
+    try:
+        access = await InstallerTenantAccessResolver.resolve(
+            session, staff_user_id=identity.staff_user_id, tenant_id=tenant_id,
+        )
+    except ManagerTenantAccessResolutionError as exc:
+        code = "company_selection_required" if tenant_id is None and exc.code == "company_selection_required" else "company_access_denied"
+        raise HTTPException(409 if code == "company_selection_required" else 403, detail={"code": code}) from exc
+    scope = await _resolve_requested_manager_storefront(session, request, access.tenant_scope)
+    enforce_demo_read_only(request, demo_read_only=scope.demo_read_only)
+    return scoped_identity(identity, access, scope)
+
+
 async def get_current_platform_identity(
     identity: AuthenticatedIdentity = Depends(get_current_identity),
 ) -> AuthenticatedIdentity:
@@ -283,6 +304,7 @@ async def require_personal_workspace_access(
     request: Request, identity: AuthenticatedIdentity = Depends(get_current_identity),
     session: AsyncSession = Depends(get_session),
 ) -> AuthenticatedUser:
+    """Personal account access, including installers; retain the dependency name for callers."""
     access = await resolve_identity_tenant_access(session, identity, personal=True)
     enforce_demo_read_only(request, demo_read_only=access.tenant_scope.demo_read_only)
     return scoped_identity(identity, access, access.tenant_scope)

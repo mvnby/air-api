@@ -310,3 +310,7 @@ async def _replace_installer(context: OrderUpdateContext) -> None:
                 installer_id=payload.installer_id,
             )
         )
+
+    from services.worker_assignment_legacy_sync import WorkerAssignmentLegacySync
+    await WorkerAssignmentLegacySync.sync(session, context.tenant_scope, order_id, context.worker_profiles,
+        previous_ids=existing_installer_ids, current_ids={getattr(payload, "installer_id", None)} - {None})

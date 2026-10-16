@@ -17,6 +17,8 @@ from models import (
     Storefront,
     Tenant,
     TenantMembership,
+    TenantWorkerProfile,
+    OrderWorkAssignment,
 )
 from services.bot_task_mutation_service import (
     BotTaskMutationAccessDeniedError,
@@ -144,6 +146,13 @@ async def test_stage_attachment_is_authorized_tenant_scoped_and_race_idempotent(
             installer_id=int(assigned_installer.id),
         )
         setup_session.add(foreign_stage)
+        await setup_session.flush()
+        profile = TenantWorkerProfile(tenant_id=tenant_scope.tenant_id, staff_user_id=staff.id)
+        setup_session.add(profile)
+        await setup_session.flush()
+        setup_session.add(OrderWorkAssignment(tenant_id=tenant_scope.tenant_id,
+            storefront_id=tenant_scope.storefront_id, order_id=order.id, work_stage_id=assigned_stage.id,
+            worker_profile_id=profile.id))
         await setup_session.commit()
 
         assigned_stage_id = int(assigned_stage.id)

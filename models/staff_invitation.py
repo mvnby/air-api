@@ -6,7 +6,7 @@ from sqlmodel import SQLModel, Field
 
 class StaffInvitation(SQLModel, table=True):
     __tablename__ = "staff_invitation"
-    __table_args__ = (CheckConstraint("role IN ('owner','admin','manager','catalog_editor')", name="ck_staff_invitation_role"),)
+    __table_args__ = (CheckConstraint("role IN ('owner','admin','manager','catalog_editor','installer')", name="ck_staff_invitation_role"),)
     id: int | None = Field(default=None, primary_key=True)
     tenant_id: int = Field(foreign_key="tenant.id", index=True)
     created_by_staff_user_id: int = Field(foreign_key="staff_users.id")

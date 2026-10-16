@@ -4,7 +4,7 @@
 /* eslint-disable */
 export type StaffInvitationPreview = {
     company_name: string;
-    role: 'owner' | 'admin' | 'manager' | 'catalog_editor';
+    role: 'owner' | 'admin' | 'manager' | 'catalog_editor' | 'installer';
     expires_at: string;
 };
 

@@ -3,10 +3,12 @@
 from typing import Any, Dict
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 
-from models import Order, OrderStageStatus, OrderStatus, OrderWorkStage
+from models import Order, OrderAttachmentLink, OrderStageStatus, OrderStatus, OrderWorkStage
 from services.command_transaction import command_transaction
+from services.worker_assignment_legacy_sync import WorkerAssignmentLegacySync
 from services.order_projection_service import OrderProjectionService
 from services.order_service import OrderService
 from services.tenant_entity_access_service import TenantEntityAccessService
@@ -14,6 +16,24 @@ from services.tenant_scope_service import TenantScope
 
 
 class OrderWorkStageCommandService:
+    @staticmethod
+    async def _get_stage_for_update(session, stage_id, *, tenant_scope, order_id=None, for_update=True):
+        # Match the assignment/Bot lock order. A joined Stage+Order FOR UPDATE
+        # cannot guarantee which row lock PostgreSQL acquires first.
+        hint = await TenantEntityAccessService.get_order_stage(
+            session, stage_id, tenant_scope=tenant_scope, order_id=order_id,
+        )
+        if hint is None:
+            return None
+        order = await TenantEntityAccessService.get_order(
+            session, hint.order_id, tenant_scope=tenant_scope, for_update=True,
+        )
+        if order is None:
+            return None
+        return await session.scalar(select(OrderWorkStage).where(
+            OrderWorkStage.id == stage_id, OrderWorkStage.order_id == order.id,
+        ).with_for_update().execution_options(populate_existing=True))
+
     @staticmethod
     async def _project_committed_order(
         session: AsyncSession,
@@ -43,6 +63,7 @@ class OrderWorkStageCommandService:
         )
 
         async with command_transaction(session):
+            worker_profiles = await WorkerAssignmentLegacySync.prepare(session, tenant_scope, [payload.installer_id])
             order = await TenantEntityAccessService.get_order(
                 session,
                 order_id,
@@ -69,6 +90,7 @@ class OrderWorkStageCommandService:
             )
             session.add(stage)
             await session.flush()
+            await WorkerAssignmentLegacySync.sync(session, tenant_scope, order_id, worker_profiles, previous_ids=set(), current_ids={stage.installer_id} - {None}, stage=stage)
             if stage.installer_id is not None:
                 await StaffTaskNotificationEventService.enqueue_assigned(
                     session,
@@ -95,7 +117,8 @@ class OrderWorkStageCommandService:
         )
 
         async with command_transaction(session):
-            stage = await TenantEntityAccessService.get_order_stage(
+            await WorkerAssignmentLegacySync.prepare(session, tenant_scope)
+            stage = await OrderWorkStageCommandService._get_stage_for_update(
                 session,
                 stage_id,
                 tenant_scope=tenant_scope,
@@ -135,7 +158,8 @@ class OrderWorkStageCommandService:
         tenant_scope: TenantScope,
     ) -> Dict[str, Any]:
         async with command_transaction(session):
-            stage = await TenantEntityAccessService.get_order_stage(
+            await WorkerAssignmentLegacySync.prepare(session, tenant_scope)
+            stage = await OrderWorkStageCommandService._get_stage_for_update(
                 session,
                 stage_id,
                 tenant_scope=tenant_scope,
@@ -143,6 +167,14 @@ class OrderWorkStageCommandService:
             )
             if not stage:
                 raise ValueError("Stage not found")
+            from services.installer_collection_service import InstallerCollectionService
+            await InstallerCollectionService.withdraw_for_stage(
+                session, tenant_scope, stage.order_id, stage.id,
+            )
+            await session.execute(update(OrderAttachmentLink).where(
+                OrderAttachmentLink.order_id == stage.order_id,
+                OrderAttachmentLink.work_stage_id == stage.id,
+            ).values(work_stage_id=None))
             await session.delete(stage)
         return {"ok": True, "id": stage_id}
 
@@ -160,7 +192,8 @@ class OrderWorkStageCommandService:
         )
 
         async with command_transaction(session):
-            stage = await TenantEntityAccessService.get_order_stage(
+            worker_profiles = await WorkerAssignmentLegacySync.prepare(session, tenant_scope, [getattr(payload, "installer_id", None)])
+            stage = await OrderWorkStageCommandService._get_stage_for_update(
                 session,
                 stage_id,
                 tenant_scope=tenant_scope,
@@ -193,6 +226,7 @@ class OrderWorkStageCommandService:
 
             session.add(stage)
             await session.flush()
+            await WorkerAssignmentLegacySync.sync(session, tenant_scope, order_id, worker_profiles, previous_ids={previous_installer_id} - {None}, current_ids={stage.installer_id} - {None}, stage=stage)
 
             if (
                 stage.status == OrderStageStatus.CANCELED
@@ -272,7 +306,8 @@ class OrderWorkStageCommandService:
         tenant_scope: TenantScope,
     ) -> Dict[str, Any]:
         async with command_transaction(session):
-            stage = await TenantEntityAccessService.get_order_stage(
+            await WorkerAssignmentLegacySync.prepare(session, tenant_scope)
+            stage = await OrderWorkStageCommandService._get_stage_for_update(
                 session,
                 stage_id,
                 tenant_scope=tenant_scope,
@@ -281,6 +316,14 @@ class OrderWorkStageCommandService:
             )
             if not stage:
                 raise ValueError("Stage not found")
+            from services.installer_collection_service import InstallerCollectionService
+            await InstallerCollectionService.withdraw_for_stage(
+                session, tenant_scope, stage.order_id, stage.id,
+            )
+            await session.execute(update(OrderAttachmentLink).where(
+                OrderAttachmentLink.order_id == stage.order_id,
+                OrderAttachmentLink.work_stage_id == stage.id,
+            ).values(work_stage_id=None))
             await session.delete(stage)
 
         return await OrderWorkStageCommandService._project_committed_order(

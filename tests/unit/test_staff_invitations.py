@@ -30,6 +30,79 @@ async def invite(session, *, tenant=2, role="manager"):
 
 
 @pytest.mark.asyncio
+async def test_installer_invitation_creates_account_only_without_crm_or_work_grant(multi_db):
+    from core.security import get_current_auth_context, get_current_installer_context
+    from fastapi import HTTPException
+    from models.installer_workspace import TenantWorkerProfile, OrderWorkAssignment
+    from api_contracts.manager_invitations import ManagerStaffInvitationCreate
+
+    session = multi_db
+    assert ManagerStaffInvitationCreate(role="installer").role == "installer"
+    # A company administrator may onboard an ordinary installer.
+    member = await session.get(TenantMembership, 20)
+    member.role = "admin"
+    await session.commit()
+    actor = replace(owner(), staff_user_id=10, is_platform_owner=False)
+    created = await Service.create(session, auth=actor, role="installer")
+    raw = created["invite_url"].split("#token=")[1]
+    assert (await Service.preview(session, token=raw))["role"] == "installer"
+    accepted, snapshot = await Service.accept(session, payload=StaffInvitationAcceptNew(
+        token=raw, mode="new", username="newinstaller", password="installer-password-123", display_name="Installer",
+    ))
+    assert accepted["tenant_id"] == 2
+    user = await session.get(StaffUser, snapshot.id)
+    membership = await session.scalar(select(TenantMembership).where(TenantMembership.staff_user_id == snapshot.id))
+    assert user.primary_role == "installer" and user.roles == ["installer"]
+    assert user.legacy_installer_id is None
+    assert membership.role == "installer" and membership.permissions == []
+    assert await session.scalar(select(TenantWorkerProfile.id).where(TenantWorkerProfile.staff_user_id == snapshot.id)) is None
+    assert list((await session.execute(select(OrderWorkAssignment))).scalars()) == []
+    identity = await get_current_identity(request(), token(snapshot.id, "newinstaller"), session)
+    installer = await get_current_installer_context(request(2), identity, session)
+    assert installer.role == "installer" and installer.tenant_id == 2
+    with pytest.raises(HTTPException) as denied:
+        await get_current_auth_context(request(2), token(snapshot.id, "newinstaller"), session)
+    assert denied.value.status_code == 403
+    with pytest.raises(StaffInvitationError):
+        await Service.accept(session, payload=StaffInvitationAcceptExisting(token=raw, mode="existing"), identity=identity)
+
+
+@pytest.mark.asyncio
+async def test_installer_invitation_revoke_and_inviter_demotion_remain_effective(multi_db):
+    session = multi_db
+    raw, result = await invite(session, role="installer")
+    await Service.revoke(session, auth=owner(), invitation_id=result["id"])
+    with pytest.raises(StaffInvitationError):
+        await Service.preview(session, token=raw)
+    with pytest.raises(StaffInvitationError):
+        await Service.accept(session, payload=StaffInvitationAcceptNew(
+            token=raw, mode="new", username="revokedinstaller", password="installer-password-123", display_name="Installer",
+        ))
+    await session.rollback()
+    member = await session.get(TenantMembership, 20)
+    member.role = "admin"
+    await session.commit()
+    actor = replace(owner(), staff_user_id=10, is_platform_owner=False)
+    result = await Service.create(session, auth=actor, role="installer")
+    member.role = "manager"
+    await session.commit()
+    with pytest.raises(StaffAccessPolicyError):
+        await Service.accept(session, payload=StaffInvitationAcceptNew(
+            token=result["invite_url"].split("#token=")[1], mode="new", username="demotedinstaller",
+            password="installer-password-123", display_name="Installer",
+        ))
+    await session.rollback()
+    assert await session.scalar(select(StaffUser.id).where(StaffUser.username.in_(["revokedinstaller", "demotedinstaller"]))) is None
+
+
+@pytest.mark.asyncio
+async def test_invitation_service_rejects_unknown_role_even_for_platform_owner(multi_db):
+    with pytest.raises(StaffInvitationError) as denied:
+        await invite(multi_db, role="supplier")
+    assert denied.value.code == "invitation_role_invalid"
+
+
+@pytest.mark.asyncio
 async def test_new_person_token_single_use_no_grants_and_safe_listing(multi_db):
     session = multi_db
     raw, created = await invite(session)

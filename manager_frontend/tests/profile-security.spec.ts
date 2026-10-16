@@ -13,6 +13,7 @@ vi.mock('../src/client', () => ({
   },
 }));
 
+import ConnectorConnections from '../src/components/ConnectorConnections.vue';
 import { ownProfileState } from '../src/services/manager-profile';
 import ProfileSecurityView from '../src/views/ProfileSecurityView.vue';
 import { isManagerPathAllowed } from '../src/manager-capabilities';
@@ -46,6 +47,9 @@ describe('ProfileSecurityView', () => {
     expect(wrapper.get('h1').text()).toBe('Профиль / Безопасность');
   });
 
+  it('keeps installer personal security while omitting Manager-only connector requests', () => {
+    managerSession.auth.value = { ...staffAuth, role: 'installer', capabilities: ['installer.works.read'] }; const wrapper = mount(ProfileSecurityView); expect(wrapper.find('#current-password').exists()).toBe(true); expect(wrapper.findComponent(ConnectorConnections).exists()).toBe(false); wrapper.unmount();
+  });
   it('uses personal password eligibility even while a selected demo company makes business auth read-only', () => {
     managerSession.auth.value = { ...staffAuth, demo_read_only: true, can_change_password: false };
     const wrapper = mount(ProfileSecurityView); expect(wrapper.find('#current-password').exists()).toBe(true); wrapper.unmount();

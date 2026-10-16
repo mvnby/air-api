@@ -5,6 +5,7 @@
 export type BotStaffNotificationPayload = {
     event_kind: 'assigned' | 'rescheduled' | 'canceled' | 'departure_reminder';
     staff_user_id: number;
+    assignment_id?: (number | null);
     tenant_id?: (number | null);
     storefront_id?: (number | null);
     stage_id: number;

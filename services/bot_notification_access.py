@@ -1,51 +1,32 @@
-"""Delivery ACL follows the event's order scope, never the user's selected bot site."""
+"""Task delivery follows a live explicit grant in the event company, never bot selection."""
 
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
-from models import Order, OrderWorkStage
-from models.tenancy import Tenant, Storefront, TenantMembership
+from core.security import AuthenticatedUser
+from models.tenancy import TenantScope, Storefront
+from services.installer_work_urls import installer_work_url
+from services.worker_assignment_access_service import WorkerAssignmentAccessService
+from services.worker_assignment_service import WorkerAssignmentError
 
 
-async def task_notification_allowed(session: AsyncSession, staff_user, payload) -> bool:
-    row = (
-        await session.execute(
-            select(
-                Order.tenant_id,
-                Order.storefront_id,
-                OrderWorkStage.installer_id,
-                TenantMembership.role,
-            )
-            .select_from(Order)
-            .join(OrderWorkStage, OrderWorkStage.order_id == Order.id)
-            .join(Tenant, Tenant.id == Order.tenant_id)
-            .join(
-                Storefront,
-                (Storefront.id == Order.storefront_id)
-                & (Storefront.tenant_id == Tenant.id),
-            )
-            .join(
-                TenantMembership,
-                (TenantMembership.tenant_id == Tenant.id)
-                & (TenantMembership.staff_user_id == staff_user.id),
-            )
-            .where(
-                Order.id == payload.order_id,
-                OrderWorkStage.id == payload.stage_id,
-                Tenant.status == "active",
-                Storefront.status == "active",
-                TenantMembership.status == "active",
-            )
-            .execution_options(populate_existing=True)
-        )
-    ).first()
-    if row is None:
+async def task_notification_assignment(session, staff_user, *, scope, stage_id, for_update=False):
+    auth = AuthenticatedUser(username=staff_user.username or str(staff_user.telegram_id or staff_user.id),
+        auth_source="notification", staff_user_id=staff_user.id, auth_version=staff_user.auth_version,
+        tenant_id=scope.tenant_id, storefront_id=scope.storefront_id, is_system_tenant=scope.is_system)
+    try:
+        return await WorkerAssignmentAccessService.get_for_stage(session, auth, stage_id, for_update=for_update)
+    except WorkerAssignmentError:
+        return None
+
+
+async def task_notification_allowed(session, staff_user, payload, *, for_update=False) -> bool:
+    # Old queued payloads have no reviewed assignment binding and may contain
+    # internal stage titles/CRM links. Never send them after this boundary changes.
+    if payload.assignment_id is None or payload.tenant_id is None or payload.storefront_id is None:
         return False
-    if row.role not in {"owner", "admin", "manager", "installer"}:
+    scope = TenantScope(tenant_id=payload.tenant_id, storefront_id=payload.storefront_id)
+    assignment = await task_notification_assignment(session, staff_user, scope=scope, stage_id=payload.stage_id, for_update=for_update)
+    if assignment is None or assignment.id != payload.assignment_id or assignment.order_id != payload.order_id:
         return False
-    if row.installer_id != staff_user.legacy_installer_id:
-        return False
-    if payload.tenant_id is not None and payload.tenant_id != row.tenant_id:
-        return False
-    if payload.storefront_id is not None and payload.storefront_id != row.storefront_id:
-        return False
-    return True
+    site = await session.get(Storefront, scope.storefront_id, populate_existing=True)
+    return bool(site and site.tenant_id == scope.tenant_id and site.status == "active"
+        and payload.stage_name == assignment.title
+        and payload.manager_url == installer_work_url(assignment.id, tenant_id=scope.tenant_id, storefront_slug=site.slug))
