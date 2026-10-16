@@ -11,6 +11,7 @@ from core.config import settings
 from core.database import get_session
 from core.security import (
     AuthenticatedUser,
+    create_access_token,
     require_manager_access,
 )
 from models import (
@@ -32,6 +33,7 @@ from services.staff_user_service import StaffUserService
 
 
 TEST_PASSWORD = "secret-12345"
+INSTALLER_STAFF_ID = 101
 
 
 class _GoogleServiceStub:
@@ -75,6 +77,7 @@ async def rbac_client(tmp_path: Path, monkeypatch):
         )
         users = [
             StaffUser(
+                id=INSTALLER_STAFF_ID,
                 display_name="Installer",
                 status="active",
                 primary_role="installer",
@@ -167,8 +170,22 @@ async def test_executor_roles_are_denied_manager_access(role: str):
 
 
 @pytest.mark.asyncio
-async def test_installer_can_login_but_cannot_open_manager_api(rbac_client: AsyncClient):
-    headers = await _login(rbac_client, "installer-rbac", TEST_PASSWORD)
+async def test_installer_only_cannot_login_or_use_preexisting_manager_token(rbac_client: AsyncClient):
+    response = await rbac_client.post(
+        "/login/access-token",
+        data={"username": "installer-rbac", "password": TEST_PASSWORD},
+    )
+    assert response.status_code == 400
+    assert "access_token" not in response.json()
+    assert "access_token" not in response.cookies
+
+    # A token issued before workspace eligibility changed cannot bypass the
+    # current actual membership checks, even with a live identity/version.
+    token = create_access_token({
+        "sub": "installer-rbac", "staff_user_id": INSTALLER_STAFF_ID,
+        "auth_version": 1, "auth_source": "staff_password", "role": "installer",
+    })
+    headers = {"Authorization": f"Bearer {token}"}
 
     me_response = await rbac_client.get("/api/manager/me", headers=headers)
     manager_response = await rbac_client.get("/api/manager/orders/scenarios", headers=headers)

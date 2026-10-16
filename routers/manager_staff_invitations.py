@@ -10,6 +10,10 @@ from api_contracts.manager_invitations import (
 from core.database import get_session
 from core.security import AuthenticatedUser, get_current_identity, reusable_oauth2, require_owner_access
 from routers.manager_profile import require_account_origin
+from routers.manager_operation_ids import (
+    MANAGER_CREATE_STAFF_INVITATION, MANAGER_LIST_STAFF_INVITATIONS,
+    MANAGER_REVOKE_STAFF_INVITATION,
+)
 from services.client_address_service import ClientAddressService
 from services.credential_service import CredentialPolicyError
 from services.login_throttle_service import LoginThrottleExceeded
@@ -40,7 +44,7 @@ async def invitation_errors(session):
         raise HTTPException(409, detail={"code": "invitation_conflict", "message": "Данные уже изменились. Обновите страницу"}) from None
 
 
-@router.post("", response_model=ManagerStaffInvitationCreated, operation_id="manager_create_staff_invitation", dependencies=[Depends(require_team_origin)])
+@router.post("", response_model=ManagerStaffInvitationCreated, operation_id=MANAGER_CREATE_STAFF_INVITATION, dependencies=[Depends(require_team_origin)])
 async def create_invitation(payload: ManagerStaffInvitationCreate, session: AsyncSession = Depends(get_session), auth: AuthenticatedUser = Depends(require_owner_access)):
     """Create a seven-day manual invitation. Requires X-Kitlane-Team:1 and approved Origin.
 
@@ -52,13 +56,13 @@ async def create_invitation(payload: ManagerStaffInvitationCreate, session: Asyn
         return await StaffInvitationService.create(session, auth=auth, role=payload.role)
 
 
-@router.get("", response_model=ManagerStaffInvitationList, operation_id="manager_list_staff_invitations")
+@router.get("", response_model=ManagerStaffInvitationList, operation_id=MANAGER_LIST_STAFF_INVITATIONS)
 async def list_invitations(page: int = Query(1, ge=1), limit: int = Query(50, ge=1, le=100), session: AsyncSession = Depends(get_session), auth: AuthenticatedUser = Depends(require_owner_access)):
     """List invitation status in the selected company; never returns tokens or password data."""
     return await StaffInvitationService.list(session, auth=auth, page=page, limit=limit)
 
 
-@router.delete("/{invitation_id}", status_code=204, operation_id="manager_revoke_staff_invitation", dependencies=[Depends(require_team_origin)])
+@router.delete("/{invitation_id}", status_code=204, operation_id=MANAGER_REVOKE_STAFF_INVITATION, dependencies=[Depends(require_team_origin)])
 async def revoke_invitation(invitation_id: int, session: AsyncSession = Depends(get_session), auth: AuthenticatedUser = Depends(require_owner_access)):
     """Revoke a pending invitation with live hierarchy checks and an atomic audit receipt.
 

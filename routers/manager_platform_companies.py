@@ -7,6 +7,10 @@ from api_contracts.manager_platform_companies import CompanySitesResponse, Platf
 from core.database import get_session
 from core.security import AuthenticatedIdentity, AuthenticatedUser, get_current_platform_identity, require_owner_access
 from routers.manager_profile import require_account_origin
+from routers.manager_operation_ids import (
+    MANAGER_LIST_PLATFORM_COMPANIES, MANAGER_UPDATE_PLATFORM_COMPANY,
+    MANAGER_LIST_COMPANY_SITES,
+)
 from services.platform_companies_service import PlatformCompaniesService, PlatformCompanyError
 
 router = APIRouter(prefix="/api/manager", tags=["manager-platform-companies"])
@@ -16,7 +20,7 @@ def require_company_origin(request: Request):
     require_account_origin(request, header="X-Kitlane-Team")
 
 
-@router.get("/platform/companies", response_model=PlatformCompanyListResponse, operation_id="manager_list_platform_companies")
+@router.get("/platform/companies", response_model=PlatformCompanyListResponse, operation_id=MANAGER_LIST_PLATFORM_COMPANIES)
 async def list_platform_companies(
     page: int = Query(1, ge=1), limit: int = Query(50, ge=1, le=100), search: str | None = Query(None, max_length=200),
     session: AsyncSession = Depends(get_session), actor: AuthenticatedIdentity = Depends(get_current_platform_identity),
@@ -31,7 +35,7 @@ async def list_platform_companies(
 
 
 @router.patch("/platform/companies/{tenant_id}", response_model=PlatformCompanyResponse,
-              operation_id="manager_update_platform_company", dependencies=[Depends(require_company_origin)])
+              operation_id=MANAGER_UPDATE_PLATFORM_COMPANY, dependencies=[Depends(require_company_origin)])
 async def update_platform_company(
     tenant_id: int, payload: PlatformCompanyUpdate, session: AsyncSession = Depends(get_session),
     actor: AuthenticatedIdentity = Depends(get_current_platform_identity),
@@ -50,7 +54,7 @@ async def update_platform_company(
         raise HTTPException(exc.status_code, detail={"code": exc.code, "message": str(exc)}) from exc
 
 
-@router.get("/company/sites", response_model=CompanySitesResponse, operation_id="manager_list_company_sites")
+@router.get("/company/sites", response_model=CompanySitesResponse, operation_id=MANAGER_LIST_COMPANY_SITES)
 async def list_company_sites(
     page: int = Query(1, ge=1), limit: int = Query(100, ge=1, le=100),
     session: AsyncSession = Depends(get_session), auth: AuthenticatedUser = Depends(require_owner_access),

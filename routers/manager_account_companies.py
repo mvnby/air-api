@@ -3,12 +3,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api_contracts.manager_companies import ManagerAccountCompaniesResponse
 from core.database import get_session
 from core.security import AuthenticatedIdentity, get_current_identity
+from routers.manager_operation_ids import MANAGER_LIST_ACCOUNT_COMPANIES
 from services.manager_account_companies_service import ManagerAccountCompaniesService
 
 router = APIRouter(prefix="/api/manager/account", tags=["manager-account"])
 
 
-@router.get("/companies", response_model=ManagerAccountCompaniesResponse, operation_id="manager_list_account_companies")
+@router.get("/companies", response_model=ManagerAccountCompaniesResponse, operation_id=MANAGER_LIST_ACCOUNT_COMPANIES)
 async def list_account_companies(
     page: int = Query(1, ge=1), limit: int = Query(100, ge=1, le=100),
     session: AsyncSession = Depends(get_session), identity: AuthenticatedIdentity = Depends(get_current_identity),
