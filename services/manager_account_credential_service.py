@@ -6,9 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from core.request_context import current_request_id
-from models import StaffUser, TenantAuditEvent, TenantMembership
+from models import StaffUser, Tenant, TenantAuditEvent, TenantMembership
 from models.tenancy import TenantScope
 from services.credential_service import CredentialPolicyError, CredentialService
+from services.staff_tenant_membership_service import StaffTenantMembershipService
 from services.legacy_owner_managed_identity_service import (
     LegacyOwnerManagedIdentityError,
     LegacyOwnerManagedIdentityService,
@@ -34,6 +35,7 @@ class ManagerAccountCredentialService:
         tenant_scope: TenantScope,
         current_password: str,
         new_password: str,
+        expected_auth_version: int | None = None,
     ) -> None:
         try:
             await LegacyOwnerManagedIdentityService.ensure_self_service_allowed(
@@ -45,6 +47,7 @@ class ManagerAccountCredentialService:
                 "self_service_unavailable",
                 "Для legacy-владельца смена пароля сейчас недоступна",
             ) from exc
+        await StaffTenantMembershipService.lock_tenant(session, tenant_id=tenant_scope.tenant_id)
         staff_user = (
             await session.execute(
                 select(StaffUser)
@@ -56,11 +59,16 @@ class ManagerAccountCredentialService:
                     StaffUser.id == staff_user_id,
                     TenantMembership.tenant_id == tenant_scope.tenant_id,
                     TenantMembership.status == "active",
+                    TenantMembership.role.in_(["owner", "admin", "manager", "catalog_editor"]),
+                    StaffUser.status == "active", StaffUser.merged_into_staff_user_id.is_(None),
                 )
                 .with_for_update()
+                .execution_options(populate_existing=True)
             )
         ).scalar_one_or_none()
-        if staff_user is None:
+        tenant = await session.get(Tenant, tenant_scope.tenant_id, populate_existing=True)
+        if (staff_user is None or tenant is None or tenant.status != "active" or tenant.demo_read_only
+                or (expected_auth_version is not None and staff_user.auth_version != expected_auth_version)):
             raise ManagerAccountCredentialError(
                 "invalid_session",
                 "Активная учётная запись сотрудника не найдена",

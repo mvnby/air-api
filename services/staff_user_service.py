@@ -182,7 +182,7 @@ class StaffUserService:
 
         return ManagerStaffResponse(
             id=int(user.id or 0),
-            avatar_url=staff_avatar_url(user),
+            avatar_url=staff_avatar_url(user, tenant_id=membership.tenant_id) if membership else None,
             display_name=user.display_name,
             status=(
                 StaffTenantMembershipService.staff_status(membership.status)
@@ -284,7 +284,7 @@ class StaffUserService:
 
     @classmethod
     async def get_by_id(cls, session: AsyncSession, staff_user_id: int) -> StaffUser | None:
-        return await session.get(StaffUser, staff_user_id)
+        return await session.get(StaffUser, staff_user_id, populate_existing=True)
 
     @classmethod
     async def list_staff(
@@ -695,6 +695,13 @@ class StaffUserService:
         tenant_scope: TenantScope,
     ) -> list[int]:
         try:
+            from models.tenancy import Tenant, Storefront
+            active_site = await session.scalar(select(Storefront.id)
+                .join(Tenant, Tenant.id == Storefront.tenant_id)
+                .where(Tenant.id == tenant_scope.tenant_id, Tenant.status == 'active',
+                       Storefront.id == tenant_scope.storefront_id, Storefront.status == 'active'))
+            if active_site is None:
+                return []
             stmt = (
                 select(StaffUser, TenantMembership)
                 .join(
@@ -707,7 +714,7 @@ class StaffUserService:
                     TenantMembership.tenant_id == tenant_scope.tenant_id,
                     TenantMembership.status == "active",
                 )
-                .order_by(StaffUser.id.asc())
+                .order_by(StaffUser.id.asc()).execution_options(populate_existing=True)
             )
             result = await session.execute(stmt)
             rows = list(result.all())
@@ -735,7 +742,7 @@ class StaffUserService:
 
         if recipient_ids:
             return recipient_ids
-        return await legacy_recipient_ids(session, settings.admin_list) if tenant_scope.is_system else []
+        return []
 
     @classmethod
     async def is_active_owner_admin_telegram_user(

@@ -1,4 +1,9 @@
 <script setup lang="ts">
+import { ContactRound, Pencil, CircleCheck } from 'lucide-vue-next';
+import TeamInvitationsPanel from '../components/manager/TeamInvitationsPanel.vue';
+import { managerInvitationsApi } from '../services/manager-invitations';
+import { managerSession } from '../services/manager-session';
+import { useDemoReadOnly } from '../services/manager-demo';
 import PersonAvatar from '../components/common/PersonAvatar.vue';
 import MoneyAmount from '../components/money/MoneyAmount.vue';
 import { onMounted, ref } from 'vue';
@@ -6,10 +11,13 @@ import { api, type ManagerStaffResponse } from '../api';
 import { getApiErrorMessage } from '../utils/api-errors';
 import InstallerEditModal from '../components/InstallerEditModal.vue';
 
+const readonly = useDemoReadOnly();
+const ownerProtected = (item: ManagerStaffResponse) => managerSession.auth.value?.role !== 'owner' && item.primary_role === 'owner';
 const staff = ref<ManagerStaffResponse[]>([]);
 const loading = ref(false);
 const error = ref('');
 const toast = ref('');
+const savingMembers = ref(new Set<number>());
 
 const showModal = ref(false);
 const editingStaff = ref<ManagerStaffResponse | null>(null);
@@ -55,11 +63,6 @@ const loadStaff = async () => {
     }
 };
 
-const openAddModal = () => {
-    editingStaff.value = null;
-    showModal.value = true;
-};
-
 const openEditModal = (item: ManagerStaffResponse) => {
     editingStaff.value = item;
     showModal.value = true;
@@ -71,14 +74,16 @@ const handleSuccess = () => {
 };
 
 const toggleActive = async (item: ManagerStaffResponse) => {
+    if (readonly.value || ownerProtected(item) || savingMembers.value.has(item.id)) return;
+    savingMembers.value.add(item.id);
     const nextStatus = item.status === 'active' ? 'inactive' : 'active';
     try {
-        const updated = await api.patchManagerStaff(item.id, { status: nextStatus });
+        const updated = await managerInvitationsApi.updateMember(item.id, { status: nextStatus });
         Object.assign(item, updated);
         setToast('Статус обновлен');
     } catch (e) {
         error.value = getApiErrorMessage(e);
-    }
+    } finally { savingMembers.value.delete(item.id); }
 };
 
 onMounted(() => {
@@ -90,7 +95,7 @@ onMounted(() => {
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
         <Transition name="toast">
             <div v-if="toast" class="fixed top-20 right-8 z-50 bg-brand-600 border border-brand-500 text-white px-4 py-3 rounded-lg shadow-xl shadow-brand-900/30 flex items-center gap-3">
-                <span class="material-icons-round text-xl">check_circle</span>
+                <CircleCheck aria-hidden="true" class="h-5 w-5" />
                 <span class="text-sm font-medium">{{ toast }}</span>
             </div>
         </Transition>
@@ -98,22 +103,18 @@ onMounted(() => {
         <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-8">
             <div>
                 <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-3">
-                    <span class="material-icons-round text-brand-600 dark:text-brand-400">badge</span>
+                    <ContactRound aria-hidden="true" class="h-6 w-6 text-brand-600 dark:text-brand-400" />
                     Сотрудники
                 </h1>
                 <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">
-                    Профили, доступ в менеджер, Telegram и назначение на работы
+                    Участники компании и их доступ
                 </p>
             </div>
 
-            <button
-                @click="openAddModal"
-                class="inline-flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 active:bg-brand-700 text-white font-medium py-2.5 px-4 rounded-lg shadow-lg shadow-brand-900/30 transition-all text-sm"
-            >
-                <span class="material-icons-round text-[18px]">add</span>
-                Добавить
-            </button>
+
         </div>
+
+        <TeamInvitationsPanel />
 
         <div v-if="error" class="bg-red-500/10 border border-red-500/50 text-red-500 dark:text-red-300 p-4 rounded-xl mb-6">
             {{ error }}
@@ -184,19 +185,19 @@ onMounted(() => {
                                     <span class="hidden sm:inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium whitespace-nowrap" :class="statusClasses(item)">
                                         {{ statusLabel(item) }}
                                     </span>
-                                    <label class="relative inline-flex items-center cursor-pointer" @click.prevent="toggleActive(item)" :title="item.status === 'active' ? 'Перевести в архив' : 'Вернуть в активные'">
-                                        <input type="checkbox" :checked="item.status === 'active'" class="sr-only peer" />
+                                    <label class="relative inline-flex items-center cursor-pointer"  :title="item.status === 'active' ? 'Перевести в архив' : 'Вернуть в активные'">
+                                        <input type="checkbox" role="switch" :aria-label="`Доступ: ${item.display_name}`" :checked="item.status === 'active'" :disabled="readonly || ownerProtected(item) || savingMembers.has(item.id)" class="sr-only peer" @change="($event.target as HTMLInputElement).checked = item.status === 'active'; toggleActive(item)" />
                                         <div class="w-9 h-5 bg-gray-200 dark:bg-slate-600 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand-500 transition-colors"></div>
                                     </label>
                                 </div>
                             </td>
                             <td class="px-5 py-4 text-right">
                                 <button
-                                    @click="openEditModal(item)"
+                                    :disabled="readonly || ownerProtected(item) || savingMembers.has(item.id)" @click="openEditModal(item)"
                                     class="p-2 text-gray-500 hover:text-gray-900 border-gray-200 hover:bg-gray-50 dark:text-slate-400 dark:hover:text-white bg-white dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg border dark:border-slate-600 transition-colors inline-flex items-center shadow-sm"
-                                    title="Редактировать"
+                                    title="Редактировать" aria-label="Редактировать"
                                 >
-                                    <span class="material-icons-round text-sm">edit</span>
+                                    <Pencil aria-hidden="true" class="h-4 w-4" />
                                 </button>
                             </td>
                         </tr>

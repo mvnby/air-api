@@ -2,6 +2,8 @@ from pydantic import BaseModel, Field
 
 
 class ManagerStorefrontResponse(BaseModel):
+    id: int
+    primary_hostname: str | None = None
     slug: str
     display_name: str
     city: str | None = None

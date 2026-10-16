@@ -1,4 +1,6 @@
 from unittest.mock import AsyncMock
+import pytest
+from services.bot_business_context import bind_bot_business_context
 
 from httpx import ASGITransport, AsyncClient
 
@@ -9,6 +11,13 @@ from services.bot_voice_quick_order_service import (
     BotVoiceQuickOrderResult,
     BotVoiceQuickOrderService,
 )
+
+
+@pytest.fixture(autouse=True)
+def isolate_service_forwarding():
+    app.dependency_overrides[bind_bot_business_context] = lambda: None
+    yield
+    app.dependency_overrides.pop(bind_bot_business_context, None)
 
 
 async def test_voice_quick_order_endpoint_returns_transcript_and_draft(monkeypatch):

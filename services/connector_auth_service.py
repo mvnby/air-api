@@ -88,7 +88,7 @@ class ConnectorAuthService:
             )
             await session.get(Tenant, snapshot.tenant_id, populate_existing=True)
             access = await ManagerTenantAccessResolver.resolve(
-                session, staff_user_id=user.id
+                session, staff_user_id=user.id, tenant_id=snapshot.tenant_id
             )
         except ManagerTenantAccessResolutionError:
             raise ConnectorAuthError(

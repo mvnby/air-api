@@ -5,6 +5,7 @@ import { Check, Clipboard, Eye, EyeOff, KeyRound, Loader2, RefreshCw } from 'luc
 import { ManagerService } from '../client';
 import ConnectorConnections from '../components/ConnectorConnections.vue';
 import { clearManagerSession, managerSession } from '../services/manager-session';
+import { ownProfileState } from '../services/manager-profile';
 import PersonalProfilePanel from '../components/profile/PersonalProfilePanel.vue';
 import {
   generateManagerPassword,
@@ -24,7 +25,7 @@ const generatedPassword = ref('');
 const generatedPasswordSaved = ref(false);
 const copySucceeded = ref(false);
 const copyingPassword = ref(false);
-const canChangePassword = computed(() => managerSession.auth.value?.can_change_password === true);
+const canChangePassword = computed(() => ownProfileState.value?.can_change_password === true && !ownProfileState.value.personal_read_only);
 const account = computed(() => managerSession.auth.value);
 const generatePassword = () => {
   const generated = generateManagerPassword();

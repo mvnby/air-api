@@ -28,7 +28,7 @@ from services.staff_task_notification_event_service import (
     StaffTaskNotificationEventService,
 )
 
-from models.tenancy import TenantScope
+from models.tenancy import TenantScope, Tenant, Storefront
 
 TEST_TENANT_SCOPE = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
 
@@ -37,6 +37,7 @@ TEST_TENANT_SCOPE = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
 async def staff_outbox_session(tmp_path):
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'staff-outbox.db'}")
     tables = (
+        Tenant.__table__, Storefront.__table__,
         Installer.__table__,
         StaffUser.__table__,
         TenantMembership.__table__,
@@ -54,6 +55,11 @@ async def staff_outbox_session(tmp_path):
     factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     try:
         async with factory() as session:
+            session.add_all([Tenant(id=1,slug='mvn',display_name='MVN',is_system=True),
+                             Tenant(id=2,slug='partner',display_name='Partner'),
+                             Storefront(id=1,tenant_id=1,slug='main',display_name='Main',status='active',is_default=True),
+                             Storefront(id=2,tenant_id=2,slug='main',display_name='Partner',status='active',is_default=True)])
+            await session.commit()
             yield session
     finally:
         await engine.dispose()
@@ -236,6 +242,8 @@ async def test_historical_staff_task_receipt_follows_only_safe_canonical_alias(s
                           telegram_id=999 if case == "other_telegram" else 123456, legacy_installer_id=10,
                           telegram_notifications_enabled=case != "opt_out")
     staff_outbox_session.add(canonical)
+    await staff_outbox_session.flush()
+    staff_outbox_session.add(TenantMembership(tenant_id=1, staff_user_id=21, role='owner', status='active'))
     if case == "other_assignment":
         stage.installer_id = None
     await staff_outbox_session.commit()
@@ -260,6 +268,8 @@ async def test_claim_cancels_delivery_when_assignment_is_stale(staff_outbox_sess
         tenant_scope=TEST_TENANT_SCOPE,
     )
     await staff_outbox_session.commit()
+    now = await CommunicationDeliveryService.database_now(staff_outbox_session)
+    await BotStaffNotificationApiService._materialize_pending(staff_outbox_session, worker_id='bot-1', now=now)
     stage.installer_id = None
     staff_outbox_session.add(stage)
     await staff_outbox_session.commit()

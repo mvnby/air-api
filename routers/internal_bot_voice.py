@@ -11,6 +11,7 @@ from api_contracts.bot import (
 )
 from core.bot_api_security import require_bot_api_token
 from core.database import get_session
+from services.bot_business_context import bind_bot_business_context
 from services.bot_voice_quick_order_service import (
     BotVoiceQuickOrderAccessDeniedError,
     BotVoiceQuickOrderService,
@@ -28,7 +29,7 @@ from services.bot_voice_transcription_provider import (
 router = APIRouter(
     prefix="/api/internal/bot/v1",
     tags=["internal bot v1 voice"],
-    dependencies=[Depends(require_bot_api_token)],
+    dependencies=[Depends(require_bot_api_token), Depends(bind_bot_business_context, scope="function")],
 )
 
 
@@ -38,6 +39,7 @@ router = APIRouter(
     operation_id="parse_internal_bot_voice_quick_order_v1",
 )
 async def parse_internal_bot_voice_quick_order(
+    expected_context_version: int | None = Form(default=None, ge=0),
     telegram_id: int = Form(ge=1),
     telegram_chat_id: int = Form(),
     telegram_message_id: int = Form(ge=1),

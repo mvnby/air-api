@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type BotRepairApplyRequest = {
+    expected_context_version?: (number | null);
     telegram_id: number;
     order_id: number;
     repair_meta_draft: Record<string, any>;

@@ -14,7 +14,7 @@ async def test_bot_catalog_service_authorizes_staff_before_search(monkeypatch):
     monkeypatch.setattr(
         BotAccessService,
         "get_context",
-        AsyncMock(return_value=SimpleNamespace(is_staff=True)),
+        AsyncMock(return_value=SimpleNamespace(is_staff=True, selection=None)),
     )
     monkeypatch.setattr(ProductService, "search_products", search)
     session = object()

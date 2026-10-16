@@ -14,8 +14,8 @@ class BotCatalogOperationsApiService:
     async def build_selection(
         session: AsyncSession, *, telegram_id: int, query: str
     ) -> dict[str, Any]:
-        await require_bot_manager(session, telegram_id)
-        return await BotProductSelectionService.build_selection(session, query)
+        context = await require_bot_manager(session, telegram_id)
+        return await BotProductSelectionService.build_selection(session, query, tenant_scope=context.selection.scope if context.selection else None)
 
     @staticmethod
     async def get_curated(
@@ -27,7 +27,10 @@ class BotCatalogOperationsApiService:
         tag_slugs: list[str],
         limit: int,
     ) -> list[dict[str, Any]]:
-        await require_bot_staff(session, telegram_id)
+        context = await require_bot_staff(session, telegram_id)
+        if context.selection is not None and not context.selection.is_system:
+            from services.bot_tenant_catalog_service import BotTenantCatalogService
+            return await BotTenantCatalogService.products(session, context.selection.scope, area=area, is_inverter=is_inverter, tag_slugs=tag_slugs, limit=limit)
         return await ProductService.get_curated(
             session,
             area=area,

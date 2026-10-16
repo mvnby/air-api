@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api_contracts.bot import (
@@ -173,6 +174,9 @@ class BotVoiceQuickOrderService:
             raise
         except BotVoiceTranscriptionProviderError:
             await cls._mark_failed(session, audit, error_code="provider_error")
+            raise
+        except HTTPException:
+            await session.rollback()
             raise
         except Exception as exc:
             await cls._mark_failed(session, audit, error_code="quick_order_parse_error")

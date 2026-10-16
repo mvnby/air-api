@@ -304,6 +304,125 @@
         ]
       }
     },
+    "/api/internal/bot/v1/staff/context/{telegram_id}/choices": {
+      "get": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Choices",
+        "description": "List a deterministic page of at most 100 accessible company/site pairs.\n\nAccess: service BOT_API_TOKEN plus an active linked staff identity and real active\nmemberships. An invalid previous selection does not prevent choosing again.",
+        "operationId": "get_internal_bot_staff_context_choices_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "telegram_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Telegram Id"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotStaffContextChoicesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal/bot/v1/staff/context/select": {
+      "post": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Select Context",
+        "description": "Select an accessible company/site using optimistic context concurrency.\n\nAccess: service BOT_API_TOKEN and the actor's real active membership; no platform\nowner virtual access or caller-provided role grants. A stale version returns 409.",
+        "operationId": "select_internal_bot_staff_context_v1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotStaffContextSelectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotStaffContextResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
     "/api/internal/bot/v1/health": {
       "get": {
         "tags": [
@@ -337,7 +456,7 @@
           "internal bot v1"
         ],
         "summary": "Get Internal Bot Staff Context",
-        "description": "Resolve the active staff context of a Telegram identity, including Manager/executor\nroles and legacy installer linkage. A non-staff identity is represented by\nis_staff=false rather than a business permission grant.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
+        "description": "Resolve the active staff context of a Telegram identity, including Manager/executor\nroles and legacy installer linkage. A non-staff identity is represented by\nis_staff=false rather than a business permission grant. An active identity whose\nexplicit selection is unavailable receives a null company/site pair and its durable\ncontext_version so the picker can recover; business calls never fall back to another\ncompany or site.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "get_internal_bot_staff_context_v1",
         "security": [
           {
@@ -449,6 +568,23 @@
               "type": "integer",
               "minimum": 1,
               "title": "Product Id"
+            }
+          },
+          {
+            "name": "expected_context_version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Expected Context Version"
             }
           },
           {
@@ -2249,7 +2385,7 @@
           "internal bot v1 runtime"
         ],
         "summary": "Get Fsm State",
-        "description": "Read durable bot FSM state by service storage_key; missing state is state=null/data={}.\nThis service primitive does not authorize a Telegram actor and is not a tenant CRM read.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
+        "description": "Read durable bot FSM state by service storage_key; missing state is state=null/data={}.\nOptional telegram_id and expected_context_version validate the actor's fresh selected\ncontext. Legacy opaque service keys retain primitive compatibility without CRM grants;\ncompany-picker ctxcb state remains readable for recovery from an unavailable selection.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "get_internal_bot_fsm_state_v1",
         "requestBody": {
           "content": {
@@ -2296,7 +2432,7 @@
           "internal bot v1 runtime"
         ],
         "summary": "Update Fsm State",
-        "description": "Update the service-owned FSM row under storage_key. write_state and write_data choose\nwhich parts to replace; data is replaced, not merged. Empty state/data removes the row.\nNo Telegram actor check or caller-supplied version precondition is provided.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
+        "description": "Update the service-owned FSM row under storage_key. write_state and write_data choose\nwhich parts to replace; data is replaced, not merged. Empty state/data removes the row.\nOptional telegram_id and expected_context_version fence writes to a fresh selected\ncontext. Legacy keys cannot write after the actor switches context. Recovery ctxcb\nrecords permit only company-picker callbacks and never grant access to CRM data.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "update_internal_bot_fsm_state_v1",
         "requestBody": {
           "content": {
@@ -5252,6 +5388,523 @@
         "security": [
           {
             "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/account/companies": {
+      "get": {
+        "tags": [
+          "manager-account"
+        ],
+        "summary": "List Account Companies",
+        "description": "Bootstrap active company choices from the authenticated person, ignoring selection headers.\n\nActual memberships use current workspace roles; verified platform owners also see virtual\nsupport contexts without creating memberships. Invalid JWTs return401. Multiple companies\nrequire explicit selection on business requests, never on this account bootstrap.",
+        "operationId": "manager_list_account_companies",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerAccountCompaniesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/platform/companies": {
+      "get": {
+        "tags": [
+          "manager-platform-companies"
+        ],
+        "summary": "List Platform Companies",
+        "description": "List every company, owners, live staff counts and all sites/domains for the platform owner.\n\nIncludes disabled/demo companies and unpublished sites; never exposes credentials.\nIndependent of selected company headers. Company owners/admins receive 403.\nPage-based pagination is bounded to 100 companies; search matches name or slug.",
+        "operationId": "manager_list_platform_companies",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformCompanyListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/platform/companies/{tenant_id}": {
+      "patch": {
+        "tags": [
+          "manager-platform-companies"
+        ],
+        "summary": "Update Platform Company",
+        "description": "Change a company name or active/disabled status as the live platform owner; audit atomically.\n\nRequires X-Kitlane-Team: 1, approved origin and exact expected_updated_at. Stale state\nreturns 409, missing company 404; the canonical system company cannot be disabled.\nDisabling blocks company access on fresh requests; it does not delete business data,\nchange catalog grants, provision sites or edit DNS. Re-read before retrying a conflict.",
+        "operationId": "manager_update_platform_company",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Tenant Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlatformCompanyUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformCompanyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/company/sites": {
+      "get": {
+        "tags": [
+          "manager-platform-companies"
+        ],
+        "summary": "List Company Sites",
+        "description": "Show all sites and domain states in the selected company to its owner/admin.\n\nIncludes draft and disabled sites for visibility. This read-only endpoint cannot\nprovision a site, publish it or alter a domain. No other company's sites are returned.\nPage-based pagination returns at most 100 sites.",
+        "operationId": "manager_list_company_sites",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanySitesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/staff/invitations": {
+      "post": {
+        "tags": [
+          "manager-team"
+        ],
+        "summary": "Create Invitation",
+        "description": "Create a seven-day manual invitation. Requires X-Kitlane-Team:1 and approved Origin.\n\nLive owner/admin hierarchy determines assignable roles; platform support uses verified\nowner authority. Returns its bearer URL only once. No email is sent, no user is created\nand no catalog permission is granted. Legacy recovery identities without staff return403.",
+        "operationId": "manager_create_staff_invitation",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerStaffInvitationCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerStaffInvitationCreated"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "manager-team"
+        ],
+        "summary": "List Invitations",
+        "description": "List invitation status in the selected company; never returns tokens or password data.",
+        "operationId": "manager_list_staff_invitations",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerStaffInvitationList"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/staff/invitations/{invitation_id}": {
+      "delete": {
+        "tags": [
+          "manager-team"
+        ],
+        "summary": "Revoke Invitation",
+        "description": "Revoke a pending invitation with live hierarchy checks and an atomic audit receipt.\n\nRequires X-Kitlane-Team:1 and approved Origin. Accepted links cannot grant access again;\nrevoking an already finished invitation does not change its existing membership.",
+        "operationId": "manager_revoke_staff_invitation",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "invitation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Invitation Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/account/invitations/preview": {
+      "post": {
+        "tags": [
+          "account-invitations"
+        ],
+        "summary": "Preview Invitation",
+        "description": "Preview company name, role and expiry from a bearer token carried in JSON, not a URL query.\n\nNo account lookup or membership mutation occurs. Invalid, expired, used, revoked or\nunavailable-company invitations return404. Preview does not consume the token.",
+        "operationId": "preview_staff_invitation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffInvitationToken"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffInvitationPreview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/account/invitations/accept": {
+      "post": {
+        "tags": [
+          "account-invitations"
+        ],
+        "summary": "Accept Invitation",
+        "description": "Accept once using an existing session, explicit account credentials, or a new strong password.\n\nRequires X-Kitlane-Team:1 and approved Origin. Password proof is rate limited. Live inviter\nauthority is checked under locks; no email matching, password reset, existing-membership\nupgrade, catalog grant or blocked/merged account reactivation occurs. A returning inactive\nperson can prove their existing password and join a new company while all old memberships\nstay disabled; auth_version increments. New/credential modes set a normal HttpOnly cookie.",
+        "operationId": "accept_staff_invitation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/StaffInvitationAcceptExisting"
+                  },
+                  {
+                    "$ref": "#/components/schemas/StaffInvitationAcceptNew"
+                  },
+                  {
+                    "$ref": "#/components/schemas/StaffInvitationAcceptCredentials"
+                  }
+                ],
+                "title": "Payload",
+                "discriminator": {
+                  "propertyName": "mode",
+                  "mapping": {
+                    "existing": "#/components/schemas/StaffInvitationAcceptExisting",
+                    "new": "#/components/schemas/StaffInvitationAcceptNew",
+                    "existing_credentials": "#/components/schemas/StaffInvitationAcceptCredentials"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffInvitationAccepted"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
           }
         ]
       }
@@ -14140,6 +14793,16 @@
             "schema": {
               "type": "integer",
               "title": "Staff User Id"
+            }
+          },
+          {
+            "name": "tenant_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Tenant Id"
             }
           }
         ],
@@ -37896,6 +38559,18 @@
       },
       "Body_apply_internal_bot_repair_nameplate_v1": {
         "properties": {
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
           "telegram_id": {
             "type": "integer",
             "minimum": 1.0,
@@ -37969,6 +38644,18 @@
       },
       "Body_apply_internal_bot_warranty_nameplate_v1": {
         "properties": {
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
           "telegram_id": {
             "type": "integer",
             "minimum": 1.0,
@@ -38048,6 +38735,18 @@
       },
       "Body_attach_internal_bot_order_file_v1": {
         "properties": {
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
           "telegram_id": {
             "type": "integer",
             "minimum": 1.0,
@@ -38097,6 +38796,18 @@
       },
       "Body_attach_internal_bot_task_stage_file_v1": {
         "properties": {
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
           "telegram_id": {
             "type": "integer",
             "minimum": 1.0,
@@ -38552,6 +39263,18 @@
       },
       "Body_parse_internal_bot_voice_quick_order_v1": {
         "properties": {
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
           "telegram_id": {
             "type": "integer",
             "minimum": 1.0,
@@ -38590,6 +39313,18 @@
       },
       "Body_recognize_internal_bot_customer_requisites_file_v1": {
         "properties": {
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
           "telegram_id": {
             "type": "integer",
             "minimum": 1.0,
@@ -38632,6 +39367,18 @@
       },
       "Body_recognize_internal_bot_repair_nameplate_v1": {
         "properties": {
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
           "telegram_id": {
             "type": "integer",
             "minimum": 1.0,
@@ -38658,6 +39405,18 @@
       },
       "Body_recognize_internal_bot_warranty_nameplate_v1": {
         "properties": {
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
           "telegram_id": {
             "type": "integer",
             "minimum": 1.0,
@@ -39283,6 +40042,18 @@
       },
       "BotCatalogSearchRequest": {
         "properties": {
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
           "telegram_id": {
             "type": "integer",
             "minimum": 1.0,
@@ -39341,6 +40112,18 @@
       },
       "BotCuratedProductsRequest": {
         "properties": {
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
           "telegram_id": {
             "type": "integer",
             "minimum": 1.0,
@@ -39447,6 +40230,18 @@
       },
       "BotCustomerRequisitesActionRequest": {
         "properties": {
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
           "telegram_id": {
             "type": "integer",
             "minimum": 1.0,
@@ -39581,6 +40376,18 @@
       },
       "BotCustomerRequisitesTextRequest": {
         "properties": {
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
           "telegram_id": {
             "type": "integer",
             "minimum": 1.0,
@@ -39624,6 +40431,30 @@
       },
       "BotFsmStateGetRequest": {
         "properties": {
+          "telegram_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telegram Id"
+          },
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
           "storage_key": {
             "type": "string",
             "maxLength": 1000,
@@ -39661,6 +40492,30 @@
       },
       "BotFsmStateUpdateRequest": {
         "properties": {
+          "telegram_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telegram Id"
+          },
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
           "storage_key": {
             "type": "string",
             "maxLength": 1000,
@@ -39940,6 +40795,18 @@
       },
       "BotOrderListRequest": {
         "properties": {
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
           "telegram_id": {
             "type": "integer",
             "minimum": 1.0,
@@ -39985,6 +40852,18 @@
       },
       "BotProductMutationRequest": {
         "properties": {
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
           "telegram_id": {
             "type": "integer",
             "minimum": 1.0,
@@ -40018,6 +40897,18 @@
       },
       "BotProductPriceUpdateRequest": {
         "properties": {
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
           "telegram_id": {
             "type": "integer",
             "minimum": 1.0,
@@ -40039,6 +40930,18 @@
       },
       "BotProductSelectionRequest": {
         "properties": {
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
           "telegram_id": {
             "type": "integer",
             "minimum": 1.0,
@@ -40112,6 +41015,18 @@
       },
       "BotQuickOrderCreateRequest": {
         "properties": {
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
           "telegram_id": {
             "type": "integer",
             "minimum": 1.0,
@@ -40214,6 +41129,18 @@
       },
       "BotQuickOrderCustomerSearchRequest": {
         "properties": {
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
           "telegram_id": {
             "type": "integer",
             "minimum": 1.0,
@@ -40550,6 +41477,18 @@
       },
       "BotQuickOrderDraftActionRequest": {
         "properties": {
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
           "telegram_id": {
             "type": "integer",
             "minimum": 1.0,
@@ -40570,6 +41509,18 @@
       },
       "BotQuickOrderDraftPatchRequest": {
         "properties": {
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
           "telegram_id": {
             "type": "integer",
             "minimum": 1.0,
@@ -40665,6 +41616,18 @@
       },
       "BotQuickOrderDraftStartRequest": {
         "properties": {
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
           "telegram_id": {
             "type": "integer",
             "minimum": 1.0,
@@ -40697,6 +41660,18 @@
       },
       "BotQuickOrderParseRequest": {
         "properties": {
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
           "telegram_id": {
             "type": "integer",
             "minimum": 1.0,
@@ -40773,6 +41748,18 @@
       },
       "BotRepairApplyRequest": {
         "properties": {
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
           "telegram_id": {
             "type": "integer",
             "minimum": 1.0,
@@ -40841,6 +41828,18 @@
       },
       "BotRepairDraftRequest": {
         "properties": {
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
           "telegram_id": {
             "type": "integer",
             "minimum": 1.0,
@@ -40963,6 +41962,86 @@
         ],
         "title": "BotRuntimeLeaseResponse"
       },
+      "BotStaffCompanyChoice": {
+        "properties": {
+          "tenant_id": {
+            "type": "integer",
+            "title": "Tenant Id"
+          },
+          "tenant_slug": {
+            "type": "string",
+            "title": "Tenant Slug"
+          },
+          "tenant_name": {
+            "type": "string",
+            "title": "Tenant Name"
+          },
+          "primary_role": {
+            "type": "string",
+            "title": "Primary Role"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Permissions"
+          },
+          "storefronts": {
+            "items": {
+              "$ref": "#/components/schemas/BotStaffSiteChoice"
+            },
+            "type": "array",
+            "title": "Storefronts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id",
+          "tenant_slug",
+          "tenant_name",
+          "primary_role",
+          "permissions",
+          "storefronts"
+        ],
+        "title": "BotStaffCompanyChoice"
+      },
+      "BotStaffContextChoicesResponse": {
+        "properties": {
+          "context_version": {
+            "type": "integer",
+            "title": "Context Version"
+          },
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/BotStaffCompanyChoice"
+            },
+            "type": "array",
+            "title": "Choices"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "context_version",
+          "choices",
+          "offset",
+          "limit",
+          "total"
+        ],
+        "title": "BotStaffContextChoicesResponse"
+      },
       "BotStaffContextResponse": {
         "properties": {
           "telegram_id": {
@@ -41012,6 +42091,99 @@
             "type": "boolean",
             "title": "Is Executor",
             "default": false
+          },
+          "staff_user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Staff User Id"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          },
+          "tenant_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Slug"
+          },
+          "tenant_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Name"
+          },
+          "storefront_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storefront Id"
+          },
+          "storefront_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storefront Slug"
+          },
+          "storefront_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storefront Name"
+          },
+          "context_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Version"
+          },
+          "can_switch_context": {
+            "type": "boolean",
+            "title": "Can Switch Context",
+            "default": false
           }
         },
         "type": "object",
@@ -41019,6 +42191,39 @@
           "telegram_id"
         ],
         "title": "BotStaffContextResponse"
+      },
+      "BotStaffContextSelectRequest": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Telegram Id"
+          },
+          "tenant_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Tenant Id"
+          },
+          "storefront_slug": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Storefront Slug"
+          },
+          "expected_context_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Context Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "tenant_id",
+          "storefront_slug",
+          "expected_context_version"
+        ],
+        "title": "BotStaffContextSelectRequest"
       },
       "BotStaffNotificationAckRequest": {
         "properties": {
@@ -41269,6 +42474,30 @@
             "minimum": 1.0,
             "title": "Staff User Id"
           },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          },
+          "storefront_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storefront Id"
+          },
           "stage_id": {
             "type": "integer",
             "minimum": 1.0,
@@ -41421,6 +42650,34 @@
         ],
         "title": "BotStaffNotificationRenewRequest"
       },
+      "BotStaffSiteChoice": {
+        "properties": {
+          "storefront_id": {
+            "type": "integer",
+            "title": "Storefront Id"
+          },
+          "storefront_slug": {
+            "type": "string",
+            "title": "Storefront Slug"
+          },
+          "storefront_name": {
+            "type": "string",
+            "title": "Storefront Name"
+          },
+          "is_default": {
+            "type": "boolean",
+            "title": "Is Default"
+          }
+        },
+        "type": "object",
+        "required": [
+          "storefront_id",
+          "storefront_slug",
+          "storefront_name",
+          "is_default"
+        ],
+        "title": "BotStaffSiteChoice"
+      },
       "BotTaskAttachmentResponse": {
         "properties": {
           "stage_id": {
@@ -41448,6 +42705,18 @@
       },
       "BotTaskListRequest": {
         "properties": {
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
           "telegram_id": {
             "type": "integer",
             "minimum": 1.0,
@@ -41524,6 +42793,18 @@
       },
       "BotTaskReportSaveRequest": {
         "properties": {
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
           "telegram_id": {
             "type": "integer",
             "minimum": 1.0,
@@ -41671,6 +42952,18 @@
       },
       "BotTaskStatusUpdateRequest": {
         "properties": {
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
           "telegram_id": {
             "type": "integer",
             "minimum": 1.0,
@@ -44785,6 +46078,169 @@
           "product_count"
         ],
         "title": "CommonGalleryImageResponse"
+      },
+      "CompanyDomainResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "hostname": {
+            "type": "string",
+            "title": "Hostname"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "active",
+              "disabled"
+            ],
+            "title": "Status"
+          },
+          "is_primary": {
+            "type": "boolean",
+            "title": "Is Primary"
+          },
+          "verified_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "hostname",
+          "status",
+          "is_primary",
+          "verified_at"
+        ],
+        "title": "CompanyDomainResponse"
+      },
+      "CompanyOwnerResponse": {
+        "properties": {
+          "staff_user_id": {
+            "type": "integer",
+            "title": "Staff User Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "staff_user_id",
+          "display_name"
+        ],
+        "title": "CompanyOwnerResponse"
+      },
+      "CompanySiteResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "active",
+              "disabled"
+            ],
+            "title": "Status"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "default_locale": {
+            "type": "string",
+            "title": "Default Locale"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "is_default": {
+            "type": "boolean",
+            "title": "Is Default"
+          },
+          "domains": {
+            "items": {
+              "$ref": "#/components/schemas/CompanyDomainResponse"
+            },
+            "type": "array",
+            "title": "Domains"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "slug",
+          "display_name",
+          "status",
+          "city",
+          "default_locale",
+          "currency",
+          "is_default",
+          "domains"
+        ],
+        "title": "CompanySiteResponse"
+      },
+      "CompanySitesResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CompanySiteResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit"
+        ],
+        "title": "CompanySitesResponse"
       },
       "ConditionPresetItem": {
         "properties": {
@@ -58197,6 +59653,135 @@
         ],
         "title": "ManagerAccessUpdate"
       },
+      "ManagerAccountCompaniesResponse": {
+        "properties": {
+          "staff_user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Staff User Id"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "is_platform_owner": {
+            "type": "boolean",
+            "title": "Is Platform Owner"
+          },
+          "default_tenant_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Tenant Id"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerAccountCompany"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "staff_user_id",
+          "username",
+          "is_platform_owner",
+          "default_tenant_id",
+          "items",
+          "total",
+          "page",
+          "limit"
+        ],
+        "title": "ManagerAccountCompaniesResponse"
+      },
+      "ManagerAccountCompany": {
+        "properties": {
+          "tenant_id": {
+            "type": "integer",
+            "title": "Tenant Id"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "membership_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Membership Id"
+          },
+          "access_kind": {
+            "type": "string",
+            "enum": [
+              "membership",
+              "platform_support"
+            ],
+            "title": "Access Kind"
+          },
+          "is_system": {
+            "type": "boolean",
+            "title": "Is System"
+          },
+          "demo_read_only": {
+            "type": "boolean",
+            "title": "Demo Read Only"
+          },
+          "default_storefront_slug": {
+            "type": "string",
+            "title": "Default Storefront Slug"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id",
+          "slug",
+          "display_name",
+          "role",
+          "membership_id",
+          "access_kind",
+          "is_system",
+          "demo_read_only",
+          "default_storefront_slug"
+        ],
+        "title": "ManagerAccountCompany"
+      },
       "ManagerActionMessageResponse": {
         "properties": {
           "message": {
@@ -58212,6 +59797,15 @@
       },
       "ManagerAuthStatusResponse": {
         "properties": {
+          "access_kind": {
+            "type": "string",
+            "enum": [
+              "membership",
+              "platform_support"
+            ],
+            "title": "Access Kind",
+            "default": "membership"
+          },
           "username": {
             "type": "string",
             "title": "Username"
@@ -74440,6 +76034,21 @@
             "format": "date-time",
             "title": "Updated At"
           },
+          "can_change_password": {
+            "type": "boolean",
+            "title": "Can Change Password",
+            "default": false
+          },
+          "must_change_password": {
+            "type": "boolean",
+            "title": "Must Change Password",
+            "default": false
+          },
+          "personal_read_only": {
+            "type": "boolean",
+            "title": "Personal Read Only",
+            "default": false
+          },
           "telegram_linked": {
             "type": "boolean",
             "title": "Telegram Linked"
@@ -77213,6 +78822,139 @@
         ],
         "title": "ManagerStaffCreatePayload"
       },
+      "ManagerStaffInvitationCreate": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "admin",
+              "manager",
+              "catalog_editor"
+            ],
+            "title": "Role"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "role"
+        ],
+        "title": "ManagerStaffInvitationCreate"
+      },
+      "ManagerStaffInvitationCreated": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "admin",
+              "manager",
+              "catalog_editor"
+            ],
+            "title": "Role"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "invite_url": {
+            "type": "string",
+            "title": "Invite Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "role",
+          "expires_at",
+          "invite_url"
+        ],
+        "title": "ManagerStaffInvitationCreated"
+      },
+      "ManagerStaffInvitationItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "admin",
+              "manager",
+              "catalog_editor"
+            ],
+            "title": "Role"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "accepted",
+              "revoked",
+              "expired"
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "role",
+          "created_at",
+          "expires_at",
+          "status"
+        ],
+        "title": "ManagerStaffInvitationItem"
+      },
+      "ManagerStaffInvitationList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerStaffInvitationItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit"
+        ],
+        "title": "ManagerStaffInvitationList"
+      },
       "ManagerStaffListResponse": {
         "properties": {
           "items": {
@@ -77697,6 +79439,21 @@
       },
       "ManagerStorefrontResponse": {
         "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "primary_hostname": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Hostname"
+          },
           "slug": {
             "type": "string",
             "title": "Slug"
@@ -77735,6 +79492,7 @@
         },
         "type": "object",
         "required": [
+          "id",
           "slug",
           "display_name",
           "default_locale",
@@ -84873,6 +86631,154 @@
         ],
         "title": "PersonalTaskUpdatePayload"
       },
+      "PlatformCompanyListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PlatformCompanyResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit"
+        ],
+        "title": "PlatformCompanyListResponse"
+      },
+      "PlatformCompanyResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "disabled"
+            ],
+            "title": "Status"
+          },
+          "is_system": {
+            "type": "boolean",
+            "title": "Is System"
+          },
+          "demo_read_only": {
+            "type": "boolean",
+            "title": "Demo Read Only"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "owners": {
+            "items": {
+              "$ref": "#/components/schemas/CompanyOwnerResponse"
+            },
+            "type": "array",
+            "title": "Owners"
+          },
+          "active_staff_count": {
+            "type": "integer",
+            "title": "Active Staff Count"
+          },
+          "sites": {
+            "items": {
+              "$ref": "#/components/schemas/CompanySiteResponse"
+            },
+            "type": "array",
+            "title": "Sites"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "slug",
+          "display_name",
+          "kind",
+          "status",
+          "is_system",
+          "demo_read_only",
+          "updated_at",
+          "owners",
+          "active_staff_count",
+          "sites"
+        ],
+        "title": "PlatformCompanyResponse"
+      },
+      "PlatformCompanyUpdate": {
+        "properties": {
+          "expected_updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expected Updated At"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 160,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "active",
+                  "disabled"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_updated_at"
+        ],
+        "title": "PlatformCompanyUpdate"
+      },
       "PostalAddressLines": {
         "properties": {
           "delivery_lines": {
@@ -90516,6 +92422,171 @@
           "total_products_using"
         ],
         "title": "SpecsKeysResponse"
+      },
+      "StaffInvitationAcceptCredentials": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 32,
+            "title": "Token"
+          },
+          "mode": {
+            "type": "string",
+            "const": "existing_credentials",
+            "title": "Mode"
+          },
+          "username": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 72,
+            "minLength": 1,
+            "title": "Password"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token",
+          "mode",
+          "username",
+          "password"
+        ],
+        "title": "StaffInvitationAcceptCredentials"
+      },
+      "StaffInvitationAcceptExisting": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 32,
+            "title": "Token"
+          },
+          "mode": {
+            "type": "string",
+            "const": "existing",
+            "title": "Mode"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token",
+          "mode"
+        ],
+        "title": "StaffInvitationAcceptExisting"
+      },
+      "StaffInvitationAcceptNew": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 32,
+            "title": "Token"
+          },
+          "mode": {
+            "type": "string",
+            "const": "new",
+            "title": "Mode"
+          },
+          "username": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 72,
+            "minLength": 9,
+            "title": "Password"
+          },
+          "display_name": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Display Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token",
+          "mode",
+          "username",
+          "password",
+          "display_name"
+        ],
+        "title": "StaffInvitationAcceptNew"
+      },
+      "StaffInvitationAccepted": {
+        "properties": {
+          "tenant_id": {
+            "type": "integer",
+            "title": "Tenant Id"
+          },
+          "default_storefront_slug": {
+            "type": "string",
+            "title": "Default Storefront Slug"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id",
+          "default_storefront_slug"
+        ],
+        "title": "StaffInvitationAccepted"
+      },
+      "StaffInvitationPreview": {
+        "properties": {
+          "company_name": {
+            "type": "string",
+            "title": "Company Name"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "admin",
+              "manager",
+              "catalog_editor"
+            ],
+            "title": "Role"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_name",
+          "role",
+          "expires_at"
+        ],
+        "title": "StaffInvitationPreview"
+      },
+      "StaffInvitationToken": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 32,
+            "title": "Token"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token"
+        ],
+        "title": "StaffInvitationToken"
       },
       "StorefrontBrandResponse": {
         "properties": {

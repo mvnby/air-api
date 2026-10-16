@@ -4,11 +4,11 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from services.bot_api_access import require_bot_manager, require_bot_staff
+from services.bot_api_access import require_bot_manager, require_bot_crm_staff
 from services.bot_order_attachment_service import BotOrderAttachmentService
 from services.bot_repair_nameplate_service import BotRepairNameplateService
 from services.bot_warranty_nameplate_service import BotWarrantyNameplateService
-from services.tenant_scope_service import SystemTenantScopeResolver
+from services.bot_business_context import resolve_bot_scope
 
 
 class BotMediaApiService:
@@ -17,7 +17,7 @@ class BotMediaApiService:
         session: AsyncSession, *, telegram_id: int, limit: int
     ) -> list[dict[str, Any]]:
         await require_bot_manager(session, telegram_id)
-        tenant_scope = await SystemTenantScopeResolver.resolve(session)
+        tenant_scope = await resolve_bot_scope(session, telegram_id)
         return await BotOrderAttachmentService.list_recent_orders(
             session,
             limit=limit,
@@ -37,8 +37,8 @@ class BotMediaApiService:
         telegram_chat_id: int | None,
         telegram_message_id: int | None,
     ) -> dict[str, Any] | None:
-        context = await require_bot_staff(session, telegram_id)
-        tenant_scope = await SystemTenantScopeResolver.resolve(session)
+        context = await require_bot_crm_staff(session, telegram_id)
+        tenant_scope = await resolve_bot_scope(session, telegram_id)
         allowed = await BotOrderAttachmentService.can_attach_to_order(
             session,
             order_id,
@@ -65,8 +65,8 @@ class BotMediaApiService:
     async def list_repair_orders(
         session: AsyncSession, *, telegram_id: int, limit: int
     ) -> list[dict[str, Any]]:
-        context = await require_bot_staff(session, telegram_id)
-        tenant_scope = await SystemTenantScopeResolver.resolve(session)
+        context = await require_bot_crm_staff(session, telegram_id)
+        tenant_scope = await resolve_bot_scope(session, telegram_id)
         return await BotRepairNameplateService.list_repair_orders(
             session,
             telegram_user_id=telegram_id,
@@ -85,8 +85,8 @@ class BotMediaApiService:
         filename: str,
         mime_type: str,
     ) -> dict[str, Any] | None:
-        context = await require_bot_staff(session, telegram_id)
-        tenant_scope = await SystemTenantScopeResolver.resolve(session)
+        context = await require_bot_crm_staff(session, telegram_id)
+        tenant_scope = await resolve_bot_scope(session, telegram_id)
         allowed = await BotRepairNameplateService.can_use_order(
             session,
             order_id,
@@ -101,6 +101,8 @@ class BotMediaApiService:
             filename=filename,
             mime_type=mime_type,
         )
+        from services.bot_staff_selection_service import BotStaffSelectionService
+        await BotStaffSelectionService.revalidate(session)
         preview = await BotRepairNameplateService.build_merge_preview(
             session,
             order_id=order_id,
@@ -125,8 +127,8 @@ class BotMediaApiService:
         telegram_chat_id: int | None,
         telegram_message_id: int | None,
     ) -> dict[str, Any] | None:
-        context = await require_bot_staff(session, telegram_id)
-        tenant_scope = await SystemTenantScopeResolver.resolve(session)
+        context = await require_bot_crm_staff(session, telegram_id)
+        tenant_scope = await resolve_bot_scope(session, telegram_id)
         return await BotRepairNameplateService.apply_to_order(
             session,
             order_id,
@@ -148,8 +150,8 @@ class BotMediaApiService:
     async def list_warranty_orders(
         session: AsyncSession, *, telegram_id: int, limit: int
     ) -> dict[str, Any]:
-        context = await require_bot_staff(session, telegram_id)
-        tenant_scope = await SystemTenantScopeResolver.resolve(session)
+        context = await require_bot_crm_staff(session, telegram_id)
+        tenant_scope = await resolve_bot_scope(session, telegram_id)
         return await BotWarrantyNameplateService.list_installation_orders(
             session,
             telegram_user_id=telegram_id,
@@ -169,8 +171,8 @@ class BotMediaApiService:
         filename: str,
         mime_type: str,
     ) -> dict[str, Any] | None:
-        context = await require_bot_staff(session, telegram_id)
-        tenant_scope = await SystemTenantScopeResolver.resolve(session)
+        context = await require_bot_crm_staff(session, telegram_id)
+        tenant_scope = await resolve_bot_scope(session, telegram_id)
         allowed = await BotWarrantyNameplateService.can_use_order(
             session,
             order_id,
@@ -185,6 +187,8 @@ class BotMediaApiService:
             filename=filename,
             mime_type=mime_type,
         )
+        from services.bot_staff_selection_service import BotStaffSelectionService
+        await BotStaffSelectionService.revalidate(session)
         preview = await BotWarrantyNameplateService.build_merge_preview(
             session,
             order_id=order_id,
@@ -216,8 +220,8 @@ class BotMediaApiService:
         telegram_chat_id: int | None,
         telegram_message_id: int | None,
     ) -> dict[str, Any] | None:
-        context = await require_bot_staff(session, telegram_id)
-        tenant_scope = await SystemTenantScopeResolver.resolve(session)
+        context = await require_bot_crm_staff(session, telegram_id)
+        tenant_scope = await resolve_bot_scope(session, telegram_id)
         return await BotWarrantyNameplateService.apply_to_order(
             session,
             order_id,

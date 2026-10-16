@@ -21,6 +21,7 @@ from schemas import LeadCreatePayload, LeadQualifyPayload, ManagerOrderCreatePay
 from services.address_suggest_service import AddressSuggestService
 from services.lead_service import LeadService
 from services.tenant_scope_service import (
+    storefront_scope_clause,
     TenantScope,
     tenant_scope_clause,
 )
@@ -28,7 +29,7 @@ from services.notification_service import NotificationService
 from services.order_service import OrderService
 from services.order_create_command_service import OrderCreateCommandService
 from services.command_transaction import command_transaction
-from services.order_scenarios import SERVICE_TYPE_LABELS, WORKFLOW_LABELS, resolve_scenario
+from services.order_scenarios import SERVICE_TYPE_LABELS, resolve_scenario
 from services.customer_party_classifier import infer_customer_type_from_requisites
 
 logger = logging.getLogger(__name__)
@@ -598,7 +599,7 @@ class BotQuickOrderService:
                 await session.execute(
                     select(Order).where(
                         Order.source_fingerprint == order_fingerprint,
-                        tenant_scope_clause(Order, tenant_scope),
+                        storefront_scope_clause(Order, tenant_scope),
                     )
                 )
             ).scalars().first()
@@ -661,7 +662,7 @@ class BotQuickOrderService:
             .where(
                 Lead.source == "bot",
                 Lead.source_fingerprint == source_fingerprint,
-                tenant_scope_clause(Lead, tenant_scope),
+                storefront_scope_clause(Lead, tenant_scope),
             )
             .order_by(Lead.created_at.desc())
             .with_for_update()

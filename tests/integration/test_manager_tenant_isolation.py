@@ -1271,9 +1271,13 @@ async def test_manager_auth_uses_membership_and_fails_closed(
         )
     ).status_code == 403
 
-    for user in (suspended, missing, ambiguous):
+    for user in (suspended, missing):
         response = await async_client.get(
             "/api/manager/me",
             headers=_headers(user),
         )
         assert response.status_code == 403
+
+    response = await async_client.get("/api/manager/me", headers=_headers(ambiguous))
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "company_selection_required"

@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type BotTaskListRequest = {
+    expected_context_version?: (number | null);
     telegram_id: number;
     limit?: number;
     date_from?: (string | null);

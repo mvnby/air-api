@@ -46,6 +46,26 @@ class ManagerTenantAccessRow:
 
 class TenancyDAO:
     @staticmethod
+    async def active_primary_domains(session, *, storefront_ids):
+        rows = (await session.execute(select(StorefrontDomain).where(
+            StorefrontDomain.storefront_id.in_(storefront_ids), StorefrontDomain.status == "active",
+            StorefrontDomain.is_primary.is_(True), StorefrontDomain.verified_at.is_not(None),
+        ))).scalars()
+        return {row.storefront_id: row.hostname for row in rows}
+
+    @staticmethod
+    async def active_company_defaults(session, *, tenant_id=None, tenant_ids=None):
+        statement = select(Tenant, Storefront).join(Storefront, Storefront.tenant_id == Tenant.id).where(
+            Tenant.status == "active", Storefront.status == "active", Storefront.is_default.is_(True),
+        )
+        if tenant_id is not None:
+            statement = statement.where(Tenant.id == tenant_id)
+        if tenant_ids is not None:
+            statement = statement.where(Tenant.id.in_(tenant_ids))
+        return list((await session.execute(statement.order_by(Tenant.id, Storefront.id)
+                                          .execution_options(populate_existing=True))).all())
+
+    @staticmethod
     async def get_active_storefront_for_tenant_slug(
         session: AsyncSession,
         *,
@@ -139,6 +159,7 @@ class TenancyDAO:
                 Storefront.is_default.is_(True),
             )
             .order_by(TenantMembership.id.asc(), Storefront.id.asc())
+            .execution_options(populate_existing=True)
         )
         rows = (await session.execute(statement)).all()
         return [

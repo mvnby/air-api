@@ -29,6 +29,7 @@ from services.communications.staff_task_contracts import (
 from services.staff_user_service import StaffUserService
 from services.staff_telegram_notifications import notifications_enabled
 from services.tenant_scope_service import (
+    storefront_scope_clause,
     tenant_scope_clause,
 )
 
@@ -93,13 +94,13 @@ class StaffTaskNotificationEventService:
                 )
             )
         ).scalars().first()
-        if membership is None:
+        if membership is None or membership.role not in {"owner", "admin", "manager", "installer"}:
             return False
         order_row = (
             await session.execute(
                 select(Order.customer_id, Order.delivery_address).where(
                     Order.id == int(stage.order_id),
-                    tenant_scope_clause(Order, tenant_scope),
+                    storefront_scope_clause(Order, tenant_scope),
                 )
             )
         ).one_or_none()
@@ -120,9 +121,15 @@ class StaffTaskNotificationEventService:
             ).one_or_none()
             if customer_row is None:
                 return False
+        from models.tenancy import Storefront
+        storefront = await session.get(Storefront, tenant_scope.storefront_id)
+        if storefront is None or storefront.tenant_id != tenant_scope.tenant_id:
+            return False
         payload = StaffTaskNotificationPayloadV1(
             event_kind=event_kind,
             staff_user_id=int(staff_user.id),
+            tenant_id=tenant_scope.tenant_id,
+            storefront_id=tenant_scope.storefront_id,
             stage_id=int(stage.id),
             order_id=int(stage.order_id),
             stage_name=stage.name,
@@ -132,7 +139,7 @@ class StaffTaskNotificationEventService:
             address=order_row.delivery_address,
             customer_name=customer_row.name if customer_row else None,
             customer_phone=customer_row.phone if customer_row else None,
-            manager_url=BotTaskService._manager_url(int(stage.order_id)),
+            manager_url=BotTaskService._manager_url(int(stage.order_id), tenant_scope=tenant_scope, storefront_slug=storefront.slug),
             change_fields=tuple(change_fields),
             reminder_offset_minutes=reminder_offset_minutes,
         )

@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type ManagerAuthStatusResponse = {
+    access_kind?: 'membership' | 'platform_support';
     username: string;
     status: string;
     staff_user_id?: (number | null);

@@ -56,9 +56,12 @@ class ManagerStorefrontSelector:
             session,
             tenant_id=tenant_scope.tenant_id,
         )
+        domains = await TenancyDAO.active_primary_domains(session, storefront_ids=[site.id for site in storefronts])
         return {
             "items": [
                 {
+                    "id": storefront.id,
+                    "primary_hostname": domains.get(storefront.id),
                     "slug": storefront.slug,
                     "display_name": storefront.display_name,
                     "city": storefront.city,

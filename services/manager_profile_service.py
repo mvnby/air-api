@@ -27,11 +27,13 @@ def utc(value: datetime) -> datetime:
 
 class ManagerProfileService:
     @staticmethod
-    def response(user: StaffUser) -> ManagerOwnProfileResponse:
+    def response(user: StaffUser, *, auth: AuthenticatedUser) -> ManagerOwnProfileResponse:
         return ManagerOwnProfileResponse(
             staff_user_id=user.id, display_name=user.display_name, username=user.username,
-            phone=user.phone, email=user.email, avatar_url=staff_avatar_url(user),
+            phone=user.phone, email=user.email, avatar_url=staff_avatar_url(user, tenant_id=auth.tenant_id),
             updated_at=utc(user.updated_at or user.created_at),
+            can_change_password=auth.can_change_password, must_change_password=auth.must_change_password,
+            personal_read_only=auth.demo_read_only,
             telegram_linked=user.telegram_id is not None,
             telegram_username=user.telegram_username,
             telegram_notifications_enabled=user.telegram_notifications_enabled,
@@ -99,7 +101,7 @@ class ManagerProfileService:
             session.add(user)
         await session.commit()
         await session.refresh(user)
-        return cls.response(user)
+        return cls.response(user, auth=auth)
 
     @classmethod
     async def set_avatar(
@@ -128,7 +130,7 @@ class ManagerProfileService:
             })
         await session.commit()
         await session.refresh(user)
-        return cls.response(user)
+        return cls.response(user, auth=auth)
 
     @staticmethod
     def audit(session, *, auth, user, action, changes):

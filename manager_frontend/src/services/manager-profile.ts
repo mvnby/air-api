@@ -1,8 +1,11 @@
+import { shallowRef, watch } from 'vue';
 import { ManagerService, OpenAPI, type ManagerOwnProfileResponse, type ManagerOwnProfileUpdate } from '../client';
 import { request } from '../client/core/request';
 import { managerSession } from './manager-session';
 
 export type OwnProfile = ManagerOwnProfileResponse;
+export const ownProfileState = shallowRef<OwnProfile | null>(null);
+watch(managerSession.auth, auth => { if (!auth || ownProfileState.value?.staff_user_id !== auth.staff_user_id) ownProfileState.value = null; }, { flush: 'sync' });
 export type OwnProfileUpdate = ManagerOwnProfileUpdate;
 const path = '/api/manager/account/profile';
 const headers = { 'X-Kitlane-Profile': '1' };
@@ -15,6 +18,7 @@ export const managerProfileApi = {
 export const applyOwnProfile = (profile: OwnProfile) => {
   const auth = managerSession.auth.value;
   if (auth?.staff_user_id !== profile.staff_user_id) return;
+  ownProfileState.value = profile;
   managerSession.auth.value = { ...auth, display_name: profile.display_name, avatar_url: profile.avatar_url };
 };
 export const refreshManagerIdentity = async () => {

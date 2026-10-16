@@ -289,7 +289,8 @@ async def telegram_client(telegram_db, monkeypatch):
     async def db_session():
         yield session
     app.dependency_overrides[get_session] = db_session
-    app.dependency_overrides[get_current_auth_context] = lambda: auth
+    from core.security import require_personal_workspace_access
+    app.dependency_overrides[require_personal_workspace_access] = lambda: auth
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         yield client
 

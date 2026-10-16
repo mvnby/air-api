@@ -161,7 +161,8 @@ async def test_manager_can_select_only_an_active_storefront_in_own_tenant(
     assert {
         item["slug"] for item in available.json()["items"] if item["is_current"]
     } == {"orsha"}
-    assert "id" not in available.json()["items"][0]
+    assert available.json()["items"][0]["id"] == 1
+    assert "primary_hostname" in available.json()["items"][0]
 
     for forbidden_slug in ("", "../../main", "disabled-city", "foreign-only"):
         response = await async_client.get(
@@ -219,8 +220,16 @@ async def test_storefront_header_does_not_bypass_ambiguous_tenant_membership(
         "/api/manager/me",
         headers=_headers(owner, storefront_slug="orsha"),
     )
-    assert response.status_code == 403
-    assert response.json()["detail"] == "Active tenant membership required"
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "company_selection_required"
+    selected = await async_client.get("/api/manager/me", headers={
+        **_headers(owner, storefront_slug="orsha"), "X-MVN-Manager-Tenant": "1",
+    })
+    assert selected.status_code == 200 and selected.json()["storefront_id"] == 3
+    foreign_site = await async_client.get("/api/manager/me", headers={
+        **_headers(owner, storefront_slug="orsha"), "X-MVN-Manager-Tenant": "2",
+    })
+    assert foreign_site.status_code == 403
 
 
 @pytest.mark.asyncio

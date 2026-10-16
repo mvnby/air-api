@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type BotProductMutationRequest = {
+    expected_context_version?: (number | null);
     telegram_id: number;
 };
 

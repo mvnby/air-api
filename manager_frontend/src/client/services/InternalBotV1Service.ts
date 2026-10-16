@@ -24,7 +24,9 @@ import type { BotQuickOrderDraftSessionResponse } from '../models/BotQuickOrderD
 import type { BotQuickOrderDraftStartRequest } from '../models/BotQuickOrderDraftStartRequest';
 import type { BotQuickOrderParseRequest } from '../models/BotQuickOrderParseRequest';
 import type { BotQuickOrderParseResponse } from '../models/BotQuickOrderParseResponse';
+import type { BotStaffContextChoicesResponse } from '../models/BotStaffContextChoicesResponse';
 import type { BotStaffContextResponse } from '../models/BotStaffContextResponse';
+import type { BotStaffContextSelectRequest } from '../models/BotStaffContextSelectRequest';
 import type { BotTaskAttachmentResponse } from '../models/BotTaskAttachmentResponse';
 import type { BotTaskListRequest } from '../models/BotTaskListRequest';
 import type { BotTaskListResponse } from '../models/BotTaskListResponse';
@@ -79,6 +81,61 @@ export class InternalBotV1Service {
         });
     }
     /**
+     * Choices
+     * List a deterministic page of at most 100 accessible company/site pairs.
+     *
+     * Access: service BOT_API_TOKEN plus an active linked staff identity and real active
+     * memberships. An invalid previous selection does not prevent choosing again.
+     * @param telegramId
+     * @param offset
+     * @param limit
+     * @returns BotStaffContextChoicesResponse Successful Response
+     * @throws ApiError
+     */
+    public static getInternalBotStaffContextChoicesV1(
+        telegramId: number,
+        offset?: number,
+        limit: number = 100,
+    ): CancelablePromise<BotStaffContextChoicesResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/internal/bot/v1/staff/context/{telegram_id}/choices',
+            path: {
+                'telegram_id': telegramId,
+            },
+            query: {
+                'offset': offset,
+                'limit': limit,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Select Context
+     * Select an accessible company/site using optimistic context concurrency.
+     *
+     * Access: service BOT_API_TOKEN and the actor's real active membership; no platform
+     * owner virtual access or caller-provided role grants. A stale version returns 409.
+     * @param requestBody
+     * @returns BotStaffContextResponse Successful Response
+     * @throws ApiError
+     */
+    public static selectInternalBotStaffContextV1(
+        requestBody: BotStaffContextSelectRequest,
+    ): CancelablePromise<BotStaffContextResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/internal/bot/v1/staff/context/select',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * Get Internal Bot Api Health
      * Check that the authenticated bot API is reachable and report its v1 contract marker.
      * Does not check a Telegram actor or database readiness.
@@ -99,7 +156,10 @@ export class InternalBotV1Service {
      * Get Internal Bot Staff Context
      * Resolve the active staff context of a Telegram identity, including Manager/executor
      * roles and legacy installer linkage. A non-staff identity is represented by
-     * is_staff=false rather than a business permission grant.
+     * is_staff=false rather than a business permission grant. An active identity whose
+     * explicit selection is unavailable receives a null company/site pair and its durable
+     * context_version so the picker can recover; business calls never fall back to another
+     * company or site.
      *
      * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
      * checks are separate. See [bot
@@ -157,12 +217,14 @@ export class InternalBotV1Service {
      * boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
      * @param productId
      * @param telegramId
+     * @param expectedContextVersion
      * @returns BotCatalogProductLookupResponse Successful Response
      * @throws ApiError
      */
     public static getInternalBotCatalogProductV1(
         productId: number,
         telegramId: number,
+        expectedContextVersion?: (number | null),
     ): CancelablePromise<BotCatalogProductLookupResponse> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -171,6 +233,7 @@ export class InternalBotV1Service {
                 'product_id': productId,
             },
             query: {
+                'expected_context_version': expectedContextVersion,
                 'telegram_id': telegramId,
             },
             errors: {

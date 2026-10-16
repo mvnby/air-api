@@ -8,7 +8,7 @@ const imageUrl = computed(() => {
   if (!props.src || failed.value) return null;
   try {
     const url = new URL(props.src, window.location.origin);
-    return url.origin === window.location.origin && /^\/api\/manager\/staff\/\d+\/avatar$/.test(url.pathname) ? url.pathname + url.search : null;
+    return url.origin === window.location.origin && /^[1-9]\d*$/.test(url.searchParams.get('tenant_id') || '') && /^\/api\/manager\/staff\/\d+\/avatar$/.test(url.pathname) ? url.pathname + url.search : null;
   } catch { return null; }
 });
 </script>

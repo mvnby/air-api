@@ -26,11 +26,11 @@ class BotTaskReadService:
         tenant_scope: TenantScope,
     ) -> list[dict]:
         context = await BotAccessService.get_context(session, telegram_id)
-        if not context.is_staff:
+        if not context.is_staff or not (context.is_manager or context.is_executor):
             raise BotTaskAccessDeniedError("Staff task access is required")
         if not context.legacy_installer_id:
             return []
-        return await BotTaskService.list_installer_tasks(
+        tasks = await BotTaskService.list_installer_tasks(
             session,
             int(context.legacy_installer_id),
             limit=limit,
@@ -39,3 +39,8 @@ class BotTaskReadService:
             statuses=statuses,
             tenant_scope=tenant_scope,
         )
+        if context.selection is not None:
+            for task in tasks:
+                task['manager_url'] = BotTaskService._manager_url(task['order_id'], tenant_scope=tenant_scope,
+                                                                 storefront_slug=context.selection.storefront_slug)
+        return tasks

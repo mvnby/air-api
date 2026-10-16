@@ -35,3 +35,10 @@ async def require_bot_catalog_editor(
     if not required.issubset(context.permissions):
         raise BotUseCaseAccessDeniedError("Explicit catalog permission is required")
     return context
+
+
+async def require_bot_crm_staff(session: AsyncSession, telegram_id: int) -> BotAccessContext:
+    context = await require_bot_staff(session, telegram_id)
+    if not (context.is_manager or context.is_executor):
+        raise BotUseCaseAccessDeniedError('CRM staff access is required')
+    return context

@@ -33,12 +33,15 @@ async def get_fsm_state(
 ) -> BotFsmStateResponse:
     """
     Read durable bot FSM state by service storage_key; missing state is state=null/data={}.
-    This service primitive does not authorize a Telegram actor and is not a tenant CRM read.
+    Optional telegram_id and expected_context_version validate the actor's fresh selected
+    context. Legacy opaque service keys retain primitive compatibility without CRM grants;
+    company-picker ctxcb state remains readable for recovery from an unavailable selection.
 
     Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
     checks are separate. See [bot
     boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
     """
+    await _bind_fsm_context(session, payload)
     result = await BotRuntimeApiService.get_fsm_state(
         session, storage_key=payload.storage_key
     )
@@ -57,14 +60,17 @@ async def update_fsm_state(
     """
     Update the service-owned FSM row under storage_key. write_state and write_data choose
     which parts to replace; data is replaced, not merged. Empty state/data removes the row.
-    No Telegram actor check or caller-supplied version precondition is provided.
+    Optional telegram_id and expected_context_version fence writes to a fresh selected
+    context. Legacy keys cannot write after the actor switches context. Recovery ctxcb
+    records permit only company-picker callbacks and never grant access to CRM data.
 
     Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
     checks are separate. See [bot
     boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
     """
+    await _bind_fsm_context(session, payload)
     result = await BotRuntimeApiService.update_fsm_state(
-        session, **payload.model_dump()
+        session, **payload.model_dump(exclude={"telegram_id", "expected_context_version"})
     )
     return BotFsmStateResponse.model_validate(result)
 
@@ -146,3 +152,42 @@ async def release_runtime_lease(
         owner_id=payload.owner_id,
         acquired=changed,
     )
+
+
+async def _bind_fsm_context(session, payload):
+    # Identity proof and leases never use this helper. Legacy raw FSM calls can
+    # only write a never-switched context; unknown users receive no business grant.
+    import json
+    from fastapi import HTTPException
+    from services.bot_access_service import BotAccessService
+    from services.bot_staff_selection_service import BotStaffSelectionService, context_changed
+    actor = payload.telegram_id or getattr(payload, 'user_id', None)
+    if actor is None:
+        try:
+            key = json.loads(payload.storage_key)
+            actor = int(key[2]) if isinstance(key, list) and len(key) >= 3 else None
+        except (ValueError, TypeError, IndexError):
+            actor = None
+    if actor is None:
+        return
+    context = await BotAccessService.get_context(session, actor)
+    if context.selection_unavailable and payload.storage_key.startswith('ctxcb:'):
+        # Company picker callbacks are recoverable personal UI, not CRM state.
+        callbacks = getattr(payload, 'data', {}).get('callbacks', [])
+        selector_write = getattr(payload, 'destiny', '') == 'context_callbacks' and callbacks and all(
+            str(value).startswith(('company_pick:', 'company_page:')) for value in callbacks)
+        if not hasattr(payload, 'write_data') or selector_write:
+            if context.selection is None or payload.expected_context_version != context.selection.context_version:
+                raise context_changed()
+            return
+    if payload.telegram_id is not None and (not context.is_staff or context.selection is None):
+        raise HTTPException(403, 'Active staff membership is required')
+    if context.selection is None:
+        return
+    if payload.telegram_id is not None and getattr(payload, 'user_id', actor) != actor:
+        raise HTTPException(403, 'FSM actor mismatch')
+    if payload.expected_context_version is None and context.selection.context_version > 0:
+        raise context_changed()
+    if payload.expected_context_version is not None:
+        await BotStaffSelectionService.bind_request(session, context.selection,
+            payload.expected_context_version, mutation=False)

@@ -36,7 +36,7 @@ from api_contracts.bot import (
 )
 from core.bot_api_security import require_bot_api_token
 from core.database import get_session
-from core.tenant_scope import get_system_tenant_scope
+from services.bot_business_context import bind_bot_business_context, get_bot_request_scope
 from models import OrderStageStatus
 from models.tenancy import TenantScope
 from routers.internal_bot_common import read_bot_upload
@@ -69,7 +69,7 @@ from services.customer_requisites_recognition_service import CustomerRequisitesR
 router = APIRouter(
     prefix="/api/internal/bot/v1",
     tags=["internal bot v1"],
-    dependencies=[Depends(require_bot_api_token)],
+    dependencies=[Depends(require_bot_api_token), Depends(bind_bot_business_context, scope="function")],
 )
 
 
@@ -102,23 +102,18 @@ async def get_internal_bot_staff_context(
     """
     Resolve the active staff context of a Telegram identity, including Manager/executor
     roles and legacy installer linkage. A non-staff identity is represented by
-    is_staff=false rather than a business permission grant.
+    is_staff=false rather than a business permission grant. An active identity whose
+    explicit selection is unavailable receives a null company/site pair and its durable
+    context_version so the picker can recover; business calls never fall back to another
+    company or site.
 
     Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
     checks are separate. See [bot
     boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
     """
     context = await BotAccessService.get_context(session, telegram_id)
-    return BotStaffContextResponse(
-        telegram_id=context.telegram_id,
-        is_staff=context.is_staff,
-        display_name=context.display_name,
-        primary_role=context.primary_role,
-        roles=context.roles,
-        legacy_installer_id=context.legacy_installer_id,
-        is_manager=context.is_manager,
-        is_executor=context.is_executor,
-    )
+    from routers.internal_bot_context import context_response
+    return context_response(context)
 
 
 @router.post(
@@ -159,6 +154,7 @@ async def search_internal_bot_catalog(
 )
 async def get_internal_bot_catalog_product(
     product_id: int = Path(ge=1),
+    expected_context_version: int | None = Query(default=None, ge=0),
     telegram_id: int = Query(ge=1),
     session: AsyncSession = Depends(get_session),
 ) -> BotCatalogProductLookupResponse:
@@ -191,7 +187,7 @@ async def get_internal_bot_catalog_product(
 async def list_internal_bot_my_tasks(
     payload: BotTaskListRequest,
     session: AsyncSession = Depends(get_session),
-    tenant_scope: TenantScope = Depends(get_system_tenant_scope),
+    tenant_scope: TenantScope = Depends(get_bot_request_scope),
 ) -> BotTaskListResponse:
     """
     Read work stages assigned to the actor’s linked installer in the system tenant, with
@@ -228,7 +224,7 @@ async def update_internal_bot_task_status(
     payload: BotTaskStatusUpdateRequest,
     stage_id: int = Path(ge=1),
     session: AsyncSession = Depends(get_session),
-    tenant_scope: TenantScope = Depends(get_system_tenant_scope),
+    tenant_scope: TenantScope = Depends(get_bot_request_scope),
 ) -> BotTaskStatusUpdateResponse:
     """
     Set the status of a stage assigned to the actor’s installer in the system tenant.
@@ -268,7 +264,7 @@ async def save_internal_bot_task_report(
     payload: BotTaskReportSaveRequest,
     stage_id: int = Path(ge=1),
     session: AsyncSession = Depends(get_session),
-    tenant_scope: TenantScope = Depends(get_system_tenant_scope),
+    tenant_scope: TenantScope = Depends(get_bot_request_scope),
 ) -> BotTaskReportSaveResponse:
     """
     Save a normalized installer report on the actor’s assigned stage in the system tenant.
@@ -302,13 +298,14 @@ async def save_internal_bot_task_report(
 )
 async def attach_internal_bot_task_stage_file(
     stage_id: int = Path(ge=1),
+    expected_context_version: int | None = Form(default=None, ge=0),
     telegram_id: int = Form(ge=1),
     file_id: str = Form(min_length=1, max_length=255),
     telegram_chat_id: int | None = Form(default=None),
     telegram_message_id: int | None = Form(default=None),
     file: UploadFile = File(),
     session: AsyncSession = Depends(get_session),
-    tenant_scope: TenantScope = Depends(get_system_tenant_scope),
+    tenant_scope: TenantScope = Depends(get_bot_request_scope),
 ) -> BotTaskAttachmentResponse:
     """
     Attach a nonempty file of at most 10 MB to the actor’s assigned stage in the system
@@ -564,7 +561,7 @@ async def create_internal_bot_quick_order(
 async def recognize_internal_bot_customer_requisites_text(
     payload: BotCustomerRequisitesTextRequest,
     session: AsyncSession = Depends(get_session),
-    tenant_scope: TenantScope = Depends(get_system_tenant_scope),
+    tenant_scope: TenantScope = Depends(get_bot_request_scope),
 ) -> BotCustomerRequisitesRecognitionResponse:
     """
     Recognize customer requisites from text for an active Manager Telegram actor in the
@@ -597,12 +594,13 @@ async def recognize_internal_bot_customer_requisites_text(
     operation_id="recognize_internal_bot_customer_requisites_file_v1",
 )
 async def recognize_internal_bot_customer_requisites_file(
+    expected_context_version: int | None = Form(default=None, ge=0),
     telegram_id: int = Form(ge=1),
     telegram_chat_id: int | None = Form(default=None),
     telegram_message_id: int | None = Form(default=None),
     file: UploadFile = File(...),
     session: AsyncSession = Depends(get_session),
-    tenant_scope: TenantScope = Depends(get_system_tenant_scope),
+    tenant_scope: TenantScope = Depends(get_bot_request_scope),
 ) -> BotCustomerRequisitesRecognitionResponse:
     """
     Recognize customer requisites from JPG, PNG, WEBP, PDF, DOC or DOCX, at most 10 MB, for
@@ -649,7 +647,7 @@ async def apply_internal_bot_customer_requisites_action(
     payload: BotCustomerRequisitesActionRequest,
     recognition_id: int = Path(ge=1),
     session: AsyncSession = Depends(get_session),
-    tenant_scope: TenantScope = Depends(get_system_tenant_scope),
+    tenant_scope: TenantScope = Depends(get_bot_request_scope),
 ) -> BotCustomerRequisitesActionResponse:
     """
     Apply the selected action to an existing requisites recognition in the system tenant for

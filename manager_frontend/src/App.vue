@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import InvitationAcceptView from './views/InvitationAcceptView.vue';
+import { ManagerContextError } from './services/manager-storefront-selection';
+import ManagerStorefrontSwitcherHost from './components/manager/ManagerStorefrontSwitcherHost.vue';
+import { managerProfileApi, applyOwnProfile } from './services/manager-profile';
 import { inboxChangedEvent } from './services/lead-inbox';
 import { computed, defineAsyncComponent, onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import { Zap, Loader2, AlertTriangle } from 'lucide-vue-next';
@@ -52,6 +56,8 @@ const CalendarDashboard = defineAsyncComponent(() => import('./views/CalendarDas
 const ManagerHomeView = defineAsyncComponent(() => import('./views/ManagerHome.vue'));
 const InstallersView = defineAsyncComponent(() => import('./views/InstallersView.vue'));
 const SettingsView = defineAsyncComponent(() => import('./views/SettingsView.vue'));
+const PlatformCompaniesView = defineAsyncComponent(() => import('./views/PlatformCompaniesView.vue'));
+const CompanySitesView = defineAsyncComponent(() => import('./views/CompanySitesView.vue'));
 const PlatformAccessView = defineAsyncComponent(() => import('./views/PlatformAccessView.vue'));
 const PlatformSettingsView = defineAsyncComponent(() => import('./views/PlatformSettingsView.vue'));
 const SettingsBackupView = defineAsyncComponent(() => import('./views/SettingsBackupView.vue'));
@@ -73,25 +79,33 @@ const SupplyRequestsView = defineAsyncComponent(() => import('./views/SupplyRequ
 const EquipmentRegistryView = defineAsyncComponent(() => import('./views/EquipmentRegistryView.vue'));
 const ProfileSecurityView = defineAsyncComponent(() => import('./views/ProfileSecurityView.vue'));
 const AnalyticsConnectionsView = defineAsyncComponent(() => import('./views/AnalyticsConnectionsView.vue'));
+const isInvitationRoute = window.location.pathname.replace(/\/$/, '') === '/manager/invite';
+// Keep the secret only in this page's memory, before rendering or making requests.
+const invitationToken = isInvitationRoute ? new URLSearchParams(window.location.hash.slice(1)).get('token') || '' : '';
+if (isInvitationRoute && window.location.hash) window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search);
+const contextError = ref('');
 const props = defineProps<{ reloadPage?: () => void }>();
 const { isAuthenticated, auth, recoveryRequired } = managerSession;
 const demoReadOnly = useDemoReadOnly();
 const { name: partnerName, logoUrl: partnerLogoUrl, compactLogoUrl: partnerCompactLogoUrl, contextKey: partnerContextKey } = useKitlaneIdentity();
 const showLoginModal = ref(false);
 const connectorReturn = connectorLoginContinuation(window.location.search, window.location.origin);
-const continueConnection = () => {
+const continueConnection = async () => {
   if (!connectorReturn || !auth.value) return false;
   if (!auth.value.staff_user_id || auth.value.auth_source === 'legacy') {
     loginError.value = 'Для подключения ChatGPT нужен ваш личный логин Kitlane, выданный владельцем компании.';
     showLoginModal.value = true;
     return true;
   }
-  if (auth.value.must_change_password) {
+  let personal;
+  try { personal = await managerProfileApi.get(); applyOwnProfile(personal); }
+  catch (error) { loginError.value = getApiErrorMessage(error); showLoginModal.value = true; return true; }
+  if (personal.must_change_password) {
     showLoginModal.value = false;
     navigate('/manager/profile');
     return true;
   }
-  return resumeConnectorLogin(connectorReturn, auth.value);
+  return resumeConnectorLogin(connectorReturn, { ...auth.value, must_change_password: personal.must_change_password, can_change_password: personal.can_change_password });
 };
 const loginUsername = ref('');
 const loginPassword = ref('');
@@ -203,6 +217,8 @@ const currentView = computed(() => {
   if (path.startsWith('/manager/customers/profile')) return 'customer-profile';
   if (path.startsWith('/manager/customers')) return 'customers';
   if (path.startsWith('/manager/staff') || path.startsWith('/manager/users') || path.startsWith('/manager/installers')) return 'installers';
+  if (path.startsWith('/manager/platform/companies')) return 'platform-companies';
+  if (path.startsWith('/manager/company/sites')) return 'company-sites';
   if (path.startsWith('/manager/platform/access')) return 'platform-access';
   if (path.startsWith('/manager/settings/backup')) return 'settings-backup';
   if (path.startsWith('/manager/settings/documents')) return 'settings-documents';
@@ -328,14 +344,15 @@ const handleLogin = async () => {
   try {
     await loginManagerWithPassword(loginUsername.value, loginPassword.value);
     loginPassword.value = '';
-    if (continueConnection()) return;
+    if (await continueConnection()) return;
     enforceAuthorizedLocation();
     showLoginModal.value = false;
     loginPassword.value = '';
     void fetchLeadsCount();
     void fetchWebRebuildStatus();
-  } catch {
-    loginError.value = 'Неверный логин или пароль';
+  } catch (error) {
+    if (error instanceof ManagerContextError) { contextError.value = error.message; showLoginModal.value = false; }
+    else loginError.value = 'Неверный логин или пароль';
   } finally {
     loginLoading.value = false;
   }
@@ -346,7 +363,7 @@ const handleTelegramLogin = async () => {
   loginError.value = '';
   try {
     await bootstrapManagerSession();
-    if (continueConnection()) return;
+    if (await continueConnection()) return;
     enforceAuthorizedLocation();
     showLoginModal.value = false;
     void fetchLeadsCount();
@@ -405,14 +422,14 @@ const fetchLeadsCount = async () => {
 const checkAuth = async () => {
   try {
     await restoreManagerSession();
-    if (continueConnection()) return;
+    if (await continueConnection()) return;
     enforceAuthorizedLocation();
     // Fetch the badge count once authenticated
     void fetchLeadsCount();
     void fetchWebRebuildStatus();
-  } catch {
-    clearManagerSession();
-    showLoginModal.value = true;
+  } catch (error) {
+    if (error instanceof ManagerContextError) { contextError.value = error.message; showLoginModal.value = false; }
+    else { clearManagerSession(); showLoginModal.value = true; }
   }
 };
 onMounted(() => {
@@ -432,7 +449,7 @@ onMounted(() => {
   webRebuildStatusInterval = window.setInterval(() => {
     if (isAuthenticated.value && canManagePlatform.value) void fetchWebRebuildStatus();
   }, 60_000);
-  checkAuth();
+  if (!isInvitationRoute) checkAuth();
 });
 onBeforeUnmount(() => {
   window.removeEventListener('popstate', onPopState);
@@ -463,8 +480,10 @@ watch(currentPath, () => {
 </script>
 
 <template>
+  <InvitationAcceptView v-if="isInvitationRoute" :token="invitationToken" />
+  <main v-else-if="contextError" class="min-h-screen bg-slate-50 p-6"><section class="mx-auto max-w-xl space-y-5 rounded-xl border bg-white p-6"><h1 class="text-xl font-bold">Компания или сайт недоступны</h1><p role="alert">{{ contextError }}</p><p class="text-sm text-gray-500">Проверьте ссылку или выберите доступную компанию.</p><ManagerStorefrontSwitcherHost :collapsed="false" /><a class="inline-block text-brand-700 underline" href="/manager/">Открыть доступную компанию</a></section></main>
   <ManagerLoginModal
-    v-if="showLoginModal && !recoveryRequired"
+    v-if="showLoginModal && !recoveryRequired && !isInvitationRoute && !contextError"
     v-model:username="loginUsername"
     v-model:password="loginPassword"
     :loading="loginLoading || telegramLoginLoading"
@@ -482,7 +501,7 @@ watch(currentPath, () => {
   <ManagerSessionRecoveryModal :reload-page="props.reloadPage" />
 
   <div
-    v-if="isAuthenticated && !recoveryRequired"
+    v-if="isAuthenticated && !recoveryRequired && !isInvitationRoute && !contextError"
     data-testid="manager-root"
     class="manager-root min-h-screen flex"
   >
@@ -542,7 +561,7 @@ watch(currentPath, () => {
       </template>
 
       <div v-if="demoReadOnly" class="mx-4 mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100" role="status">
-        Демонстрационный режим: данные доступны только для просмотра.
+        Демонстрационная компания: рабочие данные доступны только для просмотра.
       </div>
 
       <ManagerHomeView v-if="authorizedView === 'home'" :key="currentLocation" />
@@ -563,6 +582,8 @@ watch(currentPath, () => {
       <InstallersView v-else-if="authorizedView === 'installers'" :key="currentLocation" />
       <SettingsBackupView v-else-if="authorizedView === 'settings-backup' && canManageInfrastructure" :key="currentLocation" />
       <DocumentsSettingsView v-else-if="authorizedView === 'settings-documents' && canManageDocuments" :key="currentLocation" />
+      <CompanySitesView v-else-if="authorizedView === 'company-sites'" :key="currentLocation" />
+      <PlatformCompaniesView v-else-if="authorizedView === 'platform-companies'" :key="currentLocation" />
       <PlatformAccessView v-else-if="authorizedView === 'platform-access' && canManageInfrastructure" :key="currentLocation" />
       <PlatformSettingsView v-else-if="authorizedView === 'settings-platform' && canManageInfrastructure" :key="currentLocation" />
       <SettingsView v-else-if="authorizedView === 'settings' && canManageSettings" :key="currentLocation" :can-manage-call-recordings="canManageCallRecordings" />

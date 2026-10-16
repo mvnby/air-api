@@ -13,7 +13,9 @@ from models.staff_telegram import StaffTelegramWidgetReceipt
 from services.staff_telegram_security import StaffTelegramError, digest
 from services.legacy_owner_auth_guard import LegacyOwnerAuthGuard
 from services.legacy_owner_managed_identity_service import LegacyOwnerManagedIdentityService
-from services.manager_tenant_access_service import ManagerTenantAccessResolver
+from services.manager_tenant_access_service import (
+    ManagerTenantAccessResolver, ManagerTenantAccessResolutionError,
+)
 from services.staff_tenant_membership_service import StaffTenantMembershipService
 from services.staff_user_service import StaffUserService
 
@@ -60,14 +62,20 @@ async def authenticate_widget(session, payload):
     staff_id = await session.scalar(select(StaffUser.id).where(StaffUser.telegram_id == telegram_id))
     if staff_id is None:
         raise StaffTelegramError("telegram_login_unavailable", "Telegram login is not allowed", 401)
-    access = await ManagerTenantAccessResolver.resolve(session, staff_user_id=staff_id)
+    try:
+        access = await ManagerTenantAccessResolver.personal(session, staff_user_id=staff_id)
+    except ManagerTenantAccessResolutionError:
+        raise StaffTelegramError("telegram_login_unavailable", "Telegram login is not allowed", 401) from None
     await StaffTenantMembershipService.lock_tenant(session, tenant_id=access.tenant_scope.tenant_id)
     user = (await session.execute(select(StaffUser).where(
         StaffUser.id == staff_id, StaffUser.telegram_id == telegram_id,
     ).with_for_update().execution_options(populate_existing=True))).scalar_one_or_none()
     if user is None or not StaffUserService.is_active(user):
         raise StaffTelegramError("telegram_login_unavailable", "Telegram login is not allowed", 401)
-    await ManagerTenantAccessResolver.resolve(session, staff_user_id=staff_id)
+    try:
+        await ManagerTenantAccessResolver.personal(session, staff_user_id=staff_id)
+    except ManagerTenantAccessResolutionError:
+        raise StaffTelegramError("telegram_login_unavailable", "Telegram login is not allowed", 401) from None
     if not LegacyOwnerAuthGuard.allows_staff_identity(state, staff_user_id=staff_id, username=user.username or ""):
         raise StaffTelegramError("telegram_login_unavailable", "Telegram login is not allowed", 401)
     if LegacyOwnerManagedIdentityService.is_bound(state, staff_user_id=staff_id):

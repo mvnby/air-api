@@ -17,7 +17,7 @@ from services.staff_access_policy import StaffAccessPolicy, StaffAccessPolicyErr
 from services.credential_service import CredentialService
 from services.staff_user_service import StaffUserService
 
-from models.tenancy import TenantScope
+from models.tenancy import TenantScope, Tenant, Storefront
 
 TEST_TENANT_SCOPE = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
 
@@ -30,6 +30,11 @@ async def sqlite_staff_session(tmp_path: Path):
 
     session_factory = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
     async with session_factory() as session:
+        session.add_all([Tenant(id=1, slug='mvn', display_name='MVN', is_system=True),
+                         Tenant(id=2, slug='partner', display_name='Partner'),
+                         Storefront(id=1, tenant_id=1, slug='main', display_name='Main', status='active', is_default=True),
+                         Storefront(id=2, tenant_id=2, slug='main', display_name='Partner', status='active', is_default=True)])
+        await session.commit()
         yield session
 
     await engine.dispose()
@@ -555,7 +560,7 @@ async def test_telegram_admin_check_fails_closed_when_db_lookup_fails(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_admin_recipients_fall_back_to_legacy_admin_ids_when_db_has_none(sqlite_staff_session, monkeypatch):
+async def test_admin_recipients_do_not_fall_back_to_settings_when_db_has_none(sqlite_staff_session, monkeypatch):
     monkeypatch.setattr(settings, "ADMIN_IDS", "901,902", raising=False)
     monkeypatch.setattr(settings, "ADMIN_ID", 903, raising=False)
 
@@ -579,7 +584,7 @@ async def test_admin_recipients_fall_back_to_legacy_admin_ids_when_db_has_none(s
 
     recipients = await StaffUserService.get_active_owner_admin_telegram_recipient_ids(sqlite_staff_session, tenant_scope=TEST_TENANT_SCOPE)
 
-    assert recipients == [901, 902, 903]
+    assert recipients == []
 
 
 @pytest.mark.asyncio

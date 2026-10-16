@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type BotProductPriceUpdateRequest = {
+    expected_context_version?: (number | null);
     telegram_id: number;
     price: number;
 };

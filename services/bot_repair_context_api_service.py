@@ -4,10 +4,11 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from services.bot_api_access import require_bot_staff
+from services.bot_api_access import require_bot_crm_staff
 from services.bot_defect_act_service import BotDefectActService
 from services.bot_repair_nameplate_service import BotRepairNameplateService
-from services.tenant_scope_service import SystemTenantScopeResolver, TenantScope
+from services.bot_business_context import resolve_bot_scope
+from models.tenancy import TenantScope
 
 
 class BotRepairContextApiService:
@@ -15,8 +16,8 @@ class BotRepairContextApiService:
     async def _require_order_access(
         session: AsyncSession, *, telegram_id: int, order_id: int
     ) -> TenantScope:
-        context = await require_bot_staff(session, telegram_id)
-        tenant_scope = await SystemTenantScopeResolver.resolve(session)
+        context = await require_bot_crm_staff(session, telegram_id)
+        tenant_scope = await resolve_bot_scope(session, telegram_id)
         allowed = await BotRepairNameplateService.can_use_order(
             session,
             order_id,
@@ -84,8 +85,8 @@ class BotRepairContextApiService:
         telegram_chat_id: int | None,
         telegram_message_id: int | None,
     ) -> dict[str, Any]:
-        context = await require_bot_staff(session, telegram_id)
-        tenant_scope = await SystemTenantScopeResolver.resolve(session)
+        context = await require_bot_crm_staff(session, telegram_id)
+        tenant_scope = await resolve_bot_scope(session, telegram_id)
         result = await BotDefectActService.apply_diagnostic_comment(
             session,
             order_id,

@@ -439,7 +439,7 @@ async def test_my_tasks_handler_uses_gateway_without_opening_database(monkeypatc
 @pytest.mark.asyncio
 async def test_task_read_service_reuses_authorized_installer_mapping(monkeypatch):
     session = object()
-    context = SimpleNamespace(is_staff=True, legacy_installer_id=17)
+    context = SimpleNamespace(is_staff=True, is_manager=False, is_executor=True, legacy_installer_id=17, selection=None)
     get_context = AsyncMock(return_value=context)
     list_installer_tasks = AsyncMock(return_value=[])
 

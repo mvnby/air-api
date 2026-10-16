@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ChevronLeft, ChevronRight, Menu, Moon, Sun, X } from 'lucide-vue-next';
 import KitlanePartnerIdentity from './KitlanePartnerIdentity.vue';
 import KitlanePlatformBrand from './KitlanePlatformBrand.vue';
+import { managerStorefrontSelection } from '../../services/manager-storefront-selection';
 import ManagerStorefrontSwitcherHost from '../manager/ManagerStorefrontSwitcherHost.vue';
 
 const props = defineProps<{ name: string | null; logoUrl?: string | null; compactLogoUrl?: string | null; contextKey: string; collapsed: boolean; mobileOpen: boolean; theme: 'light' | 'dark' }>();
@@ -23,7 +24,7 @@ const onKeydown = (event: KeyboardEvent) => {
   if (!drawerOpen.value) return;
   if (event.key === 'Escape') { event.preventDefault(); closeDrawer(); }
   if (event.key !== 'Tab') return;
-  const controls = Array.from(sidebar.value?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], [tabindex="0"]') ?? [])
+  const controls = Array.from(sidebar.value?.querySelectorAll<HTMLElement>('button:not(:disabled), select:not(:disabled), a[href], [tabindex="0"]') ?? [])
     .filter(element => element.getClientRects().length > 0);
   const first = controls[0]; const last = controls[controls.length - 1];
   if (event.shiftKey && (document.activeElement === first || document.activeElement === sidebar.value)) { event.preventDefault(); last?.focus(); }
@@ -76,6 +77,7 @@ onBeforeUnmount(() => {
           <div class="kitlane-platform-divider"><KitlanePlatformBrand /></div>
         </div>
       </header>
+      <div class="border-b bg-[var(--kitlane-surface)] px-4 py-2 text-xs text-[var(--kitlane-muted)] md:hidden"><span class="font-medium">Компания:</span> {{ managerStorefrontSelection.companies.value.find(item => item.tenant_id === managerStorefrontSelection.selectedTenantId.value)?.display_name || name }}<span class="ml-3 font-medium">Сайт:</span> {{ managerStorefrontSelection.storefronts.value.find(item => item.slug === managerStorefrontSelection.selectedSlug.value)?.display_name || '—' }}</div>
       <slot />
     </main>
   </div>

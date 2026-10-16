@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel, select
 
 from core.config import settings
-from models import CommunicationDelivery, IntegrationOutboxEvent, StaffUser
+from models import CommunicationDelivery, IntegrationOutboxEvent, StaffUser, Tenant, Storefront, TenantMembership
 from services.communications.contracts import (
     CommunicationRecipientV1,
     InstallationEstimateLeadCreatedPayloadV1,
@@ -42,6 +42,10 @@ async def communications_session_factory(tmp_path):
         await connection.run_sync(SQLModel.metadata.create_all)
 
     factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as session:
+        session.add_all([Tenant(id=1,slug='mvn',display_name='MVN',is_system=True),
+                         Storefront(id=1,tenant_id=1,slug='main',display_name='Main',status='active',is_default=True)])
+        await session.commit()
     try:
         yield factory
     finally:
@@ -97,6 +101,12 @@ def _owner(telegram_id: int, *, status: str = "active", name: str = "Owner"):
     )
 
 
+async def _grant_canonical_memberships(session):
+    for user in (await session.execute(select(StaffUser))).scalars().all():
+        session.add(TenantMembership(tenant_id=1,staff_user_id=user.id,role=user.primary_role,status='active'))
+    await session.flush()
+
+
 @pytest.mark.asyncio
 async def test_notification_opt_out_is_not_resurrected_by_legacy_admin_ids(communications_session_factory, monkeypatch):
     monkeypatch.setattr(settings, "ADMIN_IDS", "101,999", raising=False)
@@ -106,8 +116,9 @@ async def test_notification_opt_out_is_not_resurrected_by_legacy_admin_ids(commu
         owner.telegram_notifications_enabled = False
         session.add(owner)
         await session.commit()
+        await _grant_canonical_memberships(session)
         recipients = await ManagementRecipientDirectory.list_telegram(session)
-        assert [item.destination for item in recipients] == ["999"]
+        assert recipients == []
 
 
 @pytest.mark.asyncio
@@ -140,6 +151,7 @@ async def test_recipient_directory_prefers_eligible_staff_and_filters_roles(
         )
         await session.flush()
 
+        await _grant_canonical_memberships(session)
         recipients = await ManagementRecipientDirectory.list_telegram(session)
 
         assert [recipient.destination for recipient in recipients] == ["101", "202"]
@@ -175,10 +187,10 @@ async def test_recipient_directory_legacy_fallback_cannot_reenable_ineligible_st
         )
         await session.flush()
 
+        await _grant_canonical_memberships(session)
         recipients = await ManagementRecipientDirectory.list_telegram(session)
 
-        assert [recipient.destination for recipient in recipients] == ["707"]
-        assert recipients[0].recipient_key == "legacy-telegram:707"
+        assert recipients == []
 
 
 @pytest.mark.asyncio

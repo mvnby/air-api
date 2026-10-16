@@ -3,6 +3,8 @@
 /* tslint:disable */
 /* eslint-disable */
 export type BotFsmStateGetRequest = {
+    telegram_id?: (number | null);
+    expected_context_version?: (number | null);
     storage_key: string;
 };
 
