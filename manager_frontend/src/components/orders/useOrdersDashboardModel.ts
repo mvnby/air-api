@@ -31,6 +31,8 @@ const setQueryParam = (key: string, value: string) => {
 export const useOrdersDashboardModel = (notify: (message: string) => void) => {
   const segment = ref<Segment>('b2c');
   const view = ref<DashboardView>('kanban');
+  const assignedToMe = ref(false);
+  const canFilterMine = computed(() => Boolean(managerSession.auth.value?.staff_user_id));
   const statusFilter = ref('');
   const workFilter = ref<OrderWorkFilter>('all');
   const sort = ref('created_at_desc');
@@ -70,7 +72,7 @@ export const useOrdersDashboardModel = (notify: (message: string) => void) => {
   const visibleOrders = computed(() => availableOrders.value.filter((order) => matchesOrderWorkFilter(order, workFilter.value)));
   const normalizedSearch = computed(() => search.value.trim());
   const hasActiveOrderFilters = computed(() => Boolean(
-    normalizedSearch.value || statusFilter.value || workFilter.value !== 'all' || hideOnHold.value,
+    assignedToMe.value || normalizedSearch.value || statusFilter.value || workFilter.value !== 'all' || hideOnHold.value,
   ));
   const groupedOrders = computed(() => {
     const groups: Record<string, ManagerOrderListItemResponse[]> = {};
@@ -132,6 +134,7 @@ export const useOrdersDashboardModel = (notify: (message: string) => void) => {
       || window.localStorage.getItem(ORDERS_SEGMENT_STORAGE_KEY);
     const resolvedView = params.get('view')
       || window.localStorage.getItem(ORDERS_VIEW_STORAGE_KEY);
+    assignedToMe.value = canFilterMine.value && ['1', 'true'].includes(params.get('assigned_to_me') || '');
     const groupByFromUrl = params.get('groupBy');
     const groupByFromStorage = window.localStorage.getItem(ORDERS_GROUP_BY_CUSTOMER_STORAGE_KEY);
 
@@ -210,6 +213,8 @@ export const useOrdersDashboardModel = (notify: (message: string) => void) => {
     orderFormError.value = '';
     customerAliases.value = {};
     search.value = '';
+    assignedToMe.value = false;
+    setQueryParam('assigned_to_me', '');
     workFilter.value = 'all';
     loading.value = false;
     saving.value = false;
@@ -223,7 +228,7 @@ export const useOrdersDashboardModel = (notify: (message: string) => void) => {
   };
 
   return {
-    segment, view, statusFilter, workFilter, workFilterCounts, hiddenOnHoldCount, sort, search, loading, saving, orders,
+    segment, view, assignedToMe, canFilterMine, statusFilter, workFilter, workFilterCounts, hiddenOnHoldCount, sort, search, loading, saving, orders,
     movingOrderIds, isHydrated, drawerOpen, selectedOrder, pendingOpenOrderId,
     openedByUrlOrderId, orderServerErrors, orderFormError, hideOnHold,
     groupByCustomer, filtersOpen, customerAliases, selectedOrderIds, transferLoading,

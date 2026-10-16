@@ -566,6 +566,9 @@ export type { ManagerOrderImportProductMatch } from './models/ManagerOrderImport
 export type { ManagerOrderListItemResponse } from './models/ManagerOrderListItemResponse';
 export type { ManagerOrderListResponse } from './models/ManagerOrderListResponse';
 export type { ManagerOrderProductLinePayload } from './models/ManagerOrderProductLinePayload';
+export type { ManagerOrderResponsiblePerson } from './models/ManagerOrderResponsiblePerson';
+export type { ManagerOrderResponsiblesResponse } from './models/ManagerOrderResponsiblesResponse';
+export type { ManagerOrderResponsibleUpdate } from './models/ManagerOrderResponsibleUpdate';
 export type { ManagerOrderScenarioOption } from './models/ManagerOrderScenarioOption';
 export type { ManagerOrderScenariosResponse } from './models/ManagerOrderScenariosResponse';
 export type { ManagerOrderServiceLinePayload } from './models/ManagerOrderServiceLinePayload';

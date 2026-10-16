@@ -13,7 +13,7 @@ from modules.documents.application.errors import ManagedDocumentConflictError, M
 from modules.documents.api.managed_documents_artifacts import _legacy_private_storage
 from modules.documents.infrastructure.template_source_storage import PrivateTemplateSourceStorage
 from core.database import get_session
-from core.security import get_current_manager_tenant_scope, get_current_username, require_manager_access
+from core.security import AuthenticatedUser, get_current_manager_tenant_scope, get_current_username, require_manager_access
 from models.tenancy import TenantScope
 from routers import manager_operation_ids as operation_ids
 from routers.manager_service_attachments import _read_upload_limited
@@ -120,7 +120,7 @@ async def upload_photo(observation_id: int, file: UploadFile = File(...), comman
 
 @router.post("/orders/{order_id}/maintenance-defect-acts", response_model=MaintenanceDefectActItem, status_code=201,
              operation_id=operation_ids.PREPARE_MANAGER_MAINTENANCE_DEFECT_ACT)
-async def prepare_defect_act(order_id: int, payload: PrepareMaintenanceDefectAct, actor: str = Depends(get_current_username),
+async def prepare_defect_act(order_id: int, payload: PrepareMaintenanceDefectAct, auth: AuthenticatedUser = Depends(require_manager_access),
                              session: AsyncSession = Depends(get_session), scope: TenantScope = Depends(get_current_manager_tenant_scope)):
     """Explicitly prepare a native defect-act draft from current versions of selected
     findings on one open or CLOSED ТО. Manager and tenant/storefront/customer/object
@@ -132,7 +132,8 @@ async def prepare_defect_act(order_id: int, payload: PrepareMaintenanceDefectAct
     See [maintenance acts](https://github.com/mvnby/air-api/blob/main/docs/equipment-maintenance.md).
     """
     return await command(session, MaintenanceActPreparationService.prepare(session, source_order_id=order_id,
-        payload=payload, actor=actor, scope=scope, storage=PrivateTemplateSourceStorage(_legacy_private_storage())))
+        payload=payload, actor=auth.username, scope=scope,
+        **({"creator_staff_user_id": auth.staff_user_id} if auth.staff_user_id is not None else {}), storage=PrivateTemplateSourceStorage(_legacy_private_storage())))
 
 
 @router.get("/orders/{order_id}/maintenance-defect-acts", response_model=MaintenanceDefectActList,
@@ -156,13 +157,14 @@ from services.maintenance_offer_service import MaintenanceOfferService as Offers
 
 @router.post('/orders/{order_id}/maintenance-workspace', response_model=MaintenanceWorkspaceItem,
              operation_id=operation_ids.PREPARE_MANAGER_MAINTENANCE_WORKSPACE)
-async def maintenance_workspace(order_id: int, actor: str = Depends(get_current_username), session: AsyncSession = Depends(get_session),
+async def maintenance_workspace(order_id: int, auth: AuthenticatedUser = Depends(require_manager_access), session: AsyncSession = Depends(get_session),
                                 scope: TenantScope = Depends(get_current_manager_tenant_scope)):
     """Explicitly create/reuse the same scoped repair card. No execution, crew, slot or document is assigned.
     Idempotent by source order; inaccessible source is 404, incompatible context 400/409.
     See [maintenance workflow](https://github.com/mvnby/air-api/blob/main/docs/equipment-maintenance.md).
     """
-    return await command(session, Offers.workspace(session, source_order_id=order_id, actor=actor, scope=scope))
+    return await command(session, Offers.workspace(session, source_order_id=order_id, actor=auth.username, scope=scope,
+        **({"creator_staff_user_id": auth.staff_user_id} if auth.staff_user_id is not None else {})))
 
 
 @router.get('/orders/{order_id}/maintenance-offers', response_model=MaintenanceOfferList,

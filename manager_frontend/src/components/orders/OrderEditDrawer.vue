@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, onScopeDispose, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, nextTick, onScopeDispose, ref, toRaw, watch } from 'vue';
+import OrderResponsiblePanel from './OrderResponsiblePanel.vue';
+import { useOrderResponsibility } from '../../composables/useOrderResponsibility';
+import type { OrderWithResponsibility } from '../../services/order-responsibility';
 import DealExecutionTab from './DealExecutionTab.vue';
 import OrderAttachmentsPanel from '../service-attachments/OrderAttachmentsPanel.vue';
 import EmailContractReviewLauncher from '../leads/EmailContractReviewLauncher.vue';
@@ -51,7 +54,7 @@ import { useOrderSourceCommand } from '../../composables/useOrderSourceCommand';
 
 const props = defineProps<{
   modelValue: boolean;
-  order: ManagerOrderDetailResponse | null;
+  order: OrderWithResponsibility | null;
   serverErrors?: Record<string, string>;
   formError?: string;
 }>();
@@ -245,18 +248,31 @@ const {
   onUpdated: (updated) => emit('updated', updated),
 });
 
+const responsibilityResponses = new WeakSet<object>();
+const { busy: responsibilityBusy, paused: responsibilityPaused, error: responsibilityError, canAssign: canAssignResponsible, assign: assignResponsible } = useOrderResponsibility({
+  order: computed(() => props.order), open: computed(() => props.modelValue),
+  otherBusy: computed(() => installationAttaching.value || sourceApplying.value || proposalActionLoading.value || initializing.value),
+  flush: () => orderSaving.flush(),
+  onUpdated: fresh => {
+    if (!props.order || props.order.id !== fresh.id) return;
+    // Assignment returns a full order, but only its own fields may replace local draft state.
+    const updated: OrderWithResponsibility = { ...props.order, responsible_person: fresh.responsible_person, responsible_version: fresh.responsible_version, updated_at: fresh.updated_at };
+    responsibilityResponses.add(toRaw(updated)); emit('updated', updated);
+  },
+});
+
 const {
   busy: sourceApplying, before: beforeSourceCommand,
   after: refreshAfterSourceCommand, end: endSourceCommand,
 } = useOrderSourceCommand({
   order: computed(() => props.order), open: computed(() => props.modelValue),
-  proposalId: activeProposalId, otherCommandBusy: installationAttaching,
+  proposalId: activeProposalId, otherCommandBusy: computed(() => installationAttaching.value || responsibilityBusy.value),
   flush: () => orderSaving.flush(), clearDraft,
   onUpdated: (updated) => emit('updated', updated),
 });
 const orderSaving = useOrderDrawerSaving({
   order: computed(() => props.order),
-  ready: computed(() => props.modelValue && !initializing.value && !installationAutosavePaused.value && !sourceApplying.value && Boolean(props.order)),
+  ready: computed(() => props.modelValue && !initializing.value && !installationAutosavePaused.value && !sourceApplying.value && !responsibilityPaused.value && Boolean(props.order)),
   activeProposalId,
   activeProposalLocked,
   productLines,
@@ -362,7 +378,7 @@ const {
   persistDraft,
   clearDraft,
   setToast,
-  beforeClose: async () => !proposalActionLoading.value && !sourceApplying.value
+  beforeClose: async () => !proposalActionLoading.value && !sourceApplying.value && !responsibilityBusy.value
     && await (customerContextRef.value?.beforeClose?.() ?? true) && await orderSaving.beforeClose(),
   onBeforeClose: orderSaving.cancelScheduled,
   onModelValue: (open) => emit('update:modelValue', open),
@@ -478,6 +494,7 @@ watch(
       return;
     }
     if (!order) return;
+    if (wasOpen && previousOrder?.id === order.id && responsibilityResponses.has(toRaw(order))) return;
     if (!wasOpen || order.id !== previousOrder?.id) {
       captureFocus();
       await initForm(order);
@@ -559,7 +576,7 @@ const saveContextObject = async (draft: { address: string; branchId: number | nu
       </div>
     </Transition>
     <div class="flex-1 bg-black/60" aria-hidden="true" @click="closeDrawer" />
-    <aside ref="drawerScrollContainer" tabindex="-1" role="dialog" aria-modal="true" aria-label="Рабочая область заказа" :inert="installationAttaching || sourceApplying ? true : undefined" :aria-busy="installationAttaching || sourceApplying" class="relative flex h-full w-full min-w-0 flex-col overflow-hidden bg-white text-gray-900 shadow-2xl outline-none dark:bg-slate-950 dark:text-slate-100 md:my-4 md:h-[calc(100%-2rem)] md:w-[calc(100%-2rem)] md:rounded-2xl xl:max-w-[1680px] xl:border xl:border-gray-200 dark:xl:border-slate-700" @keydown="trapFocus" @keydown.esc.stop="closeDrawer" @click="trackUsageControl" @change="trackUsageControl">
+    <aside ref="drawerScrollContainer" tabindex="-1" role="dialog" aria-modal="true" aria-label="Рабочая область заказа" :inert="installationAttaching || sourceApplying || responsibilityBusy ? true : undefined" :aria-busy="installationAttaching || sourceApplying || responsibilityBusy" class="relative flex h-full w-full min-w-0 flex-col overflow-hidden bg-white text-gray-900 shadow-2xl outline-none dark:bg-slate-950 dark:text-slate-100 md:my-4 md:h-[calc(100%-2rem)] md:w-[calc(100%-2rem)] md:rounded-2xl xl:max-w-[1680px] xl:border xl:border-gray-200 dark:xl:border-slate-700" @keydown="trapFocus" @keydown.esc.stop="closeDrawer" @click="trackUsageControl" @change="trackUsageControl">
       <OrderWorkspaceHeader
         v-show="!proposalClientPreview"
         class="shrink-0"
@@ -729,8 +746,9 @@ const saveContextObject = async (draft: { address: string; branchId: number | nu
           </fieldset>
         </div>
         <div v-show="!proposalClientPreview" class="order-first min-w-0 lg:order-none lg:self-start">
-          <button type="button" class="flex min-h-9 w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold dark:border-slate-700 dark:bg-slate-900 lg:hidden" :aria-expanded="mobileContextOpen" @click="mobileContextOpen = !mobileContextOpen"><span>Клиент, объект и заявка</span><span aria-hidden="true">{{ mobileContextOpen ? '−' : '+' }}</span></button>
+          <button type="button" class="flex min-h-9 w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold dark:border-slate-700 dark:bg-slate-900 lg:hidden" :aria-expanded="mobileContextOpen" @click="mobileContextOpen = !mobileContextOpen"><span>Ответственный, клиент и объект</span><span aria-hidden="true">{{ mobileContextOpen ? '−' : '+' }}</span></button>
           <div class="space-y-3 pt-2 lg:pt-0" :class="mobileContextOpen ? '' : 'hidden lg:block'">
+          <OrderResponsiblePanel v-if="order" :order="order" :can-assign="canAssignResponsible" :busy="responsibilityBusy" :disabled="initializing || installationAttaching || sourceApplying || proposalActionLoading" :error="responsibilityError" :assign="assignResponsible" />
           <OrderCustomerContext
             v-if="order"
             ref="customerContextRef"

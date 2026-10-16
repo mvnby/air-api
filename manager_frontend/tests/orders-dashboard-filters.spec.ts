@@ -1,5 +1,8 @@
+import { nextTick } from 'vue';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { managerSession } from '../src/services/manager-session';
+import { managerStorefrontSelection } from '../src/services/manager-storefront-selection';
 import { api } from '../src/api';
 import type { ManagerOrderListItemResponse } from '../src/client';
 import OrdersDashboard from '../src/components/orders/OrdersDashboard.vue';
@@ -132,5 +135,36 @@ describe('dashboard search and completeness', () => {
     await vi.advanceTimersByTimeAsync(250);
     await flushPromises();
     expect(JSON.stringify(board.props('groupedItems'))).toContain('Заказ 9');
+  });
+});
+
+
+describe('My orders server filter', () => {
+  beforeEach(() => { managerSession.auth.value = { staff_user_id: 7, tenant_id: 2, username: 'maria' } as any; managerStorefrontSelection.selectedSlug.value = 'main'; });
+  afterEach(() => { managerSession.auth.value = null; managerStorefrontSelection.selectedSlug.value = null; });
+  it('reloads from page one, sends Mine on every page and preserves the other filters and URL parameters', async () => {
+    window.history.replaceState({}, '', '/manager/orders/kanban?segment=b2b&customerId=42&search=офис&keep=yes');
+    const getOrders = vi.spyOn(api, 'getManagerOrders').mockResolvedValue(response([order(1)], 2));
+    wrapper = mountDashboard(); await flushPromises(); getOrders.mockClear();
+    const mine = wrapper.get('button[title="Показать заказы, где вы назначены ответственным"]'); await mine.trigger('click'); await flushPromises();
+    expect(mine.attributes('aria-pressed')).toBe('true'); expect(getOrders.mock.calls.map(([params]) => params.page)).toEqual([1, 2]);
+    for (const [params] of getOrders.mock.calls) expect(params).toEqual(expect.objectContaining({ assignedToMe: true, customerId: 42, segment: 'b2b', search: 'офис' }));
+    expect(window.location.search).toContain('assigned_to_me=1'); expect(window.location.search).toContain('keep=yes');
+    await wrapper.findAll('button').find(button => button.text().includes('Сбросить фильтры'))!.trigger('click'); await flushPromises(); expect(getOrders).toHaveBeenLastCalledWith(expect.objectContaining({ assignedToMe: false, page: 2 })); expect(window.location.search).not.toContain('assigned_to_me');
+  });
+  it('restores Mine from the URL and ignores a late previous-filter response including its page count', async () => {
+    const old = deferred<ReturnType<typeof response>>();
+    const getOrders = vi.spyOn(api, 'getManagerOrders').mockReturnValueOnce(old.promise).mockResolvedValue(response([order(9)]));
+    window.history.replaceState({}, '', '/manager/orders/kanban?assigned_to_me=1&segment=b2b'); wrapper = mountDashboard(); await flushPromises();
+    expect(getOrders).toHaveBeenCalledWith(expect.objectContaining({ assignedToMe: true }));
+    const mine = wrapper.get('button[title="Показать заказы, где вы назначены ответственным"]'); await mine.trigger('click'); await flushPromises();
+    old.resolve(response([order(4)], 4)); await flushPromises();
+    expect(getOrders).toHaveBeenCalledTimes(2);
+    expect(getOrders).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, assignedToMe: false }));
+    expect(JSON.stringify(wrapper.findComponent({ name: 'OrderKanbanBoard' }).props('groupedItems'))).toContain('Заказ 9'); expect(JSON.stringify(wrapper.findComponent({ name: 'OrderKanbanBoard' }).props('groupedItems'))).not.toContain('Заказ 4');
+  });
+  it('never applies an old response after identity or site changes', async () => {
+    const late = deferred<ReturnType<typeof response>>(); vi.spyOn(api, 'getManagerOrders').mockReturnValue(late.promise);
+    wrapper = mountDashboard(); await flushPromises(); managerStorefrontSelection.selectedSlug.value = 'other'; await nextTick(); late.resolve(response([order(77)])); await flushPromises(); expect(JSON.stringify(wrapper.findComponent({ name: 'OrderKanbanBoard' }).props('groupedItems'))).not.toContain('Заказ 77');
   });
 });

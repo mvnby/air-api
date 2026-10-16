@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import OrderResponsibleBadge from './OrderResponsibleBadge.vue';
+import type { OrderResponsibilityFields } from '../../services/order-responsibility';
 import { computed, ref } from 'vue';
 import { ChevronDown, ChevronUp, ExternalLink } from 'lucide-vue-next';
 import type { ManagerOrderListItemResponse } from '../../client';
@@ -9,7 +11,7 @@ import OrderMoney from './OrderMoney.vue';
 import { useDemoReadOnly } from '../../services/manager-demo';
 
 const props = defineProps<{
-  order: ManagerOrderListItemResponse;
+  order: ManagerOrderListItemResponse & OrderResponsibilityFields;
   expanded: boolean;
   draggableDisabled?: boolean;
 }>();
@@ -158,6 +160,7 @@ const paymentSummary = computed(() => {
           </button>
         </div>
       </div>
+      <OrderResponsibleBadge class="mt-1" :person="order.responsible_person" interactive @open="emit('open', order.id)" />
     </header>
 
     <div v-if="compactLabels.length || hiddenLabelsCount" class="mt-2 flex flex-wrap gap-1">

@@ -196,6 +196,7 @@ class LeadCommandService:
         payload: Any,
         *,
         tenant_scope: TenantScope,
+        creator_staff_user_id: int | None = None,
     ) -> Optional[Dict[str, Any]]:
         async with command_transaction(session):
             return await LeadService._qualify_lead_mutation(
@@ -203,4 +204,5 @@ class LeadCommandService:
                 lead_id,
                 payload,
                 tenant_scope=tenant_scope,
+                **({"creator_staff_user_id": creator_staff_user_id} if creator_staff_user_id is not None else {}),
             )

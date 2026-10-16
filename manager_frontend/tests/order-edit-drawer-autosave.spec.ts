@@ -1,6 +1,8 @@
 import { nextTick } from 'vue';
 import { shallowMount, flushPromises, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import OrderResponsiblePanel from '../src/components/orders/OrderResponsiblePanel.vue';
+import { orderResponsibilityApi } from '../src/services/order-responsibility';
 import OrderEditDrawer from '../src/components/orders/OrderEditDrawer.vue';
 import OrderCustomerContext from '../src/components/orders/OrderCustomerContext.vue';
 import OrderProposalWorkspace from '../src/components/orders/OrderProposalWorkspace.vue';
@@ -446,4 +448,73 @@ describe('equipment picker navigation from the order', () => {
     expect(ManagerMailService.listManagerOrderOutgoingEmails).toHaveBeenCalledWith(395, 20);
   });
 
+});
+
+
+describe('order responsibility with the actual drawer save queue', () => {
+  const person = { staff_user_id: 7, display_name: 'Мария', avatar_url: null, is_active: true };
+  const responsibility = () => wrapper.findComponent(OrderResponsiblePanel);
+  beforeEach(() => {
+    managerSession.auth.value = { tenant_id: 2, storefront_id: 1, staff_user_id: 7, username: 'maria', capabilities: ['crm.manage'] } as any;
+    managerStorefrontSelection.selectedSlug.value = 'main';
+    stored = { ...initialOrder(), responsible_person: person, responsible_version: 3 } as any;
+  });
+  afterEach(() => { managerSession.auth.value = null; managerStorefrontSelection.selectedSlug.value = null; });
+  it('drains a queued autosave before assignment and preserves newer edits made while the full response is pending', async () => {
+    let finishSave!: (value: ManagerOrderDetailResponse) => void;
+    let savePayload: any;
+    vi.mocked(ManagerOrdersService.patchManagerOrder).mockImplementationOnce((_id, payload) => { savePayload = payload; return new Promise(resolve => { finishSave = resolve; }) as any; });
+    let finishAssignment!: (value: any) => void;
+    const assign = vi.spyOn(orderResponsibilityApi, 'assign').mockImplementation(() => new Promise(resolve => { finishAssignment = resolve; }) as any);
+    await mountDrawer();
+    customer().vm.$emit('update:comment', 'Первая правка'); await nextTick(); await vi.advanceTimersByTimeAsync(700); await flushPromises();
+    const pending = responsibility().props('assign')!(8); await flushPromises(); expect(assign).not.toHaveBeenCalled();
+    customer().vm.$emit('update:comment', 'Правка в очереди'); await nextTick(); finishSave(commit(savePayload)); await flushPromises();
+    expect(assign).toHaveBeenCalledWith(395, 8, 3); expect(stored.comment).toBe('Правка в очереди');
+    customer().vm.$emit('update:comment', 'Новая правка во время назначения'); await nextTick();
+    const commercial = wrapper.findComponent(OrderProposalWorkspace).props('commercial') as any;
+    commercial.addServiceLine(); commercial.serviceLines.value[0].title = 'Новая смета'; commercial.serviceLines.value[0].price = 700; await nextTick();
+    stored = { ...stored, responsible_person: { ...person, staff_user_id: 8, display_name: 'Андрей' }, responsible_version: 4 } as any;
+    const updated = structuredClone(stored);
+    finishAssignment(updated); expect(await pending).toBe(true); await flushPromises();
+    expect(customer().props('comment')).toBe('Новая правка во время назначения'); expect((wrapper.props('order') as any).responsible_person.display_name).toBe('Андрей');
+    await vi.advanceTimersByTimeAsync(700); await flushPromises(); expect(stored.comment).toBe('Новая правка во время назначения');
+    expect(stored.proposals![0].service_lines).toEqual(expect.arrayContaining([expect.objectContaining({ title: 'Новая смета', price: 700 })]));
+  });
+  it('keeps the version seen at the click if a concurrent reassignment arrives while draining autosave', async () => {
+    vi.mocked(ManagerOrdersService.patchManagerOrder).mockImplementation(async (_id, payload) => {
+      commit(payload);
+      stored = { ...stored, responsible_person: { ...person, staff_user_id: 8, display_name: 'Андрей' }, responsible_version: 4 } as any;
+      return structuredClone(stored);
+    });
+    const assign = vi.spyOn(orderResponsibilityApi, 'assign').mockRejectedValue({ status: 409 });
+    const reload = vi.spyOn(ManagerOrdersService, 'getManagerOrderDetail').mockImplementation(async () => structuredClone(stored) as any);
+    await mountDrawer(); customer().vm.$emit('update:comment', 'Сохранить перед снятием ответственного'); await nextTick();
+    expect(await responsibility().props('assign')!(null)).toBe(false); await flushPromises();
+    expect(assign).toHaveBeenCalledExactlyOnceWith(395, null, 3); expect(reload).toHaveBeenCalledWith(395);
+    expect((wrapper.props('order') as any).responsible_person.display_name).toBe('Андрей'); expect(responsibility().props('error')).toContain('Показаны текущие данные');
+    expect(stored.comment).toBe('Сохранить перед снятием ответственного');
+  });
+  it('refreshes only responsibility after a 409, keeps unsaved fields and never replays the rejected choice', async () => {
+    let rejectAssignment!: (reason: any) => void;
+    const assign = vi.spyOn(orderResponsibilityApi, 'assign').mockImplementation(() => new Promise((_resolve, reject) => { rejectAssignment = reject; }) as any);
+    const fresh = { ...stored, comment: 'Чужой ответ', responsible_person: null, responsible_version: 4 };
+    const reload = vi.spyOn(ManagerOrdersService, 'getManagerOrderDetail').mockResolvedValue(fresh);
+    await mountDrawer(); const pending = responsibility().props('assign')!(8); await flushPromises();
+    customer().vm.$emit('update:comment', 'Мои несохранённые данные'); await nextTick(); rejectAssignment({ status: 409 }); expect(await pending).toBe(false); await flushPromises();
+    expect(assign).toHaveBeenCalledOnce(); expect(reload).toHaveBeenCalledWith(395); expect(responsibility().props('error')).toContain('Показаны текущие данные'); expect(customer().props('comment')).toBe('Мои несохранённые данные'); expect((wrapper.props('order') as any).responsible_version).toBe(4);
+  });
+  it('allows clear and virtual platform support, but disables demo and a legacy identity without staff', async () => {
+    const assign = vi.spyOn(orderResponsibilityApi, 'assign').mockResolvedValue({ ...stored, responsible_person: null, responsible_version: 4 } as any);
+    managerSession.auth.value = { ...managerSession.auth.value!, is_platform_owner: true, tenant_membership_id: null };
+    await mountDrawer(); expect(responsibility().props('canAssign')).toBe(true); expect(await responsibility().props('assign')!(null)).toBe(true); expect(assign).toHaveBeenCalledWith(395, null, 3);
+    managerSession.auth.value = { ...managerSession.auth.value!, demo_read_only: true }; await nextTick(); expect(responsibility().props('canAssign')).toBe(false); expect(await responsibility().props('assign')!(8)).toBe(false);
+    managerSession.auth.value = { ...managerSession.auth.value!, demo_read_only: false, staff_user_id: null, auth_source: 'legacy' }; await nextTick(); expect(responsibility().props('canAssign')).toBe(false); expect(assign).toHaveBeenCalledOnce();
+  });
+  it('discards an assignment response after switching person/company/site context', async () => {
+    let finish!: (value: any) => void; vi.spyOn(orderResponsibilityApi, 'assign').mockImplementation(() => new Promise(resolve => { finish = resolve; }) as any);
+    await mountDrawer(); const pending = responsibility().props('assign')!(8); await flushPromises();
+    const emittedBefore = wrapper.emitted('updated')?.length || 0; managerStorefrontSelection.selectedSlug.value = 'other'; await nextTick();
+    finish({ ...stored, responsible_person: null, responsible_version: 4 }); expect(await pending).toBe(false); expect(wrapper.emitted('updated')?.length || 0).toBe(emittedBefore);
+  });
 });

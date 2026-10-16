@@ -7,6 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, ValidationInfo, computed_field, field_validator
 
+from api_contracts.order_responsibility import ManagerOrderResponsiblePerson
 from models import PaymentCurrency
 from services.service_estimate_money import exact_money
 from schemas_common import Meta
@@ -188,6 +189,8 @@ class OrderServiceLineResponse(BaseModel):
 
 class ManagerOrderListItemResponse(BaseModel):
     id: int
+    responsible_person: ManagerOrderResponsiblePerson | None = None
+    responsible_version: int = 0
     status: str
     lead_source: Optional[str] = None
     title: Optional[str] = None

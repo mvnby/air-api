@@ -19088,7 +19088,7 @@
           "manager-orders"
         ],
         "summary": "Get Manager Orders",
-        "description": "Page orders accessible in the current Manager tenant/storefront, applying customer\nsegment, status/search/overdue/customer and sort filters before projection. limit is at\nmost 100. Invalid business filters/sort return 400; response carries list metadata\nrather than unrestricted platform CRM data.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Page orders accessible in the current Manager tenant/storefront, applying customer\nsegment, status/search/overdue/customer, personal assignment and sort filters before\npagination and count. \"assigned_to_me\" uses the authenticated staff ID; a legacy\nidentity without a staff ID receives an empty personal result. limit is at\nmost 100. Invalid business filters/sort return 400; response carries list metadata\nrather than unrestricted platform CRM data.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "get_manager_orders",
         "security": [
           {
@@ -19197,6 +19197,16 @@
                 }
               ],
               "title": "Customer Id"
+            }
+          },
+          {
+            "name": "assigned_to_me",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Assigned To Me"
             }
           }
         ],
@@ -20596,6 +20606,127 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/order-responsibles": {
+      "get": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "List Order Responsibles",
+        "description": "List active actual owner/admin/manager members of the selected company.\n\nRequires a live Manager staff identity, including verified platform support.\nDoes not include installers, catalog editors, virtual memberships or credentials.",
+        "operationId": "list_manager_order_responsibles",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderResponsiblesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/responsible": {
+      "patch": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "Patch Order Responsible",
+        "description": "Assign/clear the responsible staff member within the selected company/site.\n\nRequires X-Kitlane-Team:1, approved Origin and live owner/admin/manager membership\nor verified platform support. Legacy emergency identities without staff return403.\nActual active company membership is always required for a new assignee. A stale\nexpected_version returns409. Real changes increment the dedicated counter and\natomically record old/new responsibility; a no-op neither increments nor audits.",
+        "operationId": "patch_manager_order_responsible",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerOrderResponsibleUpdate"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -71223,6 +71354,21 @@
             "type": "integer",
             "title": "Id"
           },
+          "responsible_person": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerOrderResponsiblePerson"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "responsible_version": {
+            "type": "integer",
+            "title": "Responsible Version",
+            "default": 0
+          },
           "status": {
             "type": "string",
             "title": "Status"
@@ -72457,6 +72603,21 @@
             "type": "integer",
             "title": "Id"
           },
+          "responsible_person": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerOrderResponsiblePerson"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "responsible_version": {
+            "type": "integer",
+            "title": "Responsible Version",
+            "default": 0
+          },
           "status": {
             "type": "string",
             "title": "Status"
@@ -73036,6 +73197,99 @@
           "price"
         ],
         "title": "ManagerOrderProductLinePayload"
+      },
+      "ManagerOrderResponsiblePerson": {
+        "properties": {
+          "staff_user_id": {
+            "type": "integer",
+            "title": "Staff User Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          }
+        },
+        "type": "object",
+        "required": [
+          "staff_user_id",
+          "display_name",
+          "is_active"
+        ],
+        "title": "ManagerOrderResponsiblePerson"
+      },
+      "ManagerOrderResponsibleUpdate": {
+        "properties": {
+          "responsible_staff_user_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Responsible Staff User Id"
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "responsible_staff_user_id",
+          "expected_version"
+        ],
+        "title": "ManagerOrderResponsibleUpdate"
+      },
+      "ManagerOrderResponsiblesResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerOrderResponsiblePerson"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit"
+        ],
+        "title": "ManagerOrderResponsiblesResponse"
       },
       "ManagerOrderScenarioOption": {
         "properties": {

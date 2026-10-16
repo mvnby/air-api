@@ -35,13 +35,15 @@ class BotQuickOrderApiService:
         source_fingerprint: str,
         draft: BotQuickOrderDraft,
     ) -> BotQuickOrderCreateResult:
-        await BotQuickOrderApiService._require_manager(session, telegram_id)
+        context = await BotQuickOrderApiService._require_manager(session, telegram_id)
+        creator_staff_user_id = getattr(context, "staff_user_id", None)
         tenant_scope = await resolve_bot_scope(session, telegram_id)
         order_data = await BotQuickOrderService.create_order_from_draft(
             session,
             draft.model_dump(mode="json", exclude={"service_label"}),
             source_fingerprint=source_fingerprint,
             tenant_scope=tenant_scope,
+            **({"creator_staff_user_id": creator_staff_user_id} if type(creator_staff_user_id) is int else {}),
         )
         order_id = int(order_data.get("id") or 0)
         if not order_id:
@@ -62,10 +64,11 @@ class BotQuickOrderApiService:
         )
 
     @staticmethod
-    async def _require_manager(session: AsyncSession, telegram_id: int) -> None:
+    async def _require_manager(session: AsyncSession, telegram_id: int):
         context = await BotAccessService.get_context(session, telegram_id)
         if not context.is_staff or not context.is_manager:
             raise BotQuickOrderAccessDeniedError("Manager quick-order access is required")
+        return context
 
     @staticmethod
     def _request_fingerprint(*, telegram_id: int, idempotency_key: str) -> str:

@@ -919,6 +919,7 @@ class OrderService:
         payload: Any,
         *,
         tenant_scope: TenantScope,
+        creator_staff_user_id: int | None = None,
     ) -> Optional[Dict[str, Any]]:
         """Compatibility delegate to the transactional create command."""
         from services.order_create_command_service import OrderCreateCommandService
@@ -927,6 +928,7 @@ class OrderService:
             session,
             payload,
             tenant_scope=tenant_scope,
+            **({"creator_staff_user_id": creator_staff_user_id} if creator_staff_user_id is not None else {}),
         )
 
     @staticmethod
@@ -2007,6 +2009,8 @@ class OrderService:
         search: Optional[str] = None,
         overdue_only: bool = False,
         sort: str = "created_at_desc",
+        assigned_to_me: bool = False,
+        staff_user_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """Compatibility delegate to the Manager order read model."""
         from services.order_projection_service import OrderProjectionService
@@ -2021,6 +2025,8 @@ class OrderService:
             search=search,
             overdue_only=overdue_only,
             sort=sort,
+            assigned_to_me=assigned_to_me,
+            staff_user_id=staff_user_id,
         )
 
     @staticmethod

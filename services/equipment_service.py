@@ -573,12 +573,14 @@ class EquipmentService:
         *,
         equipment_id: int,
         tenant_scope: TenantScope,
+        creator_staff_user_id: int | None = None,
     ) -> Optional[Dict[str, Any]]:
         from services.equipment_workflow_service import EquipmentWorkflowService
         return await EquipmentWorkflowService.create_maintenance_order(
             session,
             equipment_id=equipment_id,
             tenant_scope=tenant_scope,
+            **({"creator_staff_user_id": creator_staff_user_id} if creator_staff_user_id is not None else {}),
         )
 
     @staticmethod

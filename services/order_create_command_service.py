@@ -23,6 +23,7 @@ class OrderCreateCommandService:
         payload: Any,
         *,
         tenant_scope: TenantScope,
+        creator_staff_user_id: int | None = None,
     ) -> Dict[str, Any]:
         request_id = getattr(payload, "client_request_id", None)
         fingerprint = (
@@ -39,6 +40,7 @@ class OrderCreateCommandService:
             return await OrderCreateCommandService._create_manager_order_once(
                 session, payload, tenant_scope=tenant_scope,
                 fingerprint=fingerprint,
+                **({"creator_staff_user_id": creator_staff_user_id} if creator_staff_user_id is not None else {}),
             )
         except IntegrityError:
             if fingerprint is None:
@@ -79,8 +81,15 @@ class OrderCreateCommandService:
         *,
         tenant_scope: TenantScope,
         fingerprint: str | None,
+        creator_staff_user_id: int | None = None,
     ) -> Dict[str, Any]:
         async with command_transaction(session):
+            responsible_staff_user_id = None
+            if creator_staff_user_id is not None:
+                from services.order_responsibility_service import OrderResponsibilityService
+                responsible_staff_user_id = await OrderResponsibilityService.initial_responsible(
+                    session, tenant_scope, creator_staff_user_id,
+                )
             explicit_workflow = payload.workflow_type is not None
             workflow_type, service_type = resolve_scenario(
                 workflow_type=payload.workflow_type,
@@ -119,6 +128,7 @@ class OrderCreateCommandService:
                 tenant_scope=tenant_scope,
                 commit=False,
             )
+            order.responsible_staff_user_id = responsible_staff_user_id
             if fingerprint is not None:
                 order.source_fingerprint = fingerprint
 

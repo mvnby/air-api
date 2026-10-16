@@ -9,6 +9,7 @@
     "reviewed_stage"
   ],
   "review_stages": {
+    "20": "Company-local order responsibility, active actual CRM candidates and historical people, fresh authenticated reassignment with dedicated optimistic version and atomic audit, personal filter before count/pagination and trusted internal creator allocation before persistence; reviewed 2026-10-16",
     "19": "Explicit company/site bootstrap and virtual platform support, protected one-use team invitations, platform company/site directory and audited company status controls, real-membership bot context/version fencing; reviewed 2026-10-16",
     "18": "Personal profile whitelist and optimistic edits, private company-scoped sanitized avatars, browser-bound Telegram linking and explicitly approved one-use bot login, fresh identity/membership/recovery validation and independent notification consent; reviewed 2026-10-16",
     "17": "Explicit platform-owner identity, tenant-local admin hierarchy and last-owner protection, delegated catalog edit/delete independent from CRM, live membership grants, audited optimistic cross-company permission administration; reviewed 2026-10-16",
@@ -30,6 +31,10 @@
     "11": "Native tender direct push; dedicated key, fixed active system scope, writable-primary gates, bounded payload, shared pull/push deduplication, staff preservation, stale guards and unchanged pull checkpoint reviewed 2026-10-09 for issue 849"
   },
   "operations": {
+    "routers/manager_order_responsibility.py": [
+      ["GET /api/manager/order-responsibles", "list_manager_order_responsibles", false, 20],
+      ["PATCH /api/manager/orders/{order_id}/responsible", "patch_manager_order_responsible", false, 20]
+    ],
     "routers/manager_account_companies.py": [
       ["GET /api/manager/account/companies", "manager_list_account_companies", false, 19]
     ],
@@ -274,11 +279,11 @@
       ["POST /api/internal/bot/v1/customers/requisites/recognize-file", "recognize_internal_bot_customer_requisites_file_v1", true, 1],
       ["POST /api/internal/bot/v1/customers/requisites/recognize-text", "recognize_internal_bot_customer_requisites_text_v1", false, 1],
       ["POST /api/internal/bot/v1/customers/requisites/{recognition_id}/action", "apply_internal_bot_customer_requisites_action_v1", false, 1],
-      ["POST /api/internal/bot/v1/quick-orders", "create_internal_bot_quick_order_v1", false, 1],
+      ["POST /api/internal/bot/v1/quick-orders", "create_internal_bot_quick_order_v1", false, 20],
       ["POST /api/internal/bot/v1/quick-orders/customers/search", "search_internal_bot_quick_order_customers_v1", false, 1],
       ["POST /api/internal/bot/v1/quick-orders/drafts", "start_internal_bot_quick_order_draft_v1", false, 1],
       ["POST /api/internal/bot/v1/quick-orders/drafts/{draft_id}/cancel", "cancel_internal_bot_quick_order_draft_v1", false, 1],
-      ["POST /api/internal/bot/v1/quick-orders/drafts/{draft_id}/create", "create_internal_bot_quick_order_from_draft_v1", false, 1],
+      ["POST /api/internal/bot/v1/quick-orders/drafts/{draft_id}/create", "create_internal_bot_quick_order_from_draft_v1", false, 20],
       ["POST /api/internal/bot/v1/quick-orders/parse", "parse_internal_bot_quick_order_v1", false, 1],
       ["POST /api/internal/bot/v1/tasks/my", "list_internal_bot_my_tasks_v1", false, 1],
       ["POST /api/internal/bot/v1/tasks/stages/{stage_id}/attachments", "attach_internal_bot_task_stage_file_v1", false, 1],
@@ -390,7 +395,7 @@
       ["GET /api/manager/catalog-decision/filter-options", "list_manager_catalog_decision_filter_options", false, 2],
       ["GET /api/manager/catalog-decision/products", "list_manager_catalog_decision_products", false, 2],
       ["POST /api/manager/catalog-decision/collections", "create_manager_catalog_decision_collection", false, 2],
-      ["POST /api/manager/catalog-decision/orders", "create_manager_catalog_decision_order", false, 2],
+      ["POST /api/manager/catalog-decision/orders", "create_manager_catalog_decision_order", false, 20],
       ["POST /api/manager/catalog-decision/orders/{order_id}/attach", "attach_manager_catalog_decision_to_order", false, 2]
     ],
     "routers/manager_catalog_management.py": [
@@ -487,7 +492,7 @@
       ["POST /api/manager/equipment/{equipment_id}/components", "create_manager_equipment_component", false, 3],
       ["POST /api/manager/equipment/{equipment_id}/history", "create_manager_equipment_history", false, 3],
       ["POST /api/manager/equipment/{equipment_id}/history/from-repair-order", "create_manager_equipment_history_from_repair_order", false, 3],
-      ["POST /api/manager/equipment/{equipment_id}/maintenance-order", "create_manager_maintenance_order", false, 3]
+      ["POST /api/manager/equipment/{equipment_id}/maintenance-order", "create_manager_maintenance_order", false, 20]
     ],
     "routers/manager_equipment_links.py": [
       ["DELETE /api/manager/orders/{order_id}/equipment-links/{link_id}", "delete_manager_order_equipment_link", false, 3],
@@ -590,7 +595,7 @@
       ["PATCH /api/manager/leads/{lead_id}", "patch_manager_lead", false, 2],
       ["POST /api/manager/leads", "create_manager_lead", false, 2],
       ["POST /api/manager/leads/{lead_id}/mark-lost", "mark_manager_lead_lost", false, 2],
-      ["POST /api/manager/leads/{lead_id}/qualify", "qualify_manager_lead", false, 2]
+      ["POST /api/manager/leads/{lead_id}/qualify", "qualify_manager_lead", false, 20]
     ],
     "routers/manager_maintenance_observations.py": [
       ["GET /api/manager/equipment/{equipment_id}/maintenance-observations", "list_manager_equipment_maintenance_observations", false, 5],
@@ -599,14 +604,14 @@
       ["PATCH /api/manager/maintenance-observations/{observation_id}", "update_manager_maintenance_observation", false, 5],
       ["POST /api/manager/maintenance-observations/{observation_id}/photos", "upload_manager_maintenance_observation_photo", false, 5],
       ["POST /api/manager/orders/{order_id}/maintenance-observations", "create_manager_maintenance_observation", false, 5],
-      ["POST /api/manager/orders/{order_id}/maintenance-defect-acts", "prepare_manager_maintenance_defect_act", false, 6],
+      ["POST /api/manager/orders/{order_id}/maintenance-defect-acts", "prepare_manager_maintenance_defect_act", false, 20],
       ["GET /api/manager/orders/{order_id}/maintenance-defect-acts", "list_manager_maintenance_defect_acts", false, 6],
       ["GET /api/manager/customers/{customer_id}/maintenance-observations", "list_manager_customer_maintenance_observations", false, 8],
       ["GET /api/manager/orders/{order_id}/maintenance-offers", "list_manager_maintenance_offers", false, 8],
       ["POST /api/manager/maintenance-observations/{observation_id}/resolution", "resolve_manager_maintenance_observation", false, 8],
       ["POST /api/manager/orders/{order_id}/maintenance-offers", "prepare_manager_maintenance_offer", false, 8],
       ["POST /api/manager/orders/{order_id}/maintenance-offers/{offer_id}/commands", "command_manager_maintenance_offer", false, 8],
-      ["POST /api/manager/orders/{order_id}/maintenance-workspace", "prepare_manager_maintenance_workspace", false, 8]
+      ["POST /api/manager/orders/{order_id}/maintenance-workspace", "prepare_manager_maintenance_workspace", false, 20]
     ],
     "routers/manager_mail.py": [
       ["DELETE /api/manager/mail/bank-receipts/{receipt_id}", "delete_manager_bank_receipt", false, 2],
@@ -701,10 +706,10 @@
       ["POST /api/manager/order-workspace-usage/batch", "record_manager_order_usage", false, 2]
     ],
     "routers/manager_orders_read.py": [
-      ["GET /api/manager/orders", "get_manager_orders", false, 2],
+      ["GET /api/manager/orders", "get_manager_orders", false, 20],
       ["GET /api/manager/orders/scenarios", "list_manager_order_scenarios", false, 2],
       ["GET /api/manager/orders/work-stages/stale", "list_manager_stale_order_stages", false, 2],
-      ["GET /api/manager/orders/{order_id}", "get_manager_order_detail", false, 2],
+      ["GET /api/manager/orders/{order_id}", "get_manager_order_detail", false, 20],
       ["POST /api/manager/orders/export", "export_manager_orders", false, 2]
     ],
     "routers/manager_orders_write.py": [
@@ -716,7 +721,7 @@
       ["PATCH /api/manager/orders/{order_id}", "patch_manager_order", false, 2],
       ["PATCH /api/manager/orders/{order_id}/proposals/{proposal_id}", "patch_manager_order_proposal", false, 2],
       ["PATCH /api/manager/orders/{order_id}/stages/{stage_id}", "update_manager_order_stage", false, 2],
-      ["POST /api/manager/orders", "create_manager_order", false, 2],
+      ["POST /api/manager/orders", "create_manager_order", false, 20],
       ["POST /api/manager/orders/import", "import_manager_orders", false, 2],
       ["POST /api/manager/orders/import/preview", "preview_import_manager_orders", false, 2],
       ["POST /api/manager/orders/{order_id}/documents/{doc_type}", "generate_manager_order_document", false, 2],
