@@ -9,10 +9,13 @@ from schemas import (
     ManagerInstallerUpdatePayload,
     ManagerInstallerResponse,
     ManagerInstallerListResponse,
+    ManagerStaffCreatePayload,
+    ManagerStaffUpdatePayload,
     Meta,
 )
 from services.staff_user_service import StaffUserService
 from services.staff_tenant_membership_service import StaffTenantMembershipService
+from services.legacy_owner_managed_identity_service import LegacyOwnerManagedIdentityService
 
 class ManagerInstallerService:
     @staticmethod
@@ -185,27 +188,33 @@ class ManagerInstallerService:
         payload: ManagerInstallerCreatePayload,
         *,
         tenant_scope: TenantScope,
+        actor_role: str | None = None,
+        actor_staff_user_id: int | None = None,
+        actor_username: str = "internal",
+        is_platform_owner: bool = False,
     ) -> ManagerInstallerResponse:
-        inst = Installer(
-            name=payload.name,
-            is_active=payload.is_active,
-            default_rate=payload.default_rate,
-            telegram_id=payload.telegram_id,
-        )
-        session.add(inst)
-        await session.flush()
-        await StaffUserService.ensure_for_installer(
+        staff = await StaffUserService.create_staff(
             session,
-            inst,
+            ManagerStaffCreatePayload(
+                display_name=payload.name,
+                primary_role="installer",
+                status="active" if payload.is_active else "inactive",
+                default_rate=payload.default_rate,
+                telegram_id=payload.telegram_id,
+                is_assignable_installer=True,
+            ),
             tenant_scope=tenant_scope,
+            actor_role=actor_role,
+            actor_staff_user_id=actor_staff_user_id,
+            actor_username=actor_username,
+            is_platform_owner=is_platform_owner,
         )
-        await session.commit()
-        await session.refresh(inst)
-        staff_user = await StaffUserService.get_by_legacy_installer_id(session, int(inst.id))
-        return cls._response_from_installer(
-            inst,
-            staff_user,
-            tenant_is_active=payload.is_active,
+        return ManagerInstallerResponse(
+            id=int(staff.legacy_installer_id),
+            name=staff.display_name,
+            is_active=staff.status == "active",
+            default_rate=staff.default_rate,
+            telegram_id=staff.telegram_id,
         )
 
     @classmethod
@@ -216,6 +225,10 @@ class ManagerInstallerService:
         payload: ManagerInstallerUpdatePayload,
         *,
         tenant_scope: TenantScope,
+        actor_role: str | None = None,
+        actor_staff_user_id: int | None = None,
+        actor_username: str = "internal",
+        is_platform_owner: bool = False,
     ) -> Optional[ManagerInstallerResponse]:
         res = await session.execute(select(Installer).where(Installer.id == installer_id))
         inst = res.scalar_one_or_none()
@@ -226,8 +239,6 @@ class ManagerInstallerService:
             session,
             installer_id,
         )
-        membership = None
-        memberships = []
         if staff_user is not None:
             membership = await StaffTenantMembershipService.get_for_tenant(
                 session,
@@ -236,74 +247,58 @@ class ManagerInstallerService:
             )
             if membership is None:
                 return None
-            memberships = await StaffTenantMembershipService.list_for_staff(
+            await LegacyOwnerManagedIdentityService.ensure_generic_mutation_allowed(
                 session,
                 staff_user_id=int(staff_user.id or 0),
-                lock=True,
-            )
-            shared_fields: set[str] = set()
-            if payload.name is not None:
-                shared_fields.add("display_name")
-            if payload.default_rate is not None:
-                shared_fields.add("default_rate")
-            if payload.telegram_id is not None:
-                shared_fields.add("telegram_id")
-            StaffTenantMembershipService.validate_shared_identity_update(
-                changed_fields=shared_fields,
-                membership_count=len(memberships),
-                is_system_tenant=tenant_scope.is_system,
+                tenant_id=tenant_scope.tenant_id,
             )
         elif not tenant_scope.is_system:
             return None
-            
-        if payload.name is not None:
-            inst.name = payload.name
-        if payload.default_rate is not None:
-            inst.default_rate = payload.default_rate
-        if payload.telegram_id is not None:
-            inst.telegram_id = payload.telegram_id
+        else:
+            # Legacy contractors without an account are adopted only under the
+            # tenant parent lock. Subsequent writes use the same staff policy.
+            await StaffTenantMembershipService.lock_tenant(session, tenant_id=tenant_scope.tenant_id)
+            staff_user = await StaffUserService.ensure_for_installer(
+                session, inst, tenant_scope=tenant_scope,
+            )
 
-        session.add(inst)
-        await session.flush()
-        staff_user = await StaffUserService.ensure_for_installer(
-            session,
-            inst,
-            tenant_scope=tenant_scope,
-        )
+        staff_changes = {
+            field: value
+            for field, value in (
+                ("display_name", payload.name),
+                ("default_rate", payload.default_rate),
+                ("telegram_id", payload.telegram_id),
+            )
+            if value is not None
+        }
         if payload.is_active is not None:
-            membership = await StaffTenantMembershipService.get_for_tenant(
-                session,
-                tenant_id=tenant_scope.tenant_id,
-                staff_user_id=int(staff_user.id or 0),
-            )
-            if membership is None:
-                return None
-            membership.status = "active" if payload.is_active else "disabled"
-            StaffTenantMembershipService.touch(membership)
-            session.add(membership)
-            memberships = await StaffTenantMembershipService.list_for_staff(
-                session,
-                staff_user_id=int(staff_user.id or 0),
-            )
-            staff_user.status = StaffTenantMembershipService.aggregate_staff_status(
-                memberships
-            )
-            inst.is_active = StaffUserService.is_active(staff_user)
-            session.add(staff_user)
-            session.add(inst)
+            staff_changes["status"] = "active" if payload.is_active else "inactive"
+        updated = await StaffUserService.update_staff(
+            session,
+            int(staff_user.id),
+            ManagerStaffUpdatePayload(**staff_changes),
+            tenant_scope=tenant_scope,
+            actor_role=actor_role,
+            actor_staff_user_id=actor_staff_user_id,
+            actor_username=actor_username,
+            is_platform_owner=is_platform_owner,
+            commit=False,
+        )
+        if updated is None:
+            return None
+        # The legacy contractor mirrors the shared account, while response
+        # activity remains local to the current tenant membership.
+        inst.name = staff_user.display_name
+        inst.default_rate = staff_user.default_rate
+        inst.telegram_id = staff_user.telegram_id
+        inst.is_active = StaffUserService.is_active(staff_user)
+        session.add(inst)
         await session.commit()
         await session.refresh(inst)
-
-        staff_user = await StaffUserService.get_by_legacy_installer_id(session, int(inst.id))
-        membership = await StaffTenantMembershipService.get_for_tenant(
-            session,
-            tenant_id=tenant_scope.tenant_id,
-            staff_user_id=int(staff_user.id or 0),
-        )
         return cls._response_from_installer(
             inst,
             staff_user,
-            tenant_is_active=bool(membership and membership.status == "active"),
+            tenant_is_active=updated.status == "active",
         )
 
     @classmethod

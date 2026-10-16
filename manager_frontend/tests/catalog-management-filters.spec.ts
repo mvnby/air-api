@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { managerSession } from '../src/services/manager-session';
 import CatalogManagementFilters from '../src/components/products/CatalogManagementFilters.vue';
 import CatalogDecisionFilters from '../src/components/catalog-decision/CatalogDecisionFilters.vue';
 import { defaultManagementFilters, managementFilterPayload } from '../src/services/catalog-management-api';
@@ -18,6 +19,7 @@ const buttonByText = (wrapper: ReturnType<typeof mount>, text: string) => (
 );
 
 describe('catalog management filters', () => {
+  beforeEach(() => { managerSession.auth.value = { capabilities: ['platform.manage'] } as any; });
   afterEach(() => vi.restoreAllMocks());
 
   const mountFilters = async (modelValue = defaultManagementFilters()) => {
@@ -30,6 +32,21 @@ describe('catalog management filters', () => {
     await flushPromises();
     return wrapper;
   };
+
+  it('uses reference data without CRM or supplier requests for catalog editors', async () => {
+    managerSession.auth.value = { capabilities: ['catalog.master.edit'] } as any;
+    const masterBrands = vi.spyOn(api, 'listManagerBrands').mockResolvedValue({ items: brands } as any);
+    vi.spyOn(api, 'listManagerBrandSeries').mockResolvedValue({ items: [{ id: 10, title: 'MDSAG' }] } as any);
+    const wrapper = await mountFilters();
+    expect(masterBrands).toHaveBeenCalledOnce();
+    expect(catalogDecisionApi.filterOptions).not.toHaveBeenCalled();
+    expect(api.listSuppliers).not.toHaveBeenCalled();
+    expect(wrapper.find('select[aria-label="Поставщик"]').exists()).toBe(false);
+    await wrapper.setProps({ modelValue: { ...defaultManagementFilters(), brandIds: [1] } });
+    await flushPromises();
+    expect(wrapper.text()).toContain('MDSAG');
+    wrapper.unmount();
+  });
 
   it('includes drafts by default while retaining the shared all-orderable filter', () => {
     const state = defaultManagementFilters();

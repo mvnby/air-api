@@ -35,8 +35,10 @@ export class ManagerTagsService {
      * 400. POST has no idempotency receipt; this creates dictionary state rather than
      * assigning product tags.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param requestBody
      * @returns ManagerTagGroupResponse Successful Response
@@ -61,8 +63,10 @@ export class ManagerTagsService {
      * group returns 400. This edits the shared dictionary, leaving product-tag associations
      * attached to their tag IDs.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param groupId
      * @param requestBody
@@ -91,8 +95,10 @@ export class ManagerTagsService {
      * Permanently delete an empty shared tag group. Missing group returns 404, including after
      * deletion; any remaining tag blocks deletion with 400. Remove/reassign tags first.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param groupId
      * @returns any Successful Response
@@ -118,8 +124,10 @@ export class ManagerTagsService {
      * group returns 404; duplicate slug returns 400. This does not assign the tag to products;
      * POST has no idempotency receipt.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param requestBody
      * @returns ManagerTagOptionResponse Successful Response
@@ -144,8 +152,10 @@ export class ManagerTagsService {
      * Product links continue to refer to the same tag ID; editing this shared tag affects all
      * linked products.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param tagId
      * @param requestBody
@@ -175,8 +185,10 @@ export class ManagerTagsService {
      * on a repeat after deletion. This removes the shared label rather than just removing it
      * from one product.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param tagId
      * @returns any Successful Response

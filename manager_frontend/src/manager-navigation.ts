@@ -59,14 +59,14 @@ export const navSections: NavSection[] = [
     label: 'Каталог',
     items: [
       { path: '/manager/products', label: 'Кондиционеры', icon: Package, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.catalogMasterRead },
-      { path: '/manager/brands', label: 'Бренды', icon: Award, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.platformManage },
-      { path: '/manager/features', label: 'Фичи', icon: Sparkles, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.platformManage },
+      { path: '/manager/brands', label: 'Бренды', icon: Award, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.catalogMasterEdit },
+      { path: '/manager/features', label: 'Фичи', icon: Sparkles, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.catalogMasterEdit },
       { path: '/manager/suppliers', label: 'Поставщики', icon: Building2, match: 'exact', requiredCapability: MANAGER_CAPABILITY.platformManage },
       { path: '/manager/suppliers/prices', label: 'Прайсы поставщиков', icon: FileSpreadsheet, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.platformManage },
       { path: '/manager/supplier-mapping', label: 'Маппинг прайсов', icon: Link2, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.platformManage },
       { path: '/manager/catalog-quality', label: 'Качество каталога', icon: ShieldCheck, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.platformManage },
       { path: '/manager/media', label: 'Медиатека', icon: ImageIcon, match: 'exact', requiredCapability: MANAGER_CAPABILITY.platformManage },
-      { path: '/manager/tags', label: 'Теги', icon: Tags, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.platformManage },
+      { path: '/manager/tags', label: 'Теги', icon: Tags, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.catalogMasterEdit },
     ],
   },
   {
@@ -115,6 +115,7 @@ export const navSections: NavSection[] = [
     items: [
       { path: '/manager/settings', label: 'Настройки', icon: Settings, match: 'exact', requiredCapability: MANAGER_CAPABILITY.settingsManage },
       { path: '/manager/settings/documents', label: 'Документы CRM', icon: ReceiptText, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.documentsManage },
+      { path: '/manager/platform/access', label: 'Доступ к каталогу', icon: ShieldCheck, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.infrastructureManage },
       { path: '/manager/settings/platform', label: 'Платформа', icon: Settings, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.infrastructureManage },
       { path: '/manager/settings/backup', label: 'DR / Бэкапы', icon: Database, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.infrastructureManage },
     ],

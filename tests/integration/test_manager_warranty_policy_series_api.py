@@ -3,8 +3,9 @@ from datetime import timedelta
 import pytest
 from httpx import AsyncClient
 
+from core.config import settings
 from core.security import create_access_token
-from models import Brand, ProductSeries, StaffUser, Supplier, TenantMembership
+from models import Brand, LegacyOwnerAuthState, ProductSeries, StaffUser, Supplier, TenantMembership
 
 
 async def _owner_headers(db) -> dict[str, str]:
@@ -13,11 +14,17 @@ async def _owner_headers(db) -> dict[str, str]:
         status="active",
         roles=["owner"],
         primary_role="owner",
-        username="warranty-policy-owner",
+        username=settings.ADMIN_USERNAME,
     )
     db.add(owner)
     await db.flush()
     db.add(TenantMembership(tenant_id=1, staff_user_id=int(owner.id), role="owner", status="active"))
+    await db.flush()
+    state = await db.get(LegacyOwnerAuthState, 1)
+    assert state is not None
+    state.mode = "staff_shadow"
+    state.owner_staff_user_id = owner.id
+    db.add(state)
     await db.flush()
     token = create_access_token(
         {
@@ -96,3 +103,31 @@ async def test_manager_warranty_policy_api_supports_multi_series_and_legacy_upda
     assert legacy_write.status_code == 200
     assert legacy_write.json()["series_id"] == second.id
     assert legacy_write.json()["series_ids"] == [second.id]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["owner", "manager"])
+async def test_ordinary_system_staff_cannot_mutate_platform_warranty_policies(async_client, db, role):
+    staff = StaffUser(
+        display_name=f"Ordinary system {role}", username=f"warranty-system-{role}",
+        status="active", roles=[role], primary_role=role,
+    )
+    db.add(staff)
+    await db.flush()
+    db.add(TenantMembership(tenant_id=1, staff_user_id=staff.id, role=role, status="active"))
+    await db.commit()
+    token = create_access_token({
+        "sub": staff.username, "staff_user_id": staff.id,
+        "auth_version": staff.auth_version, "auth_source": "warranty-policy-series-api-test",
+    }, expires_delta=timedelta(minutes=10))
+    headers = {"Authorization": f"Bearer {token}"}
+    created = await async_client.post(
+        "/api/manager/warranty-policies", headers=headers,
+        json={"name": "Forbidden shared policy", "duration_months": 36},
+    )
+    updated = await async_client.patch(
+        "/api/manager/warranty-policies/1", headers=headers,
+        json={"name": "Forbidden shared update"},
+    )
+    assert created.status_code == 403, created.text
+    assert updated.status_code == 403, updated.text

@@ -51,6 +51,8 @@ class AuthenticatedUser:
     must_change_password: bool = False
     can_change_password: bool = False
     demo_read_only: bool = False
+    is_platform_owner: bool = False
+    permissions: tuple[str, ...] = ()
 
     def tenant_scope(self) -> TenantScope:
         if not self.tenant_id or not self.storefront_id:
@@ -67,6 +69,7 @@ class AuthenticatedUser:
 
 MANAGER_ACCESS_ROLES = frozenset({"owner", "admin", "manager"})
 OWNER_ACCESS_ROLES = frozenset({"owner", "admin"})
+WORKSPACE_ACCESS_ROLES = MANAGER_ACCESS_ROLES | {"catalog_editor"}
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -185,6 +188,10 @@ async def get_current_auth_context(
                 must_change_password=bool(staff_user.must_change_password),
                 can_change_password=bool(staff_user.password_hash) and not tenant_scope.demo_read_only,
                 demo_read_only=tenant_scope.demo_read_only,
+                is_platform_owner=LegacyOwnerAuthGuard.allows_bound_staff(
+                    legacy_owner_state, staff_user_id=int(staff_user.id or 0)
+                ),
+                permissions=access.permissions,
             )
 
         if not LegacyOwnerAuthGuard.configured_username_matches(username):
@@ -211,6 +218,7 @@ async def get_current_auth_context(
             storefront_id=tenant_scope.storefront_id,
             is_system_tenant=tenant_scope.is_system,
             auth_version=int(legacy_owner_state.legacy_token_version),
+            is_platform_owner=True,
         )
 
     except jwt.ExpiredSignatureError:
@@ -238,6 +246,40 @@ async def require_manager_access(
     return auth
 
 
+async def require_workspace_access(
+    auth: AuthenticatedUser = Depends(get_current_auth_context),
+) -> AuthenticatedUser:
+    if (
+        _normalized_role(auth) not in WORKSPACE_ACCESS_ROLES
+        or not auth.tenant_id
+        or not auth.storefront_id
+    ):
+        raise HTTPException(status_code=403, detail="Workspace access required")
+    return auth
+
+
+async def require_catalog_master_edit(
+    auth: AuthenticatedUser = Depends(require_workspace_access),
+) -> AuthenticatedUser:
+    if not auth.is_platform_owner and "catalog.master.edit" not in auth.permissions:
+        raise HTTPException(status_code=403, detail="Catalog editing access required")
+    return auth
+
+
+async def require_catalog_master_delete(
+    auth: AuthenticatedUser = Depends(require_catalog_master_edit),
+) -> AuthenticatedUser:
+    if not auth.is_platform_owner and "catalog.master.delete" not in auth.permissions:
+        raise HTTPException(status_code=403, detail="Catalog deletion access required")
+    return auth
+
+
+async def get_current_catalog_username(
+    auth: AuthenticatedUser = Depends(require_workspace_access),
+) -> str:
+    return auth.username
+
+
 async def require_owner_access(
     auth: AuthenticatedUser = Depends(get_current_auth_context),
 ) -> AuthenticatedUser:
@@ -254,13 +296,13 @@ async def require_owner_access(
 
 
 async def require_system_owner_access(
-    auth: AuthenticatedUser = Depends(require_owner_access),
+    auth: AuthenticatedUser = Depends(require_workspace_access),
 ) -> AuthenticatedUser:
-    """Restrict platform infrastructure to system-tenant owners/admins."""
-    if not auth.is_system_tenant:
+    """Use the durable owner identity, never company membership as authority."""
+    if not auth.is_platform_owner:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="System tenant owner access required",
+            detail="Platform owner access required",
         )
     return auth
 
@@ -279,8 +321,9 @@ async def get_current_manager_tenant_scope(
 
 async def require_system_manager_tenant_scope(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
+    auth: AuthenticatedUser = Depends(require_system_owner_access),
 ) -> TenantScope:
-    """Keep global platform surfaces unavailable to white-label tenants."""
+    """Compatibility name for operator-only, system-company workflows."""
     if not tenant_scope.is_system:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

@@ -130,11 +130,12 @@ async def test_routes_reject_partner_and_system_manager_without_spending_or_expo
     app = FastAPI()
     app.add_exception_handler(RequestValidationError, manager_validation_exception_handler)
     app.include_router(router)
-    auth = {"role": "owner", "system": False}
+    auth = {"role": "owner", "system": False, "platform": False}
     app.dependency_overrides[get_current_auth_context] = lambda: AuthenticatedUser(
         username="owner", auth_source="staff_password", role=auth["role"],
         tenant_id=1 if auth["system"] else 21, storefront_id=1,
         is_system_tenant=auth["system"],
+        is_platform_owner=auth["platform"],
     )
     async def database():
         yield session
@@ -143,7 +144,7 @@ async def test_routes_reject_partner_and_system_manager_without_spending_or_expo
     monkeypatch.setattr("services.deepseek_provider_service.request_deepseek_completion", provider)
     caplog.set_level("INFO", logger="routers.manager_platform_ai")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        for role, system in (("owner", False), ("admin", False), ("manager", True)):
+        for role, system in (("owner", False), ("admin", False), ("manager", True), ("owner", True), ("admin", True)):
             auth.update(role=role, system=system)
             for method, path, payload in (
                 ("GET", "", None), ("PUT", "", {"key": "attacker-key"}),
@@ -153,7 +154,7 @@ async def test_routes_reject_partner_and_system_manager_without_spending_or_expo
                 assert response.status_code == 403
         provider.assert_not_called()
         assert await Service.get(session) is None
-        auth.update(role="owner", system=True)
+        auth.update(role="owner", system=True, platform=True)
         imported = await client.post("/api/manager/platform-ai/deepseek/import-environment")
         assert imported.status_code == 200
         assert "old-environment-key" not in imported.text

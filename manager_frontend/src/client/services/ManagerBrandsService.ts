@@ -44,8 +44,10 @@ export class ManagerBrandsService {
      * must be nonempty; an existing slug or invalid publication media returns 400. This POST
      * has no idempotency receipt.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [media
      * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -72,8 +74,10 @@ export class ManagerBrandsService {
      * Missing brand returns 404; conflicting slug, empty title or invalid content media
      * returns 400. Semantic no-op edits do not publish a new catalog revision.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [media
      * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -105,8 +109,10 @@ export class ManagerBrandsService {
      * prior deletion; products, series or products attached to its tag block deletion with
      * 400. This is a permanent delete, not hiding a brand.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param brandId
      * @returns ManagerActionMessageResponse Successful Response
@@ -161,8 +167,10 @@ export class ManagerBrandsService {
      * title, duplicate slug within the brand or invalid feature media returns 400. Creation
      * does not assign the feature to series/products and has no idempotency receipt.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [feature
      * taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
@@ -194,8 +202,10 @@ export class ManagerBrandsService {
      * feature returns 404; empty title, duplicate brand slug or invalid media returns 400.
      * Assignments to series are preserved.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [feature
      * taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
@@ -231,8 +241,10 @@ export class ManagerBrandsService {
      * archiving with 400. An already archived unassigned feature is a semantic no-op; this is
      * not a physical delete.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [feature
      * taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
@@ -291,8 +303,10 @@ export class ManagerBrandsService {
      * publication media. Missing brand returns 404; empty title, conflicting slug or invalid
      * feature/media choices returns 400. This POST has no idempotency receipt.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [feature
      * taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
@@ -325,8 +339,10 @@ export class ManagerBrandsService {
      * hidden series in the brand showcase returns 400. Feature priority permits at most three
      * featured entries.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [feature
      * taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
@@ -361,8 +377,10 @@ export class ManagerBrandsService {
      * assigned products block deletion with 400, so hide a used series instead. A repeat after
      * deletion returns 404.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param brandId
      * @param seriesId
@@ -392,8 +410,10 @@ export class ManagerBrandsService {
      * brand/series returns 404; empty/invalid media returns 400. Series and product changes
      * commit together; this writes state rather than producing a preview.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [media
      * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).

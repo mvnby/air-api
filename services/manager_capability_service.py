@@ -9,6 +9,8 @@ class ManagerCapabilityService:
 
     CRM_MANAGE = "crm.manage"
     CATALOG_MASTER_READ = "catalog.master.read"
+    CATALOG_MASTER_EDIT = "catalog.master.edit"
+    CATALOG_MASTER_DELETE = "catalog.master.delete"
     STOREFRONT_OFFERS_READ = "storefront.offers.read"
     STOREFRONT_COLLECTIONS_MANAGE = "storefront.collections.manage"
     PLATFORM_MANAGE = "platform.manage"
@@ -23,6 +25,8 @@ class ManagerCapabilityService:
     ORDERED_CAPABILITIES = (
         CRM_MANAGE,
         CATALOG_MASTER_READ,
+        CATALOG_MASTER_EDIT,
+        CATALOG_MASTER_DELETE,
         STOREFRONT_OFFERS_READ,
         STOREFRONT_COLLECTIONS_MANAGE,
         PLATFORM_MANAGE,
@@ -51,15 +55,18 @@ class ManagerCapabilityService:
                     cls.SERVICES_MANAGE,
                 }
             )
-        if auth.is_system_tenant:
+        if auth.is_platform_owner:
             capabilities.add(cls.PLATFORM_MANAGE)
+            capabilities.add(cls.INFRASTRUCTURE_MANAGE)
+        if auth.is_platform_owner or cls.CATALOG_MASTER_EDIT in auth.permissions:
+            capabilities.update({cls.CATALOG_MASTER_READ, cls.CATALOG_MASTER_EDIT})
+            if auth.is_platform_owner or cls.CATALOG_MASTER_DELETE in auth.permissions:
+                capabilities.add(cls.CATALOG_MASTER_DELETE)
         if role in OWNER_ACCESS_ROLES:
             capabilities.add(cls.STAFF_MANAGE)
             capabilities.add(cls.ANALYTICS_MANAGE)
             capabilities.add(cls.DOCUMENTS_MANAGE)
             capabilities.add(cls.SETTINGS_MANAGE)
-            if auth.is_system_tenant:
-                capabilities.add(cls.INFRASTRUCTURE_MANAGE)
         return [
             capability
             for capability in cls.ORDERED_CAPABILITIES

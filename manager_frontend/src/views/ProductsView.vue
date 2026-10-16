@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useCatalogAccess } from "../composables/useCatalogAccess";
+const { canManagePlatform, canDeleteCatalog } = useCatalogAccess();
 import BynSymbol from '../components/money/BynSymbol.vue';
 import MoneyAmount from '../components/money/MoneyAmount.vue';
 import { ref, onMounted, onUnmounted, watch, computed, nextTick } from 'vue';
@@ -48,6 +50,11 @@ import {
     YANDEX_BUSINESS_PUBLIC_FEED_PATH,
 } from '../utils/yandex-business-feed';
 
+const canUseCrm = computed(() => hasManagerCapability(managerSession.auth.value, MANAGER_CAPABILITY.crmManage));
+const openProductDetails = (product: Product) => {
+    if (canUseCrm.value) readerItem.value = product;
+    else openProductWorkspace(product);
+};
 const catalogUsage = useCatalogUsage();
 const usageReportOpen = ref(false);
 const yandexFeedSettingsOpen = ref(false);
@@ -399,12 +406,14 @@ const toggleSelectAll = () => {
 };
 
 const openBulkUpdate = () => {
+    if (!canManagePlatform.value) return;
     if (selectedProductIds.value.size === 0) return;
     showBulkActionsMenu.value = false;
     showBulkSpecsModal.value = true;
 };
 
 const openBulkCompatibility = () => {
+    if (!canManagePlatform.value) return;
     if (selectedProductIds.value.size === 0) return;
     if (selectedProductIds.value.size !== selectedProductsForBulkCompatibility.value.length) { setToast('Для совместимости выберите товары из загруженного списка.'); return; }
     showBulkActionsMenu.value = false;
@@ -433,6 +442,7 @@ const loadCommonGallery = async () => {
 };
 
 const openBulkImageModal = async () => {
+    if (!canManagePlatform.value) return;
     if (selectedProductIds.value.size === 0) return;
     showBulkActionsMenu.value = false;
     modalMode.value = 'bulk';
@@ -712,6 +722,7 @@ const savePrice = async (product: Product) => {
 };
 
 const handleBulkSetRrcPrices = async () => {
+    if (!canManagePlatform.value) return;
     if (selectedProductIds.value.size === 0) return;
 
     showBulkActionsMenu.value = false;
@@ -730,12 +741,14 @@ const handleBulkSetRrcPrices = async () => {
 };
 
 const openBulkDeleteConfirm = () => {
+    if (!canDeleteCatalog.value) return;
     if (selectedProductIds.value.size === 0) return;
     showBulkActionsMenu.value = false;
     showBulkDeleteConfirm.value = true;
 };
 
 const handleBulkDeleteProducts = async () => {
+    if (!canDeleteCatalog.value) return;
     if (selectedProductIds.value.size === 0) return;
 
     bulkDeleteLoading.value = true;
@@ -1167,6 +1180,7 @@ const confirmDeleteId = ref<number | null>(null);
 const confirmDeleteUrl = ref<string | null>(null);
 
 const removeFromGallery = async (id: number) => {
+    if (!canDeleteCatalog.value) return;
     if (confirmDeleteId.value !== id) {
         confirmDeleteId.value = id;
         setTimeout(() => { if(confirmDeleteId.value === id) confirmDeleteId.value = null; }, 3000);
@@ -1185,6 +1199,7 @@ const removeFromGallery = async (id: number) => {
 };
 
 const removeCommonImage = async (url: string) => {
+    if (!canDeleteCatalog.value) return;
     if (!isBulkMode.value) return;
     if (confirmDeleteUrl.value !== url) {
         confirmDeleteUrl.value = url;
@@ -1288,6 +1303,7 @@ onUnmounted(() => {
 
 const isDeletingProduct = ref<number | null>(null);
 const deleteProduct = async (product: Product) => {
+    if (!canDeleteCatalog.value) return;
     const proceed = await confirmDialog({
         title: 'Удалить товар?',
         description: `«${product.title}». Если товар используется в заказах, удаление будет отклонено.`,
@@ -1392,19 +1408,19 @@ watchDebounced(
                 v-if="showBulkActionsMenu"
                 class="absolute left-0 top-full z-40 mt-2 w-64 rounded-xl border border-gray-200 bg-white p-2 shadow-xl dark:border-slate-700 dark:bg-slate-900"
               >
-                  <button @click="openBulkImageModal" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 dark:text-slate-200 dark:hover:bg-slate-800">
+                  <button v-if="canManagePlatform" @click="openBulkImageModal" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 dark:text-slate-200 dark:hover:bg-slate-800">
                       <Images class="w-4 h-4" /> Изображения
                   </button>
-                  <button @click="openBulkUpdate" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 dark:text-slate-200 dark:hover:bg-slate-800">
+                  <button v-if="canManagePlatform" @click="openBulkUpdate" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 dark:text-slate-200 dark:hover:bg-slate-800">
                       <Edit3 class="w-4 h-4" /> Изменить выбранные
                   </button>
-                  <button @click="openBulkCompatibility" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 dark:text-slate-200 dark:hover:bg-slate-800">
+                  <button v-if="canManagePlatform" @click="openBulkCompatibility" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 dark:text-slate-200 dark:hover:bg-slate-800">
                       <Link2 class="w-4 h-4" /> Совместимость
                   </button>
-                  <button @click="handleBulkSetRrcPrices" :disabled="bulkRrcLoading" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800">
+                  <button v-if="canManagePlatform" @click="handleBulkSetRrcPrices" :disabled="bulkRrcLoading" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800">
                       <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': bulkRrcLoading }" /> К РРЦ
                   </button>
-                  <button @click="openBulkDeleteConfirm" :disabled="bulkDeleteLoading" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:hover:bg-red-950/40">
+                  <button v-if="canDeleteCatalog" @click="openBulkDeleteConfirm" :disabled="bulkDeleteLoading" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:hover:bg-red-950/40">
                       <Trash2 class="w-4 h-4" /> Удалить
                   </button>
                   <button @click="selectedProductIds.clear(); showBulkActionsMenu = false" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-500 hover:bg-gray-50 dark:text-slate-400 dark:hover:bg-slate-800">
@@ -1415,16 +1431,16 @@ watchDebounced(
 
           <div v-if="selectedProductIds.size > 0" class="hidden items-center gap-2 bg-brand-50 dark:bg-brand-900/20 px-4 py-2 rounded-lg border border-brand-100 dark:border-brand-900/30 sm:flex">
               <span class="text-sm font-medium text-brand-800 dark:text-brand-300">{{ selectedProductIds.size }} выбрано</span>
-              <button @click="openBulkImageModal" class="flex items-center gap-1 bg-gray-700 text-white px-3 py-1.5 rounded-md text-sm hover:bg-gray-800 transition-colors">
+              <button v-if="canManagePlatform" @click="openBulkImageModal" class="flex items-center gap-1 bg-gray-700 text-white px-3 py-1.5 rounded-md text-sm hover:bg-gray-800 transition-colors">
                   <Images class="w-3.5 h-3.5" /> Изображения
               </button>
-              <button @click="openBulkUpdate" class="flex items-center gap-1 bg-brand-600 text-white px-3 py-1.5 rounded-md text-sm hover:bg-brand-700 transition-colors">
+              <button v-if="canManagePlatform" @click="openBulkUpdate" class="flex items-center gap-1 bg-brand-600 text-white px-3 py-1.5 rounded-md text-sm hover:bg-brand-700 transition-colors">
                   <Edit3 class="w-3.5 h-3.5" /> Изменить выбранные
               </button>
-              <button @click="openBulkCompatibility" class="flex items-center gap-1 bg-indigo-600 text-white px-3 py-1.5 rounded-md text-sm hover:bg-indigo-700 transition-colors">
+              <button v-if="canManagePlatform" @click="openBulkCompatibility" class="flex items-center gap-1 bg-indigo-600 text-white px-3 py-1.5 rounded-md text-sm hover:bg-indigo-700 transition-colors">
                   <Link2 class="w-3.5 h-3.5" /> Совместимость
               </button>
-              <button 
+              <button v-if="canManagePlatform"
                 @click="handleBulkSetRrcPrices" 
                 :disabled="bulkRrcLoading"
                 class="flex items-center gap-1 bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-md text-sm transition-all disabled:opacity-50"
@@ -1433,6 +1449,7 @@ watchDebounced(
                   К РРЦ
               </button>
               <button
+                v-if="canDeleteCatalog"
                 @click="openBulkDeleteConfirm"
                 :disabled="bulkDeleteLoading"
                 class="flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-md text-sm transition-all disabled:opacity-50"
@@ -1453,6 +1470,7 @@ watchDebounced(
             Создать
           </button>
           <button
+            v-if="canManagePlatform"
             @click="showOnlinerImportModal = true"
             class="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-200 rounded-lg text-sm font-medium transition-colors shadow-sm"
             title="Импорт товаров"
@@ -1461,6 +1479,7 @@ watchDebounced(
             Импорт
           </button>
           <button
+            v-if="canManagePlatform"
             @click="downloadYandexBusinessPriceList"
             :disabled="yandexPriceListLoading"
             class="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed dark:bg-slate-700 dark:hover:bg-slate-600"
@@ -1470,6 +1489,7 @@ watchDebounced(
             Скачать YML
           </button>
           <button
+            v-if="canManagePlatform"
             @click="copyYandexBusinessFeedLink"
             class="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-200 rounded-lg text-sm font-medium transition-colors shadow-sm"
             title="Скопировать ссылку Яндекса"
@@ -1487,7 +1507,7 @@ watchDebounced(
       </Transition>
 
     <div class="mb-3 flex flex-wrap gap-2 text-sm">
-      <button type="button" class="rounded-lg border px-3 py-2" @click="yandexFeedSettingsOpen = true">Настроить Яндекс</button>
+      <button v-if="canManagePlatform" type="button" class="rounded-lg border px-3 py-2" @click="yandexFeedSettingsOpen = true">Настроить Яндекс</button>
       <button type="button" class="rounded-lg border px-3 py-2" :aria-pressed="catalogUsage.enabled.value" @click="catalogUsage.setOptIn(!catalogUsage.enabled.value)">Наблюдение: {{ catalogUsage.enabled.value ? 'вкл.' : 'выкл.' }}</button>
       <button v-if="canViewUsageReport" type="button" class="rounded-lg border px-3 py-2" @click="usageReportOpen = true">Отчёт об удобстве</button>
     </div>
@@ -1498,7 +1518,7 @@ watchDebounced(
       <button v-if="totalProducts > products.length" type="button" class="rounded-lg border px-3 py-2" :disabled="selectingAll || loading || totalProducts > 500" @click="selectAllResults">Выбрать все {{ totalProducts }}</button>
       <span v-if="totalProducts > 500" class="text-xs">Для массового изменения сузьте выбор до 500 товаров.</span>
       <span v-if="selectedProductIds.size">Выбрано: {{ selectedProductIds.size }}</span>
-      <button v-if="selectedProductIds.size" type="button" class="rounded-lg bg-brand-600 px-3 py-2 font-semibold text-white" @click="openBulkUpdate">Изменить выбранные</button>
+      <button v-if="selectedProductIds.size && canManagePlatform" type="button" class="rounded-lg bg-brand-600 px-3 py-2 font-semibold text-white" @click="openBulkUpdate">Изменить выбранные</button>
       <button v-if="selectedProductIds.size" type="button" class="underline" @click="selectedProductIds.clear()">Снять весь выбор</button>
     </div>
 
@@ -1518,8 +1538,8 @@ watchDebounced(
         <div v-for="product in products" :key="product.id" 
              class="relative cursor-pointer overflow-hidden rounded-lg border-2 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:bg-slate-800"
              :class="selectedProductIds.has(product.id) ? 'border-brand-500 ring-2 ring-brand-100 dark:ring-brand-900/50' : 'border-transparent'"
-             @click="readerItem = product"
-             role="button" tabindex="0" @keydown.enter.self="readerItem = product" @keydown.space.self.prevent="readerItem = product"
+             @click="openProductDetails(product)"
+             role="button" tabindex="0" @keydown.enter.self="openProductDetails(product)" @keydown.space.self.prevent="openProductDetails(product)"
         >
              <!-- Selection Checkbox Overlay -->
              <div class="absolute top-2.5 left-2.5 z-10">
@@ -1584,12 +1604,12 @@ watchDebounced(
                         сайт
                     </button>
                 </div>
-                <div class="mt-1 space-y-0.5 text-[11px] text-gray-500 dark:text-slate-400">
+                <div v-if="canManagePlatform" class="mt-1 space-y-0.5 text-[11px] text-gray-500 dark:text-slate-400">
                     <div>Себестоимость: <MoneyAmount :value="product.min_cost_byn" :formatted-value="product.min_cost_byn?.toFixed(2)" /></div>
                     <div>РРЦ: <MoneyAmount :value="product.recommended_price_byn" :formatted-value="product.recommended_price_byn?.toFixed(2)" /></div>
                     <div>Маржа: <MoneyAmount :value="product.margin_abs_preview" :formatted-value="product.margin_abs_preview?.toFixed(2)" /></div>
                 </div>
-                <div class="mt-2 flex items-center gap-1.5 text-[10px]">
+                <div v-if="canManagePlatform" class="mt-2 flex items-center gap-1.5 text-[10px]">
                     <span class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">Витебск: {{ product.vitebsk_qty || 0 }}</span>
                     <span class="px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-200">Минск: {{ product.minsk_qty || 0 }}</span>
                     <span
@@ -1631,7 +1651,7 @@ watchDebounced(
                         <button type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-slate-800" :disabled="!product.slug" @click="copyPublicProductLink(product)"><Link2 class="h-4 w-4" />Копировать ссылку</button>
                         <button type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-slate-800" :disabled="!product.slug" @click="openPublicProductPage(product)"><ExternalLink class="h-4 w-4" />Открыть на сайте</button>
                         <div class="my-1 border-t border-gray-100 dark:border-slate-800" />
-                        <button type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30" :disabled="isDeletingProduct === product.id" @click="deleteProduct(product)"><Trash2 class="h-4 w-4" />Удалить</button>
+                        <button v-if="canDeleteCatalog" type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30" :disabled="isDeletingProduct === product.id" @click="deleteProduct(product)"><Trash2 class="h-4 w-4" />Удалить</button>
                     </div>
                 </details>
             </div>
@@ -1652,7 +1672,7 @@ watchDebounced(
               <th class="p-4 text-xs font-semibold uppercase tracking-wider">Фото</th>
               <th class="p-4 text-xs font-semibold uppercase tracking-wider">Название</th>
               <th class="p-4 text-xs font-semibold uppercase tracking-wider">Цена</th>
-              <th class="p-4 text-xs font-semibold uppercase tracking-wider">Supply</th>
+              <th v-if="canManagePlatform" class="p-4 text-xs font-semibold uppercase tracking-wider">Поставки</th>
               <th class="p-4 text-xs font-semibold uppercase tracking-wider text-right">Действия</th>
             </tr>
           </thead>
@@ -1660,7 +1680,7 @@ watchDebounced(
             <tr v-for="product in products" :key="product.id" 
                 class="cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
                 :class="{ 'bg-brand-50/50 dark:bg-brand-900/20': selectedProductIds.has(product.id) }"
-                @click="readerItem = product"
+                @click="openProductDetails(product)"
             >
               <td class="p-4">
                 <button @click.stop="toggleSelection(product.id)" class="text-gray-400 hover:text-gray-600 dark:hover:text-slate-300">
@@ -1677,7 +1697,7 @@ watchDebounced(
                 </div>
               </td>
               <td class="p-4">
-                <button type="button" class="max-w-xl text-left text-sm font-medium text-brand-700 hover:underline dark:text-brand-300" :aria-label="`Открыть карточку ${product.title}`" @click.stop="readerItem = product">
+                <button type="button" class="max-w-xl text-left text-sm font-medium text-brand-700 hover:underline dark:text-brand-300" :aria-label="`Открыть карточку ${product.title}`" @click.stop="openProductDetails(product)">
                   {{ product.title }}
                 </button>
               </td>
@@ -1686,7 +1706,7 @@ watchDebounced(
                    <MoneyAmount :value="product.price" :formatted-value="String(product.price)" />
                 </div>
               </td>
-              <td class="p-4 text-xs text-gray-600 dark:text-slate-400">
+              <td v-if="canManagePlatform" class="p-4 text-xs text-gray-600 dark:text-slate-400">
                 <div>Себест: <MoneyAmount :value="product.min_cost_byn" :formatted-value="product.min_cost_byn?.toFixed(2)" /></div>
                 <div>РРЦ: <MoneyAmount :value="product.recommended_price_byn" :formatted-value="product.recommended_price_byn?.toFixed(2)" /></div>
                 <div>V: {{ product.vitebsk_qty || 0 }} / M: {{ product.minsk_qty || 0 }}</div>
@@ -1715,7 +1735,7 @@ watchDebounced(
                       <button type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-slate-800" :disabled="!product.slug" @click="copyPublicProductLink(product)"><Link2 class="h-4 w-4" />Копировать ссылку</button>
                       <button type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-slate-800" :disabled="!product.slug" @click="openPublicProductPage(product)"><ExternalLink class="h-4 w-4" />Открыть на сайте</button>
                       <div class="my-1 border-t border-gray-100 dark:border-slate-800" />
-                      <button type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30" :disabled="isDeletingProduct === product.id" @click="deleteProduct(product)"><Trash2 class="h-4 w-4" />Удалить</button>
+                      <button v-if="canDeleteCatalog" type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30" :disabled="isDeletingProduct === product.id" @click="deleteProduct(product)"><Trash2 class="h-4 w-4" />Удалить</button>
                     </div>
                   </details>
                 </div>
@@ -1977,7 +1997,7 @@ watchDebounced(
                       <img :src="getImageUrl(img.url)" class="w-full h-full object-cover" />
                       <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-1 p-2 transition-opacity">
                           <button
-                              @click="removeCommonImage(img.url)"
+                              v-if="canDeleteCatalog" @click="removeCommonImage(img.url)"
                               class="text-[10px] text-white px-2 py-1 rounded w-full transition-colors"
                               :class="confirmDeleteUrl === img.url ? 'bg-red-800 font-bold' : 'bg-red-600 hover:bg-red-700'"
                           >
@@ -2096,7 +2116,7 @@ watchDebounced(
                               {{ variantReprocessingImageId === img.id ? 'variant...' : 'Обновить card этой картинки' }}
                            </button>
                            <button
-                              @click="removeFromGallery(img.id)"
+                              v-if="canDeleteCatalog" @click="removeFromGallery(img.id)"
                               class="text-[10px] text-white px-2 py-1 rounded w-full transition-colors"
                               :class="confirmDeleteId === img.id ? 'bg-red-800 font-bold' : 'bg-red-600 hover:bg-red-700'"
                            >

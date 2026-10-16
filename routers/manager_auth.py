@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api_contracts.manager_storefronts import ManagerStorefrontListResponse
 from core.database import get_session
 from core.auth_cookie import clear_auth_cookie
-from core.security import AuthenticatedUser, require_manager_access
+from core.security import AuthenticatedUser, require_manager_access, require_workspace_access
 from routers.manager_operation_ids import (
     CHANGE_MANAGER_ACCOUNT_PASSWORD,
     LIST_MANAGER_STOREFRONTS,
@@ -23,7 +23,7 @@ router = APIRouter(prefix="/api/manager", tags=["manager"])
 
 
 @router.get("/me", response_model=ManagerAuthStatusResponse, operation_id=READ_USER_ME)
-async def check_auth_status(auth: AuthenticatedUser = Depends(require_manager_access)):
+async def check_auth_status(auth: AuthenticatedUser = Depends(require_workspace_access)):
     """
     Read the authenticated Manager identity, live tenant/storefront context and UI capabilities.
     Includes password-change eligibility, mandatory-password-change and demo-read-only flags.
@@ -46,6 +46,7 @@ async def check_auth_status(auth: AuthenticatedUser = Depends(require_manager_ac
         "can_change_password": auth.can_change_password,
         "must_change_password": auth.must_change_password,
         "demo_read_only": auth.demo_read_only,
+        "is_platform_owner": auth.is_platform_owner,
     }
 
 
@@ -58,7 +59,7 @@ async def change_account_password(
     payload: ManagerPasswordChangePayload,
     response: Response,
     session: AsyncSession = Depends(get_session),
-    auth: AuthenticatedUser = Depends(require_manager_access),
+    auth: AuthenticatedUser = Depends(require_workspace_access),
 ) -> None:
     """
     Change the current staff account password using its current password and record the
@@ -101,7 +102,7 @@ async def change_account_password(
 )
 async def list_manager_storefronts(
     session: AsyncSession = Depends(get_session),
-    auth: AuthenticatedUser = Depends(require_manager_access),
+    auth: AuthenticatedUser = Depends(require_workspace_access),
 ):
     """
     List active storefronts belonging to the authenticated Manager's current tenant, including

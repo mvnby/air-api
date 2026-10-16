@@ -9,6 +9,7 @@ from core.security import AuthenticatedUser, require_owner_access
 from routers.manager_operation_ids import CREATE_MANAGER_STAFF, LIST_MANAGER_STAFF, PATCH_MANAGER_STAFF
 from schemas import ManagerStaffCreatePayload, ManagerStaffListResponse, ManagerStaffResponse, ManagerStaffUpdatePayload
 from services.staff_user_service import StaffUserService
+from services.staff_access_policy import StaffAccessPolicyError
 from services.legacy_owner_managed_identity_service import (
     LegacyOwnerManagedIdentityError,
     LegacyOwnerManagedIdentityService,
@@ -59,15 +60,23 @@ async def create_staff(
             session=session,
             payload=payload,
             tenant_scope=auth.tenant_scope(),
+            actor_role=auth.role or "",
+            actor_staff_user_id=auth.staff_user_id,
+            actor_username=auth.username,
+            is_platform_owner=auth.is_platform_owner,
         )
+    except StaffAccessPolicyError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
     except ValueError as exc:
+        await session.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except IntegrityError as exc:
         await session.rollback()
         raise HTTPException(status_code=400, detail="Логин или Telegram ID уже используется") from exc
-    except ValueError as exc:
-        await session.rollback()
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.patch("/{staff_user_id}", response_model=ManagerStaffResponse, operation_id=PATCH_MANAGER_STAFF)
@@ -80,7 +89,7 @@ async def patch_staff(
     """
     Patch a staff member reached through the current tenant membership; requires an owner/admin.
     Only supplied fields are changed. Role/status affect the membership, while permitted
-    identity fields affect the shared account; non-system tenants cannot change protected
+    identity fields affect the shared account; only the platform owner can change protected
     shared-profile fields for multi-tenant staff. A new password increments auth_version.
     Missing membership returns 404, invalid/duplicate values 400 and protected legacy-owner
     identity mutation 409 with code/message. There is no optimistic version or replay receipt.
@@ -96,6 +105,10 @@ async def patch_staff(
             staff_user_id=staff_user_id,
             payload=payload,
             tenant_scope=auth.tenant_scope(),
+            actor_role=auth.role or "",
+            actor_staff_user_id=auth.staff_user_id,
+            actor_username=auth.username,
+            is_platform_owner=auth.is_platform_owner,
         )
     except LegacyOwnerManagedIdentityError as exc:
         await session.rollback()
@@ -103,14 +116,18 @@ async def patch_staff(
             status_code=409,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
+    except StaffAccessPolicyError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
     except ValueError as exc:
+        await session.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except IntegrityError as exc:
         await session.rollback()
         raise HTTPException(status_code=400, detail="Логин или Telegram ID уже используется") from exc
-    except ValueError as exc:
-        await session.rollback()
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if staff_user is None:
         raise HTTPException(status_code=404, detail="Сотрудник не найден")
     return staff_user

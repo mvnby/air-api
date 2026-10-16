@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
 from core.logger import logger
-from core.security import get_current_username
+from core.security import get_current_catalog_username
 from routers.manager_operation_ids import (
     APPLY_GALLERY_TO_SERIES,
     BULK_ADD_GALLERY_IMAGES,
@@ -62,7 +62,7 @@ async def link_search_result(
     url: str = Query(..., description="URL of the image"),
     product_id: int = Query(..., description="ID of the product"),
     session: AsyncSession = Depends(get_session),
-    username: str = Depends(get_current_username),
+    username: str = Depends(get_current_catalog_username),
 ):
     """
     Download/ingest a search-result image into shared managed product storage and attach its
@@ -70,8 +70,10 @@ async def link_search_result(
     source/media returns 400 and runtime processing conflict 409. Existing canonical
     product/URL links are reused; this is a catalog write, not search.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [media
     publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -98,7 +100,7 @@ async def link_search_result(
 async def set_main_image(
     image_id: int = Query(..., description="ID of the ProductImage to set as main"),
     session: AsyncSession = Depends(get_session),
-    username: str = Depends(get_current_username),
+    username: str = Depends(get_current_catalog_username),
 ):
     """
     Set Product.main_image to a gallery image’s permitted publication URL. Missing
@@ -106,8 +108,10 @@ async def set_main_image(
     Repeating the same selection is a semantic no-op; this does not crop/process the image
     or delete prior media.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [media
     publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -126,7 +130,7 @@ async def set_main_image(
 async def delete_gallery_image(
     image_id: int,
     session: AsyncSession = Depends(get_session),
-    username: str = Depends(get_current_username),
+    username: str = Depends(get_current_catalog_username),
 ):
     """
     Delete one gallery database link and its variant rows, synchronize legacy product.images
@@ -134,8 +138,10 @@ async def delete_gallery_image(
     deferred garbage collection. Missing link returns 404, including after successful
     deletion.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [media
     publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -155,7 +161,7 @@ async def crop_product_image(
     image_id: int,
     payload: ProductImageCropPayload,
     session: AsyncSession = Depends(get_session),
-    username: str = Depends(get_current_username),
+    username: str = Depends(get_current_catalog_username),
 ):
     """
     Crop a gallery source and append a new link or replace the selected link according to
@@ -164,8 +170,10 @@ async def crop_product_image(
     source or crop returns 400. This writes media immediately, preserves installation
     classification and has no idempotency receipt.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [media
     publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -194,7 +202,7 @@ async def replace_product_image_local(
     image_id: int,
     file: UploadFile = File(...),
     session: AsyncSession = Depends(get_session),
-    username: str = Depends(get_current_username),
+    username: str = Depends(get_current_catalog_username),
 ):
     """
     Replace one gallery link with browser-prepared image bytes and rebuild its original
@@ -202,8 +210,10 @@ async def replace_product_image_local(
     old URL; installation classification is kept. Empty file, more than 25 MB, missing
     image/product or invalid media returns 400. Physical old objects remain retained.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [media
     publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -235,7 +245,7 @@ async def remove_product_image_background(
     mode: str = Query("replace", description="replace current ProductImage URL or append a new image"),
     set_main: bool = Query(False),
     session: AsyncSession = Depends(get_session),
-    username: str = Depends(get_current_username),
+    username: str = Depends(get_current_catalog_username),
 ):
     """
     Synchronously process a gallery image with the selected provider/model, replacing its
@@ -244,8 +254,10 @@ async def remove_product_image_background(
     for non-installation images. Invalid/missing source returns 400; provider/runtime
     conflict returns 409. This is not a processing-job enqueue.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [media
     publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -274,7 +286,7 @@ async def reuse_image(
     product_id: int = Query(...),
     source_image_url: str = Query(...),
     session: AsyncSession = Depends(get_session),
-    username: str = Depends(get_current_username),
+    username: str = Depends(get_current_catalog_username),
 ):
     """
     Canonicalize an image source URL, ingesting external sources when necessary, and link it
@@ -282,8 +294,10 @@ async def reuse_image(
     reused; original-variant metadata may be repaired. ValueError failures, including
     missing product, are exposed as 404 by this route.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [media
     publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -302,7 +316,7 @@ async def reuse_image(
 async def bulk_add_gallery_images(
     payload: BulkGalleryAddRequest,
     session: AsyncSession = Depends(get_session),
-    username: str = Depends(get_current_username),
+    username: str = Depends(get_current_catalog_username),
 ):
     """
     Append canonicalized source URLs to all selected products without removing existing
@@ -311,8 +325,10 @@ async def bulk_add_gallery_images(
     sources return 400. Database changes and catalog invalidation commit together; this may
     ingest external sources.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [media
     publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -343,7 +359,7 @@ async def bulk_upload_local_images(
     is_installation: bool = Form(False),
     set_main: bool = Form(False),
     session: AsyncSession = Depends(get_session),
-    username: str = Depends(get_current_username),
+    username: str = Depends(get_current_catalog_username),
 ):
     """
     Upload local files once to shared managed storage and attach their URLs to every
@@ -352,8 +368,10 @@ async def bulk_upload_local_images(
     uploaded URL for non-installation images. Attachments and catalog invalidation commit
     together.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [media
     publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -380,7 +398,7 @@ async def bulk_upload_local_images(
 async def bulk_delete_common_gallery_images(
     payload: BulkGalleryDeleteRequest,
     session: AsyncSession = Depends(get_session),
-    username: str = Depends(get_current_username),
+    username: str = Depends(get_current_catalog_username),
 ):
     """
     Remove selected URLs only when they are common to all selected products under the
@@ -388,8 +406,10 @@ async def bulk_delete_common_gallery_images(
     returns 400. Deletes gallery/variant rows and clears affected main images, but retains
     physical files. A repeat requires recalculating the common intersection.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [media
     publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -418,7 +438,7 @@ async def apply_gallery_to_series(
         description="Rejected with 409 because physical media cleanup is deferred",
     ),
     session: AsyncSession = Depends(get_session),
-    username: str = Depends(get_current_username),
+    username: str = Depends(get_current_catalog_username),
 ):
     """
     Replace sibling products’ non-installation galleries and main images with the source
@@ -427,8 +447,10 @@ async def apply_gallery_to_series(
     false commits them. Missing source returns 404; absent series/gallery returns 400.
     delete_unreferenced=true always returns 409 because physical deletion is deferred.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [media
     publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -461,7 +483,7 @@ async def process_missing_image_variants(
     provider: str = Query("noop", description="Processing provider: auto, noop, manual, rembg, birefnet, ben"),
     rembg_model: str | None = Query(None, description="Optional rembg model override"),
     session: AsyncSession = Depends(get_session),
-    username: str = Depends(get_current_username),
+    username: str = Depends(get_current_catalog_username),
 ):
     """
     Select up to 100 gallery images lacking a requested variant. dry_run defaults to true
@@ -470,8 +492,10 @@ async def process_missing_image_variants(
     default provider is noop. Invalid variant/provider returns 400. Inspect per-item
     errors/statuses; an HTTP success can include processing failures.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [media
     publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -501,7 +525,7 @@ async def reprocess_image_variant(
     provider: str = Query("noop", description="Processing provider: auto, noop, manual, rembg, birefnet, ben"),
     rembg_model: str | None = Query(None, description="Optional rembg model override"),
     session: AsyncSession = Depends(get_session),
-    username: str = Depends(get_current_username),
+    username: str = Depends(get_current_catalog_username),
 ):
     """
     Synchronously regenerate/retry one gallery image variant and return its saved processing
@@ -510,8 +534,10 @@ async def reprocess_image_variant(
     variants may be skipped. This is a state change with no job/receipt; inspect
     processing_status/processing_error before retrying.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [media
     publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -538,7 +564,7 @@ async def reprocess_image_variant(
 async def cleanup_media(
     dry_run: bool = Query(False),
     session: AsyncSession = Depends(get_session),
-    username: str = Depends(get_current_username),
+    username: str = Depends(get_current_catalog_username),
 ):
     """
     Report orphan candidates under local media/products only when dry_run=true. The default
@@ -546,8 +572,10 @@ async def cleanup_media(
     and reclaimed_bytes describe potential deletions; no file is actually removed, and the
     returned file list is capped at 50.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [media
     publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).

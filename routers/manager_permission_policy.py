@@ -17,6 +17,8 @@ from core.security import (
     require_owner_access,
     require_system_manager_tenant_scope,
     require_system_owner_access,
+    require_catalog_master_edit,
+    require_catalog_master_delete,
 )
 from routers import manager_operation_ids as operation_ids
 from services.manager_capability_service import ManagerCapabilityService
@@ -179,6 +181,49 @@ PLATFORM_MANAGER_OPERATION_IDS = frozenset(
     }
 )
 
+# A collaborator receives only shared reference/product editing. Procurement,
+# imports, bulk operations and platform media remain operator-owned.
+CATALOG_EDIT_OPERATION_IDS = frozenset({
+    operation_ids.GET_MANAGER_PRODUCTS, operation_ids.GET_MANAGER_PRODUCT,
+    operation_ids.QUERY_MANAGER_CATALOG, operation_ids.SELECT_MANAGER_CATALOG,
+    operation_ids.SMART_SEARCH_PRODUCTS, operation_ids.CREATE_MANAGER_PRODUCT,
+    operation_ids.DUPLICATE_MANAGER_PRODUCT, operation_ids.UPDATE_PRODUCT,
+    operation_ids.CREATE_MANAGER_BRAND, operation_ids.UPDATE_MANAGER_BRAND,
+    operation_ids.CREATE_MANAGER_BRAND_FEATURE, operation_ids.UPDATE_MANAGER_BRAND_FEATURE,
+    operation_ids.CREATE_MANAGER_BRAND_SERIES, operation_ids.UPDATE_MANAGER_BRAND_SERIES,
+    operation_ids.APPLY_MANAGER_SERIES_GALLERY_TO_PRODUCTS,
+    operation_ids.CREATE_MANAGER_TAG_GROUP, operation_ids.UPDATE_MANAGER_TAG_GROUP,
+    operation_ids.CREATE_MANAGER_TAG, operation_ids.UPDATE_MANAGER_TAG,
+    operation_ids.CREATE_MANAGER_FEATURE, operation_ids.UPDATE_MANAGER_FEATURE,
+    operation_ids.UPSERT_MANAGER_FEATURE_TARGET_LINK,
+    operation_ids.DELETE_MANAGER_FEATURE_TARGET_LINK,
+    operation_ids.UPDATE_MANAGER_PRODUCT_FEATURES, operation_ids.DELETE_MANAGER_PRODUCT_FEATURE,
+    operation_ids.APPLY_MANAGER_PRODUCT_FEATURE_SUGGESTIONS,
+    operation_ids.PREVIEW_MANAGER_FEATURE_SERIES_MIGRATION,
+    operation_ids.APPLY_MANAGER_FEATURE_SERIES_MIGRATION,
+    operation_ids.CREATE_MANAGER_FEATURE_CONTENT_AI_DRAFT,
+    operation_ids.CREATE_MANAGER_SERIES_CONTENT_AI_DRAFT,
+    operation_ids.CREATE_MANAGER_BRAND_SHORT_DESCRIPTION_AI_DRAFT,
+    operation_ids.UPLOAD_IMAGE, operation_ids.UPLOAD_LOCAL_IMAGES,
+    operation_ids.LINK_SEARCH_RESULT, operation_ids.SET_MAIN_IMAGE,
+    operation_ids.CROP_PRODUCT_IMAGE, operation_ids.REPLACE_PRODUCT_IMAGE_LOCAL,
+    operation_ids.REMOVE_PRODUCT_IMAGE_BACKGROUND, operation_ids.REUSE_IMAGE,
+    operation_ids.BULK_ADD_GALLERY_IMAGES, operation_ids.BULK_UPLOAD_LOCAL_IMAGES,
+    operation_ids.APPLY_GALLERY_TO_SERIES,
+})
+
+CATALOG_DELETE_OPERATION_IDS = frozenset({
+    operation_ids.DELETE_MANAGER_PRODUCT, operation_ids.DELETE_MANAGER_BRAND,
+    operation_ids.DELETE_MANAGER_BRAND_FEATURE, operation_ids.DELETE_MANAGER_BRAND_SERIES,
+    operation_ids.DELETE_MANAGER_TAG_GROUP, operation_ids.DELETE_MANAGER_TAG,
+    operation_ids.ARCHIVE_MANAGER_FEATURE, operation_ids.DELETE_IMAGE,
+    operation_ids.BULK_DELETE_COMMON_GALLERY_IMAGES,
+})
+
+PLATFORM_MANAGER_OPERATION_IDS = (
+    PLATFORM_MANAGER_OPERATION_IDS - CATALOG_EDIT_OPERATION_IDS - CATALOG_DELETE_OPERATION_IDS
+)
+
 
 TENANT_SERVICE_OPERATION_IDS = frozenset(
     {
@@ -245,7 +290,7 @@ async def require_storefront_collections_manage(
 async def require_system_analytics_manage(
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> AuthenticatedUser:
-    if not auth.is_system_tenant or ManagerCapabilityService.ANALYTICS_MANAGE not in ManagerCapabilityService.for_auth(auth):
+    if not auth.is_platform_owner:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="System analytics management access required",
@@ -356,6 +401,10 @@ CALL_RECORDING_OPERATION_IDS = frozenset({
 
 
 def required_permission_dependency(operation_id: str | None):
+    if operation_id in CATALOG_EDIT_OPERATION_IDS:
+        return require_catalog_master_edit
+    if operation_id in CATALOG_DELETE_OPERATION_IDS:
+        return require_catalog_master_delete
     if operation_id in CALL_RECORDING_OPERATION_IDS:
         return require_manager_access
     if operation_id in SOURCE_EQUIPMENT_OPERATION_IDS:

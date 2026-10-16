@@ -8,10 +8,12 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import select
 
 from api_contracts.tenant_offers import POSTGRESQL_INTEGER_MAX
+from core.config import settings
 from core.security import create_access_token
 from crud.tenant_offer import TenantOfferDAO
 from models import (
     IntegrationOutboxEvent,
+    LegacyOwnerAuthState,
     Product,
     StaffUser,
     Storefront,
@@ -56,6 +58,19 @@ async def _create_owner(
     )
     await session.flush()
     return user
+
+
+async def _create_platform_owner(session: AsyncSession) -> StaffUser:
+    owner = await _create_owner(
+        session, tenant_id=1, username=settings.ADMIN_USERNAME,
+    )
+    state = await session.get(LegacyOwnerAuthState, 1)
+    assert state is not None
+    state.mode = "staff_shadow"
+    state.owner_staff_user_id = owner.id
+    session.add(state)
+    await session.flush()
+    return owner
 
 
 async def _create_second_tenant(
@@ -105,7 +120,7 @@ async def test_manager_tenant_offers_are_exactly_storefront_scoped_and_audited(
     db: AsyncSession,
 ):
     tenant_b, storefront_b = await _create_second_tenant(db)
-    owner_a = await _create_owner(db, tenant_id=1, username="offer-owner-a")
+    owner_a = await _create_platform_owner(db)
     owner_b = await _create_owner(
         db,
         tenant_id=int(tenant_b.id),
@@ -235,6 +250,7 @@ async def test_manager_tenant_offers_are_exactly_storefront_scoped_and_audited(
     assert audit_a.json()["total"] == 2
     assert audit_a.json()["items"][0]["action"] == "tenant_offer.updated"
     assert audit_a.json()["items"][0]["actor_staff_user_id"] == owner_a.id
+    assert audit_a.json()["items"][0]["actor_username"] == settings.ADMIN_USERNAME
     assert audit_a.json()["items"][0]["change_set"]["price"] == {
         "before": 2100,
         "after": 2050,
@@ -253,7 +269,7 @@ async def test_tenant_offer_rejects_invalid_price_and_unknown_product_without_au
     async_client: AsyncClient,
     db: AsyncSession,
 ):
-    owner = await _create_owner(db, tenant_id=1, username="offer-validator")
+    owner = await _create_platform_owner(db)
     await db.commit()
     headers = _headers(owner)
 
@@ -283,7 +299,7 @@ async def test_tenant_offer_patch_rejects_explicit_null_except_old_price(
     async_client: AsyncClient,
     db: AsyncSession,
 ):
-    owner = await _create_owner(db, tenant_id=1, username="offer-null-validator")
+    owner = await _create_platform_owner(db)
     product = Product(title="Nullable Model", slug="nullable-model", price=1000)
     db.add(product)
     await db.commit()
@@ -327,7 +343,7 @@ async def test_tenant_offer_rejects_values_outside_postgresql_integer_range(
     async_client: AsyncClient,
     db: AsyncSession,
 ):
-    owner = await _create_owner(db, tenant_id=1, username="offer-int-validator")
+    owner = await _create_platform_owner(db)
     product = Product(title="Integer Model", slug="integer-model", price=1000)
     db.add(product)
     await db.commit()
@@ -358,6 +374,44 @@ async def test_tenant_offer_rejects_values_outside_postgresql_integer_range(
         )
         assert get_response.status_code == 422, get_response.text
         assert patch_response.status_code == 422, patch_response.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["owner", "manager"])
+async def test_ordinary_system_staff_cannot_write_tenant_offers(async_client, db, role):
+    staff = StaffUser(
+        display_name=f"Ordinary system {role}", username=f"offer-system-{role}",
+        status="active", roles=[role], primary_role=role,
+    )
+    product = Product(title="Protected offer model", slug="protected-offer-model", price=1000)
+    db.add_all([staff, product])
+    await db.flush()
+    db.add(TenantMembership(tenant_id=1, staff_user_id=staff.id, role=role, status="active"))
+    offer = TenantOffer(
+        tenant_id=1, storefront_id=1, product_id=product.id, price=1200,
+        created_by_username="seed", updated_by_username="seed",
+    )
+    db.add(offer)
+    await db.commit()
+    headers = _headers(staff)
+    identity = await async_client.get("/api/manager/me", headers=headers)
+    assert identity.status_code == 200
+    assert identity.json()["is_platform_owner"] is False
+    assert (await async_client.get("/api/manager/tenant-offers", headers=headers)).status_code == 200
+    created = await async_client.post(
+        "/api/manager/tenant-offers", headers=headers,
+        json={"product_id": product.id, "price": 1},
+    )
+    patched = await async_client.patch(
+        f"/api/manager/tenant-offers/{offer.id}", headers=headers, json={"price": 1},
+    )
+    assert created.status_code == 403, created.text
+    assert patched.status_code == 403, patched.text
+    unchanged = await async_client.get(f"/api/manager/tenant-offers/{offer.id}", headers=headers)
+    assert unchanged.json()["price"] == 1200
+    audit = await async_client.get("/api/manager/tenant-offers/audit", headers=headers)
+    assert audit.status_code == 200
+    assert audit.json() == {"items": [], "total": 0}
 
 
 @pytest.mark.asyncio

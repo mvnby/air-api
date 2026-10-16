@@ -9,6 +9,7 @@
     "reviewed_stage"
   ],
   "review_stages": {
+    "17": "Explicit platform-owner identity, tenant-local admin hierarchy and last-owner protection, delegated catalog edit/delete independent from CRM, live membership grants, audited optimistic cross-company permission administration; reviewed 2026-10-16",
     "16": "Shared Manager product reader: catalog.master.read, live tenant/storefront scope, published partner master browse, exact offer/grant projection, registered technical specifications, public gallery/manual URLs and plain text description, existing eligible decision selection and demo cost masking; read-only, reviewed 2026-10-15",
     "15": "DL/C6/C5/C4 envelope PDF at actual size, shared postal-line preview and explicit Belpost postcode suggestions; current Manager membership and customer tenant scope, reviewed one-time address overrides without writes, bounded provider lookup and embedded raster branding, manual selection/fallback, embedded Cyrillic and overflow rejection; reviewed 2026-10-16",
     "14": "Standalone saved mail, private immutable attachment bytes, current company/account/link access, optimistic versions, exact Manager approval with CSRF, durable send fence, unknown SMTP outcome and separate MCP OAuth mail scopes; reviewed 2026-10-13",
@@ -27,6 +28,10 @@
     "11": "Native tender direct push; dedicated key, fixed active system scope, writable-primary gates, bounded payload, shared pull/push deduplication, staff preservation, stale guards and unchanged pull checkpoint reviewed 2026-10-09 for issue 849"
   },
   "operations": {
+    "routers/manager_access.py": [
+      ["GET /api/manager/platform/access", "list_manager_access", false, 17],
+      ["PATCH /api/manager/platform/access/{membership_id}", "update_manager_access", false, 17]
+    ],
     "routers/manager_customer_envelopes.py": [
       ["POST /api/manager/customers/{customer_id}/envelope-pdf", "print_manager_customer_envelope", false, 15],
       ["POST /api/manager/customers/{customer_id}/envelope-postcodes", "lookup_manager_customer_postcodes", false, 15],

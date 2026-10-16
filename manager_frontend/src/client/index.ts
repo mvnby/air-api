@@ -365,6 +365,10 @@ export type { ManagedDocumentItem } from './models/ManagedDocumentItem';
 export type { ManagedDocumentListResponse } from './models/ManagedDocumentListResponse';
 export type { ManagedDocumentReadinessResponse } from './models/ManagedDocumentReadinessResponse';
 export type { ManagedDocumentVoidPayload } from './models/ManagedDocumentVoidPayload';
+export type { ManagerAccessItem } from './models/ManagerAccessItem';
+export type { ManagerAccessList } from './models/ManagerAccessList';
+export type { ManagerAccessMeta } from './models/ManagerAccessMeta';
+export type { ManagerAccessUpdate } from './models/ManagerAccessUpdate';
 export type { ManagerActionMessageResponse } from './models/ManagerActionMessageResponse';
 export type { ManagerAuthStatusResponse } from './models/ManagerAuthStatusResponse';
 export type { ManagerBackgroundRemovalConfigResponse } from './models/ManagerBackgroundRemovalConfigResponse';
@@ -940,6 +944,7 @@ export { InternalBotV1StaffNotificationsService } from './services/InternalBotV1
 export { InternalBotV1VoiceService } from './services/InternalBotV1VoiceService';
 export { LoginService } from './services/LoginService';
 export { ManagerService } from './services/ManagerService';
+export { ManagerAccessService } from './services/ManagerAccessService';
 export { ManagerAnalyticsConnectionsService } from './services/ManagerAnalyticsConnectionsService';
 export { ManagerBackupsService } from './services/ManagerBackupsService';
 export { ManagerBrandsService } from './services/ManagerBrandsService';

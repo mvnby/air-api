@@ -143,8 +143,10 @@ export class ManagerService {
      * filters apply to the master catalog; publication here is not a tenant-offer publication
      * flag.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param page
      * @param limit
@@ -1020,8 +1022,10 @@ export class ManagerService {
      * is_published defaults to true; creation is not implicitly a draft. POST has no
      * idempotency receipt and retries may create another card.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [media
      * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -1049,8 +1053,10 @@ export class ManagerService {
      * make_unpublished is set. Gallery copying reuses media URLs. Missing source returns 404;
      * invalid fields/media returns 400. Each successful POST creates a new card.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [media
      * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -1084,8 +1090,10 @@ export class ManagerService {
      * fields/references/media returns 400. Writers lock the product to coordinate with bulk
      * apply; no expected_version or client idempotency receipt is accepted.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [media
      * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -1117,8 +1125,10 @@ export class ManagerService {
      * prevent deletion and return 400. Missing product returns 404, including after successful
      * deletion. This does not mean unpublishing the product.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param productId
      * @returns any Successful Response
@@ -1143,8 +1153,10 @@ export class ManagerService {
      * Read a shared product editor card with its related catalog data, including unpublished
      * products. Missing product returns 404; this is not the tenant storefront projection.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param productId
      * @returns ManagerCatalogProductItemResponse Successful Response
@@ -1171,8 +1183,10 @@ export class ManagerService {
      * Repeating without intervening price changes makes no further changes; this does not edit
      * tenant offers.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param requestBody
      * @returns ManagerBulkRoundPriceResponse Successful Response
@@ -1198,8 +1212,10 @@ export class ManagerService {
      * skipped_count also includes prices already equal to RRC. Missing IDs are ignored.
      * Repeats recalculate current supply metrics and do not edit tenant offers.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param requestBody
      * @returns ManagerBulkSetRrcPriceResponse Successful Response
@@ -1225,8 +1241,10 @@ export class ManagerService {
      * deletions commit individually, so the batch may partially succeed. Empty selection does
      * nothing; repeating the batch reports previously deleted IDs as missing.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param requestBody
      * @returns ManagerBulkDeleteProductsResponse Successful Response
@@ -1269,8 +1287,10 @@ export class ManagerService {
      * Technical/brand/category filters refine results; limit is 1–100. This does not require
      * publication or tenant-offer eligibility.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param q Free-text search query, e.g. 'mdv loft 18'
      * @param limit
@@ -1325,8 +1345,10 @@ export class ManagerService {
      * imported. This writes catalog state and downloads media; repeated calls follow
      * update_existing and source matching rather than an idempotency receipt.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [media
      * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -1354,8 +1376,10 @@ export class ManagerService {
      * removed and partial successes/errors are returned. This downloads source content/media
      * and mutates cards; it is neither preview nor a background-job response.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [media
      * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -1383,8 +1407,10 @@ export class ManagerService {
      * order; accepted/queued does not mean import completed. Each POST creates a new job with
      * no idempotency receipt; results and partial failures are read from job status.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param requestBody
      * @returns CatalogImportJobStartResponse Successful Response
@@ -1409,8 +1435,10 @@ export class ManagerService {
      * otherwise the latest recorded job. Returns progress and successes/errors without
      * starting work; 404 means no recorded job is available.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @returns CatalogImportJobStatusResponse Successful Response
      * @throws ApiError
@@ -1426,8 +1454,10 @@ export class ManagerService {
      * Read one persisted shared catalog import job by job_id with progress and results/errors.
      * Missing job returns 404; polling only reads state and does not retry failed imports.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param jobId
      * @returns CatalogImportJobStatusResponse Successful Response
@@ -1682,8 +1712,10 @@ export class ManagerService {
      * Missing product returns 404; invalid source/image returns 400 and runtime storage
      * failure 500. Reusing identical canonical bytes/link does not create another link.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [media
      * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -1719,8 +1751,10 @@ export class ManagerService {
      * was missing. Missing product returns 404; repeating identical canonical images can reuse
      * existing links.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [media
      * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -1848,8 +1882,10 @@ export class ManagerService {
      * source/media returns 400 and runtime processing conflict 409. Existing canonical
      * product/URL links are reused; this is a catalog write, not search.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [media
      * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -1881,8 +1917,10 @@ export class ManagerService {
      * Repeating the same selection is a semantic no-op; this does not crop/process the image
      * or delete prior media.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [media
      * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -1911,8 +1949,10 @@ export class ManagerService {
      * deferred garbage collection. Missing link returns 404, including after successful
      * deletion.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [media
      * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -1942,8 +1982,10 @@ export class ManagerService {
      * source or crop returns 400. This writes media immediately, preserves installation
      * classification and has no idempotency receipt.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [media
      * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -1976,8 +2018,10 @@ export class ManagerService {
      * old URL; installation classification is kept. Empty file, more than 25 MB, missing
      * image/product or invalid media returns 400. Physical old objects remain retained.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [media
      * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -2011,8 +2055,10 @@ export class ManagerService {
      * for non-installation images. Invalid/missing source returns 400; provider/runtime
      * conflict returns 409. This is not a processing-job enqueue.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [media
      * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -2055,8 +2101,10 @@ export class ManagerService {
      * reused; original-variant metadata may be repaired. ValueError failures, including
      * missing product, are exposed as 404 by this route.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [media
      * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -2089,8 +2137,10 @@ export class ManagerService {
      * sources return 400. Database changes and catalog invalidation commit together; this may
      * ingest external sources.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [media
      * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -2119,8 +2169,10 @@ export class ManagerService {
      * uploaded URL for non-installation images. Attachments and catalog invalidation commit
      * together.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [media
      * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -2148,8 +2200,10 @@ export class ManagerService {
      * returns 400. Deletes gallery/variant rows and clears affected main images, but retains
      * physical files. A repeat requires recalculating the common intersection.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [media
      * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -2178,8 +2232,10 @@ export class ManagerService {
      * false commits them. Missing source returns 404; absent series/gallery returns 400.
      * delete_unreferenced=true always returns 409 because physical deletion is deferred.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [media
      * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -2215,8 +2271,10 @@ export class ManagerService {
      * default provider is noop. Invalid variant/provider returns 400. Inspect per-item
      * errors/statuses; an HTTP success can include processing failures.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [media
      * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -2261,8 +2319,10 @@ export class ManagerService {
      * variants may be skipped. This is a state change with no job/receipt; inspect
      * processing_status/processing_error before retrying.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [media
      * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -2302,8 +2362,10 @@ export class ManagerService {
      * and reclaimed_bytes describe potential deletions; no file is actually removed, and the
      * returned file list is capped at 50.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [media
      * publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -2388,8 +2450,10 @@ export class ManagerService {
      * are ignored. Wi-Fi edits replace related source/derived keys as a group; changes commit
      * together.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param requestBody
      * @returns ManagerBulkSpecsResponse Successful Response
@@ -2416,8 +2480,10 @@ export class ManagerService {
      * are logged/skipped. This synchronous catalog-wide migration does not run the ordinary
      * normalized-spec/brand-series editor pipeline.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param dryRun Если True - не сохраняет изменения в БД, только показывает пример
      * @returns ManagerNormalizeLegacySpecsResponse Successful Response

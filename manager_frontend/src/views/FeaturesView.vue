@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useCatalogAccess } from "../composables/useCatalogAccess";
+const { canDeleteCatalog } = useCatalogAccess();
 import { onMounted, ref } from "vue";
 import { Archive, Plus, Search } from "lucide-vue-next";
 import {
@@ -109,6 +111,7 @@ const onEditorSaved = async () => {
 };
 
 const archive = async (feature: CatalogFeature) => {
+  if (!canDeleteCatalog.value) return;
   const confirmed = await confirmDialog({
     title: "Архивировать фичу?",
     description: feature.name,
@@ -273,7 +276,7 @@ onMounted(load);
             {{ feature.rules?.length || 0 }} правил</span
           >
           <button
-            v-if="feature.is_active"
+            v-if="feature.is_active && canDeleteCatalog"
             type="button"
             class="flex h-8 w-8 items-center justify-center rounded-md text-gray-400 hover:bg-red-50 hover:text-red-600"
             title="Архивировать"

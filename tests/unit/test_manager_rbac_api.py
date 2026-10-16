@@ -25,6 +25,7 @@ from routers.manager_auth import router as manager_auth_router
 from routers.manager_backups import router as manager_backups_router
 from routers.manager_crm import router as manager_crm_router
 from routers.manager_google_auth import router as manager_google_auth_router
+from routers.manager_orders_read import router as manager_orders_read_router
 from routers.manager_settings import router as manager_settings_router
 from routers.manager_staff import router as manager_staff_router
 from services.staff_user_service import StaffUserService
@@ -118,6 +119,7 @@ async def rbac_client(tmp_path: Path, monkeypatch):
     app.include_router(auth_router)
     app.include_router(manager_auth_router)
     app.include_router(manager_crm_router)
+    app.include_router(manager_orders_read_router)
     app.include_router(manager_staff_router)
     app.include_router(manager_backups_router)
     app.include_router(manager_google_auth_router)
@@ -169,7 +171,7 @@ async def test_installer_can_login_but_cannot_open_manager_api(rbac_client: Asyn
     headers = await _login(rbac_client, "installer-rbac", TEST_PASSWORD)
 
     me_response = await rbac_client.get("/api/manager/me", headers=headers)
-    manager_response = await rbac_client.get("/api/manager/crm/health-report", headers=headers)
+    manager_response = await rbac_client.get("/api/manager/orders/scenarios", headers=headers)
 
     assert me_response.status_code == 403
     assert manager_response.status_code == 403
@@ -180,7 +182,8 @@ async def test_manager_can_use_manager_api_but_not_owner_endpoints(rbac_client: 
     headers = await _login(rbac_client, "manager-rbac", TEST_PASSWORD)
 
     me_response = await rbac_client.get("/api/manager/me", headers=headers)
-    manager_response = await rbac_client.get("/api/manager/crm/health-report", headers=headers)
+    manager_response = await rbac_client.get("/api/manager/orders/scenarios", headers=headers)
+    platform_telemetry_response = await rbac_client.get("/api/manager/crm/health-report", headers=headers)
     staff_response = await rbac_client.get("/api/manager/staff", headers=headers)
     backups_response = await rbac_client.get("/api/manager/backups", headers=headers)
     google_response = await rbac_client.get("/api/manager/google-auth/status", headers=headers)
@@ -199,6 +202,7 @@ async def test_manager_can_use_manager_api_but_not_owner_endpoints(rbac_client: 
     assert me_response.status_code == 200
     assert me_response.json()["role"] == "manager"
     assert manager_response.status_code == 200
+    assert platform_telemetry_response.status_code == 403
     assert staff_response.status_code == 403
     assert backups_response.status_code == 403
     assert google_response.status_code == 403
@@ -208,13 +212,14 @@ async def test_manager_can_use_manager_api_but_not_owner_endpoints(rbac_client: 
 
 
 @pytest.mark.asyncio
-async def test_owner_and_legacy_admin_can_use_owner_endpoints(rbac_client: AsyncClient):
+async def test_company_owner_and_legacy_platform_owner_have_distinct_access(rbac_client: AsyncClient):
     owner_headers = await _login(rbac_client, "owner-rbac", TEST_PASSWORD)
     legacy_headers = await _login(rbac_client, settings.ADMIN_USERNAME, settings.ADMIN_PASSWORD)
 
-    for headers in (owner_headers, legacy_headers):
+    for headers, is_platform_owner in ((owner_headers, False), (legacy_headers, True)):
         me_response = await rbac_client.get("/api/manager/me", headers=headers)
-        manager_response = await rbac_client.get("/api/manager/crm/health-report", headers=headers)
+        manager_response = await rbac_client.get("/api/manager/orders/scenarios", headers=headers)
+        platform_telemetry_response = await rbac_client.get("/api/manager/crm/health-report", headers=headers)
         staff_response = await rbac_client.get("/api/manager/staff", headers=headers)
         backups_response = await rbac_client.get("/api/manager/backups", headers=headers)
         google_response = await rbac_client.get("/api/manager/google-auth/status", headers=headers)
@@ -222,8 +227,11 @@ async def test_owner_and_legacy_admin_can_use_owner_endpoints(rbac_client: Async
 
         assert me_response.status_code == 200
         assert me_response.json()["role"] == "owner"
+        assert me_response.json()["is_platform_owner"] is is_platform_owner
         assert manager_response.status_code == 200
         assert staff_response.status_code == 200
-        assert backups_response.status_code == 200
-        assert google_response.status_code == 200
-        assert settings_response.status_code == 200
+        expected_platform_status = 200 if is_platform_owner else 403
+        assert platform_telemetry_response.status_code == expected_platform_status
+        assert backups_response.status_code == expected_platform_status
+        assert google_response.status_code == expected_platform_status
+        assert settings_response.status_code == expected_platform_status

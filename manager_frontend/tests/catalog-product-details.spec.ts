@@ -82,10 +82,10 @@ describe('catalog product reader', () => {
       expect(dialog().text()).toContain('Цена пока не указана'); expect(dialog().text()).not.toContain('0 BYN');
     }
   });
-  it('limits editing to the platform owner and selection to CRM permission', async () => {
+  it('requires explicit catalog edit permission and CRM permission for selection', async () => {
     managerSession.auth.value = auth(['catalog.master.read']); start(); await flushPromises();
     expect(dialog().text()).not.toContain('Добавить в подбор'); expect(dialog().text()).not.toContain('Редактировать');
-    managerSession.auth.value = auth(['platform.manage']); await flushPromises();
+    managerSession.auth.value = auth(['catalog.master.edit']); await flushPromises();
     expect(dialog().get('a[href="/manager/products/11"]').text()).toBe('Редактировать');
     expect(dialog().text()).not.toContain('Добавить в подбор');
   });

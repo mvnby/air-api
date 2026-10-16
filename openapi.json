@@ -1790,7 +1790,7 @@
           "internal bot v1 operations"
         ],
         "summary": "Update Catalog Product Price",
-        "description": "Set an absolute shared product price for an active Manager actor (403 otherwise).\nReturns changed from the product service; invalid values return 422. It does not change\na tenant-specific storefront offer price.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
+        "description": "Set an absolute shared product price for an active staff actor with explicit\ncatalog.master.edit permission or platform-owner authority (403 otherwise).\nReturns changed from the product service; invalid values return 422. It does not change\na tenant-specific storefront offer price.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "update_internal_bot_catalog_product_price_v1",
         "security": [
           {
@@ -1849,7 +1849,7 @@
           "internal bot v1 operations"
         ],
         "summary": "Delete Catalog Product",
-        "description": "Delete a shared product for an active Manager actor (403 otherwise), returning the\nproduct service changed result. Invalid service input returns 422; this is a catalog\nmutation, not a storefront unpublish operation.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
+        "description": "Delete a shared product for an active staff actor with catalog.master.edit and\ncatalog.master.delete, or platform-owner authority (403 otherwise), returning the\nproduct service changed result. Invalid service input returns 422; this is a catalog\nmutation, not a storefront unpublish operation.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "delete_internal_bot_catalog_product_v1",
         "security": [
           {
@@ -5056,6 +5056,143 @@
         ]
       }
     },
+    "/api/manager/platform/access": {
+      "get": {
+        "tags": [
+          "manager-access"
+        ],
+        "summary": "List Manager Access",
+        "description": "List company memberships and delegated catalog permissions for the platform owner.\n\nRead-only, paginated directory across companies; includes names, roles and status,\nnever credentials or order data. Company owners/admins receive 403.",
+        "operationId": "list_manager_access",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerAccessList"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/platform/access/{membership_id}": {
+      "patch": {
+        "tags": [
+          "manager-access"
+        ],
+        "summary": "Update Manager Access",
+        "description": "Replace explicit catalog edit/delete grants for one company membership.\n\nOnly the platform owner may delegate or revoke; no platform-owner grant is accepted.\nLive membership/identity status still applies on every use. Changes are audited.\nRequires expected_updated_at; concurrent changes return 409, missing membership 404.\nRe-read before retrying a stale request. An unchanged current request is a no-op.",
+        "operationId": "update_manager_access",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "membership_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Membership Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerAccessUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerAccessItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/analytics-connections": {
       "get": {
         "tags": [
@@ -5775,7 +5912,7 @@
           "manager-features"
         ],
         "summary": "Create Feature",
-        "description": "Create a feature and its automatic rules; is_active defaults to true. New definitions\nsupport universal or brand ownership; brand features require a valid brand and only\nuniversal features accept automatic rules. Invalid category, replacement, scope or\nunpublished media returns 400. Returns 201; creation does not assign it to every brand\nproduct and has no idempotency receipt.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
+        "description": "Create a feature and its automatic rules; is_active defaults to true. New definitions\nsupport universal or brand ownership; brand features require a valid brand and only\nuniversal features accept automatic rules. Invalid category, replacement, scope or\nunpublished media returns 400. Returns 201; creation does not assign it to every brand\nproduct and has no idempotency receipt.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
         "operationId": "create_manager_feature",
         "security": [
           {
@@ -5822,7 +5959,7 @@
           "manager-features"
         ],
         "summary": "Preview Feature Series Migration",
-        "description": "Read candidates where the same active manual feature is assigned without individual\noverrides to every published product in a series. Omitted/empty valid series IDs scans\nall series; returned candidate tokens describe the current source links. This read-only\nreport does not create series links or remove product links.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
+        "description": "Read candidates where the same active manual feature is assigned without individual\noverrides to every published product in a series. Omitted/empty valid series IDs scans\nall series; returned candidate tokens describe the current source links. This read-only\nreport does not create series links or remove product links.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
         "operationId": "preview_manager_feature_series_migration",
         "security": [
           {
@@ -5880,7 +6017,7 @@
           "manager-features"
         ],
         "summary": "Apply Feature Series Migration",
-        "description": "Move only submitted candidate rows from repeated product assignments to series\nassignments, deleting the matching product links in one transaction. Duplicate\ncandidates return 400; stale tokens/source links or changed eligibility return 409. Rows\nare locked and revalidated; refresh preview after conflict. This mutates catalog\ninheritance and is not a background job.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
+        "description": "Move only submitted candidate rows from repeated product assignments to series\nassignments, deleting the matching product links in one transaction. Duplicate\ncandidates return 400; stale tokens/source links or changed eligibility return 409. Rows\nare locked and revalidated; refresh preview after conflict. This mutates catalog\ninheritance and is not a background job.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
         "operationId": "apply_manager_feature_series_migration",
         "requestBody": {
           "content": {
@@ -5973,7 +6110,7 @@
           "manager-features"
         ],
         "summary": "Update Feature",
-        "description": "Update supplied definition fields/rules, validating ownership, replacements and media\nreadiness. Missing feature returns 404; invalid references, replacement cycles or\nillegal scope changes returns 400. Legacy series/product/derived definitions must be\nmigrated to universal or brand before ordinary editing.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
+        "description": "Update supplied definition fields/rules, validating ownership, replacements and media\nreadiness. Missing feature returns 404; invalid references, replacement cycles or\nillegal scope changes returns 400. Legacy series/product/derived definitions must be\nmigrated to universal or brand before ordinary editing.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
         "operationId": "update_manager_feature",
         "security": [
           {
@@ -6029,7 +6166,7 @@
           "manager-features"
         ],
         "summary": "Archive Feature",
-        "description": "Set the feature inactive and return its archived definition; this is not a physical\ndelete. Missing feature returns 404. Archiving changes effective catalog projections\nwhile keeping the stored definition and historical relationships.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
+        "description": "Set the feature inactive and return its archived definition; this is not a physical\ndelete. Missing feature returns 404. Archiving changes effective catalog projections\nwhile keeping the stored definition and historical relationships.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
         "operationId": "archive_manager_feature",
         "security": [
           {
@@ -6077,7 +6214,7 @@
           "manager-features"
         ],
         "summary": "Upsert Target Link",
-        "description": "Create or update a brand/series feature assignment and overrides; returns 204. Feature\nand target must exist and ownership must allow the target. Invalid scope/media or a\nfourth featured series feature returns 400; missing target returns 404. is_featured\napplies only to series; universal rules resolve separately from stored assignments.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
+        "description": "Create or update a brand/series feature assignment and overrides; returns 204. Feature\nand target must exist and ownership must allow the target. Invalid scope/media or a\nfourth featured series feature returns 400; missing target returns 404. is_featured\napplies only to series; universal rules resolve separately from stored assignments.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
         "operationId": "upsert_manager_feature_target_link",
         "security": [
           {
@@ -6148,7 +6285,7 @@
           "manager-features"
         ],
         "summary": "Delete Target Link",
-        "description": "Remove a stored brand/series assignment and return 204. Missing series returns 404; an\nabsent brand or assignment is a no-op in the current service. Removal stops that\ninheritance path but does not archive the feature or suppress other rule/product\nassignments.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
+        "description": "Remove a stored brand/series assignment and return 204. Missing series returns 404; an\nabsent brand or assignment is a no-op in the current service. Removal stops that\ninheritance path but does not archive the feature or suppress other rule/product\nassignments.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
         "operationId": "delete_manager_feature_target_link",
         "security": [
           {
@@ -6257,7 +6394,7 @@
           "manager-features"
         ],
         "summary": "Update Product Features",
-        "description": "Replace a product\u2019s explicit feature assignments, including enabled/hidden overrides,\nthen return the resolved workspace. Omitted entries lose their explicit assignment;\ninherited/rule-derived features may remain. Missing product returns 404; duplicate,\ninvalid, archived or incompatible features/media returns 400. Writes commit together.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
+        "description": "Replace a product\u2019s explicit feature assignments, including enabled/hidden overrides,\nthen return the resolved workspace. Omitted entries lose their explicit assignment;\ninherited/rule-derived features may remain. Missing product returns 404; duplicate,\ninvalid, archived or incompatible features/media returns 400. Writes commit together.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
         "operationId": "update_manager_product_features",
         "security": [
           {
@@ -6315,7 +6452,7 @@
           "manager-features"
         ],
         "summary": "Delete Product Feature",
-        "description": "Delete the explicit product assignment and return the resolved workspace. Missing\nproduct returns 404; missing assignment is a no-op. Inherited or automatic features can\nreappear, so deletion is different from an explicit hidden override.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
+        "description": "Delete the explicit product assignment and return the resolved workspace. Missing\nproduct returns 404; missing assignment is a no-op. Inherited or automatic features can\nreappear, so deletion is different from an explicit hidden override.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
         "operationId": "delete_manager_product_feature",
         "security": [
           {
@@ -6372,7 +6509,7 @@
           "manager-features"
         ],
         "summary": "Apply Product Feature Suggestions",
-        "description": "Revalidate requested suggestion IDs and persist only legacy derived suggestions, then\nreturn the resolved workspace. Universal automatic rules already resolve without stored\nlinks. Missing product returns 404; outdated/unavailable suggestions return 409. Refresh\nthe workspace before retrying stale suggestions.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
+        "description": "Revalidate requested suggestion IDs and persist only legacy derived suggestions, then\nreturn the resolved workspace. Universal automatic rules already resolve without stored\nlinks. Missing product returns 404; outdated/unavailable suggestions return 409. Refresh\nthe workspace before retrying stale suggestions.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
         "operationId": "apply_manager_product_feature_suggestions",
         "security": [
           {
@@ -6430,7 +6567,7 @@
           "manager"
         ],
         "summary": "List Products For Manager",
-        "description": "Read a paginated shared product list for editing, including unpublished cards unless\nfiltered. page starts at 1 and limit is 1\u2013100. Brand/category/series and technical\nfilters apply to the master catalog; publication here is not a tenant-offer publication\nflag.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Read a paginated shared product list for editing, including unpublished cards unless\nfiltered. page starts at 1 and limit is 1\u2013100. Brand/category/series and technical\nfilters apply to the master catalog; publication here is not a tenant-offer publication\nflag.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "get_manager_products",
         "security": [
           {
@@ -8250,7 +8387,7 @@
           "manager"
         ],
         "summary": "Create Product",
-        "description": "Create a manual shared product, normalize specs and synchronize category, brand/series,\ntags and manuals. Invalid title, references or publication media returns 400.\nis_published defaults to true; creation is not implicitly a draft. POST has no\nidempotency receipt and retries may create another card.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
+        "description": "Create a manual shared product, normalize specs and synchronize category, brand/series,\ntags and manuals. Invalid title, references or publication media returns 400.\nis_published defaults to true; creation is not implicitly a draft. POST has no\nidempotency receipt and retries may create another card.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
         "operationId": "create_manager_product",
         "requestBody": {
           "content": {
@@ -8297,7 +8434,7 @@
           "manager"
         ],
         "summary": "Duplicate Product",
-        "description": "Create a separate card from a source product with submitted overrides and optional\ngallery/manual/tag copying. Publication is inherited unless overridden or\nmake_unpublished is set. Gallery copying reuses media URLs. Missing source returns 404;\ninvalid fields/media returns 400. Each successful POST creates a new card.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
+        "description": "Create a separate card from a source product with submitted overrides and optional\ngallery/manual/tag copying. Publication is inherited unless overridden or\nmake_unpublished is set. Gallery copying reuses media URLs. Missing source returns 404;\ninvalid fields/media returns 400. Each successful POST creates a new card.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
         "operationId": "duplicate_manager_product",
         "security": [
           {
@@ -8355,7 +8492,7 @@
           "manager"
         ],
         "summary": "Update Product",
-        "description": "Update submitted product fields; submitted specs are normalized and supplied\ntags/manuals replace those relations. Brand/series and category are synchronized\naccording to explicit overrides and changed inputs. Missing product returns 404; invalid\nfields/references/media returns 400. Writers lock the product to coordinate with bulk\napply; no expected_version or client idempotency receipt is accepted.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
+        "description": "Update submitted product fields; submitted specs are normalized and supplied\ntags/manuals replace those relations. Brand/series and category are synchronized\naccording to explicit overrides and changed inputs. Missing product returns 404; invalid\nfields/references/media returns 400. Writers lock the product to coordinate with bulk\napply; no expected_version or client idempotency receipt is accepted.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
         "operationId": "update_product",
         "security": [
           {
@@ -8411,7 +8548,7 @@
           "manager"
         ],
         "summary": "Delete Product",
-        "description": "Permanently delete a product and its removable catalog relations. References from orders\nprevent deletion and return 400. Missing product returns 404, including after successful\ndeletion. This does not mean unpublishing the product.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Permanently delete a product and its removable catalog relations. References from orders\nprevent deletion and return 400. Missing product returns 404, including after successful\ndeletion. This does not mean unpublishing the product.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "delete_manager_product",
         "security": [
           {
@@ -8455,7 +8592,7 @@
           "manager"
         ],
         "summary": "Get Product For Manager",
-        "description": "Read a shared product editor card with its related catalog data, including unpublished\nproducts. Missing product returns 404; this is not the tenant storefront projection.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Read a shared product editor card with its related catalog data, including unpublished\nproducts. Missing product returns 404; this is not the tenant storefront projection.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "get_manager_product",
         "security": [
           {
@@ -8503,7 +8640,7 @@
           "manager"
         ],
         "summary": "Bulk Round Price",
-        "description": "Round each existing selected master-product price down to a multiple of 50 and return\nthe changed count. Missing IDs are ignored and an empty selection does nothing.\nRepeating without intervening price changes makes no further changes; this does not edit\ntenant offers.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Round each existing selected master-product price down to a multiple of 50 and return\nthe changed count. Missing IDs are ignored and an empty selection does nothing.\nRepeating without intervening price changes makes no further changes; this does not edit\ntenant offers.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "bulk_round_price",
         "requestBody": {
           "content": {
@@ -8550,7 +8687,7 @@
           "manager"
         ],
         "summary": "Bulk Set Rrc Price",
-        "description": "Set existing selected master-product prices to rounded current supplier-derived\nrecommended retail prices. Products without a positive RRC remain unchanged;\nskipped_count also includes prices already equal to RRC. Missing IDs are ignored.\nRepeats recalculate current supply metrics and do not edit tenant offers.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Set existing selected master-product prices to rounded current supplier-derived\nrecommended retail prices. Products without a positive RRC remain unchanged;\nskipped_count also includes prices already equal to RRC. Missing IDs are ignored.\nRepeats recalculate current supply metrics and do not edit tenant offers.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "bulk_set_rrc_price",
         "requestBody": {
           "content": {
@@ -8597,7 +8734,7 @@
           "manager"
         ],
         "summary": "Bulk Delete Products",
-        "description": "Permanently delete explicitly selected products one at a time and report per-product\nfailures. Order-linked products cannot be deleted; missing IDs are failures. Successful\ndeletions commit individually, so the batch may partially succeed. Empty selection does\nnothing; repeating the batch reports previously deleted IDs as missing.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Permanently delete explicitly selected products one at a time and report per-product\nfailures. Order-linked products cannot be deleted; missing IDs are failures. Successful\ndeletions commit individually, so the batch may partially succeed. Empty selection does\nnothing; repeating the batch reports previously deleted IDs as missing.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "bulk_delete_manager_products",
         "requestBody": {
           "content": {
@@ -8675,7 +8812,7 @@
           "manager"
         ],
         "summary": "Smart Search Products",
-        "description": "Search the shared catalog for the product picker by text tokens and BTU-index numeric\ntokens with AND-combined matching against titles, tags, area and cooling power.\nTechnical/brand/category filters refine results; limit is 1\u2013100. This does not require\npublication or tenant-offer eligibility.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Search the shared catalog for the product picker by text tokens and BTU-index numeric\ntokens with AND-combined matching against titles, tags, area and cooling power.\nTechnical/brand/category filters refine results; limit is 1\u2013100. This does not require\npublication or tenant-offer eligibility.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "smart_search_products",
         "security": [
           {
@@ -8873,7 +9010,7 @@
           "manager"
         ],
         "summary": "Import From Onliner",
-        "description": "Synchronously import product URLs using the importer, optionally following related\nmodels and updating existing cards. Blank URLs are stripped; successes and per-product\nerrors are returned separately, so success of the HTTP call does not mean all products\nimported. This writes catalog state and downloads media; repeated calls follow\nupdate_existing and source matching rather than an idempotency receipt.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
+        "description": "Synchronously import product URLs using the importer, optionally following related\nmodels and updating existing cards. Blank URLs are stripped; successes and per-product\nerrors are returned separately, so success of the HTTP call does not mean all products\nimported. This writes catalog state and downloads media; repeated calls follow\nupdate_existing and source matching rather than an idempotency receipt.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
         "operationId": "import_onliner",
         "requestBody": {
           "content": {
@@ -8920,7 +9057,7 @@
           "manager"
         ],
         "summary": "Catalog Import",
-        "description": "Synchronously import URLs from supported catalog sources, selecting the parser for each\nURL. Optional related-model expansion and update_existing control writes. Blank URLs are\nremoved and partial successes/errors are returned. This downloads source content/media\nand mutates cards; it is neither preview nor a background-job response.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
+        "description": "Synchronously import URLs from supported catalog sources, selecting the parser for each\nURL. Optional related-model expansion and update_existing control writes. Blank URLs are\nremoved and partial successes/errors are returned. This downloads source content/media\nand mutates cards; it is neither preview nor a background-job response.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
         "operationId": "catalog_import",
         "requestBody": {
           "content": {
@@ -8967,7 +9104,7 @@
           "manager"
         ],
         "summary": "Start Catalog Import Job",
-        "description": "Persist a new catalog import job and return 202 with its ID/status/stage for polling.\nBlank URLs are removed; no remaining URL returns 400. The shared queue runs jobs in\norder; accepted/queued does not mean import completed. Each POST creates a new job with\nno idempotency receipt; results and partial failures are read from job status.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Persist a new catalog import job and return 202 with its ID/status/stage for polling.\nBlank URLs are removed; no remaining URL returns 400. The shared queue runs jobs in\norder; accepted/queued does not mean import completed. Each POST creates a new job with\nno idempotency receipt; results and partial failures are read from job status.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "start_catalog_import_job",
         "requestBody": {
           "content": {
@@ -9014,7 +9151,7 @@
           "manager"
         ],
         "summary": "Get Current Catalog Import Job Status",
-        "description": "Read the shared import queue\u2019s current job: the running/queued job is preferred,\notherwise the latest recorded job. Returns progress and successes/errors without\nstarting work; 404 means no recorded job is available.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Read the shared import queue\u2019s current job: the running/queued job is preferred,\notherwise the latest recorded job. Returns progress and successes/errors without\nstarting work; 404 means no recorded job is available.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "get_current_catalog_import_job_status",
         "responses": {
           "200": {
@@ -9041,7 +9178,7 @@
           "manager"
         ],
         "summary": "Get Catalog Import Job Status",
-        "description": "Read one persisted shared catalog import job by job_id with progress and results/errors.\nMissing job returns 404; polling only reads state and does not retry failed imports.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Read one persisted shared catalog import job by job_id with progress and results/errors.\nMissing job returns 404; polling only reads state and does not retry failed imports.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "get_catalog_import_job_status",
         "security": [
           {
@@ -9089,7 +9226,7 @@
           "manager-catalog-management"
         ],
         "summary": "Query Catalog",
-        "description": "Query the shared catalog-management workspace using its combined technical, publication,\nsupplier and missing-data filters. Filtering precedes pagination. Supplier means a\nmapped active supplier offer, not ownership of the product; results include draft and\norderable products.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [catalog\nworkspace](https://github.com/mvnby/air-api/blob/main/docs/catalog-management-workspace.md).",
+        "description": "Query the shared catalog-management workspace using its combined technical, publication,\nsupplier and missing-data filters. Filtering precedes pagination. Supplier means a\nmapped active supplier offer, not ownership of the product; results include draft and\norderable products.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [catalog\nworkspace](https://github.com/mvnby/air-api/blob/main/docs/catalog-management-workspace.md).",
         "operationId": "query_manager_catalog",
         "requestBody": {
           "content": {
@@ -9136,7 +9273,7 @@
           "manager-catalog-management"
         ],
         "summary": "Select Catalog",
-        "description": "Resolve the same workspace filters to a bounded full selection of product IDs without\npagination. More than 500 matches returns 400 rather than a truncated selection. The\nreturned IDs are a snapshot; later preview/apply validates their current availability.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [catalog\nworkspace](https://github.com/mvnby/air-api/blob/main/docs/catalog-management-workspace.md).",
+        "description": "Resolve the same workspace filters to a bounded full selection of product IDs without\npagination. More than 500 matches returns 400 rather than a truncated selection. The\nreturned IDs are a snapshot; later preview/apply validates their current availability.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [catalog\nworkspace](https://github.com/mvnby/air-api/blob/main/docs/catalog-management-workspace.md).",
         "operationId": "select_manager_catalog",
         "requestBody": {
           "content": {
@@ -9183,7 +9320,7 @@
           "manager-catalog-management"
         ],
         "summary": "Preview Bulk",
-        "description": "Calculate before/after results for selected products inside a transaction that is rolled\nback. No catalog changes are saved. Returns a signed token valid for 900 seconds, bound\nto the tenant/storefront/actor, selection, change and product fingerprints. Invalid\nchoices return 400; unavailable products return 409. Apply must use this token.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [catalog\nworkspace](https://github.com/mvnby/air-api/blob/main/docs/catalog-management-workspace.md).",
+        "description": "Calculate before/after results for selected products inside a transaction that is rolled\nback. No catalog changes are saved. Returns a signed token valid for 900 seconds, bound\nto the tenant/storefront/actor, selection, change and product fingerprints. Invalid\nchoices return 400; unavailable products return 409. Apply must use this token.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [catalog\nworkspace](https://github.com/mvnby/air-api/blob/main/docs/catalog-management-workspace.md).",
         "operationId": "preview_manager_catalog_bulk",
         "requestBody": {
           "content": {
@@ -9230,7 +9367,7 @@
           "manager-catalog-management"
         ],
         "summary": "Apply Bulk",
-        "description": "Apply the signed preview after locking selected products and checking their\nfingerprints. All product changes commit in one transaction. Invalid/expired/wrong-actor\ntoken returns 400; removed or changed products return 409 and require a new preview.\nThis is not a reusable idempotency receipt: a successful changing apply can make its own\npreview stale.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [catalog\nworkspace](https://github.com/mvnby/air-api/blob/main/docs/catalog-management-workspace.md).",
+        "description": "Apply the signed preview after locking selected products and checking their\nfingerprints. All product changes commit in one transaction. Invalid/expired/wrong-actor\ntoken returns 400; removed or changed products return 409 and require a new preview.\nThis is not a reusable idempotency receipt: a successful changing apply can make its own\npreview stale.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [catalog\nworkspace](https://github.com/mvnby/air-api/blob/main/docs/catalog-management-workspace.md).",
         "operationId": "apply_manager_catalog_bulk",
         "requestBody": {
           "content": {
@@ -10511,7 +10648,7 @@
           "manager-content-ai"
         ],
         "summary": "Create Manager Brand Short Description Ai Draft",
-        "description": "Generate a short-description draft from supplied full brand copy without saving the\nbrand. Blank/invalid input returns 422; rate/concurrency limits return 429 with\nRetry-After; unavailable configuration/retryable provider failures return 503 and other\nprovider failures return 502. Repeating makes another provider request and may return\ndifferent text.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
+        "description": "Generate a short-description draft from supplied full brand copy without saving the\nbrand. Blank/invalid input returns 422; rate/concurrency limits return 429 with\nRetry-After; unavailable configuration/retryable provider failures return 503 and other\nprovider failures return 502. Repeating makes another provider request and may return\ndifferent text.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
         "operationId": "create_manager_brand_short_description_ai_draft",
         "requestBody": {
           "content": {
@@ -10558,7 +10695,7 @@
           "manager-content-ai"
         ],
         "summary": "Create Manager Feature Content Ai Draft",
-        "description": "Generate a feature content/SEO draft either from a public source URL or by polishing\npasted text; input modes are mutually exclusive. The response is editor draft data and\ndoes not create/update a feature. Invalid/unsafe source returns 422, upstream fetch\nfailure 502, limits 429 with Retry-After, and provider failures 502/503. Repeating calls\nthe provider again.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
+        "description": "Generate a feature content/SEO draft either from a public source URL or by polishing\npasted text; input modes are mutually exclusive. The response is editor draft data and\ndoes not create/update a feature. Invalid/unsafe source returns 422, upstream fetch\nfailure 502, limits 429 with Retry-After, and provider failures 502/503. Repeating calls\nthe provider again.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
         "operationId": "create_manager_feature_content_ai_draft",
         "requestBody": {
           "content": {
@@ -10605,7 +10742,7 @@
           "manager-content-ai"
         ],
         "summary": "Create Manager Series Content Ai Draft",
-        "description": "Generate a series tagline/content/SEO draft from a public source or pasted full\ndescription. Series/brand identity is context; no series or assignments are saved.\nInvalid/unsafe source returns 422, upstream fetch failure 502, limits 429 with\nRetry-After and provider failures 502/503. Repeating may produce different draft text.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
+        "description": "Generate a series tagline/content/SEO draft from a public source or pasted full\ndescription. Series/brand identity is context; no series or assignments are saved.\nInvalid/unsafe source returns 422, upstream fetch failure 502, limits 429 with\nRetry-After and provider failures 502/503. Repeating may produce different draft text.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
         "operationId": "create_manager_series_content_ai_draft",
         "requestBody": {
           "content": {
@@ -11085,7 +11222,7 @@
           "manager"
         ],
         "summary": "Upload Image",
-        "description": "Download a source image, decode/convert it to shared WebP storage and attach it to the\nproduct. A non-installation upload also sets main_image; installation uploads do not.\nMissing product returns 404; invalid source/image returns 400 and runtime storage\nfailure 500. Reusing identical canonical bytes/link does not create another link.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
+        "description": "Download a source image, decode/convert it to shared WebP storage and attach it to the\nproduct. A non-installation upload also sets main_image; installation uploads do not.\nMissing product returns 404; invalid source/image returns 400 and runtime storage\nfailure 500. Reusing identical canonical bytes/link does not create another link.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
         "operationId": "upload_image",
         "security": [
           {
@@ -11158,7 +11295,7 @@
           "manager"
         ],
         "summary": "Upload Local Images",
-        "description": "Ingest local files into shared WebP product storage and attach successful files in one\ncatalog transaction. Invalid individual files may be skipped; uploaded/images report\naccepted results. The first successful non-installation image becomes main only if it\nwas missing. Missing product returns 404; repeating identical canonical images can reuse\nexisting links.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
+        "description": "Ingest local files into shared WebP product storage and attach successful files in one\ncatalog transaction. Invalid individual files may be skipped; uploaded/images report\naccepted results. The first successful non-installation image becomes main only if it\nwas missing. Missing product returns 404; repeating identical canonical images can reuse\nexisting links.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
         "operationId": "upload_local_images",
         "security": [
           {
@@ -12439,7 +12576,7 @@
           "manager"
         ],
         "summary": "Link Search Result",
-        "description": "Download/ingest a search-result image into shared managed product storage and attach its\ngallery link. Does not set the main image. Missing product returns 404; invalid\nsource/media returns 400 and runtime processing conflict 409. Existing canonical\nproduct/URL links are reused; this is a catalog write, not search.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
+        "description": "Download/ingest a search-result image into shared managed product storage and attach its\ngallery link. Does not set the main image. Missing product returns 404; invalid\nsource/media returns 400 and runtime processing conflict 409. Existing canonical\nproduct/URL links are reused; this is a catalog write, not search.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
         "operationId": "link_search_result",
         "security": [
           {
@@ -12500,7 +12637,7 @@
           "manager"
         ],
         "summary": "Set Main Image",
-        "description": "Set Product.main_image to a gallery image\u2019s permitted publication URL. Missing\nimage/product and other ValueError validation failures are exposed as 404 by this route.\nRepeating the same selection is a semantic no-op; this does not crop/process the image\nor delete prior media.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
+        "description": "Set Product.main_image to a gallery image\u2019s permitted publication URL. Missing\nimage/product and other ValueError validation failures are exposed as 404 by this route.\nRepeating the same selection is a semantic no-op; this does not crop/process the image\nor delete prior media.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
         "operationId": "set_main_image",
         "security": [
           {
@@ -12550,7 +12687,7 @@
           "manager"
         ],
         "summary": "Delete Gallery Image",
-        "description": "Delete one gallery database link and its variant rows, synchronize legacy product.images\nand clear main_image if it points to that URL. Physical objects are retained for\ndeferred garbage collection. Missing link returns 404, including after successful\ndeletion.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
+        "description": "Delete one gallery database link and its variant rows, synchronize legacy product.images\nand clear main_image if it points to that URL. Physical objects are retained for\ndeferred garbage collection. Missing link returns 404, including after successful\ndeletion.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
         "operationId": "delete_image",
         "security": [
           {
@@ -12598,7 +12735,7 @@
           "manager"
         ],
         "summary": "Crop Product Image",
-        "description": "Crop a gallery source and append a new link or replace the selected link according to\nmode. Replacement rebuilds original-variant metadata and follows an existing main-image\nreference; set_main can select the result for non-installation images. Invalid/missing\nsource or crop returns 400. This writes media immediately, preserves installation\nclassification and has no idempotency receipt.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
+        "description": "Crop a gallery source and append a new link or replace the selected link according to\nmode. Replacement rebuilds original-variant metadata and follows an existing main-image\nreference; set_main can select the result for non-installation images. Invalid/missing\nsource or crop returns 400. This writes media immediately, preserves installation\nclassification and has no idempotency receipt.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
         "operationId": "crop_product_image",
         "security": [
           {
@@ -12656,7 +12793,7 @@
           "manager"
         ],
         "summary": "Replace Product Image Local",
-        "description": "Replace one gallery link with browser-prepared image bytes and rebuild its original\nvariant without server crop work. Main image follows the replacement when it used the\nold URL; installation classification is kept. Empty file, more than 25 MB, missing\nimage/product or invalid media returns 400. Physical old objects remain retained.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
+        "description": "Replace one gallery link with browser-prepared image bytes and rebuild its original\nvariant without server crop work. Main image follows the replacement when it used the\nold URL; installation classification is kept. Empty file, more than 25 MB, missing\nimage/product or invalid media returns 400. Physical old objects remain retained.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
         "operationId": "replace_product_image_local",
         "security": [
           {
@@ -12714,7 +12851,7 @@
           "manager"
         ],
         "summary": "Remove Product Image Background",
-        "description": "Synchronously process a gallery image with the selected provider/model, replacing its\nlink by default; append creates/reuses a separate result link. Unknown mode falls back\nto replace. Existing main-image references follow replacement and set_main is honored\nfor non-installation images. Invalid/missing source returns 400; provider/runtime\nconflict returns 409. This is not a processing-job enqueue.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
+        "description": "Synchronously process a gallery image with the selected provider/model, replacing its\nlink by default; append creates/reuses a separate result link. Unknown mode falls back\nto replace. Existing main-image references follow replacement and set_main is honored\nfor non-installation images. Invalid/missing source returns 400; provider/runtime\nconflict returns 409. This is not a processing-job enqueue.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
         "operationId": "remove_product_image_background",
         "security": [
           {
@@ -12814,7 +12951,7 @@
           "manager"
         ],
         "summary": "Reuse Image",
-        "description": "Canonicalize an image source URL, ingesting external sources when necessary, and link it\nto the target product without changing its main image. A fully linked canonical URL is\nreused; original-variant metadata may be repaired. ValueError failures, including\nmissing product, are exposed as 404 by this route.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
+        "description": "Canonicalize an image source URL, ingesting external sources when necessary, and link it\nto the target product without changing its main image. A fully linked canonical URL is\nreused; original-variant metadata may be repaired. ValueError failures, including\nmissing product, are exposed as 404 by this route.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
         "operationId": "reuse_image",
         "security": [
           {
@@ -12871,7 +13008,7 @@
           "manager"
         ],
         "summary": "Bulk Add Gallery Images",
-        "description": "Append canonicalized source URLs to all selected products without removing existing\ngallery links. Existing links are reused; set_main selects the first URL only for\nnon-installation images. Missing products return 404; empty/invalid selections or\nsources return 400. Database changes and catalog invalidation commit together; this may\ningest external sources.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
+        "description": "Append canonicalized source URLs to all selected products without removing existing\ngallery links. Existing links are reused; set_main selects the first URL only for\nnon-installation images. Missing products return 404; empty/invalid selections or\nsources return 400. Database changes and catalog invalidation commit together; this may\ningest external sources.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
         "operationId": "bulk_add_gallery_images",
         "requestBody": {
           "content": {
@@ -12918,7 +13055,7 @@
           "manager"
         ],
         "summary": "Bulk Upload Local Images",
-        "description": "Upload local files once to shared managed storage and attach their URLs to every\nselected product. product_ids_json must be a nonempty JSON array; missing products\nreturn 404, invalid/empty selection/files return 400. set_main can select the first\nuploaded URL for non-installation images. Attachments and catalog invalidation commit\ntogether.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
+        "description": "Upload local files once to shared managed storage and attach their URLs to every\nselected product. product_ids_json must be a nonempty JSON array; missing products\nreturn 404, invalid/empty selection/files return 400. set_main can select the first\nuploaded URL for non-installation images. Attachments and catalog invalidation commit\ntogether.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
         "operationId": "bulk_upload_local_images",
         "requestBody": {
           "content": {
@@ -12965,7 +13102,7 @@
           "manager"
         ],
         "summary": "Bulk Delete Common Gallery Images",
-        "description": "Remove selected URLs only when they are common to all selected products under the\nrequested installation filter. Invalid/empty selection or URLs outside that intersection\nreturns 400. Deletes gallery/variant rows and clears affected main images, but retains\nphysical files. A repeat requires recalculating the common intersection.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
+        "description": "Remove selected URLs only when they are common to all selected products under the\nrequested installation filter. Invalid/empty selection or URLs outside that intersection\nreturns 400. Deletes gallery/variant rows and clears affected main images, but retains\nphysical files. A repeat requires recalculating the common intersection.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
         "operationId": "bulk_delete_common_gallery_images",
         "requestBody": {
           "content": {
@@ -13012,7 +13149,7 @@
           "manager"
         ],
         "summary": "Apply Gallery To Series",
-        "description": "Replace sibling products\u2019 non-installation galleries and main images with the source\nproduct\u2019s gallery/main image, preserving installation photos; source URLs are also\nmerged into the series gallery. dry_run=true only reports effects, while the default\nfalse commits them. Missing source returns 404; absent series/gallery returns 400.\ndelete_unreferenced=true always returns 409 because physical deletion is deferred.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
+        "description": "Replace sibling products\u2019 non-installation galleries and main images with the source\nproduct\u2019s gallery/main image, preserving installation photos; source URLs are also\nmerged into the series gallery. dry_run=true only reports effects, while the default\nfalse commits them. Missing source returns 404; absent series/gallery returns 400.\ndelete_unreferenced=true always returns 409 because physical deletion is deferred.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
         "operationId": "apply_gallery_to_series",
         "security": [
           {
@@ -13086,7 +13223,7 @@
           "manager"
         ],
         "summary": "Process Missing Image Variants",
-        "description": "Select up to 100 gallery images lacking a requested variant. dry_run defaults to true\nand only reports candidates; false synchronously processes the bounded batch and saves\nstatuses/files with catalog invalidation. Installation photos are excluded by default;\ndefault provider is noop. Invalid variant/provider returns 400. Inspect per-item\nerrors/statuses; an HTTP success can include processing failures.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
+        "description": "Select up to 100 gallery images lacking a requested variant. dry_run defaults to true\nand only reports candidates; false synchronously processes the bounded batch and saves\nstatuses/files with catalog invalidation. Installation photos are excluded by default;\ndefault provider is noop. Invalid variant/provider returns 400. Inspect per-item\nerrors/statuses; an HTTP success can include processing failures.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
         "operationId": "process_missing_image_variants",
         "security": [
           {
@@ -13199,7 +13336,7 @@
           "manager"
         ],
         "summary": "Reprocess Image Variant",
-        "description": "Synchronously regenerate/retry one gallery image variant and return its saved processing\nstate. Missing image returns 404; invalid variant/provider returns 400. Source/provider\nfailures may be saved as failed and returned with HTTP success; installation catalog\nvariants may be skipped. This is a state change with no job/receipt; inspect\nprocessing_status/processing_error before retrying.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
+        "description": "Synchronously regenerate/retry one gallery image variant and return its saved processing\nstate. Missing image returns 404; invalid variant/provider returns 400. Source/provider\nfailures may be saved as failed and returned with HTTP success; installation catalog\nvariants may be skipped. This is a state change with no job/receipt; inspect\nprocessing_status/processing_error before retrying.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
         "operationId": "reprocess_image_variant",
         "security": [
           {
@@ -13289,7 +13426,7 @@
           "manager"
         ],
         "summary": "Cleanup Media",
-        "description": "Report orphan candidates under local media/products only when dry_run=true. The default\ndry_run=false returns 409 because physical garbage collection is disabled. deleted_count\nand reclaimed_bytes describe potential deletions; no file is actually removed, and the\nreturned file list is capped at 50.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
+        "description": "Report orphan candidates under local media/products only when dry_run=true. The default\ndry_run=false returns 409 because physical garbage collection is disabled. deleted_count\nand reclaimed_bytes describe potential deletions; no file is actually removed, and the\nreturned file list is capped at 50.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
         "operationId": "cleanup_media",
         "security": [
           {
@@ -13432,7 +13569,7 @@
           "manager"
         ],
         "summary": "Bulk Update Specs",
-        "description": "Merge, replace or delete spec keys on existing selected products, normalize the result\nand synchronize brand/series plus catalog revisions. Replace replaces the full spec map;\ndeleting series aliases clears the series assignment when absent. Missing product IDs\nare ignored. Wi-Fi edits replace related source/derived keys as a group; changes commit\ntogether.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Merge, replace or delete spec keys on existing selected products, normalize the result\nand synchronize brand/series plus catalog revisions. Replace replaces the full spec map;\ndeleting series aliases clears the series assignment when absent. Missing product IDs\nare ignored. Wi-Fi edits replace related source/derived keys as a group; changes commit\ntogether.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "bulk_update_specs",
         "requestBody": {
           "content": {
@@ -13479,7 +13616,7 @@
           "manager"
         ],
         "summary": "Normalize Legacy Specs",
-        "description": "Scan products with specs and convert legacy labels/values using the legacy migration\nmap. dry_run defaults to true and counts prospective changes without saving;\ndry_run=false commits changed spec maps. Invalid legacy formats and per-product failures\nare logged/skipped. This synchronous catalog-wide migration does not run the ordinary\nnormalized-spec/brand-series editor pipeline.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Scan products with specs and convert legacy labels/values using the legacy migration\nmap. dry_run defaults to true and counts prospective changes without saving;\ndry_run=false commits changed spec maps. Invalid legacy formats and per-product failures\nare logged/skipped. This synchronous catalog-wide migration does not run the ordinary\nnormalized-spec/brand-series editor pipeline.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "normalize_legacy_specs",
         "security": [
           {
@@ -25873,7 +26010,7 @@
           "manager-installers"
         ],
         "summary": "Create Installer",
-        "description": "Create an installer and ensure its linked staff identity and membership in the\nauthenticated tenant. Creation errors are returned as 400. This has staff-account side\neffects and no idempotency receipt, so repeated calls are not guaranteed to reuse a\nprior installer.\n\nAccess and scope: Manager access is required; installer visibility follows staff\nmembership in the authenticated tenant. The system tenant also sees unmapped legacy\ninstallers. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Create an installer and ensure its linked staff identity and membership in the\nauthenticated tenant. Creation errors are returned as 400. This has staff-account side\neffects and no idempotency receipt, so repeated calls are not guaranteed to reuse a\nprior installer.\n\nAccess and scope: Tenant owner/admin access is required; installer visibility follows staff\nmembership in the authenticated tenant. The system tenant also sees unmapped legacy\ninstallers. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "create_manager_installer",
         "security": [
           {
@@ -25983,7 +26120,7 @@
           "manager-installers"
         ],
         "summary": "Update Installer",
-        "description": "Update submitted non-null installer identity fields and/or the current tenant\nmembership\u2019s activity. Missing/inaccessible installer returns 404. Partners cannot edit\nshared identity fields when the staff user has multiple memberships; this service\nrejection is not converted to a dedicated client error by this route. Omitted/null\nfields are ignored, including telegram_id; membership changes also recompute aggregate\nstaff activity. No expected-version guard is used.\n\nAccess and scope: Manager access is required; installer visibility follows staff\nmembership in the authenticated tenant. The system tenant also sees unmapped legacy\ninstallers. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Update submitted non-null installer identity fields and/or the current tenant\nmembership\u2019s activity. Missing/inaccessible installer returns 404. Linked accounts use\nstaff access rules: admin cannot edit owners/admins, protected legacy owners remain\nfenced, and the last active owner cannot be disabled. Shared identity fields for staff\nwith multiple memberships require platform-owner access. Omitted/null fields are ignored,\nincluding telegram_id; membership changes also recompute aggregate staff activity.\n\nAccess and scope: Tenant owner/admin access is required; installer visibility follows staff\nmembership in the authenticated tenant. The system tenant also sees unmapped legacy\ninstallers. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "update_manager_installer",
         "security": [
           {
@@ -26164,7 +26301,7 @@
           "manager-staff"
         ],
         "summary": "Patch Staff",
-        "description": "Patch a staff member reached through the current tenant membership; requires an owner/admin.\nOnly supplied fields are changed. Role/status affect the membership, while permitted\nidentity fields affect the shared account; non-system tenants cannot change protected\nshared-profile fields for multi-tenant staff. A new password increments auth_version.\nMissing membership returns 404, invalid/duplicate values 400 and protected legacy-owner\nidentity mutation 409 with code/message. There is no optimistic version or replay receipt.",
+        "description": "Patch a staff member reached through the current tenant membership; requires an owner/admin.\nOnly supplied fields are changed. Role/status affect the membership, while permitted\nidentity fields affect the shared account; only the platform owner can change protected\nshared-profile fields for multi-tenant staff. A new password increments auth_version.\nMissing membership returns 404, invalid/duplicate values 400 and protected legacy-owner\nidentity mutation 409 with code/message. There is no optimistic version or replay receipt.",
         "operationId": "patch_manager_staff",
         "security": [
           {
@@ -26247,7 +26384,7 @@
           "manager brands"
         ],
         "summary": "Create Manager Brand",
-        "description": "Create a shared brand and synchronize its brand tag. Title and generated/requested slug\nmust be nonempty; an existing slug or invalid publication media returns 400. This POST\nhas no idempotency receipt.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
+        "description": "Create a shared brand and synchronize its brand tag. Title and generated/requested slug\nmust be nonempty; an existing slug or invalid publication media returns 400. This POST\nhas no idempotency receipt.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
         "operationId": "create_manager_brand",
         "requestBody": {
           "content": {
@@ -26294,7 +26431,7 @@
           "manager brands"
         ],
         "summary": "Update Manager Brand",
-        "description": "Update submitted brand fields and synchronize the brand tag when identity changes.\nMissing brand returns 404; conflicting slug, empty title or invalid content media\nreturns 400. Semantic no-op edits do not publish a new catalog revision.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
+        "description": "Update submitted brand fields and synchronize the brand tag when identity changes.\nMissing brand returns 404; conflicting slug, empty title or invalid content media\nreturns 400. Semantic no-op edits do not publish a new catalog revision.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
         "operationId": "update_manager_brand",
         "security": [
           {
@@ -26350,7 +26487,7 @@
           "manager brands"
         ],
         "summary": "Delete Manager Brand",
-        "description": "Delete a brand and its unused brand tag. Missing brand returns 404, including after\nprior deletion; products, series or products attached to its tag block deletion with\n400. This is a permanent delete, not hiding a brand.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Delete a brand and its unused brand tag. Missing brand returns 404, including after\nprior deletion; products, series or products attached to its tag block deletion with\n400. This is a permanent delete, not hiding a brand.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "delete_manager_brand",
         "security": [
           {
@@ -26444,7 +26581,7 @@
           "manager brands"
         ],
         "summary": "Create Manager Brand Feature",
-        "description": "Create a brand-owned feature through the brand editor. Missing brand returns 404; empty\ntitle, duplicate slug within the brand or invalid feature media returns 400. Creation\ndoes not assign the feature to series/products and has no idempotency receipt.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
+        "description": "Create a brand-owned feature through the brand editor. Missing brand returns 404; empty\ntitle, duplicate slug within the brand or invalid feature media returns 400. Creation\ndoes not assign the feature to series/products and has no idempotency receipt.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
         "operationId": "create_manager_brand_feature",
         "security": [
           {
@@ -26502,7 +26639,7 @@
           "manager brands"
         ],
         "summary": "Update Manager Brand Feature",
-        "description": "Update submitted fields of a feature belonging to the requested brand. Missing brand or\nfeature returns 404; empty title, duplicate brand slug or invalid media returns 400.\nAssignments to series are preserved.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
+        "description": "Update submitted fields of a feature belonging to the requested brand. Missing brand or\nfeature returns 404; empty title, duplicate brand slug or invalid media returns 400.\nAssignments to series are preserved.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
         "operationId": "update_manager_brand_feature",
         "security": [
           {
@@ -26567,7 +26704,7 @@
           "manager brands"
         ],
         "summary": "Delete Manager Brand Feature",
-        "description": "Archive an unassigned brand feature by setting it inactive and preserving its\ndefinition/history. Missing brand or feature returns 404; any series assignment blocks\narchiving with 400. An already archived unassigned feature is a semantic no-op; this is\nnot a physical delete.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
+        "description": "Archive an unassigned brand feature by setting it inactive and preserving its\ndefinition/history. Missing brand or feature returns 404; any series assignment blocks\narchiving with 400. An already archived unassigned feature is a semantic no-op; this is\nnot a physical delete.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
         "operationId": "delete_manager_brand_feature",
         "security": [
           {
@@ -26670,7 +26807,7 @@
           "manager brands"
         ],
         "summary": "Create Manager Brand Series",
-        "description": "Create a shared series under the requested brand, validating its feature assignments and\npublication media. Missing brand returns 404; empty title, conflicting slug or invalid\nfeature/media choices returns 400. This POST has no idempotency receipt.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
+        "description": "Create a shared series under the requested brand, validating its feature assignments and\npublication media. Missing brand returns 404; empty title, conflicting slug or invalid\nfeature/media choices returns 400. This POST has no idempotency receipt.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
         "operationId": "create_manager_brand_series",
         "security": [
           {
@@ -26728,7 +26865,7 @@
           "manager brands"
         ],
         "summary": "Update Manager Brand Series",
-        "description": "Update submitted series fields and, when supplied, replace feature assignments. Missing\nbrand/series returns 404; invalid assignments/media, duplicate slug or including a\nhidden series in the brand showcase returns 400. Feature priority permits at most three\nfeatured entries.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
+        "description": "Update submitted series fields and, when supplied, replace feature assignments. Missing\nbrand/series returns 404; invalid assignments/media, duplicate slug or including a\nhidden series in the brand showcase returns 400. Feature priority permits at most three\nfeatured entries.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [feature\ntaxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).",
         "operationId": "update_manager_brand_series",
         "security": [
           {
@@ -26793,7 +26930,7 @@
           "manager brands"
         ],
         "summary": "Delete Manager Brand Series",
-        "description": "Permanently delete a series and its feature links. Missing brand/series returns 404;\nassigned products block deletion with 400, so hide a used series instead. A repeat after\ndeletion returns 404.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Permanently delete a series and its feature links. Missing brand/series returns 404;\nassigned products block deletion with 400, so hide a used series instead. A repeat after\ndeletion returns 404.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "delete_manager_brand_series",
         "security": [
           {
@@ -26850,7 +26987,7 @@
           "manager brands"
         ],
         "summary": "Apply Manager Series Gallery To Products",
-        "description": "Save the submitted nonempty gallery on the series and add those URLs to every assigned\nproduct. Existing links are skipped; product main images are not changed. Missing\nbrand/series returns 404; empty/invalid media returns 400. Series and product changes\ncommit together; this writes state rather than producing a preview.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
+        "description": "Save the submitted nonempty gallery on the series and add those URLs to every assigned\nproduct. Existing links are skipped; product main images are not changed. Missing\nbrand/series returns 404; empty/invalid media returns 400. Series and product changes\ncommit together; this writes state rather than producing a preview.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).\nSee [media\npublication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).",
         "operationId": "apply_manager_series_gallery_to_products",
         "security": [
           {
@@ -30018,7 +30155,7 @@
           "manager tags"
         ],
         "summary": "Create Tag Group",
-        "description": "Create a shared tag group, deriving slug from title when omitted. Duplicate slug returns\n400. POST has no idempotency receipt; this creates dictionary state rather than\nassigning product tags.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Create a shared tag group, deriving slug from title when omitted. Duplicate slug returns\n400. POST has no idempotency receipt; this creates dictionary state rather than\nassigning product tags.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "create_manager_tag_group",
         "requestBody": {
           "content": {
@@ -30065,7 +30202,7 @@
           "manager tags"
         ],
         "summary": "Update Tag Group",
-        "description": "Update submitted tag-group fields. Missing group returns 404; a slug used by another\ngroup returns 400. This edits the shared dictionary, leaving product-tag associations\nattached to their tag IDs.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Update submitted tag-group fields. Missing group returns 404; a slug used by another\ngroup returns 400. This edits the shared dictionary, leaving product-tag associations\nattached to their tag IDs.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "update_manager_tag_group",
         "security": [
           {
@@ -30121,7 +30258,7 @@
           "manager tags"
         ],
         "summary": "Delete Tag Group",
-        "description": "Permanently delete an empty shared tag group. Missing group returns 404, including after\ndeletion; any remaining tag blocks deletion with 400. Remove/reassign tags first.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Permanently delete an empty shared tag group. Missing group returns 404, including after\ndeletion; any remaining tag blocks deletion with 400. Remove/reassign tags first.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "delete_manager_tag_group",
         "security": [
           {
@@ -30167,7 +30304,7 @@
           "manager tags"
         ],
         "summary": "Create Tag",
-        "description": "Create a tag in an existing shared group, deriving slug from title when omitted. Missing\ngroup returns 404; duplicate slug returns 400. This does not assign the tag to products;\nPOST has no idempotency receipt.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Create a tag in an existing shared group, deriving slug from title when omitted. Missing\ngroup returns 404; duplicate slug returns 400. This does not assign the tag to products;\nPOST has no idempotency receipt.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "create_manager_tag",
         "requestBody": {
           "content": {
@@ -30214,7 +30351,7 @@
           "manager tags"
         ],
         "summary": "Update Tag",
-        "description": "Update submitted tag fields. Missing tag returns 404; conflicting slug returns 400.\nProduct links continue to refer to the same tag ID; editing this shared tag affects all\nlinked products.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Update submitted tag fields. Missing tag returns 404; conflicting slug returns 400.\nProduct links continue to refer to the same tag ID; editing this shared tag affects all\nlinked products.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "update_manager_tag",
         "security": [
           {
@@ -30270,7 +30407,7 @@
           "manager tags"
         ],
         "summary": "Delete Tag",
-        "description": "Permanently delete the tag and its product-tag links. Missing tag returns 404, including\non a repeat after deletion. This removes the shared label rather than just removing it\nfrom one product.\n\nAccess and scope: system-tenant Manager access is required; this operates on the shared\nplatform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Permanently delete the tag and its product-tag links. Missing tag returns 404, including\non a repeat after deletion. This removes the shared label rather than just removing it\nfrom one product.\n\nAccess and scope: shared catalog operations require an explicit platform-owner or\ndelegated catalog permission, independent of company membership. Destructive operations\nrequire catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.\nThis operates on the shared platform catalog. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "delete_manager_tag",
         "security": [
           {
@@ -57161,6 +57298,143 @@
         ],
         "title": "ManagedDocumentVoidPayload"
       },
+      "ManagerAccessItem": {
+        "properties": {
+          "membership_id": {
+            "type": "integer",
+            "title": "Membership Id"
+          },
+          "staff_user_id": {
+            "type": "integer",
+            "title": "Staff User Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "tenant_id": {
+            "type": "integer",
+            "title": "Tenant Id"
+          },
+          "tenant_name": {
+            "type": "string",
+            "title": "Tenant Name"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "permissions": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "catalog.master.edit",
+                "catalog.master.delete"
+              ]
+            },
+            "type": "array",
+            "title": "Permissions"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "membership_id",
+          "staff_user_id",
+          "display_name",
+          "tenant_id",
+          "tenant_name",
+          "role",
+          "status",
+          "permissions",
+          "updated_at"
+        ],
+        "title": "ManagerAccessItem"
+      },
+      "ManagerAccessList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerAccessItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ManagerAccessMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "meta"
+        ],
+        "title": "ManagerAccessList"
+      },
+      "ManagerAccessMeta": {
+        "properties": {
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "pages": {
+            "type": "integer",
+            "title": "Pages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "page",
+          "limit",
+          "total",
+          "pages"
+        ],
+        "title": "ManagerAccessMeta"
+      },
+      "ManagerAccessUpdate": {
+        "properties": {
+          "permissions": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "catalog.master.edit",
+                "catalog.master.delete"
+              ]
+            },
+            "type": "array",
+            "maxItems": 2,
+            "title": "Permissions"
+          },
+          "expected_updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expected Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "permissions",
+          "expected_updated_at"
+        ],
+        "title": "ManagerAccessUpdate"
+      },
       "ManagerActionMessageResponse": {
         "properties": {
           "message": {
@@ -57266,6 +57540,11 @@
           "demo_read_only": {
             "type": "boolean",
             "title": "Demo Read Only",
+            "default": false
+          },
+          "is_platform_owner": {
+            "type": "boolean",
+            "title": "Is Platform Owner",
             "default": false
           }
         },

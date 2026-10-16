@@ -1,3 +1,4 @@
+import { useCatalogAccess } from "./useCatalogAccess";
 import { computed, ref, type ComputedRef, type Ref, watch } from "vue";
 import { ManagerFeaturesService, type ManagerFeatureResponse } from "../client";
 import {
@@ -398,6 +399,7 @@ export const useSeriesWorkspace = ({
   };
 
   const deleteSeries = async (series: ManagerBrandSeries) => {
+    if (!useCatalogAccess().canDeleteCatalog.value) return;
     if (!selectedBrandId.value) return;
     const confirmed = await confirmDialog({
       title: "Удалить серию?",

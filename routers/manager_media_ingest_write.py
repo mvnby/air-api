@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
 from core.logger import logger
-from core.security import get_current_username
+from core.security import get_current_catalog_username
 from routers.manager_operation_ids import UPLOAD_IMAGE, UPLOAD_LOCAL_IMAGES
 from routers.manager_permission_policy import ManagerPermissionRoute
 from schemas import ManagerMediaImageLinkResponse, ManagerMediaUploadLocalImagesResponse
@@ -29,7 +29,7 @@ async def upload_image(
     product_id: int = Query(..., description="ID of the product to attach image to"),
     is_installation: bool = Query(False, description="Is this an installation photo?"),
     session: AsyncSession = Depends(get_session),
-    username: str = Depends(get_current_username),
+    username: str = Depends(get_current_catalog_username),
 ):
     """
     Download a source image, decode/convert it to shared WebP storage and attach it to the
@@ -37,8 +37,10 @@ async def upload_image(
     Missing product returns 404; invalid source/image returns 400 and runtime storage
     failure 500. Reusing identical canonical bytes/link does not create another link.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [media
     publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -69,7 +71,7 @@ async def upload_local_images(
     files: List[UploadFile] = File(...),
     is_installation: bool = Query(False),
     session: AsyncSession = Depends(get_session),
-    username: str = Depends(get_current_username),
+    username: str = Depends(get_current_catalog_username),
 ):
     """
     Ingest local files into shared WebP product storage and attach successful files in one
@@ -78,8 +80,10 @@ async def upload_local_images(
     was missing. Missing product returns 404; repeating identical canonical images can reuse
     existing links.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [media
     publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).

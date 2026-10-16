@@ -38,7 +38,7 @@ let requestVersion = 0;
 let previousOverflow: string | null = null;
 let previousOverflowPriority = '';
 const title = computed(() => detail.value?.title || props.item?.title || 'Карточка товара');
-const canEdit = computed(() => hasManagerCapability(managerSession.auth.value, MANAGER_CAPABILITY.platformManage));
+const canEdit = computed(() => hasManagerCapability(managerSession.auth.value, MANAGER_CAPABILITY.catalogMasterEdit));
 const showSelection = computed(() => hasManagerCapability(managerSession.auth.value, MANAGER_CAPABILITY.crmManage) && !!detail.value?.selection_item);
 const eligible = computed(() => !!detail.value?.allowed && detail.value.effective_price != null && detail.value.effective_price > 0);
 const selectionDisabled = computed(() => props.busy || props.inProposal || (!props.selected && !eligible.value));

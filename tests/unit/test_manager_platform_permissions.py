@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
@@ -11,6 +12,8 @@ from core.security import (
     AuthenticatedUser,
     get_current_auth_context,
     require_manager_access,
+    require_catalog_master_edit,
+    require_catalog_master_delete,
     require_system_manager_tenant_scope,
     require_system_owner_access,
 )
@@ -58,6 +61,8 @@ from routers import (
 )
 from routers.manager_permission_policy import (
     CATALOG_DECISION_OPERATION_IDS,
+    CATALOG_EDIT_OPERATION_IDS,
+    CATALOG_DELETE_OPERATION_IDS,
     PLATFORM_MANAGER_OPERATION_IDS,
     STOREFRONT_COLLECTION_OPERATION_IDS,
     SYSTEM_OWNER_OPERATION_IDS,
@@ -216,20 +221,30 @@ def _has_direct_dependency(route: APIRoute, dependency) -> bool:
     return any(item.call is dependency for item in route.dependant.dependencies)
 
 
+def _catalog_or_platform_dependency(operation_id):
+    if operation_id in CATALOG_EDIT_OPERATION_IDS:
+        return require_catalog_master_edit
+    if operation_id in CATALOG_DELETE_OPERATION_IDS:
+        return require_catalog_master_delete
+    return require_system_manager_tenant_scope
+
+
 def test_platform_policy_is_attached_to_every_registered_operation():
     routes = _api_routes(*PLATFORM_ROUTERS, *INFRASTRUCTURE_ROUTERS)
     by_operation_id = {route.operation_id: route for route in routes}
 
-    missing_platform = PLATFORM_MANAGER_OPERATION_IDS - by_operation_id.keys()
+    missing_platform = (PLATFORM_MANAGER_OPERATION_IDS | CATALOG_EDIT_OPERATION_IDS | CATALOG_DELETE_OPERATION_IDS) - by_operation_id.keys()
     missing_infrastructure = SYSTEM_OWNER_OPERATION_IDS - by_operation_id.keys()
     assert not missing_platform
     assert not missing_infrastructure
 
-    for operation_id in PLATFORM_MANAGER_OPERATION_IDS:
+    for operation_id in PLATFORM_MANAGER_OPERATION_IDS | CATALOG_EDIT_OPERATION_IDS | CATALOG_DELETE_OPERATION_IDS:
         assert _has_direct_dependency(
             by_operation_id[operation_id],
-            require_system_manager_tenant_scope,
+            _catalog_or_platform_dependency(operation_id),
         ), operation_id
+    assert not (CATALOG_EDIT_OPERATION_IDS & CATALOG_DELETE_OPERATION_IDS)
+    assert not ((CATALOG_EDIT_OPERATION_IDS | CATALOG_DELETE_OPERATION_IDS) & PLATFORM_MANAGER_OPERATION_IDS)
     for operation_id in SYSTEM_OWNER_OPERATION_IDS:
         assert _has_direct_dependency(
             by_operation_id[operation_id],
@@ -270,11 +285,11 @@ def test_catalog_usage_report_requires_system_analytics_capability():
         assert _has_direct_dependency(by_operation_id[operation_id], require_system_analytics_manage)
 
 
-def test_every_global_mutation_in_policy_routers_requires_system_manager():
+def test_every_global_mutation_requires_explicit_catalog_or_platform_authority():
     for route in _api_routes(*PURE_GLOBAL_MUTATION_ROUTERS):
         if route.methods.intersection(UNSAFE_METHODS):
-            assert route.operation_id in PLATFORM_MANAGER_OPERATION_IDS, route.operation_id
-            assert _has_direct_dependency(route, require_system_manager_tenant_scope)
+            assert route.operation_id in PLATFORM_MANAGER_OPERATION_IDS | CATALOG_EDIT_OPERATION_IDS | CATALOG_DELETE_OPERATION_IDS, route.operation_id
+            assert _has_direct_dependency(route, _catalog_or_platform_dependency(route.operation_id))
 
     for route in _api_routes(manager_catalog.router):
         is_catalog_operation = route.path.startswith("/api/manager/products") or route.path.startswith(
@@ -284,8 +299,8 @@ def test_every_global_mutation_in_policy_routers_requires_system_manager():
             route.methods.intersection(UNSAFE_METHODS)
             or route.path.startswith("/api/manager/catalog/import/jobs")
         ):
-            assert route.operation_id in PLATFORM_MANAGER_OPERATION_IDS, route.operation_id
-            assert _has_direct_dependency(route, require_system_manager_tenant_scope)
+            assert route.operation_id in PLATFORM_MANAGER_OPERATION_IDS | CATALOG_EDIT_OPERATION_IDS | CATALOG_DELETE_OPERATION_IDS, route.operation_id
+            assert _has_direct_dependency(route, _catalog_or_platform_dependency(route.operation_id))
 
 
 def test_sensitive_supply_and_reusable_media_routers_are_fully_system_scoped():
@@ -387,7 +402,7 @@ def test_tenant_crm_routes_and_media_worker_do_not_gain_platform_gate():
     ]
     assert tenant_routes
     for route in tenant_routes:
-        assert _has_direct_dependency(route, require_system_manager_tenant_scope) == (route.operation_id in platform_ai_operations)
+        assert _has_direct_dependency(route, _catalog_or_platform_dependency(route.operation_id)) == (route.operation_id in platform_ai_operations)
         assert not _has_direct_dependency(route, require_system_owner_access)
 
     worker_routes = _api_routes(manager_media_worker.router)
@@ -658,13 +673,11 @@ def test_tenant_offer_reads_remain_tenant_scoped_without_platform_gate():
 
 
 @pytest.mark.asyncio
-async def test_system_manager_can_run_registered_catalog_mutation(monkeypatch):
+async def test_system_manager_needs_explicit_grant_for_catalog_mutation(monkeypatch):
     app = FastAPI()
     app.include_router(manager_tags.router)
-    app.dependency_overrides[get_current_auth_context] = lambda: _auth_context(
-        role="manager",
-        is_system=True,
-    )
+    current_auth = {"value": _auth_context(role="manager", is_system=True)}
+    app.dependency_overrides[get_current_auth_context] = lambda: current_auth["value"]
 
     async def _session():
         yield object()
@@ -687,6 +700,10 @@ async def test_system_manager_can_run_registered_catalog_mutation(monkeypatch):
         transport=ASGITransport(app=app),
         base_url="http://test",
     ) as client:
+        denied = await client.post("/api/manager/tags/groups", json={"title": "Denied"})
+        assert denied.status_code == 403
+        create_group.assert_not_awaited()
+        current_auth["value"] = replace(current_auth["value"], permissions=("catalog.master.edit",))
         response = await client.post(
             "/api/manager/tags/groups",
             json={"title": "Allowed"},
@@ -726,6 +743,9 @@ async def test_infrastructure_mutation_requires_system_owner(monkeypatch):
             json={"key": "allowed", "value": "yes"},
         )
         current_auth["value"] = _auth_context(role="owner", is_system=True)
+        system_member_denied = await client.post("/api/manager/settings", json={"key": "allowed", "value": "yes"})
+        assert system_member_denied.status_code == 403
+        current_auth["value"] = replace(current_auth["value"], is_platform_owner=True)
         allowed = await client.post(
             "/api/manager/settings",
             json={"key": "allowed", "value": "yes"},

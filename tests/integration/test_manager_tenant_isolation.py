@@ -4,6 +4,7 @@ import pytest
 from httpx import AsyncClient
 from sqlmodel import select
 
+from core.config import settings
 from core.security import create_access_token
 from models import (
     AnalyticsConnection,
@@ -953,7 +954,7 @@ async def test_installer_directory_and_updates_are_tenant_scoped(
 
 
 @pytest.mark.asyncio
-async def test_dashboard_is_tenant_scoped_and_global_mail_is_system_only(
+async def test_dashboard_is_tenant_scoped_and_global_mail_requires_platform_owner(
     async_client: AsyncClient,
     db,
 ):
@@ -1092,8 +1093,18 @@ async def test_dashboard_is_tenant_scoped_and_global_mail_is_system_only(
         "/api/manager/mail/bank-receipts",
         headers=headers_b,
     )
-    assert system_mail.status_code == 200
+    assert system_mail.status_code == 403
     assert foreign_mail.status_code == 403
+    legacy_login = await async_client.post(
+        "/login/access-token",
+        data={"username": settings.ADMIN_USERNAME, "password": settings.ADMIN_PASSWORD},
+    )
+    assert legacy_login.status_code == 200
+    platform_mail = await async_client.get(
+        "/api/manager/mail/bank-receipts",
+        headers={"Authorization": f"Bearer {legacy_login.json()['access_token']}"},
+    )
+    assert platform_mail.status_code == 200
 
 
 @pytest.mark.asyncio
@@ -1102,6 +1113,7 @@ async def test_owner_staff_management_is_tenant_scoped(
     db,
 ):
     tenant_b, _ = await _create_tenant(db, slug="staff-b")
+    tenant_b_id = int(tenant_b.id)
     owner_a = await _create_staff(
         db,
         tenant_id=1,
@@ -1166,15 +1178,22 @@ async def test_owner_staff_management_is_tenant_scoped(
     )
     await db.commit()
 
+    shared_id = int(shared.id)
     shared_identity_patch = await async_client.patch(
-        f"/api/manager/staff/{shared.id}",
+        f"/api/manager/staff/{shared_id}",
         headers=headers_b,
         json={"display_name": "Tenant B must not rewrite shared identity"},
     )
     assert shared_identity_patch.status_code == 400
+    system_identity_patch = await async_client.patch(
+        f"/api/manager/staff/{shared_id}",
+        headers=headers_a,
+        json={"display_name": "System company owner must not rewrite shared identity"},
+    )
+    assert system_identity_patch.status_code == 400
 
     membership_patch = await async_client.patch(
-        f"/api/manager/staff/{shared.id}",
+        f"/api/manager/staff/{shared_id}",
         headers=headers_b,
         json={"status": "blocked", "primary_role": "manager"},
     )
@@ -1182,7 +1201,7 @@ async def test_owner_staff_management_is_tenant_scoped(
     memberships = (
         await db.execute(
             select(TenantMembership)
-            .where(TenantMembership.staff_user_id == shared.id)
+            .where(TenantMembership.staff_user_id == shared_id)
             .order_by(TenantMembership.tenant_id.asc())
         )
     ).scalars().all()
@@ -1191,11 +1210,13 @@ async def test_owner_staff_management_is_tenant_scoped(
         for item in memberships
     ] == [
         (1, "owner", "active"),
-        (tenant_b.id, "manager", "suspended"),
+        (tenant_b_id, "manager", "suspended"),
     ]
     await db.refresh(shared)
     assert shared.status == "active"
     assert shared.display_name == "shared-staff"
+    assert shared.primary_role == "owner"
+    assert shared.roles == ["owner"]
 
 
 @pytest.mark.asyncio

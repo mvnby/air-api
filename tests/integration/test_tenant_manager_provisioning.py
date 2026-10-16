@@ -219,12 +219,21 @@ async def test_never_converts_global_admin_to_tenant_owner(db) -> None:
         role="owner",
         reset_password=True,
     )
+    original_password_hash = staff.password_hash
 
     plan = await TenantManagerProvisioningService.plan(db, request=request)
 
     assert plan["ready"] is False
-    assert "extraneous global roles" in " ".join(plan["blockers"])
+    assert "cannot be converted to the requested role" in " ".join(plan["blockers"])
     assert plan["changes"] == []
+    with pytest.raises(TenantManagerProvisioningBlockedError):
+        await TenantManagerProvisioningService.execute(
+            db, request=request, password="replacement-password-2026", plan_token=plan["plan_token"],
+        )
+    await db.refresh(staff)
+    assert staff.primary_role == "admin"
+    assert staff.roles == ["admin"]
+    assert staff.password_hash == original_password_hash
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useCatalogAccess } from "../../composables/useCatalogAccess";
+const { canDeleteCatalog } = useCatalogAccess();
 import type { ManagerBrand, ManagerBrandSeries } from "../../api";
 import SeriesList from "./SeriesList.vue";
 
@@ -213,7 +215,7 @@ const forwardSeriesDragOver = (event: DragEvent, series: ManagerBrandSeries) =>
                         : 'Удалить бренд'
                     "
                     aria-label="Удалить бренд"
-                    @click.stop="emit('delete', brand)"
+                    v-if="canDeleteCatalog" @click.stop="emit('delete', brand)"
                   >
                     <span class="material-icons-round text-[18px]">delete</span>
                   </button>

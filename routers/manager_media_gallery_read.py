@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
-from core.security import get_current_username
+from core.security import get_current_catalog_username
 from routers.manager_operation_ids import (
     GET_COMMON_GALLERY_IMAGES,
     GET_IMAGE_VARIANT_CANDIDATES,
@@ -35,7 +35,7 @@ router = APIRouter(
 async def reuse_search(
     q: str = Query(..., min_length=2),
     session: AsyncSession = Depends(get_session),
-    username: str = Depends(get_current_username),
+    username: str = Depends(get_current_catalog_username),
 ):
     """
     Search shared product titles for image reuse and return up to 10 product
@@ -59,7 +59,7 @@ async def reuse_search(
 async def get_common_gallery_images(
     product_ids: List[int] = Query(..., description="Selected product IDs"),
     session: AsyncSession = Depends(get_session),
-    username: str = Depends(get_current_username),
+    username: str = Depends(get_current_catalog_username),
 ):
     """
     Return non-installation URLs present in every selected product’s gallery. Empty
@@ -94,7 +94,7 @@ async def get_image_variant_candidates(
     limit: int = Query(100, ge=1, le=100),
     include_installation: bool = Query(False),
     session: AsyncSession = Depends(get_session),
-    username: str = Depends(get_current_username),
+    username: str = Depends(get_current_catalog_username),
 ):
     """
     Read a bounded dry-run candidate set missing the requested variant; limit is 1–100 and

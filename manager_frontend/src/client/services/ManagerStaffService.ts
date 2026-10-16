@@ -68,7 +68,7 @@ export class ManagerStaffService {
      * Patch Staff
      * Patch a staff member reached through the current tenant membership; requires an owner/admin.
      * Only supplied fields are changed. Role/status affect the membership, while permitted
-     * identity fields affect the shared account; non-system tenants cannot change protected
+     * identity fields affect the shared account; only the platform owner can change protected
      * shared-profile fields for multi-tenant staff. A new password increments auth_version.
      * Missing membership returns 404, invalid/duplicate values 400 and protected legacy-owner
      * identity mutation 409 with code/message. There is no optimistic version or replay receipt.

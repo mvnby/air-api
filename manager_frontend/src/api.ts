@@ -936,7 +936,7 @@ export const api = {
         categorySlug?: string,
         filters: ManagerProductFilterOptions = {},
     ): Promise<Product[]> {
-        if (!hasManagerCapability(managerSession.auth.value, MANAGER_CAPABILITY.platformManage)) {
+        if (!hasManagerCapability(managerSession.auth.value, MANAGER_CAPABILITY.catalogMasterEdit)) {
             const response = await ManagerTenantCatalogService.listManagerTenantCatalogProducts(
                 1,
                 limit,

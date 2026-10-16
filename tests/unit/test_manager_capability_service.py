@@ -34,7 +34,7 @@ def test_non_system_manager_gets_only_tenant_work_capabilities():
 
 def test_system_owner_gets_standard_capabilities_without_private_pilot():
     assert ManagerCapabilityService.for_auth(
-        _auth(role="owner", is_system=True)
+        replace(_auth(role="owner", is_system=True), is_platform_owner=True)
     ) == [
         capability for capability in ManagerCapabilityService.ORDERED_CAPABILITIES
         if capability != ManagerCapabilityService.CALL_RECORDINGS_MANAGE
@@ -52,6 +52,30 @@ def test_non_system_owner_does_not_gain_platform_capabilities():
     assert "services.manage" in capabilities
     assert "platform.manage" not in capabilities
     assert "infrastructure.manage" not in capabilities
+
+
+@pytest.mark.parametrize("role", ["owner", "admin", "manager"])
+def test_system_membership_does_not_grant_platform_or_catalog_edit_access(role):
+    capabilities = ManagerCapabilityService.for_auth(_auth(role=role, is_system=True))
+    assert not {"platform.manage", "infrastructure.manage", "catalog.master.edit", "catalog.master.delete"}.intersection(capabilities)
+
+
+@pytest.mark.parametrize("is_system", [False, True])
+def test_catalog_editor_only_receives_explicitly_delegated_catalog_capabilities(is_system):
+    auth = _auth(role="catalog_editor", is_system=is_system)
+    assert ManagerCapabilityService.for_auth(auth) == []
+    assert ManagerCapabilityService.for_auth(replace(auth, permissions=("catalog.master.edit",))) == [
+        "catalog.master.read", "catalog.master.edit",
+    ]
+    assert ManagerCapabilityService.for_auth(replace(auth, permissions=("catalog.master.edit", "catalog.master.delete"))) == [
+        "catalog.master.read", "catalog.master.edit", "catalog.master.delete",
+    ]
+
+
+def test_delete_grant_alone_cannot_create_catalog_access():
+    assert ManagerCapabilityService.for_auth(replace(
+        _auth(role="catalog_editor", is_system=False), permissions=("catalog.master.delete",)
+    )) == []
 
 
 @pytest.mark.parametrize("role", ["owner", "admin", "manager"])
