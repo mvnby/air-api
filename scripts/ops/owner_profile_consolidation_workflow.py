@@ -29,8 +29,9 @@ SAFE_PHASES = frozenset({
 
 
 class PhaseError(gates.WorkflowError):
-    def __init__(self, phase):
+    def __init__(self, phase, *, cause=None):
         self.phase = phase if phase in SAFE_PHASES else "unclassified"
+        self.diagnostic = gates.safe_diagnostic_metadata(cause)
         super().__init__("Owner profile workflow blocked at " + self.phase)
 
 
@@ -41,8 +42,8 @@ def phase(name):
         yield
     except PhaseError:
         raise
-    except Exception:
-        raise PhaseError(name) from None
+    except Exception as exc:
+        raise PhaseError(name, cause=exc) from None
 
 
 def parse_result(output, *, action):
@@ -160,6 +161,7 @@ def execute(args):
             artifact = {
                 "operation": args.operation, "outcome": "blocked", "reviewed_main_sha": os.environ.get("GITHUB_SHA"),
                 "failure_phase": exc.phase if isinstance(exc, PhaseError) else "preflight_proof",
+                **(exc.diagnostic if isinstance(exc, PhaseError) else gates.safe_diagnostic_metadata(exc)),
                 "result": {**sanitize(plan), "ready": False,
                            "blockers": sorted(set(plan["blockers"] + ["dual_node_proof_failed"]))},
             }
@@ -209,6 +211,7 @@ def main():
         artifact = execute(args)
     except Exception as exc:
         failed_phase = exc.phase if isinstance(exc, PhaseError) else "unclassified"
+        diagnostic = exc.diagnostic if isinstance(exc, PhaseError) else gates.safe_diagnostic_metadata(exc)
         # Early gate failures previously lost the only useful diagnostic. Keep
         # an existing detailed/recovery report, or write a fixed minimal one.
         try:
@@ -217,13 +220,15 @@ def main():
                 artifact = {
                     "operation": args.operation, "outcome": "blocked",
                     "failure_phase": failed_phase,
+                    **diagnostic,
                     "reviewed_main_sha": sha if gates.REVIEWED_SHA_RE.fullmatch(sha) else None,
                 }
                 gates.assert_no_forbidden_artifact_keys(artifact)
                 gates._write_result(args.result_file, artifact)
         except Exception:
             print("owner_profile_workflow artifact=unavailable", file=sys.stderr)
-        print(f"owner_profile_workflow status=blocked phase={failed_phase}", file=sys.stderr)
+        diagnostic_text = "".join(f" {key}={value}" for key, value in diagnostic.items())
+        print(f"owner_profile_workflow status=blocked phase={failed_phase}{diagnostic_text}", file=sys.stderr)
         raise SystemExit(2) from None
     print(json.dumps({"ready": artifact["result"]["ready"], "operation": args.operation}))
     if not artifact["result"]["ready"]:

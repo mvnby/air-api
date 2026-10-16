@@ -200,3 +200,43 @@ def test_failure_preserves_existing_recovery_report(monkeypatch, controller_main
         workflow.main()
     assert json.loads(controller_main.read_text()) == report
     assert capsys.readouterr().err == "owner_profile_workflow status=blocked phase=unclassified\n"
+
+
+@pytest.mark.parametrize("code,status", [
+    ("local_helper_unreviewed", None), ("remote_lock_busy", 1),
+    ("remote_ssh_failed", 255), ("runtime_response_invalid", None),
+])
+def test_phase_preserves_safe_diagnostics_in_artifact_and_log(monkeypatch, controller_main, capsys, code, status):
+    def fail(*args, **kwargs):
+        error = workflow.gates.WorkflowDiagnosticError(code, remote_status=status)
+        error.args = ("SECRET_SENTINEL exception contents",)
+        raise error
+    monkeypatch.setattr(workflow.gates, "_run_remote", fail)
+    with pytest.raises(SystemExit):
+        workflow.main()
+    saved = controller_main.read_text()
+    report = json.loads(saved)
+    captured = capsys.readouterr()
+    assert report["failure_phase"] == "primary_runtime"
+    assert report["diagnostic_code"] == code
+    if status is not None:
+        assert report["remote_status"] == status
+        assert f"remote_status={status}" in captured.err
+    else:
+        assert "remote_status" not in report
+    assert f"diagnostic_code={code}" in captured.err
+    assert "SECRET_SENTINEL" not in saved + captured.err + captured.out
+
+
+def test_proof_failure_keeps_safe_remote_diagnostic(monkeypatch, controller_main, capsys):
+    def fail(*args, **kwargs):
+        raise workflow.gates.WorkflowDiagnosticError("remote_lock_busy", remote_status=1)
+    monkeypatch.setattr(workflow, "prove", fail)
+    with pytest.raises(SystemExit):
+        workflow.main()
+    report = json.loads(controller_main.read_text())
+    assert report["failure_phase"] == "preflight_proof"
+    assert report["diagnostic_code"] == "remote_lock_busy"
+    assert report["remote_status"] == 1
+    assert report["result"]["ready"] is False
+    assert "private-plan-token" not in controller_main.read_text()

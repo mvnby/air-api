@@ -1,6 +1,7 @@
 import argparse
 import hashlib
 import json
+import subprocess
 from io import BytesIO
 from pathlib import Path
 
@@ -81,6 +82,73 @@ def test_runtime_rejects_nonimmutable_or_malformed_container_identity():
     assert parsed.service == "app-green"
     with pytest.raises(workflow.WorkflowError, match="reviewed immutable"):
         workflow._parse_runtime_target("app-blue|" + "c" * 64 + "|backend:latest")
+
+
+@pytest.mark.parametrize("status,stderr,expected", [
+    (1, "safe_deploy_lock status=failed error=[Errno 11] Resource temporarily unavailable\n", "remote_lock_busy"),
+    (1, "safe_deploy_lock status=failed error=safe deployment lock helper source is unreviewed", "remote_helper_unreviewed"),
+    (1, "safe_deploy_lock status=failed error=deployment lock file is unsafe", "remote_lock_unsafe"),
+    (1, "[Errno 11] Resource temporarily unavailable", "remote_command_failed"),
+    (1, "safe_deploy_lock status=failed error=[Errno 11] Resource temporarily unavailable\nSECRET", "remote_command_failed"),
+    (2, "safe_deploy_lock status=failed error=[Errno 11] Resource temporarily unavailable", "remote_command_failed"),
+    (255, "SECRET transport details", "remote_ssh_failed"),
+    (75, "SECRET command details", "remote_command_failed"),
+])
+def test_remote_failures_have_only_allowlisted_diagnostics(monkeypatch, status, stderr, expected):
+    calls = []
+    monkeypatch.setattr(workflow, "_deploy_lock_helper_digest", lambda: "a" * 64)
+    monkeypatch.setattr(workflow, "ssh_args", lambda *args: ["ssh", "reviewed-node"])
+    def run(command, stdin):
+        calls.append(command)
+        return subprocess.CompletedProcess(command, status, stdout="SECRET response", stderr=stderr)
+    monkeypatch.setattr(workflow, "_subprocess_runner", run)
+    with pytest.raises(workflow.WorkflowDiagnosticError) as caught:
+        workflow._run_remote(PATRONI_NODES[0], None, "PRIVATE command", stdin="PRIVATE input")
+    assert workflow.safe_diagnostic_metadata(caught.value) == {"diagnostic_code": expected, "remote_status": status}
+    assert "SECRET" not in str(caught.value) and "PRIVATE" not in str(caught.value)
+    assert len(calls) == 1  # Only the helper's existing bounded lock wait; no command retry.
+    assert " exec-wait " in calls[0][-1]
+    assert "API_DEPLOY_LOCK_HELPER_SHA256=" + "a" * 64 in calls[0][-1]
+
+
+def test_remote_explicit_accepted_status_remains_accepted(monkeypatch):
+    monkeypatch.setattr(workflow, "_deploy_lock_helper_digest", lambda: "a" * 64)
+    monkeypatch.setattr(workflow, "ssh_args", lambda *args: [])
+    monkeypatch.setattr(workflow, "_subprocess_runner", lambda *args: subprocess.CompletedProcess([], 2, stdout="report", stderr=""))
+    assert workflow._run_remote(PATRONI_NODES[0], None, "plan", accepted_statuses=frozenset({0, 2})).status == 2
+
+
+def test_local_helper_missing_and_unsafe_are_distinct(monkeypatch, tmp_path):
+    helper = tmp_path / "helper.py"
+    monkeypatch.setattr(workflow, "LOCAL_DEPLOY_LOCK_HELPER", helper)
+    with pytest.raises(workflow.WorkflowDiagnosticError) as missing:
+        workflow._deploy_lock_helper_digest()
+    assert workflow.safe_diagnostic_metadata(missing.value) == {"diagnostic_code": "local_helper_unavailable"}
+    helper.write_text("SECRET helper contents")
+    helper.chmod(0o666)
+    with pytest.raises(workflow.WorkflowDiagnosticError) as unsafe:
+        workflow._deploy_lock_helper_digest()
+    assert workflow.safe_diagnostic_metadata(unsafe.value) == {"diagnostic_code": "local_helper_unreviewed"}
+    helper.chmod(0o600)
+    assert workflow._deploy_lock_helper_digest() == hashlib.sha256(helper.read_bytes()).hexdigest()
+
+
+def test_unknown_and_malformed_diagnostic_metadata_is_not_exported():
+    assert workflow.safe_diagnostic_metadata(RuntimeError("SECRET")) == {}
+    for status in ("SECRET", True, 256):
+        error = workflow.WorkflowDiagnosticError("SECRET", remote_status=status)
+        assert workflow.safe_diagnostic_metadata(error) == {"diagnostic_code": "unclassified"}
+    error.diagnostic_code = ["SECRET"]
+    error.remote_status = {"SECRET": 1}
+    assert workflow.safe_diagnostic_metadata(error) == {"diagnostic_code": "unclassified"}
+
+
+@pytest.mark.parametrize("raw", [None, "SECRET", "app-blue|bad|SECRET"])
+def test_runtime_parse_failure_has_static_code(raw):
+    with pytest.raises(workflow.WorkflowDiagnosticError) as caught:
+        workflow._parse_runtime_target(raw)
+    assert workflow.safe_diagnostic_metadata(caught.value) == {"diagnostic_code": "runtime_response_invalid"}
+    assert "SECRET" not in str(caught.value)
 
 
 def test_one_time_credential_reader_is_bounded_and_does_not_normalize_bytes():
