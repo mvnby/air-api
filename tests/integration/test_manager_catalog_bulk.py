@@ -1,45 +1,21 @@
-from datetime import timedelta
-
 import pytest
 from httpx import AsyncClient
 from sqlmodel import select
 
-from core.security import create_access_token
-from models import Product, StaffUser, TenantMembership
+from core.config import settings
+from models import Product
 
 
 BASE = "/api/manager/catalog-management"
 
 
-async def _manager_headers(db) -> dict[str, str]:
-    staff = StaffUser(
-        display_name="Catalog bulk manager",
-        username="catalog-bulk-manager",
-        status="active",
-        roles=["manager"],
-        primary_role="manager",
+async def _platform_owner_headers(async_client) -> dict[str, str]:
+    response = await async_client.post(
+        "/login/access-token",
+        data={"username": settings.ADMIN_USERNAME, "password": settings.ADMIN_PASSWORD},
     )
-    db.add(staff)
-    await db.flush()
-    db.add(
-        TenantMembership(
-            tenant_id=1,
-            staff_user_id=staff.id,
-            role="manager",
-            status="active",
-        )
-    )
-    await db.commit()
-    token = create_access_token(
-        {
-            "sub": staff.username,
-            "staff_user_id": staff.id,
-            "auth_version": staff.auth_version,
-            "auth_source": "catalog-bulk-test",
-        },
-        expires_delta=timedelta(minutes=10),
-    )
-    return {"Authorization": f"Bearer {token}"}
+    assert response.status_code == 200, response.text
+    return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
 
 async def _products(db, count: int = 2) -> list[Product]:
@@ -74,7 +50,7 @@ async def _preview(async_client: AsyncClient, headers: dict[str, str], product_i
 async def test_bulk_preview_does_not_persist_postgres(async_client: AsyncClient, db):
     products = await _products(db)
     product_ids = [int(product.id) for product in products]
-    headers = await _manager_headers(db)
+    headers = await _platform_owner_headers(async_client)
 
     preview = await _preview(async_client, headers, product_ids)
 
@@ -104,7 +80,7 @@ async def test_bulk_preview_does_not_persist_postgres(async_client: AsyncClient,
 async def test_bulk_apply_updates_all_previewed_products_postgres(async_client: AsyncClient, db):
     products = await _products(db)
     product_ids = [int(product.id) for product in products]
-    headers = await _manager_headers(db)
+    headers = await _platform_owner_headers(async_client)
     preview = await _preview(async_client, headers, product_ids)
 
     applied = await async_client.post(
@@ -134,7 +110,7 @@ async def test_bulk_apply_updates_all_previewed_products_postgres(async_client: 
 @pytest.mark.asyncio
 async def test_bulk_apply_rejects_stale_token_without_partial_write_postgres(async_client: AsyncClient, db):
     products = await _products(db)
-    headers = await _manager_headers(db)
+    headers = await _platform_owner_headers(async_client)
     product_ids = [int(product.id) for product in products]
     preview = await _preview(async_client, headers, product_ids)
 
