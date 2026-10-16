@@ -170,14 +170,16 @@ async def test_executor_roles_are_denied_manager_access(role: str):
 
 
 @pytest.mark.asyncio
-async def test_installer_only_cannot_login_or_use_preexisting_manager_token(rbac_client: AsyncClient):
+async def test_installer_can_login_but_cannot_use_manager_api(rbac_client: AsyncClient):
     response = await rbac_client.post(
         "/login/access-token",
         data={"username": "installer-rbac", "password": TEST_PASSWORD},
     )
-    assert response.status_code == 400
-    assert "access_token" not in response.json()
-    assert "access_token" not in response.cookies
+    assert response.status_code == 200
+    assert response.json()["access_token"]
+    assert response.cookies["access_token"]
+    fresh_headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
+    assert (await rbac_client.get("/api/manager/me", headers=fresh_headers)).status_code == 403
 
     # A token issued before workspace eligibility changed cannot bypass the
     # current actual membership checks, even with a live identity/version.
