@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi import FastAPI
@@ -10,6 +11,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import event, select
 
 from core.database import get_session
+from core.config import settings
 from core.security import create_access_token
 from models import (
     Customer,
@@ -543,7 +545,7 @@ async def test_manager_atomic_projection_failure_and_team_protection(
 
 async def test_date_bucket_count_before_pagination_and_null_dates(workspace_db):
     session, client = workspace_db
-    now = datetime.now()
+    now = datetime.now(ZoneInfo(settings.BOT_TASK_TIMEZONE)).replace(tzinfo=None)
     for identifier, start in [(10, now), (11, now + timedelta(days=2)), (12, None)]:
         session.add(
             OrderWorkStage(
