@@ -6,12 +6,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api_contracts.manager_access import ManagerAccessItem, ManagerAccessList, ManagerAccessUpdate
 from core.database import get_session
 from core.security import AuthenticatedUser, require_system_owner_access
+from routers.manager_operation_ids import LIST_MANAGER_ACCESS, UPDATE_MANAGER_ACCESS
 from services.manager_access_service import ManagerAccessConflict, ManagerAccessService
 
 router = APIRouter(prefix="/api/manager/platform/access", tags=["manager-access"])
 
 
-@router.get("", response_model=ManagerAccessList, operation_id="list_manager_access")
+@router.get("", response_model=ManagerAccessList, operation_id=LIST_MANAGER_ACCESS)
 async def list_manager_access(
     page: int = Query(1, ge=1), limit: int = Query(50, ge=1, le=100),
     search: str | None = Query(None, max_length=200),
@@ -26,7 +27,7 @@ async def list_manager_access(
     return await ManagerAccessService.list(session, page=page, limit=limit, search=search)
 
 
-@router.patch("/{membership_id}", response_model=ManagerAccessItem, operation_id="update_manager_access")
+@router.patch("/{membership_id}", response_model=ManagerAccessItem, operation_id=UPDATE_MANAGER_ACCESS)
 async def update_manager_access(
     membership_id: int, payload: ManagerAccessUpdate,
     session: AsyncSession = Depends(get_session),

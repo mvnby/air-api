@@ -64,11 +64,12 @@ async def test_save_keep_replace_disable_delete_and_no_public_secret(session):
 async def test_routes_reject_partner_owner_and_keep_secret_out_of_reads(session, monkeypatch):
     app = FastAPI()
     app.include_router(router)
-    auth = {"system": False}
+    auth = {"system": False, "platform": False}
     app.dependency_overrides[get_current_auth_context] = lambda: AuthenticatedUser(
         username="owner", auth_source="staff_password", role="owner",
         tenant_id=1 if auth["system"] else 21, storefront_id=1,
         is_system_tenant=auth["system"],
+        is_platform_owner=auth["platform"],
     )
     async def database():
         yield session
@@ -78,6 +79,8 @@ async def test_routes_reject_partner_owner_and_keep_secret_out_of_reads(session,
         assert (await client.put("/api/manager/platform-ai", json={"key": "private-key"})).status_code == 403
         assert (await client.get("/api/manager/platform-ai/models")).status_code == 403
         auth["system"] = True
+        assert (await client.put("/api/manager/platform-ai", json={"key": "private-key"})).status_code == 403
+        auth["platform"] = True
         saved = await client.put("/api/manager/platform-ai", json={"key": "private-key", "selected_model": "cheap-cn"})
         assert saved.status_code == 200
         assert "private-key" not in saved.text

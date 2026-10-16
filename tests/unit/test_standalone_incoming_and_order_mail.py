@@ -176,7 +176,8 @@ async def test_legacy_mail_adapters_keep_existing_owner_without_inventing_staff(
     app.include_router(router)
     app.include_router(native_router)
     auth = AuthenticatedUser(username="legacy-owner", auth_source="legacy", role="owner",
-                             tenant_id=1, storefront_id=1, is_system_tenant=True)
+                             tenant_id=1, storefront_id=1, is_system_tenant=True,
+                             is_platform_owner=True)
     async def current_auth():
         return auth
     async def session():

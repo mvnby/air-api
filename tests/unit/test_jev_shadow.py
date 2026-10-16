@@ -214,9 +214,10 @@ async def test_system_only_routes_never_disclose_or_spend_for_partners(factory, 
     app = FastAPI()
     app.add_exception_handler(RequestValidationError, manager_validation_exception_handler)
     app.include_router(router)
-    auth = {"role": "owner", "system": False}
+    auth = {"role": "owner", "system": False, "platform": False}
     app.dependency_overrides[get_current_auth_context] = lambda: AuthenticatedUser(username="owner", auth_source="staff_password",
-        role=auth["role"], tenant_id=1 if auth["system"] else 21, storefront_id=1, is_system_tenant=auth["system"])
+        role=auth["role"], tenant_id=1 if auth["system"] else 21, storefront_id=1,
+        is_system_tenant=auth["system"], is_platform_owner=auth["platform"])
     async def database():
         async with factory() as session:
             yield session
@@ -225,14 +226,14 @@ async def test_system_only_routes_never_disclose_or_spend_for_partners(factory, 
     monkeypatch.setattr("services.jev_provider_service.classify_jev", provider)
     caplog.set_level("INFO", logger="routers.manager_jev")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        for role, system in [("owner", False), ("admin", False), ("manager", True)]:
+        for role, system in [("owner", False), ("admin", False), ("manager", True), ("owner", True), ("admin", True)]:
             auth.update(role=role, system=system)
             for method, path, data in [("GET", "", None), ("PUT", "", {"key": "secret"}), ("DELETE", "", None),
                                        ("POST", "/test", None), ("GET", "/shadow", None)]:
                 response = await client.request(method, "/api/manager/platform-ai/jev" + path, json=data)
                 assert response.status_code == 403
         provider.assert_not_called()
-        auth.update(role="owner", system=True)
+        auth.update(role="owner", system=True, platform=True)
         response = await client.put("/api/manager/platform-ai/jev", json={"key": "jev-secret-key", "enabled": True})
         assert response.status_code == 200 and "jev-secret-key" not in response.text
         assert (await client.post("/api/manager/platform-ai/jev/test")).json() == {"ok": True, "model": "jev-1.13.0"}
