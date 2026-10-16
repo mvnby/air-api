@@ -5,8 +5,9 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlmodel import select
 
+from core.config import settings
 from core.security import create_access_token
-from models import CatalogWorkspaceUsageDaily, StaffUser, TenantMembership
+from models import CatalogWorkspaceUsageDaily, LegacyOwnerAuthState, StaffUser, TenantMembership
 from schemas_catalog_usage import CatalogUsageBatch
 from services.catalog_workspace_usage_service import CatalogWorkspaceUsageService
 
@@ -30,14 +31,23 @@ def _headers(staff):
 
 
 @pytest.mark.asyncio
-async def test_catalog_usage_is_platform_only_and_report_requires_analytics_manage(async_client, db):
-    owner = await _staff(db, "catalog-usage-owner", "owner")
+async def test_catalog_usage_batch_and_report_require_explicit_platform_owner(async_client, db):
+    owner = await _staff(db, settings.ADMIN_USERNAME, "owner")
+    state = await db.get(LegacyOwnerAuthState, 1)
+    assert state is not None
+    state.mode = "staff_shadow"
+    state.owner_staff_user_id = owner.id
+    db.add(state)
     manager = await _staff(db, "catalog-usage-manager", "manager")
+    company_owner = await _staff(db, "catalog-usage-company-owner", "owner")
     await db.commit()
 
     assert (await async_client.post(f"{BASE}/batch", json={"events": [EVENT]})).status_code == 401
-    assert (await async_client.post(f"{BASE}/batch", headers=_headers(manager), json={"events": [EVENT]})).status_code == 200
-    assert (await async_client.get(f"{BASE}/daily", headers=_headers(manager))).status_code == 403
+    for ordinary_staff in (manager, company_owner):
+        assert (await async_client.post(f"{BASE}/batch", headers=_headers(ordinary_staff), json={"events": [EVENT]})).status_code == 403
+        assert (await async_client.get(f"{BASE}/daily", headers=_headers(ordinary_staff))).status_code == 403
+    accepted = await async_client.post(f"{BASE}/batch", headers=_headers(owner), json={"events": [EVENT]})
+    assert accepted.status_code == 200, accepted.text
     report = await async_client.get(f"{BASE}/daily?days=90", headers=_headers(owner))
     assert report.status_code == 200, report.text
     result = report.json()
