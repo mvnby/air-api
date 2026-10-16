@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import OrderResponsibleBadge from './OrderResponsibleBadge.vue';
+import type { OrderResponsibilityFields } from '../../services/order-responsibility';
 import { computed } from 'vue';
 import type { ManagerOrderListItemResponse } from '../../client';
 import type { Segment } from '../../api';
@@ -8,7 +10,7 @@ import OrderMoney from './OrderMoney.vue';
 import { useDemoReadOnly } from '../../services/manager-demo';
 
 const props = defineProps<{
-  order: ManagerOrderListItemResponse;
+  order: ManagerOrderListItemResponse & OrderResponsibilityFields;
   segment: Segment;
   nested?: boolean;
   selectable?: boolean;
@@ -63,6 +65,7 @@ const demoReadOnly = useDemoReadOnly();
           <p v-if="hasTitle" class="mt-0.5 line-clamp-2 text-xs leading-4 text-gray-600 dark:text-slate-300" :title="customerName">{{ customerName }}</p>
           <p v-if="rowSegment === 'b2b' && order.customer?.inn" class="text-xs text-gray-500 dark:text-slate-400">УНП: {{ order.customer.inn }}</p>
           <p v-else-if="rowSegment === 'b2c' && order.customer?.phone" class="text-xs text-gray-500 dark:text-slate-400">{{ formatPhone(order.customer.phone) }}</p>
+          <OrderResponsibleBadge class="mt-1.5" :person="order.responsible_person" interactive @open="emit('open', order.id)" />
           <div v-if="order.manager_labels?.length" class="mt-1 flex flex-wrap gap-1">
             <span
               v-for="label in order.manager_labels"

@@ -161,11 +161,53 @@ Manager bootstrap/unsaved navigation, migration/client checks and normal smoke
 checks. Keep additive tables during rollback; do not activate multi-company work
 through an older API with ambiguous membership resolution.
 
-## Subsequent authorized stage
+## Stage 4: order responsibility
 
-1. **Order responsibility:** a responsible sales manager, avatar/name in lists
-   and kanban, personal filtering and audited reassignment; work-stage executors
-   remain separate assignments.
+An order has one optional responsible sales manager, shown by name/photo in the
+list, kanban and order workspace. Installation assignments and legacy Telegram
+`user_id` retain their separate meanings. Historical orders start unassigned;
+there is no inferred backfill. The authenticated company/site still controls
+which orders a person may see. **My orders** adds an authenticated staff filter
+before pagination and count, combining with the existing business filters; it
+does not restrict the ordinary all-orders view. A recovery identity without a
+staff ID has an empty personal queue.
+
+`GET /api/manager/order-responsibles` pages actual active owner/admin/manager
+members of the selected company, with names and private avatar URLs. Installers,
+catalog editors and virtual support memberships are not assignment candidates.
+The platform owner may reassign a partner's order through support access, but
+cannot assign themself there without a real eligible membership. Former
+responsible people remain visible on historical orders, marked unavailable for
+new assignment; merged aliases are never followed to another person.
+
+`PATCH /api/manager/orders/{order_id}/responsible` accepts the selected staff ID
+or `null` and `expected_version`. It requires an authenticated staff identity,
+CRM access, approved Origin and `X-Kitlane-Team: 1`. Fresh authority, company/site,
+candidate membership and the dedicated `responsible_version` are checked under
+ordered transaction locks. Stale versions return 409; a real change increments
+the counter and records the old/new assignment and actor in the same audit
+transaction. A no-op leaves the counter and journal unchanged. Demo access is
+read-only. Emergency legacy identities without staff IDs cannot reassign.
+Assignment responses do not repair proposals or recalculate persisted money
+fields; responsibility changes cannot silently save unrelated order data.
+
+New internal orders use the server-verified creator when that person is an
+eligible actual member. The same rule covers Manager creation, catalog quick
+orders, lead qualification, bot quick orders and maintenance continuations.
+Existing orders and command replays keep their assignment. Public website,
+email/repair intake and transferred orders do not infer a staff identity from
+payloads, usernames or channels. Allocation takes its parent locks before child
+foreign-key writes or idempotency receipts; it does not replace the caller's
+credential verification. Reassignment does not send a notification.
+
+Migration `t1166respons01` adds nullable responsibility, its nonnegative version,
+an index and company/staff foreign keys after `t1164bot01`. Preserve these
+additive columns during application rollback. Required verification includes
+company/site isolation, eligible and historical people, filter/count consistency,
+creator/replay behavior, competing reassignment and access revocation, private
+photos, drawer autosave/stale responses, generated clients and normal deployment
+smoke checks. Production acceptance uses existing data in read-only requests;
+it does not create test orders or invitations.
 
 Installer workspaces, collection instructions and supplier-only accounts remain
 later releases. Catalog and CRM have separate permission boundaries now; deploying

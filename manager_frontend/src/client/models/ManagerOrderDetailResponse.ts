@@ -5,6 +5,7 @@
 import type { IncomingOrderContext } from './IncomingOrderContext';
 import type { ManagerInstallerResponse } from './ManagerInstallerResponse';
 import type { ManagerOrderDocumentItem } from './ManagerOrderDocumentItem';
+import type { ManagerOrderResponsiblePerson } from './ManagerOrderResponsiblePerson';
 import type { ManagerOrderSourceEnrichment } from './ManagerOrderSourceEnrichment';
 import type { OrderCustomerBranchBrief } from './OrderCustomerBranchBrief';
 import type { OrderCustomerBrief } from './OrderCustomerBrief';
@@ -17,6 +18,8 @@ import type { PaymentCurrency } from './PaymentCurrency';
 import type { PaymentResponse } from './PaymentResponse';
 export type ManagerOrderDetailResponse = {
     id: number;
+    responsible_person?: (ManagerOrderResponsiblePerson | null);
+    responsible_version?: number;
     status: string;
     lead_source?: (string | null);
     title?: (string | null);

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { managerStorefrontSelection } from '../../services/manager-storefront-selection';
+import type { OrderWithResponsibility } from '../../services/order-responsibility';
 import { api } from '../../api';
 import {
   ManagerOrdersService,
-  type ManagerOrderDetailResponse,
   type ManagerOrderListItemResponse,
   type ManagerOrderTransferPackage_Input,
   type ManagerOrderUpdatePayload,
@@ -38,7 +39,7 @@ const setToast = (message: string) => {
   }, 2500);
 };
 const {
-  segment, view, statusFilter, workFilter, workFilterCounts, hiddenOnHoldCount, sort, search, loading, orders,
+  segment, view, assignedToMe, canFilterMine, statusFilter, workFilter, workFilterCounts, hiddenOnHoldCount, sort, search, loading, orders,
   movingOrderIds, isHydrated, drawerOpen, selectedOrder, pendingOpenOrderId,
   openedByUrlOrderId, orderServerErrors, orderFormError, hideOnHold,
   groupByCustomer, filtersOpen, selectedOrderIds, transferLoading, importFileInput,
@@ -140,6 +141,8 @@ const commitImport = async () => {
 };
 
 let loadRequestId = 0;
+const identityScope = computed(() => `${managerSession.auth.value?.staff_user_id || managerSession.auth.value?.username}:${managerSession.auth.value?.tenant_id}:${managerStorefrontSelection.selectedSlug.value}`);
+watch(identityScope, () => { loadRequestId++; clearIdentityScopedState(); }, { flush: 'sync' });
 
 const renameOrderTitle = async (payload: { orderId: number; title: string | null }) => {
   const nextTitle = payload.title?.trim() || null;
@@ -169,6 +172,7 @@ const loadOrders = async () => {
   try {
     const params = {
       segment: segment.value,
+      assignedToMe: assignedToMe.value,
       customerId: customerIdFilter.value,
       status: statusFilter.value || undefined,
       search: normalizedSearch.value || undefined,
@@ -221,15 +225,16 @@ const refreshOrders = () => {
   return loadOrders();
 };
 watch(
-  () => [segment.value, statusFilter.value, sort.value, search.value],
+  () => [segment.value, statusFilter.value, sort.value, assignedToMe.value, search.value],
   (next, previous) => {
     if (!isHydrated.value) return;
     // Invalidate the old response as soon as the inputs change, including the debounce window.
     loadRequestId += 1;
     persistSegmentAndView();
     setQueryParam('search', normalizedSearch.value);
+    setQueryParam('assigned_to_me', assignedToMe.value ? '1' : '');
     if (searchTimer) window.clearTimeout(searchTimer);
-    if (next.slice(0, 3).some((value, index) => value !== previous[index])) {
+    if (next.slice(0, 4).some((value, index) => value !== previous[index])) {
       void refreshOrders();
     } else {
       searchTimer = window.setTimeout(refreshOrders, 250);
@@ -242,6 +247,7 @@ watch(groupByCustomer, () => {
 });
 const boardFilterReset = ref(0);
 const clearOrderFilters = () => {
+  assignedToMe.value = false;
   search.value = '';
   statusFilter.value = '';
   workFilter.value = 'all';
@@ -444,12 +450,13 @@ const handleOrderDeleted = async (orderId: number) => {
   await loadOrders();
 };
 
-const applyOrderUpdate = (order: ManagerOrderDetailResponse) => {
+const applyOrderUpdate = (order: OrderWithResponsibility) => {
   selectedOrder.value = order;
   const index = orders.value.findIndex((item) => item.id === order.id);
   if (index !== -1) {
     orders.value.splice(index, 1, order);
   }
+  if (assignedToMe.value && order.responsible_person?.staff_user_id !== managerSession.auth.value?.staff_user_id) void refreshOrders();
 };
 
 onMounted(async () => {
@@ -472,11 +479,10 @@ onMounted(async () => {
   }
   persistSegmentAndView();
   persistGrouping();
-  try {
-    await loadOrders();
-  } finally {
-    isHydrated.value = true;
-  }
+  // Flush preference watchers before enabling live filter changes during the first request.
+  await nextTick();
+  isHydrated.value = true;
+  await loadOrders();
 });
 
 watch(drawerOpen, (isOpen) => {
@@ -494,6 +500,7 @@ watch(drawerOpen, (isOpen) => {
   <div class="min-h-screen bg-gray-50 text-slate-900 dark:bg-slate-900 dark:text-slate-100">
     <div class="mx-auto max-w-[1400px] px-4 py-6 md:px-8">
       <OrdersToolbar
+        v-model:assigned-to-me="assignedToMe" :can-filter-mine="canFilterMine"
         v-model:segment="segment" v-model:view="view" v-model:search="search"
         v-model:status-filter="statusFilter" v-model:work-filter="workFilter"
         v-model:group-by-customer="groupByCustomer" v-model:hide-on-hold="hideOnHold"

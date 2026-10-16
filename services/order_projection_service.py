@@ -8,7 +8,7 @@ behavior-preserving slices.
 from datetime import date, datetime
 from typing import Any, Dict, Optional
 
-from sqlalchemy import String, and_, cast, func, not_, or_
+from sqlalchemy import String, and_, cast, false, func, not_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
@@ -74,15 +74,20 @@ class OrderProjectionService:
         order: Order,
         *,
         demo_read_only: bool = False,
+        responsible_person: Any = None,
+        recalculate_totals: bool = True,
     ) -> Dict[str, Any]:
         if (
-            "proposals" in getattr(order, "__dict__", {})
+            recalculate_totals
+            and "proposals" in getattr(order, "__dict__", {})
             and "product_links" in getattr(order, "__dict__", {})
             and "service_links" in getattr(order, "__dict__", {})
         ):
             order.calculate_totals()
         return {
             "id": int(order.id or 0),
+            "responsible_person": responsible_person,
+            "responsible_version": int(getattr(order, "responsible_version", 0) or 0),
             "status": order.status.value if hasattr(order.status, "value") else str(order.status or OrderStatus.NEW_LEAD.value),
             "lead_source": (
                 order.lead_source.value
@@ -259,6 +264,8 @@ class OrderProjectionService:
         overdue_only: bool = False,
         sort: str = "created_at_desc",
         customer_id: Optional[int] = None,
+        assigned_to_me: bool = False,
+        staff_user_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         from schemas import Meta
 
@@ -286,6 +293,13 @@ class OrderProjectionService:
                 tenant_scope_clause(Customer, tenant_scope),
             ),
         ]
+        if assigned_to_me:
+            # A recovery identity without a staff ID has no personal orders;
+            # NULL must never turn "mine" into the unassigned queue.
+            base_filters.append(
+                Order.responsible_staff_user_id == staff_user_id
+                if staff_user_id is not None else false()
+            )
         if segment == "b2b":
             base_filters.append(is_b2b)
         elif segment == "b2c":
@@ -374,10 +388,14 @@ class OrderProjectionService:
 
         result = await session.execute(base_stmt)
         orders = list(result.scalars().all())
+        from services.order_responsibility_service import OrderResponsibilityService
+
+        responsible_people = await OrderResponsibilityService.person_map(session, orders)
         items = [
             OrderProjectionService._map_order_list_item(
                 order,
                 demo_read_only=tenant_scope.demo_read_only,
+                responsible_person=responsible_people.get(order.id),
             )
             for order in orders
         ]
@@ -394,6 +412,7 @@ class OrderProjectionService:
         order_id: int,
         *,
         tenant_scope: TenantScope,
+        repair_legacy_state: bool = True,
     ) -> Optional[Dict[str, Any]]:
         order = await TenantEntityAccessService.get_order(
             session,
@@ -433,7 +452,9 @@ class OrderProjectionService:
         # repair through a locked command before exposing its ID: a plain flush
         # in this read session is rolled back when the request closes.
         selected_proposal = OrderService._selected_proposal(order)
-        if not tenant_scope.demo_read_only and (
+        # Command responses keep cached money fields intact and project under
+        # their caller's locks without the legacy GET repair's separate commit.
+        if repair_legacy_state and not tenant_scope.demo_read_only and (
             selected_proposal is None or not selected_proposal.is_selected
         ):
             from services.order_proposal_command_service import OrderProposalCommandService
@@ -445,9 +466,14 @@ class OrderProjectionService:
                 session, order_id, tenant_scope=tenant_scope,
             )
 
+        from services.order_responsibility_service import OrderResponsibilityService
+
+        responsible_people = await OrderResponsibilityService.person_map(session, [order])
         data = OrderProjectionService._map_order_list_item(
             order,
             demo_read_only=tenant_scope.demo_read_only,
+            responsible_person=responsible_people.get(order.id),
+            recalculate_totals=repair_legacy_state,
         )
         meta = order.technical_meta if isinstance(order.technical_meta, dict) else {}
         belzakupki_meta = meta.get("belzakupki") if isinstance(meta.get("belzakupki"), dict) else {}

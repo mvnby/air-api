@@ -326,6 +326,7 @@ class LeadService:
         payload: Any,
         *,
         tenant_scope: TenantScope,
+        creator_staff_user_id: int | None = None,
     ) -> Optional[Dict[str, Any]]:
         """Compatibility delegate to the transactional Lead command."""
         from services.lead_command_service import LeadCommandService
@@ -335,6 +336,7 @@ class LeadService:
             lead_id,
             payload,
             tenant_scope=tenant_scope,
+            **({"creator_staff_user_id": creator_staff_user_id} if creator_staff_user_id is not None else {}),
         )
 
     @staticmethod
@@ -344,7 +346,14 @@ class LeadService:
         payload: Any,
         *,
         tenant_scope: TenantScope,
+        creator_staff_user_id: int | None = None,
     ) -> Optional[Dict[str, Any]]:
+        responsible_staff_user_id = None
+        if creator_staff_user_id is not None:
+            from services.order_responsibility_service import OrderResponsibilityService
+            responsible_staff_user_id = await OrderResponsibilityService.initial_responsible(
+                session, tenant_scope, creator_staff_user_id,
+            )
         lead = await TenantEntityAccessService.get_lead(
             session,
             lead_id,
@@ -513,6 +522,7 @@ class LeadService:
             order_delivery_address = selected_branch.delivery_address
 
         order = Order(
+            responsible_staff_user_id=responsible_staff_user_id,
             tenant_id=lead.tenant_id,
             storefront_id=lead.storefront_id,
             customer_id=customer.id,

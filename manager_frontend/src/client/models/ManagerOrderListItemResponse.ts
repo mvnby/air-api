@@ -3,12 +3,15 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ManagerInstallerResponse } from './ManagerInstallerResponse';
+import type { ManagerOrderResponsiblePerson } from './ManagerOrderResponsiblePerson';
 import type { OrderCustomerBranchBrief } from './OrderCustomerBranchBrief';
 import type { OrderCustomerBrief } from './OrderCustomerBrief';
 import type { OrderCustomerContractBrief } from './OrderCustomerContractBrief';
 import type { PaymentCurrency } from './PaymentCurrency';
 export type ManagerOrderListItemResponse = {
     id: number;
+    responsible_person?: (ManagerOrderResponsiblePerson | null);
+    responsible_version?: number;
     status: string;
     lead_source?: (string | null);
     title?: (string | null);

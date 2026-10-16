@@ -4,7 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
-from core.security import get_current_manager_tenant_scope, get_current_username
+from core.security import (
+    AuthenticatedUser, get_current_manager_tenant_scope, get_current_username,
+    require_manager_access,
+)
 from models.tenancy import TenantScope
 from routers.manager_operation_ids import (
     EXPORT_MANAGER_ORDERS,
@@ -58,13 +61,16 @@ async def get_manager_orders(
     overdue_only: bool = Query(False),
     sort: str = Query("created_at_desc"),
     customer_id: Optional[int] = Query(None, gt=0),
-    _: str = Depends(get_current_username),
+    assigned_to_me: bool = Query(False),
+    auth: AuthenticatedUser = Depends(require_manager_access),
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     """
     Page orders accessible in the current Manager tenant/storefront, applying customer
-    segment, status/search/overdue/customer and sort filters before projection. limit is at
+    segment, status/search/overdue/customer, personal assignment and sort filters before
+    pagination and count. "assigned_to_me" uses the authenticated staff ID; a legacy
+    identity without a staff ID receives an empty personal result. limit is at
     most 100. Invalid business filters/sort return 400; response carries list metadata
     rather than unrestricted platform CRM data.
 
@@ -83,6 +89,8 @@ async def get_manager_orders(
             overdue_only=overdue_only,
             sort=sort,
             customer_id=customer_id,
+            assigned_to_me=assigned_to_me,
+            staff_user_id=auth.staff_user_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

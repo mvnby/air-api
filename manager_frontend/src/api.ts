@@ -433,16 +433,18 @@ export const api = {
         overdueOnly?: boolean;
         sort?: string;
         customerId?: number;
+        assignedToMe?: boolean;
     }) {
         return await ManagerOrdersService.getManagerOrders(
             params.segment,
             params.page ?? 1,
             params.limit ?? 50,
-            params.status ?? undefined,
-            params.search ?? undefined,
+            params.status,
+            params.search,
             params.overdueOnly ?? false,
             params.sort ?? 'created_at_desc',
             params.customerId,
+            params.assignedToMe ?? false,
         );
     },
 

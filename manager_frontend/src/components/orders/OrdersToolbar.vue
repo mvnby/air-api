@@ -6,6 +6,7 @@ import { ORDER_WORK_FILTERS, type OrderWorkFilter } from './order-work-filters';
 import OrdersTabSwitcher from './OrdersTabSwitcher.vue';
 import OrdersViewToggle from './OrdersViewToggle.vue';
 
+const assignedToMe = defineModel<boolean>('assignedToMe', { default: false });
 const segment = defineModel<Segment>('segment', { required: true });
 const view = defineModel<DashboardView>('view', { required: true });
 const search = defineModel<string>('search', { required: true });
@@ -16,6 +17,7 @@ const hideOnHold = defineModel<boolean>('hideOnHold', { required: true });
 const filtersOpen = defineModel<boolean>('filtersOpen', { required: true });
 
 defineProps<{
+  canFilterMine?: boolean;
   counts: Record<OrderWorkFilter, number>;
   hiddenOnHoldCount: number;
   visibleCount: number;
@@ -40,6 +42,7 @@ const emit = defineEmits<{
     <div class="flex flex-wrap items-center gap-3">
       <h1 class="text-xl font-bold dark:text-white">Заказы</h1>
       <OrdersTabSwitcher v-model="segment" />
+      <button type="button" class="inline-flex min-h-9 items-center rounded-lg border px-3 py-1.5 text-sm font-semibold disabled:opacity-40" :class="assignedToMe ? 'border-brand-600 bg-brand-600 text-white' : 'border-gray-200 text-gray-700 dark:border-slate-600 dark:text-slate-200'" :aria-pressed="assignedToMe" :disabled="!canFilterMine" :title="canFilterMine ? 'Показать заказы, где вы назначены ответственным' : 'Нужна личная учётная запись'" @click="assignedToMe = !assignedToMe">Мои заказы</button>
       <div class="ml-auto flex items-center gap-2">
         <OrdersViewToggle v-model="view" />
         <button type="button" class="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-gray-200 px-2 text-sm text-gray-700 dark:border-slate-600 dark:text-slate-200"

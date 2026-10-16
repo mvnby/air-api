@@ -16,6 +16,8 @@ import type { ManagerOrderImportCommitResponse } from '../models/ManagerOrderImp
 import type { ManagerOrderImportPreviewRequest } from '../models/ManagerOrderImportPreviewRequest';
 import type { ManagerOrderImportPreviewResponse } from '../models/ManagerOrderImportPreviewResponse';
 import type { ManagerOrderListResponse } from '../models/ManagerOrderListResponse';
+import type { ManagerOrderResponsiblesResponse } from '../models/ManagerOrderResponsiblesResponse';
+import type { ManagerOrderResponsibleUpdate } from '../models/ManagerOrderResponsibleUpdate';
 import type { ManagerOrderScenariosResponse } from '../models/ManagerOrderScenariosResponse';
 import type { ManagerOrderSourceAnalyze } from '../models/ManagerOrderSourceAnalyze';
 import type { ManagerOrderSourceApply } from '../models/ManagerOrderSourceApply';
@@ -58,7 +60,9 @@ export class ManagerOrdersService {
     /**
      * Get Manager Orders
      * Page orders accessible in the current Manager tenant/storefront, applying customer
-     * segment, status/search/overdue/customer and sort filters before projection. limit is at
+     * segment, status/search/overdue/customer, personal assignment and sort filters before
+     * pagination and count. "assigned_to_me" uses the authenticated staff ID; a legacy
+     * identity without a staff ID receives an empty personal result. limit is at
      * most 100. Invalid business filters/sort return 400; response carries list metadata
      * rather than unrestricted platform CRM data.
      *
@@ -72,6 +76,7 @@ export class ManagerOrdersService {
      * @param overdueOnly
      * @param sort
      * @param customerId
+     * @param assignedToMe
      * @returns ManagerOrderListResponse Successful Response
      * @throws ApiError
      */
@@ -84,6 +89,7 @@ export class ManagerOrdersService {
         overdueOnly: boolean = false,
         sort: string = 'created_at_desc',
         customerId?: (number | null),
+        assignedToMe: boolean = false,
     ): CancelablePromise<ManagerOrderListResponse> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -97,6 +103,7 @@ export class ManagerOrdersService {
                 'overdue_only': overdueOnly,
                 'sort': sort,
                 'customer_id': customerId,
+                'assigned_to_me': assignedToMe,
             },
             errors: {
                 422: `Validation Error`,
@@ -767,6 +774,64 @@ export class ManagerOrdersService {
                 'order_id': orderId,
                 'stage_id': stageId,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * List Order Responsibles
+     * List active actual owner/admin/manager members of the selected company.
+     *
+     * Requires a live Manager staff identity, including verified platform support.
+     * Does not include installers, catalog editors, virtual memberships or credentials.
+     * @param page
+     * @param limit
+     * @returns ManagerOrderResponsiblesResponse Successful Response
+     * @throws ApiError
+     */
+    public static listManagerOrderResponsibles(
+        page: number = 1,
+        limit: number = 50,
+    ): CancelablePromise<ManagerOrderResponsiblesResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/order-responsibles',
+            query: {
+                'page': page,
+                'limit': limit,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Patch Order Responsible
+     * Assign/clear the responsible staff member within the selected company/site.
+     *
+     * Requires X-Kitlane-Team:1, approved Origin and live owner/admin/manager membership
+     * or verified platform support. Legacy emergency identities without staff return403.
+     * Actual active company membership is always required for a new assignee. A stale
+     * expected_version returns409. Real changes increment the dedicated counter and
+     * atomically record old/new responsibility; a no-op neither increments nor audits.
+     * @param orderId
+     * @param requestBody
+     * @returns ManagerOrderDetailResponse Successful Response
+     * @throws ApiError
+     */
+    public static patchManagerOrderResponsible(
+        orderId: number,
+        requestBody: ManagerOrderResponsibleUpdate,
+    ): CancelablePromise<ManagerOrderDetailResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/manager/orders/{order_id}/responsible',
+            path: {
+                'order_id': orderId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

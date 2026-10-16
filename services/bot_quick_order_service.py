@@ -558,10 +558,12 @@ class BotQuickOrderService:
         *,
         tenant_scope: TenantScope,
         source_fingerprint: str | None = None,
+        creator_staff_user_id: int | None = None,
     ) -> dict[str, Any]:
         async with command_transaction(session):
             result = await cls._create_order_mutation(
-                session, draft, tenant_scope=tenant_scope, source_fingerprint=source_fingerprint
+                session, draft, tenant_scope=tenant_scope, source_fingerprint=source_fingerprint,
+                **({"creator_staff_user_id": creator_staff_user_id} if creator_staff_user_id is not None else {}),
             )
         if result.get("_bot_order_created"):
             try:
@@ -580,7 +582,13 @@ class BotQuickOrderService:
         *,
         tenant_scope: TenantScope,
         source_fingerprint: str | None = None,
+        creator_staff_user_id: int | None = None,
     ) -> dict[str, Any]:
+        if creator_staff_user_id is not None:
+            # New-client intake flushes a tenant-owned Lead before qualification.
+            # Take allocation parent fences before any such child persistence.
+            from services.order_responsibility_service import OrderResponsibilityService
+            await OrderResponsibilityService.initial_responsible(session, tenant_scope, creator_staff_user_id)
         normalized = cls.normalize_draft(draft)
         target_date = None
         if normalized.get("target_date"):
@@ -635,6 +643,7 @@ class BotQuickOrderService:
                     contact_phone=normalized.get("contact_phone"),
                 ),
                 tenant_scope=tenant_scope,
+                **({"creator_staff_user_id": creator_staff_user_id} if creator_staff_user_id is not None else {}),
             )
             order = await session.get(Order, int(created["id"]))
             if order is None:
@@ -763,6 +772,7 @@ class BotQuickOrderService:
                     service_type=service_type,
                 ),
                 tenant_scope=tenant_scope,
+                **({"creator_staff_user_id": creator_staff_user_id} if creator_staff_user_id is not None else {}),
             )
         if not qualification:
             raise ValueError("Не удалось квалифицировать лид")

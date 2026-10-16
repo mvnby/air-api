@@ -175,6 +175,7 @@ async def attach_catalog_decision_to_order(
 )
 async def create_catalog_decision_order(
     payload: CatalogDecisionCreateOrderPayload,
+    auth: AuthenticatedUser = Depends(require_manager_access),
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
@@ -197,6 +198,7 @@ async def create_catalog_decision_order(
             prospect_type=payload.prospect_type,
             proposal_mode=payload.proposal_mode,
             tenant_scope=tenant_scope,
+            **({"creator_staff_user_id": auth.staff_user_id} if auth.staff_user_id is not None else {}),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

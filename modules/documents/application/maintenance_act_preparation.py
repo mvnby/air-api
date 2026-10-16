@@ -84,13 +84,20 @@ class MaintenanceActPreparationService:
 
     @classmethod
     async def prepare(cls, session: AsyncSession, *, source_order_id: int, payload: PrepareMaintenanceDefectAct,
-                      actor: str, scope: TenantScope, storage: TemplateSourceStorage):
+                      actor: str, scope: TenantScope, storage: TemplateSourceStorage, creator_staff_user_id: int | None = None):
         async with command_transaction(session):
             return await cls._prepare(session, source_order_id=source_order_id, payload=payload,
-                                      actor=actor, scope=scope, storage=storage)
+                                      actor=actor, scope=scope, storage=storage,
+                                      **({"creator_staff_user_id": creator_staff_user_id} if creator_staff_user_id is not None else {}))
 
     @classmethod
-    async def _prepare(cls, session, *, source_order_id, payload, actor, scope, storage):
+    async def _prepare(cls, session, *, source_order_id, payload, actor, scope, storage, creator_staff_user_id: int | None = None):
+        responsible_staff_user_id = None
+        if creator_staff_user_id is not None:
+            from services.order_responsibility_service import OrderResponsibilityService
+            responsible_staff_user_id = await OrderResponsibilityService.initial_responsible(
+                session, scope, creator_staff_user_id,
+            )
         source = await Access.get_order(session, source_order_id, tenant_scope=scope, for_update=True, populate_existing=True)
         if source is None:
             raise ObservationNotFound("Исходное ТО не найдено")
@@ -130,7 +137,7 @@ class MaintenanceActPreparationService:
         if not issuer:
             raise ObservationNotFound("Выберите активное юридическое лицо исполнителя в настройках документов")
         if continuation is None:
-            order = Order(tenant_id=source.tenant_id, storefront_id=source.storefront_id, customer_id=source.customer_id,
+            order = Order(responsible_staff_user_id=responsible_staff_user_id, tenant_id=source.tenant_id, storefront_id=source.storefront_id, customer_id=source.customer_id,
                           customer_branch_id=source.customer_branch_id, delivery_address=source.delivery_address,
                           status=OrderStatus.NEGOTIATION, workflow_type='repair', title=f"Замечания по ТО #{source.id}",
                           technical_meta={'maintenance_source_order_id': source.id})

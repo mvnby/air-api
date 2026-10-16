@@ -513,6 +513,7 @@ class EquipmentWorkflowService:
         *,
         equipment_id: int,
         tenant_scope: TenantScope,
+        creator_staff_user_id: int | None = None,
     ) -> Optional[Dict[str, Any]]:
         equipment = await TenantEntityAccessService.get_equipment(
             session,
@@ -554,6 +555,7 @@ class EquipmentWorkflowService:
             session=session,
             payload=payload,
             tenant_scope=tenant_scope,
+            **({"creator_staff_user_id": creator_staff_user_id} if creator_staff_user_id is not None else {}),
         )
         if not created:
             raise ValueError("Maintenance order could not be created")

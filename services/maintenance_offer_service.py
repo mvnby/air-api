@@ -12,7 +12,13 @@ from services.tenant_entity_access_service import TenantEntityAccessService as A
 
 class MaintenanceOfferService:
     @staticmethod
-    async def context(session, source_order_id, scope, *, lock=False, create=False, actor=''):
+    async def context(session, source_order_id, scope, *, lock=False, create=False, actor='', creator_staff_user_id: int | None = None):
+        responsible_staff_user_id = None
+        if create and creator_staff_user_id is not None:
+            from services.order_responsibility_service import OrderResponsibilityService
+            responsible_staff_user_id = await OrderResponsibilityService.initial_responsible(
+                session, scope, creator_staff_user_id,
+            )
         source = await Access.get_order(session, source_order_id, tenant_scope=scope, for_update=lock, populate_existing=True)
         if source is None:
             raise ObservationNotFound('Исходное ТО не найдено')
@@ -22,7 +28,7 @@ class MaintenanceOfferService:
                                            equipment_id=None, scope=scope, allow_archived=True)
         continuation = await session.scalar(select(MaintenanceContinuation).where(MaintenanceContinuation.source_order_id == source.id))
         if continuation is None and create:
-            order = Order(tenant_id=source.tenant_id, storefront_id=source.storefront_id, customer_id=source.customer_id,
+            order = Order(responsible_staff_user_id=responsible_staff_user_id, tenant_id=source.tenant_id, storefront_id=source.storefront_id, customer_id=source.customer_id,
                 customer_branch_id=source.customer_branch_id, delivery_address=source.delivery_address,
                 status=OrderStatus.NEGOTIATION, workflow_type='repair', title=f'Замечания по ТО #{source.id}',
                 technical_meta={'maintenance_source_order_id': source.id})
@@ -38,9 +44,10 @@ class MaintenanceOfferService:
         return source, continuation, order
 
     @classmethod
-    async def workspace(cls, session, *, source_order_id, scope, actor):
+    async def workspace(cls, session, *, source_order_id, scope, actor, creator_staff_user_id: int | None = None):
         async with command_transaction(session):
-            source, continuation, order = await cls.context(session, source_order_id, scope, lock=True, create=True, actor=actor)
+            source, continuation, order = await cls.context(session, source_order_id, scope, lock=True, create=True, actor=actor,
+                **({"creator_staff_user_id": creator_staff_user_id} if creator_staff_user_id is not None else {}))
             return dict(source_order_id=source.id, continuation_order_id=order.id)
 
     @staticmethod

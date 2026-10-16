@@ -325,6 +325,15 @@ class OrderWorkStage(SQLModel, table=True):
 
 class Order(SQLModel, table=True):
     __table_args__ = (
+        ForeignKeyConstraint(["responsible_staff_user_id"], ["staff_users.id"],
+                             name="fk_order_responsible_staff", ondelete="RESTRICT"),
+        ForeignKeyConstraint(["tenant_id", "responsible_staff_user_id"],
+                             ["tenant_membership.tenant_id", "tenant_membership.staff_user_id"],
+                             name="fk_order_responsible_membership", ondelete="RESTRICT"),
+        CheckConstraint("responsible_staff_user_id IS NULL OR tenant_id IS NOT NULL",
+                        name="ck_order_responsible_tenant"),
+        CheckConstraint("responsible_version >= 0", name="ck_order_responsible_version"),
+        Index("ix_order_tenant_responsible", "tenant_id", "responsible_staff_user_id"),
         UniqueConstraint(
             "id",
             "tenant_id",
@@ -399,6 +408,9 @@ class Order(SQLModel, table=True):
     )
 
     user_id: Optional[int] = Field(default=None, index=True)
+    responsible_staff_user_id: Optional[int] = Field(default=None)
+    responsible_version: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default="0"))
+
 
     status: OrderStatus = Field(
         default=OrderStatus.NEW_LEAD,

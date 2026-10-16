@@ -105,6 +105,10 @@ class ConnectorMaintenanceService:
             issuer = await session.get(DocumentLegalEntity, inputs.payload.legal_entity_id)
             if issuer is None or issuer.tenant_id != scope.tenant_id or issuer.status != "active":
                 raise ObservationNotFound("Active legal entity not found")
+            # Receipt claiming flushes tenant/staff FKs before the domain callback.
+            # Fence this sole connector order-creation path before that claim.
+            from services.order_responsibility_service import OrderResponsibilityService
+            await OrderResponsibilityService.initial_responsible(session, scope, actor.staff_user_id)
         command_key = uuid5(NAMESPACE_URL, f"kitlane:{actor.staff_user_id}:{name}:{inputs.idempotency_key}")
         model = {"create_maintenance_finding": ConnectorFindingResult,
                  "update_maintenance_finding": ConnectorFindingResult,
@@ -136,7 +140,8 @@ class ConnectorMaintenanceService:
                 from services.private_attachment_storage_service import get_private_attachment_storage
                 payload = PrepareMaintenanceDefectAct.model_validate({**inputs.payload.model_dump(), "command_key": command_key})
                 value = await MaintenanceActPreparationService.prepare(session, source_order_id=source_order_id,
-                    payload=payload, **common, storage=PrivateTemplateSourceStorage(get_private_attachment_storage()))
+                    payload=payload, **common, storage=PrivateTemplateSourceStorage(get_private_attachment_storage()),
+                    creator_staff_user_id=actor.staff_user_id)
             else:
                 payload = PrepareMaintenanceOffer.model_validate({**inputs.payload.model_dump(), "command_key": command_key})
                 value = await Offers.prepare(session, source_order_id=source_order_id, payload=payload, **common)

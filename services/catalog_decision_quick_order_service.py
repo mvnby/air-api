@@ -55,6 +55,7 @@ class CatalogDecisionQuickOrderService:
         prospect_type: Literal["individual", "company"],
         proposal_mode: Literal["bundle", "alternatives"] = "bundle",
         tenant_scope: TenantScope,
+        creator_staff_user_id: int | None = None,
     ) -> dict[str, Any]:
         ids = [int(product_id) for product_id in product_ids]
         if len(ids) != len(set(ids)):
@@ -82,6 +83,12 @@ class CatalogDecisionQuickOrderService:
         order_id: int | None = None
         try:
             async with command_transaction(session):
+                responsible_staff_user_id = None
+                if creator_staff_user_id is not None:
+                    from services.order_responsibility_service import OrderResponsibilityService
+                    responsible_staff_user_id = await OrderResponsibilityService.initial_responsible(
+                        session, tenant_scope, creator_staff_user_id,
+                    )
                 snapshots = await CatalogDecisionQueryService.get_product_snapshots(
                     session,
                     tenant_scope=tenant_scope,
@@ -93,6 +100,7 @@ class CatalogDecisionQuickOrderService:
 
                 now = datetime.now()
                 order = Order(
+                    responsible_staff_user_id=responsible_staff_user_id,
                     tenant_id=tenant_scope.tenant_id,
                     storefront_id=tenant_scope.storefront_id,
                     customer_id=None,
