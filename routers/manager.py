@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from routers import manager_auth
+from routers import manager_access
 from routers import manager_analytics_connections
 from routers import manager_backups
 from routers import manager_brands
@@ -59,6 +60,7 @@ from modules.documents.api import router as manager_document_system_router
 
 
 router = APIRouter()
+router.include_router(manager_access.router)
 router.include_router(manager_analytics_connections.router)
 router.include_router(manager_backups.router)
 router.include_router(manager_google_auth.router)

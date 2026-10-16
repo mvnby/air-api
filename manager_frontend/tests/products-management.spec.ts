@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
 
 vi.mock('../src/services/catalog-management-api', () => ({
@@ -18,6 +18,7 @@ vi.mock('../src/components/ProductImageCropDialog.vue', () => ({ default: { temp
 vi.mock('../src/components/yandex-business/YandexBusinessFeedSettingsDialog.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('../src/components/catalog/CatalogUsageReport.vue', () => ({ default: { template: '<div />' } }));
 
+import { managerSession } from '../src/services/manager-session';
 import ProductsView from '../src/views/ProductsView.vue';
 import { catalogManagementApi } from '../src/services/catalog-management-api';
 import CatalogDecisionProductDetailsDialog from '../src/components/catalog-decision/CatalogDecisionProductDetailsDialog.vue';
@@ -38,6 +39,7 @@ class TestIntersectionObserver {
 (globalThis as any).IntersectionObserver = TestIntersectionObserver;
 
 describe('product management list', () => {
+  beforeEach(() => { localStorage.clear(); sessionStorage.clear(); managerSession.auth.value = { username: 'owner', staff_user_id: 1, tenant_id: 1, capabilities: ['crm.manage', 'platform.manage', 'catalog.master.edit', 'catalog.master.delete'] } as any; });
   let wrapper: ReturnType<typeof mount> | undefined;
   const start = async () => {
     history.replaceState({}, '', '/manager/products');
@@ -71,6 +73,20 @@ describe('product management list', () => {
     expect(view.text()).toContain('РРЦ: —');
     expect(view.text()).toContain('Маржа: -0.01 BYN');
     expect(view.find('svg[viewBox="0 0 360.67 446.4"]').exists()).toBe(true);
+  });
+
+  it('hides procurement and bulk tools for a catalog editor and opens the master card directly', async () => {
+    managerSession.auth.value = { capabilities: ['catalog.master.read', 'catalog.master.edit'] } as any;
+    vi.mocked(catalogManagementApi.list).mockResolvedValue(result([{ ...product, price: 10.234, min_cost_byn: 2, recommended_price_byn: 3, margin_abs_preview: 8 }]));
+    const view = await start();
+    expect(view.text()).toContain('10.234 BYN');
+    for (const label of ['Себестоимость', 'Маржа', 'К РРЦ', 'Импорт', 'Скачать YML']) expect(view.text()).not.toContain(label);
+    await view.find('div.absolute button').trigger('click');
+    expect(view.findAll('button').filter(button => button.text().includes('Изменить выбранные'))).toHaveLength(0);
+    expect(view.findAll('button').filter(button => button.text() === 'Удалить')).toHaveLength(0);
+    await view.find('[title="Открыть товар"]').trigger('click');
+    expect(location.pathname).toBe('/manager/products/11');
+    expect(view.findComponent(CatalogDecisionProductDetailsDialog).props('item')).toBeNull();
   });
 
   it('does not let a stale list response replace newer filter results', async () => {

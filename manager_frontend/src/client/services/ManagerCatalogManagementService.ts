@@ -21,8 +21,10 @@ export class ManagerCatalogManagementService {
      * mapped active supplier offer, not ownership of the product; results include draft and
      * orderable products.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [catalog
      * workspace](https://github.com/mvnby/air-api/blob/main/docs/catalog-management-workspace.md).
@@ -49,8 +51,10 @@ export class ManagerCatalogManagementService {
      * pagination. More than 500 matches returns 400 rather than a truncated selection. The
      * returned IDs are a snapshot; later preview/apply validates their current availability.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [catalog
      * workspace](https://github.com/mvnby/air-api/blob/main/docs/catalog-management-workspace.md).
@@ -78,8 +82,10 @@ export class ManagerCatalogManagementService {
      * to the tenant/storefront/actor, selection, change and product fingerprints. Invalid
      * choices return 400; unavailable products return 409. Apply must use this token.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [catalog
      * workspace](https://github.com/mvnby/air-api/blob/main/docs/catalog-management-workspace.md).
@@ -108,8 +114,10 @@ export class ManagerCatalogManagementService {
      * This is not a reusable idempotency receipt: a successful changing apply can make its own
      * preview stale.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [catalog
      * workspace](https://github.com/mvnby/air-api/blob/main/docs/catalog-management-workspace.md).

@@ -8,10 +8,12 @@ import time
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from sqlmodel import SQLModel
+from sqlmodel import SQLModel, select
 
 from core.config import settings
-from models import Installer, StaffUser, TenantMembership
+from models import Installer, StaffUser, TenantAuditEvent, TenantMembership
+from schemas import ManagerStaffCreatePayload, ManagerStaffUpdatePayload
+from services.staff_access_policy import StaffAccessPolicy, StaffAccessPolicyError
 from services.credential_service import CredentialService
 from services.staff_user_service import StaffUserService
 
@@ -51,6 +53,7 @@ def test_staff_role_and_status_helpers():
         "owner",
         "admin",
         "manager",
+        "catalog_editor",
         "installer",
         "maintenance",
         "repair",
@@ -65,7 +68,214 @@ def test_staff_role_and_status_helpers():
     assert StaffUserService.can_be_any_executor(repair_executor)
     assert not StaffUserService.can_be_any_executor(manager)
     assert StaffUserService.has_role(json_roles_admin, "admin")
-    assert StaffUserService.primary_role(json_roles_admin) == "owner"
+    assert StaffUserService.primary_role(json_roles_admin) == "admin"
+
+
+@pytest.mark.parametrize("role", ["owner", "admin", "manager", "catalog_editor", "installer"])
+def test_primary_roles_preserve_distinct_staff_access(role):
+    assert StaffUserService.normalize_primary_role(role) == role
+
+
+@pytest.mark.parametrize("requested_role", ["owner", "admin"])
+def test_tenant_admin_cannot_assign_privileged_roles(requested_role):
+    with pytest.raises(StaffAccessPolicyError, match="Недостаточно прав"):
+        StaffAccessPolicy.validate_mutation(
+            actor_role="admin", is_platform_owner=False,
+            target_role="manager", requested_role=requested_role,
+        )
+
+
+@pytest.mark.parametrize("target_role", ["owner", "admin"])
+def test_tenant_admin_cannot_modify_privileged_identity(target_role):
+    with pytest.raises(StaffAccessPolicyError):
+        StaffAccessPolicy.validate_mutation(
+            actor_role="admin", is_platform_owner=False,
+            target_role=target_role, requested_role="manager",
+        )
+
+
+@pytest.mark.parametrize("requested_role", ["manager", "catalog_editor", "installer"])
+def test_tenant_admin_can_assign_ordinary_roles(requested_role):
+    StaffAccessPolicy.validate_mutation(
+        actor_role="admin", is_platform_owner=False,
+        target_role=None, requested_role=requested_role,
+    )
+
+
+def test_tenant_owner_cannot_modify_platform_owner_identity():
+    with pytest.raises(StaffAccessPolicyError) as exc:
+        StaffAccessPolicy.validate_mutation(
+            actor_role="owner", is_platform_owner=False,
+            target_role="owner", requested_role="owner",
+            target_is_platform_owner=True,
+        )
+    assert exc.value.code == "platform_owner_protected"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("payload", [{"primary_role": "admin"}, {"status": "blocked"}])
+async def test_last_active_owner_cannot_be_removed(sqlite_staff_session, payload):
+    owner = await StaffUserService.create_staff(
+        sqlite_staff_session,
+        ManagerStaffCreatePayload(display_name="Owner", primary_role="owner"),
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+    inactive_owner = StaffUser(display_name="Inactive owner", status="inactive", primary_role="owner")
+    sqlite_staff_session.add(inactive_owner)
+    await sqlite_staff_session.flush()
+    sqlite_staff_session.add(TenantMembership(
+        tenant_id=TEST_TENANT_SCOPE.tenant_id, staff_user_id=inactive_owner.id,
+        role="owner", status="active",
+    ))
+    await sqlite_staff_session.commit()
+
+    with pytest.raises(StaffAccessPolicyError) as exc:
+        await StaffUserService.update_staff(
+            sqlite_staff_session, owner.id, ManagerStaffUpdatePayload(**payload),
+            tenant_scope=TEST_TENANT_SCOPE, actor_role="owner",
+        )
+    assert exc.value.code == "last_active_owner"
+    await sqlite_staff_session.rollback()
+    membership = (await sqlite_staff_session.execute(select(TenantMembership).where(
+        TenantMembership.staff_user_id == owner.id,
+    ))).scalar_one()
+    assert membership.role == "owner"
+    assert membership.status == "active"
+
+
+@pytest.mark.asyncio
+async def test_membership_changes_audit_actor_and_keep_other_tenant_global_roles(sqlite_staff_session):
+    created = await StaffUserService.create_staff(
+        sqlite_staff_session,
+        ManagerStaffCreatePayload(display_name="Shared", primary_role="manager"),
+        tenant_scope=TEST_TENANT_SCOPE,
+        actor_role="owner", actor_staff_user_id=123, actor_username="tenant-owner",
+    )
+    sqlite_staff_session.add(TenantMembership(
+        tenant_id=2, staff_user_id=created.id, role="manager", status="active",
+    ))
+    await sqlite_staff_session.commit()
+    updated = await StaffUserService.update_staff(
+        sqlite_staff_session, created.id, ManagerStaffUpdatePayload(primary_role="admin"),
+        tenant_scope=TEST_TENANT_SCOPE,
+        actor_role="owner", actor_staff_user_id=123, actor_username="tenant-owner",
+    )
+    assert updated.primary_role == "admin"
+    identity = await sqlite_staff_session.get(StaffUser, created.id)
+    assert identity.primary_role == "manager"
+    assert identity.roles == ["manager"]
+    with pytest.raises(ValueError, match="оператор платформы"):
+        await StaffUserService.update_staff(
+            sqlite_staff_session, created.id, ManagerStaffUpdatePayload(display_name="Shared edit"),
+            tenant_scope=TEST_TENANT_SCOPE, actor_role="owner", is_platform_owner=False,
+        )
+    await sqlite_staff_session.rollback()
+    events = list((await sqlite_staff_session.execute(
+        select(TenantAuditEvent).order_by(TenantAuditEvent.id)
+    )).scalars())
+    assert [event.action for event in events] == ["staff_membership_created", "staff_membership_updated"]
+    assert events[-1].actor_staff_user_id == 123
+    assert events[-1].actor_username == "tenant-owner"
+    assert events[-1].change_set == {"membership": {
+        "before": {"role": "manager", "status": "active"},
+        "after": {"role": "admin", "status": "active"},
+    }}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("changes", [
+    {"username": "takeover"}, {"password": "replacement-secret"},
+    {"telegram_id": 666}, {"telegram_username": "takeover"},
+])
+async def test_tenant_owner_cannot_take_over_catalog_grantee_credentials(sqlite_staff_session, changes):
+    grantee = await StaffUserService.create_staff(
+        sqlite_staff_session,
+        ManagerStaffCreatePayload(display_name="Catalog editor", primary_role="catalog_editor",
+                                  username="catalog-editor", telegram_id=505, telegram_username="editor"),
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+    membership = (await sqlite_staff_session.execute(select(TenantMembership).where(
+        TenantMembership.staff_user_id == grantee.id,
+    ))).scalar_one()
+    membership.permissions = ["catalog.master.edit"]
+    await sqlite_staff_session.commit()
+    with pytest.raises(StaffAccessPolicyError) as exc:
+        await StaffUserService.update_staff(
+            sqlite_staff_session, grantee.id, ManagerStaffUpdatePayload(**changes),
+            tenant_scope=TEST_TENANT_SCOPE, actor_role="owner",
+        )
+    assert exc.value.code == "catalog_grantee_identity_protected"
+    await sqlite_staff_session.rollback()
+    identity = await sqlite_staff_session.get(StaffUser, grantee.id)
+    assert identity.username == "catalog-editor"
+    assert identity.telegram_id == 505
+    assert identity.telegram_username == "editor"
+    assert identity.password_hash is None
+
+
+@pytest.mark.asyncio
+async def test_grantee_unchanged_login_bindings_and_access_revocation_remain_allowed(sqlite_staff_session):
+    grantee = await StaffUserService.create_staff(
+        sqlite_staff_session,
+        ManagerStaffCreatePayload(display_name="Catalog editor", primary_role="catalog_editor",
+                                  username="catalog-editor", telegram_id=505, telegram_username="editor"),
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+    membership = (await sqlite_staff_session.execute(select(TenantMembership).where(
+        TenantMembership.staff_user_id == grantee.id,
+    ))).scalar_one()
+    membership.permissions = ["catalog.master.delete"]
+    await sqlite_staff_session.commit()
+    result = await StaffUserService.update_staff(
+        sqlite_staff_session, grantee.id,
+        ManagerStaffUpdatePayload(username="CATALOG-EDITOR", telegram_id=505,
+                                  telegram_username="editor", password="", status="inactive", primary_role="installer"),
+        tenant_scope=TEST_TENANT_SCOPE, actor_role="owner",
+    )
+    assert result.status == "inactive"
+    assert result.primary_role == "installer"
+    await sqlite_staff_session.refresh(membership)
+    assert membership.permissions == ["catalog.master.delete"]
+
+
+@pytest.mark.asyncio
+async def test_catalog_grant_in_another_membership_protects_shared_credentials(sqlite_staff_session):
+    grantee = await StaffUserService.create_staff(
+        sqlite_staff_session,
+        ManagerStaffCreatePayload(display_name="Shared editor", primary_role="manager"),
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+    sqlite_staff_session.add(TenantMembership(
+        tenant_id=2, staff_user_id=grantee.id, role="catalog_editor", status="disabled",
+        permissions=["catalog.master.edit"],
+    ))
+    await sqlite_staff_session.commit()
+    with pytest.raises(StaffAccessPolicyError) as exc:
+        await StaffUserService.update_staff(
+            sqlite_staff_session, grantee.id, ManagerStaffUpdatePayload(password="new-secret"),
+            tenant_scope=TEST_TENANT_SCOPE, actor_role="owner",
+        )
+    assert exc.value.code == "catalog_grantee_identity_protected"
+
+
+@pytest.mark.asyncio
+async def test_platform_owner_can_manage_catalog_grantee_credentials(sqlite_staff_session):
+    grantee = await StaffUserService.create_staff(
+        sqlite_staff_session,
+        ManagerStaffCreatePayload(display_name="Editor", primary_role="catalog_editor"),
+        tenant_scope=TEST_TENANT_SCOPE,
+    )
+    membership = (await sqlite_staff_session.execute(select(TenantMembership).where(
+        TenantMembership.staff_user_id == grantee.id,
+    ))).scalar_one()
+    membership.permissions = ["catalog.master.edit"]
+    await sqlite_staff_session.commit()
+    result = await StaffUserService.update_staff(
+        sqlite_staff_session, grantee.id, ManagerStaffUpdatePayload(username="platform-managed", telegram_id=404),
+        tenant_scope=TEST_TENANT_SCOPE, actor_role="owner", is_platform_owner=True,
+    )
+    assert result.username == "platform-managed"
+    assert result.telegram_id == 404
 
 
 def test_staff_password_hash_and_verify():

@@ -6,18 +6,20 @@ import hashlib
 import hmac
 from typing import Iterable, Optional
 from urllib.parse import parse_qsl
+from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select, func, or_
 
 from core.config import settings
-from models import Installer, StaffUser, TenantMembership
+from models import Installer, LegacyOwnerAuthState, StaffUser, TenantAuditEvent, TenantMembership
 from models.tenancy import TenantScope
 from schemas import ManagerStaffCreatePayload, ManagerStaffUpdatePayload, ManagerStaffResponse, ManagerStaffListResponse, Meta
 from services.staff_tenant_membership_service import (
     StaffTenantMembershipService,
 )
 from services.credential_service import CredentialService
+from services.staff_access_policy import StaffAccessPolicy
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,7 @@ class StaffUserService:
     DISABLED_BOT_TOKEN_PLACEHOLDER = "0:disabled-bot-token"
     ROLE_OWNER = "owner"
     ROLE_ADMIN = "admin"
+    ROLE_CATALOG_EDITOR = "catalog_editor"
     ROLE_MANAGER = "manager"
     ROLE_INSTALLER = "installer"
     ROLE_MAINTENANCE = "maintenance"
@@ -44,9 +47,9 @@ class StaffUserService:
     STATUS_INACTIVE = "inactive"
     STATUS_BLOCKED = "blocked"
 
-    PRIMARY_ROLES = {ROLE_OWNER, ROLE_MANAGER, ROLE_INSTALLER}
+    PRIMARY_ROLES = {ROLE_OWNER, ROLE_ADMIN, ROLE_MANAGER, ROLE_CATALOG_EDITOR, ROLE_INSTALLER}
     ROLES = PRIMARY_ROLES | {ROLE_ADMIN, ROLE_MAINTENANCE, ROLE_REPAIR, ROLE_MEASURER}
-    OWNER_ADMIN_ROLES = {ROLE_OWNER, ROLE_MANAGER}
+    OWNER_ADMIN_ROLES = {ROLE_OWNER, ROLE_ADMIN, ROLE_MANAGER}
     MANAGEMENT_ROLES = {ROLE_OWNER, ROLE_ADMIN, ROLE_MANAGER}
     EXECUTOR_ROLES = {ROLE_INSTALLER, ROLE_MAINTENANCE, ROLE_REPAIR, ROLE_MEASURER}
     STATUSES = {STATUS_ACTIVE, STATUS_INACTIVE, STATUS_BLOCKED}
@@ -58,14 +61,16 @@ class StaffUserService:
     @classmethod
     def normalize_primary_role(cls, role: str | None, roles: Iterable[str] | None = None) -> str:
         value = cls.normalize_role(role or "")
-        if value == cls.ROLE_ADMIN:
-            return cls.ROLE_OWNER
-        if value in {cls.ROLE_OWNER, cls.ROLE_MANAGER}:
+        if value in cls.PRIMARY_ROLES - {cls.ROLE_INSTALLER}:
             return value
 
         legacy_roles = set(cls.normalize_roles(roles))
-        if cls.ROLE_OWNER in legacy_roles or cls.ROLE_ADMIN in legacy_roles:
+        if cls.ROLE_OWNER in legacy_roles:
             return cls.ROLE_OWNER
+        if cls.ROLE_ADMIN in legacy_roles:
+            return cls.ROLE_ADMIN
+        if cls.ROLE_CATALOG_EDITOR in legacy_roles:
+            return cls.ROLE_CATALOG_EDITOR
         if cls.ROLE_MANAGER in legacy_roles:
             return cls.ROLE_MANAGER
         if value == cls.ROLE_INSTALLER:
@@ -353,9 +358,20 @@ class StaffUserService:
         payload: ManagerStaffCreatePayload,
         *,
         tenant_scope: TenantScope,
+        actor_role: str | None = None,
+        actor_staff_user_id: int | None = None,
+        actor_username: str = "internal",
+        is_platform_owner: bool = False,
     ) -> ManagerStaffResponse:
         username = cls.normalize_username(payload.username)
         primary_role = cls.normalize_primary_role(payload.primary_role)
+        StaffAccessPolicy.validate_mutation(
+            actor_role=actor_role,
+            is_platform_owner=is_platform_owner,
+            target_role=None,
+            requested_role=primary_role,
+        )
+        await StaffTenantMembershipService.lock_tenant(session, tenant_id=tenant_scope.tenant_id)
         assignable = bool(payload.is_assignable_installer)
         display_name = payload.display_name.strip()
         if not display_name:
@@ -393,6 +409,15 @@ class StaffUserService:
         )
         session.add(membership)
         await cls._sync_installer_link(session, staff_user, assignable)
+        await session.flush()
+        cls._audit_membership_change(
+            session,
+            membership=membership,
+            tenant_scope=tenant_scope,
+            before=None,
+            actor_staff_user_id=actor_staff_user_id,
+            actor_username=actor_username,
+        )
         await session.commit()
         await session.refresh(staff_user)
         await session.refresh(membership)
@@ -406,7 +431,15 @@ class StaffUserService:
         payload: ManagerStaffUpdatePayload,
         *,
         tenant_scope: TenantScope,
+        actor_role: str | None = None,
+        actor_staff_user_id: int | None = None,
+        actor_username: str = "internal",
+        is_platform_owner: bool = False,
+        commit: bool = True,
     ) -> ManagerStaffResponse | None:
+        # Serialize membership access changes on a stable parent before locking
+        # staff rows; concurrent owners cannot both remove the last owner.
+        await StaffTenantMembershipService.lock_tenant(session, tenant_id=tenant_scope.tenant_id)
         row = (
             await session.execute(
                 select(StaffUser, TenantMembership)
@@ -419,6 +452,7 @@ class StaffUserService:
                     TenantMembership.tenant_id == tenant_scope.tenant_id,
                 )
                 .with_for_update()
+                .execution_options(populate_existing=True)
             )
         ).first()
         if row is None:
@@ -426,17 +460,73 @@ class StaffUserService:
         staff_user, membership = row
 
         changed_fields = set(payload.model_fields_set)
+        before = {"role": membership.role, "status": membership.status}
+        requested_role = (
+            cls.normalize_primary_role(payload.primary_role)
+            if "primary_role" in changed_fields
+            else cls.normalize_primary_role(membership.role)
+        )
+        requested_status = (
+            StaffTenantMembershipService.membership_status(payload.status)
+            if "status" in changed_fields
+            else membership.status
+        )
+        target_is_platform_owner = False
+        if actor_role is not None:
+            target_is_platform_owner = bool(await session.scalar(
+                select(LegacyOwnerAuthState.id).where(
+                    LegacyOwnerAuthState.owner_staff_user_id == staff_user_id
+                )
+            ))
+        StaffAccessPolicy.validate_mutation(
+            actor_role=actor_role,
+            is_platform_owner=is_platform_owner,
+            target_role=cls.normalize_primary_role(membership.role),
+            requested_role=requested_role,
+            target_is_platform_owner=target_is_platform_owner,
+        )
+        if (
+            membership.role == cls.ROLE_OWNER
+            and membership.status == "active"
+            and cls.is_active(staff_user)
+            and (requested_role != cls.ROLE_OWNER or requested_status != "active")
+        ):
+            active_owner_count = await StaffTenantMembershipService.count_active_owners(
+                session, tenant_id=tenant_scope.tenant_id,
+            )
+            StaffAccessPolicy.require_remaining_owner(active_owner_count)
         memberships = await StaffTenantMembershipService.list_for_staff(
             session,
             staff_user_id=staff_user_id,
             lock=True,
         )
+        credentials_changed = bool(payload.password) or any((
+            "username" in changed_fields
+            and cls.normalize_username(payload.username) != cls.normalize_username(staff_user.username),
+            "telegram_id" in changed_fields
+            and payload.telegram_id != staff_user.telegram_id,
+            "telegram_username" in changed_fields
+            and (payload.telegram_username or None) != (staff_user.telegram_username or None),
+        ))
+        StaffAccessPolicy.validate_catalog_grantee_credentials(
+            actor_role=actor_role,
+            is_platform_owner=is_platform_owner,
+            has_catalog_grant=any(
+                {"catalog.master.edit", "catalog.master.delete"}.intersection(
+                    getattr(item, "permissions", None) or []
+                )
+                for item in memberships
+            ),
+            credentials_changed=credentials_changed,
+        )
         StaffTenantMembershipService.validate_shared_identity_update(
             changed_fields=changed_fields,
             membership_count=len(memberships),
-            is_system_tenant=tenant_scope.is_system,
+            is_system_tenant=(
+                is_platform_owner if actor_role is not None else tenant_scope.is_system
+            ),
         )
-        sync_global_profile = tenant_scope.is_system or len(memberships) == 1
+        sync_global_profile = len(memberships) == 1
 
         if "display_name" in changed_fields and payload.display_name is not None:
             display_name = payload.display_name.strip()
@@ -458,8 +548,6 @@ class StaffUserService:
             StaffTenantMembershipService.touch(membership)
             if sync_global_profile:
                 staff_user.primary_role = membership.role
-        else:
-            staff_user.primary_role = cls.primary_role(staff_user)
         if "username" in changed_fields:
             staff_user.username = cls.normalize_username(payload.username)
         if payload.password:
@@ -493,10 +581,46 @@ class StaffUserService:
         await session.flush()
         if sync_global_profile:
             await cls._sync_installer_link(session, staff_user, assignable)
-        await session.commit()
+        cls._audit_membership_change(
+            session,
+            membership=membership,
+            tenant_scope=tenant_scope,
+            before=before,
+            actor_staff_user_id=actor_staff_user_id,
+            actor_username=actor_username,
+        )
+        if commit:
+            await session.commit()
+        else:
+            await session.flush()
         await session.refresh(staff_user)
         await session.refresh(membership)
         return cls._response(staff_user, membership=membership)
+
+    @staticmethod
+    def _audit_membership_change(
+        session: AsyncSession,
+        *,
+        membership: TenantMembership,
+        tenant_scope: TenantScope,
+        before: dict[str, str] | None,
+        actor_staff_user_id: int | None,
+        actor_username: str,
+    ) -> None:
+        after = {"role": membership.role, "status": membership.status}
+        if before == after:
+            return
+        session.add(TenantAuditEvent(
+            tenant_id=tenant_scope.tenant_id,
+            storefront_id=tenant_scope.storefront_id,
+            actor_staff_user_id=actor_staff_user_id,
+            actor_username=actor_username,
+            action="staff_membership_created" if before is None else "staff_membership_updated",
+            entity_type="tenant_membership",
+            entity_id=int(membership.id),
+            request_id=str(uuid4()),
+            change_set={"membership": {"before": before, "after": after}},
+        ))
 
     @classmethod
     async def _sync_installer_link(

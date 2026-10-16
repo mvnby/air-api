@@ -41,6 +41,7 @@ class ManagerTenantAccessRow:
     role: str
     is_system: bool
     demo_read_only: bool = False
+    permissions: tuple[str, ...] = ()
 
 
 class TenancyDAO:
@@ -146,6 +147,7 @@ class TenancyDAO:
                 tenant_id=int(tenant.id or 0),
                 storefront_id=int(storefront.id or 0),
                 role=str(membership.role or "").strip().lower(),
+                permissions=tuple(membership.permissions or ()),
                 is_system=bool(tenant.is_system),
                 demo_read_only=bool(tenant.demo_read_only),
             )

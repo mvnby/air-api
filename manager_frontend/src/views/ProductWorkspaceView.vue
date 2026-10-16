@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useCatalogAccess } from "../composables/useCatalogAccess";
+const { canManagePlatform, canDeleteCatalog } = useCatalogAccess();
 import MoneyAmount from '../components/money/MoneyAmount.vue';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import {
@@ -64,7 +66,7 @@ const activeSection = ref<ProductWorkspaceSection>(location.section);
 const context = loadProductWorkspaceContext();
 const neighbors = computed(() => getProductWorkspaceNeighbors(context?.productIds || [], productId || 0));
 
-const sections: Array<{ id: ProductWorkspaceSection; label: string; icon: typeof Package }> = [
+const allSections: Array<{ id: ProductWorkspaceSection; label: string; icon: typeof Package }> = [
   { id: 'main', label: 'Основное', icon: Package },
   { id: 'media', label: 'Медиа', icon: Images },
   { id: 'specifications', label: 'Характеристики', icon: Settings2 },
@@ -73,6 +75,9 @@ const sections: Array<{ id: ProductWorkspaceSection; label: string; icon: typeof
   { id: 'publication', label: 'Публикация и файлы', icon: FileText },
   { id: 'relations', label: 'Связи и теги', icon: Link2 },
 ];
+
+const sections = computed(() => allSections.filter(section => section.id !== 'suppliers' || canManagePlatform.value));
+if (activeSection.value === 'suppliers' && !canManagePlatform.value) activeSection.value = 'main';
 
 const mediaCount = computed(() => product.value ? getProductImageCount(product.value) : 0);
 
@@ -149,13 +154,13 @@ const loadProduct = async () => {
   try {
     const [detail, rebuild] = await Promise.all([
       api.getManagerProduct(productId),
-      api.getWebRebuildStatus().catch(() => null),
+      canManagePlatform.value ? api.getWebRebuildStatus().catch(() => null) : Promise.resolve(null),
     ]);
     product.value = detail;
     supplierOfferCount.value = null;
     rebuildStatus.value = rebuild;
     loading.value = false;
-    void loadProductQuality(detail);
+    if (canManagePlatform.value) void loadProductQuality(detail);
   } catch (error) {
     errorMessage.value = `Не удалось открыть товар: ${getApiErrorMessage(error)}`;
   } finally {
@@ -243,7 +248,7 @@ const copyPublicProductLink = async () => {
 };
 
 const deleteProduct = async () => {
-  if (!product.value || deleting.value) return;
+  if (!canDeleteCatalog.value || !product.value || deleting.value) return;
   if (!await confirmDialog({
     title: 'Удалить товар?',
     description: `«${product.value.title}». Товар со связями удалить не получится.`,
@@ -297,7 +302,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload));
             <span v-if="product" class="rounded-md px-2 py-1 text-xs font-semibold" :class="product.is_published ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'">
               {{ product.is_published ? 'Опубликован' : 'Скрыт' }}
             </span>
-            <span v-if="product" class="rounded-md bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700 dark:bg-slate-800 dark:text-slate-200"><MoneyAmount :value="product.price" :formatted-value="String(product.price)" /></span>
+            <span v-if="product && canManagePlatform" class="rounded-md bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700 dark:bg-slate-800 dark:text-slate-200"><MoneyAmount :value="product.price" :formatted-value="String(product.price)" /></span>
             <span v-if="product" class="rounded-md bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-800 dark:bg-blue-950 dark:text-blue-200">{{ availabilityLabel }}</span>
           </div>
           <button type="button" class="hidden h-9 items-center gap-2 rounded-lg border border-gray-200 px-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 sm:inline-flex" :disabled="!publicProductUrl" @click="openPublicProduct">
@@ -315,7 +320,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload));
               <button type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-slate-800" :disabled="!publicProductUrl" @click="copyPublicProductLink"><ClipboardCopy class="h-4 w-4" />Копировать ссылку</button>
               <button type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-slate-800" @click="setExpertMode(!expertMode)"><Wrench class="h-4 w-4" />{{ expertMode ? 'Выключить экспертный режим' : 'Экспертный режим' }}</button>
               <div class="my-1 border-t border-gray-100 dark:border-slate-800" />
-              <button type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30" :disabled="deleting" @click="deleteProduct"><Trash2 class="h-4 w-4" />Удалить товар</button>
+              <button v-if="canDeleteCatalog" type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30" :disabled="deleting" @click="deleteProduct"><Trash2 class="h-4 w-4" />Удалить товар</button>
             </div>
           </div>
         </div>
@@ -354,7 +359,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload));
         <ProductEditModal ref="editor" v-show="!['media', 'features'].includes(activeSection)" :model-value="true" :product="product" mode="edit" presentation="workspace" :workspace-section="activeSection" :expert-mode="expertMode" @update:model-value="goBack" @dirty-change="dirty = $event" @supplier-offers-loaded="supplierOfferCount = $event" />
       </main>
 
-      <aside class="space-y-4 xl:sticky xl:top-[132px] xl:self-start">
+      <aside v-if="canManagePlatform" class="space-y-4 xl:sticky xl:top-[132px] xl:self-start">
         <section class="border-y border-gray-200 bg-white py-4 dark:border-slate-800 dark:bg-slate-950 xl:rounded-lg xl:border xl:p-4">
           <div class="flex items-center justify-between gap-3">
             <div>

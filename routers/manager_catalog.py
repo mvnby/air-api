@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.database import get_session
 from core.manager_api_errors import manager_http_error
 from core.manager_error_codes import BAD_REQUEST, PRODUCT_NOT_FOUND
-from core.security import get_current_username
+from core.security import AuthenticatedUser, get_current_catalog_username, require_catalog_master_edit, require_catalog_master_delete
 from routers.manager_operation_ids import (
     BULK_ROUND_PRICE,
     BULK_SET_RRC_PRICE,
@@ -48,6 +48,7 @@ from schemas import (
 )
 from services.catalog_import_runtime_service import catalog_import_runtime_service
 from services.manager_catalog_service import ManagerCatalogService
+from services.catalog_access_service import CatalogAccessService
 from services.importer_service import ImporterService
 from routers import manager_customers
 
@@ -83,7 +84,8 @@ async def list_products_for_manager(
     category_status: Optional[Literal["assigned", "missing"]] = Query(None, description="Catalog category status: assigned/missing"),
     sort: str = Query("recommended"),
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
+    auth: AuthenticatedUser = Depends(require_catalog_master_edit),
 ):
     """
     Read a paginated shared product list for editing, including unpublished cards unless
@@ -91,11 +93,13 @@ async def list_products_for_manager(
     filters apply to the master catalog; publication here is not a tenant-offer publication
     flag.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
-    return await ManagerCatalogService.list_products(
+    result = await ManagerCatalogService.list_products(
         session=session,
         page=page,
         limit=limit,
@@ -113,6 +117,7 @@ async def list_products_for_manager(
         category_status=category_status,
         sort=sort,
     )
+    return CatalogAccessService.project_product(result, is_platform_owner=auth.is_platform_owner)
 
 
 router.include_router(manager_customers.router)
@@ -126,7 +131,7 @@ router.include_router(manager_customers.router)
 async def create_product(
     data: ProductCreate,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Create a manual shared product, normalize specs and synchronize category, brand/series,
@@ -134,8 +139,10 @@ async def create_product(
     is_published defaults to true; creation is not implicitly a draft. POST has no
     idempotency receipt and retries may create another card.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [media
     publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -164,7 +171,7 @@ async def duplicate_product(
     product_id: int,
     data: ProductDuplicatePayload,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Create a separate card from a source product with submitted overrides and optional
@@ -172,8 +179,10 @@ async def duplicate_product(
     make_unpublished is set. Gallery copying reuses media URLs. Missing source returns 404;
     invalid fields/media returns 400. Each successful POST creates a new card.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [media
     publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -210,7 +219,8 @@ async def update_product(
     product_id: int,
     data: ProductUpdate,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
+    auth: AuthenticatedUser = Depends(require_catalog_master_edit),
 ):
     """
     Update submitted product fields; submitted specs are normalized and supplied
@@ -219,12 +229,16 @@ async def update_product(
     fields/references/media returns 400. Writers lock the product to coordinate with bulk
     apply; no expected_version or client idempotency receipt is accepted.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [media
     publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
     """
+    if data.is_published is False:
+        await require_catalog_master_delete(auth)
     try:
         result = await ManagerCatalogService.update_product(
             session=session,
@@ -257,15 +271,17 @@ async def update_product(
 async def delete_product(
     product_id: int,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Permanently delete a product and its removable catalog relations. References from orders
     prevent deletion and return 400. Missing product returns 404, including after successful
     deletion. This does not mean unpublishing the product.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     try:
@@ -297,7 +313,7 @@ async def delete_product(
 async def bulk_round_price(
     request: BulkRoundRequest,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Round each existing selected master-product price down to a multiple of 50 and return
@@ -305,8 +321,10 @@ async def bulk_round_price(
     Repeating without intervening price changes makes no further changes; this does not edit
     tenant offers.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     return await ManagerCatalogService.bulk_round_prices(session=session, request=request)
@@ -320,7 +338,7 @@ async def bulk_round_price(
 async def bulk_set_rrc_price(
     request: BulkProductIdsRequest,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Set existing selected master-product prices to rounded current supplier-derived
@@ -328,8 +346,10 @@ async def bulk_set_rrc_price(
     skipped_count also includes prices already equal to RRC. Missing IDs are ignored.
     Repeats recalculate current supply metrics and do not edit tenant offers.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     return await ManagerCatalogService.bulk_set_prices_to_rrc(session=session, request=request)
@@ -343,7 +363,7 @@ async def bulk_set_rrc_price(
 async def bulk_delete_products(
     request: BulkProductIdsRequest,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Permanently delete explicitly selected products one at a time and report per-product
@@ -351,8 +371,10 @@ async def bulk_delete_products(
     deletions commit individually, so the batch may partially succeed. Empty selection does
     nothing; repeating the batch reports previously deleted IDs as missing.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     return await ManagerCatalogService.bulk_delete_products(session=session, request=request)
@@ -365,7 +387,7 @@ async def bulk_delete_products(
 )
 async def get_all_tags(
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Read all tags grouped by TagGroup for the shared product editor. No pagination
@@ -395,7 +417,8 @@ async def smart_search_products(
     brand_slugs: Optional[List[str]] = Query(None, description="Brand slugs to include"),
     category_slug: Optional[str] = Query(None, description="Category tag slug: cat-household/cat-multi/cat-industrial"),
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
+    auth: AuthenticatedUser = Depends(require_catalog_master_edit),
 ):
     """
     Search the shared catalog for the product picker by text tokens and BTU-index numeric
@@ -403,11 +426,13 @@ async def smart_search_products(
     Technical/brand/category filters refine results; limit is 1–100. This does not require
     publication or tenant-offer eligibility.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
-    return await ManagerCatalogService.smart_search(
+    result = await ManagerCatalogService.smart_search(
         session=session,
         q=q,
         limit=limit,
@@ -420,6 +445,7 @@ async def smart_search_products(
         brand_slugs=brand_slugs,
         category_slug=category_slug,
     )
+    return CatalogAccessService.project_product(result, is_platform_owner=auth.is_platform_owner)
 
 
 @router.get(
@@ -430,14 +456,17 @@ async def smart_search_products(
 async def get_product_for_manager(
     product_id: int,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
+    auth: AuthenticatedUser = Depends(require_catalog_master_edit),
 ):
     """
     Read a shared product editor card with its related catalog data, including unpublished
     products. Missing product returns 404; this is not the tenant storefront projection.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     product = await ManagerCatalogService.get_product(
@@ -450,7 +479,7 @@ async def get_product_for_manager(
             endpoint=GET_MANAGER_PRODUCT,
             error_code=PRODUCT_NOT_FOUND,
         )
-    return product
+    return CatalogAccessService.project_product(product, is_platform_owner=auth.is_platform_owner)
 
 
 @router.post(
@@ -460,7 +489,7 @@ async def get_product_for_manager(
 )
 async def import_from_onliner(
     payload: OnlinerImportPayload,
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Synchronously import product URLs using the importer, optionally following related
@@ -469,8 +498,10 @@ async def import_from_onliner(
     imported. This writes catalog state and downloads media; repeated calls follow
     update_existing and source matching rather than an idempotency receipt.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [media
     publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -496,7 +527,7 @@ async def import_from_onliner(
 )
 async def catalog_import(
     payload: CatalogImportPayload,
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Synchronously import URLs from supported catalog sources, selecting the parser for each
@@ -504,8 +535,10 @@ async def catalog_import(
     removed and partial successes/errors are returned. This downloads source content/media
     and mutates cards; it is neither preview nor a background-job response.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [media
     publication](https://github.com/mvnby/air-api/blob/main/docs/catalog-media-publication.md).
@@ -532,7 +565,7 @@ async def catalog_import(
 )
 async def start_catalog_import_job(
     payload: CatalogImportPayload,
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Persist a new catalog import job and return 202 with its ID/status/stage for polling.
@@ -540,8 +573,10 @@ async def start_catalog_import_job(
     order; accepted/queued does not mean import completed. Each POST creates a new job with
     no idempotency receipt; results and partial failures are read from job status.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     urls = [u.strip() for u in payload.urls if u.strip()]
@@ -567,15 +602,17 @@ async def start_catalog_import_job(
     operation_id=GET_CURRENT_CATALOG_IMPORT_JOB_STATUS,
 )
 async def get_current_catalog_import_job_status(
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Read the shared import queue’s current job: the running/queued job is preferred,
     otherwise the latest recorded job. Returns progress and successes/errors without
     starting work; 404 means no recorded job is available.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     job = await catalog_import_runtime_service.get_current_job()
@@ -591,14 +628,16 @@ async def get_current_catalog_import_job_status(
 )
 async def get_catalog_import_job_status(
     job_id: str,
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Read one persisted shared catalog import job by job_id with progress and results/errors.
     Missing job returns 404; polling only reads state and does not retry failed imports.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     job = await catalog_import_runtime_service.get_job(job_id)

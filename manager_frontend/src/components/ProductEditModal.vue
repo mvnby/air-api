@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useCatalogAccess } from "../composables/useCatalogAccess";
+const { canManagePlatform, canDeleteCatalog } = useCatalogAccess();
 import { useCatalogUsage } from '../composables/useCatalogUsage';
 const catalogUsage = useCatalogUsage();
 import { ref, watch, computed } from 'vue';
@@ -151,7 +153,7 @@ const isPersistedProduct = computed(() => props.mode === 'edit' && Boolean(props
 const isWorkspace = computed(() => props.presentation === 'workspace');
 const showMainSection = computed(() => !isWorkspace.value || props.workspaceSection === 'main');
 const showSpecificationsSection = computed(() => !isWorkspace.value || props.workspaceSection === 'specifications');
-const showSuppliersSection = computed(() => !isWorkspace.value || props.workspaceSection === 'suppliers');
+const showSuppliersSection = computed(() => canManagePlatform.value && (!isWorkspace.value || props.workspaceSection === 'suppliers'));
 const showPublicationSection = computed(() => !isWorkspace.value || props.workspaceSection === 'publication');
 const showRelationsSection = computed(() => !isWorkspace.value || props.workspaceSection === 'relations');
 const effectiveExpertMode = computed(() => !isWorkspace.value || props.expertMode);
@@ -1131,7 +1133,7 @@ watch(() => [props.modelValue, props.mode, props.product?.id] as const, async ([
 watch(isDirty, (value) => emit('dirty-change', value));
 
 const loadSupplierOffers = async () => {
-    if (!props.product) return;
+    if (!props.product || !canManagePlatform.value) return;
     const productId = props.product.id;
     supplierOffersLoading.value = true;
     supplierOffersError.value = '';
@@ -1258,6 +1260,7 @@ const save = async (): Promise<boolean> => {
         if (isPersistedProduct.value && !categorySelectionTouched.value) {
             delete updateData.catalog_category_override;
         }
+        if (!canDeleteCatalog.value && isPersistedProduct.value && !updateData.is_published) delete updateData.is_published;
         if (isCreateMode.value) {
             await api.createProduct(updateData as ProductCreate);
         } else if (isDuplicateMode.value) {
@@ -1372,6 +1375,7 @@ defineExpose({ save, isDirty, loading });
                             v-model="form"
                             :errors="formServerErrors"
                             :current-category="product?.catalog_category"
+                            :allow-unpublish="!isPersistedProduct || canDeleteCatalog"
                             @category-change="categorySelectionTouched = true"
                         />
 

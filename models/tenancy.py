@@ -89,6 +89,10 @@ class TenantMembership(SQLModel, table=True):
     tenant_id: int = Field(foreign_key="tenant.id", index=True)
     staff_user_id: int = Field(foreign_key="staff_users.id", index=True)
     role: str = Field(sa_column=Column(String(40), nullable=False, index=True))
+    permissions: list[str] = Field(
+        default_factory=list,
+        sa_column=Column(JSON, nullable=False, server_default=text("'[]'")),
+    )
     status: str = Field(default="active", sa_column=Column(String(24), nullable=False, index=True))
     created_at: datetime = Field(
         default_factory=utc_now,

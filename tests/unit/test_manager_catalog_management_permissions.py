@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from core.database import get_session
-from core.security import AuthenticatedUser, require_manager_access
+from core.security import AuthenticatedUser, get_current_auth_context
 from routers import manager_catalog_management
 from services.catalog_management_service import CatalogManagementService
 
@@ -47,7 +47,7 @@ async def test_catalog_management_query_requires_authentication_before_service()
 async def test_catalog_management_query_rejects_non_system_manager_before_service(monkeypatch):
     app = FastAPI()
     app.include_router(manager_catalog_management.router)
-    app.dependency_overrides[require_manager_access] = _tenant_manager
+    app.dependency_overrides[get_current_auth_context] = _tenant_manager
 
     async def _session():
         yield object()

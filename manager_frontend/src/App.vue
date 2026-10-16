@@ -52,6 +52,7 @@ const CalendarDashboard = defineAsyncComponent(() => import('./views/CalendarDas
 const ManagerHomeView = defineAsyncComponent(() => import('./views/ManagerHome.vue'));
 const InstallersView = defineAsyncComponent(() => import('./views/InstallersView.vue'));
 const SettingsView = defineAsyncComponent(() => import('./views/SettingsView.vue'));
+const PlatformAccessView = defineAsyncComponent(() => import('./views/PlatformAccessView.vue'));
 const PlatformSettingsView = defineAsyncComponent(() => import('./views/PlatformSettingsView.vue'));
 const SettingsBackupView = defineAsyncComponent(() => import('./views/SettingsBackupView.vue'));
 const DocumentsSettingsView = defineAsyncComponent(() => import('./views/DocumentsSettingsView.vue'));
@@ -139,6 +140,7 @@ const normalizePath = (path: string) => {
 };
 const currentPath = computed(() => normalizePath(currentLocation.value.split('?')[0] || '/manager'));
 const canManagePlatform = computed(() => hasManagerCapability(auth.value, MANAGER_CAPABILITY.platformManage));
+const canEditCatalog = computed(() => hasManagerCapability(auth.value, MANAGER_CAPABILITY.catalogMasterEdit));
 const canManageInfrastructure = computed(() => hasManagerCapability(auth.value, MANAGER_CAPABILITY.infrastructureManage));
 const canManageDocuments = computed(() => hasManagerCapability(auth.value, MANAGER_CAPABILITY.documentsManage));
 const canManageSettings = computed(() => hasManagerCapability(auth.value, MANAGER_CAPABILITY.settingsManage));
@@ -189,9 +191,11 @@ const toggleNavSection = (sectionId: NavSectionId) => {
     [sectionId]: !expandedNavSections.value[sectionId],
   };
 };
+const defaultView = computed(() => hasManagerCapability(auth.value, MANAGER_CAPABILITY.crmManage)
+  ? 'home' : canEditCatalog.value ? 'products' : 'profile-security');
 const currentView = computed(() => {
   const path = currentPath.value;
-  if (path === '/manager' || path === '/manager/') return 'home';
+  if (path === '/manager' || path === '/manager/') return defaultView.value;
   if (path === '/manager/profile') return 'profile-security';
   if (path.startsWith('/manager/integrations')) return 'analytics-connections';
   if (path.startsWith('/manager/tasks')) return 'personal-tasks';
@@ -207,6 +211,7 @@ const currentView = computed(() => {
   if (path.startsWith('/manager/customers/profile')) return 'customer-profile';
   if (path.startsWith('/manager/customers')) return 'customers';
   if (path.startsWith('/manager/staff') || path.startsWith('/manager/users') || path.startsWith('/manager/installers')) return 'installers';
+  if (path.startsWith('/manager/platform/access')) return 'platform-access';
   if (path.startsWith('/manager/settings/backup')) return 'settings-backup';
   if (path.startsWith('/manager/settings/documents')) return 'settings-documents';
   if (path.startsWith('/manager/settings/platform')) return 'settings-platform';
@@ -228,7 +233,7 @@ const currentView = computed(() => {
   return 'products';
 });
 const authorizedView = computed(() => (
-  isManagerPathAllowed(auth.value, currentPath.value) ? currentView.value : 'home'
+  isManagerPathAllowed(auth.value, currentPath.value) ? currentView.value : defaultView.value
 ));
 const webRebuildNeedsAttention = computed(() => Boolean(webRebuildStatus.value?.needs_rebuild));
 const webRebuildQueued = computed(() => webRebuildStatus.value?.state === 'queued');
@@ -593,6 +598,7 @@ watch(currentPath, () => {
       <InstallersView v-else-if="authorizedView === 'installers'" :key="currentLocation" />
       <SettingsBackupView v-else-if="authorizedView === 'settings-backup' && canManageInfrastructure" :key="currentLocation" />
       <DocumentsSettingsView v-else-if="authorizedView === 'settings-documents' && canManageDocuments" :key="currentLocation" />
+      <PlatformAccessView v-else-if="authorizedView === 'platform-access' && canManageInfrastructure" :key="currentLocation" />
       <PlatformSettingsView v-else-if="authorizedView === 'settings-platform' && canManageInfrastructure" :key="currentLocation" />
       <SettingsView v-else-if="authorizedView === 'settings' && canManageSettings" :key="currentLocation" :can-manage-call-recordings="canManageCallRecordings" />
       <InstallationRatesView v-else-if="authorizedView === 'installation-rates'" :key="currentLocation" />
@@ -608,8 +614,8 @@ watch(currentPath, () => {
       <SupplyRequestsView v-else-if="authorizedView === 'supply'" :key="currentLocation" />
       <SupplierFeedsView v-else-if="authorizedView === 'suppliers'" :key="currentLocation" :initial-tab="currentPath.startsWith('/manager/suppliers/prices') ? 'prices' : 'profile'" />
       <SupplierMappingView v-else-if="authorizedView === 'supplier-mapping'" :key="currentLocation" />
-      <ProductWorkspaceView v-else-if="authorizedView === 'product-workspace' && canManagePlatform" :key="currentLocation" />
-      <ProductsView v-else-if="canManagePlatform" :key="currentLocation" />
+      <ProductWorkspaceView v-else-if="authorizedView === 'product-workspace' && canEditCatalog" :key="currentLocation" />
+      <ProductsView v-else-if="canEditCatalog" :key="currentLocation" />
       <TenantCatalogView v-else :key="currentLocation" />
     </KitlaneShell>
 

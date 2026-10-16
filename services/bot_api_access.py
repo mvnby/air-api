@@ -21,3 +21,17 @@ async def require_bot_manager(session: AsyncSession, telegram_id: int) -> BotAcc
     if not context.is_manager:
         raise BotUseCaseAccessDeniedError("Manager access is required")
     return context
+
+
+async def require_bot_catalog_editor(
+    session: AsyncSession, telegram_id: int, *, deleting: bool = False,
+) -> BotAccessContext:
+    context = await require_bot_staff(session, telegram_id)
+    if context.is_platform_owner:
+        return context
+    required = {"catalog.master.edit"}
+    if deleting:
+        required.add("catalog.master.delete")
+    if not required.issubset(context.permissions):
+        raise BotUseCaseAccessDeniedError("Explicit catalog permission is required")
+    return context

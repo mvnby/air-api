@@ -51,7 +51,7 @@ export class ManagerInstallersService {
      * effects and no idempotency receipt, so repeated calls are not guaranteed to reuse a
      * prior installer.
      *
-     * Access and scope: Manager access is required; installer visibility follows staff
+     * Access and scope: Tenant owner/admin access is required; installer visibility follows staff
      * membership in the authenticated tenant. The system tenant also sees unmapped legacy
      * installers. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
@@ -106,13 +106,13 @@ export class ManagerInstallersService {
     /**
      * Update Installer
      * Update submitted non-null installer identity fields and/or the current tenant
-     * membership’s activity. Missing/inaccessible installer returns 404. Partners cannot edit
-     * shared identity fields when the staff user has multiple memberships; this service
-     * rejection is not converted to a dedicated client error by this route. Omitted/null
-     * fields are ignored, including telegram_id; membership changes also recompute aggregate
-     * staff activity. No expected-version guard is used.
+     * membership’s activity. Missing/inaccessible installer returns 404. Linked accounts use
+     * staff access rules: admin cannot edit owners/admins, protected legacy owners remain
+     * fenced, and the last active owner cannot be disabled. Shared identity fields for staff
+     * with multiple memberships require platform-owner access. Omitted/null fields are ignored,
+     * including telegram_id; membership changes also recompute aggregate staff activity.
      *
-     * Access and scope: Manager access is required; installer visibility follows staff
+     * Access and scope: Tenant owner/admin access is required; installer visibility follows staff
      * membership in the authenticated tenant. The system tenant also sees unmapped legacy
      * installers. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).

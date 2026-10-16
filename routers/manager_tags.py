@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
-from core.security import get_current_username
+from core.security import get_current_catalog_username
 from schemas import (
     ManagerTagGroupCreatePayload,
     ManagerTagGroupUpdatePayload,
@@ -38,7 +38,7 @@ router = APIRouter(
 )
 async def get_tag_groups(
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Read all shared tag groups with their tags; no pagination is accepted. This endpoint
@@ -59,15 +59,17 @@ async def get_tag_groups(
 async def create_tag_group(
     payload: ManagerTagGroupCreatePayload,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Create a shared tag group, deriving slug from title when omitted. Duplicate slug returns
     400. POST has no idempotency receipt; this creates dictionary state rather than
     assigning product tags.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     return await TagService.create_tag_group(session=session, payload=payload)
@@ -82,15 +84,17 @@ async def update_tag_group(
     group_id: int,
     payload: ManagerTagGroupUpdatePayload,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Update submitted tag-group fields. Missing group returns 404; a slug used by another
     group returns 400. This edits the shared dictionary, leaving product-tag associations
     attached to their tag IDs.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     return await TagService.update_tag_group(session=session, group_id=group_id, payload=payload)
@@ -103,14 +107,16 @@ async def update_tag_group(
 async def delete_tag_group(
     group_id: int,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Permanently delete an empty shared tag group. Missing group returns 404, including after
     deletion; any remaining tag blocks deletion with 400. Remove/reassign tags first.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     await TagService.delete_tag_group(session=session, group_id=group_id)
@@ -125,15 +131,17 @@ async def delete_tag_group(
 async def create_tag(
     payload: ManagerTagCreatePayload,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Create a tag in an existing shared group, deriving slug from title when omitted. Missing
     group returns 404; duplicate slug returns 400. This does not assign the tag to products;
     POST has no idempotency receipt.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     return await TagService.create_tag(session=session, payload=payload)
@@ -148,15 +156,17 @@ async def update_tag(
     tag_id: int,
     payload: ManagerTagUpdatePayload,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Update submitted tag fields. Missing tag returns 404; conflicting slug returns 400.
     Product links continue to refer to the same tag ID; editing this shared tag affects all
     linked products.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     return await TagService.update_tag(session=session, tag_id=tag_id, payload=payload)
@@ -169,15 +179,17 @@ async def update_tag(
 async def delete_tag(
     tag_id: int,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Permanently delete the tag and its product-tag links. Missing tag returns 404, including
     on a repeat after deletion. This removes the shared label rather than just removing it
     from one product.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     await TagService.delete_tag(session=session, tag_id=tag_id)

@@ -1,9 +1,10 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 
 from core.database import get_session
-from core.security import get_current_manager_tenant_scope, get_current_username
+from core.security import AuthenticatedUser, get_current_manager_tenant_scope, get_current_username, require_owner_access
 from models.tenancy import TenantScope
 from routers.manager_operation_ids import (
     GET_MANAGER_INSTALLERS,
@@ -18,6 +19,8 @@ from schemas import (
     ManagerInstallerListResponse,
 )
 from services.installer_service import ManagerInstallerService
+from services.staff_access_policy import StaffAccessPolicyError
+from services.legacy_owner_managed_identity_service import LegacyOwnerManagedIdentityError
 
 router = APIRouter(prefix="/api/manager/installers", tags=["manager-installers"])
 
@@ -62,7 +65,7 @@ async def list_installers(
 async def create_installer(
     payload: ManagerInstallerCreatePayload,
     session: AsyncSession = Depends(get_session),
-    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
+    auth: AuthenticatedUser = Depends(require_owner_access),
 ):
     """
     Create an installer and ensure its linked staff identity and membership in the
@@ -70,7 +73,7 @@ async def create_installer(
     effects and no idempotency receipt, so repeated calls are not guaranteed to reuse a
     prior installer.
 
-    Access and scope: Manager access is required; installer visibility follows staff
+    Access and scope: Tenant owner/admin access is required; installer visibility follows staff
     membership in the authenticated tenant. The system tenant also sees unmapped legacy
     installers. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
@@ -79,10 +82,21 @@ async def create_installer(
         return await ManagerInstallerService.create(
             session=session,
             payload=payload,
-            tenant_scope=tenant_scope,
+            tenant_scope=auth.tenant_scope(),
+            actor_role=auth.role or "",
+            actor_staff_user_id=auth.staff_user_id,
+            actor_username=auth.username,
+            is_platform_owner=auth.is_platform_owner,
         )
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except StaffAccessPolicyError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=exc.status_code, detail={"code": exc.code, "message": str(exc)}) from exc
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=400, detail="Telegram ID уже используется") from exc
+    except ValueError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get(
@@ -124,27 +138,44 @@ async def update_installer(
     installer_id: int,
     payload: ManagerInstallerUpdatePayload,
     session: AsyncSession = Depends(get_session),
-    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
+    auth: AuthenticatedUser = Depends(require_owner_access),
 ):
     """
     Update submitted non-null installer identity fields and/or the current tenant
-    membership’s activity. Missing/inaccessible installer returns 404. Partners cannot edit
-    shared identity fields when the staff user has multiple memberships; this service
-    rejection is not converted to a dedicated client error by this route. Omitted/null
-    fields are ignored, including telegram_id; membership changes also recompute aggregate
-    staff activity. No expected-version guard is used.
+    membership’s activity. Missing/inaccessible installer returns 404. Linked accounts use
+    staff access rules: admin cannot edit owners/admins, protected legacy owners remain
+    fenced, and the last active owner cannot be disabled. Shared identity fields for staff
+    with multiple memberships require platform-owner access. Omitted/null fields are ignored,
+    including telegram_id; membership changes also recompute aggregate staff activity.
 
-    Access and scope: Manager access is required; installer visibility follows staff
+    Access and scope: Tenant owner/admin access is required; installer visibility follows staff
     membership in the authenticated tenant. The system tenant also sees unmapped legacy
     installers. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
-    installer = await ManagerInstallerService.update(
-        session=session,
-        installer_id=installer_id,
-        payload=payload,
-        tenant_scope=tenant_scope,
-    )
+    try:
+        installer = await ManagerInstallerService.update(
+            session=session,
+            installer_id=installer_id,
+            payload=payload,
+            tenant_scope=auth.tenant_scope(),
+            actor_role=auth.role or "",
+            actor_staff_user_id=auth.staff_user_id,
+            actor_username=auth.username,
+            is_platform_owner=auth.is_platform_owner,
+        )
+    except LegacyOwnerManagedIdentityError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=409, detail={"code": exc.code, "message": str(exc)}) from exc
+    except StaffAccessPolicyError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=exc.status_code, detail={"code": exc.code, "message": str(exc)}) from exc
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=400, detail="Telegram ID уже используется") from exc
+    except ValueError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not installer:
         raise HTTPException(status_code=404, detail="Монтажник не найден")
     return installer

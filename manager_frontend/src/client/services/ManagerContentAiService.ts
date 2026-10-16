@@ -20,8 +20,10 @@ export class ManagerContentAiService {
      * provider failures return 502. Repeating makes another provider request and may return
      * different text.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [feature
      * taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
@@ -50,8 +52,10 @@ export class ManagerContentAiService {
      * failure 502, limits 429 with Retry-After, and provider failures 502/503. Repeating calls
      * the provider again.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [feature
      * taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
@@ -79,8 +83,10 @@ export class ManagerContentAiService {
      * Invalid/unsafe source returns 422, upstream fetch failure 502, limits 429 with
      * Retry-After and provider failures 502/503. Repeating may produce different draft text.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [feature
      * taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).

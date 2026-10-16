@@ -17,5 +17,6 @@ export type ManagerAuthStatusResponse = {
     can_change_password?: boolean;
     must_change_password?: boolean;
     demo_read_only?: boolean;
+    is_platform_owner?: boolean;
 };
 

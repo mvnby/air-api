@@ -3,10 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   listTenantCatalog: vi.fn(),
+  searchMasterCatalog: vi.fn(),
 }));
 
 vi.mock('../src/client', () => ({
   OpenAPI: {},
+  ManagerService: { smartSearchProducts: mocks.searchMasterCatalog },
   ManagerTenantCatalogService: {
     listManagerTenantCatalogProducts: mocks.listTenantCatalog,
   },
@@ -229,6 +231,15 @@ describe('tenant manager capabilities', () => {
       title: 'Indoor unit',
     });
     expect(sanitizeEquipmentComponentPayload(payload, true)).toEqual(payload);
+  });
+
+  it('uses master-catalog search for compatibility editing without CRM permission', async () => {
+    managerSession.auth.value = { ...tenantManagerAuth, capabilities: [MANAGER_CAPABILITY.catalogMasterRead, MANAGER_CAPABILITY.catalogMasterEdit] } as any;
+    mocks.searchMasterCatalog.mockResolvedValue({ items: [{ id: 2, title: 'Master model' }] });
+    const products = await api.smartSearchProducts('Master', 20);
+    expect(mocks.listTenantCatalog).not.toHaveBeenCalled();
+    expect(mocks.searchMasterCatalog).toHaveBeenCalledWith('Master', 20, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined);
+    expect(products).toEqual([{ id: 2, title: 'Master model' }]);
   });
 
   it('uses only allowed tenant catalog products in the CRM product picker', async () => {

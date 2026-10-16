@@ -3,13 +3,32 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
+from sqlmodel import func, select
 
-from models import TenantMembership
+from models import StaffUser, Tenant, TenantMembership
 
 
 class StaffTenantMembershipService:
     """Keep tenant-local staff access separate from the shared identity."""
+
+    @staticmethod
+    async def lock_tenant(session: AsyncSession, *, tenant_id: int) -> None:
+        await session.execute(
+            select(Tenant).where(Tenant.id == tenant_id).with_for_update()
+        )
+
+    @staticmethod
+    async def count_active_owners(session: AsyncSession, *, tenant_id: int) -> int:
+        return int(await session.scalar(
+            select(func.count(TenantMembership.id))
+            .join(StaffUser, StaffUser.id == TenantMembership.staff_user_id)
+            .where(
+                TenantMembership.tenant_id == tenant_id,
+                TenantMembership.role == "owner",
+                TenantMembership.status == "active",
+                StaffUser.status == "active",
+            )
+        ) or 0)
 
     SHARED_IDENTITY_FIELDS = frozenset(
         {
@@ -94,7 +113,7 @@ class StaffTenantMembershipService:
             .order_by(TenantMembership.id.asc())
         )
         if lock:
-            statement = statement.with_for_update()
+            statement = statement.with_for_update().execution_options(populate_existing=True)
         return list((await session.execute(statement)).scalars().all())
 
     @staticmethod

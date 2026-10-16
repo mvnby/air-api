@@ -3,6 +3,8 @@ import type { ManagerAuthStatusResponse } from './client';
 export const MANAGER_CAPABILITY = {
   crmManage: 'crm.manage',
   catalogMasterRead: 'catalog.master.read',
+  catalogMasterEdit: 'catalog.master.edit',
+  catalogMasterDelete: 'catalog.master.delete',
   storefrontOffersRead: 'storefront.offers.read',
   storefrontCollectionsManage: 'storefront.collections.manage',
   platformManage: 'platform.manage',
@@ -33,6 +35,10 @@ export const requiredCapabilityForManagerPath = (path: string): ManagerCapabilit
   if (path.startsWith('/manager/settings/documents')) {
     return MANAGER_CAPABILITY.documentsManage;
   }
+  if (path.startsWith('/manager/platform/access')) return MANAGER_CAPABILITY.infrastructureManage;
+  if (path.startsWith('/manager/brands') || path.startsWith('/manager/features') || path.startsWith('/manager/tags')) {
+    return MANAGER_CAPABILITY.catalogMasterEdit;
+  }
   if (path.startsWith('/manager/settings/platform') || path.startsWith('/manager/settings/backup')) {
     return MANAGER_CAPABILITY.infrastructureManage;
   }
@@ -46,7 +52,7 @@ export const requiredCapabilityForManagerPath = (path: string): ManagerCapabilit
     || path.startsWith('/manager/mail')
   ) return MANAGER_CAPABILITY.crmManage;
   if (/^\/manager\/products\/\d+(?:\/|$)/.test(path)) {
-    return MANAGER_CAPABILITY.platformManage;
+    return MANAGER_CAPABILITY.catalogMasterEdit;
   }
   if (path === '/manager/catalog-decision' || path === '/manager/catalog-decision/') {
     return MANAGER_CAPABILITY.crmManage;

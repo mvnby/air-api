@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useCatalogAccess } from "../../composables/useCatalogAccess";
+const { canDeleteCatalog } = useCatalogAccess();
 import type { ManagerBrand, ManagerBrandSeries } from "../../api";
 
 const props = defineProps<{
@@ -161,7 +163,7 @@ const productLabel = (count: number | undefined) => {
             :disabled="(series.products_count ?? 0) > 0"
             title="Удалить серию"
             aria-label="Удалить серию"
-            @click.stop="emit('delete', series)"
+            v-if="canDeleteCatalog" @click.stop="emit('delete', series)"
           >
             <span class="material-icons-round text-[18px]">delete</span>
           </button>
@@ -283,7 +285,7 @@ const productLabel = (count: number | undefined) => {
               type="button"
               class="rounded border border-red-200 px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
               :disabled="(series.products_count ?? 0) > 0"
-              @click.stop="emit('delete', series)"
+              v-if="canDeleteCatalog" @click.stop="emit('delete', series)"
             >
               Удалить
             </button>

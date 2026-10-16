@@ -4,7 +4,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from services.bot_api_access import require_bot_manager, require_bot_staff
+from services.bot_api_access import require_bot_manager, require_bot_staff, require_bot_catalog_editor
 from services.bot_product_selection_service import BotProductSelectionService
 from services.product_service import ProductService
 
@@ -44,12 +44,12 @@ class BotCatalogOperationsApiService:
         product_id: int,
         price: int,
     ) -> bool:
-        await require_bot_manager(session, telegram_id)
+        await require_bot_catalog_editor(session, telegram_id)
         return await ProductService.update_price(session, product_id, price)
 
     @staticmethod
     async def delete_product(
         session: AsyncSession, *, telegram_id: int, product_id: int
     ) -> bool:
-        await require_bot_manager(session, telegram_id)
+        await require_bot_catalog_editor(session, telegram_id, deleting=True)
         return await ProductService.delete(session, product_id)

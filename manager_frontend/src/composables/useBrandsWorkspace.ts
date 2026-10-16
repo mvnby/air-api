@@ -1,4 +1,5 @@
 import { computed, onMounted, ref } from "vue";
+import { useCatalogAccess } from "./useCatalogAccess";
 import { api, type ManagerBrand } from "../api";
 import { getApiErrorMessage } from "../utils/api-errors";
 import { confirmDialog } from "../services/ui-feedback";
@@ -232,6 +233,7 @@ export const useBrandsWorkspace = () => {
   };
 
   const deleteBrand = async (brand: ManagerBrand) => {
+    if (!useCatalogAccess().canDeleteCatalog.value) return;
     const confirmed = await confirmDialog({
       title: "Удалить бренд?",
       description: brand.title,

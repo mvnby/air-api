@@ -15,7 +15,7 @@ type MainForm = {
 };
 const form = defineModel<MainForm>({ required: true });
 const emit = defineEmits<{ (e: 'category-change'): void }>();
-defineProps<{ errors: Record<string, string>; currentCategory?: Category | null }>();
+defineProps<{ errors: Record<string, string>; currentCategory?: Category | null; allowUnpublish?: boolean }>();
 const categories: { value: Category | null; label: string }[] = [
     { value: 'cat-household', label: 'Бытовые' },
     { value: 'cat-multi', label: 'Мульти-сплит' },
@@ -91,7 +91,7 @@ const categoryLabel = (category: Category) => categories.find(item => item.value
 
 <div class="flex items-center gap-2 pt-1">
      <label class="relative inline-flex items-center cursor-pointer">
-        <input type="checkbox" v-model="form.is_published" class="sr-only peer">
+        <input type="checkbox" v-model="form.is_published" :disabled="form.is_published && !allowUnpublish" class="sr-only peer" />
         <div class="w-11 h-6 bg-gray-200 dark:bg-slate-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-brand-300 dark:peer-focus:ring-brand-900 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 dark:after:border-slate-600 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
         <span class="ms-3 text-sm font-semibold text-gray-700 dark:text-slate-300">Опубликовано</span>
     </label>

@@ -90,8 +90,10 @@ export class ManagerFeaturesService {
      * unpublished media returns 400. Returns 201; creation does not assign it to every brand
      * product and has no idempotency receipt.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [feature
      * taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
@@ -119,8 +121,10 @@ export class ManagerFeaturesService {
      * all series; returned candidate tokens describe the current source links. This read-only
      * report does not create series links or remove product links.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [feature
      * taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
@@ -150,8 +154,10 @@ export class ManagerFeaturesService {
      * are locked and revalidated; refresh preview after conflict. This mutates catalog
      * inheritance and is not a background job.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [feature
      * taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
@@ -208,8 +214,10 @@ export class ManagerFeaturesService {
      * illegal scope changes returns 400. Legacy series/product/derived definitions must be
      * migrated to universal or brand before ordinary editing.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [feature
      * taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
@@ -241,8 +249,10 @@ export class ManagerFeaturesService {
      * delete. Missing feature returns 404. Archiving changes effective catalog projections
      * while keeping the stored definition and historical relationships.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [feature
      * taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
@@ -271,8 +281,10 @@ export class ManagerFeaturesService {
      * fourth featured series feature returns 400; missing target returns 404. is_featured
      * applies only to series; universal rules resolve separately from stored assignments.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [feature
      * taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
@@ -311,8 +323,10 @@ export class ManagerFeaturesService {
      * inheritance path but does not archive the feature or suppress other rule/product
      * assignments.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [feature
      * taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
@@ -376,8 +390,10 @@ export class ManagerFeaturesService {
      * inherited/rule-derived features may remain. Missing product returns 404; duplicate,
      * invalid, archived or incompatible features/media returns 400. Writes commit together.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [feature
      * taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
@@ -409,8 +425,10 @@ export class ManagerFeaturesService {
      * product returns 404; missing assignment is a no-op. Inherited or automatic features can
      * reappear, so deletion is different from an explicit hidden override.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [feature
      * taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
@@ -442,8 +460,10 @@ export class ManagerFeaturesService {
      * links. Missing product returns 404; outdated/unavailable suggestions return 409. Refresh
      * the workspace before retrying stale suggestions.
      *
-     * Access and scope: system-tenant Manager access is required; this operates on the shared
-     * platform catalog. See [Manager
+     * Access and scope: shared catalog operations require an explicit platform-owner or
+     * delegated catalog permission, independent of company membership. Destructive operations
+     * require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+     * This operates on the shared platform catalog. See [Manager
      * authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * See [feature
      * taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).

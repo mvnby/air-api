@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { api } from '../../api';
 import { ManagerFeaturesService, type ManagerFeatureResponse } from '../../client';
 import CatalogDecisionFilters from '../catalog-decision/CatalogDecisionFilters.vue';
 import { catalogDecisionApi } from '../../services/catalog-decision-api';
 import type { CatalogManagementFilterState, CatalogManagementSort } from '../../services/catalog-management-api';
+import { useCatalogAccess } from '../../composables/useCatalogAccess';
+const { canManagePlatform } = useCatalogAccess();
 import { getApiErrorMessage } from '../../utils/api-errors';
 
 const props = defineProps<{ modelValue: CatalogManagementFilterState; sort: CatalogManagementSort }>();
@@ -22,13 +24,14 @@ const reset = () => { resetKey.value++; emit('reset'); };
 const load = async () => {
   error.value = '';
   const results = await Promise.allSettled([
-    catalogDecisionApi.filterOptions(), api.listSuppliers(),
+    canManagePlatform.value ? catalogDecisionApi.filterOptions() : api.listManagerBrands().then(result => ({ brands: result.items, series: [] })),
+    canManagePlatform.value ? api.listSuppliers() : Promise.resolve({ items: [] }),
     ManagerFeaturesService.listManagerFeatures(undefined, undefined, undefined, undefined, undefined, true),
   ]);
   const options = results[0];
   if (options.status === 'fulfilled') {
     brands.value = options.value.brands ?? [];
-    series.value = (options.value.series ?? []).map(item => ({ ...item, brandId: item.brand_id }));
+    series.value = (options.value.series ?? []).map(item => ({ ...item, brandId: 'brand_id' in item ? item.brand_id : null }));
   } else error.value = getApiErrorMessage(options.reason);
   const supply = results[1];
   if (supply.status === 'fulfilled') suppliers.value = supply.value.items;
@@ -37,6 +40,13 @@ const load = async () => {
   if (featureLibrary.status === 'fulfilled') features.value = featureLibrary.value.items;
   else error.value = getApiErrorMessage(featureLibrary.reason);
 };
+watch(() => props.modelValue.brandIds, async (ids) => {
+  if (canManagePlatform.value || !ids?.length) return;
+  try {
+    const results = await Promise.all(ids.map(id => api.listManagerBrandSeries(id).then(result => result.items.map(item => ({ id: item.id, title: item.title, brandId: id })))));
+    series.value = results.flat();
+  } catch (cause) { error.value = getApiErrorMessage(cause); }
+}, { immediate: true });
 onMounted(load);
 </script>
 
@@ -44,9 +54,9 @@ onMounted(load);
   <div class="mb-4 space-y-3">
     <input type="search" class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800" placeholder="Найти товар, бренд или серию" aria-label="Поиск по каталогу" :value="modelValue.search ?? ''" @input="update({ search: ($event.target as HTMLInputElement).value || undefined })" />
     <details :open="expanded" @toggle="expanded = ($event.target as HTMLDetailsElement).open" class="space-y-3">
-      <summary class="cursor-pointer py-2 text-sm font-semibold text-gray-700 dark:text-slate-200">Фильтры<span v-if="activeCount"> · {{ activeCount }}</span><span class="ml-2 font-normal text-gray-500">Бренд, серия, поставщик, характеристики</span></summary>
+      <summary class="cursor-pointer py-2 text-sm font-semibold text-gray-700 dark:text-slate-200">Фильтры<span v-if="activeCount"> · {{ activeCount }}</span><span class="ml-2 font-normal text-gray-500">{{ canManagePlatform ? 'Бренд, серия, поставщик, характеристики' : 'Бренд, серия, характеристики' }}</span></summary>
     <div class="flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800">
-      <label class="min-w-40 flex-1 text-xs font-semibold text-gray-600 dark:text-slate-300">Поставщик
+      <label v-if="canManagePlatform" class="min-w-40 flex-1 text-xs font-semibold text-gray-600 dark:text-slate-300">Поставщик
         <select class="mt-1 block w-full rounded-lg border bg-transparent p-2 text-sm" aria-label="Поставщик" :value="modelValue.supplierId ?? ''" @change="update({ supplierId: Number(($event.target as HTMLSelectElement).value) || undefined })">
           <option value="">Все поставщики</option><option v-for="supplier in suppliers" :key="supplier.id" :value="supplier.id">{{ supplier.name }}</option>
         </select>

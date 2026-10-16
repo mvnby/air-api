@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
-from core.security import get_current_username
+from core.security import get_current_catalog_username
 from schemas_features import (
     FeatureCategoryResponse,
     FeatureCreatePayload,
@@ -55,7 +55,7 @@ router = APIRouter(
 )
 async def list_feature_categories(
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Read feature-library categories in their display order. This shared dictionary has no
@@ -83,7 +83,7 @@ async def list_features(
     scope_type: Literal["universal", "brand", "series", "product", "derived"] | None = Query(None),
     is_active: bool | None = Query(True),
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Read shared feature definitions with category/brand/product/scope filters. Active
@@ -118,7 +118,7 @@ async def list_features(
 async def create_feature(
     payload: FeatureCreatePayload,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Create a feature and its automatic rules; is_active defaults to true. New definitions
@@ -127,8 +127,10 @@ async def create_feature(
     unpublished media returns 400. Returns 201; creation does not assign it to every brand
     product and has no idempotency receipt.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [feature
     taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
@@ -144,7 +146,7 @@ async def create_feature(
 async def preview_feature_series_migration(
     series_ids: list[int] | None = Query(None),
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Read candidates where the same active manual feature is assigned without individual
@@ -152,8 +154,10 @@ async def preview_feature_series_migration(
     all series; returned candidate tokens describe the current source links. This read-only
     report does not create series links or remove product links.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [feature
     taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
@@ -169,7 +173,7 @@ async def preview_feature_series_migration(
 async def apply_feature_series_migration(
     payload: ManagerFeatureSeriesMigrationApplyPayload,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Move only submitted candidate rows from repeated product assignments to series
@@ -178,8 +182,10 @@ async def apply_feature_series_migration(
     are locked and revalidated; refresh preview after conflict. This mutates catalog
     inheritance and is not a background job.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [feature
     taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
@@ -195,7 +201,7 @@ async def apply_feature_series_migration(
 async def get_feature(
     feature_id: int,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Read a shared feature definition, rules and relationships, including archived
@@ -220,7 +226,7 @@ async def update_feature(
     feature_id: int,
     payload: FeatureUpdatePayload,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Update supplied definition fields/rules, validating ownership, replacements and media
@@ -228,8 +234,10 @@ async def update_feature(
     illegal scope changes returns 400. Legacy series/product/derived definitions must be
     migrated to universal or brand before ordinary editing.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [feature
     taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
@@ -245,15 +253,17 @@ async def update_feature(
 async def archive_feature(
     feature_id: int,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Set the feature inactive and return its archived definition; this is not a physical
     delete. Missing feature returns 404. Archiving changes effective catalog projections
     while keeping the stored definition and historical relationships.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [feature
     taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
@@ -272,7 +282,7 @@ async def upsert_target_link(
     target_id: int,
     payload: FeatureTargetLinkPayload,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Create or update a brand/series feature assignment and overrides; returns 204. Feature
@@ -280,8 +290,10 @@ async def upsert_target_link(
     fourth featured series feature returns 400; missing target returns 404. is_featured
     applies only to series; universal rules resolve separately from stored assignments.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [feature
     taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
@@ -306,7 +318,7 @@ async def delete_target_link(
     target_type: Literal["brand", "series"],
     target_id: int,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Remove a stored brand/series assignment and return 204. Missing series returns 404; an
@@ -314,8 +326,10 @@ async def delete_target_link(
     inheritance path but does not archive the feature or suppress other rule/product
     assignments.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [feature
     taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
@@ -337,7 +351,7 @@ async def delete_target_link(
 async def get_product_features(
     product_id: int,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Read a product feature workspace with explicit assignments, effective
@@ -362,7 +376,7 @@ async def update_product_features(
     product_id: int,
     payload: ManagerProductFeaturesUpdatePayload,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Replace a product’s explicit feature assignments, including enabled/hidden overrides,
@@ -370,8 +384,10 @@ async def update_product_features(
     inherited/rule-derived features may remain. Missing product returns 404; duplicate,
     invalid, archived or incompatible features/media returns 400. Writes commit together.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [feature
     taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
@@ -390,15 +406,17 @@ async def delete_product_feature(
     product_id: int,
     feature_id: int,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Delete the explicit product assignment and return the resolved workspace. Missing
     product returns 404; missing assignment is a no-op. Inherited or automatic features can
     reappear, so deletion is different from an explicit hidden override.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [feature
     taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
@@ -417,7 +435,7 @@ async def apply_product_feature_suggestions(
     product_id: int,
     payload: ManagerFeatureSuggestionsApplyPayload,
     session: AsyncSession = Depends(get_session),
-    _user: str = Depends(get_current_username),
+    _user: str = Depends(get_current_catalog_username),
 ):
     """
     Revalidate requested suggestion IDs and persist only legacy derived suggestions, then
@@ -425,8 +443,10 @@ async def apply_product_feature_suggestions(
     links. Missing product returns 404; outdated/unavailable suggestions return 409. Refresh
     the workspace before retrying stale suggestions.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [feature
     taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).

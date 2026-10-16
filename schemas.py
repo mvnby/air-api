@@ -807,6 +807,7 @@ class ManagerAuthStatusResponse(BaseModel):
     can_change_password: bool = False
     must_change_password: bool = False
     demo_read_only: bool = False
+    is_platform_owner: bool = False
 
 
 class ManagerPasswordChangePayload(BaseModel):

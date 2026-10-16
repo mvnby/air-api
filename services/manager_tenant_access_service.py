@@ -17,6 +17,7 @@ class ManagerTenantAccess:
     membership_id: int
     role: str
     tenant_scope: TenantScope
+    permissions: tuple[str, ...] = ()
 
 
 class ManagerTenantAccessResolver:
@@ -48,6 +49,7 @@ class ManagerTenantAccessResolver:
         return ManagerTenantAccess(
             membership_id=candidate.membership_id,
             role=candidate.role,
+            permissions=candidate.permissions,
             tenant_scope=TenantScope(
                 tenant_id=candidate.tenant_id,
                 storefront_id=candidate.storefront_id,

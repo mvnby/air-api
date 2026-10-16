@@ -15,7 +15,9 @@ const editingStaff = ref<ManagerStaffResponse | null>(null);
 
 const roleLabels: Record<string, string> = {
     owner: 'Владелец',
+    admin: 'Администратор',
     manager: 'Менеджер',
+    catalog_editor: 'Редактор каталога',
     installer: 'Монтажник',
 };
 

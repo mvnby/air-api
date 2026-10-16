@@ -28,6 +28,8 @@ class BotAccessContext:
     primary_role: str = ""
     roles: list[str] = field(default_factory=list)
     legacy_installer_id: Optional[int] = None
+    is_platform_owner: bool = False
+    permissions: tuple[str, ...] = ()
 
     @property
     def is_manager(self) -> bool:
@@ -141,6 +143,10 @@ class BotAccessService:
                 primary_role=primary_role,
                 roles=roles,
                 legacy_installer_id=user.legacy_installer_id,
+                is_platform_owner=LegacyOwnerAuthGuard.allows_bound_staff(
+                    legacy_owner_state, staff_user_id=int(user.id or 0),
+                ),
+                permissions=tuple(membership.permissions or ()),
             )
 
         if settings.is_admin_user(normalized_telegram_id):

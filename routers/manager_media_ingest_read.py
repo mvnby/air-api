@@ -3,7 +3,7 @@ from typing import List
 from fastapi import APIRouter, Depends, Query
 
 from core.logger import logger
-from core.security import get_current_username
+from core.security import get_current_catalog_username
 from routers.manager_operation_ids import SEARCH_IMAGES
 from schemas import ManagerMediaImageSearchResultResponse
 from services.manager_media_service import ManagerMediaService
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/manager", tags=["manager"])
 async def search_images(
     q: str = Query(..., description="Query string for image search"),
     max_results: int = 20,
-    username: str = Depends(get_current_username),
+    username: str = Depends(get_current_catalog_username),
 ):
     """
     Search DuckDuckGo remotely for image metadata/URLs using q and max_results. Provider

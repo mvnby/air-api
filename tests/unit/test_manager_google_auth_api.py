@@ -11,8 +11,7 @@ from core.config import settings
 from core.database import get_session
 from core.security import (
     AuthenticatedUser,
-    get_current_owner_username,
-    require_owner_access,
+    get_current_auth_context,
 )
 from models.tenancy import TenantScope
 from routers.manager_google_auth import (
@@ -75,14 +74,14 @@ async def google_auth_client(monkeypatch):
         https_only=False,
     )
     app.include_router(manager_google_auth_router)
-    app.dependency_overrides[get_current_owner_username] = lambda: "admin"
-    app.dependency_overrides[require_owner_access] = lambda: AuthenticatedUser(
+    app.dependency_overrides[get_current_auth_context] = lambda: AuthenticatedUser(
         username=settings.ADMIN_USERNAME,
         auth_source="legacy",
         role="owner",
         tenant_id=1,
         storefront_id=1,
         is_system_tenant=True,
+        is_platform_owner=True,
     )
 
     async def _override_session():

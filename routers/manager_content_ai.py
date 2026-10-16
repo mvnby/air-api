@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from core.security import AuthenticatedUser, get_current_auth_context, get_current_username
+from core.security import AuthenticatedUser, get_current_auth_context, get_current_catalog_username
 from routers.manager_operation_ids import (
     CREATE_MANAGER_BRAND_SHORT_DESCRIPTION_AI_DRAFT,
     CREATE_MANAGER_FEATURE_CONTENT_AI_DRAFT,
@@ -29,7 +29,7 @@ from services.manager_content_source_service import ManagerContentSourceError
 router = APIRouter(
     prefix="/api/manager/content-ai",
     tags=["manager-content-ai"],
-    dependencies=[Depends(get_current_username)],
+    dependencies=[Depends(get_current_catalog_username)],
     route_class=ManagerPermissionRoute,
 )
 service = ManagerContentAIService()
@@ -51,8 +51,10 @@ async def create_manager_brand_short_description_ai_draft(
     provider failures return 502. Repeating makes another provider request and may return
     different text.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [feature
     taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
@@ -82,8 +84,10 @@ async def create_manager_feature_content_ai_draft(
     failure 502, limits 429 with Retry-After, and provider failures 502/503. Repeating calls
     the provider again.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [feature
     taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).
@@ -114,8 +118,10 @@ async def create_manager_series_content_ai_draft(
     Invalid/unsafe source returns 422, upstream fetch failure 502, limits 429 with
     Retry-After and provider failures 502/503. Repeating may produce different draft text.
 
-    Access and scope: system-tenant Manager access is required; this operates on the shared
-    platform catalog. See [Manager
+    Access and scope: shared catalog operations require an explicit platform-owner or
+    delegated catalog permission, independent of company membership. Destructive operations
+    require catalog.master.delete; imports, bulk tools and procurement remain platform-owner-only.
+    This operates on the shared platform catalog. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     See [feature
     taxonomy](https://github.com/mvnby/air-api/blob/main/docs/catalog/feature-taxonomy-guide.md).

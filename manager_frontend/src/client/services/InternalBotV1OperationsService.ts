@@ -71,7 +71,8 @@ export class InternalBotV1OperationsService {
     }
     /**
      * Update Catalog Product Price
-     * Set an absolute shared product price for an active Manager actor (403 otherwise).
+     * Set an absolute shared product price for an active staff actor with explicit
+     * catalog.master.edit permission or platform-owner authority (403 otherwise).
      * Returns changed from the product service; invalid values return 422. It does not change
      * a tenant-specific storefront offer price.
      *
@@ -102,7 +103,8 @@ export class InternalBotV1OperationsService {
     }
     /**
      * Delete Catalog Product
-     * Delete a shared product for an active Manager actor (403 otherwise), returning the
+     * Delete a shared product for an active staff actor with catalog.master.edit and
+     * catalog.master.delete, or platform-owner authority (403 otherwise), returning the
      * product service changed result. Invalid service input returns 422; this is a catalog
      * mutation, not a storefront unpublish operation.
      *

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useCatalogAccess } from "../composables/useCatalogAccess";
+const { canDeleteCatalog } = useCatalogAccess();
 import { ref, computed, onMounted } from 'vue';
 import { api } from '../api';
 import type { ManagerTagGroupResponse, ManagerTagOptionResponse } from '../client';
@@ -55,6 +57,7 @@ const openEditGroup = (group: ManagerTagGroupResponse) => {
 };
 
 const deleteGroup = async (group: ManagerTagGroupResponse) => {
+  if (!canDeleteCatalog.value) return;
   if (!await confirmDialog({ title: 'Удалить группу тегов?', description: group.title, confirmText: 'Удалить', variant: 'danger' })) return;
   try {
     await api.deleteManagerTagGroup(group.id);
@@ -78,6 +81,7 @@ const openEditTag = (tag: ManagerTagOptionResponse) => {
 };
 
 const deleteTag = async (tag: ManagerTagOptionResponse) => {
+  if (!canDeleteCatalog.value) return;
   if (!await confirmDialog({ title: 'Удалить тег?', description: tag.title, confirmText: 'Удалить', variant: 'danger' })) return;
   try {
     await api.deleteManagerTag(tag.id);
@@ -175,7 +179,7 @@ const deleteTag = async (tag: ManagerTagOptionResponse) => {
             
             <div class="flex items-center gap-2">
               <button 
-                @click="deleteGroup(selectedGroup)"
+                v-if="canDeleteCatalog" @click="deleteGroup(selectedGroup)"
                 class="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
               >
                 <span class="material-icons-round text-[18px]">delete</span>
@@ -211,7 +215,7 @@ const deleteTag = async (tag: ManagerTagOptionResponse) => {
                    <h4 class="font-medium text-gray-800 dark:text-gray-200 truncate pr-2" :title="tag.title">{{ tag.title }}</h4>
                    <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                      <button @click="openEditTag(tag)" class="text-gray-400 hover:text-brand-600 dark:hover:text-brand-400"><span class="material-icons-round text-[16px]">edit</span></button>
-                     <button @click="deleteTag(tag)" class="text-gray-400 hover:text-red-500"><span class="material-icons-round text-[16px]">close</span></button>
+                     <button v-if="canDeleteCatalog" @click="deleteTag(tag)" class="text-gray-400 hover:text-red-500"><span class="material-icons-round text-[16px]">close</span></button>
                    </div>
                  </div>
                  <div class="text-xs text-gray-500 dark:text-slate-400 font-mono mb-3 truncate">

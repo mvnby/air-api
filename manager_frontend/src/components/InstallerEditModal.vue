@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import BynSymbol from './money/BynSymbol.vue';
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { api, type ManagerStaffCreatePayload, type ManagerStaffResponse, type ManagerStaffUpdatePayload } from '../api';
+import { managerSession } from '../services/manager-session';
 import { getApiErrorMessage } from '../utils/api-errors';
 
 const props = defineProps<{
@@ -14,6 +15,8 @@ const emit = defineEmits<{
     (e: 'success'): void;
 }>();
 
+const canAssignOwner = computed(() => managerSession.auth.value?.role === 'owner');
+const ownerProtected = computed(() => !canAssignOwner.value && props.staffUser?.primary_role === 'owner');
 const loading = ref(false);
 const error = ref('');
 
@@ -89,6 +92,7 @@ const buildPayload = (): ManagerStaffCreatePayload | ManagerStaffUpdatePayload =
 });
 
 const submit = async () => {
+    if (ownerProtected.value || (!canAssignOwner.value && formData.value.primary_role === 'owner')) return;
     if (!formData.value.display_name.trim()) {
         error.value = 'Имя сотрудника обязательно';
         return;
@@ -135,6 +139,7 @@ const submit = async () => {
                             {{ error }}
                         </div>
 
+                        <p v-if="ownerProtected" class="text-sm text-amber-700">Профиль владельца может изменять только владелец компании.</p>
                         <section class="space-y-3">
                             <h4 class="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Профиль</h4>
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -145,9 +150,11 @@ const submit = async () => {
 
                                 <label class="block">
                                     <span class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Роль</span>
-                                    <select v-model="formData.primary_role" class="field-input" :disabled="loading">
-                                        <option value="owner">Владелец</option>
+                                    <select v-model="formData.primary_role" class="field-input" :disabled="loading || ownerProtected">
+                                        <option value="owner" :disabled="!canAssignOwner">Владелец</option>
+                                        <option value="admin">Администратор</option>
                                         <option value="manager">Менеджер</option>
+                                        <option value="catalog_editor">Редактор каталога</option>
                                         <option value="installer">Монтажник</option>
                                     </select>
                                 </label>
@@ -233,7 +240,7 @@ const submit = async () => {
                         <button
                             @click="submit"
                             class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-brand-600 hover:bg-brand-500 active:bg-brand-700 transition-colors rounded-lg disabled:opacity-50 shadow-lg shadow-brand-900/30"
-                            :disabled="loading || !formData.display_name.trim()"
+                            :disabled="loading || ownerProtected || !formData.display_name.trim()"
                         >
                             <span v-if="loading" class="material-icons-round text-sm animate-spin">refresh</span>
                             <span v-else class="material-icons-round text-sm">save</span>
