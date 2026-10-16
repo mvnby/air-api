@@ -19,6 +19,7 @@ class ManagerAccessDAO:
             select(TenantMembership, StaffUser.display_name, Tenant.display_name)
             .join(StaffUser, StaffUser.id == TenantMembership.staff_user_id)
             .join(Tenant, Tenant.id == TenantMembership.tenant_id)
+            .where(StaffUser.merged_into_staff_user_id.is_(None))
         )
         if search and search.strip():
             term = f"%{search.strip()}%"
@@ -38,6 +39,6 @@ class ManagerAccessDAO:
             select(TenantMembership, StaffUser.display_name, Tenant.display_name)
             .join(StaffUser, StaffUser.id == TenantMembership.staff_user_id)
             .join(Tenant, Tenant.id == TenantMembership.tenant_id)
-            .where(TenantMembership.id == membership_id)
+            .where(TenantMembership.id == membership_id, StaffUser.merged_into_staff_user_id.is_(None))
             .with_for_update(of=TenantMembership)
         )).first()

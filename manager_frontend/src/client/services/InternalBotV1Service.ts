@@ -4,6 +4,8 @@
 /* eslint-disable */
 import type { Body_attach_internal_bot_task_stage_file_v1 } from '../models/Body_attach_internal_bot_task_stage_file_v1';
 import type { Body_recognize_internal_bot_customer_requisites_file_v1 } from '../models/Body_recognize_internal_bot_customer_requisites_file_v1';
+import type { BotAccountLinkClaimRequest } from '../models/BotAccountLinkClaimRequest';
+import type { BotAccountLinkClaimResponse } from '../models/BotAccountLinkClaimResponse';
 import type { BotApiHealthResponse } from '../models/BotApiHealthResponse';
 import type { BotCatalogProductLookupResponse } from '../models/BotCatalogProductLookupResponse';
 import type { BotCatalogSearchRequest } from '../models/BotCatalogSearchRequest';
@@ -30,10 +32,52 @@ import type { BotTaskReportSaveRequest } from '../models/BotTaskReportSaveReques
 import type { BotTaskReportSaveResponse } from '../models/BotTaskReportSaveResponse';
 import type { BotTaskStatusUpdateRequest } from '../models/BotTaskStatusUpdateRequest';
 import type { BotTaskStatusUpdateResponse } from '../models/BotTaskStatusUpdateResponse';
+import type { BotTelegramLoginDecisionRequest } from '../models/BotTelegramLoginDecisionRequest';
+import type { BotTelegramLoginDecisionResponse } from '../models/BotTelegramLoginDecisionResponse';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class InternalBotV1Service {
+    /**
+     * Claim Account Link
+     * Claim a short-lived link/login token using the sender of a real private /start update. Requires service BOT_API_TOKEN, not Manager credentials. Link claims need not be existing staff and only stage proof; final browser confirmation owns the write. Login claims require an already linked active identity. Same-sender delivery retry is safe; another sender409, unknown/expired token404/409. Never merges accounts or issues a user JWT.
+     * @param requestBody
+     * @returns BotAccountLinkClaimResponse Successful Response
+     * @throws ApiError
+     */
+    public static claimInternalBotAccountLinkV1(
+        requestBody: BotAccountLinkClaimRequest,
+    ): CancelablePromise<BotAccountLinkClaimResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/internal/bot/v1/account-links/claim',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Decide Login
+     * Record the actual private Telegram sender's approve/deny callback after displaying the matching browser code. Requires BOT_API_TOKEN; only the original claimant may decide. Approval revalidates the current linked account and auth_version. Only the originating browser can consume this approval via POST /login/telegram/challenges/{id}/complete.
+     * @param requestBody
+     * @returns BotTelegramLoginDecisionResponse Successful Response
+     * @throws ApiError
+     */
+    public static decideInternalBotTelegramLoginV1(
+        requestBody: BotTelegramLoginDecisionRequest,
+    ): CancelablePromise<BotTelegramLoginDecisionResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/internal/bot/v1/account-links/login-decision',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
     /**
      * Get Internal Bot Api Health
      * Check that the authenticated bot API is reachable and report its v1 contract marker.

@@ -697,6 +697,7 @@ class ManagerStaffUpdatePayload(BaseModel):
 
 class ManagerStaffResponse(ManagerStaffBase):
     id: int
+    avatar_url: Optional[str] = None
     has_password: bool = False
     legacy_installer_id: Optional[int] = None
     created_at: datetime
@@ -798,6 +799,7 @@ class ManagerAuthStatusResponse(BaseModel):
     staff_user_id: Optional[int] = None
     role: Optional[str] = None
     display_name: Optional[str] = None
+    avatar_url: Optional[str] = None
     auth_source: str = "legacy"
     tenant_id: int
     storefront_id: int

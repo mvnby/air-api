@@ -37,6 +37,8 @@ class LegacyOwnerAuthStateService:
                 read=True,
                 of=LegacyOwnerAuthState,
             )
+        if for_update or for_share:
+            statement = statement.execution_options(populate_existing=True)
         state = (await session.execute(statement)).scalar_one_or_none()
         if state is None or state.mode not in cls.MODES:
             raise LegacyOwnerAuthStateUnavailableError(

@@ -41,6 +41,7 @@ from services.communications.website_canary_target import (
     WebsiteCanaryTarget,
 )
 from services.staff_user_service import StaffUserService
+from services.staff_telegram_notifications import notifications_enabled
 
 
 class WebsiteCanaryProviderBoundaryRejected(CommunicationsCanarySafetyError):
@@ -59,6 +60,7 @@ def _reject() -> NoReturn:
 
 
 def _lock(statement, session: AsyncSession):
+    statement = statement.execution_options(populate_existing=True)
     if session.get_bind().dialect.name == "postgresql":
         return statement.with_for_update()
     return statement
@@ -184,6 +186,7 @@ async def lock_exact_website_recipient(
         or staff_user is None
         or membership is None
         or staff_user.status != StaffUserService.STATUS_ACTIVE
+        or not notifications_enabled(staff_user)
         or membership.status != "active"
         or membership.role
         not in TenantWebsiteManagementRecipientDirectory.ELIGIBLE_MEMBERSHIP_ROLES

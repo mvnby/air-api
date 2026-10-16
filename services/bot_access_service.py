@@ -7,6 +7,7 @@ from sqlmodel import select
 from core.config import settings
 from models import StaffUser, TenantMembership
 from services.staff_user_service import StaffUserService
+from services.staff_telegram_notifications import legacy_telegram_allowed
 from services.legacy_owner_auth_guard import LegacyOwnerAuthGuard
 from services.legacy_owner_auth_state_service import (
     LegacyOwnerAuthStateUnavailableError,
@@ -149,7 +150,8 @@ class BotAccessService:
                 permissions=tuple(membership.permissions or ()),
             )
 
-        if settings.is_admin_user(normalized_telegram_id):
+        if (settings.is_admin_user(normalized_telegram_id)
+                and await legacy_telegram_allowed(session, normalized_telegram_id)):
             return BotAccessContext(
                 telegram_id=normalized_telegram_id,
                 is_staff=True,

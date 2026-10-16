@@ -28,6 +28,9 @@ class _DummyResult:
     def all(self):
         return []
 
+    def __iter__(self):
+        return iter(self.all())
+
 
 class _DummySession:
     def __init__(self, order):

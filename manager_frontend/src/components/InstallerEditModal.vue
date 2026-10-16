@@ -28,8 +28,6 @@ const formData = ref({
     password: '',
     phone: '',
     email: '',
-    telegram_id: null as number | null,
-    telegram_username: '',
     is_assignable_installer: false,
     default_rate: null as number | null,
 });
@@ -45,8 +43,6 @@ watch(() => props.modelValue, (val) => {
             password: '',
             phone: props.staffUser.phone || '',
             email: props.staffUser.email || '',
-            telegram_id: props.staffUser.telegram_id ?? null,
-            telegram_username: props.staffUser.telegram_username || '',
             is_assignable_installer: props.staffUser.is_assignable_installer ?? false,
             default_rate: props.staffUser.default_rate ?? null,
         };
@@ -59,8 +55,6 @@ watch(() => props.modelValue, (val) => {
             password: '',
             phone: '',
             email: '',
-            telegram_id: null,
-            telegram_username: '',
             is_assignable_installer: false,
             default_rate: null,
         };
@@ -85,8 +79,6 @@ const buildPayload = (): ManagerStaffCreatePayload | ManagerStaffUpdatePayload =
     password: formData.value.password.trim() || null,
     phone: nullableText(formData.value.phone),
     email: nullableText(formData.value.email),
-    telegram_id: formData.value.telegram_id,
-    telegram_username: nullableText(formData.value.telegram_username.replace(/^@/, '')),
     is_assignable_installer: formData.value.is_assignable_installer,
     default_rate: formData.value.default_rate,
 });
@@ -186,20 +178,7 @@ const submit = async () => {
                             </div>
                         </section>
 
-                        <section class="space-y-3">
-                            <h4 class="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Telegram</h4>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <label class="block">
-                                    <span class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Telegram ID</span>
-                                    <input v-model.number="formData.telegram_id" type="number" class="field-input" placeholder="123456789" :disabled="loading" />
-                                </label>
-
-                                <label class="block">
-                                    <span class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Username</span>
-                                    <input v-model="formData.telegram_username" type="text" class="field-input" placeholder="@username" :disabled="loading" />
-                                </label>
-                            </div>
-                        </section>
+                        <p class="text-sm text-gray-500 dark:text-slate-400">Telegram сотрудник подключает самостоятельно в своём профиле.</p>
 
                         <section class="space-y-3">
                             <h4 class="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Работы и статус</h4>

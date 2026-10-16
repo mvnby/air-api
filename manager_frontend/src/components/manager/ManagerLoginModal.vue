@@ -72,7 +72,8 @@ const emit = defineEmits<{
         >
           {{ loading ? 'Входим...' : 'Войти' }}
         </button>
-        <div v-if="telegramEnabled" class="pt-2">
+      </form>
+        <div v-if="telegramEnabled" class="pt-4">
           <div class="mb-3 flex items-center gap-3 text-xs uppercase tracking-[0.18em] text-[var(--kitlane-muted)]">
             <span class="h-px flex-1 bg-gray-200" />
             <span>или</span>
@@ -85,7 +86,6 @@ const emit = defineEmits<{
             <slot name="telegram" />
           </div>
         </div>
-      </form>
     </div>
   </div>
 </template>

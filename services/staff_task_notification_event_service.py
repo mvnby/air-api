@@ -27,6 +27,7 @@ from services.communications.staff_task_contracts import (
     StaffTaskNotificationPayloadV1,
 )
 from services.staff_user_service import StaffUserService
+from services.staff_telegram_notifications import notifications_enabled
 from services.tenant_scope_service import (
     tenant_scope_clause,
 )
@@ -80,6 +81,7 @@ class StaffTaskNotificationEventService:
             or staff_user.id is None
             or not StaffUserService.is_active(staff_user)
             or staff_user.telegram_id is None
+            or not notifications_enabled(staff_user)
         ):
             return False
         membership = (

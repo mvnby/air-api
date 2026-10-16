@@ -10,6 +10,7 @@ import {
   Settings,
 } from 'lucide-vue-next';
 
+import PersonAvatar from '../common/PersonAvatar.vue';
 import type { ManagerAuthStatusResponse } from '../../client';
 import { MANAGER_CAPABILITY, hasManagerCapability } from '../../manager-capabilities';
 import { managerStorefrontSelection } from '../../services/manager-storefront-selection';
@@ -34,7 +35,6 @@ const logoutLoading = ref(false);
 const accountName = computed(() => (
   String(props.auth.display_name || props.auth.username || 'Аккаунт').trim()
 ));
-const avatarLetter = computed(() => accountName.value.charAt(0).toUpperCase() || 'А');
 const currentStorefront = computed(() => {
   const selected = managerStorefrontSelection.selectedSlug.value;
   return managerStorefrontSelection.storefronts.value.find(
@@ -113,9 +113,7 @@ onBeforeUnmount(() => {
       aria-haspopup="menu"
       @click="open = !open"
     >
-      <span class="kitlane-account-avatar">
-        {{ avatarLetter }}
-      </span>
+      <PersonAvatar :name="accountName" :src="auth.avatar_url" size="sm" />
       <span class="hidden min-w-0 sm:block">
         <span class="block max-w-44 truncate text-sm font-semibold text-gray-900">{{ accountName }}</span>
         <span class="block max-w-44 truncate text-[11px] text-gray-500">{{ currentStorefront }}</span>

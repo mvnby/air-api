@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PersonAvatar from '../components/common/PersonAvatar.vue';
 import MoneyAmount from '../components/money/MoneyAmount.vue';
 import { onMounted, ref } from 'vue';
 import { api, type ManagerStaffResponse } from '../api';
@@ -140,9 +141,7 @@ onMounted(() => {
                         <tr v-for="item in staff" :key="item.id" class="hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors group">
                             <td class="px-5 py-4">
                                 <div class="flex items-center min-w-[220px]">
-                                    <div class="h-9 w-9 rounded-full bg-gray-100 dark:bg-slate-700 flex items-center justify-center border border-gray-200 dark:border-slate-600 text-gray-600 dark:text-slate-300 font-bold text-xs shrink-0">
-                                        {{ item.display_name.substring(0, 2).toUpperCase() }}
-                                    </div>
+                                    <PersonAvatar :name="item.display_name" :src="item.avatar_url" size="sm" />
                                     <div class="ml-3 min-w-0">
                                         <div class="text-sm font-medium text-gray-900 dark:text-slate-100 truncate">{{ item.display_name }}</div>
                                         <div class="text-xs text-gray-500 dark:text-slate-500 truncate">
@@ -166,7 +165,7 @@ onMounted(() => {
                             </td>
                             <td class="px-5 py-4 hidden md:table-cell">
                                 <div class="text-sm text-gray-700 dark:text-slate-300">
-                                    <div v-if="item.telegram_id">{{ item.telegram_id }}</div>
+                                    <div v-if="item.telegram_id">Подключён</div>
                                     <div v-else class="text-gray-400 dark:text-slate-500">Не привязан</div>
                                     <div v-if="item.telegram_username" class="text-xs text-blue-600 dark:text-blue-400">@{{ item.telegram_username }}</div>
                                 </div>

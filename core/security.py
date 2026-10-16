@@ -22,6 +22,7 @@ from services.manager_storefront_selector_service import (
 )
 from services.staff_user_service import StaffUserService
 from services.legacy_owner_auth_guard import LegacyOwnerAuthGuard
+from services.legacy_owner_managed_identity_service import LegacyOwnerManagedIdentityService
 from services.tenant_scope_service import SystemTenantScopeResolver
 
 # JWT CONFIG
@@ -158,6 +159,12 @@ async def get_current_auth_context(
                 username=str(staff_user.username or ""),
             ):
                 raise HTTPException(status_code=401, detail="Invalid user")
+            if LegacyOwnerManagedIdentityService.is_bound(
+                legacy_owner_state, staff_user_id=int(staff_user.id or 0),
+            ) and not await LegacyOwnerManagedIdentityService.exact_bound_staff_identity_allowed(
+                session, state=legacy_owner_state, user=staff_user,
+            ):
+                raise HTTPException(status_code=401, detail="Invalid owner profile")
             try:
                 access = await ManagerTenantAccessResolver.resolve(
                     session,

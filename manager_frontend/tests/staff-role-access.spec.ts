@@ -30,6 +30,19 @@ describe('employee role controls', () => {
     wrapper.unmount();
     update.mockRestore();
   });
+  it('omits Telegram identity fields from an ordinary employee update', async () => {
+    managerSession.auth.value = { role: 'owner' } as any;
+    const update = vi.spyOn(api, 'patchManagerStaff').mockResolvedValue({} as any);
+    const wrapper = mount(InstallerEditModal, { props: { modelValue: false, staffUser: { id: 8, display_name: 'Employee', primary_role: 'manager', status: 'active', telegram_id: 123, telegram_username: 'existing' } as any }, global: { stubs: { teleport: true } } });
+    await wrapper.setProps({ modelValue: true });
+    expect(wrapper.find('input[type="number"][placeholder="123456789"]').exists()).toBe(false);
+    await wrapper.findAll('button').find(button => button.text().includes('Сохранить'))!.trigger('click'); await flushPromises();
+    expect(update).toHaveBeenCalledOnce();
+    expect(update.mock.calls[0]![1]).not.toHaveProperty('telegram_id');
+    expect(update.mock.calls[0]![1]).not.toHaveProperty('telegram_username');
+    wrapper.unmount(); update.mockRestore();
+  });
+
   it('allows a company owner to select an owner role', async () => {
     managerSession.auth.value = { role: 'owner' } as any;
     const wrapper = mount(InstallerEditModal, { props: { modelValue: false }, global: { stubs: { teleport: true } } });

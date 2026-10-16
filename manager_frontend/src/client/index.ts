@@ -38,6 +38,7 @@ export type { Body_create_installation_estimate_lead } from './models/Body_creat
 export type { Body_create_repair_diagnostic_lead } from './models/Body_create_repair_diagnostic_lead';
 export type { Body_import_manager_bank_statement } from './models/Body_import_manager_bank_statement';
 export type { Body_login_access_token } from './models/Body_login_access_token';
+export type { Body_manager_upload_own_avatar } from './models/Body_manager_upload_own_avatar';
 export type { Body_parse_internal_bot_voice_quick_order_v1 } from './models/Body_parse_internal_bot_voice_quick_order_v1';
 export type { Body_recognize_internal_bot_customer_requisites_file_v1 } from './models/Body_recognize_internal_bot_customer_requisites_file_v1';
 export type { Body_recognize_internal_bot_repair_nameplate_v1 } from './models/Body_recognize_internal_bot_repair_nameplate_v1';
@@ -56,6 +57,8 @@ export type { Body_upload_manager_order_document } from './models/Body_upload_ma
 export type { Body_upload_manager_registration_certificate } from './models/Body_upload_manager_registration_certificate';
 export type { Body_upload_manager_storefront_logo } from './models/Body_upload_manager_storefront_logo';
 export type { Body_upload_media_assets } from './models/Body_upload_media_assets';
+export type { BotAccountLinkClaimRequest } from './models/BotAccountLinkClaimRequest';
+export type { BotAccountLinkClaimResponse } from './models/BotAccountLinkClaimResponse';
 export type { BotApiHealthResponse } from './models/BotApiHealthResponse';
 export type { BotCatalogProductLookupResponse } from './models/BotCatalogProductLookupResponse';
 export type { BotCatalogProductResponse } from './models/BotCatalogProductResponse';
@@ -120,6 +123,8 @@ export type { BotTaskReportSaveResponse } from './models/BotTaskReportSaveRespon
 export type { BotTaskResponse } from './models/BotTaskResponse';
 export type { BotTaskStatusUpdateRequest } from './models/BotTaskStatusUpdateRequest';
 export type { BotTaskStatusUpdateResponse } from './models/BotTaskStatusUpdateResponse';
+export type { BotTelegramLoginDecisionRequest } from './models/BotTelegramLoginDecisionRequest';
+export type { BotTelegramLoginDecisionResponse } from './models/BotTelegramLoginDecisionResponse';
 export type { BotVoiceQuickOrderParseResponse } from './models/BotVoiceQuickOrderParseResponse';
 export type { BrandShortDescriptionDraft } from './models/BrandShortDescriptionDraft';
 export type { BrandShortDescriptionDraftRequest } from './models/BrandShortDescriptionDraftRequest';
@@ -577,6 +582,9 @@ export type { ManagerOrderTransferServiceLine } from './models/ManagerOrderTrans
 export type { ManagerOrderTransferServiceRef } from './models/ManagerOrderTransferServiceRef';
 export type { ManagerOrderTransferWorkStage } from './models/ManagerOrderTransferWorkStage';
 export type { ManagerOrderUpdatePayload } from './models/ManagerOrderUpdatePayload';
+export type { ManagerOwnAvatarDelete } from './models/ManagerOwnAvatarDelete';
+export type { ManagerOwnProfileResponse } from './models/ManagerOwnProfileResponse';
+export type { ManagerOwnProfileUpdate } from './models/ManagerOwnProfileUpdate';
 export type { ManagerPasswordChangePayload } from './models/ManagerPasswordChangePayload';
 export type { ManagerProductCollectionCreate } from './models/ManagerProductCollectionCreate';
 export type { ManagerProductCollectionItemPayload } from './models/ManagerProductCollectionItemPayload';
@@ -903,7 +911,13 @@ export type { SupplyRequestStockLinePayload } from './models/SupplyRequestStockL
 export type { SupplyRequestUpdatePayload } from './models/SupplyRequestUpdatePayload';
 export type { TagGroupResponse } from './models/TagGroupResponse';
 export type { TagResponse } from './models/TagResponse';
+export type { TelegramChallengeResponse } from './models/TelegramChallengeResponse';
+export type { TelegramChallengeStartResponse } from './models/TelegramChallengeStartResponse';
+export type { TelegramDisconnectPayload } from './models/TelegramDisconnectPayload';
+export type { TelegramLinkConfirmPayload } from './models/TelegramLinkConfirmPayload';
+export type { TelegramLinkedResponse } from './models/TelegramLinkedResponse';
 export type { TelegramLoginPayload } from './models/TelegramLoginPayload';
+export type { TelegramProfile } from './models/TelegramProfile';
 export type { TemplateExternalEditSyncPayload } from './models/TemplateExternalEditSyncPayload';
 export type { TemplateExternalEditSyncResponse } from './models/TemplateExternalEditSyncResponse';
 export type { TenderLeadPushResult } from './models/TenderLeadPushResult';
@@ -945,6 +959,7 @@ export { InternalBotV1VoiceService } from './services/InternalBotV1VoiceService'
 export { LoginService } from './services/LoginService';
 export { ManagerService } from './services/ManagerService';
 export { ManagerAccessService } from './services/ManagerAccessService';
+export { ManagerAccountTelegramService } from './services/ManagerAccountTelegramService';
 export { ManagerAnalyticsConnectionsService } from './services/ManagerAnalyticsConnectionsService';
 export { ManagerBackupsService } from './services/ManagerBackupsService';
 export { ManagerBrandsService } from './services/ManagerBrandsService';
@@ -983,6 +998,7 @@ export { ManagerOrderUsageService } from './services/ManagerOrderUsageService';
 export { ManagerPersonalTasksService } from './services/ManagerPersonalTasksService';
 export { ManagerPlatformAiService } from './services/ManagerPlatformAiService';
 export { ManagerProductCollectionsService } from './services/ManagerProductCollectionsService';
+export { ManagerProfileService } from './services/ManagerProfileService';
 export { ManagerRepairComplaintsService } from './services/ManagerRepairComplaintsService';
 export { ManagerServiceAttachmentsService } from './services/ManagerServiceAttachmentsService';
 export { ManagerServiceCatalogService } from './services/ManagerServiceCatalogService';

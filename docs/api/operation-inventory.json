@@ -9,6 +9,7 @@
     "reviewed_stage"
   ],
   "review_stages": {
+    "18": "Personal profile whitelist and optimistic edits, private company-scoped sanitized avatars, browser-bound Telegram linking and explicitly approved one-use bot login, fresh identity/membership/recovery validation and independent notification consent; reviewed 2026-10-16",
     "17": "Explicit platform-owner identity, tenant-local admin hierarchy and last-owner protection, delegated catalog edit/delete independent from CRM, live membership grants, audited optimistic cross-company permission administration; reviewed 2026-10-16",
     "16": "Shared Manager product reader: catalog.master.read, live tenant/storefront scope, published partner master browse, exact offer/grant projection, registered technical specifications, public gallery/manual URLs and plain text description, existing eligible decision selection and demo cost masking; read-only, reviewed 2026-10-15",
     "15": "DL/C6/C5/C4 envelope PDF at actual size, shared postal-line preview and explicit Belpost postcode suggestions; current Manager membership and customer tenant scope, reviewed one-time address overrides without writes, bounded provider lookup and embedded raster branding, manual selection/fallback, embedded Cyrillic and overflow rejection; reviewed 2026-10-16",
@@ -28,6 +29,23 @@
     "11": "Native tender direct push; dedicated key, fixed active system scope, writable-primary gates, bounded payload, shared pull/push deduplication, staff preservation, stale guards and unchanged pull checkpoint reviewed 2026-10-09 for issue 849"
   },
   "operations": {
+    "routers/manager_profile.py": [
+      ["DELETE /api/manager/account/profile/avatar", "manager_delete_own_avatar", false, 18],
+      ["GET /api/manager/account/profile", "manager_get_own_profile", false, 18],
+      ["GET /api/manager/staff/{staff_user_id}/avatar", "manager_read_staff_avatar", false, 18],
+      ["PATCH /api/manager/account/profile", "manager_update_own_profile", false, 18],
+      ["POST /api/manager/account/profile/avatar", "manager_upload_own_avatar", false, 18]
+    ],
+    "routers/manager_account_telegram.py": [
+      ["DELETE /api/manager/account/telegram", "disconnect_manager_telegram", false, 18],
+      ["GET /api/manager/account/telegram/link-challenges/{challenge_id}", "get_manager_telegram_link", false, 18],
+      ["POST /api/manager/account/telegram/link-challenges", "start_manager_telegram_link", false, 18],
+      ["POST /api/manager/account/telegram/link-challenges/{challenge_id}/confirm", "confirm_manager_telegram_link", false, 18]
+    ],
+    "routers/internal_bot_account_links.py": [
+      ["POST /api/internal/bot/v1/account-links/claim", "claim_internal_bot_account_link_v1", false, 18],
+      ["POST /api/internal/bot/v1/account-links/login-decision", "decide_internal_bot_telegram_login_v1", false, 18]
+    ],
     "routers/manager_access.py": [
       ["GET /api/manager/platform/access", "list_manager_access", false, 17],
       ["PATCH /api/manager/platform/access/{membership_id}", "update_manager_access", false, 17]
@@ -292,7 +310,7 @@
       ["PUT /api/manager/analytics-connections/yandex-webmaster", "upsert_manager_yandex_webmaster_connection", false, 3]
     ],
     "routers/manager_auth.py": [
-      ["GET /api/manager/me", "read_user_me", true, 3],
+      ["GET /api/manager/me", "read_user_me", true, 18],
       ["GET /api/manager/storefronts", "list_manager_storefronts", false, 3],
       ["POST /api/manager/account/change-password", "change_manager_account_password", false, 3]
     ],

@@ -17,6 +17,35 @@ class BotApiHealthResponse(BaseModel):
     api_version: Literal["v1"] = "v1"
 
 
+class BotAccountLinkClaimRequest(BaseModel):
+    token: str = Field(pattern=r"^[A-Za-z0-9_-]{43}$")
+    purpose: Literal["link", "login"]
+    telegram_id: int = Field(gt=0)
+    chat_id: int = Field(gt=0)
+    message_id: int = Field(gt=0)
+    telegram_username: str | None = Field(default=None, max_length=160)
+    telegram_display_name: str = Field(max_length=300)
+
+
+class BotAccountLinkClaimResponse(BaseModel):
+    challenge_id: str
+    purpose: Literal["link", "login"]
+    status: Literal["claimed", "approval_pending", "approved"]
+    expires_at: datetime
+    browser_code: str | None = None
+
+
+class BotTelegramLoginDecisionRequest(BaseModel):
+    challenge_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    telegram_id: int = Field(gt=0)
+    approve: bool
+
+
+class BotTelegramLoginDecisionResponse(BaseModel):
+    challenge_id: str
+    status: Literal["approved", "denied"]
+
+
 class BotStaffContextResponse(BaseModel):
     telegram_id: int = Field(ge=1)
     is_staff: bool = False

@@ -39,6 +39,19 @@ class StaffUser(SQLModel, table=True):
     email: Optional[str] = Field(default=None, index=True)
     telegram_id: Optional[int] = Field(default=None, sa_column=Column(BigInteger, unique=True, nullable=True))
     telegram_username: Optional[str] = Field(default=None, index=True)
+    telegram_verified_at: Optional[datetime] = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
+    telegram_notifications_enabled: bool = Field(
+        default=True, sa_column=Column(Boolean, nullable=False, server_default="true"),
+    )
+    avatar_version: Optional[str] = Field(
+        default=None, sa_column=Column(String(64), nullable=True),
+    )
+    # Historical identities remain addressable; authentication never follows this link.
+    merged_into_staff_user_id: Optional[int] = Field(
+        default=None, foreign_key="staff_users.id", index=True,
+    )
 
     legacy_installer_id: Optional[int] = Field(
         default=None,
