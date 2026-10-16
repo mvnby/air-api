@@ -15,6 +15,7 @@ vi.mock('../src/api', () => ({
   },
 }));
 
+import MoneyAmount from '../src/components/money/MoneyAmount.vue';
 import InstallationRateEditModal from '../src/components/InstallationRateEditModal.vue';
 import InstallersView from '../src/views/InstallersView.vue';
 import InstallationRatesView from '../src/views/InstallationRatesView.vue';
@@ -145,6 +146,10 @@ describe('installer rate presentation', () => {
     expect(wrapper.text()).toContain('12.345 BYN');
     expect(wrapper.text()).toContain('-5 BYN');
     expect(wrapper.text().match(/Ставка не задана/g)).toHaveLength(1);
-    expect(wrapper.findAll('svg[aria-hidden="true"]')).toHaveLength(3);
+    const rateAmounts = wrapper.findAllComponents(MoneyAmount);
+    expect(rateAmounts.map(amount => amount.props('value'))).toEqual([0, 12.345, -5]);
+    for (const amount of rateAmounts) {
+      expect(amount.findAll('svg[aria-hidden="true"]')).toHaveLength(1);
+    }
   });
 });
