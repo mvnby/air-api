@@ -64,17 +64,56 @@ infer broader authority from system-company membership, so a rollback to the old
 policy requires first restricting affected non-owner accounts. Do not downgrade
 the schema while a newer application instance remains active.
 
+## Stage 2: personal profile and Telegram
+
+The account menu opens one personal profile at `/manager/profile`. A person can
+edit their name, phone, email, photo and Telegram notification preference. Login,
+company roles and catalog grants are separate controls. Profile writes require
+the current profile timestamp and `X-Kitlane-Profile: 1`; stale edits return
+`409/profile_changed`. Changing contact email does not create a login factor.
+
+Photos accept JPEG, PNG or WebP up to 5 MiB and 20 million pixels. The server
+rejects animation, applies orientation, crops to a square and stores only a
+256px WebP without source metadata. The authenticated photo endpoint checks the
+viewer company before returning bytes or a conditional `304`. Retained company
+memberships allow old order photos; platform owners can inspect across companies.
+Photos have private, revalidated caching and never enter the public media library.
+
+Telegram connection uses a five-minute private-bot link. The bot proves its actual
+sender; the originating browser shows that profile and must confirm it. A
+forwarded link alone cannot bind a different person. A Telegram account already
+bound to another person cannot be stolen or merged. The bot also supports login
+for existing linked accounts through an explicit approval with a matching browser
+code. It does not create an account. Browser secrets are HttpOnly and opaque
+deep-link tokens are stored only as hashes. Login approval is consumed once and
+rechecks account version, company access and the owner recovery fence.
+
+Telegram link/removal rotates the authentication version and refreshes the current
+browser session. Removal requires a working alternate username/password. Turning
+notifications off preserves bot and login access while suppressing eligible
+deliveries, including previously queued staff-task notifications.
+
+Revoked Telegram bindings are retained in a private identity ledger. An old ID
+cannot regain bot privileges or deliveries through legacy `ADMIN_IDS` after
+unlinking or replacement. A later explicit verified binding remains authoritative.
+The compatible signed widget also finalizes identity, membership and replay proof
+under the same transaction; its JWT uses the verified authentication version.
+
+Migrations `t1162profile01` and `t1162telegram01` are additive and do not merge
+accounts. The fixed owner-profile consolidation has a separate reviewed plan and
+protected production workflow. It keeps the bound owner ID, login, password,
+authentication version and existing connector/business references; it transfers
+the other profile's personal data and retires that identity as historical.
+Authentication never follows historical aliases. See the dedicated
+[consolidation procedure](owner-profile-consolidation.md).
+
 ## Subsequent authorized stages
 
-1. **Unified profile:** reconcile the existing owner identities after a reviewed
-   relationship report; preserve historic audit/installer references and prove
-   recovery. Add avatars, personal settings and verified Telegram linking/login
-   without manual IDs. Authentication and bot messaging consent remain distinct.
-2. **Company and team administration:** invitations, account participation,
+1. **Company and team administration:** invitations, account participation,
    explicit multi-company request context, partner/storefront overview and
    tenant-aware bot access. Move company-specific worker settings out of the
    shared personal identity before enabling shared workers across companies.
-3. **Order responsibility:** a responsible sales manager, avatar/name in lists
+2. **Order responsibility:** a responsible sales manager, avatar/name in lists
    and kanban, personal filtering and audited reassignment; work-stage executors
    remain separate assignments.
 

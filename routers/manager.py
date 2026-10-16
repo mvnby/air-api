@@ -27,6 +27,8 @@ from routers import manager_product_collections
 from routers import manager_leads
 from routers import manager_mail
 from routers import manager_media
+from routers import manager_profile
+from routers import manager_account_telegram
 from routers import manager_mdv_catalog
 from routers import manager_orders
 from routers import manager_commercial_terms
@@ -75,6 +77,8 @@ router.include_router(manager_media.router)
 router.include_router(manager_mdv_catalog.router)
 router.include_router(manager_specs.router)
 router.include_router(manager_auth.router)
+router.include_router(manager_profile.router)
+router.include_router(manager_account_telegram.router)
 router.include_router(manager_docs.router)
 router.include_router(manager_document_drive.router)
 router.include_router(manager_call_recordings.router)

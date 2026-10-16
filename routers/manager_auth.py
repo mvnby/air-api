@@ -12,6 +12,8 @@ from routers.manager_operation_ids import (
 )
 from schemas import ManagerAuthStatusResponse, ManagerPasswordChangePayload
 from services.manager_capability_service import ManagerCapabilityService
+from services.staff_avatar_service import staff_avatar_url
+from services.staff_user_service import StaffUserService
 from services.manager_storefront_selector_service import ManagerStorefrontSelector
 from services.manager_account_credential_service import (
     ManagerAccountCredentialError,
@@ -23,7 +25,10 @@ router = APIRouter(prefix="/api/manager", tags=["manager"])
 
 
 @router.get("/me", response_model=ManagerAuthStatusResponse, operation_id=READ_USER_ME)
-async def check_auth_status(auth: AuthenticatedUser = Depends(require_workspace_access)):
+async def check_auth_status(
+    auth: AuthenticatedUser = Depends(require_workspace_access),
+    session: AsyncSession = Depends(get_session),
+):
     """
     Read the authenticated Manager identity, live tenant/storefront context and UI capabilities.
     Includes password-change eligibility, mandatory-password-change and demo-read-only flags.
@@ -31,12 +36,14 @@ async def check_auth_status(auth: AuthenticatedUser = Depends(require_workspace_
     access and tenant/storefront context; insufficient access returns 403. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
+    user = await StaffUserService.get_by_id(session, auth.staff_user_id) if auth.staff_user_id else None
     return {
         "username": auth.username,
         "status": "authenticated",
         "staff_user_id": auth.staff_user_id,
         "role": auth.role,
         "display_name": auth.display_name,
+        "avatar_url": staff_avatar_url(user) if user is not None else None,
         "auth_source": auth.auth_source,
         "tenant_id": auth.tenant_id,
         "storefront_id": auth.storefront_id,

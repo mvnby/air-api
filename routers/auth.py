@@ -148,6 +148,14 @@ async def login_access_token(
                 source=source,
                 reservation=reservation,
             )
+        if LegacyOwnerManagedIdentityService.is_bound(
+            current_legacy_state, staff_user_id=int(authentication.user.id or 0),
+        ) and not await LegacyOwnerManagedIdentityService.exact_bound_staff_identity_allowed(
+            session, state=current_legacy_state, user=authentication.user,
+        ):
+            await _reject_password_login(
+                session, username=form_data.username, source=source, reservation=reservation,
+            )
         await LoginThrottleService.clear(session, form_data.username)
         staff_user = authentication.user
         username = staff_user.username or str(staff_user.telegram_id or staff_user.id)
@@ -193,43 +201,8 @@ async def login_telegram(
     session: AsyncSession = Depends(get_session),
 ) -> Any:
     telegram_payload = payload.model_dump(exclude_none=True)
-    if (
-        not StaffUserService.verify_telegram_login_payload(telegram_payload)
-        or not await LegacyOwnerManagedIdentityService.telegram_login_allowed(
-            session,
-            telegram_id=payload.id,
-        )
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Telegram login is not allowed",
-        )
-    staff_user = await StaffUserService.authenticate_telegram_login(
-        session,
-        telegram_payload,
-    )
-    if staff_user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Telegram login is not allowed")
-
-    legacy_owner_state = await LegacyOwnerAuthGuard.state(session)
-    if not LegacyOwnerAuthGuard.allows_staff_identity(
-        legacy_owner_state,
-        staff_user_id=int(staff_user.id or 0),
-        username=str(staff_user.username or ""),
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Telegram login is not allowed",
-        )
-
-    username = staff_user.username or str(staff_user.telegram_id or staff_user.id)
-    return _token_response(
-        response,
-        {
-            "sub": username,
-            "staff_user_id": staff_user.id,
-            "role": StaffUserService.primary_role(staff_user),
-            "auth_source": "telegram",
-            "auth_version": staff_user.auth_version,
-        },
-    )
+    from services.staff_telegram_widget import authenticate_widget
+    from services.staff_telegram_security import telegram_errors
+    async with telegram_errors(session):
+        authentication = await authenticate_widget(session, telegram_payload)
+    return _token_response(response, authentication.token_data())

@@ -4,6 +4,8 @@ from core.config import settings
 
 from routers import api as api_router
 from routers import auth as auth_router
+from routers import auth_telegram
+from routers import internal_bot_account_links
 from routers import internal_bot as internal_bot_router
 from routers import internal_bot_media as internal_bot_media_router
 from routers import internal_bot_notifications as internal_bot_notifications_router
@@ -20,6 +22,8 @@ from routers import manager_mail_workspace, manager_incoming_mail
 
 APP_ROUTERS: tuple[APIRouter, ...] = (
     auth_router.router,
+    auth_telegram.router,
+    internal_bot_account_links.router,
     internal_bot_router.router,
     internal_bot_media_router.router,
     internal_bot_notifications_router.router,

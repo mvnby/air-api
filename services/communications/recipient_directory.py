@@ -8,6 +8,7 @@ from models import StaffUser, Storefront, TenantMembership
 from services.communications.canary_errors import CommunicationsCanarySafetyError
 from services.communications.contracts import CommunicationRecipientV1
 from services.staff_user_service import StaffUserService
+from services.staff_telegram_notifications import notifications_enabled, legacy_recipient_ids
 
 
 class ManagementRecipientDirectory:
@@ -53,7 +54,7 @@ class ManagementRecipientDirectory:
         if recipients:
             return recipients
 
-        for telegram_id in settings.admin_list:
+        for telegram_id in await legacy_recipient_ids(session, settings.admin_list):
             destination = str(int(telegram_id))
             if (
                 destination in database_destinations
@@ -101,6 +102,8 @@ class InstallationEstimateOwnerRecipientDirectory:
         recipient_keys: set[str] = set()
         destinations: set[str] = set()
         for staff_user in active_owners:
+            if not notifications_enabled(staff_user):
+                continue
             if staff_user.id is None or staff_user.telegram_id is None:
                 raise CommunicationsCanarySafetyError(
                     "installation_owner_recipient_invalid"
@@ -186,6 +189,8 @@ class TenantWebsiteManagementRecipientDirectory:
         recipient_keys: set[str] = set()
         destinations: set[str] = set()
         for membership, staff_user in rows:
+            if not notifications_enabled(staff_user):
+                continue
             if (
                 membership.staff_user_id is None
                 or staff_user.id is None
@@ -253,6 +258,8 @@ class OperationsCanaryRecipientDirectory:
         recipients: list[CommunicationRecipientV1] = []
         destinations: set[str] = set()
         for staff_user in active_owners:
+            if not notifications_enabled(staff_user):
+                continue
             if staff_user.id is None or staff_user.telegram_id is None:
                 raise CommunicationsCanarySafetyError(
                     "active_owner_recipient_invalid"

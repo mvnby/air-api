@@ -286,6 +286,13 @@ def test_staff_password_hash_and_verify():
     assert not StaffUserService.verify_password("wrong", password_hash)
 
 
+def test_notification_opt_out_does_not_disable_bot_authorization():
+    user = StaffUser(display_name="Owner", primary_role="owner", roles=["owner"], telegram_id=101,
+                     telegram_notifications_enabled=False)
+    assert not StaffUserService.can_receive_admin_notifications(user)
+    assert StaffUserService.can_use_bot_admin(user)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("status", "password_hash"),
@@ -349,6 +356,15 @@ def test_telegram_login_payload_signature(monkeypatch):
     assert StaffUserService.verify_telegram_login_payload(payload)
 
     payload["username"] = "attacker"
+    assert not StaffUserService.verify_telegram_login_payload(payload)
+
+
+def test_telegram_login_payload_rejects_future_timestamp(monkeypatch):
+    monkeypatch.setattr(settings, "BOT_TOKEN", "123:token", raising=False)
+    payload = {"id": "101", "auth_date": str(int(time.time()) + 3600)}
+    data = "\n".join(f"{key}={payload[key]}" for key in sorted(payload))
+    key = hashlib.sha256(settings.BOT_TOKEN.encode()).digest()
+    payload["hash"] = hmac.new(key, data.encode(), hashlib.sha256).hexdigest()
     assert not StaffUserService.verify_telegram_login_payload(payload)
 
 
@@ -529,12 +545,12 @@ async def test_telegram_admin_check_keeps_legacy_fallback_when_no_staff_match(
 
 
 @pytest.mark.asyncio
-async def test_telegram_admin_check_falls_back_to_legacy_when_db_lookup_fails(monkeypatch):
+async def test_telegram_admin_check_fails_closed_when_db_lookup_fails(monkeypatch):
     monkeypatch.setattr(settings, "ADMIN_IDS", "909", raising=False)
     monkeypatch.setattr(settings, "ADMIN_ID", 0, raising=False)
     session = SimpleNamespace(execute=AsyncMock(side_effect=RuntimeError("db down")))
 
-    assert await StaffUserService.is_active_owner_admin_telegram_user(session, 909)
+    assert not await StaffUserService.is_active_owner_admin_telegram_user(session, 909)
     assert not await StaffUserService.is_active_owner_admin_telegram_user(session, 101)
 
 

@@ -2,31 +2,15 @@
 
 from __future__ import annotations
 
-import json
 import secrets
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models import LegacyOwnerAuthState, StaffUser, Tenant, TenantMembership
+from models import Installer, LegacyOwnerAuthState, StaffUser, Tenant, TenantMembership
+from services.legacy_owner_profile_policy import LegacyOwnerProfilePolicy
 from services.legacy_owner_auth_guard import LegacyOwnerAuthGuard
 from services.legacy_owner_auth_state_service import LegacyOwnerAuthStateService
-
-
-def _normalized_roles(value: object) -> list[str]:
-    roles = value
-    if isinstance(roles, str):
-        try:
-            parsed = json.loads(roles)
-        except json.JSONDecodeError:
-            parsed = [roles]
-        roles = parsed if isinstance(parsed, list) else [roles]
-    normalized: list[str] = []
-    for item in roles if isinstance(roles, list) else []:
-        role = str(item or "").strip().lower()
-        if role and role not in normalized:
-            normalized.append(role)
-    return normalized
 
 
 class LegacyOwnerManagedIdentityError(ValueError):
@@ -84,7 +68,7 @@ class LegacyOwnerManagedIdentityService:
                 "Legacy owner self-service is unavailable while legacy authentication is active"
             )
         if cls.is_bound(state, staff_user_id=staff_user_id):
-            user = await session.get(StaffUser, staff_user_id)
+            user = await session.get(StaffUser, staff_user_id, populate_existing=True)
             if user is None or not await cls.exact_bound_staff_identity_allowed(
                 session,
                 state=state,
@@ -114,10 +98,10 @@ class LegacyOwnerManagedIdentityService:
             and LegacyOwnerAuthGuard.configured_username_matches(
                 str(user.username or "")
             )
-            and str(user.status or "").strip().lower() == "active"
-            and str(user.primary_role or "").strip().lower() == "owner"
-            and _normalized_roles(user.roles) == ["owner"]
-            and user.legacy_installer_id is None
+            and LegacyOwnerProfilePolicy.allows(
+                user, installer=(await session.get(Installer, user.legacy_installer_id))
+                if user.legacy_installer_id is not None else None,
+            )
         ):
             return False
         memberships = list(
@@ -126,6 +110,7 @@ class LegacyOwnerManagedIdentityService:
                     select(TenantMembership, Tenant)
                     .join(Tenant, Tenant.id == TenantMembership.tenant_id)
                     .where(TenantMembership.staff_user_id == int(user.id))
+                    .execution_options(populate_existing=True)
                 )
             ).all()
         )

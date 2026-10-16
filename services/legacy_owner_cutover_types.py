@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from models import LegacyOwnerAuthState, StaffUser, Storefront, Tenant, TenantMembership
+from models import Installer, LegacyOwnerAuthState, StaffUser, Storefront, Tenant, TenantMembership
 
 
 @dataclass(frozen=True)
@@ -23,6 +23,7 @@ class LegacyOwnerCutoverState:
     storefronts: list[Storefront]
     candidates: list[StaffUser]
     memberships: list[TenantMembership]
+    installer: Installer | None = None
 
     @property
     def tenant(self) -> Tenant | None:

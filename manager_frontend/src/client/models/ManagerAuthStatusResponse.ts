@@ -8,6 +8,7 @@ export type ManagerAuthStatusResponse = {
     staff_user_id?: (number | null);
     role?: (string | null);
     display_name?: (string | null);
+    avatar_url?: (string | null);
     auth_source?: string;
     tenant_id: number;
     storefront_id: number;

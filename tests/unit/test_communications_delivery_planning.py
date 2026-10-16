@@ -98,6 +98,19 @@ def _owner(telegram_id: int, *, status: str = "active", name: str = "Owner"):
 
 
 @pytest.mark.asyncio
+async def test_notification_opt_out_is_not_resurrected_by_legacy_admin_ids(communications_session_factory, monkeypatch):
+    monkeypatch.setattr(settings, "ADMIN_IDS", "101,999", raising=False)
+    monkeypatch.setattr(settings, "ADMIN_ID", 0, raising=False)
+    async with communications_session_factory() as session:
+        owner = _owner(101)
+        owner.telegram_notifications_enabled = False
+        session.add(owner)
+        await session.commit()
+        recipients = await ManagementRecipientDirectory.list_telegram(session)
+        assert [item.destination for item in recipients] == ["999"]
+
+
+@pytest.mark.asyncio
 async def test_recipient_directory_prefers_eligible_staff_and_filters_roles(
     communications_session_factory,
     monkeypatch,

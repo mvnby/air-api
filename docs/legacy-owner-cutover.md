@@ -80,3 +80,9 @@ password, bcrypt hash, token,
 or secret is written to a summary or artifact. Removing the legacy runtime
 environment is a later contraction operation after an approved soak and a
 separate two-node recovery plan.
+
+The separately reviewed [owner profile consolidation](owner-profile-consolidation.md)
+preserves the bound owner ID and credential. Recovery and self-service accept its
+owner-plus-installer profile only with a valid installer link and verified
+Telegram binding; generic staff administration remains fenced. Auth rollback
+does not undo consolidation or rewrite historical account references.

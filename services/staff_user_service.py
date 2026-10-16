@@ -20,6 +20,7 @@ from services.staff_tenant_membership_service import (
 )
 from services.credential_service import CredentialService
 from services.staff_access_policy import StaffAccessPolicy
+from services.staff_telegram_notifications import notifications_enabled, legacy_recipient_ids, legacy_telegram_allowed, retire_telegram_identity
 
 logger = logging.getLogger(__name__)
 
@@ -124,19 +125,25 @@ class StaffUserService:
 
     @classmethod
     def is_active(cls, staff_user: StaffUser) -> bool:
-        return cls.normalize_status(getattr(staff_user, "status", None)) == cls.STATUS_ACTIVE
+        return (
+            cls.normalize_status(getattr(staff_user, "status", None)) == cls.STATUS_ACTIVE
+            and getattr(staff_user, "merged_into_staff_user_id", None) is None
+        )
 
     @classmethod
     def can_receive_admin_notifications(cls, staff_user: StaffUser) -> bool:
         return (
             cls.is_active(staff_user)
+            and notifications_enabled(staff_user)
             and bool(getattr(staff_user, "telegram_id", None))
             and cls.primary_role(staff_user) in cls.OWNER_ADMIN_ROLES
         )
 
     @classmethod
     def can_use_bot_admin(cls, staff_user: StaffUser) -> bool:
-        return cls.can_receive_admin_notifications(staff_user)
+        return (cls.is_active(staff_user)
+                and bool(getattr(staff_user, "telegram_id", None))
+                and cls.primary_role(staff_user) in cls.OWNER_ADMIN_ROLES)
 
     @classmethod
     def can_be_executor(cls, staff_user: StaffUser, role: str) -> bool:
@@ -171,8 +178,11 @@ class StaffUserService:
         *,
         membership: TenantMembership | None = None,
     ) -> ManagerStaffResponse:
+        from services.staff_avatar_service import staff_avatar_url
+
         return ManagerStaffResponse(
             id=int(user.id or 0),
+            avatar_url=staff_avatar_url(user),
             display_name=user.display_name,
             status=(
                 StaffTenantMembershipService.staff_status(membership.status)
@@ -237,38 +247,6 @@ class StaffUserService:
             auth_version=verified_auth_version,
         )
 
-    @classmethod
-    async def authenticate_telegram_login(
-        cls,
-        session: AsyncSession,
-        payload: dict[str, str | int],
-        *,
-        max_age: timedelta = timedelta(minutes=10),
-    ) -> StaffUser | None:
-        if not cls.verify_telegram_login_payload(payload, max_age=max_age):
-            return None
-
-        telegram_id = payload.get("id")
-        try:
-            normalized_telegram_id = int(telegram_id)
-        except (TypeError, ValueError):
-            return None
-
-        result = await session.execute(select(StaffUser).where(StaffUser.telegram_id == normalized_telegram_id))
-        user = result.scalar_one_or_none()
-        if user is None or not cls.is_active(user):
-            return None
-
-        username = str(payload.get("username") or "").strip() or None
-        if username and user.telegram_username != username:
-            user.telegram_username = username
-        user.last_login_at = datetime.now(timezone.utc).replace(tzinfo=None)
-        user.primary_role = cls.primary_role(user)
-        session.add(user)
-        await session.commit()
-        await session.refresh(user)
-        return user
-
     @staticmethod
     def _telegram_payload_items(payload: dict[str, str | int] | str) -> dict[str, str]:
         if isinstance(payload, str):
@@ -295,7 +273,8 @@ class StaffUserService:
             auth_date = datetime.fromtimestamp(int(values.get("auth_date", "0")), tz=timezone.utc)
         except (TypeError, ValueError, OSError):
             return False
-        if datetime.now(timezone.utc) - auth_date > max_age:
+        age = datetime.now(timezone.utc) - auth_date
+        if age < timedelta(seconds=-30) or age > max_age:
             return False
 
         data_check_string = "\n".join(f"{key}={values[key]}" for key in sorted(values))
@@ -323,7 +302,10 @@ class StaffUserService:
                 TenantMembership,
                 TenantMembership.staff_user_id == StaffUser.id,
             )
-            .where(TenantMembership.tenant_id == tenant_scope.tenant_id)
+            .where(
+                TenantMembership.tenant_id == tenant_scope.tenant_id,
+                StaffUser.merged_into_staff_user_id.is_(None),
+            )
         )
         if search:
             query = f"%{search.strip().lower()}%"
@@ -458,6 +440,12 @@ class StaffUserService:
         if row is None:
             return None
         staff_user, membership = row
+        if staff_user.merged_into_staff_user_id is not None:
+            from services.staff_access_policy import StaffAccessPolicyError
+            raise StaffAccessPolicyError(
+                "Объединённый профиль нельзя изменять или активировать",
+                code="staff_identity_merged", status_code=409,
+            )
 
         changed_fields = set(payload.model_fields_set)
         before = {"role": membership.role, "status": membership.status}
@@ -560,6 +548,11 @@ class StaffUserService:
         if "email" in changed_fields:
             staff_user.email = payload.email or None
         if "telegram_id" in changed_fields:
+            if staff_user.telegram_id != payload.telegram_id:
+                await retire_telegram_identity(session, staff_user.telegram_id, staff_user.id)
+                staff_user.telegram_verified_at = None
+                if not payload.password:
+                    staff_user.auth_version += 1
             staff_user.telegram_id = payload.telegram_id
         if "telegram_username" in changed_fields:
             staff_user.telegram_username = payload.telegram_username or None
@@ -724,13 +717,15 @@ class StaffUserService:
                 tenant_scope.tenant_id,
                 exc_info=True,
             )
-            return settings.admin_list if tenant_scope.is_system else []
+            return []
 
         recipient_ids: list[int] = []
         seen: set[int] = set()
         for user, membership in rows:
             membership_role = cls.normalize_primary_role(membership.role)
             if membership_role not in cls.OWNER_ADMIN_ROLES:
+                continue
+            if not cls.is_active(user) or not notifications_enabled(user):
                 continue
             telegram_id = int(user.telegram_id)
             if telegram_id in seen:
@@ -740,7 +735,7 @@ class StaffUserService:
 
         if recipient_ids:
             return recipient_ids
-        return settings.admin_list if tenant_scope.is_system else []
+        return await legacy_recipient_ids(session, settings.admin_list) if tenant_scope.is_system else []
 
     @classmethod
     async def is_active_owner_admin_telegram_user(
@@ -764,11 +759,12 @@ class StaffUserService:
             )
             users = list(result.scalars().all())
         except Exception:
-            logger.debug("STAFF_ADMIN_CHECK_DB_LOOKUP_FAILED using legacy ADMIN_IDS fallback", exc_info=True)
-            return settings.is_admin_user(normalized_telegram_id)
+            logger.debug("STAFF_ADMIN_CHECK_DB_LOOKUP_FAILED access denied", exc_info=True)
+            return False
 
         if not users:
-            return settings.is_admin_user(normalized_telegram_id)
+            return (settings.is_admin_user(normalized_telegram_id)
+                    and await legacy_telegram_allowed(session, normalized_telegram_id))
 
         return any(cls.can_use_bot_admin(user) for user in users)
 
@@ -781,11 +777,13 @@ class StaffUserService:
         if installer.id is not None:
             staff_user = await cls.get_by_legacy_installer_id(session, int(installer.id))
             if staff_user is not None:
-                if not cls.can_be_any_executor(staff_user) or not staff_user.telegram_id:
+                if not cls.can_be_any_executor(staff_user) or not staff_user.telegram_id or not notifications_enabled(staff_user):
                     return None
                 return int(staff_user.telegram_id)
 
         if not installer.is_active or not installer.telegram_id:
+            return None
+        if not await legacy_telegram_allowed(session, installer.telegram_id):
             return None
         return int(installer.telegram_id)
 

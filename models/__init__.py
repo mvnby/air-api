@@ -101,6 +101,8 @@ from .service_asset import (
     WarrantyPolicySeriesLink,
 )
 from .staff import StaffUser
+from .staff_avatar import StaffAvatar
+from .staff_telegram import StaffTelegramChallenge, StaffTelegramRetiredIdentity, StaffTelegramWidgetReceipt
 from .incoming_mail import IncomingMail, IncomingMailAttachment
 from .mail_workspace import MailAttachmentSnapshot
 from .storage_maintenance import StorageReconciliationCursor
@@ -173,6 +175,7 @@ from .supplier import (
 )
 
 __all__ = [
+    "StaffAvatar", "StaffTelegramChallenge", "StaffTelegramRetiredIdentity", "StaffTelegramWidgetReceipt",
     "InboxReadState", "InboxTriageState", "InboxEvent",
     "Article",
     "AnalyticsConnection",

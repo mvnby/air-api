@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { inboxChangedEvent } from './services/lead-inbox';
-import { computed, defineAsyncComponent, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import { Zap, Loader2, AlertTriangle } from 'lucide-vue-next';
 import { api } from './api';
 import { getApiErrorMessage } from './utils/api-errors';
 import { connectorLoginContinuation, resumeConnectorLogin } from './services/connector-login-continuation';
-import type { TelegramLoginPayload } from './client';
 import UiFeedbackHost from './components/common/UiFeedbackHost.vue';
 import ManagerAccountMenu from './components/manager/ManagerAccountMenu.vue';
 import ManagerLoginModal from './components/manager/ManagerLoginModal.vue';
+import TelegramLoginChallenge from './components/manager/TelegramLoginChallenge.vue';
 import ManagerSessionRecoveryModal from './components/manager/ManagerSessionRecoveryModal.vue';
 import KitlaneShell from './components/kitlane/KitlaneShell.vue';
 import KitlaneNavigation from './components/kitlane/KitlaneNavigation.vue';
@@ -18,7 +18,7 @@ import { runGuardedNavigation } from './services/unsaved-navigation-guard';
 import {
   clearManagerSession,
   loginManagerWithPassword,
-  loginManagerWithTelegram,
+  bootstrapManagerSession,
   managerSession,
   restoreManagerSession,
 } from './services/manager-session';
@@ -98,7 +98,6 @@ const loginPassword = ref('');
 const loginLoading = ref(false);
 const loginError = ref('');
 const telegramLoginLoading = ref(false);
-const telegramLoginContainer = ref<HTMLElement | null>(null);
 const rebuildLoading = ref(false);
 const webRebuildStatus = ref<WebRebuildStatus | null>(null);
 const isMobileNavOpen = ref(false);
@@ -112,8 +111,6 @@ const acceptedBrowserLocation = ref(currentLocation.value);
 const viewRevision = ref(0);
 const THEME_STORAGE_KEY = 'manager_theme';
 const NAV_SECTIONS_STORAGE_KEY = 'manager_nav_sections_v1';
-const telegramLoginBotUsername = String(import.meta.env.VITE_TELEGRAM_LOGIN_BOT_USERNAME || '').trim();
-const telegramCallbackName = 'onTelegramManagerAuth';
 let webRebuildStatusInterval: ReturnType<typeof window.setInterval> | null = null;
 type WebRebuildStatus = {
   current_revision: number;
@@ -126,11 +123,6 @@ type WebRebuildStatus = {
   state: string;
   last_error?: string | null;
 };
-declare global {
-  interface Window {
-    onTelegramManagerAuth?: (user: TelegramLoginPayload) => void;
-  }
-}
 const expandedNavSections = ref<Record<NavSectionId, boolean>>({ ...defaultExpandedNavSections });
 const normalizePath = (path: string) => {
   if (path.length > 1 && path.endsWith('/')) {
@@ -330,7 +322,7 @@ const fetchWebRebuildStatus = async () => {
   }
 };
 const handleLogin = async () => {
-  if (recoveryRequired.value) return;
+  if (recoveryRequired.value || loginLoading.value || telegramLoginLoading.value) return;
   loginLoading.value = true;
   loginError.value = '';
   try {
@@ -348,12 +340,12 @@ const handleLogin = async () => {
     loginLoading.value = false;
   }
 };
-const handleTelegramLogin = async (payload: TelegramLoginPayload) => {
+const handleTelegramLogin = async () => {
   if (recoveryRequired.value) return;
   telegramLoginLoading.value = true;
   loginError.value = '';
   try {
-    await loginManagerWithTelegram(payload);
+    await bootstrapManagerSession();
     if (continueConnection()) return;
     enforceAuthorizedLocation();
     showLoginModal.value = false;
@@ -377,25 +369,6 @@ const handleLogoutSuccess = () => {
 };
 const handleLogoutError = (message: string) => {
   setToast(`Не удалось завершить сессию: ${message}`, 'error');
-};
-const renderTelegramLogin = async () => {
-  if (!telegramLoginBotUsername || !showLoginModal.value || recoveryRequired.value) return;
-  await nextTick();
-  const container = telegramLoginContainer.value;
-  if (!container) return;
-  container.innerHTML = '';
-  window[telegramCallbackName] = (user: TelegramLoginPayload) => {
-    void handleTelegramLogin(user);
-  };
-  const script = document.createElement('script');
-  script.src = 'https://telegram.org/js/telegram-widget.js?22';
-  script.async = true;
-  script.setAttribute('data-telegram-login', telegramLoginBotUsername);
-  script.setAttribute('data-size', 'large');
-  script.setAttribute('data-userpic', 'false');
-  script.setAttribute('data-request-access', 'write');
-  script.setAttribute('data-onauth', `${telegramCallbackName}(user)`);
-  container.appendChild(script);
 };
 const handleRebuild = async () => {
   if (!canManagePlatform.value) return;
@@ -468,12 +441,6 @@ onBeforeUnmount(() => {
     window.clearInterval(webRebuildStatusInterval);
     webRebuildStatusInterval = null;
   }
-  delete window[telegramCallbackName];
-});
-watch(showLoginModal, (visible) => {
-  if (visible && !recoveryRequired.value) {
-    void renderTelegramLogin();
-  }
 });
 watch(recoveryRequired, (required) => {
   if (!required) return;
@@ -485,8 +452,6 @@ watch(recoveryRequired, (required) => {
   loginPassword.value = '';
   isMobileNavOpen.value = false;
   toast.value = '';
-  if (telegramLoginContainer.value) telegramLoginContainer.value.innerHTML = '';
-  delete window[telegramCallbackName];
 }, { flush: 'sync' });
 watch(expandedNavSections, (value) => {
   window.localStorage.setItem(NAV_SECTIONS_STORAGE_KEY, JSON.stringify(value));
@@ -502,15 +467,15 @@ watch(currentPath, () => {
     v-if="showLoginModal && !recoveryRequired"
     v-model:username="loginUsername"
     v-model:password="loginPassword"
-    :loading="loginLoading"
+    :loading="loginLoading || telegramLoginLoading"
     :error="loginError"
-    :telegram-enabled="Boolean(telegramLoginBotUsername)"
+    :telegram-enabled="true"
     :telegram-loading="telegramLoginLoading"
     :connector-login="Boolean(connectorReturn)"
     @submit="handleLogin"
   >
     <template #telegram>
-      <div ref="telegramLoginContainer" />
+      <TelegramLoginChallenge :disabled="loginLoading" @authenticated="handleTelegramLogin" @busy="telegramLoginLoading = $event" />
     </template>
   </ManagerLoginModal>
 

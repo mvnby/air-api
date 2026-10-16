@@ -200,6 +200,57 @@ async def test_assignment_event_claim_and_ack_use_database_clock(
 
 
 @pytest.mark.asyncio
+async def test_staff_notification_opt_out_prevents_enqueue_and_cancels_queued_delivery(staff_outbox_session):
+    stage = await _seed_task(staff_outbox_session)
+    await StaffTaskNotificationEventService.enqueue_assigned(
+        staff_outbox_session, stage=stage, previous_installer_id=None, tenant_scope=TEST_TENANT_SCOPE,
+    )
+    await staff_outbox_session.commit()
+    staff = await staff_outbox_session.get(StaffUser, 20)
+    staff.telegram_notifications_enabled = False
+    await staff_outbox_session.commit()
+    assert await StaffTaskNotificationEventService.enqueue_assigned(
+        staff_outbox_session, stage=stage, previous_installer_id=None, tenant_scope=TEST_TENANT_SCOPE,
+    ) is False
+    assert await BotStaffNotificationApiService.claim(
+        staff_outbox_session, worker_id="bot-1", visibility_timeout_seconds=90,
+    ) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case", ["same", "other_telegram", "opt_out", "other_assignment"])
+async def test_historical_staff_task_receipt_follows_only_safe_canonical_alias(staff_outbox_session, case):
+    stage = await _seed_task(staff_outbox_session)
+    await StaffTaskNotificationEventService.enqueue_assigned(
+        staff_outbox_session, stage=stage, previous_installer_id=None, tenant_scope=TEST_TENANT_SCOPE,
+    )
+    await staff_outbox_session.commit()
+    now = await CommunicationDeliveryService.database_now(staff_outbox_session)
+    await BotStaffNotificationApiService._materialize_pending(staff_outbox_session, worker_id="bot-1", now=now)
+    historical = await staff_outbox_session.get(StaffUser, 20)
+    historical.telegram_id = historical.legacy_installer_id = None
+    historical.status = "inactive"
+    historical.merged_into_staff_user_id = 21
+    await staff_outbox_session.flush()
+    canonical = StaffUser(id=21, display_name="Canonical owner", primary_role="owner", roles=["owner", "installer"],
+                          telegram_id=999 if case == "other_telegram" else 123456, legacy_installer_id=10,
+                          telegram_notifications_enabled=case != "opt_out")
+    staff_outbox_session.add(canonical)
+    if case == "other_assignment":
+        stage.installer_id = None
+    await staff_outbox_session.commit()
+    notification = await BotStaffNotificationApiService.claim(
+        staff_outbox_session, worker_id="bot-1", visibility_timeout_seconds=90,
+    )
+    if case == "same":
+        assert notification is not None
+        assert notification["telegram_id"] == 123456
+        assert notification["payload"]["staff_user_id"] == 20
+    else:
+        assert notification is None
+
+
+@pytest.mark.asyncio
 async def test_claim_cancels_delivery_when_assignment_is_stale(staff_outbox_session):
     stage = await _seed_task(staff_outbox_session)
     await StaffTaskNotificationEventService.enqueue_assigned(

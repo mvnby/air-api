@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from models import (
+    Installer,
     LegacyOwnerAuthState,
     StaffUser,
     Storefront,
@@ -39,6 +40,7 @@ from services.legacy_owner_cutover_types import (
 )
 from services.legacy_owner_runtime_credential import LegacyOwnerRuntimeCredential
 from services.staff_user_service import StaffUserService
+from services.legacy_owner_profile_policy import LegacyOwnerProfilePolicy
 
 
 class LegacyOwnerCutoverBlockedError(RuntimeError):
@@ -293,12 +295,12 @@ class LegacyOwnerCutoverService:
             LegacyOwnerAuthState.id == LegacyOwnerAuthStateService.SINGLETON_ID
         )
         if for_update:
-            auth_statement = auth_statement.with_for_update(of=LegacyOwnerAuthState)
+            auth_statement = auth_statement.with_for_update(of=LegacyOwnerAuthState).execution_options(populate_existing=True)
         auth_state = (await session.execute(auth_statement)).scalar_one_or_none()
 
         tenant_statement = select(Tenant).where(func.lower(Tenant.slug) == cls.SYSTEM_TENANT_SLUG)
         if for_update:
-            tenant_statement = tenant_statement.with_for_update(of=Tenant)
+            tenant_statement = tenant_statement.with_for_update(of=Tenant).execution_options(populate_existing=True)
         tenants = list((await session.execute(tenant_statement)).scalars().all())
 
         storefronts: list[Storefront] = []
@@ -308,7 +310,7 @@ class LegacyOwnerCutoverService:
                 func.lower(Storefront.slug) == cls.SYSTEM_STOREFRONT_SLUG,
             )
             if for_update:
-                statement = statement.with_for_update(of=Storefront)
+                statement = statement.with_for_update(of=Storefront).execution_options(populate_existing=True)
             storefronts = list((await session.execute(statement)).scalars().all())
 
         candidates: list[StaffUser] = []
@@ -319,7 +321,7 @@ class LegacyOwnerCutoverService:
                 .order_by(StaffUser.id.asc())
             )
             if for_update:
-                statement = statement.with_for_update(of=StaffUser)
+                statement = statement.with_for_update(of=StaffUser).execution_options(populate_existing=True)
             candidates = list((await session.execute(statement)).scalars().all())
 
         memberships: list[TenantMembership] = []
@@ -330,7 +332,7 @@ class LegacyOwnerCutoverService:
                 .order_by(TenantMembership.id.asc())
             )
             if for_update:
-                statement = statement.with_for_update(of=TenantMembership)
+                statement = statement.with_for_update(of=TenantMembership).execution_options(populate_existing=True)
             memberships = list((await session.execute(statement)).scalars().all())
         return _CutoverState(
             auth_state=auth_state,
@@ -338,6 +340,8 @@ class LegacyOwnerCutoverService:
             storefronts=storefronts,
             candidates=candidates,
             memberships=memberships,
+            installer=(await session.get(Installer, candidates[0].legacy_installer_id))
+            if len(candidates) == 1 and candidates[0].legacy_installer_id is not None else None,
         )
 
     @classmethod
@@ -365,7 +369,13 @@ class LegacyOwnerCutoverService:
                 changes.append("restore_legacy_auth")
         current = cls._public_state(runtime=runtime, state=state)
         digest_payload = {
-            "version": 3,
+            "version": 4,
+            "profile": {
+                "telegram_id": state.user.telegram_id,
+                "telegram_verified_at": str(getattr(state.user, "telegram_verified_at", None)),
+                "installer_id": state.user.legacy_installer_id,
+                "roles": state.user.roles,
+            } if state.user else None,
             "for_action": for_action,
             "runtime_binding": runtime.binding,
             "current": current,
@@ -493,12 +503,7 @@ class LegacyOwnerCutoverService:
             blockers.append("bound_owner_mismatch")
         if not (
             user.username == runtime.normalized_name
-            and user.status == StaffUserService.STATUS_ACTIVE
-            and StaffUserService.primary_role(user) == StaffUserService.ROLE_OWNER
-            and StaffUserService.normalize_roles(user.roles) == [StaffUserService.ROLE_OWNER]
-            and user.legacy_installer_id is None
-            and user.telegram_id is None
-            and not user.telegram_username
+            and LegacyOwnerProfilePolicy.allows(user, installer=state.installer)
             and user.auth_version >= 1
             and user.password_changed_at is not None
             and not user.must_change_password
@@ -539,8 +544,7 @@ class LegacyOwnerCutoverService:
             "active": bool(user and user.status == StaffUserService.STATUS_ACTIVE),
             "owner_role": bool(
                 user
-                and StaffUserService.primary_role(user) == StaffUserService.ROLE_OWNER
-                and StaffUserService.normalize_roles(user.roles) == [StaffUserService.ROLE_OWNER]
+                and LegacyOwnerProfilePolicy.allows(user, installer=state.installer)
             ),
             "normalized_identity_exact": bool(user and user.username == runtime.normalized_name),
             "credential_timestamp_set": bool(user and user.password_changed_at),

@@ -1,6 +1,8 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('../src/components/profile/PersonalProfilePanel.vue', () => ({ default: { template: '<div />' } }));
+
 const mocks = vi.hoisted(() => ({
   changePassword: vi.fn(),
 }));

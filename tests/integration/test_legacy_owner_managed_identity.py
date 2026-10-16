@@ -69,6 +69,7 @@ async def _bound_owner(
         must_change_password=False,
         telegram_id=telegram_id,
         telegram_username="bound_owner" if telegram_id else None,
+        telegram_verified_at=datetime.now(timezone.utc) if telegram_id else None,
     )
     db.add(owner)
     await db.flush()

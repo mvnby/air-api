@@ -8,6 +8,7 @@ from services.communications.staff_task_contracts import (
     StaffTaskNotificationPayloadV1,
 )
 from services.staff_user_service import StaffUserService
+from services.staff_telegram_notifications import notification_identity
 
 
 class StaffTaskRecipientDirectory:
@@ -17,7 +18,7 @@ class StaffTaskRecipientDirectory:
         *,
         payload: StaffTaskNotificationPayloadV1,
     ) -> list[CommunicationRecipientV1]:
-        staff_user = await session.get(StaffUser, payload.staff_user_id)
+        staff_user = await notification_identity(session, payload.staff_user_id)
         if (
             staff_user is None
             or not StaffUserService.is_active(staff_user)
