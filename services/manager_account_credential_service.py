@@ -1,4 +1,4 @@
-"""Atomic self-service credential rotation for authenticated manager staff."""
+"""Atomic self-service credential rotation for authenticated staff accounts."""
 
 from datetime import datetime, timezone
 
@@ -9,6 +9,7 @@ from core.request_context import current_request_id
 from models import StaffUser, Tenant, TenantAuditEvent, TenantMembership
 from models.tenancy import TenantScope
 from services.credential_service import CredentialPolicyError, CredentialService
+from services.account_access_service import AccountAccessResolver
 from services.staff_tenant_membership_service import StaffTenantMembershipService
 from services.legacy_owner_managed_identity_service import (
     LegacyOwnerManagedIdentityError,
@@ -59,7 +60,7 @@ class ManagerAccountCredentialService:
                     StaffUser.id == staff_user_id,
                     TenantMembership.tenant_id == tenant_scope.tenant_id,
                     TenantMembership.status == "active",
-                    TenantMembership.role.in_(["owner", "admin", "manager", "catalog_editor"]),
+                    TenantMembership.role.in_(AccountAccessResolver.ROLES),
                     StaffUser.status == "active", StaffUser.merged_into_staff_user_id.is_(None),
                 )
                 .with_for_update()

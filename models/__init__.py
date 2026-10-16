@@ -334,3 +334,7 @@ __all__ = [
 ]
 from .maintenance_continuation import MaintenanceContinuation, MaintenanceActPreparation, MaintenanceActSource
 from .maintenance_offer import MaintenanceOffer, MaintenanceOfferSource, MaintenanceOfferEvent, MaintenanceResolution
+
+from .installer_workspace import TenantWorkerProfile, OrderWorkAssignment
+
+from .installer_publication import InstallerMaterialPublication, InstallerCollectionInstruction

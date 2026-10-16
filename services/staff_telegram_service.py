@@ -12,7 +12,8 @@ from models.staff_telegram import StaffTelegramChallenge
 from services.credential_service import CredentialService
 from services.legacy_owner_auth_guard import LegacyOwnerAuthGuard
 from services.legacy_owner_managed_identity_service import LegacyOwnerManagedIdentityService
-from services.manager_tenant_access_service import ManagerTenantAccessResolver, ManagerTenantAccessResolutionError
+from services.account_access_service import AccountAccessResolver
+from services.manager_tenant_access_service import ManagerTenantAccessResolutionError
 from services.staff_tenant_membership_service import StaffTenantMembershipService
 from services.staff_telegram_security import StaffTelegramError, bot_username, digest, require_browser
 from services.staff_user_service import StaffUserService
@@ -75,7 +76,7 @@ class StaffTelegramService:
                 TenantMembership.tenant_id == auth.tenant_id,
                 TenantMembership.staff_user_id == auth.staff_user_id,
                 TenantMembership.status == "active",
-                TenantMembership.role.in_(["owner", "admin", "manager", "catalog_editor"]),
+                TenantMembership.role.in_(AccountAccessResolver.ROLES),
                 Tenant.status == "active", Tenant.demo_read_only.is_(False),
                 Storefront.id == auth.storefront_id, Storefront.status == "active",
             ).execution_options(populate_existing=True)
@@ -165,7 +166,7 @@ class StaffTelegramService:
             if not await LegacyOwnerManagedIdentityService.exact_bound_staff_identity_allowed(session, state=state, user=user):
                 raise StaffTelegramError("telegram_login_unavailable", "Для этого Telegram вход недоступен", 403)
         try:
-            await ManagerTenantAccessResolver.personal(session, staff_user_id=user.id)
+            await AccountAccessResolver.personal(session, staff_user_id=user.id)
         except ManagerTenantAccessResolutionError:
             raise StaffTelegramError("telegram_login_unavailable", "Для этого Telegram вход недоступен", 403) from None
         return user
@@ -256,7 +257,7 @@ class StaffTelegramService:
             raise StaffTelegramError("telegram_login_unavailable", "Сначала подтвердите вход в боте", 403)
         # Snapshot first without a lock; the final locked read below is authoritative.
         await LegacyOwnerAuthGuard.state(session, for_update=True)
-        access = await ManagerTenantAccessResolver.personal(session, staff_user_id=snapshot.staff_user_id)
+        access = await AccountAccessResolver.personal(session, staff_user_id=snapshot.staff_user_id)
         await StaffTenantMembershipService.lock_tenant(session, tenant_id=access.tenant_scope.tenant_id)
         user = (await session.execute(select(StaffUser).where(
             StaffUser.id == snapshot.staff_user_id,

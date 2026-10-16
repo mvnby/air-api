@@ -2522,7 +2522,7 @@ export class ManagerService {
     /**
      * Change Account Password
      * Change the current staff account password using its current password and record the
-     * credential change. Requires Manager access and self-service password eligibility;
+     * credential change. Requires an active actual account membership and self-service password eligibility;
      * unavailable self-service returns 409 with detail.code=self_service_unavailable. Credential
      * validation failures return 400 with code/message. Success is 204, increments the account
      * auth version and clears the authentication cookie; sign in again. This command has no replay

@@ -1,4 +1,5 @@
 import { computed, ref, watch } from 'vue';
+import { hasManagerCapability, MANAGER_CAPABILITY } from '../manager-capabilities';
 import { storefrontSettingsApi } from '../features/settings/storefront-settings-api';
 import { managerSession } from '../services/manager-session';
 import { managerStorefrontSelection } from '../services/manager-storefront-selection';
@@ -18,7 +19,7 @@ export function useKitlaneIdentity() {
   watch([storefront, contextKey, brandRevision], async ([current]) => {
     const requestGeneration = ++generation;
     brand.value = null;
-    if (!current) return;
+    if (!current || hasManagerCapability(managerSession.auth.value, MANAGER_CAPABILITY.installerWorksRead)) return;
     try {
       const result = await storefrontSettingsApi.brand();
       if (generation === requestGeneration) brand.value = result;

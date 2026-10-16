@@ -9,6 +9,7 @@
 | --- | --- | --- |
 | Публичная витрина `mvnby/mvn-web` | Прежде всего `/api/v1/*`: каталог, контент, обращения, заказ | Контекст витрины задаёт доверенный серверный запрос; условия подписи и четыре исключения описаны в [контракте витрины](../storefront-context-contract.md#protected-public-surfaces). Это не произвольный API для записи от имени tenant. |
 | Manager UI и авторизованный сотрудник | `/api/manager/*`, вход через `/login/*` | JWT/cookie, живое членство в tenant, роль и права конкретной операции; см. [авторизацию](authentication.md#manager). |
+| Кабинет монтажника | `/api/installer/*`, общий вход через `/login/*` | Реальное членство и явное назначение выбранной компании/сайта; только просмотр безопасной карточки. См. [контракт кабинета](../installer-workspace.md). |
 | Сервис штатного Telegram-бота | `/api/internal/bot/v1/*` | Выделенный `BOT_API_TOKEN`, затем проверка сотрудника в бизнес-операциях; см. [границу бота](../bot-service-boundary.md#ownership). Это не пользовательский или партнёрский токен. |
 | Личное подключение ChatGPT | `/api/connector/mcp` и `/api/connector/oauth/*` | Отдельный OAuth grant с точным MCP resource и scopes; см. [подключение](../chatgpt-connector.md#адрес-и-доступ), [аудит первого выпуска](../chatgpt-connector-handoff.md#что-выпущено-и-можно-подключать). |
 | Сервис Белзакупки, прямой приём | `POST /api/integrations/tenders/leads` | Отдельный серверный Bearer key и фиксированная активная компания/витрина; выключен по умолчанию. Нативный формат, повторы и границы — в [контракте приёма](../belzakupki-intake.md#direct-push-intake-849-first-release-slice). |
@@ -28,6 +29,7 @@
 
 | Область | Путь для поиска | Владелец контракта и документация |
 | --- | --- | --- |
+| Назначенные монтажнику работы | `/api/installer/*`, `/api/manager/orders/*/installer-workspace` | [installer_workspace.py](../../routers/installer_workspace.py), [manager_installer_workspace.py](../../routers/manager_installer_workspace.py), [границы кабинета](../installer-workspace.md) |
 | Публичный каталог и характеристики | `GET /api/v1/products`, `GET /api/v1/filters/config`, `/api/v1/specs/*` | [api_products.py](../../routers/api_products.py), [схемы товаров](../../schemas.py), [таксономия](../catalog/feature-taxonomy-guide.md), [код модели и номинальный класс](../catalog/public-product-identity.md) |
 | Управление каталогом и характеристиками | `/api/manager/catalog-management/*`, `/api/manager/products/*`, `/api/manager/features/*` | [manager_catalog_management.py](../../routers/manager_catalog_management.py), [manager_features.py](../../routers/manager_features.py), [рабочая область](../catalog-management-workspace.md) |
 | Контент и подборки | `/api/v1/content/*`, `/api/manager/product-collections/*` | [api_content.py](../../routers/api_content.py), [manager_product_collections.py](../../routers/manager_product_collections.py), [контракт подборок](../product-collections.md) |
@@ -99,7 +101,7 @@ request/response, права и исключения: универсальног
 ## Как поддерживать контракт при развитии API
 
 [Инвентаризация и критерии готовности](documentation-coverage.md) фиксируют
-точный перечень 634 HTTP-операции и завершённые этапы проверки по областям.
+точный перечень HTTP-операций и завершённые этапы проверки по областям.
 Непустой `description` сам по себе не означает полноту контракта.
 
 - Для новой или изменённой операции описывайте назначение, права и область

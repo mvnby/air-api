@@ -2,6 +2,7 @@ import type { ManagerAuthStatusResponse } from './client';
 
 export const MANAGER_CAPABILITY = {
   crmManage: 'crm.manage',
+  installerWorksRead: 'installer.works.read',
   catalogMasterRead: 'catalog.master.read',
   catalogMasterEdit: 'catalog.master.edit',
   catalogMasterDelete: 'catalog.master.delete',
@@ -25,8 +26,14 @@ export const hasManagerCapability = (
   capability: ManagerCapability,
 ): boolean => Boolean(auth?.capabilities?.includes(capability) && (![MANAGER_CAPABILITY.platformManage, MANAGER_CAPABILITY.infrastructureManage].some(value => value === capability) || auth.is_system_tenant !== false));
 
+export const canReadOwnInstallerWorks = (
+  auth: Pick<ManagerAuthStatusResponse, 'capabilities' | 'tenant_membership_id'> | null | undefined,
+): boolean => hasManagerCapability(auth, MANAGER_CAPABILITY.installerWorksRead)
+  || Boolean(auth?.tenant_membership_id && hasManagerCapability(auth, MANAGER_CAPABILITY.crmManage));
+
 export const requiredCapabilityForManagerPath = (path: string): ManagerCapability | null => {
   if (path === '/manager' || path === '/manager/' || path === '/manager/profile') return null;
+  if (path === '/manager/my-work' || path.startsWith('/manager/my-work/')) return MANAGER_CAPABILITY.installerWorksRead;
   if (path.startsWith('/manager/settings/calls') || path.startsWith('/manager/calls')) {
     return MANAGER_CAPABILITY.callRecordingsManage;
   }
@@ -86,9 +93,10 @@ export const requiredCapabilityForManagerPath = (path: string): ManagerCapabilit
 };
 
 export const isManagerPathAllowed = (
-  auth: Pick<ManagerAuthStatusResponse, 'capabilities'> | null | undefined,
+  auth: Pick<ManagerAuthStatusResponse, 'capabilities'> & Partial<Pick<ManagerAuthStatusResponse, 'tenant_membership_id'>> | null | undefined,
   path: string,
 ): boolean => {
+  if (path === '/manager/my-work' || path.startsWith('/manager/my-work/')) return canReadOwnInstallerWorks(auth);
   const required = requiredCapabilityForManagerPath(path);
   return required === null || hasManagerCapability(auth, required);
 };

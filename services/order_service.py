@@ -1583,6 +1583,8 @@ class OrderService:
         from services.bot_service import BotService
         from services.staff_user_service import StaffUserService
 
+        from services.worker_assignment_legacy_sync import WorkerAssignmentLegacySync
+        worker_profiles = await WorkerAssignmentLegacySync.prepare(session, tenant_scope, [item["installer_id"] for item in installers_data])
         owned_order = await TenantEntityAccessService.get_order(
             session,
             order_id,
@@ -1635,6 +1637,8 @@ class OrderService:
         
         await session.flush()
         
+        await WorkerAssignmentLegacySync.sync(session, tenant_scope, order_id, worker_profiles, previous_ids=set(existing_map), current_ids=new_installer_ids)
+
         # 4. Триггер уведомлений для НОВЫХ
         if added_installers:
             # Подгружаем детали для сообщения
@@ -1690,6 +1694,8 @@ class OrderService:
             items_data: Dict with 'products', 'services', 'installers' lists
         """
         from models import OrderInstaller
+        from services.worker_assignment_legacy_sync import WorkerAssignmentLegacySync
+        worker_profiles = await WorkerAssignmentLegacySync.prepare(session, tenant_scope, [item["installer_id"] for item in items_data.get("installers", [])])
         order = await TenantEntityAccessService.get_order(
             session,
             order_id,
@@ -1714,6 +1720,7 @@ class OrderService:
         await session.execute(delete(OrderProductLink).where(OrderProductLink.order_id == order_id, OrderProductLink.proposal_id == proposal.id))
         await session.execute(delete(OrderServiceLink).where(OrderServiceLink.order_id == order_id, OrderServiceLink.proposal_id == proposal.id))
         
+        previous_installer_ids = {link.installer_id for link in order.installers}
         # Clear installers
         stmt = OrderInstaller.__table__.delete().where(OrderInstaller.order_id == order_id)
         await session.execute(stmt)
@@ -1771,6 +1778,8 @@ class OrderService:
         
         await session.flush()
         
+        await WorkerAssignmentLegacySync.sync(session, tenant_scope, order_id, worker_profiles, previous_ids=previous_installer_ids, current_ids={int(item["installer_id"]) for item in items_data.get("installers", [])})
+
         # 5. Recalculate totals
         await OrderService._refresh_order_financials(session, order)
         session.add(order)

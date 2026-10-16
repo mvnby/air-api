@@ -1,5 +1,6 @@
 import { ref } from 'vue';
 import { managerCompaniesApi, type CompanyChoice, type CompanyChoices } from './manager-companies';
+import { installerWorkspaceApi } from './installer-workspace';
 import { runGuardedNavigation } from './unsaved-navigation-guard';
 
 import {
@@ -41,7 +42,8 @@ export const isManagerApiRequest = (url: string): boolean => {
     || path.startsWith('/api/manager/media/worker/')
   );
   const personal = /^\/api\/manager\/account(?:\/|$)/.test(path);
-  return isManagerPath && !isDedicatedWorkerPath && !personal;
+  const isInstallerPath = path === '/api/installer' || path.startsWith('/api/installer/');
+  return isInstallerPath || (isManagerPath && !isDedicatedWorkerPath && !personal);
 };
 
 export const managerContextStorageKey = (
@@ -120,7 +122,8 @@ export class ManagerStorefrontSelection {
   }
   async initializeContext(
     loadCompanies: (page?: number) => PromiseLike<CompanyChoices> = managerCompaniesApi.choices,
-    loadSites: () => PromiseLike<{ items?: ManagerStorefrontResponse[] }> = () => ManagerService.listManagerStorefronts(),
+    loadSites: (company: CompanyChoice) => PromiseLike<{ items?: ManagerStorefrontResponse[] }> = company => company.role === 'installer'
+      ? installerWorkspaceApi.storefronts() : ManagerService.listManagerStorefronts(),
     search = typeof window === 'undefined' ? '' : window.location.search,
   ): Promise<void> {
     this.loading.value = true;
@@ -151,7 +154,7 @@ export class ManagerStorefrontSelection {
       if (!selected) throw new ManagerContextError(companies.length ? 'Нет доступа к компании из ссылки' : 'У вас пока нет доступа к компании. Откройте приглашение от владельца.');
       this.selectedTenantId.value = selected.tenant_id;
       // Only a validated company is sent to business endpoints. Views stay unmounted until sites and /me succeed.
-      const sites = await loadSites();
+      const sites = await loadSites(selected);
       this.storefronts.value = (sites.items ?? []).map(site => ({ ...site, is_current: false }));
       const requestedSite = explicitSite ? rawSite : stored.tenant_id === selected.tenant_id ? normalizedSlug(stored.site) : null;
       const current = this.storefronts.value.find(site => site.slug === requestedSite)

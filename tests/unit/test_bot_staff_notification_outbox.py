@@ -4,12 +4,11 @@ import pytest
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from sqlmodel import select
+from sqlmodel import SQLModel, select
 
 from models import (
     CommunicationDelivery,
     CommunicationDeliveryAttempt,
-    ConsumerInbox,
     Customer,
     Installer,
     IntegrationOutboxEvent,
@@ -18,6 +17,9 @@ from models import (
     OrderWorkStage,
     StaffUser,
     TenantMembership,
+    TenantWorkerProfile,
+    OrderWorkAssignment,
+    LegacyOwnerAuthState,
 )
 from services.bot_staff_notification_api_service import (
     BotStaffNotificationApiService,
@@ -36,22 +38,8 @@ TEST_TENANT_SCOPE = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
 @pytest.fixture
 async def staff_outbox_session(tmp_path):
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'staff-outbox.db'}")
-    tables = (
-        Tenant.__table__, Storefront.__table__,
-        Installer.__table__,
-        StaffUser.__table__,
-        TenantMembership.__table__,
-        Customer.__table__,
-        Order.__table__,
-        OrderWorkStage.__table__,
-        IntegrationOutboxEvent.__table__,
-        ConsumerInbox.__table__,
-        CommunicationDelivery.__table__,
-        CommunicationDeliveryAttempt.__table__,
-    )
     async with engine.begin() as connection:
-        for table in tables:
-            await connection.run_sync(table.create)
+        await connection.run_sync(SQLModel.metadata.create_all)
     factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     try:
         async with factory() as session:
@@ -59,6 +47,7 @@ async def staff_outbox_session(tmp_path):
                              Tenant(id=2,slug='partner',display_name='Partner'),
                              Storefront(id=1,tenant_id=1,slug='main',display_name='Main',status='active',is_default=True),
                              Storefront(id=2,tenant_id=2,slug='main',display_name='Partner',status='active',is_default=True)])
+            session.add(LegacyOwnerAuthState())
             await session.commit()
             yield session
     finally:
@@ -95,6 +84,11 @@ async def _seed_task(session: AsyncSession) -> OrderWorkStage:
             status="active",
         )
     )
+    await session.flush()
+    session.add(TenantWorkerProfile(id=20, tenant_id=1, staff_user_id=20))
+    await session.flush()
+    session.add(OrderWorkAssignment(id=50, tenant_id=1, storefront_id=1, order_id=40,
+        work_stage_id=50, worker_profile_id=20, title="Published work"))
     await session.commit()
     return stage
 
@@ -137,6 +131,10 @@ async def test_assignment_event_rejects_foreign_order_scope(
     events_after_rejection = (
         await staff_outbox_session.execute(select(IntegrationOutboxEvent))
     ).scalars().all()
+    staff_outbox_session.add(TenantWorkerProfile(id=21, tenant_id=2, staff_user_id=20))
+    grant = await staff_outbox_session.get(OrderWorkAssignment, 50)
+    grant.tenant_id, grant.storefront_id, grant.worker_profile_id = 2, 2, 21
+    await staff_outbox_session.commit()
     accepted = await StaffTaskNotificationEventService.enqueue_assigned(
         staff_outbox_session,
         stage=stage,
@@ -187,6 +185,9 @@ async def test_assignment_event_claim_and_ack_use_database_clock(
     assert notification["telegram_id"] == 123456
     assert notification["payload"]["event_kind"] == "assigned"
     assert notification["payload"]["stage_id"] == 50
+    assert notification["payload"]["stage_name"] == "Published work"
+    assert notification["payload"]["assignment_id"] == 50
+    assert "/my-work/50?company=1&site=main" in notification["payload"]["manager_url"]
     result = await BotStaffNotificationApiService.ack(
         staff_outbox_session,
         delivery_id=notification["delivery_id"],
@@ -223,6 +224,41 @@ async def test_staff_notification_opt_out_prevents_enqueue_and_cancels_queued_de
     ) is None
 
 
+@pytest.mark.parametrize("change", ["grant", "profile", "member", "editor", "unsafe_title", "old_payload"])
+async def test_queued_task_delivery_rechecks_explicit_acl_and_safe_snapshot(staff_outbox_session, change):
+    session = staff_outbox_session
+    stage = await _seed_task(session)
+    assert await StaffTaskNotificationEventService.enqueue_assigned(
+        session, stage=stage, previous_installer_id=None, tenant_scope=TEST_TENANT_SCOPE,
+    )
+    await session.commit()
+    now = await CommunicationDeliveryService.database_now(session)
+    await BotStaffNotificationApiService._materialize_pending(session, worker_id="bot-1", now=now)
+    delivery = await session.scalar(select(CommunicationDelivery))
+    assert delivery is not None
+    if change == "grant":
+        (await session.get(OrderWorkAssignment, 50)).revoked_at = datetime.now(timezone.utc)
+    elif change == "profile":
+        (await session.get(TenantWorkerProfile, 20)).status = "disabled"
+    elif change in {"member", "editor"}:
+        member = await session.scalar(select(TenantMembership).where(TenantMembership.staff_user_id == 20))
+        if change == "editor":
+            member.role = "catalog_editor"
+        else:
+            member.status = "disabled"
+    else:
+        snapshot = dict(delivery.render_context)
+        if change == "old_payload":
+            snapshot.pop("assignment_id")
+        else:
+            snapshot["stage_name"] = "PRIVATE legacy stage title"
+        delivery.render_context = snapshot
+    await session.commit()
+    assert await BotStaffNotificationApiService.claim(session, worker_id="bot-1", visibility_timeout_seconds=90) is None
+    await session.refresh(delivery)
+    assert delivery.status == "canceled"
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("case", ["same", "other_telegram", "opt_out", "other_assignment"])
 async def test_historical_staff_task_receipt_follows_only_safe_canonical_alias(staff_outbox_session, case):
@@ -244,8 +280,13 @@ async def test_historical_staff_task_receipt_follows_only_safe_canonical_alias(s
     staff_outbox_session.add(canonical)
     await staff_outbox_session.flush()
     staff_outbox_session.add(TenantMembership(tenant_id=1, staff_user_id=21, role='owner', status='active'))
+    # Notification aliases never create rights. A reviewed current worker grant
+    # must explicitly belong to the canonical person as well.
+    staff_outbox_session.add(TenantWorkerProfile(id=21, tenant_id=1, staff_user_id=21))
+    grant = await staff_outbox_session.get(OrderWorkAssignment, 50)
+    grant.worker_profile_id = 21
     if case == "other_assignment":
-        stage.installer_id = None
+        grant.revoked_at = datetime.now(timezone.utc)
     await staff_outbox_session.commit()
     notification = await BotStaffNotificationApiService.claim(
         staff_outbox_session, worker_id="bot-1", visibility_timeout_seconds=90,
@@ -270,8 +311,7 @@ async def test_claim_cancels_delivery_when_assignment_is_stale(staff_outbox_sess
     await staff_outbox_session.commit()
     now = await CommunicationDeliveryService.database_now(staff_outbox_session)
     await BotStaffNotificationApiService._materialize_pending(staff_outbox_session, worker_id='bot-1', now=now)
-    stage.installer_id = None
-    staff_outbox_session.add(stage)
+    (await staff_outbox_session.get(OrderWorkAssignment, 50)).revoked_at = datetime.now(timezone.utc)
     await staff_outbox_session.commit()
 
     notification = await BotStaffNotificationApiService.claim(

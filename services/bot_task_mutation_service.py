@@ -14,7 +14,9 @@ from models import (
     ServiceAttachment,
 )
 from models.tenancy import TenantScope
-from services.bot_access_service import BotAccessService
+from services.bot_worker_access import BotWorkerAccessDeniedError, bot_worker_auth
+from services.worker_assignment_access_service import WorkerAssignmentAccessService
+from services.worker_assignment_service import WorkerAssignmentError
 from services.notification_service import NotificationService
 from services.service_attachment_service import ServiceAttachmentService
 from services.tenant_entity_access_service import TenantEntityAccessService
@@ -59,9 +61,15 @@ class BotTaskMutationService:
         stage_id: int,
         tenant_scope: TenantScope,
     ) -> OrderWorkStage:
-        context = await BotAccessService.get_context(session, telegram_id)
-        if not context.is_staff or not context.legacy_installer_id:
-            raise BotTaskMutationAccessDeniedError("Staff task access is required")
+        try:
+            auth = await bot_worker_auth(session, telegram_id, tenant_scope)
+            assignment = await WorkerAssignmentAccessService.get_for_stage(
+                session, auth, stage_id, for_update=True, existing_action=True,
+            )
+        except (BotWorkerAccessDeniedError, WorkerAssignmentError) as exc:
+            raise BotTaskMutationAccessDeniedError(str(exc)) from exc
+        if assignment is None:
+            raise BotTaskMutationAccessDeniedError("An active explicit work assignment is required")
 
         stage = await TenantEntityAccessService.get_order_stage(
             session,
@@ -69,7 +77,7 @@ class BotTaskMutationService:
             tenant_scope=tenant_scope,
             for_update=True,
         )
-        if not stage or stage.installer_id != context.legacy_installer_id:
+        if not stage or stage.order_id != assignment.order_id:
             raise BotTaskMutationAccessDeniedError(
                 "Task was not found or is assigned to another executor"
             )

@@ -209,8 +209,10 @@ photos, drawer autosave/stale responses, generated clients and normal deployment
 smoke checks. Production acceptance uses existing data in read-only requests;
 it does not create test orders or invitations.
 
-Installer workspaces, collection instructions and supplier-only accounts remain
-later releases. Catalog and CRM have separate permission boundaries now; deploying
+Installer workspaces and collection instructions are covered by the
+[read-only first release](installer-workspace.md). Receipt confirmation, installer
+settlement and supplier-only accounts remain later releases.
+Catalog and CRM have separate permission boundaries now; deploying
 them as independent applications is a future architecture decision.
 
 Related procedures: [authentication](api/authentication.md),

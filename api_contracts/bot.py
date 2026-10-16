@@ -174,12 +174,13 @@ class BotTaskResponse(BaseModel):
     stage_id: int | None = Field(default=None, ge=1)
     title: str
     status: str
-    start_time: datetime
+    start_time: datetime | None = None
     address: str | None = None
     customer_name: str = "Клиент"
     customer_phone: str | None = None
     comment: str | None = None
     manager_url: str | None = None
+    work_url: str | None = None
 
 
 class BotTaskListResponse(BaseModel):
@@ -552,6 +553,7 @@ class BotStaffNotificationPayload(BaseModel):
         "assigned", "rescheduled", "canceled", "departure_reminder"
     ]
     staff_user_id: int = Field(ge=1)
+    assignment_id: int | None = Field(default=None, gt=0)
     tenant_id: int | None = Field(default=None, gt=0)
     storefront_id: int | None = Field(default=None, gt=0)
     stage_id: int = Field(ge=1)

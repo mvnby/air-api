@@ -13,6 +13,8 @@ from models import (
     OrderWorkStage,
     StaffUser,
     TenantMembership,
+    TenantWorkerProfile,
+    OrderWorkAssignment,
 )
 from services.bot_task_mutation_service import BotTaskMutationService
 from services.tenant_scope_service import SystemTenantScopeResolver
@@ -72,6 +74,13 @@ async def test_postgres_duplicate_bot_task_mutations_change_each_value_once(
             status=OrderStageStatus.IN_PROGRESS,
         )
         setup_session.add_all([status_stage, report_stage])
+        await setup_session.flush()
+        profile = TenantWorkerProfile(tenant_id=tenant_scope.tenant_id, staff_user_id=staff_user.id)
+        setup_session.add(profile)
+        await setup_session.flush()
+        setup_session.add_all([OrderWorkAssignment(tenant_id=tenant_scope.tenant_id,
+            storefront_id=tenant_scope.storefront_id, order_id=order.id, work_stage_id=stage.id,
+            worker_profile_id=profile.id) for stage in (status_stage, report_stage)])
         await setup_session.commit()
 
     notify = AsyncMock(return_value=1)

@@ -114,6 +114,8 @@ vi.mock('../src/views/SupplierFeedsView.vue', () => ({
 }));
 
 import App from '../src/App.vue';
+import { installerWorkspaceApi } from '../src/services/installer-workspace';
+import { storefrontSettingsApi } from '../src/features/settings/storefront-settings-api';
 import { managerProfileApi } from '../src/services/manager-profile';
 import { managerInvitationsApi } from '../src/services/manager-invitations';
 import { useOrderDrawerSaving } from '../src/composables/useOrderDrawerSaving';
@@ -653,5 +655,23 @@ describe('company bootstrap and public invitation boundary', () => {
     await wrapper!.get('form').trigger('submit'); await flushPromises();
     expect(accept).toHaveBeenCalledWith({ token: 'private-token-01234567890123456789', mode: 'existing_credentials', username: 'maria', password: 'personal-password' });
     preview.mockRestore(); accept.mockRestore();
+  });
+});
+
+
+describe('installer app boundary', () => {
+  it('mounts personal work after installer bootstrap without loading CRM, catalog or Manager branding', async () => {
+    const installerAuth = { ...oldAuth, role: 'installer', capabilities: ['installer.works.read'], tenant_membership_id: 19 };
+    const choices = companyChoices(installerAuth, oldStorefronts);
+    choices.items = choices.items.map(item => ({ ...item, role: 'installer' })); mocks.companies.mockResolvedValue(choices);
+    vi.spyOn(installerWorkspaceApi, 'storefronts').mockResolvedValue(oldStorefronts as never);
+    vi.spyOn(installerWorkspaceApi, 'me').mockResolvedValue(installerAuth);
+    vi.spyOn(installerWorkspaceApi, 'works').mockResolvedValue({ items: [], total: 0, page: 1, limit: 30 });
+    const brand = vi.spyOn(storefrontSettingsApi, 'brand');
+    await mountApp('/manager/');
+    await vi.waitFor(() => expect(wrapper!.find('[data-testid="installer-works"]').exists()).toBe(true));
+    expect(window.location.pathname).toBe('/manager/my-work'); expect(wrapper!.text()).toContain('Пока нет назначенных работ');
+    for (const label of ['Поставщики', 'Клиенты', 'Заказы', 'Кондиционеры']) expect(wrapper!.findAll('nav button').some(button => button.text() === label)).toBe(false);
+    expect(mocks.readMe).not.toHaveBeenCalled(); expect(mocks.listStorefronts).not.toHaveBeenCalled(); expect(mocks.getLeadsCounter).not.toHaveBeenCalled(); expect(mocks.getManagerOrders).not.toHaveBeenCalled(); expect(brand).not.toHaveBeenCalled();
   });
 });

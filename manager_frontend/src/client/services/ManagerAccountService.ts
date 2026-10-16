@@ -11,7 +11,7 @@ export class ManagerAccountService {
      * List Account Companies
      * Bootstrap active company choices from the authenticated person, ignoring selection headers.
      *
-     * Actual memberships use current workspace roles; verified platform owners also see virtual
+     * Actual memberships use current account roles, including installer; verified platform owners also see virtual
      * support contexts without creating memberships. Invalid JWTs return401. Multiple companies
      * require explicit selection on business requests, never on this account bootstrap.
      * @param page

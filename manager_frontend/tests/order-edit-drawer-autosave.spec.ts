@@ -1,6 +1,8 @@
 import { nextTick } from 'vue';
 import { shallowMount, flushPromises, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import OrderWorkerAssignmentsPanel from '../src/components/orders/OrderWorkerAssignmentsPanel.vue';
+import { orderWorkerAssignmentsApi } from '../src/services/order-worker-assignments';
 import OrderResponsiblePanel from '../src/components/orders/OrderResponsiblePanel.vue';
 import { orderResponsibilityApi } from '../src/services/order-responsibility';
 import OrderEditDrawer from '../src/components/orders/OrderEditDrawer.vue';
@@ -516,5 +518,23 @@ describe('order responsibility with the actual drawer save queue', () => {
     await mountDrawer(); const pending = responsibility().props('assign')!(8); await flushPromises();
     const emittedBefore = wrapper.emitted('updated')?.length || 0; managerStorefrontSelection.selectedSlug.value = 'other'; await nextTick();
     finish({ ...stored, responsible_person: null, responsible_version: 4 }); expect(await pending).toBe(false); expect(wrapper.emitted('updated')?.length || 0).toBe(emittedBefore);
+  });
+});
+
+
+describe('worker instructions with the actual drawer save queue', () => {
+  it('flushes queued order edits before a worker write without applying workspace data to order fields', async () => {
+    managerSession.auth.value = { username: 'manager', staff_user_id: 7, tenant_id: 2, storefront_id: 1, capabilities: ['crm.manage'] } as any;
+    const workspace = { order_id: stored.id, assignments: [], materials: [], collection: { version: 0, assignment_id: null, amount: null, currency: null, status: 'not_assigned', updated_at: null }, balances: [], financial_fingerprint: 'a'.repeat(64) } as any;
+    vi.spyOn(orderWorkerAssignmentsApi, 'get').mockResolvedValue(workspace);
+    vi.spyOn(orderWorkerAssignmentsApi, 'candidates').mockResolvedValue({ items: [{ staff_user_id: 9, display_name: 'Монтажник' }], total: 1, page: 1, limit: 100 });
+    const assign = vi.spyOn(orderWorkerAssignmentsApi, 'assign').mockResolvedValue(workspace);
+    wrapper = shallowMount(OrderEditDrawer, { props: { modelValue: false, order: stored, onUpdated: (order: ManagerOrderDetailResponse) => { void wrapper.setProps({ order }); } }, global: { stubs: { OrderWorkerAssignmentsPanel: false } } });
+    await wrapper.setProps({ modelValue: true }); await flushPromises();
+    wrapper.findComponent(OrderWorkspaceNav).vm.$emit('select', 'work'); await flushPromises();
+    customer().vm.$emit('update:comment', 'Несохранённая информация менеджера'); await nextTick();
+    const panel = wrapper.findComponent(OrderWorkerAssignmentsPanel); await panel.get('[aria-label="Исполнитель работы"]').setValue('9'); await panel.findAll('form')[0]!.trigger('submit'); await flushPromises();
+    expect(ManagerOrdersService.patchManagerOrder).toHaveBeenCalled(); expect(assign).toHaveBeenCalledWith(stored.id, 9, null); expect(stored.comment).toBe('Несохранённая информация менеджера'); expect(customer().props('comment')).toBe('Несохранённая информация менеджера');
+    expect(wrapper.props('order')).not.toHaveProperty('assignments'); managerSession.auth.value = null;
   });
 });

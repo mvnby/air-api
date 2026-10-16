@@ -86,17 +86,17 @@ class BotStaffNotificationApiService:
             or not StaffUserService.is_active(staff_user)
             or staff_user.telegram_id is None
             or str(int(staff_user.telegram_id)) != claim.destination
-            or staff_user.legacy_installer_id is None
         ):
             return False
         from services.bot_notification_access import task_notification_allowed
-        if not await task_notification_allowed(session, staff_user, payload):
+        # Final provider handoff and assignment revocation serialize on the same
+        # ordered work fences. Audience expansion deliberately remains read-only.
+        if not await task_notification_allowed(session, staff_user, payload, for_update=True):
             return False
         stage = await session.get(OrderWorkStage, payload.stage_id)
         if (
             stage is None
             or int(stage.order_id) != payload.order_id
-            or stage.installer_id != staff_user.legacy_installer_id
         ):
             return False
         stage_status = OrderStageStatus(stage.status)

@@ -41,6 +41,9 @@ describe('company invitations', () => {
     await wrapper.findAll('button').find(button => button.text() === 'Скопировать ссылку')!.trigger('click'); await flushPromises(); expect(writeText).toHaveBeenCalledWith('https://manager.test/manager/invite#token=secret');
     await wrapper.findAll('button').find(button => button.text() === 'Отозвать')!.trigger('click'); await flushPromises(); expect(mocks.revoke).toHaveBeenCalledWith(6); expect(wrapper.find('input[readonly]').exists()).toBe(false); wrapper.unmount();
   });
+  it('invites an installer without granting any work', async () => {
+    mocks.create.mockResolvedValue({ id: 9, role: 'installer', expires_at: preview.expires_at, invite_url: '/manager/invite#token=worker' }); const wrapper = mount(TeamInvitationsPanel); await flushPromises(); await wrapper.get('select').setValue('installer'); await wrapper.get('form').trigger('submit'); await flushPromises(); expect(mocks.create).toHaveBeenCalledWith('installer'); expect(wrapper.text()).toContain('Монтажник'); wrapper.unmount();
+  });
   it('prevents admins inviting an owner', async () => {
     managerSession.auth.value = { role: 'admin' } as any; const wrapper = mount(TeamInvitationsPanel); await flushPromises(); expect(wrapper.get('option[value="owner"]').attributes('disabled')).toBeDefined(); await wrapper.get('select').setValue('owner'); await wrapper.get('form').trigger('submit'); expect(mocks.create).not.toHaveBeenCalled(); wrapper.unmount();
   });

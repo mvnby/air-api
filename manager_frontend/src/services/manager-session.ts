@@ -6,6 +6,7 @@ import {
   type ManagerAuthStatusResponse,
   type TelegramLoginPayload,
 } from '../client';
+import { installerWorkspaceApi } from './installer-workspace';
 import { ManagerContextError, managerStorefrontSelection } from './manager-storefront-selection';
 
 type AuthenticationStep = () => PromiseLike<unknown>;
@@ -45,6 +46,13 @@ export const recoverManagerSessionFromUnauthorized = (): boolean => {
   return requireManagerSessionRecovery();
 };
 
+export const readCurrentWorkspaceIdentity = (): PromiseLike<ManagerAuthStatusResponse> => {
+  const selected = managerStorefrontSelection.companies.value.find(
+    company => company.tenant_id === managerStorefrontSelection.selectedTenantId.value,
+  );
+  return selected?.role === 'installer' ? installerWorkspaceApi.me() : ManagerService.readUserMe();
+};
+
 export const bootstrapManagerSession = async (
   authenticate?: AuthenticationStep,
 ): Promise<ManagerAuthStatusResponse> => {
@@ -57,7 +65,7 @@ export const bootstrapManagerSession = async (
   try {
     if (authenticate) await authenticate();
     await managerStorefrontSelection.initializeContext();
-    const auth = await ManagerService.readUserMe();
+    const auth = await readCurrentWorkspaceIdentity();
     const site = managerStorefrontSelection.storefronts.value.find(item => item.slug === managerStorefrontSelection.selectedSlug.value);
     if (auth.tenant_id !== managerStorefrontSelection.selectedTenantId.value || (site && typeof site.id === 'number' && auth.storefront_id !== site.id)) {
       throw new ManagerContextError('Сервер не подтвердил выбранную компанию или сайт. Обновите страницу.');

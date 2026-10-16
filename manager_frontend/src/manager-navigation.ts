@@ -2,6 +2,7 @@ import type { Component } from 'vue';
 import { MANAGER_CAPABILITY, type ManagerCapability } from './manager-capabilities';
 import {
   Award,
+  ClipboardList,
   Boxes,
   Building2,
   Calendar,
@@ -42,6 +43,8 @@ export type NavSection = {
   label: string;
   items: NavItem[];
 };
+
+export const installerWorkNavItem: NavItem = { path: '/manager/my-work', label: 'Мои работы', icon: ClipboardList, match: 'prefix' };
 
 export const coreNavItems: NavItem[] = [
   { path: '/manager', label: 'Главная', icon: Home, match: 'exact' },

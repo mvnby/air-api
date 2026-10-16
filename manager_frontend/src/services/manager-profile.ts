@@ -1,7 +1,7 @@
 import { shallowRef, watch } from 'vue';
-import { ManagerService, OpenAPI, type ManagerOwnProfileResponse, type ManagerOwnProfileUpdate } from '../client';
+import { OpenAPI, type ManagerOwnProfileResponse, type ManagerOwnProfileUpdate } from '../client';
 import { request } from '../client/core/request';
-import { managerSession } from './manager-session';
+import { managerSession, readCurrentWorkspaceIdentity } from './manager-session';
 
 export type OwnProfile = ManagerOwnProfileResponse;
 export const ownProfileState = shallowRef<OwnProfile | null>(null);
@@ -24,7 +24,7 @@ export const applyOwnProfile = (profile: OwnProfile) => {
 export const refreshManagerIdentity = async () => {
   const previous = managerSession.auth.value;
   if (!previous) return;
-  const fresh = await ManagerService.readUserMe();
+  const fresh = await readCurrentWorkspaceIdentity();
   if (managerSession.auth.value === previous) {
     managerSession.auth.value = { ...fresh };
     managerSession.currentUserRole.value = fresh.role || '';

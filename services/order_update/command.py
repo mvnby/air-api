@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.command_transaction import command_transaction
+from services.worker_assignment_legacy_sync import WorkerAssignmentLegacySync
 from services.order_projection_service import OrderProjectionService
 from services.order_service import OrderService
 from services.order_update.commercial_lines import apply_commercial_lines
@@ -26,6 +27,14 @@ class OrderUpdateCommandService:
         tenant_scope: TenantScope,
     ) -> Optional[Dict[str, Any]]:
         async with command_transaction(session):
+            fields_set = getattr(payload, "model_fields_set", None)
+            if fields_set is None:
+                fields_set = getattr(payload, "__fields_set__", set())
+            worker_profiles = {}
+            if "installer_id" in fields_set:
+                worker_profiles = await WorkerAssignmentLegacySync.prepare(
+                    session, tenant_scope, [getattr(payload, "installer_id", None)]
+                )
             order = await TenantEntityAccessService.get_order(
                 session,
                 order_id,
@@ -34,10 +43,6 @@ class OrderUpdateCommandService:
             )
             if not order:
                 return None
-
-            fields_set = getattr(payload, "model_fields_set", None)
-            if fields_set is None:
-                fields_set = getattr(payload, "__fields_set__", set())
 
             from services.maintenance_commercial_guard import guard_order_update
             await guard_order_update(session, order, payload, fields_set)
@@ -53,6 +58,7 @@ class OrderUpdateCommandService:
                 payload=payload,
                 tenant_scope=tenant_scope,
                 fields_set=set(fields_set),
+                worker_profiles=worker_profiles,
                 previous_workflow_type=OrderService._normalize_workflow_type(
                     getattr(order, "workflow_type", None)
                 ),

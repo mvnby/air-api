@@ -136,9 +136,10 @@ async def login_access_token(
         session, form_data.username, form_data.password
     )
     if authentication is not None:
-        from services.manager_tenant_access_service import ManagerTenantAccessResolver, ManagerTenantAccessResolutionError
+        from services.account_access_service import AccountAccessResolver
+        from services.manager_tenant_access_service import ManagerTenantAccessResolutionError
         try:
-            await ManagerTenantAccessResolver.personal(session, staff_user_id=authentication.user.id)
+            await AccountAccessResolver.personal(session, staff_user_id=authentication.user.id)
         except ManagerTenantAccessResolutionError:
             await _reject_password_login(session, username=form_data.username, source=source, reservation=reservation)
         current_legacy_state = await LegacyOwnerAuthGuard.state(session)

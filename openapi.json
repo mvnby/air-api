@@ -628,7 +628,7 @@
           "internal bot v1"
         ],
         "summary": "List Internal Bot My Tasks",
-        "description": "Read work stages assigned to the actor\u2019s linked installer in the system tenant, with\noptional date/status filters. Active staff access is required (403 otherwise); staff\nwithout an installer linkage receive an empty list.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
+        "description": "Read the actor's active explicit assignments in the selected company/site, with\noptional date/status filters. Requires a real eligible membership and active worker\nprofile. Payroll/legacy installer links grant no access. Only published instructions\nand the safe installer projection are returned; work_url opens My Work, never CRM.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "list_internal_bot_my_tasks_v1",
         "requestBody": {
           "content": {
@@ -675,7 +675,7 @@
           "internal bot v1"
         ],
         "summary": "Update Internal Bot Task Status",
-        "description": "Set the status of a stage assigned to the actor\u2019s installer in the system tenant.\nMissing/inaccessible/unassigned stage returns 403; an invalid state transition returns\n409. changed reports whether a transition occurred; this is not a generic idempotency\nreceipt.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
+        "description": "Set the status of an explicitly assigned stage in the selected company/site.\nMissing/inaccessible/unassigned stage returns 403; an invalid state transition returns\n409. changed reports whether a transition occurred; this is not a generic idempotency\nreceipt. Membership, worker profile and unrevoked assignment are revalidated under\nordered locks; completed stages permit idempotent completion but cannot be reopened.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "update_internal_bot_task_status_v1",
         "security": [
           {
@@ -734,7 +734,7 @@
           "internal bot v1"
         ],
         "summary": "Save Internal Bot Task Report",
-        "description": "Save a normalized installer report on the actor\u2019s assigned stage in the system tenant.\nMissing/inaccessible stage returns 403. Repeating the same normalized report returns\nchanged=false.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
+        "description": "Save a normalized report on the actor's explicitly assigned stage in the selected\ncompany/site. Active membership/profile and an unrevoked assignment are required.\nCompleted stages retain this existing report action; canceled/closed work is denied.\nMissing/inaccessible stage returns 403. Repeating the same normalized report returns\nchanged=false.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "save_internal_bot_task_report_v1",
         "security": [
           {
@@ -793,7 +793,7 @@
           "internal bot v1"
         ],
         "summary": "Attach Internal Bot Task Stage File",
-        "description": "Attach a nonempty file of at most 10 MB to the actor\u2019s assigned stage in the system\ntenant. Inaccessible stage returns 403, empty content 422 and oversize content 413.\nfile_id provides attachment deduplication; inspect already_attached on retries.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
+        "description": "Attach a nonempty file of at most 10 MB to the actor's explicitly assigned stage in\nthe selected company/site. Current membership/profile/assignment access is required,\nincluding on retries; legacy payroll links do not grant access. Inaccessible stage\nreturns 403, empty content 422 and oversize content 413.\nfile_id provides attachment deduplication; inspect already_attached on retries.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "attach_internal_bot_task_stage_file_v1",
         "security": [
           {
@@ -5398,7 +5398,7 @@
           "manager-account"
         ],
         "summary": "List Account Companies",
-        "description": "Bootstrap active company choices from the authenticated person, ignoring selection headers.\n\nActual memberships use current workspace roles; verified platform owners also see virtual\nsupport contexts without creating memberships. Invalid JWTs return401. Multiple companies\nrequire explicit selection on business requests, never on this account bootstrap.",
+        "description": "Bootstrap active company choices from the authenticated person, ignoring selection headers.\n\nActual memberships use current account roles, including installer; verified platform owners also see virtual\nsupport contexts without creating memberships. Invalid JWTs return401. Multiple companies\nrequire explicit selection on business requests, never on this account bootstrap.",
         "operationId": "manager_list_account_companies",
         "security": [
           {
@@ -14547,7 +14547,7 @@
           "manager"
         ],
         "summary": "Change Account Password",
-        "description": "Change the current staff account password using its current password and record the\ncredential change. Requires Manager access and self-service password eligibility;\nunavailable self-service returns 409 with detail.code=self_service_unavailable. Credential\nvalidation failures return 400 with code/message. Success is 204, increments the account\nauth version and clears the authentication cookie; sign in again. This command has no replay\nreceipt, and the old password cannot be reused for a retry.",
+        "description": "Change the current staff account password using its current password and record the\ncredential change. Requires an active actual account membership and self-service password eligibility;\nunavailable self-service returns 409 with detail.code=self_service_unavailable. Credential\nvalidation failures return 400 with code/message. Success is 204, increments the account\nauth version and clears the authentication cookie; sign in again. This command has no replay\nreceipt, and the old password cannot be reused for a retry.",
         "operationId": "change_manager_account_password",
         "requestBody": {
           "content": {
@@ -20734,6 +20734,596 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ManagerOrderDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/installer/me": {
+      "get": {
+        "tags": [
+          "installer-auth"
+        ],
+        "summary": "Read Installer Me",
+        "description": "Read live identity and the selected real company/site for My Work.\n\nAccepts the existing Manager company/storefront headers. An invalid explicit\nselection is denied, never replaced. Only actual owner/admin/manager/installer\nmembership is eligible; virtual platform support and catalog editors are denied.\nThis bootstrap grants no assignment, CRM or write access.",
+        "operationId": "read_installer_me",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerAuthStatusResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/installer/storefronts": {
+      "get": {
+        "tags": [
+          "installer-auth"
+        ],
+        "summary": "List Installer Storefronts",
+        "description": "List active sites of the selected real company, without switching context.\n\nUses the same fresh membership and explicit selection checks as /installer/me.\nListing a site grants no assignment or Manager access.",
+        "operationId": "list_installer_storefronts",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerStorefrontListResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/installer/works": {
+      "get": {
+        "tags": [
+          "installer-work"
+        ],
+        "summary": "List Works",
+        "description": "Read only the actor's live explicit work assignments in the selected company/site.\n\nActive account, actual membership, worker profile, assignment and work lifecycle\nare rechecked. Payroll-only or historical links never grant access. Date filters\nprecede count/pagination; limit is at most 100. Financial/private CRM fields are\nabsent. See https://github.com/mvnby/air-api/blob/main/docs/installer-workspace.md.",
+        "operationId": "list_installer_works",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "bucket",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(all|today|upcoming|unscheduled)$",
+              "default": "all",
+              "title": "Bucket"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallerWorksResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/installer/works/{assignment_id}": {
+      "get": {
+        "tags": [
+          "installer-work"
+        ],
+        "summary": "Read Work",
+        "description": "Read a live assigned task with approved instructions, technical equipment and materials.\n\nMissing, revoked, foreign-company/site or inactive work returns404. No raw order\ncomments, quotes, payment ledger, supplier, purchase price or cost is returned.\nCollection amount is visible only to the designated recipient while its financial\nsnapshot is current. See the installer-workspace domain contract.",
+        "operationId": "get_installer_work",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "assignment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Assignment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallerWorkDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/installer/works/{assignment_id}/materials/{material_id}/content": {
+      "get": {
+        "tags": [
+          "installer-work"
+        ],
+        "summary": "Read Material",
+        "description": "Proxy explicitly published technical bytes after live assignment/link checks.\n\nACL is rechecked after storage I/O. No bearer/presigned URL is issued, caching is\ndisabled and conditional304 cannot bypass authorization. Archived, unpublished,\nrevoked or foreign materials return404. Original filenames/source metadata are\nnever exposed; only approved image/PDF media are allowed.",
+        "operationId": "read_installer_work_material",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "assignment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Assignment Id"
+            }
+          },
+          {
+            "name": "material_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Material Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/worker-candidates": {
+      "get": {
+        "tags": [
+          "manager-installer-workspace"
+        ],
+        "summary": "Candidates",
+        "description": "Page active actual company owner/admin/manager/installer assignment candidates.\n\nRequires CRM access; virtual support is allowed to manage a partner, but does not\nbecome a candidate without actual membership. No credentials/payroll are returned.",
+        "operationId": "list_manager_worker_candidates",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerCandidatesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/installer-workspace": {
+      "get": {
+        "tags": [
+          "manager-installer-workspace"
+        ],
+        "summary": "Workspace",
+        "description": "Read scoped work grants, approved publications and the current collection review state.\n\nCRM membership or verified platform support is required. A foreign/missing order\nreturns404. Financial balances/fingerprint are Manager-only and do not create or\nrepair any proposal, assignment, payment or worker profile.",
+        "operationId": "get_manager_installer_workspace",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerInstallerWorkspace"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/installer-workspace/assignments": {
+      "post": {
+        "tags": [
+          "manager-installer-workspace"
+        ],
+        "summary": "Create Assignment",
+        "description": "Explicitly assign an actual company worker to an order or active visit.\n\nRequires X-Kitlane-Team:1 and approved Origin. Fresh authority/eligibility and scope\nare checked under ordered locks. Creates a company worker profile if needed;\ndoes not copy internal comments, grant CRM or create payroll/payment records.\nAssignment and audit commit atomically; duplicate active assignments are reused.",
+        "operationId": "create_manager_worker_assignment",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkerAssignmentCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerInstallerWorkspace"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/installer-workspace/assignments/{assignment_id}": {
+      "patch": {
+        "tags": [
+          "manager-installer-workspace"
+        ],
+        "summary": "Publish Assignment",
+        "description": "Publish only explicitly approved work title/instructions and technical attachment links.\n\nRequires team Origin/header protection and fresh scoped CRM authority. A stale\nassignment version returns409; unavailable/nontechnical/foreign materials are\nrejected. Version, publications and audit are atomic, preserving unrelated order\nfields and financial data.",
+        "operationId": "publish_manager_worker_assignment",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "assignment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Assignment Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkerAssignmentPublicationUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerInstallerWorkspace"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/installer-workspace/assignments/{assignment_id}/revoke": {
+      "post": {
+        "tags": [
+          "manager-installer-workspace"
+        ],
+        "summary": "Revoke Assignment",
+        "description": "Revoke versioned work access with atomic audit; preserve payroll/history and files.\n\nRequires team Origin/header protection and fresh scoped CRM authority. Stale\nversions return409. New reads, downloads and old bot actions lose authorization;\nthe original assignment identity is never reassigned to a different person.",
+        "operationId": "revoke_manager_worker_assignment",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "assignment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Assignment Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkerAssignmentRevoke"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerInstallerWorkspace"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/installer-workspace/collection": {
+      "put": {
+        "tags": [
+          "manager-installer-workspace"
+        ],
+        "summary": "Collection",
+        "description": "Publish/clear one versioned collection instruction to one assigned recipient.\n\nRequires team Origin/header protection, live CRM authority, an unchanged financial\nfingerprint and exact nonnegative money no greater than the current balance in\nthe supported currency. Zero is explicit; null clears. Stale edits return409.\nThis is not confirmation of receipt and never inserts/changes payments or payroll.",
+        "operationId": "put_manager_worker_collection",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerCollectionUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerInstallerWorkspace"
                 }
               }
             }
@@ -42605,6 +43195,18 @@
             "minimum": 1.0,
             "title": "Staff User Id"
           },
+          "assignment_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignment Id"
+          },
           "tenant_id": {
             "anyOf": [
               {
@@ -43015,8 +43617,15 @@
             "title": "Status"
           },
           "start_time": {
-            "type": "string",
-            "format": "date-time",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Start Time"
           },
           "address": {
@@ -43067,6 +43676,17 @@
               }
             ],
             "title": "Manager Url"
+          },
+          "work_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Url"
           }
         },
         "type": "object",
@@ -43075,8 +43695,7 @@
           "id",
           "order_id",
           "title",
-          "status",
-          "start_time"
+          "status"
         ],
         "title": "BotTaskResponse",
         "description": "Stable read-only task projection rendered by the Telegram runtime."
@@ -54971,6 +55590,443 @@
         ],
         "title": "InstallationWorkSummary"
       },
+      "InstallerCollection": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "not_assigned",
+              "not_collector",
+              "ready",
+              "requires_review"
+            ],
+            "title": "Status"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "BYN",
+                  "USD",
+                  "EUR"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "recipient_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipient Name"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "InstallerCollection"
+      },
+      "InstallerEquipment": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "serial": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serial"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Quantity"
+          },
+          "technical_specs": {
+            "items": {
+              "$ref": "#/components/schemas/InstallerTechnicalSpec"
+            },
+            "type": "array",
+            "title": "Technical Specs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "name",
+          "quantity"
+        ],
+        "title": "InstallerEquipment"
+      },
+      "InstallerMaterial": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "file_kind": {
+            "type": "string",
+            "enum": [
+              "image",
+              "pdf"
+            ],
+            "title": "File Kind"
+          },
+          "content_url": {
+            "type": "string",
+            "title": "Content Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "file_kind",
+          "content_url"
+        ],
+        "title": "InstallerMaterial"
+      },
+      "InstallerTechnicalSpec": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "value"
+        ],
+        "title": "InstallerTechnicalSpec"
+      },
+      "InstallerWorkDetail": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "work_stage_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Stage Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "start_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Time"
+          },
+          "end_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Time"
+          },
+          "customer_name": {
+            "type": "string",
+            "title": "Customer Name"
+          },
+          "customer_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Phone"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "collection": {
+            "$ref": "#/components/schemas/InstallerCollection"
+          },
+          "instructions": {
+            "type": "string",
+            "title": "Instructions"
+          },
+          "equipment": {
+            "items": {
+              "$ref": "#/components/schemas/InstallerEquipment"
+            },
+            "type": "array",
+            "title": "Equipment"
+          },
+          "materials": {
+            "items": {
+              "$ref": "#/components/schemas/InstallerMaterial"
+            },
+            "type": "array",
+            "title": "Materials"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "order_id",
+          "work_stage_id",
+          "version",
+          "title",
+          "status",
+          "start_time",
+          "customer_name",
+          "collection",
+          "instructions",
+          "equipment",
+          "materials"
+        ],
+        "title": "InstallerWorkDetail"
+      },
+      "InstallerWorkSummary": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "work_stage_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Stage Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "start_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Time"
+          },
+          "end_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Time"
+          },
+          "customer_name": {
+            "type": "string",
+            "title": "Customer Name"
+          },
+          "customer_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Phone"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "collection": {
+            "$ref": "#/components/schemas/InstallerCollection"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "order_id",
+          "work_stage_id",
+          "version",
+          "title",
+          "status",
+          "start_time",
+          "customer_name",
+          "collection"
+        ],
+        "title": "InstallerWorkSummary"
+      },
+      "InstallerWorksResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InstallerWorkSummary"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit"
+        ],
+        "title": "InstallerWorksResponse"
+      },
       "JevShadowItem": {
         "properties": {
           "id": {
@@ -63007,6 +64063,173 @@
         ],
         "title": "ManagerCatalogQualitySupplierResponse"
       },
+      "ManagerCollectionBalance": {
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "BYN",
+              "USD",
+              "EUR"
+            ],
+            "title": "Currency"
+          },
+          "remaining_amount": {
+            "type": "string",
+            "title": "Remaining Amount"
+          }
+        },
+        "type": "object",
+        "required": [
+          "currency",
+          "remaining_amount"
+        ],
+        "title": "ManagerCollectionBalance"
+      },
+      "ManagerCollectionInstruction": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "assignment_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignment Id"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "BYN",
+                  "USD",
+                  "EUR"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "not_assigned",
+              "ready",
+              "requires_review"
+            ],
+            "title": "Status"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "assignment_id",
+          "amount",
+          "currency",
+          "status",
+          "updated_at"
+        ],
+        "title": "ManagerCollectionInstruction"
+      },
+      "ManagerCollectionUpdate": {
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Version"
+          },
+          "assignment_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignment Id"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,12}|(?=[\\d.]{1,15}0*$)\\d{0,12}\\.\\d{0,2}0*$)"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "BYN",
+                  "USD",
+                  "EUR"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "financial_fingerprint": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Financial Fingerprint"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_version",
+          "assignment_id",
+          "financial_fingerprint"
+        ],
+        "title": "ManagerCollectionUpdate"
+      },
       "ManagerCommercialDocumentDefaults": {
         "properties": {
           "order_id": {
@@ -69752,6 +70975,52 @@
         },
         "type": "object",
         "title": "ManagerInstallerUpdatePayload"
+      },
+      "ManagerInstallerWorkspace": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "assignments": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerWorkerAssignment"
+            },
+            "type": "array",
+            "title": "Assignments"
+          },
+          "materials": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerWorkerMaterial"
+            },
+            "type": "array",
+            "title": "Materials"
+          },
+          "collection": {
+            "$ref": "#/components/schemas/ManagerCollectionInstruction"
+          },
+          "balances": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerCollectionBalance"
+            },
+            "type": "array",
+            "title": "Balances"
+          },
+          "financial_fingerprint": {
+            "type": "string",
+            "title": "Financial Fingerprint"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id",
+          "assignments",
+          "materials",
+          "collection",
+          "balances",
+          "financial_fingerprint"
+        ],
+        "title": "ManagerInstallerWorkspace"
       },
       "ManagerLegacyReconciliationConfirmPayload": {
         "properties": {
@@ -79084,7 +80353,8 @@
               "owner",
               "admin",
               "manager",
-              "catalog_editor"
+              "catalog_editor",
+              "installer"
             ],
             "title": "Role"
           }
@@ -79108,7 +80378,8 @@
               "owner",
               "admin",
               "manager",
-              "catalog_editor"
+              "catalog_editor",
+              "installer"
             ],
             "title": "Role"
           },
@@ -79143,7 +80414,8 @@
               "owner",
               "admin",
               "manager",
-              "catalog_editor"
+              "catalog_editor",
+              "installer"
             ],
             "title": "Role"
           },
@@ -81960,6 +83232,126 @@
           "updated_at"
         ],
         "title": "ManagerWarrantyPolicyResponse"
+      },
+      "ManagerWorkerAssignment": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "staff_user_id": {
+            "type": "integer",
+            "title": "Staff User Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "work_stage_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Stage Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "instructions": {
+            "type": "string",
+            "title": "Instructions"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "material_link_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Material Link Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "staff_user_id",
+          "display_name",
+          "work_stage_id",
+          "version",
+          "title",
+          "instructions",
+          "source",
+          "revoked_at",
+          "is_active",
+          "material_link_ids"
+        ],
+        "title": "ManagerWorkerAssignment"
+      },
+      "ManagerWorkerMaterial": {
+        "properties": {
+          "link_id": {
+            "type": "integer",
+            "title": "Link Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "file_kind": {
+            "type": "string",
+            "enum": [
+              "image",
+              "pdf"
+            ],
+            "title": "File Kind"
+          },
+          "work_stage_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Stage Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "link_id",
+          "label",
+          "file_kind",
+          "work_stage_id"
+        ],
+        "title": "ManagerWorkerMaterial"
       },
       "MdvCatalogImportPayload": {
         "properties": {
@@ -92808,7 +94200,8 @@
               "owner",
               "admin",
               "manager",
-              "catalog_editor"
+              "catalog_editor",
+              "installer"
             ],
             "title": "Role"
           },
@@ -98269,6 +99662,144 @@
           "message"
         ],
         "title": "WebRebuildTriggerResponse"
+      },
+      "WorkerAssignmentCreate": {
+        "properties": {
+          "staff_user_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Staff User Id"
+          },
+          "work_stage_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Stage Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "staff_user_id"
+        ],
+        "title": "WorkerAssignmentCreate"
+      },
+      "WorkerAssignmentPublicationUpdate": {
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Version"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "instructions": {
+            "type": "string",
+            "maxLength": 8000,
+            "title": "Instructions",
+            "default": ""
+          },
+          "material_link_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "maxItems": 30,
+            "title": "Material Link Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_version",
+          "title"
+        ],
+        "title": "WorkerAssignmentPublicationUpdate"
+      },
+      "WorkerAssignmentRevoke": {
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_version"
+        ],
+        "title": "WorkerAssignmentRevoke"
+      },
+      "WorkerCandidatesResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WorkerPerson"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit"
+        ],
+        "title": "WorkerCandidatesResponse"
+      },
+      "WorkerPerson": {
+        "properties": {
+          "staff_user_id": {
+            "type": "integer",
+            "title": "Staff User Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "staff_user_id",
+          "display_name"
+        ],
+        "title": "WorkerPerson"
       },
       "YandexBusinessCollectionConflict": {
         "properties": {

@@ -22,7 +22,6 @@ class StaffTaskRecipientDirectory:
             staff_user is None
             or not StaffUserService.is_active(staff_user)
             or staff_user.telegram_id is None
-            or staff_user.legacy_installer_id is None
         ):
             return []
         from services.bot_notification_access import task_notification_allowed

@@ -14,6 +14,7 @@ from models import (
     OrderStatus,
     OrderWorkStage,
     Payment,
+    Tenant, Storefront, LegacyOwnerAuthState,
 )
 from models.tenancy import TenantScope
 from schemas import (
@@ -47,6 +48,11 @@ async def command_session(tmp_path: Path):
         expire_on_commit=False,
     )
     async with session_factory() as session:
+        session.add(Tenant(id=1, slug="mvn", display_name="MVN", is_system=True))
+        await session.flush()
+        session.add(Storefront(id=1, tenant_id=1, slug="main", display_name="Main", status="active"))
+        session.add(LegacyOwnerAuthState(id=1, mode="legacy"))
+        await session.commit()
         yield session
 
     await engine.dispose()

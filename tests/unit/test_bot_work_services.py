@@ -26,6 +26,8 @@ from models import (
     Storefront,
     Tenant,
     TenantMembership,
+    TenantWorkerProfile,
+    OrderWorkAssignment,
 )
 from models.common import OrderStageStatus
 from services.bot_access_service import BotAccessService
@@ -353,6 +355,18 @@ async def test_task_list_merges_stages_and_distinct_legacy_orders(sqlite_staff_s
     )
     await sqlite_staff_session.commit()
 
+    profile = TenantWorkerProfile(tenant_id=1, staff_user_id=staff.id)
+    sqlite_staff_session.add(profile)
+    await sqlite_staff_session.flush()
+    stages = (await sqlite_staff_session.execute(select(OrderWorkStage))).scalars().all()
+    for stage in stages:
+        if stage.name != "Этап без даты":
+            sqlite_staff_session.add(OrderWorkAssignment(tenant_id=1, storefront_id=1, order_id=stage.order_id,
+                work_stage_id=stage.id, worker_profile_id=profile.id, title=stage.name))
+    sqlite_staff_session.add(OrderWorkAssignment(tenant_id=1, storefront_id=1, order_id=legacy_order.id,
+        worker_profile_id=profile.id, title="Старый монтаж без даты"))
+    await sqlite_staff_session.commit()
+
     tasks = await BotTaskService.list_my_tasks(
         sqlite_staff_session,
         12345,
@@ -366,9 +380,9 @@ async def test_task_list_merges_stages_and_distinct_legacy_orders(sqlite_staff_s
     ]
     assert [task["kind"] for task in tasks] == ["stage", "stage", "order"]
     assert tasks[0]["stage_id"] == tasks[0]["id"]
-    assert tasks[0]["manager_url"].endswith(
-        f"/orders/kanban?orderId={active_order.id}"
-    )
+    assert tasks[0]["manager_url"] is None
+    assert "/my-work/" in tasks[0]["work_url"] and "company=1&site=main" in tasks[0]["work_url"]
+
     assert not any(
         task["kind"] == "order" and task["order_id"] == active_order.id
         for task in tasks
@@ -437,39 +451,18 @@ async def test_my_tasks_handler_uses_gateway_without_opening_database(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_task_read_service_reuses_authorized_installer_mapping(monkeypatch):
-    session = object()
-    context = SimpleNamespace(is_staff=True, is_manager=False, is_executor=True, legacy_installer_id=17, selection=None)
-    get_context = AsyncMock(return_value=context)
-    list_installer_tasks = AsyncMock(return_value=[])
+async def test_task_read_service_reuses_safe_installer_projection(monkeypatch):
+    session, auth = object(), object()
+    actor = AsyncMock(return_value=(auth, SimpleNamespace(storefront_slug="main")))
+    listing = AsyncMock(return_value=SimpleNamespace(items=[], total=0))
+    monkeypatch.setattr("services.bot_task_read_service.bot_worker_context", actor)
+    monkeypatch.setattr("services.installer_workspace_service.InstallerWorkspaceService.list_works", listing)
 
-    monkeypatch.setattr(
-        "services.bot_task_read_service.BotAccessService.get_context",
-        get_context,
-    )
-    monkeypatch.setattr(
-        "services.bot_task_read_service.BotTaskService.list_installer_tasks",
-        list_installer_tasks,
-    )
-
-    tasks = await BotTaskReadService.list_for_staff(
-        session,
-        telegram_id=777,
-        limit=10,
-        tenant_scope=TEST_TENANT_SCOPE,
-    )
-
-    assert tasks == []
-    get_context.assert_awaited_once_with(session, 777)
-    list_installer_tasks.assert_awaited_once_with(
-        session,
-        17,
-        limit=10,
-        date_from=None,
-        date_to=None,
-        statuses=None,
-        tenant_scope=TEST_TENANT_SCOPE,
-    )
+    assert await BotTaskReadService.list_for_staff(
+        session, telegram_id=777, limit=10, tenant_scope=TEST_TENANT_SCOPE,
+    ) == []
+    actor.assert_awaited_once_with(session, 777, TEST_TENANT_SCOPE)
+    listing.assert_awaited_once_with(session, auth, page=1, limit=100, bucket="all")
 
 
 def test_task_report_builder_keeps_text_report_plain():

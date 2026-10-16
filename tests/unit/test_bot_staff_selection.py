@@ -302,6 +302,13 @@ async def test_notification_acl_uses_event_membership_not_selected_company(selec
         ]
     )
     await session.commit()
+    from models import TenantWorkerProfile, OrderWorkAssignment
+    from services.installer_work_urls import installer_work_url
+    session.add(TenantWorkerProfile(id=31, tenant_id=11, staff_user_id=31))
+    await session.flush()
+    session.add(OrderWorkAssignment(id=71, tenant_id=11, storefront_id=21, order_id=71,
+        work_stage_id=81, worker_profile_id=31, title="Work"))
+    await session.commit()
     issued = (await BotAccessService.get_context(session, 101)).selection
     await Selection.select(
         session, issued, tenant_id=12, storefront_slug="partner", expected_version=0
@@ -312,13 +319,14 @@ async def test_notification_acl_uses_event_membership_not_selected_company(selec
         return StaffTaskNotificationPayloadV1(
             event_kind="assigned",
             staff_user_id=31,
+            assignment_id=71,
             stage_id=stage_id,
             order_id=order_id,
             tenant_id=tenant_id,
             storefront_id=site,
             stage_name="Work",
             status="planned",
-            manager_url="https://example.test",
+            manager_url=installer_work_url(71, tenant_id=tenant_id, storefront_slug="main"),
         )
 
     assert await task_notification_allowed(session, user, payload(71, 81, 11, 21))

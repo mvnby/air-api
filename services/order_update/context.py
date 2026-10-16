@@ -1,6 +1,6 @@
 """Shared state for one Manager order update command."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Optional, Set
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,5 +22,6 @@ class OrderUpdateContext:
     previous_negotiation_status: str
     previous_execution_status: str
     previous_delivery_address: Optional[str]
+    worker_profiles: dict = field(default_factory=dict)
     currency_fields_changed: bool = False
     current_workflow_type: str = ""

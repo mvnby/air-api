@@ -622,6 +622,12 @@ LIST_MANAGER_ORDER_RESPONSIBLES = "list_manager_order_responsibles"
 PATCH_MANAGER_ORDER_RESPONSIBLE = "patch_manager_order_responsible"
 
 ALL_MANAGER_OPERATION_IDS = (
+    "list_manager_worker_candidates",
+    "get_manager_installer_workspace",
+    "create_manager_worker_assignment",
+    "publish_manager_worker_assignment",
+    "revoke_manager_worker_assignment",
+    "put_manager_worker_collection",
     LIST_MANAGER_ORDER_RESPONSIBLES,
     PATCH_MANAGER_ORDER_RESPONSIBLE,
     MANAGER_LIST_ACCOUNT_COMPANIES,

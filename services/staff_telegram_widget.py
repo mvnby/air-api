@@ -13,9 +13,8 @@ from models.staff_telegram import StaffTelegramWidgetReceipt
 from services.staff_telegram_security import StaffTelegramError, digest
 from services.legacy_owner_auth_guard import LegacyOwnerAuthGuard
 from services.legacy_owner_managed_identity_service import LegacyOwnerManagedIdentityService
-from services.manager_tenant_access_service import (
-    ManagerTenantAccessResolver, ManagerTenantAccessResolutionError,
-)
+from services.account_access_service import AccountAccessResolver
+from services.manager_tenant_access_service import ManagerTenantAccessResolutionError
 from services.staff_tenant_membership_service import StaffTenantMembershipService
 from services.staff_user_service import StaffUserService
 
@@ -63,7 +62,7 @@ async def authenticate_widget(session, payload):
     if staff_id is None:
         raise StaffTelegramError("telegram_login_unavailable", "Telegram login is not allowed", 401)
     try:
-        access = await ManagerTenantAccessResolver.personal(session, staff_user_id=staff_id)
+        access = await AccountAccessResolver.personal(session, staff_user_id=staff_id)
     except ManagerTenantAccessResolutionError:
         raise StaffTelegramError("telegram_login_unavailable", "Telegram login is not allowed", 401) from None
     await StaffTenantMembershipService.lock_tenant(session, tenant_id=access.tenant_scope.tenant_id)
@@ -73,7 +72,7 @@ async def authenticate_widget(session, payload):
     if user is None or not StaffUserService.is_active(user):
         raise StaffTelegramError("telegram_login_unavailable", "Telegram login is not allowed", 401)
     try:
-        await ManagerTenantAccessResolver.personal(session, staff_user_id=staff_id)
+        await AccountAccessResolver.personal(session, staff_user_id=staff_id)
     except ManagerTenantAccessResolutionError:
         raise StaffTelegramError("telegram_login_unavailable", "Telegram login is not allowed", 401) from None
     if not LegacyOwnerAuthGuard.allows_staff_identity(state, staff_user_id=staff_id, username=user.username or ""):
