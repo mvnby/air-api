@@ -1,6 +1,7 @@
 """Physical PostgreSQL proves owner transition uniqueness and lock fencing."""
 
 from datetime import datetime, timezone
+import asyncio
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,23 +33,25 @@ async def seed(db):
 
 
 @pytest.mark.asyncio
-async def test_postgres_unique_transfers_and_competing_owner_operation(db, db_engine):
-    await seed(db)
-    plan = await Service.plan(db)
-    assert plan["ready"], plan
-    await db.rollback()
+async def test_postgres_unique_transfers_and_competing_owner_operation(db_engine):
     factory = sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
+    # The db fixture deliberately retains an outer rollback transaction.
+    # Independent connections require fully committed seed rows instead.
+    async with factory() as setup:
+        await seed(setup)
+        plan = await Service.plan(setup)
+        assert plan["ready"], plan
     async with factory() as first, factory() as second:
-        result = await Service.execute(first, plan_token=plan["plan_token"])
+        result = await asyncio.wait_for(Service.execute(first, plan_token=plan["plan_token"]), timeout=15)
         assert result["complete"]
         with pytest.raises(LegacyOwnerCutoverBlockedError, match="owns the lock"):
-            await Service.execute(second, plan_token=plan["plan_token"])
+            await asyncio.wait_for(Service.execute(second, plan_token=plan["plan_token"]), timeout=15)
         await second.rollback()
         # A commit makes the unique transfer durable; the old source no longer
         # owns either key, and retrying its reviewed plan is stale.
         await first.commit()
         with pytest.raises(LegacyOwnerCutoverBlockedError, match="stale"):
-            await Service.execute(second, plan_token=plan["plan_token"])
+            await asyncio.wait_for(Service.execute(second, plan_token=plan["plan_token"]), timeout=15)
         await second.rollback()
         source, target = await second.get(StaffUser, 1), await second.get(StaffUser, 4)
         assert source.telegram_id is None and source.legacy_installer_id is None
@@ -57,20 +60,21 @@ async def test_postgres_unique_transfers_and_competing_owner_operation(db, db_en
 
 
 @pytest.mark.asyncio
-async def test_postgres_failed_transition_releases_unique_keys_without_partial_merge(db, db_engine, monkeypatch):
-    await seed(db)
-    plan = await Service.plan(db)
-    await db.rollback()
+async def test_postgres_failed_transition_releases_unique_keys_without_partial_merge(db_engine, monkeypatch):
+    factory = sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as setup:
+        await seed(setup)
+        plan = await Service.plan(setup)
+        assert plan["ready"], plan
     original = Service._load.__func__
     async def fail_postcheck(cls, session, *, lock=False):
         if not lock:
             raise RuntimeError("post-check failed")
         return await original(cls, session, lock=lock)
     monkeypatch.setattr(Service, "_load", classmethod(fail_postcheck))
-    factory = sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
     async with factory() as writer:
         with pytest.raises(RuntimeError):
-            await Service.execute(writer, plan_token=plan["plan_token"])
+            await asyncio.wait_for(Service.execute(writer, plan_token=plan["plan_token"]), timeout=15)
         await writer.rollback()
     async with factory() as reader:
         source, target = await reader.get(StaffUser, 1), await reader.get(StaffUser, 4)
