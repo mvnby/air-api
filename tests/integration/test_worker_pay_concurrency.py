@@ -186,7 +186,7 @@ async def test_actual_pay_migration_preserves_cash_and_rejects_cross_account_all
             "INSERT INTO worker_cash_receipt (id,account_id,tenant_id,storefront_id,order_id,assignment_reference,collection_version,amount,currency,title,payment_id,created_at) VALUES (1,1,1,1,100,7,1,100,'BYN','Original client receipt',1000,now()),(2,2,2,2,200,8,1,200,'BYN','Foreign client receipt',2000,now())",
             "INSERT INTO worker_cash_handover (id,account_id,tenant_id,storefront_id,recipient_staff_user_id,recipient_name,amount,currency,status,version,created_at,resolved_at) VALUES (1,1,1,1,4,'Original recipient',20,'BYN','confirmed',1,now(),now())",
             "INSERT INTO worker_cash_handover_allocation (handover_id,receipt_id,account_id,amount) VALUES (1,1,1,20)",
-            "INSERT INTO worker_money_command (id,account_id,actor_staff_user_id,idempotency_key,request_hash,result,created_at) VALUES (1,1,4,'00000000-0000-0000-0000-000000000001',repeat('a',64),'{\"id\":1}',now())",
+            "INSERT INTO worker_money_command (id,account_id,actor_staff_user_id,idempotency_key,request_hash,result,created_at) VALUES (1,1,4,'00000000-0000-0000-0000-000000000001',repeat('a',64),json_build_object('id',1),now())",
         ]:
             await connection.execute(text(statement))
         snapshots = {}
