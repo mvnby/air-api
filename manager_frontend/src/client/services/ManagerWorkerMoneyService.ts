@@ -170,4 +170,36 @@ export class ManagerWorkerMoneyService {
             },
         });
     }
+    /**
+     * Reverse Handover
+     * Correct confirmed cash receipt with a reason while retaining original recipient and dates.
+     *
+     * Requires live cash-management authority, Origin/header, shared account version and
+     * durable UUID. Restores the worker's cash custody and releases source allocations;
+     * original amount, recipient and confirmation timestamp remain. No client Payment.
+     * @param workerProfileId
+     * @param handoverId
+     * @param requestBody
+     * @returns WorkerMoneyCommandResult Successful Response
+     * @throws ApiError
+     */
+    public static reverseManagerCashHandover(
+        workerProfileId: number,
+        handoverId: number,
+        requestBody: WorkerMoneyCorrection,
+    ): CancelablePromise<WorkerMoneyCommandResult> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/worker-money/{worker_profile_id}/handovers/{handover_id}/reverse',
+            path: {
+                'worker_profile_id': workerProfileId,
+                'handover_id': handoverId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
 }

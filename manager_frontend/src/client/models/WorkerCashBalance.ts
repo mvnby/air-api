@@ -8,6 +8,7 @@ export type WorkerCashBalance = {
     handed_over: string;
     held: string;
     pending: string;
+    offset?: string;
     available: string;
 };
 

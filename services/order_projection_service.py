@@ -107,6 +107,7 @@ class OrderProjectionService:
             "installation_date": order.installation_date,
             "total_amount": float(order.total_amount or 0),
             "total_cost": None if demo_read_only else float(order.total_cost or 0),
+            "installer_cost_byn": None if demo_read_only else float(order.installer_cost_byn),
             "margin": None if demo_read_only else float(order.margin or 0),
             "total_payments": float(order.total_payments or 0),
             "balance_due": float(order.balance_due or 0),

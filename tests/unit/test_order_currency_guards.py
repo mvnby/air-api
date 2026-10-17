@@ -62,6 +62,24 @@ def test_normalize_payment_currency_accepts_upper_and_lowercase():
         OrderService._normalize_payment_currency("USDT")
 
 
+def test_worker_pay_cost_counts_once_alongside_preserved_legacy_cost():
+    order = Order(worker_pay_cost_byn=Decimal("200.25"))
+    order.product_links = [OrderProductLink(quantity=1, price=1000, cost=500)]
+    order.service_links = [OrderServiceLink(quantity=1, price=100, cost=20)]
+    order.installers = [OrderInstaller(agreed_pay=25.75)]
+    order.payments = []
+    order.proposals = []
+    for _ in range(2):
+        order.calculate_totals()
+        assert order.installer_cost_byn == Decimal("226.00")
+        assert order.total_cost == pytest.approx(746)
+        assert order.margin == pytest.approx(354)
+    order.worker_pay_cost_byn = Decimal("0.00")
+    order.calculate_totals()
+    assert order.total_cost == pytest.approx(545.75)
+    assert order.margin == pytest.approx(554.25)
+
+
 def test_payment_payload_rejects_invalid_currency():
     payload = PaymentCreatePayload(amount=10, currency=PaymentCurrency.EUR, type="prepayment")
     assert payload.currency == PaymentCurrency.EUR

@@ -314,3 +314,49 @@ class WorkerMoneyService(WorkerMoneyReader):
             kind="receipt_reversal",
             status="recorded",
         )
+
+    @classmethod
+    async def reverse_handover(cls, session, auth, profile_id, handover_id, payload):
+        scope, _, account, _, _ = await cls.context(
+            session,
+            auth,
+            profile_id=profile_id,
+            manager=True,
+            mutation=True,
+            finance=True,
+        )
+        replay = await cls.replay(
+            session, auth, account, "handover_reversed", handover_id, payload
+        )
+        if replay:
+            return replay
+        cls.check_version(account.version, payload.expected_version)
+        row = await DAO.handover(session, account.id, handover_id)
+        if row is None:
+            raise InstallerWorkspaceError(
+                "handover_not_found", "Передача денег не найдена", 404
+            )
+        if row.status != "confirmed":
+            raise InstallerWorkspaceError(
+                "handover_not_confirmed",
+                "Отменить можно только подтверждённое получение денег",
+            )
+        row.status, row.reversed_at, row.reversal_reason = (
+            "reversed",
+            datetime.now(timezone.utc),
+            payload.reason,
+        )
+        row.version += 1
+        session.add(row)
+        return await cls.record(
+            session,
+            auth,
+            scope,
+            account,
+            "handover_reversed",
+            handover_id,
+            payload,
+            row=row,
+            kind="handover_reversal",
+            status="recorded",
+        )

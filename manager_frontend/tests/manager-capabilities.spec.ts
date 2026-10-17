@@ -79,6 +79,12 @@ describe('tenant manager capabilities', () => {
     managerSession.auth.value = tenantManagerAuth as any;
   });
 
+  it('opens remuneration only with its separate financial read capability', () => {
+    expect(isManagerPathAllowed({ capabilities: ['crm.manage'] }, '/manager/worker-pay')).toBe(false);
+    expect(isManagerPathAllowed({ capabilities: ['worker.pay.read'] }, '/manager/worker-pay')).toBe(true);
+    expect(isManagerPathAllowed({ capabilities: ['installer.works.read'] }, '/manager/my-pay')).toBe(true);
+  });
+
   it('allows CRM, the read-only catalog and exact storefront collections', () => {
     for (const path of [
       '/manager',

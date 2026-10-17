@@ -28,6 +28,18 @@ CONFIRM_MANAGER_CASH_HANDOVER = "confirm_manager_cash_handover"
 REJECT_MANAGER_CASH_HANDOVER = "reject_manager_cash_handover"
 REVERSE_MANAGER_WORKER_RECEIPT = "reverse_manager_worker_receipt"
 
+REVERSE_MANAGER_CASH_HANDOVER = "reverse_manager_cash_handover"
+LIST_MANAGER_WORKER_PAY = "list_manager_worker_pay"
+GET_MANAGER_WORKER_PAY = "get_manager_worker_pay"
+GET_MANAGER_ORDER_WORKER_PAY = "get_manager_order_worker_pay"
+CREATE_MANAGER_WORKER_PAY_AGREEMENT = "create_manager_worker_pay_agreement"
+REVISE_MANAGER_WORKER_PAY_AGREEMENT = "revise_manager_worker_pay_agreement"
+ACCRUE_MANAGER_WORKER_PAY_AGREEMENT = "accrue_manager_worker_pay_agreement"
+CANCEL_MANAGER_WORKER_PAY_AGREEMENT = "cancel_manager_worker_pay_agreement"
+CREATE_MANAGER_WORKER_PAY_PAYOUT = "create_manager_worker_pay_payout"
+CREATE_MANAGER_WORKER_PAY_OFFSET = "create_manager_worker_pay_offset"
+REVERSE_MANAGER_WORKER_PAY_PAYOUT = "reverse_manager_worker_pay_payout"
+
 QUERY_MANAGER_CATALOG = "query_manager_catalog"
 SELECT_MANAGER_CATALOG = "select_manager_catalog"
 PREVIEW_MANAGER_CATALOG_BULK = "preview_manager_catalog_bulk"
@@ -632,6 +644,17 @@ ALL_MANAGER_OPERATION_IDS = (
     CONFIRM_MANAGER_CASH_HANDOVER,
     REJECT_MANAGER_CASH_HANDOVER,
     REVERSE_MANAGER_WORKER_RECEIPT,
+    REVERSE_MANAGER_CASH_HANDOVER,
+    LIST_MANAGER_WORKER_PAY,
+    GET_MANAGER_WORKER_PAY,
+    GET_MANAGER_ORDER_WORKER_PAY,
+    CREATE_MANAGER_WORKER_PAY_AGREEMENT,
+    REVISE_MANAGER_WORKER_PAY_AGREEMENT,
+    ACCRUE_MANAGER_WORKER_PAY_AGREEMENT,
+    CANCEL_MANAGER_WORKER_PAY_AGREEMENT,
+    CREATE_MANAGER_WORKER_PAY_PAYOUT,
+    CREATE_MANAGER_WORKER_PAY_OFFSET,
+    REVERSE_MANAGER_WORKER_PAY_PAYOUT,
     "list_manager_worker_candidates",
     "get_manager_installer_workspace",
     "create_manager_worker_assignment",

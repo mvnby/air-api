@@ -5,7 +5,7 @@ import WorkerMoneyView from '../src/views/WorkerMoneyView.vue';
 import { workerMoneyApi as api, exactAmount } from '../src/services/worker-money';
 import { managerSession, clearManagerSession } from '../src/services/manager-session';
 import { managerStorefrontSelection } from '../src/services/manager-storefront-selection';
-vi.mock('../src/services/worker-money', async original => ({ ...await original<typeof import('../src/services/worker-money')>(), workerMoneyApi: { own: vi.fn(), recipients: vi.fn(), receive: vi.fn(), handover: vi.fn(), cancel: vi.fn(), overview: vi.fn(), worker: vi.fn(), action: vi.fn(), reverse: vi.fn() } }));
+vi.mock('../src/services/worker-money', async original => ({ ...await original<typeof import('../src/services/worker-money')>(), workerMoneyApi: { own: vi.fn(), recipients: vi.fn(), receive: vi.fn(), handover: vi.fn(), cancel: vi.fn(), overview: vi.fn(), worker: vi.fn(), action: vi.fn(), reverse: vi.fn(), reverseHandover: vi.fn() } }));
 const balance = { currency: 'BYN' as const, received: '100.00', handed_over: '0.00', held: '100.00', pending: '0.00', available: '100.00' };
 const entry = { id: 7, kind: 'handover' as const, status: 'pending' as const, amount: '20.00', currency: 'BYN' as const, created_at: '2026-10-17T10:00:00Z', recipient_staff_user_id: 3, recipient_name: 'Кассир', version: 2, can_reverse: false };
 const workspace = { worker_profile_id: 4, staff_user_id: 9, display_name: 'Монтажник', version: 8, can_manage: true, balances: [balance], items: [entry], total: 1, page: 1, limit: 30 };
@@ -63,6 +63,12 @@ describe('worker cash workspace', () => {
     vi.mocked(api.worker).mockResolvedValue({ ...workspace, items: [{ ...entry, kind: 'client_receipt', status: 'recorded', can_reverse: true }] });
     wrapper = mount(WorkerMoneyView, { props: { management: true } }); await flushPromises(); await wrapper.findAll('button').find(item => item.text().includes('Монтажник'))!.trigger('click'); await flushPromises();
     await button('Исправить ошибочное получение').trigger('click'); expect(api.reverse).not.toHaveBeenCalled(); expect(wrapper.text()).toContain('Укажите причину'); await wrapper.get('[aria-label="Причина исправления"]').setValue('Ошибочная запись'); await button('Исправить ошибочное получение').trigger('click'); await button('Подтверждаю').trigger('click'); await flushPromises(); expect(api.reverse).toHaveBeenCalledWith(4, 7, expect.objectContaining({ expected_version: 8, reason: 'Ошибочная запись' }));
+  });
+  it('corrects a confirmed cash handover with account version and a reason', async () => {
+    vi.mocked(api.worker).mockResolvedValue({ ...workspace, items: [{ ...entry, status: 'confirmed', can_reverse: true }] }); vi.mocked(api.reverseHandover).mockResolvedValue({} as any);
+    wrapper = mount(WorkerMoneyView, { props: { management: true } }); await flushPromises(); await wrapper.findAll('button').find(item => item.text().includes('Монтажник'))!.trigger('click'); await flushPromises();
+    await wrapper.get('[aria-label="Причина исправления"]').setValue('Ошибочная передача'); await button('Исправить ошибочную передачу').trigger('click'); await button('Подтверждаю').trigger('click'); await flushPromises();
+    expect(api.reverseHandover).toHaveBeenCalledWith(4, 7, expect.objectContaining({ expected_version: 8, reason: 'Ошибочная передача' })); expect(api.reverse).not.toHaveBeenCalled();
   });
   it('blocks conflicting handover retry without silently sending a new version', async () => {
     vi.mocked(api.cancel).mockRejectedValue({ status: 409 }); wrapper = mount(WorkerMoneyView); await flushPromises(); await button('Отменить передачу').trigger('click'); await button('Подтверждаю').trigger('click'); await flushPromises(); expect(api.cancel).toHaveBeenCalledTimes(1); expect(button('Подтверждаю').attributes('disabled')).toBeDefined();

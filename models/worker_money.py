@@ -137,8 +137,12 @@ class WorkerCashHandover(SQLModel, table=True):
             "currency IN ('BYN','USD','EUR')", name="ck_worker_cash_handover_currency"
         ),
         CheckConstraint(
-            "status IN ('pending','confirmed','rejected','cancelled')",
+            "status IN ('pending','confirmed','rejected','cancelled','reversed')",
             name="ck_worker_cash_handover_status",
+        ),
+        CheckConstraint(
+            "(status = 'reversed' AND reversed_at IS NOT NULL AND reversal_reason IS NOT NULL) OR (status <> 'reversed' AND reversed_at IS NULL AND reversal_reason IS NULL)",
+            name="ck_worker_cash_handover_reversal",
         ),
         CheckConstraint("version >= 0", name="ck_worker_cash_handover_version"),
         CheckConstraint(
@@ -162,8 +166,13 @@ class WorkerCashHandover(SQLModel, table=True):
     resolved_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True))
     )
+    reversed_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True))
+    )
+    reversal_reason: str | None = Field(default=None, sa_column=Column(String(500)))
 
 
+# Confirmed handovers retain their original recipient, amount and resolution time.
 class WorkerCashHandoverAllocation(SQLModel, table=True):
     __tablename__ = "worker_cash_handover_allocation"
     __table_args__ = (

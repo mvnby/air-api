@@ -21962,6 +21962,758 @@
         }
       }
     },
+    "/api/manager/worker-money/{worker_profile_id}/handovers/{handover_id}/reverse": {
+      "post": {
+        "tags": [
+          "manager-worker-money"
+        ],
+        "summary": "Reverse Handover",
+        "description": "Correct confirmed cash receipt with a reason while retaining original recipient and dates.\n\nRequires live cash-management authority, Origin/header, shared account version and\ndurable UUID. Restores the worker's cash custody and releases source allocations;\noriginal amount, recipient and confirmation timestamp remain. No client Payment.",
+        "operationId": "reverse_manager_cash_handover",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "worker_profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Worker Profile Id"
+            }
+          },
+          {
+            "name": "handover_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Handover Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkerMoneyCorrection"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerMoneyCommandResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/installer/pay": {
+      "get": {
+        "tags": [
+          "installer-pay"
+        ],
+        "summary": "Own Pay",
+        "description": "Read only personal pay history without order costs, other staff pay or private notes.\n\nLive identity and actual company membership are required; work closure/revocation\ndoes not erase liabilities. Pagination is bounded, reads create no account.",
+        "operationId": "get_installer_pay",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerPayWorkspace"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/worker-pay": {
+      "get": {
+        "tags": [
+          "manager-worker-pay"
+        ],
+        "summary": "Overview",
+        "description": "Read scoped worker obligations with live pay authority or verified support access.\n\nFormer worker liabilities remain visible. Pay and cash authorities are separate;\noffset needs both. A finance grant does not grant access to order commercial data.",
+        "operationId": "list_manager_worker_pay",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerPayOverview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/worker-pay/{worker_profile_id}": {
+      "get": {
+        "tags": [
+          "manager-worker-pay"
+        ],
+        "summary": "Worker Pay",
+        "description": "Read one scoped worker's frozen agreements, obligations and settlement history.\n\nA foreign profile is404. Safe own projection omits BYN expense equivalents;\nthis Manager projection exposes reviewed frozen costs. No-store, bounded pagination.",
+        "operationId": "get_manager_worker_pay",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "worker_profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Worker Profile Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerWorkerPayWorkspace"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/worker-pay": {
+      "get": {
+        "tags": [
+          "manager-worker-pay"
+        ],
+        "summary": "Order Pay",
+        "description": "Read eligible explicit assigned works and existing immutable order pay agreements.\n\nRequires live pay authority plus scoped CRM access. Candidate reads never create\naccounts; version0 is returned before first command. Foreign orders return404.",
+        "operationId": "get_manager_order_worker_pay",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerPayOrderWorkspace"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/worker-pay/agreements": {
+      "post": {
+        "tags": [
+          "manager-worker-pay"
+        ],
+        "summary": "Agree",
+        "description": "Agree fixed positive pay for a live assigned work, freezing its reviewed BYN cost.\n\nLive pay authority, Origin/header, shared account version and UUID key are required.\nForeign pay needs explicit BYN cost; BYN cost equals amount. Cost enters the order\nonce at agreement, active work cannot be duplicated and legacy positive pay conflicts.",
+        "operationId": "create_manager_worker_pay_agreement",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkerPayAgreementCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerMoneyCommandResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/worker-pay/{worker_profile_id}/agreements/{agreement_id}/revise": {
+      "post": {
+        "tags": [
+          "manager-worker-pay"
+        ],
+        "summary": "Revise",
+        "description": "Revise agreed, unaccrued pay with fresh account/agreement versions and frozen cost.\n\nRequires live pay management, Origin/header and durable UUID. Accrued/cancelled\nrows cannot be edited. Updates the order cost atomically without creating Payment.",
+        "operationId": "revise_manager_worker_pay_agreement",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "worker_profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Worker Profile Id"
+            }
+          },
+          {
+            "name": "agreement_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Agreement Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkerPayAgreementRevise"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerMoneyCommandResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/worker-pay/{worker_profile_id}/agreements/{agreement_id}/accrue": {
+      "post": {
+        "tags": [
+          "manager-worker-pay"
+        ],
+        "summary": "Accrue",
+        "description": "Accrue agreed pay into a payable liability without charging order cost again.\n\nLive pay management, Origin/header, account/agreement versions and UUID required.\nCompleted/revoked work retains its valid agreement; history stays independent of ACL.",
+        "operationId": "accrue_manager_worker_pay_agreement",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "worker_profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Worker Profile Id"
+            }
+          },
+          {
+            "name": "agreement_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Agreement Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkerPayAgreementAction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerMoneyCommandResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/worker-pay/{worker_profile_id}/agreements/{agreement_id}/cancel": {
+      "post": {
+        "tags": [
+          "manager-worker-pay"
+        ],
+        "summary": "Cancel",
+        "description": "Cancel only entirely unpaid pay with a reason and preserve the original agreement.\n\nRequires fresh pay authority, Origin/header and both versions/UUID. Existing payouts\nmust first be reversed. Cost removal and cancellation are atomic; no history deleted.",
+        "operationId": "cancel_manager_worker_pay_agreement",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "worker_profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Worker Profile Id"
+            }
+          },
+          {
+            "name": "agreement_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Agreement Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkerPayAgreementCancel"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerMoneyCommandResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/worker-pay/{worker_profile_id}/payouts": {
+      "post": {
+        "tags": [
+          "manager-worker-pay"
+        ],
+        "summary": "Payout",
+        "description": "Record an external cash/bank remuneration payout allocated FIFO to accrued same-currency pay.\n\nRequires live pay authority, Origin/header, account version and UUID. No advances or\noverpayment; custody of customer money and customer Payments remain independent.",
+        "operationId": "create_manager_worker_pay_payout",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "worker_profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Worker Profile Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkerPayPayoutCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerMoneyCommandResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/worker-pay/{worker_profile_id}/offsets": {
+      "post": {
+        "tags": [
+          "manager-worker-pay"
+        ],
+        "summary": "Offset",
+        "description": "Explicitly offset accrued unpaid remuneration against free customer cash in the same currency.\n\nRequires both live pay/cash grants, Origin/header, shared account version and UUID.\nPending reservations and other currencies cannot fund an offset. Both FIFO allocations\nand balances change atomically; no client Payment or second order cost is created.",
+        "operationId": "create_manager_worker_pay_offset",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "worker_profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Worker Profile Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkerPayOffsetCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerMoneyCommandResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/worker-pay/{worker_profile_id}/payouts/{payout_id}/reverse": {
+      "post": {
+        "tags": [
+          "manager-worker-pay"
+        ],
+        "summary": "Reverse",
+        "description": "Reverse a payout or offset with a reason, restoring the original obligations.\n\nRequires fresh pay authority, account version, Origin/header and UUID; offset reversal\nadditionally needs cash authority and restores custody. Original rows/allocations stay\nimmutable, customer Payments and frozen order cost are unchanged. Identical replay safe.",
+        "operationId": "reverse_manager_worker_pay_payout",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "worker_profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Worker Profile Id"
+            }
+          },
+          {
+            "name": "payout_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Payout Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkerMoneyCorrection"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerMoneyCommandResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/orders/{order_id}/source-card": {
       "get": {
         "tags": [
@@ -28893,7 +29645,7 @@
           "manager-staff"
         ],
         "summary": "Patch Staff",
-        "description": "Patch a staff member reached through the current tenant membership; requires an owner/admin.\nOnly supplied fields are changed. Role/status affect the membership, while permitted\nidentity fields affect the shared account; only the platform owner can change protected\nshared-profile fields for multi-tenant staff. A new password increments auth_version.\nMissing membership returns 404, invalid/duplicate values 400 and protected legacy-owner\nidentity mutation 409 with code/message. There is no optimistic version or replay receipt.\ncan_manage_worker_money delegates only the tenant-local manager cash permission;\nit preserves platform catalog grants and requires a live company owner/admin or\nverified platform owner acting as staff administrator, not as a cash recipient.",
+        "description": "Patch a staff member reached through the current tenant membership; requires an owner/admin.\nOnly supplied fields are changed. Role/status affect the membership, while permitted\nidentity fields affect the shared account; only the platform owner can change protected\nshared-profile fields for multi-tenant staff. A new password increments auth_version.\nMissing membership returns 404, invalid/duplicate values 400 and protected legacy-owner\nidentity mutation 409 with code/message. There is no optimistic version or replay receipt.\ncan_manage_worker_money and can_manage_worker_pay delegate independent tenant-local\ncash-custody and remuneration permissions only to a manager;\nit preserves platform catalog grants and requires a live company owner/admin or\nverified platform owner acting as staff administrator, not as a cash recipient.",
         "operationId": "patch_manager_staff",
         "security": [
           {
@@ -73444,6 +74196,17 @@
             ],
             "title": "Total Cost"
           },
+          "installer_cost_byn": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installer Cost Byn"
+          },
           "margin": {
             "anyOf": [
               {
@@ -74692,6 +75455,17 @@
               }
             ],
             "title": "Total Cost"
+          },
+          "installer_cost_byn": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installer Cost Byn"
           },
           "margin": {
             "anyOf": [
@@ -81280,6 +82054,11 @@
             "title": "Can Manage Worker Money",
             "default": false
           },
+          "can_manage_worker_pay": {
+            "type": "boolean",
+            "title": "Can Manage Worker Pay",
+            "default": false
+          },
           "avatar_url": {
             "anyOf": [
               {
@@ -81478,6 +82257,17 @@
               }
             ],
             "title": "Can Manage Worker Money"
+          },
+          "can_manage_worker_pay": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Can Manage Worker Pay"
           }
         },
         "type": "object",
@@ -84051,6 +84841,186 @@
           "work_stage_id"
         ],
         "title": "ManagerWorkerMaterial"
+      },
+      "ManagerWorkerPayAgreementItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "worker_profile_id": {
+            "type": "integer",
+            "title": "Worker Profile Id"
+          },
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "assignment_reference": {
+            "type": "integer",
+            "title": "Assignment Reference"
+          },
+          "work_stage_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Stage Id"
+          },
+          "work_key": {
+            "type": "string",
+            "title": "Work Key"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "amount": {
+            "type": "string",
+            "title": "Amount"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "agreed",
+              "accrued",
+              "cancelled"
+            ],
+            "title": "Status"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "paid": {
+            "type": "string",
+            "title": "Paid"
+          },
+          "owed": {
+            "type": "string",
+            "title": "Owed"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "cost_byn_amount": {
+            "type": "string",
+            "title": "Cost Byn Amount"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "worker_profile_id",
+          "order_id",
+          "assignment_reference",
+          "work_stage_id",
+          "work_key",
+          "title",
+          "amount",
+          "currency",
+          "status",
+          "version",
+          "paid",
+          "owed",
+          "created_at",
+          "cost_byn_amount"
+        ],
+        "title": "ManagerWorkerPayAgreementItem"
+      },
+      "ManagerWorkerPayWorkspace": {
+        "properties": {
+          "worker_profile_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Profile Id"
+          },
+          "staff_user_id": {
+            "type": "integer",
+            "title": "Staff User Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "can_manage": {
+            "type": "boolean",
+            "title": "Can Manage"
+          },
+          "can_offset": {
+            "type": "boolean",
+            "title": "Can Offset"
+          },
+          "balances": {
+            "items": {
+              "$ref": "#/components/schemas/WorkerPayBalance"
+            },
+            "type": "array",
+            "title": "Balances"
+          },
+          "agreements": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerWorkerPayAgreementItem"
+            },
+            "type": "array",
+            "title": "Agreements"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WorkerPayEntry"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "worker_profile_id",
+          "staff_user_id",
+          "display_name",
+          "version",
+          "can_manage",
+          "can_offset",
+          "balances",
+          "agreements",
+          "items",
+          "total",
+          "page",
+          "limit"
+        ],
+        "title": "ManagerWorkerPayWorkspace"
       },
       "MdvCatalogImportPayload": {
         "properties": {
@@ -100498,6 +101468,11 @@
             "type": "string",
             "title": "Pending"
           },
+          "offset": {
+            "type": "string",
+            "title": "Offset",
+            "default": "0.00"
+          },
           "available": {
             "type": "string",
             "title": "Available"
@@ -100599,7 +101574,13 @@
             "enum": [
               "client_receipt",
               "handover",
-              "receipt_reversal"
+              "receipt_reversal",
+              "handover_reversal",
+              "offset",
+              "offset_reversal",
+              "agreement",
+              "payout",
+              "payout_reversal"
             ],
             "title": "Kind"
           },
@@ -100665,7 +101646,10 @@
             "enum": [
               "client_receipt",
               "handover",
-              "receipt_reversal"
+              "receipt_reversal",
+              "handover_reversal",
+              "offset",
+              "offset_reversal"
             ],
             "title": "Kind"
           },
@@ -100951,6 +101935,733 @@
           "limit"
         ],
         "title": "WorkerMoneyWorkspace"
+      },
+      "WorkerPayAgreementAction": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Idempotency Key"
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Version"
+          },
+          "expected_agreement_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Agreement Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "expected_version",
+          "expected_agreement_version"
+        ],
+        "title": "WorkerPayAgreementAction"
+      },
+      "WorkerPayAgreementCancel": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Idempotency Key"
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Version"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason"
+          },
+          "expected_agreement_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Agreement Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "expected_version",
+          "reason",
+          "expected_agreement_version"
+        ],
+        "title": "WorkerPayAgreementCancel"
+      },
+      "WorkerPayAgreementCreate": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Idempotency Key"
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Version"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,12}|(?=[\\d.]{1,15}0*$)\\d{0,12}\\.\\d{0,2}0*$)"
+              }
+            ],
+            "title": "Amount"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "BYN",
+              "USD",
+              "EUR"
+            ],
+            "title": "Currency"
+          },
+          "assignment_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Assignment Id"
+          },
+          "cost_byn_amount": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,12}|(?=[\\d.]{1,15}0*$)\\d{0,12}\\.\\d{0,2}0*$)"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Byn Amount"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "expected_version",
+          "amount",
+          "currency",
+          "assignment_id"
+        ],
+        "title": "WorkerPayAgreementCreate"
+      },
+      "WorkerPayAgreementItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "worker_profile_id": {
+            "type": "integer",
+            "title": "Worker Profile Id"
+          },
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "assignment_reference": {
+            "type": "integer",
+            "title": "Assignment Reference"
+          },
+          "work_stage_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Stage Id"
+          },
+          "work_key": {
+            "type": "string",
+            "title": "Work Key"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "amount": {
+            "type": "string",
+            "title": "Amount"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "agreed",
+              "accrued",
+              "cancelled"
+            ],
+            "title": "Status"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "paid": {
+            "type": "string",
+            "title": "Paid"
+          },
+          "owed": {
+            "type": "string",
+            "title": "Owed"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "worker_profile_id",
+          "order_id",
+          "assignment_reference",
+          "work_stage_id",
+          "work_key",
+          "title",
+          "amount",
+          "currency",
+          "status",
+          "version",
+          "paid",
+          "owed",
+          "created_at"
+        ],
+        "title": "WorkerPayAgreementItem"
+      },
+      "WorkerPayAgreementRevise": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Idempotency Key"
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Version"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,12}|(?=[\\d.]{1,15}0*$)\\d{0,12}\\.\\d{0,2}0*$)"
+              }
+            ],
+            "title": "Amount"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "BYN",
+              "USD",
+              "EUR"
+            ],
+            "title": "Currency"
+          },
+          "expected_agreement_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Agreement Version"
+          },
+          "cost_byn_amount": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,12}|(?=[\\d.]{1,15}0*$)\\d{0,12}\\.\\d{0,2}0*$)"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Byn Amount"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "expected_version",
+          "amount",
+          "currency",
+          "expected_agreement_version"
+        ],
+        "title": "WorkerPayAgreementRevise"
+      },
+      "WorkerPayBalance": {
+        "properties": {
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "agreed": {
+            "type": "string",
+            "title": "Agreed"
+          },
+          "accrued": {
+            "type": "string",
+            "title": "Accrued"
+          },
+          "paid": {
+            "type": "string",
+            "title": "Paid"
+          },
+          "owed": {
+            "type": "string",
+            "title": "Owed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "currency",
+          "agreed",
+          "accrued",
+          "paid",
+          "owed"
+        ],
+        "title": "WorkerPayBalance"
+      },
+      "WorkerPayCandidate": {
+        "properties": {
+          "assignment_id": {
+            "type": "integer",
+            "title": "Assignment Id"
+          },
+          "worker_profile_id": {
+            "type": "integer",
+            "title": "Worker Profile Id"
+          },
+          "staff_user_id": {
+            "type": "integer",
+            "title": "Staff User Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "work_stage_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Stage Id"
+          },
+          "account_version": {
+            "type": "integer",
+            "title": "Account Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "assignment_id",
+          "worker_profile_id",
+          "staff_user_id",
+          "display_name",
+          "title",
+          "work_stage_id",
+          "account_version"
+        ],
+        "title": "WorkerPayCandidate"
+      },
+      "WorkerPayEntry": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "payout",
+              "offset",
+              "payout_reversal",
+              "offset_reversal"
+            ],
+            "title": "Kind"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "recorded",
+              "reversed"
+            ],
+            "title": "Status"
+          },
+          "amount": {
+            "type": "string",
+            "title": "Amount"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "cash",
+              "bank",
+              "offset"
+            ],
+            "title": "Method"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "can_reverse": {
+            "type": "boolean",
+            "title": "Can Reverse",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "status",
+          "amount",
+          "currency",
+          "method",
+          "created_at",
+          "version"
+        ],
+        "title": "WorkerPayEntry"
+      },
+      "WorkerPayOffsetCreate": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Idempotency Key"
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Version"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,12}|(?=[\\d.]{1,15}0*$)\\d{0,12}\\.\\d{0,2}0*$)"
+              }
+            ],
+            "title": "Amount"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "BYN",
+              "USD",
+              "EUR"
+            ],
+            "title": "Currency"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "expected_version",
+          "amount",
+          "currency"
+        ],
+        "title": "WorkerPayOffsetCreate"
+      },
+      "WorkerPayOrderWorkspace": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/WorkerPayCandidate"
+            },
+            "type": "array",
+            "title": "Candidates"
+          },
+          "agreements": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerWorkerPayAgreementItem"
+            },
+            "type": "array",
+            "title": "Agreements"
+          },
+          "can_manage": {
+            "type": "boolean",
+            "title": "Can Manage"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id",
+          "candidates",
+          "agreements",
+          "can_manage"
+        ],
+        "title": "WorkerPayOrderWorkspace"
+      },
+      "WorkerPayOverview": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WorkerPayOverviewItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "can_manage": {
+            "type": "boolean",
+            "title": "Can Manage"
+          },
+          "can_offset": {
+            "type": "boolean",
+            "title": "Can Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit",
+          "can_manage",
+          "can_offset"
+        ],
+        "title": "WorkerPayOverview"
+      },
+      "WorkerPayOverviewItem": {
+        "properties": {
+          "worker_profile_id": {
+            "type": "integer",
+            "title": "Worker Profile Id"
+          },
+          "staff_user_id": {
+            "type": "integer",
+            "title": "Staff User Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "balances": {
+            "items": {
+              "$ref": "#/components/schemas/WorkerPayBalance"
+            },
+            "type": "array",
+            "title": "Balances"
+          }
+        },
+        "type": "object",
+        "required": [
+          "worker_profile_id",
+          "staff_user_id",
+          "display_name",
+          "balances"
+        ],
+        "title": "WorkerPayOverviewItem"
+      },
+      "WorkerPayPayoutCreate": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Idempotency Key"
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Version"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,12}|(?=[\\d.]{1,15}0*$)\\d{0,12}\\.\\d{0,2}0*$)"
+              }
+            ],
+            "title": "Amount"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "BYN",
+              "USD",
+              "EUR"
+            ],
+            "title": "Currency"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "cash",
+              "bank"
+            ],
+            "title": "Method",
+            "default": "cash"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "expected_version",
+          "amount",
+          "currency"
+        ],
+        "title": "WorkerPayPayoutCreate"
+      },
+      "WorkerPayWorkspace": {
+        "properties": {
+          "worker_profile_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Profile Id"
+          },
+          "staff_user_id": {
+            "type": "integer",
+            "title": "Staff User Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "can_manage": {
+            "type": "boolean",
+            "title": "Can Manage"
+          },
+          "can_offset": {
+            "type": "boolean",
+            "title": "Can Offset"
+          },
+          "balances": {
+            "items": {
+              "$ref": "#/components/schemas/WorkerPayBalance"
+            },
+            "type": "array",
+            "title": "Balances"
+          },
+          "agreements": {
+            "items": {
+              "$ref": "#/components/schemas/WorkerPayAgreementItem"
+            },
+            "type": "array",
+            "title": "Agreements"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WorkerPayEntry"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "worker_profile_id",
+          "staff_user_id",
+          "display_name",
+          "version",
+          "can_manage",
+          "can_offset",
+          "balances",
+          "agreements",
+          "items",
+          "total",
+          "page",
+          "limit"
+        ],
+        "title": "WorkerPayWorkspace"
       },
       "WorkerPerson": {
         "properties": {

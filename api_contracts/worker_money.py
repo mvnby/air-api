@@ -71,12 +71,20 @@ class WorkerCashBalance(BaseModel):
     handed_over: str
     held: str
     pending: str
+    offset: str = "0.00"
     available: str
 
 
 class WorkerMoneyEntry(BaseModel):
     id: int
-    kind: Literal["client_receipt", "handover", "receipt_reversal"]
+    kind: Literal[
+        "client_receipt",
+        "handover",
+        "receipt_reversal",
+        "handover_reversal",
+        "offset",
+        "offset_reversal",
+    ]
     status: Literal[
         "recorded", "pending", "confirmed", "rejected", "cancelled", "reversed"
     ]
@@ -121,7 +129,17 @@ class WorkerMoneyOverview(BaseModel):
 
 class WorkerMoneyCommandResult(BaseModel):
     id: int
-    kind: Literal["client_receipt", "handover", "receipt_reversal"]
+    kind: Literal[
+        "client_receipt",
+        "handover",
+        "receipt_reversal",
+        "handover_reversal",
+        "offset",
+        "offset_reversal",
+        "agreement",
+        "payout",
+        "payout_reversal",
+    ]
     status: str
     version: int
     account_version: int
