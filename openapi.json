@@ -28893,7 +28893,7 @@
           "manager-staff"
         ],
         "summary": "Patch Staff",
-        "description": "Patch a staff member reached through the current tenant membership; requires an owner/admin.\nOnly supplied fields are changed. Role/status affect the membership, while permitted\nidentity fields affect the shared account; only the platform owner can change protected\nshared-profile fields for multi-tenant staff. A new password increments auth_version.\nMissing membership returns 404, invalid/duplicate values 400 and protected legacy-owner\nidentity mutation 409 with code/message. There is no optimistic version or replay receipt.\ncan_manage_worker_money delegates only the tenant-local manager cash permission;\nit preserves platform catalog grants and requires a live actual company owner/admin.",
+        "description": "Patch a staff member reached through the current tenant membership; requires an owner/admin.\nOnly supplied fields are changed. Role/status affect the membership, while permitted\nidentity fields affect the shared account; only the platform owner can change protected\nshared-profile fields for multi-tenant staff. A new password increments auth_version.\nMissing membership returns 404, invalid/duplicate values 400 and protected legacy-owner\nidentity mutation 409 with code/message. There is no optimistic version or replay receipt.\ncan_manage_worker_money delegates only the tenant-local manager cash permission;\nit preserves platform catalog grants and requires a live company owner/admin or\nverified platform owner acting as staff administrator, not as a cash recipient.",
         "operationId": "patch_manager_staff",
         "security": [
           {

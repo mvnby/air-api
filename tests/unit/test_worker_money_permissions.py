@@ -62,7 +62,7 @@ async def test_cash_permission_is_company_local_audited_and_preserves_catalog(
     ]
 
 
-async def test_manager_cannot_grant_self_and_support_is_not_company_finance(
+async def test_manager_cannot_grant_self_but_platform_owner_can_delegate_for_partner(
     money_permission_client,
 ):
     _, client = money_permission_client
@@ -73,13 +73,15 @@ async def test_manager_cannot_grant_self_and_support_is_not_company_finance(
             json={"can_manage_worker_money": True},
         )
     ).status_code == 403
-    assert (
-        await client.patch(
-            "/api/manager/staff/10",
-            headers=headers(4, 2),
-            json={"primary_role": "manager", "can_manage_worker_money": True},
-        )
-    ).status_code == 403
+    delegated = await client.patch(
+        "/api/manager/staff/10", headers=headers(4, 2),
+        json={"primary_role": "manager", "can_manage_worker_money": True},
+    )
+    assert delegated.status_code == 200, delegated.text
+    assert delegated.json()["can_manage_worker_money"] is True
+    # Support delegates to a real company member; it does not acquire that grant.
+    assert "worker.money.manage" not in ManagerCapabilityService.for_auth(
+        replace(auth(4, 2), role="owner", access_kind="platform_support", is_platform_owner=True))
 
 
 async def test_catalog_permission_replacement_preserves_cash_delegation(multi_db):  # noqa: F811

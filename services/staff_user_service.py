@@ -482,10 +482,14 @@ class StaffUserService:
             if actor_role is not None:
                 actor_membership = await StaffTenantMembershipService.get_for_tenant(session,
                     tenant_id=tenant_scope.tenant_id, staff_user_id=actor_staff_user_id)
-                actor_person = await session.get(StaffUser, actor_staff_user_id)
-                if (not actor_membership or actor_membership.status != "active"
-                    or actor_membership.role not in (cls.ROLE_OWNER, cls.ROLE_ADMIN)
-                    or not actor_person or not cls.is_active(actor_person)):
+                actor_person = await session.get(StaffUser, actor_staff_user_id, populate_existing=True)
+                from services.legacy_owner_auth_guard import LegacyOwnerAuthGuard
+                platform_delegation = is_platform_owner and LegacyOwnerAuthGuard.allows_bound_staff(
+                    await LegacyOwnerAuthGuard.state(session), staff_user_id=actor_staff_user_id)
+                company_delegation = bool(actor_membership and actor_membership.status == "active"
+                    and actor_membership.role in (cls.ROLE_OWNER, cls.ROLE_ADMIN))
+                if (not actor_person or not cls.is_active(actor_person)
+                    or not (company_delegation or platform_delegation)):
                     from services.staff_access_policy import StaffAccessPolicyError
                     raise StaffAccessPolicyError("Назначать финансовые права может владелец или администратор компании",
                         code="money_grant_forbidden")

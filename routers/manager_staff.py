@@ -95,7 +95,8 @@ async def patch_staff(
     Missing membership returns 404, invalid/duplicate values 400 and protected legacy-owner
     identity mutation 409 with code/message. There is no optimistic version or replay receipt.
     can_manage_worker_money delegates only the tenant-local manager cash permission;
-    it preserves platform catalog grants and requires a live actual company owner/admin.
+    it preserves platform catalog grants and requires a live company owner/admin or
+    verified platform owner acting as staff administrator, not as a cash recipient.
     """
     if "can_manage_worker_money" in payload.model_fields_set:
         from routers.manager_staff_invitations import require_team_origin
