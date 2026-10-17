@@ -185,6 +185,9 @@ class StaffUserService:
             can_manage_worker_money=bool(membership and membership.status == "active" and (
                 membership.role in ("owner", "admin") or (membership.role == "manager"
                 and "worker.money.manage" in (membership.permissions or [])))),
+            can_manage_worker_pay=bool(membership and membership.status == "active" and (
+                membership.role in ("owner", "admin") or (membership.role == "manager"
+                and "worker.pay.manage" in (membership.permissions or [])))),
             avatar_url=staff_avatar_url(user, tenant_id=membership.tenant_id) if membership else None,
             display_name=user.display_name,
             status=(
@@ -476,8 +479,15 @@ class StaffUserService:
             requested_role=requested_role,
             target_is_platform_owner=target_is_platform_owner,
         )
-        if "can_manage_worker_money" in changed_fields:
-            if payload.can_manage_worker_money is None or requested_role != cls.ROLE_MANAGER:
+        financial_fields = {
+            "can_manage_worker_money": "worker.money.manage",
+            "can_manage_worker_pay": "worker.pay.manage",
+        }
+        changed_financial_fields = changed_fields & financial_fields.keys()
+        if changed_financial_fields:
+            if requested_role != cls.ROLE_MANAGER or any(
+                getattr(payload, field) is None for field in changed_financial_fields
+            ):
                 raise ValueError("Право проводить расчёты отдельно настраивается только для менеджера")
             if actor_role is not None:
                 actor_membership = await StaffTenantMembershipService.get_for_tenant(session,
@@ -494,14 +504,15 @@ class StaffUserService:
                     raise StaffAccessPolicyError("Назначать финансовые права может владелец или администратор компании",
                         code="money_grant_forbidden")
             permissions = set(membership.permissions or [])
-            if payload.can_manage_worker_money:
-                permissions.add("worker.money.manage")
-            else:
-                permissions.discard("worker.money.manage")
+            for field in changed_financial_fields:
+                if getattr(payload, field):
+                    permissions.add(financial_fields[field])
+                else:
+                    permissions.discard(financial_fields[field])
             membership.permissions = sorted(permissions)
             StaffTenantMembershipService.touch(membership)
         if requested_role not in (cls.ROLE_OWNER, cls.ROLE_ADMIN, cls.ROLE_MANAGER):
-            membership.permissions = sorted(set(membership.permissions or []) - {"worker.money.manage"})
+            membership.permissions = sorted(set(membership.permissions or []) - set(financial_fields.values()))
         if (
             membership.role == cls.ROLE_OWNER
             and membership.status == "active"

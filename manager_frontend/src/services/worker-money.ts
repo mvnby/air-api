@@ -20,6 +20,7 @@ export const workerMoneyApi = {
   overview: (page = 1) => get<MoneyOverview>('/api/manager/worker-money', page),
   worker: (id: number, page = 1) => get<MoneyWorkspace>(`/api/manager/worker-money/${id}`, page),
   action: (worker: number, id: number, action: 'confirm' | 'reject', body: MoneyCommand) => post(`/api/manager/worker-money/${worker}/handovers/${id}/${action}`, body),
+  reverseHandover: (worker: number, id: number, body: WorkerMoneyCorrection) => post(`/api/manager/worker-money/${worker}/handovers/${id}/reverse`, body),
   reverse: (worker: number, id: number, body: WorkerMoneyCorrection) => post(`/api/manager/worker-money/${worker}/receipts/${id}/reverse`, body),
 };
 // Integer cents keep both validation and comparisons exact. Extra decimals are rejected.

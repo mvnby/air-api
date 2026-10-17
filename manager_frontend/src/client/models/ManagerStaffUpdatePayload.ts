@@ -15,5 +15,6 @@ export type ManagerStaffUpdatePayload = {
     is_assignable_installer?: (boolean | null);
     default_rate?: (number | null);
     can_manage_worker_money?: (boolean | null);
+    can_manage_worker_pay?: (boolean | null);
 };
 

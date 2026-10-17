@@ -134,6 +134,7 @@ class WorkerMoneyAccess:
         row,
         kind,
         status,
+        audit_changes=None,
     ):
         account.version += 1
         session.add(account)
@@ -171,6 +172,7 @@ class WorkerMoneyAccess:
                     "amount": str(row.amount),
                     "currency": row.currency,
                     "status": status,
+                    **(audit_changes or {}),
                     **(
                         {"reason": payload.reason} if hasattr(payload, "reason") else {}
                     ),

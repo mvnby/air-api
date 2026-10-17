@@ -28,6 +28,7 @@ from routers.manager_operation_ids import (
     REVERSE_MANAGER_WORKER_RECEIPT,
 )
 from routers.manager_staff_invitations import require_team_origin
+from routers.manager_operation_ids import REVERSE_MANAGER_CASH_HANDOVER
 from services.command_transaction import command_transaction
 from services.worker_money_service import WorkerMoneyService as Money
 
@@ -294,4 +295,30 @@ async def reverse_receipt(
         async with command_transaction(session):
             return await Money.reverse_receipt(
                 session, auth, worker_profile_id, receipt_id, payload
+            )
+
+
+@manager_router.post(
+    "/{worker_profile_id}/handovers/{handover_id}/reverse",
+    response_model=WorkerMoneyCommandResult,
+    operation_id=REVERSE_MANAGER_CASH_HANDOVER,
+    dependencies=protected,
+)
+async def reverse_handover(
+    worker_profile_id: int,
+    handover_id: int,
+    payload: WorkerMoneyCorrection,
+    auth: AuthenticatedUser = Depends(require_manager_access),
+    session: AsyncSession = Depends(get_session),
+):
+    """Correct confirmed cash receipt with a reason while retaining original recipient and dates.
+
+    Requires live cash-management authority, Origin/header, shared account version and
+    durable UUID. Restores the worker's cash custody and releases source allocations;
+    original amount, recipient and confirmation timestamp remain. No client Payment.
+    """
+    async with installer_errors(session):
+        async with command_transaction(session):
+            return await Money.reverse_handover(
+                session, auth, worker_profile_id, handover_id, payload
             )

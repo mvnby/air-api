@@ -9,6 +9,7 @@
     "reviewed_stage"
   ],
   "review_stages": {
+    "23": "Fixed scoped remuneration agreements and frozen BYN order expenses, explicit accrual, exact FIFO payouts and dual-authority cash offsets, shared account mutex/versions/durable UUID, independent pay delegation, safe own history, preserved payout/handover corrections and no duplicate legacy expenses; reviewed 2026-10-17",
     "22": "Client cash receipt against a reviewed live collection instruction, atomic Payment/custody/instruction/audit, exact money, durable command replay, company/site/worker cash history, reserved source allocations, selected-recipient handover acknowledgement, explicit finance delegation and non-destructive correction; reviewed 2026-10-17",
     "21": "Read-only installer workspace: actual company/site membership and explicit per-order/visit grants, safe technical projections and private publications, one versioned recipient collection instruction with live financial review, shared bot/queued notification ACL and installer invitations without implicit grants; reviewed 2026-10-16",
     "20": "Company-local order responsibility, active actual CRM candidates and historical people, fresh authenticated reassignment with dedicated optimistic version and atomic audit, personal filter before count/pagination and trusted internal creator allocation before persistence; reviewed 2026-10-16",
@@ -33,17 +34,31 @@
     "11": "Native tender direct push; dedicated key, fixed active system scope, writable-primary gates, bounded payload, shared pull/push deduplication, staff preservation, stale guards and unchanged pull checkpoint reviewed 2026-10-09 for issue 849"
   },
   "operations": {
+    "routers/worker_pay.py": [
+      ["GET /api/installer/pay", "get_installer_pay", false, 23],
+      ["GET /api/manager/worker-pay", "list_manager_worker_pay", false, 23],
+      ["GET /api/manager/worker-pay/{worker_profile_id}", "get_manager_worker_pay", false, 23],
+      ["GET /api/manager/orders/{order_id}/worker-pay", "get_manager_order_worker_pay", false, 23],
+      ["POST /api/manager/orders/{order_id}/worker-pay/agreements", "create_manager_worker_pay_agreement", false, 23],
+      ["POST /api/manager/worker-pay/{worker_profile_id}/agreements/{agreement_id}/revise", "revise_manager_worker_pay_agreement", false, 23],
+      ["POST /api/manager/worker-pay/{worker_profile_id}/agreements/{agreement_id}/accrue", "accrue_manager_worker_pay_agreement", false, 23],
+      ["POST /api/manager/worker-pay/{worker_profile_id}/agreements/{agreement_id}/cancel", "cancel_manager_worker_pay_agreement", false, 23],
+      ["POST /api/manager/worker-pay/{worker_profile_id}/payouts", "create_manager_worker_pay_payout", false, 23],
+      ["POST /api/manager/worker-pay/{worker_profile_id}/offsets", "create_manager_worker_pay_offset", false, 23],
+      ["POST /api/manager/worker-pay/{worker_profile_id}/payouts/{payout_id}/reverse", "reverse_manager_worker_pay_payout", false, 23]
+    ],
     "routers/worker_money.py": [
-      ["GET /api/installer/money", "get_installer_money", false, 22],
-      ["GET /api/installer/money/recipients", "list_installer_money_recipients", false, 22],
-      ["GET /api/manager/worker-money", "list_manager_worker_money", false, 22],
-      ["GET /api/manager/worker-money/{worker_profile_id}", "get_manager_worker_money", false, 22],
-      ["POST /api/installer/money/handovers", "create_installer_cash_handover", false, 22],
-      ["POST /api/installer/money/handovers/{handover_id}/cancel", "cancel_installer_cash_handover", false, 22],
-      ["POST /api/installer/works/{assignment_id}/collections", "confirm_installer_client_money", false, 22],
-      ["POST /api/manager/worker-money/{worker_profile_id}/handovers/{handover_id}/confirm", "confirm_manager_cash_handover", false, 22],
-      ["POST /api/manager/worker-money/{worker_profile_id}/handovers/{handover_id}/reject", "reject_manager_cash_handover", false, 22],
-      ["POST /api/manager/worker-money/{worker_profile_id}/receipts/{receipt_id}/reverse", "reverse_manager_worker_receipt", false, 22]
+      ["GET /api/installer/money", "get_installer_money", false, 23],
+      ["GET /api/installer/money/recipients", "list_installer_money_recipients", false, 23],
+      ["GET /api/manager/worker-money", "list_manager_worker_money", false, 23],
+      ["GET /api/manager/worker-money/{worker_profile_id}", "get_manager_worker_money", false, 23],
+      ["POST /api/installer/money/handovers", "create_installer_cash_handover", false, 23],
+      ["POST /api/installer/money/handovers/{handover_id}/cancel", "cancel_installer_cash_handover", false, 23],
+      ["POST /api/installer/works/{assignment_id}/collections", "confirm_installer_client_money", false, 23],
+      ["POST /api/manager/worker-money/{worker_profile_id}/handovers/{handover_id}/confirm", "confirm_manager_cash_handover", false, 23],
+      ["POST /api/manager/worker-money/{worker_profile_id}/handovers/{handover_id}/reject", "reject_manager_cash_handover", false, 23],
+      ["POST /api/manager/worker-money/{worker_profile_id}/handovers/{handover_id}/reverse", "reverse_manager_cash_handover", false, 23],
+      ["POST /api/manager/worker-money/{worker_profile_id}/receipts/{receipt_id}/reverse", "reverse_manager_worker_receipt", false, 23]
     ],
     "routers/installer_auth.py": [
       ["GET /api/installer/me", "read_installer_me", false, 21],
@@ -629,17 +644,17 @@
       ["POST /api/manager/leads/{lead_id}/qualify", "qualify_manager_lead", false, 20]
     ],
     "routers/manager_maintenance_observations.py": [
+      ["GET /api/manager/customers/{customer_id}/maintenance-observations", "list_manager_customer_maintenance_observations", false, 8],
       ["GET /api/manager/equipment/{equipment_id}/maintenance-observations", "list_manager_equipment_maintenance_observations", false, 5],
       ["GET /api/manager/maintenance-observations/{observation_id}", "get_manager_maintenance_observation", false, 5],
+      ["GET /api/manager/orders/{order_id}/maintenance-defect-acts", "list_manager_maintenance_defect_acts", false, 6],
       ["GET /api/manager/orders/{order_id}/maintenance-observations", "list_manager_order_maintenance_observations", false, 5],
+      ["GET /api/manager/orders/{order_id}/maintenance-offers", "list_manager_maintenance_offers", false, 8],
       ["PATCH /api/manager/maintenance-observations/{observation_id}", "update_manager_maintenance_observation", false, 5],
       ["POST /api/manager/maintenance-observations/{observation_id}/photos", "upload_manager_maintenance_observation_photo", false, 5],
-      ["POST /api/manager/orders/{order_id}/maintenance-observations", "create_manager_maintenance_observation", false, 5],
-      ["POST /api/manager/orders/{order_id}/maintenance-defect-acts", "prepare_manager_maintenance_defect_act", false, 20],
-      ["GET /api/manager/orders/{order_id}/maintenance-defect-acts", "list_manager_maintenance_defect_acts", false, 6],
-      ["GET /api/manager/customers/{customer_id}/maintenance-observations", "list_manager_customer_maintenance_observations", false, 8],
-      ["GET /api/manager/orders/{order_id}/maintenance-offers", "list_manager_maintenance_offers", false, 8],
       ["POST /api/manager/maintenance-observations/{observation_id}/resolution", "resolve_manager_maintenance_observation", false, 8],
+      ["POST /api/manager/orders/{order_id}/maintenance-defect-acts", "prepare_manager_maintenance_defect_act", false, 20],
+      ["POST /api/manager/orders/{order_id}/maintenance-observations", "create_manager_maintenance_observation", false, 5],
       ["POST /api/manager/orders/{order_id}/maintenance-offers", "prepare_manager_maintenance_offer", false, 8],
       ["POST /api/manager/orders/{order_id}/maintenance-offers/{offer_id}/commands", "command_manager_maintenance_offer", false, 8],
       ["POST /api/manager/orders/{order_id}/maintenance-workspace", "prepare_manager_maintenance_workspace", false, 20]
@@ -660,10 +675,10 @@
       ["POST /api/manager/mail/email/send-test", "send_manager_test_email", false, 14],
       ["POST /api/manager/mail/leads/import", "import_manager_email_leads", false, 2],
       ["POST /api/manager/mail/orders/{order_id}/compose", "compose_manager_order_email", false, 12],
+      ["POST /api/manager/mail/orders/{order_id}/draft", "create_manager_order_mail_draft", false, 14],
       ["POST /api/manager/mail/orders/{order_id}/email", "send_manager_order_email", false, 14],
       ["POST /api/manager/mail/outgoing-emails/{email_id}/retry", "retry_manager_outgoing_email", false, 14],
-      ["PUT /api/manager/mail/bank-receipts/{receipt_id}/allocations", "replace_manager_bank_receipt_allocations", false, 2],
-      ["POST /api/manager/mail/orders/{order_id}/draft", "create_manager_order_mail_draft", false, 14]
+      ["PUT /api/manager/mail/bank-receipts/{receipt_id}/allocations", "replace_manager_bank_receipt_allocations", false, 2]
     ],
     "routers/manager_mdv_catalog.py": [
       ["POST /api/manager/catalog/mdv/import/jobs", "start_mdv_catalog_import_job", true, 2],
@@ -839,7 +854,7 @@
     ],
     "routers/manager_staff.py": [
       ["GET /api/manager/staff", "list_manager_staff", false, 3],
-      ["PATCH /api/manager/staff/{staff_user_id}", "patch_manager_staff", false, 3],
+      ["PATCH /api/manager/staff/{staff_user_id}", "patch_manager_staff", false, 23],
       ["POST /api/manager/staff", "create_manager_staff", false, 3]
     ],
     "routers/manager_storefront_settings.py": [

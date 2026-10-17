@@ -432,6 +432,11 @@ class Order(SQLModel, table=True):
 
     total_amount: float = Field(default=0.0)
     total_cost: float = Field(default=0.0)
+    # Exact remuneration component, updated with the agreements under the order lock.
+    worker_pay_cost_byn: Decimal = Field(
+        default=Decimal("0.00"),
+        sa_column=Column(Numeric(14, 2), nullable=False, server_default="0"),
+    )
     margin: float = Field(default=0.0)
 
     # Financials
@@ -579,6 +584,14 @@ class Order(SQLModel, table=True):
         },
     )
 
+    @property
+    def installer_cost_byn(self) -> Decimal:
+        legacy = sum(
+            (Decimal(str(link.agreed_pay or 0)) for link in self.installers),
+            Decimal("0"),
+        )
+        return legacy + Decimal(str(self.worker_pay_cost_byn or 0))
+
     def calculate_totals(self):
         selected_proposal = next(
             (
@@ -629,7 +642,7 @@ class Order(SQLModel, table=True):
         s_sum = sum((cents(item.price) * item.quantity for item in service_links), Decimal("0"))
         p_cost = sum((cents(item.cost) * item.quantity for item in product_links), Decimal("0"))
         s_cost = sum((cents(item.cost) * item.quantity for item in service_links), Decimal("0"))
-        i_cost = sum((Decimal(str(inst.agreed_pay or 0)) for inst in self.installers), Decimal("0"))
+        i_cost = self.installer_cost_byn
 
         # Cached order totals remain FLOAT until the later money migration.
         self.total_amount = float(p_sum + s_sum)

@@ -15,6 +15,7 @@ export type ManagerStaffResponse = {
     default_rate?: (number | null);
     id: number;
     can_manage_worker_money?: boolean;
+    can_manage_worker_pay?: boolean;
     avatar_url?: (string | null);
     has_password?: boolean;
     legacy_installer_id?: (number | null);

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onScopeDispose, ref, toRaw, watch } from 'vue';
+import OrderWorkerPayPanel from './OrderWorkerPayPanel.vue';
 import OrderWorkerAssignmentsPanel from './OrderWorkerAssignmentsPanel.vue';
 import OrderResponsiblePanel from './OrderResponsiblePanel.vue';
 import { useOrderResponsibility } from '../../composables/useOrderResponsibility';
@@ -176,7 +177,8 @@ const {
   validateLines: validateProposalLines,
   setToast,
 });
-const workerAssignmentBusy = ref(false);
+const workerAssignmentBusy = ref(false), workerPayBusy = ref(false), workerPayRevision = ref(0);
+const setWorkerAssignmentBusy = (value: boolean) => { if (workerAssignmentBusy.value && !value) workerPayRevision.value++; workerAssignmentBusy.value = value; };
 const linkedEquipmentOptions = ref<ServiceAttachmentEquipmentOption[]>([]);
 const equipmentPanelRef = ref<InstanceType<typeof OrderEquipmentPanel> | null>(null);
 const documentsWorkspaceRef = ref<InstanceType<typeof OrderDocumentsWorkspace> | null>(null);
@@ -380,7 +382,7 @@ const {
   persistDraft,
   clearDraft,
   setToast,
-  beforeClose: async () => !proposalActionLoading.value && !sourceApplying.value && !responsibilityBusy.value && !workerAssignmentBusy.value
+  beforeClose: async () => !proposalActionLoading.value && !sourceApplying.value && !responsibilityBusy.value && !workerAssignmentBusy.value && !workerPayBusy.value
     && await (customerContextRef.value?.beforeClose?.() ?? true) && await orderSaving.beforeClose(),
   onBeforeClose: orderSaving.cancelScheduled,
   onModelValue: (open) => emit('update:modelValue', open),
@@ -578,7 +580,7 @@ const saveContextObject = async (draft: { address: string; branchId: number | nu
       </div>
     </Transition>
     <div class="flex-1 bg-black/60" aria-hidden="true" @click="closeDrawer" />
-    <aside ref="drawerScrollContainer" tabindex="-1" role="dialog" aria-modal="true" aria-label="Рабочая область заказа" :inert="installationAttaching || sourceApplying || responsibilityBusy || workerAssignmentBusy ? true : undefined" :aria-busy="installationAttaching || sourceApplying || responsibilityBusy || workerAssignmentBusy" class="relative flex h-full w-full min-w-0 flex-col overflow-hidden bg-white text-gray-900 shadow-2xl outline-none dark:bg-slate-950 dark:text-slate-100 md:my-4 md:h-[calc(100%-2rem)] md:w-[calc(100%-2rem)] md:rounded-2xl xl:max-w-[1680px] xl:border xl:border-gray-200 dark:xl:border-slate-700" @keydown="trapFocus" @keydown.esc.stop="closeDrawer" @click="trackUsageControl" @change="trackUsageControl">
+    <aside ref="drawerScrollContainer" tabindex="-1" role="dialog" aria-modal="true" aria-label="Рабочая область заказа" :inert="installationAttaching || sourceApplying || responsibilityBusy || workerAssignmentBusy || workerPayBusy ? true : undefined" :aria-busy="installationAttaching || sourceApplying || responsibilityBusy || workerAssignmentBusy || workerPayBusy" class="relative flex h-full w-full min-w-0 flex-col overflow-hidden bg-white text-gray-900 shadow-2xl outline-none dark:bg-slate-950 dark:text-slate-100 md:my-4 md:h-[calc(100%-2rem)] md:w-[calc(100%-2rem)] md:rounded-2xl xl:max-w-[1680px] xl:border xl:border-gray-200 dark:xl:border-slate-700" @keydown="trapFocus" @keydown.esc.stop="closeDrawer" @click="trackUsageControl" @change="trackUsageControl">
       <OrderWorkspaceHeader
         v-show="!proposalClientPreview"
         class="shrink-0"
@@ -699,7 +701,8 @@ const saveContextObject = async (draft: { address: string; branchId: number | nu
             </section>
 
             <section v-show="activeWorkspaceSection === 'work'" class="min-w-0" data-order-usage="workspace-work-panel">
-              <OrderWorkerAssignmentsPanel v-if="order && activeWorkspaceSection === 'work'" :key="`worker-assignments-${order.id}`" :order-id="order.id" :work-stages="order.work_stages" :disabled="demoReadOnly || initializing || installationAttaching || sourceApplying || proposalActionLoading || responsibilityBusy" :before-action="orderSaving.flush" @busy="workerAssignmentBusy = $event" />
+              <OrderWorkerAssignmentsPanel v-if="order && activeWorkspaceSection === 'work'" :key="`worker-assignments-${order.id}`" :order-id="order.id" :work-stages="order.work_stages" :disabled="demoReadOnly || initializing || installationAttaching || sourceApplying || proposalActionLoading || responsibilityBusy || workerPayBusy" :before-action="orderSaving.flush" @busy="setWorkerAssignmentBusy" />
+              <OrderWorkerPayPanel v-if="order && activeWorkspaceSection === 'work'" :key="`worker-pay-${order.id}-${workerPayRevision}`" :order-id="order.id" :disabled="demoReadOnly || initializing || installationAttaching || sourceApplying || proposalActionLoading || responsibilityBusy || workerAssignmentBusy" :before-action="orderSaving.flush" @busy="workerPayBusy = $event" @changed="emit('reload', order.id)" />
               <OrderIncomingContext v-if="order?.incoming_context" :context="order.incoming_context" />
               <OrderSalesInstallationWorkspace
                 v-if="workflowType === 'sales_installation'"
@@ -751,7 +754,7 @@ const saveContextObject = async (draft: { address: string; branchId: number | nu
         <div v-show="!proposalClientPreview" class="order-first min-w-0 lg:order-none lg:self-start">
           <button type="button" class="flex min-h-9 w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold dark:border-slate-700 dark:bg-slate-900 lg:hidden" :aria-expanded="mobileContextOpen" @click="mobileContextOpen = !mobileContextOpen"><span>Ответственный, клиент и объект</span><span aria-hidden="true">{{ mobileContextOpen ? '−' : '+' }}</span></button>
           <div class="space-y-3 pt-2 lg:pt-0" :class="mobileContextOpen ? '' : 'hidden lg:block'">
-          <OrderResponsiblePanel v-if="order" :order="order" :can-assign="canAssignResponsible" :busy="responsibilityBusy" :disabled="initializing || installationAttaching || sourceApplying || proposalActionLoading || workerAssignmentBusy" :error="responsibilityError" :assign="assignResponsible" />
+          <OrderResponsiblePanel v-if="order" :order="order" :can-assign="canAssignResponsible" :busy="responsibilityBusy" :disabled="initializing || installationAttaching || sourceApplying || proposalActionLoading || workerAssignmentBusy || workerPayBusy" :error="responsibilityError" :assign="assignResponsible" />
           <OrderCustomerContext
             v-if="order"
             ref="customerContextRef"

@@ -205,6 +205,7 @@ class ManagerOrderListItemResponse(BaseModel):
     installation_date: Optional[datetime] = None
     total_amount: float
     total_cost: Optional[float] = None
+    installer_cost_byn: Optional[float] = None
     margin: Optional[float] = None
     is_paid: bool
     comment: Optional[str] = None

@@ -34,6 +34,7 @@ export type ManagerOrderDetailResponse = {
     installation_date?: (string | null);
     total_amount: number;
     total_cost?: (number | null);
+    installer_cost_byn?: (number | null);
     margin?: (number | null);
     is_paid: boolean;
     comment?: (string | null);

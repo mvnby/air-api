@@ -4,7 +4,7 @@
 /* eslint-disable */
 export type WorkerMoneyEntry = {
     id: number;
-    kind: 'client_receipt' | 'handover' | 'receipt_reversal';
+    kind: 'client_receipt' | 'handover' | 'receipt_reversal' | 'handover_reversal' | 'offset' | 'offset_reversal';
     status: 'recorded' | 'pending' | 'confirmed' | 'rejected' | 'cancelled' | 'reversed';
     amount: string;
     currency: 'BYN' | 'USD' | 'EUR';

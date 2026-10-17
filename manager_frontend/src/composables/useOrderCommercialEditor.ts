@@ -184,7 +184,8 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
   const margin = computed(() => {
     const productCost = productLines.value.reduce((sum, line) => sum + Math.round(line.cost * 100) * line.quantity, 0);
     const serviceCost = serviceLines.value.reduce((sum, line) => sum + Math.round(Number(line.cost || 0) * 100) * line.quantity, 0);
-    return (Math.round(total.value * 100) - productCost - serviceCost) / 100;
+    const installerCost = Math.round(Number(order.value?.installer_cost_byn || 0) * 100);
+    return (Math.round(total.value * 100) - productCost - serviceCost - installerCost) / 100;
   });
 
   const rememberProductOption = (option: ProductOption) => {

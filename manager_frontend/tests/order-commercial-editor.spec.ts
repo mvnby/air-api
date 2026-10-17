@@ -39,6 +39,17 @@ afterEach(() => {
 });
 
 describe('useOrderCommercialEditor', () => {
+  it('refreshes margin from the combined installer cost without subtracting wages twice', () => {
+    const previous = order.value;
+    try {
+      order.value = { id: 42, installer_cost_byn: 125.25 } as ManagerOrderDetailResponse;
+      const editor = createEditor(); editor.addServiceLine(); Object.assign(editor.serviceLines.value[0]!, { title: 'Монтаж', price: 500, cost: 50 });
+      expect(editor.margin.value).toBe(324.75);
+      order.value = { ...order.value, installer_cost_byn: 175.75 };
+      expect(editor.margin.value).toBe(274.25);
+    } finally { order.value = previous; }
+  });
+
   const legacyInstallation = () => ({ id: 10, service_id: null, service_title: 'Установка №1…№5',
     quantity: 1, price: 3300, cost: 0, line_total: 3300, installation_estimate_revision_id: 5,
     installation_projection_mode: 'collapsed', installation_display_lines: [

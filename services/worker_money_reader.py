@@ -27,19 +27,23 @@ class WorkerMoneyReader(WorkerMoneyAccess):
             buckets.setdefault(currency, {})["received"] = Decimal(amount)
         for currency, status, amount in handovers:
             buckets.setdefault(currency, {})[status] = Decimal(amount)
+        for currency, amount in await DAO.offset_totals(session, account.id):
+            buckets.setdefault(currency, {})["offset"] = Decimal(amount)
         result = []
         for currency, values in sorted(buckets.items()):
             received = values.get("received", Decimal(0))
             handed = values.get("confirmed", Decimal(0))
             pending = values.get("pending", Decimal(0))
+            offset = values.get("offset", Decimal(0))
             result.append(
                 WorkerCashBalance(
                     currency=currency,
                     received=f"{received:.2f}",
                     handed_over=f"{handed:.2f}",
-                    held=f"{received - handed:.2f}",
+                    held=f"{received - handed - offset:.2f}",
                     pending=f"{pending:.2f}",
-                    available=f"{received - handed - pending:.2f}",
+                    offset=f"{offset:.2f}",
+                    available=f"{received - handed - pending - offset:.2f}",
                 )
             )
         return result
@@ -75,15 +79,41 @@ class WorkerMoneyReader(WorkerMoneyAccess):
                 )
         items = []
         for kind, row in events:
-            if kind == "handover":
+            if kind.startswith("offset"):
                 items.append(
                     WorkerMoneyEntry(
                         id=row.id,
                         kind=kind,
-                        status=row.status,
+                        status="recorded"
+                        if kind.endswith("reversal") or row.reversed_at is None
+                        else "reversed",
                         amount=f"{row.amount:.2f}",
                         currency=row.currency,
-                        created_at=row.created_at,
+                        created_at=row.reversed_at
+                        if kind.endswith("reversal")
+                        else row.created_at,
+                        version=row.version,
+                        title="Зачёт оплаты труда",
+                    )
+                )
+            elif kind.startswith("handover"):
+                items.append(
+                    WorkerMoneyEntry(
+                        id=row.id,
+                        kind=kind,
+                        status="recorded"
+                        if kind == "handover_reversal"
+                        else row.status,
+                        amount=f"{row.amount:.2f}",
+                        currency=row.currency,
+                        created_at=row.reversed_at
+                        if kind == "handover_reversal"
+                        else row.created_at,
+                        can_reverse=bool(
+                            can_manage
+                            and kind == "handover"
+                            and row.status == "confirmed"
+                        ),
                         recipient_staff_user_id=row.recipient_staff_user_id,
                         recipient_name=row.recipient_name,
                         version=row.version,

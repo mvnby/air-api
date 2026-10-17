@@ -72,7 +72,8 @@ export class ManagerStaffService {
      * shared-profile fields for multi-tenant staff. A new password increments auth_version.
      * Missing membership returns 404, invalid/duplicate values 400 and protected legacy-owner
      * identity mutation 409 with code/message. There is no optimistic version or replay receipt.
-     * can_manage_worker_money delegates only the tenant-local manager cash permission;
+     * can_manage_worker_money and can_manage_worker_pay delegate independent tenant-local
+     * cash-custody and remuneration permissions only to a manager;
      * it preserves platform catalog grants and requires a live company owner/admin or
      * verified platform owner acting as staff administrator, not as a cash recipient.
      * @param staffUserId

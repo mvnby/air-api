@@ -119,6 +119,8 @@ class WorkerMoneyDAO:
 
     @staticmethod
     async def receipt_remainders(session, account_id, currency):
+        from models.worker_pay import WorkerPayPayout, WorkerPayOffsetCashAllocation
+
         used = (
             select(
                 WorkerCashHandoverAllocation.receipt_id,
@@ -135,15 +137,34 @@ class WorkerMoneyDAO:
             .group_by(WorkerCashHandoverAllocation.receipt_id)
             .subquery()
         )
+        offsets = (
+            select(
+                WorkerPayOffsetCashAllocation.receipt_id,
+                func.sum(WorkerPayOffsetCashAllocation.amount).label("used"),
+            )
+            .join(
+                WorkerPayPayout,
+                WorkerPayPayout.id == WorkerPayOffsetCashAllocation.payout_id,
+            )
+            .where(
+                WorkerPayPayout.account_id == account_id,
+                WorkerPayPayout.reversed_at.is_(None),
+            )
+            .group_by(WorkerPayOffsetCashAllocation.receipt_id)
+            .subquery()
+        )
         return (
             await session.execute(
                 select(
                     WorkerCashReceipt,
-                    (WorkerCashReceipt.amount - func.coalesce(used.c.used, 0)).label(
-                        "remaining"
-                    ),
+                    (
+                        WorkerCashReceipt.amount
+                        - func.coalesce(used.c.used, 0)
+                        - func.coalesce(offsets.c.used, 0)
+                    ).label("remaining"),
                 )
                 .outerjoin(used, used.c.receipt_id == WorkerCashReceipt.id)
+                .outerjoin(offsets, offsets.c.receipt_id == WorkerCashReceipt.id)
                 .where(
                     WorkerCashReceipt.account_id == account_id,
                     WorkerCashReceipt.currency == currency,
@@ -182,7 +203,25 @@ class WorkerMoneyDAO:
         return receipts, handovers
 
     @staticmethod
+    async def offset_totals(session, account_id):
+        from models.worker_pay import WorkerPayPayout
+
+        return (
+            await session.execute(
+                select(WorkerPayPayout.currency, func.sum(WorkerPayPayout.amount))
+                .where(
+                    WorkerPayPayout.account_id == account_id,
+                    WorkerPayPayout.method == "offset",
+                    WorkerPayPayout.reversed_at.is_(None),
+                )
+                .group_by(WorkerPayPayout.currency)
+            )
+        ).all()
+
+    @staticmethod
     async def journal(session, account_id, page, limit):
+        from models.worker_pay import WorkerPayPayout
+
         events = union_all(
             select(
                 literal("client_receipt").label("kind"),
@@ -202,6 +241,29 @@ class WorkerMoneyDAO:
                 WorkerCashHandover.id,
                 WorkerCashHandover.created_at,
             ).where(WorkerCashHandover.account_id == account_id),
+            select(
+                literal("handover_reversal"),
+                WorkerCashHandover.id,
+                WorkerCashHandover.reversed_at,
+            ).where(
+                WorkerCashHandover.account_id == account_id,
+                WorkerCashHandover.reversed_at.is_not(None),
+            ),
+            select(
+                literal("offset"), WorkerPayPayout.id, WorkerPayPayout.created_at
+            ).where(
+                WorkerPayPayout.account_id == account_id,
+                WorkerPayPayout.method == "offset",
+            ),
+            select(
+                literal("offset_reversal"),
+                WorkerPayPayout.id,
+                WorkerPayPayout.reversed_at,
+            ).where(
+                WorkerPayPayout.account_id == account_id,
+                WorkerPayPayout.method == "offset",
+                WorkerPayPayout.reversed_at.is_not(None),
+            ),
         ).subquery()
         total = int(await session.scalar(select(func.count()).select_from(events)) or 0)
         rows = (
@@ -212,42 +274,43 @@ class WorkerMoneyDAO:
                 .limit(limit)
             )
         ).all()
-        receipt_ids = [row.id for row in rows if row.kind != "handover"]
-        handover_ids = [row.id for row in rows if row.kind == "handover"]
-        receipts = (
-            {
-                row.id: row
-                for row in (
-                    await session.scalars(
-                        select(WorkerCashReceipt).where(
-                            WorkerCashReceipt.account_id == account_id,
-                            WorkerCashReceipt.id.in_(receipt_ids),
+        sources = {}
+        for prefix, model in [
+            ("receipt", WorkerCashReceipt),
+            ("handover", WorkerCashHandover),
+            ("offset", WorkerPayPayout),
+        ]:
+            ids = [
+                row.id
+                for row in rows
+                if (row.kind.startswith("client") or row.kind.startswith("receipt"))
+                and prefix == "receipt"
+                or row.kind.startswith(prefix)
+            ]
+            sources[prefix] = (
+                {
+                    row.id: row
+                    for row in (
+                        await session.scalars(
+                            select(model).where(
+                                model.account_id == account_id, model.id.in_(ids)
+                            )
                         )
-                    )
-                ).all()
-            }
-            if receipt_ids
-            else {}
-        )
-        handovers = (
-            {
-                row.id: row
-                for row in (
-                    await session.scalars(
-                        select(WorkerCashHandover).where(
-                            WorkerCashHandover.account_id == account_id,
-                            WorkerCashHandover.id.in_(handover_ids),
-                        )
-                    )
-                ).all()
-            }
-            if handover_ids
-            else {}
-        )
+                    ).all()
+                }
+                if ids
+                else {}
+            )
         return [
             (
                 row.kind,
-                handovers[row.id] if row.kind == "handover" else receipts[row.id],
+                sources[
+                    "receipt"
+                    if row.kind.startswith(("client", "receipt"))
+                    else "handover"
+                    if row.kind.startswith("handover")
+                    else "offset"
+                ][row.id],
             )
             for row in rows
         ], total

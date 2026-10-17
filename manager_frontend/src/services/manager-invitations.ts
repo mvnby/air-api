@@ -11,7 +11,7 @@ export const managerInvitationsApi = {
   list: (page = 1) => request<{ items: TeamInvitation[]; total: number; page: number; limit: number }>(OpenAPI, { method: 'GET', url, query: { page, limit: 50 } }),
   create: (role: InviteRole) => request<{ id: number; role: InviteRole; expires_at: string; invite_url: string }>(OpenAPI, { method: 'POST', url, headers, body: { role }, mediaType: 'application/json' }),
   revoke: (id: number) => request<void>(OpenAPI, { method: 'DELETE', url: `${url}/${id}`, headers }),
-  updateMember: (id: number, body: { primary_role?: string; status?: string; can_manage_worker_money?: boolean }) => request<ManagerStaffResponse>(OpenAPI, { method: 'PATCH', url: `/api/manager/staff/${id}`, headers, body, mediaType: 'application/json' }),
+  updateMember: (id: number, body: { primary_role?: string; status?: string; can_manage_worker_money?: boolean; can_manage_worker_pay?: boolean }) => request<ManagerStaffResponse>(OpenAPI, { method: 'PATCH', url: `/api/manager/staff/${id}`, headers, body, mediaType: 'application/json' }),
   preview: (token: string) => request<InvitationPreview>(OpenAPI, { method: 'POST', url: '/api/account/invitations/preview', headers, body: { token }, mediaType: 'application/json' }),
   accept: (body: InvitationAccept) => request<{ tenant_id: number; default_storefront_slug: string | null }>(OpenAPI, { method: 'POST', url: '/api/account/invitations/accept', headers, body, mediaType: 'application/json' }),
 };

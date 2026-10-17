@@ -1569,6 +1569,36 @@ class OrderService:
             raise ValueError("Selected installer is inactive or blocked")
 
     @staticmethod
+    async def _guard_legacy_installer_pay(session, order, installers_data) -> None:
+        """An order lock must precede both remuneration write paths."""
+        positive_ids = {
+            int(item["installer_id"])
+            for item in installers_data
+            if Decimal(str(item.get("agreed_pay", 0) or 0)) > 0
+        }
+        if not positive_ids:
+            return
+        from models import TenantWorkerProfile
+        from models.worker_money import WorkerCashAccount
+        from models.worker_pay import WorkerPayAgreement
+
+        overlap = await session.scalar(
+            select(WorkerPayAgreement.id)
+            .join(WorkerCashAccount, WorkerCashAccount.id == WorkerPayAgreement.account_id)
+            .join(TenantWorkerProfile, TenantWorkerProfile.id == WorkerCashAccount.worker_profile_id)
+            .where(
+                WorkerPayAgreement.order_id == order.id,
+                WorkerPayAgreement.status != "cancelled",
+                WorkerCashAccount.tenant_id == order.tenant_id,
+                WorkerCashAccount.storefront_id == order.storefront_id,
+                TenantWorkerProfile.canonical_legacy_installer_id.in_(positive_ids),
+            )
+            .limit(1)
+        )
+        if overlap is not None:
+            raise ValueError("Оплата этого исполнителя уже ведётся в расчётах с монтажниками. Измените соглашение там.")
+
+    @staticmethod
     async def update_order_installers(
         session: AsyncSession,
         order_id: int,
@@ -1593,6 +1623,8 @@ class OrderService:
         )
         if owned_order is None:
             raise ValueError("Order not found")
+
+        await OrderService._guard_legacy_installer_pay(session, owned_order, installers_data)
         
         # 1. Забираем текущие назначения чтобы понять, кто новый
         existing = await session.execute(select(OrderInstaller).where(OrderInstaller.order_id == order_id))
@@ -1711,6 +1743,7 @@ class OrderService:
         )
         if not order:
             return
+        await OrderService._guard_legacy_installer_pay(session, order, items_data.get("installers", []))
         proposal = await OrderService.ensure_default_proposal(session, order)
         
         from services.maintenance_commercial_guard import guard_lines

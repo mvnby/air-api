@@ -346,6 +346,7 @@ async def test_pending_handover_reserves_funds_and_confirmation_is_exactly_once(
     assert balance(view) == {
         "currency": "BYN",
         "received": "100.00",
+        "offset": "0.00",
         "handed_over": "0.00",
         "held": "100.00",
         "pending": "50.00",

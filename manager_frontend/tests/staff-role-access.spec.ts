@@ -39,7 +39,7 @@ describe('employee role controls', () => {
     expect(wrapper.find('input[type="number"][placeholder="123456789"]').exists()).toBe(false);
     await wrapper.get('form').trigger('submit'); await flushPromises();
     expect(update).toHaveBeenCalledOnce();
-    expect(update.mock.calls[0]![1]).toEqual({ primary_role: 'manager', status: 'active', can_manage_worker_money: false });
+    expect(update.mock.calls[0]![1]).toEqual({ primary_role: 'manager', status: 'active', can_manage_worker_money: false, can_manage_worker_pay: false });
     expect(update.mock.calls[0]![1]).not.toHaveProperty('telegram_id');
     expect(update.mock.calls[0]![1]).not.toHaveProperty('telegram_username');
     wrapper.unmount(); update.mockRestore();
@@ -51,8 +51,14 @@ describe('employee role controls', () => {
     const wrapper = mount(InstallerEditModal, { props: { modelValue: true, staffUser: { id: 8, display_name: 'Кассир', primary_role: 'manager', status: 'active', can_manage_worker_money: initial } as any }, global: { stubs: { teleport: true } } });
     expect((wrapper.get('input[type="checkbox"]').element as HTMLInputElement).checked).toBe(initial);
     await wrapper.get('input[type="checkbox"]').setValue(!initial); await wrapper.get('form').trigger('submit'); await flushPromises();
-    expect(update).toHaveBeenCalledWith(8, { primary_role: 'manager', status: 'active', can_manage_worker_money: !initial });
+    expect(update).toHaveBeenCalledWith(8, { primary_role: 'manager', status: 'active', can_manage_worker_money: !initial, can_manage_worker_pay: false });
     wrapper.unmount(); update.mockRestore();
+  });
+  it('grants remuneration independently of the client cash permission', async () => {
+    const update = vi.spyOn(managerInvitationsApi, 'updateMember').mockResolvedValue({} as any);
+    const wrapper = mount(InstallerEditModal, { props: { modelValue: true, staffUser: { id: 8, display_name: 'Бухгалтер', primary_role: 'manager', status: 'active', can_manage_worker_money: false, can_manage_worker_pay: false } as any }, global: { stubs: { teleport: true } } });
+    await wrapper.findAll('input[type="checkbox"]')[1]!.setValue(true); await wrapper.get('form').trigger('submit'); await flushPromises();
+    expect(update).toHaveBeenCalledWith(8, { primary_role: 'manager', status: 'active', can_manage_worker_money: false, can_manage_worker_pay: true }); wrapper.unmount(); update.mockRestore();
   });
   it('omits the grant when changing a manager to an installer', async () => {
     const update = vi.spyOn(managerInvitationsApi, 'updateMember').mockResolvedValue({} as any);
