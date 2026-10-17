@@ -33,7 +33,7 @@ export const canReadOwnInstallerWorks = (
 
 export const requiredCapabilityForManagerPath = (path: string): ManagerCapability | null => {
   if (path === '/manager' || path === '/manager/' || path === '/manager/profile') return null;
-  if (path === '/manager/my-work' || path.startsWith('/manager/my-work/')) return MANAGER_CAPABILITY.installerWorksRead;
+  if (path === '/manager/my-money' || path === '/manager/my-work' || path.startsWith('/manager/my-work/')) return MANAGER_CAPABILITY.installerWorksRead;
   if (path.startsWith('/manager/settings/calls') || path.startsWith('/manager/calls')) {
     return MANAGER_CAPABILITY.callRecordingsManage;
   }
@@ -53,7 +53,8 @@ export const requiredCapabilityForManagerPath = (path: string): ManagerCapabilit
     return MANAGER_CAPABILITY.infrastructureManage;
   }
   if (
-    path.startsWith('/manager/tasks')
+    path.startsWith('/manager/worker-money')
+    || path.startsWith('/manager/tasks')
     || path.startsWith('/manager/leads')
     || path.startsWith('/manager/orders')
     || path.startsWith('/manager/calendar')
@@ -96,7 +97,7 @@ export const isManagerPathAllowed = (
   auth: Pick<ManagerAuthStatusResponse, 'capabilities'> & Partial<Pick<ManagerAuthStatusResponse, 'tenant_membership_id'>> | null | undefined,
   path: string,
 ): boolean => {
-  if (path === '/manager/my-work' || path.startsWith('/manager/my-work/')) return canReadOwnInstallerWorks(auth);
+  if (path === '/manager/my-money' || path === '/manager/my-work' || path.startsWith('/manager/my-work/')) return canReadOwnInstallerWorks(auth);
   const required = requiredCapabilityForManagerPath(path);
   return required === null || hasManagerCapability(auth, required);
 };

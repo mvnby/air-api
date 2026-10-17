@@ -100,6 +100,14 @@ class OrderPaymentCommandService:
             if not payment or payment.order_id != order_id:
                 raise ValueError("Payment not found on this order")
 
+            from models.worker_money import WorkerCashReceipt
+            linked_cash = await session.scalar(select(WorkerCashReceipt.id).where(
+                (WorkerCashReceipt.payment_id == payment_id)
+                | (WorkerCashReceipt.reversal_payment_id == payment_id)
+            ))
+            if linked_cash is not None:
+                raise ValueError("Платёж связан с деньгами исполнителя. Исправьте получение в расчётах с сотрудником")
+
             bank_receipt_id = (
                 int(payment.bank_receipt_id) if payment.bank_receipt_id else None
             )

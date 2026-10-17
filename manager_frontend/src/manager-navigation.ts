@@ -46,6 +46,8 @@ export type NavSection = {
 
 export const installerWorkNavItem: NavItem = { path: '/manager/my-work', label: 'Мои работы', icon: ClipboardList, match: 'prefix' };
 
+export const installerMoneyNavItem: NavItem = { path: '/manager/my-money', label: 'Мои деньги', icon: Wallet, match: 'exact' };
+
 export const coreNavItems: NavItem[] = [
   { path: '/manager', label: 'Главная', icon: Home, match: 'exact' },
   { path: '/manager/tasks', label: 'Поручения', icon: ListTodo, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.crmManage },
@@ -103,6 +105,7 @@ export const navSections: NavSection[] = [
     id: 'finance',
     label: 'Финансы',
     items: [
+      { path: '/manager/worker-money', label: 'Деньги у сотрудников', icon: Wallet, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.crmManage },
       { path: '/manager/payments', label: 'Платежи', icon: ReceiptText, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.platformManage },
     ],
   },

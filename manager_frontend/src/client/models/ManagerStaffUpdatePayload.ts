@@ -14,5 +14,6 @@ export type ManagerStaffUpdatePayload = {
     telegram_username?: (string | null);
     is_assignable_installer?: (boolean | null);
     default_rate?: (number | null);
+    can_manage_worker_money?: (boolean | null);
 };
 

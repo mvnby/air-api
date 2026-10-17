@@ -22,7 +22,7 @@ class ManagerAccessService:
             membership_id=membership.id, staff_user_id=membership.staff_user_id,
             display_name=staff_name, tenant_id=membership.tenant_id, tenant_name=tenant_name,
             role=membership.role, status=membership.status,
-            permissions=membership.permissions or [], updated_at=membership.updated_at,
+            permissions=[p for p in membership.permissions or [] if p in {"catalog.master.edit", "catalog.master.delete"}], updated_at=membership.updated_at,
         )
 
     @classmethod
@@ -46,7 +46,7 @@ class ManagerAccessService:
         expected = payload.expected_updated_at.replace(tzinfo=timezone.utc) if payload.expected_updated_at.tzinfo is None else payload.expected_updated_at
         if current != expected:
             raise ManagerAccessConflict("Доступ уже изменён. Обновите список и повторите действие.")
-        permissions = sorted(payload.permissions)
+        permissions = sorted(set(payload.permissions) | (set(membership.permissions or []) - {"catalog.master.edit", "catalog.master.delete"}))
         before = list(membership.permissions or [])
         if sorted(before) != permissions:
             storefront_id = await ManagerAccessDAO.default_storefront_id(session, membership.tenant_id)

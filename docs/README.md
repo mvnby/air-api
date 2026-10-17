@@ -58,6 +58,7 @@
 | Мониторинг и инфраструктурная безопасность | [VPS monitoring](api-vps-monitoring.md), [security](infrastructure-security-runbook.md) |
 | Пользователи, роли и делегирование каталога | [Пользователи и доступ](users-and-access.md) |
 | Кабинет монтажника, назначения и сумма к получению | [Первый выпуск кабинета](installer-workspace.md) |
+| Получение клиентских денег и передача компании | [Учёт денег у монтажников](worker-money.md) |
 | Выдача доступа tenant-менеджеру | [Provisioning](tenant-manager-provisioning.md) |
 | Read-only демо tenant | [Reviewed fixture и проверка](tenant-demo-setup.md) |
 | Закрытый учебный кабинет | [Подготовка данных и уроков](tenant-training-setup.md) |

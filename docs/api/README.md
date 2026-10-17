@@ -30,6 +30,7 @@
 | Область | Путь для поиска | Владелец контракта и документация |
 | --- | --- | --- |
 | Назначенные монтажнику работы | `/api/installer/*`, `/api/manager/orders/*/installer-workspace` | [installer_workspace.py](../../routers/installer_workspace.py), [manager_installer_workspace.py](../../routers/manager_installer_workspace.py), [границы кабинета](../installer-workspace.md) |
+| Клиентские деньги у монтажников | `/api/installer/money*`, `/api/installer/works/*/collections`, `/api/manager/worker-money*` | [worker_money.py](../../routers/worker_money.py), [получение и передача компании](../worker-money.md) |
 | Публичный каталог и характеристики | `GET /api/v1/products`, `GET /api/v1/filters/config`, `/api/v1/specs/*` | [api_products.py](../../routers/api_products.py), [схемы товаров](../../schemas.py), [таксономия](../catalog/feature-taxonomy-guide.md), [код модели и номинальный класс](../catalog/public-product-identity.md) |
 | Управление каталогом и характеристиками | `/api/manager/catalog-management/*`, `/api/manager/products/*`, `/api/manager/features/*` | [manager_catalog_management.py](../../routers/manager_catalog_management.py), [manager_features.py](../../routers/manager_features.py), [рабочая область](../catalog-management-workspace.md) |
 | Контент и подборки | `/api/v1/content/*`, `/api/manager/product-collections/*` | [api_content.py](../../routers/api_content.py), [manager_product_collections.py](../../routers/manager_product_collections.py), [контракт подборок](../product-collections.md) |

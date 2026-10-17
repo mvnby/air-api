@@ -182,6 +182,9 @@ class StaffUserService:
 
         return ManagerStaffResponse(
             id=int(user.id or 0),
+            can_manage_worker_money=bool(membership and membership.status == "active" and (
+                membership.role in ("owner", "admin") or (membership.role == "manager"
+                and "worker.money.manage" in (membership.permissions or [])))),
             avatar_url=staff_avatar_url(user, tenant_id=membership.tenant_id) if membership else None,
             display_name=user.display_name,
             status=(
@@ -448,7 +451,7 @@ class StaffUserService:
             )
 
         changed_fields = set(payload.model_fields_set)
-        before = {"role": membership.role, "status": membership.status}
+        before = {"role": membership.role, "status": membership.status, "permissions": list(membership.permissions or [])}
         requested_role = (
             cls.normalize_primary_role(payload.primary_role)
             if "primary_role" in changed_fields
@@ -473,6 +476,28 @@ class StaffUserService:
             requested_role=requested_role,
             target_is_platform_owner=target_is_platform_owner,
         )
+        if "can_manage_worker_money" in changed_fields:
+            if payload.can_manage_worker_money is None or requested_role != cls.ROLE_MANAGER:
+                raise ValueError("Право проводить расчёты отдельно настраивается только для менеджера")
+            if actor_role is not None:
+                actor_membership = await StaffTenantMembershipService.get_for_tenant(session,
+                    tenant_id=tenant_scope.tenant_id, staff_user_id=actor_staff_user_id)
+                actor_person = await session.get(StaffUser, actor_staff_user_id)
+                if (not actor_membership or actor_membership.status != "active"
+                    or actor_membership.role not in (cls.ROLE_OWNER, cls.ROLE_ADMIN)
+                    or not actor_person or not cls.is_active(actor_person)):
+                    from services.staff_access_policy import StaffAccessPolicyError
+                    raise StaffAccessPolicyError("Назначать финансовые права может владелец или администратор компании",
+                        code="money_grant_forbidden")
+            permissions = set(membership.permissions or [])
+            if payload.can_manage_worker_money:
+                permissions.add("worker.money.manage")
+            else:
+                permissions.discard("worker.money.manage")
+            membership.permissions = sorted(permissions)
+            StaffTenantMembershipService.touch(membership)
+        if requested_role not in (cls.ROLE_OWNER, cls.ROLE_ADMIN, cls.ROLE_MANAGER):
+            membership.permissions = sorted(set(membership.permissions or []) - {"worker.money.manage"})
         if (
             membership.role == cls.ROLE_OWNER
             and membership.status == "active"
@@ -596,11 +621,11 @@ class StaffUserService:
         *,
         membership: TenantMembership,
         tenant_scope: TenantScope,
-        before: dict[str, str] | None,
+        before: dict[str, object] | None,
         actor_staff_user_id: int | None,
         actor_username: str,
     ) -> None:
-        after = {"role": membership.role, "status": membership.status}
+        after = {"role": membership.role, "status": membership.status, "permissions": list(membership.permissions or [])}
         if before == after:
             return
         session.add(TenantAuditEvent(

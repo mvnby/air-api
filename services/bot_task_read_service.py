@@ -9,7 +9,7 @@ from services.bot_task_service import BotTaskService
 from services.bot_worker_access import BotWorkerAccessDeniedError, bot_worker_context
 from services.worker_assignment_service import WorkerAssignmentError
 from services.installer_collection_service import InstallerWorkspaceError
-from services.installer_work_urls import installer_work_url
+from services.installer_work_urls import installer_money_url, installer_work_url
 
 
 class BotTaskAccessDeniedError(PermissionError):
@@ -53,6 +53,7 @@ class BotTaskReadService:
                         "start_time": detail.start_time, "address": detail.address,
                         "customer_name": detail.customer_name, "customer_phone": detail.customer_phone,
                         "comment": detail.instructions or None, "manager_url": None, "work_url": url,
+                        "money_url": installer_money_url(tenant_id=tenant_scope.tenant_id, storefront_slug=selection.storefront_slug),
                     })
                     if len(result) >= safe_limit:
                         break

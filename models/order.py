@@ -971,6 +971,7 @@ class OutgoingEmail(SQLModel, table=True):
 
 class Payment(SQLModel, table=True):
     __tablename__ = "payment"
+    __table_args__ = (UniqueConstraint("id", "order_id", name="uq_payment_id_order"),)
 
     id: Optional[int] = Field(default=None, primary_key=True)
     order_id: int = Field(foreign_key="order.id", index=True)

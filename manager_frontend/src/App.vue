@@ -30,6 +30,7 @@ import { useDemoReadOnly } from './services/manager-demo';
 import {
   coreNavItems,
   installerWorkNavItem,
+  installerMoneyNavItem,
   defaultExpandedNavSections,
   navSections,
   type NavItem,
@@ -42,6 +43,7 @@ import {
   isManagerPathAllowed,
   canReadOwnInstallerWorks,
 } from './manager-capabilities';
+const WorkerMoneyView = defineAsyncComponent(() => import('./views/WorkerMoneyView.vue'));
 const InstallerWorksView = defineAsyncComponent(() => import('./views/InstallerWorksView.vue'));
 const ProductsView = defineAsyncComponent(() => import('./views/ProductsView.vue'));
 const TenantCatalogView = defineAsyncComponent(() => import('./views/TenantCatalogView.vue'));
@@ -158,7 +160,7 @@ const isInstallerWorkspace = computed(() => hasManagerCapability(auth.value, MAN
 const visibleCoreNavItems = computed(() => [
   ...coreNavItems.filter(item => (!isInstallerWorkspace.value || item.path !== '/manager')
     && (!item.requiredCapability || hasManagerCapability(auth.value, item.requiredCapability))),
-  ...(canReadOwnInstallerWorks(auth.value) ? [installerWorkNavItem] : []),
+  ...(canReadOwnInstallerWorks(auth.value) ? [installerWorkNavItem, installerMoneyNavItem] : []),
 ]);
 const visibleNavSections = computed<NavSection[]>(() => navSections
   .map(section => ({
@@ -208,6 +210,8 @@ const defaultView = computed(() => isInstallerWorkspace.value ? 'installer-works
 const currentView = computed(() => {
   const path = currentPath.value;
   if (path === '/manager' || path === '/manager/') return defaultView.value;
+  if (path === '/manager/my-money') return 'installer-money';
+  if (path.startsWith('/manager/worker-money')) return 'worker-money';
   if (path === '/manager/my-work' || path.startsWith('/manager/my-work/')) return 'installer-works';
   if (path === '/manager/profile') return 'profile-security';
   if (path.startsWith('/manager/integrations')) return 'analytics-connections';
@@ -576,6 +580,8 @@ watch(currentPath, () => {
       </div>
 
       <InstallerWorksView v-if="authorizedView === 'installer-works'" :key="currentLocation" />
+      <WorkerMoneyView v-else-if="authorizedView === 'installer-money'" :key="currentLocation" />
+      <WorkerMoneyView v-else-if="authorizedView === 'worker-money'" :key="currentLocation" management />
       <ManagerHomeView v-else-if="authorizedView === 'home'" :key="currentLocation" />
       <ProfileSecurityView v-else-if="authorizedView === 'profile-security'" :key="currentLocation" @password-changed="handleLogoutSuccess" />
       <AnalyticsConnectionsView v-else-if="authorizedView === 'analytics-connections'" :key="currentLocation" />
