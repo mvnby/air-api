@@ -20,6 +20,13 @@ from core.security import (
     require_manager_access,
 )
 from routers.installer_workspace import installer_errors
+from routers.manager_operation_ids import (
+    CONFIRM_MANAGER_CASH_HANDOVER,
+    GET_MANAGER_WORKER_MONEY,
+    LIST_MANAGER_WORKER_MONEY,
+    REJECT_MANAGER_CASH_HANDOVER,
+    REVERSE_MANAGER_WORKER_RECEIPT,
+)
 from routers.manager_staff_invitations import require_team_origin
 from services.command_transaction import command_transaction
 from services.worker_money_service import WorkerMoneyService as Money
@@ -149,7 +156,7 @@ async def cancel_handover(
 
 
 @manager_router.get(
-    "", response_model=WorkerMoneyOverview, operation_id="list_manager_worker_money"
+    "", response_model=WorkerMoneyOverview, operation_id=LIST_MANAGER_WORKER_MONEY
 )
 async def overview(
     response: Response,
@@ -172,7 +179,7 @@ async def overview(
 @manager_router.get(
     "/{worker_profile_id}",
     response_model=WorkerMoneyWorkspace,
-    operation_id="get_manager_worker_money",
+    operation_id=GET_MANAGER_WORKER_MONEY,
 )
 async def worker_money(
     worker_profile_id: int,
@@ -203,7 +210,7 @@ async def worker_money(
 @manager_router.post(
     "/{worker_profile_id}/handovers/{handover_id}/confirm",
     response_model=WorkerMoneyCommandResult,
-    operation_id="confirm_manager_cash_handover",
+    operation_id=CONFIRM_MANAGER_CASH_HANDOVER,
     dependencies=protected,
 )
 async def confirm_handover(
@@ -235,7 +242,7 @@ async def confirm_handover(
 @manager_router.post(
     "/{worker_profile_id}/handovers/{handover_id}/reject",
     response_model=WorkerMoneyCommandResult,
-    operation_id="reject_manager_cash_handover",
+    operation_id=REJECT_MANAGER_CASH_HANDOVER,
     dependencies=protected,
 )
 async def reject_handover(
@@ -266,7 +273,7 @@ async def reject_handover(
 @manager_router.post(
     "/{worker_profile_id}/receipts/{receipt_id}/reverse",
     response_model=WorkerMoneyCommandResult,
-    operation_id="reverse_manager_worker_receipt",
+    operation_id=REVERSE_MANAGER_WORKER_RECEIPT,
     dependencies=protected,
 )
 async def reverse_receipt(

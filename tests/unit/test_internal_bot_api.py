@@ -494,6 +494,7 @@ async def test_internal_bot_task_list_returns_stable_projection(monkeypatch):
                 "comment": "Позвонить заранее",
                 "manager_url": "https://api.mvn.by/manager/orders/kanban?orderId=42",
                 "work_url": None,
+                "money_url": None,
             }
         ]
     }
