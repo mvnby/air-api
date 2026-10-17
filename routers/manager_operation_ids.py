@@ -22,6 +22,11 @@ LIST_MANAGER_STOREFRONTS = "list_manager_storefronts"
 LIST_MANAGER_ACCESS = "list_manager_access"
 UPDATE_MANAGER_ACCESS = "update_manager_access"
 GET_MANAGER_CALENDAR_EVENTS = "get_manager_calendar_events"
+LIST_MANAGER_WORKER_MONEY = "list_manager_worker_money"
+GET_MANAGER_WORKER_MONEY = "get_manager_worker_money"
+CONFIRM_MANAGER_CASH_HANDOVER = "confirm_manager_cash_handover"
+REJECT_MANAGER_CASH_HANDOVER = "reject_manager_cash_handover"
+REVERSE_MANAGER_WORKER_RECEIPT = "reverse_manager_worker_receipt"
 
 QUERY_MANAGER_CATALOG = "query_manager_catalog"
 SELECT_MANAGER_CATALOG = "select_manager_catalog"
@@ -622,6 +627,11 @@ LIST_MANAGER_ORDER_RESPONSIBLES = "list_manager_order_responsibles"
 PATCH_MANAGER_ORDER_RESPONSIBLE = "patch_manager_order_responsible"
 
 ALL_MANAGER_OPERATION_IDS = (
+    LIST_MANAGER_WORKER_MONEY,
+    GET_MANAGER_WORKER_MONEY,
+    CONFIRM_MANAGER_CASH_HANDOVER,
+    REJECT_MANAGER_CASH_HANDOVER,
+    REVERSE_MANAGER_WORKER_RECEIPT,
     "list_manager_worker_candidates",
     "get_manager_installer_workspace",
     "create_manager_worker_assignment",

@@ -9,6 +9,7 @@
     "reviewed_stage"
   ],
   "review_stages": {
+    "22": "Client cash receipt against a reviewed live collection instruction, atomic Payment/custody/instruction/audit, exact money, durable command replay, company/site/worker cash history, reserved source allocations, selected-recipient handover acknowledgement, explicit finance delegation and non-destructive correction; reviewed 2026-10-17",
     "21": "Read-only installer workspace: actual company/site membership and explicit per-order/visit grants, safe technical projections and private publications, one versioned recipient collection instruction with live financial review, shared bot/queued notification ACL and installer invitations without implicit grants; reviewed 2026-10-16",
     "20": "Company-local order responsibility, active actual CRM candidates and historical people, fresh authenticated reassignment with dedicated optimistic version and atomic audit, personal filter before count/pagination and trusted internal creator allocation before persistence; reviewed 2026-10-16",
     "19": "Explicit company/site bootstrap and virtual platform support, protected one-use team invitations, platform company/site directory and audited company status controls, real-membership bot context/version fencing; reviewed 2026-10-16",
@@ -32,6 +33,18 @@
     "11": "Native tender direct push; dedicated key, fixed active system scope, writable-primary gates, bounded payload, shared pull/push deduplication, staff preservation, stale guards and unchanged pull checkpoint reviewed 2026-10-09 for issue 849"
   },
   "operations": {
+    "routers/worker_money.py": [
+      ["GET /api/installer/money", "get_installer_money", false, 22],
+      ["GET /api/installer/money/recipients", "list_installer_money_recipients", false, 22],
+      ["GET /api/manager/worker-money", "list_manager_worker_money", false, 22],
+      ["GET /api/manager/worker-money/{worker_profile_id}", "get_manager_worker_money", false, 22],
+      ["POST /api/installer/money/handovers", "create_installer_cash_handover", false, 22],
+      ["POST /api/installer/money/handovers/{handover_id}/cancel", "cancel_installer_cash_handover", false, 22],
+      ["POST /api/installer/works/{assignment_id}/collections", "confirm_installer_client_money", false, 22],
+      ["POST /api/manager/worker-money/{worker_profile_id}/handovers/{handover_id}/confirm", "confirm_manager_cash_handover", false, 22],
+      ["POST /api/manager/worker-money/{worker_profile_id}/handovers/{handover_id}/reject", "reject_manager_cash_handover", false, 22],
+      ["POST /api/manager/worker-money/{worker_profile_id}/receipts/{receipt_id}/reverse", "reverse_manager_worker_receipt", false, 22]
+    ],
     "routers/installer_auth.py": [
       ["GET /api/installer/me", "read_installer_me", false, 21],
       ["GET /api/installer/storefronts", "list_installer_storefronts", false, 21]

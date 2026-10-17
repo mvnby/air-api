@@ -693,10 +693,12 @@ class ManagerStaffUpdatePayload(BaseModel):
     telegram_username: Optional[str] = None
     is_assignable_installer: Optional[bool] = None
     default_rate: Optional[float] = None
+    can_manage_worker_money: Optional[bool] = None
 
 
 class ManagerStaffResponse(ManagerStaffBase):
     id: int
+    can_manage_worker_money: bool = False
     avatar_url: Optional[str] = None
     has_password: bool = False
     legacy_installer_id: Optional[int] = None

@@ -59,6 +59,7 @@ class WorkerAssignmentPublicationUpdate(BaseModel):
 
 class InstallerCollection(BaseModel):
     status: Literal["not_assigned", "not_collector", "ready", "requires_review"]
+    version: int = 0
     amount: str | None = None
     currency: Literal["BYN", "USD", "EUR"] | None = None
     recipient_name: str | None = None

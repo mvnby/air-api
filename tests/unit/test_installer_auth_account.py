@@ -83,7 +83,7 @@ async def test_selected_installer_never_unions_manager_role_from_another_company
     own = await client.get("/api/installer/me", headers=headers())
     assert own.status_code == 200, own.text
     assert own.json()["role"] == "installer"
-    assert own.json()["capabilities"] == ["installer.works.read"]
+    assert own.json()["capabilities"] == ["installer.works.read", "installer.money.read", "installer.money.receive", "installer.money.handover"]
     assert own.json()["tenant_membership_id"] == 10
     denied = await client.get("/api/manager/me", headers=headers())
     assert denied.status_code == 403
@@ -91,7 +91,7 @@ async def test_selected_installer_never_unions_manager_role_from_another_company
     assert crm.status_code == 200
     assert crm.json()["role"] == "manager" and "crm.manage" in crm.json()["capabilities"]
     worker = await client.get("/api/installer/me", headers=headers(tenant=2))
-    assert worker.status_code == 200 and worker.json()["capabilities"] == ["installer.works.read"]
+    assert worker.status_code == 200 and worker.json()["capabilities"] == ["installer.works.read", "installer.money.read", "installer.money.receive", "installer.money.handover"]
 
 
 async def test_installer_requires_explicit_valid_company_site_and_real_membership(installer_account):
@@ -115,7 +115,7 @@ async def test_actual_selected_roles_can_bootstrap_only_read_capability(installe
     result = await client.get("/api/installer/me", headers=headers(user_id=12))
     assert result.status_code == 200
     assert result.json()["role"] == role
-    assert result.json()["capabilities"] == ["installer.works.read"]
+    assert result.json()["capabilities"] == ["installer.works.read", "installer.money.read", "installer.money.receive", "installer.money.handover"]
 
 
 async def test_bootstrap_includes_installer_but_storefronts_stay_in_selected_company(installer_account):

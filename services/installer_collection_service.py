@@ -212,6 +212,7 @@ class InstallerCollectionService:
         )
         return InstallerCollection(
             status="ready" if valid else "requires_review",
+            version=row.version,
             amount=f"{row.amount:.2f}" if valid else None,
             currency=row.currency if valid else None,
             recipient_name=person.display_name if person else None,

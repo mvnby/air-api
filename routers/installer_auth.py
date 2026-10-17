@@ -34,7 +34,7 @@ async def read_installer_me(
         "avatar_url": staff_avatar_url(user, tenant_id=auth.tenant_id) if user else None,
         "auth_source": auth.auth_source, "tenant_id": auth.tenant_id, "storefront_id": auth.storefront_id,
         "tenant_membership_id": auth.tenant_membership_id, "is_system_tenant": auth.is_system_tenant,
-        "capabilities": ["installer.works.read"], "can_change_password": auth.can_change_password,
+        "capabilities": ["installer.works.read", "installer.money.read", "installer.money.receive", "installer.money.handover"], "can_change_password": auth.can_change_password,
         "must_change_password": auth.must_change_password, "demo_read_only": auth.demo_read_only,
         "is_platform_owner": auth.is_platform_owner, "access_kind": "membership",
     }

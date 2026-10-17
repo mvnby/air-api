@@ -181,6 +181,7 @@ class BotTaskResponse(BaseModel):
     comment: str | None = None
     manager_url: str | None = None
     work_url: str | None = None
+    money_url: str | None = None
 
 
 class BotTaskListResponse(BaseModel):

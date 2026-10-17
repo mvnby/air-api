@@ -21,6 +21,7 @@ class ManagerCapabilityService:
     DOCUMENTS_MANAGE = "documents.manage"
     SETTINGS_MANAGE = "settings.manage"
     SERVICES_MANAGE = "services.manage"
+    WORKER_MONEY_MANAGE = "worker.money.manage"
     CALL_RECORDINGS_MANAGE = "call_recordings.manage"
 
     ORDERED_CAPABILITIES = (
@@ -38,6 +39,7 @@ class ManagerCapabilityService:
         DOCUMENTS_MANAGE,
         SETTINGS_MANAGE,
         SERVICES_MANAGE,
+        WORKER_MONEY_MANAGE,
         CALL_RECORDINGS_MANAGE,
     )
 
@@ -67,10 +69,14 @@ class ManagerCapabilityService:
             if auth.is_platform_owner or cls.CATALOG_MASTER_DELETE in auth.permissions:
                 capabilities.add(cls.CATALOG_MASTER_DELETE)
         if role in OWNER_ACCESS_ROLES:
+            if auth.access_kind != "platform_support":
+                capabilities.add(cls.WORKER_MONEY_MANAGE)
             capabilities.add(cls.STAFF_MANAGE)
             capabilities.add(cls.ANALYTICS_MANAGE)
             capabilities.add(cls.DOCUMENTS_MANAGE)
             capabilities.add(cls.SETTINGS_MANAGE)
+        if role == "manager" and cls.WORKER_MONEY_MANAGE in auth.permissions:
+            capabilities.add(cls.WORKER_MONEY_MANAGE)
         return [
             capability
             for capability in cls.ORDERED_CAPABILITIES

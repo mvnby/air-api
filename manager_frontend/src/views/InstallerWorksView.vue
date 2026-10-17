@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, ClipboardList, Loader2, MapPin, Phone, RefreshCw } from 'lucide-vue-next';
+import InstallerMoneyReceipt from '../components/installer/InstallerMoneyReceipt.vue';
 import InstallerMaterials from '../components/installer/InstallerMaterials.vue';
 import InstallerEquipmentCard from '../components/installer/InstallerEquipmentCard.vue';
 import InstallerCollectionInstruction from '../components/installer/InstallerCollectionInstruction.vue';
@@ -46,6 +47,7 @@ onBeforeUnmount(() => { ++generation; });
     <article v-else-if="detail" class="space-y-5">
       <div class="rounded-2xl border border-gray-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900"><p class="text-xs text-gray-500">Заказ №{{ detail.order_id }}</p><h2 class="mt-1 text-xl font-semibold">{{ detail.title }}</h2><p class="mt-3 flex items-center gap-2 text-sm"><CalendarDays class="h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />{{ dateLabel(detail.start_time) }}</p><p v-if="detail.address" class="mt-2 flex items-start gap-2 text-sm"><MapPin class="h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />{{ detail.address }}</p><p class="mt-3 font-medium">{{ detail.customer_name }}</p><a v-if="detail.customer_phone" class="mt-1 inline-flex min-h-11 items-center gap-2 text-sm text-brand-600" :href="phoneHref(detail.customer_phone)"><Phone class="h-4 w-4" aria-hidden="true" />{{ detail.customer_phone }}</a></div>
       <InstallerCollectionInstruction :collection="detail.collection" />
+      <InstallerMoneyReceipt :key="`${context}:${detail.id}:${detail.version}:${detail.collection.version}:${detail.collection.updated_at}`" :assignment-id="detail.id" :collection="detail.collection" @saved="load" @refresh="load" />
       <section v-if="detail.instructions"><h2 class="mb-2 font-semibold">Указания по работе</h2><p class="whitespace-pre-wrap break-words rounded-xl bg-white p-4 text-sm dark:bg-slate-900">{{ detail.instructions }}</p></section>
       <section v-if="detail.equipment.length"><h2 class="mb-3 font-semibold">Оборудование</h2><div class="grid gap-3 md:grid-cols-2"><InstallerEquipmentCard v-for="equipment in detail.equipment" :key="equipment.key" :equipment="equipment" /></div></section>
       <InstallerMaterials :key="detail.id" :materials="detail.materials" />

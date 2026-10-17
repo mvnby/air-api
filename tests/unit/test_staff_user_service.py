@@ -182,8 +182,8 @@ async def test_membership_changes_audit_actor_and_keep_other_tenant_global_roles
     assert events[-1].actor_staff_user_id == 123
     assert events[-1].actor_username == "tenant-owner"
     assert events[-1].change_set == {"membership": {
-        "before": {"role": "manager", "status": "active"},
-        "after": {"role": "admin", "status": "active"},
+        "before": {"role": "manager", "status": "active", "permissions": []},
+        "after": {"role": "admin", "status": "active", "permissions": []},
     }}
 
 

@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -83,6 +83,7 @@ async def create_staff(
 async def patch_staff(
     staff_user_id: int,
     payload: ManagerStaffUpdatePayload,
+    request: Request,
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_owner_access),
 ):
@@ -93,7 +94,13 @@ async def patch_staff(
     shared-profile fields for multi-tenant staff. A new password increments auth_version.
     Missing membership returns 404, invalid/duplicate values 400 and protected legacy-owner
     identity mutation 409 with code/message. There is no optimistic version or replay receipt.
+    can_manage_worker_money delegates only the tenant-local manager cash permission;
+    it preserves platform catalog grants and requires a live company owner/admin or
+    verified platform owner acting as staff administrator, not as a cash recipient.
     """
+    if "can_manage_worker_money" in payload.model_fields_set:
+        from routers.manager_staff_invitations import require_team_origin
+        require_team_origin(request)
     try:
         await LegacyOwnerManagedIdentityService.ensure_generic_mutation_allowed(
             session,

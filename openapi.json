@@ -21341,6 +21341,627 @@
         }
       }
     },
+    "/api/installer/money": {
+      "get": {
+        "tags": [
+          "installer-money"
+        ],
+        "summary": "Own Money",
+        "description": "Read only personal cash balances and paginated immutable receipt history in the selected company/site.\n\nActive real membership is required; support impersonation is forbidden. Closed or\nrevoked work does not erase financial history or restore order access. No prices,\npurchases, supplier data or other workers' transactions are exposed. No-store.",
+        "operationId": "get_installer_money",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerMoneyWorkspace"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/installer/money/recipients": {
+      "get": {
+        "tags": [
+          "installer-money"
+        ],
+        "summary": "Recipients",
+        "description": "List other active actual company members authorized to acknowledge cash receipt.\n\nReturns only names/identifiers of owners, administrators and managers explicitly\ngranted worker.money.manage. A platform support identity is never a recipient.\nPagination is bounded at 100; this read creates no account or financial entry.",
+        "operationId": "list_installer_money_recipients",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerMoneyRecipients"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/installer/works/{assignment_id}/collections": {
+      "post": {
+        "tags": [
+          "installer-money"
+        ],
+        "summary": "Receive",
+        "description": "Confirm actual full/partial client cash against a live reviewed collection instruction.\n\nTeam Origin/header and current designated assignment are required. Exact positive\namount/currency cannot exceed the instruction or fresh customer balance. Atomically\nrecords one Payment, cash custody, consumed instruction/version and audit. A UUID\nkey replays the committed result; changed payload/key reuse or stale version is409.\nForeign/revoked assignments are404. Receiving cash is not installer remuneration.",
+        "operationId": "confirm_installer_client_money",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "assignment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Assignment Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientMoneyReceived"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerMoneyCommandResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/installer/money/handovers": {
+      "post": {
+        "tags": [
+          "installer-money"
+        ],
+        "summary": "Create Handover",
+        "description": "Report cash handed to an eligible company recipient, reserving personal available funds.\n\nRequires team Origin/header, fresh account version and UUID replay key. Exact\ncurrency-specific funds are allocated to source receipts and reserved atomically.\nMoney remains held until the selected recipient acknowledges it. Overbooking,\nself-recipient or unavailable recipient is rejected; this never adds client Payment.",
+        "operationId": "create_installer_cash_handover",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkerCashHandoverCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerMoneyCommandResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/installer/money/handovers/{handover_id}/cancel": {
+      "post": {
+        "tags": [
+          "installer-money"
+        ],
+        "summary": "Cancel Handover",
+        "description": "Cancel only the actor's pending handover using its row version and a UUID key.\n\nTeam Origin/header and live identity are required. Releases reservations without\nchanging client payment or erasing history. Already resolved or stale requests\nreturn409; foreign company/site/account identifiers return404. Safe identical replay.",
+        "operationId": "cancel_installer_cash_handover",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "handover_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Handover Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkerCashHandoverAction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerMoneyCommandResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/worker-money": {
+      "get": {
+        "tags": [
+          "manager-worker-money"
+        ],
+        "summary": "Overview",
+        "description": "Read company/site worker cash balances with bounded pagination and live CRM authority.\n\nIncludes historical accounts of disabled workers so liabilities do not disappear.\ncan_manage independently describes cash-command authority; CRM alone cannot\nacknowledge transfers or reverse receipts. Reads do not provision accounts.",
+        "operationId": "list_manager_worker_money",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerMoneyOverview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/worker-money/{worker_profile_id}": {
+      "get": {
+        "tags": [
+          "manager-worker-money"
+        ],
+        "summary": "Worker Money",
+        "description": "Read selected company/site worker cash history without granting access to other tenants.\n\nRequires fresh CRM authority; a foreign worker returns404. History survives work\nclosure/revocation. Exact balances distinguish held, pending and available funds;\ncan_reverse applies only to fully unallocated receipts. Responses are no-store.",
+        "operationId": "get_manager_worker_money",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "worker_profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Worker Profile Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerMoneyWorkspace"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/worker-money/{worker_profile_id}/handovers/{handover_id}/confirm": {
+      "post": {
+        "tags": [
+          "manager-worker-money"
+        ],
+        "summary": "Confirm Handover",
+        "description": "Acknowledge actual cash receipt as the selected recipient with live cash-management authority.\n\nActual owner/admin or explicit worker.money.manage membership, team Origin/header,\nhandover version and UUID key are required. Another recipient/support cannot confirm.\nPending reservations become confirmed cash handed over atomically; no second client\nPayment is created. Conflicts are409; identical committed commands replay safely.",
+        "operationId": "confirm_manager_cash_handover",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "worker_profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Worker Profile Id"
+            }
+          },
+          {
+            "name": "handover_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Handover Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkerCashHandoverAction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerMoneyCommandResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/worker-money/{worker_profile_id}/handovers/{handover_id}/reject": {
+      "post": {
+        "tags": [
+          "manager-worker-money"
+        ],
+        "summary": "Reject Handover",
+        "description": "Reject a pending scoped handover with live owner/admin or delegated cash authority.\n\nTeam Origin/header, current handover version and UUID key are required. Releases\nreserved cash, preserves the request/audit and changes no client payments. Foreign\nidentifiers are404, stale/resolved operations409, identical replay is safe.",
+        "operationId": "reject_manager_cash_handover",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "worker_profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Worker Profile Id"
+            }
+          },
+          {
+            "name": "handover_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Handover Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkerCashHandoverAction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerMoneyCommandResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/worker-money/{worker_profile_id}/receipts/{receipt_id}/reverse": {
+      "post": {
+        "tags": [
+          "manager-worker-money"
+        ],
+        "summary": "Reverse Receipt",
+        "description": "Correct an entirely unallocated erroneous receipt with an explicit reason and counter-payment.\n\nLive cash-management authority, team Origin/header, account version and UUID key\nare required. Original receipt/Payment remain immutable. Confirmed/pending handover\nfunds cannot be reversed; cancel pending handovers first. The corrective negative\nPayment, audit and cash reversal are atomic; collection requires Manager review.",
+        "operationId": "reverse_manager_worker_receipt",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "worker_profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Worker Profile Id"
+            }
+          },
+          {
+            "name": "receipt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Receipt Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkerMoneyCorrection"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerMoneyCommandResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/orders/{order_id}/source-card": {
       "get": {
         "tags": [
@@ -28272,7 +28893,7 @@
           "manager-staff"
         ],
         "summary": "Patch Staff",
-        "description": "Patch a staff member reached through the current tenant membership; requires an owner/admin.\nOnly supplied fields are changed. Role/status affect the membership, while permitted\nidentity fields affect the shared account; only the platform owner can change protected\nshared-profile fields for multi-tenant staff. A new password increments auth_version.\nMissing membership returns 404, invalid/duplicate values 400 and protected legacy-owner\nidentity mutation 409 with code/message. There is no optimistic version or replay receipt.",
+        "description": "Patch a staff member reached through the current tenant membership; requires an owner/admin.\nOnly supplied fields are changed. Role/status affect the membership, while permitted\nidentity fields affect the shared account; only the platform owner can change protected\nshared-profile fields for multi-tenant staff. A new password increments auth_version.\nMissing membership returns 404, invalid/duplicate values 400 and protected legacy-owner\nidentity mutation 409 with code/message. There is no optimistic version or replay receipt.\ncan_manage_worker_money delegates only the tenant-local manager cash permission;\nit preserves platform catalog grants and requires a live company owner/admin or\nverified platform owner acting as staff administrator, not as a cash recipient.",
         "operationId": "patch_manager_staff",
         "security": [
           {
@@ -43687,6 +44308,17 @@
               }
             ],
             "title": "Work Url"
+          },
+          "money_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Money Url"
           }
         },
         "type": "object",
@@ -46690,6 +47322,52 @@
           "items"
         ],
         "title": "CatalogUsageReport"
+      },
+      "ClientMoneyReceived": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Idempotency Key"
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Version"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,12}|(?=[\\d.]{1,15}0*$)\\d{0,12}\\.\\d{0,2}0*$)"
+              }
+            ],
+            "title": "Amount"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "BYN",
+              "USD",
+              "EUR"
+            ],
+            "title": "Currency"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "expected_version",
+          "amount",
+          "currency"
+        ],
+        "title": "ClientMoneyReceived",
+        "description": "expected_version is the displayed collection instruction version."
       },
       "CommercialSourceTerm": {
         "properties": {
@@ -55601,6 +56279,11 @@
               "requires_review"
             ],
             "title": "Status"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version",
+            "default": 0
           },
           "amount": {
             "anyOf": [
@@ -80592,6 +81275,11 @@
             "type": "integer",
             "title": "Id"
           },
+          "can_manage_worker_money": {
+            "type": "boolean",
+            "title": "Can Manage Worker Money",
+            "default": false
+          },
           "avatar_url": {
             "anyOf": [
               {
@@ -80779,6 +81467,17 @@
               }
             ],
             "title": "Default Rate"
+          },
+          "can_manage_worker_money": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Can Manage Worker Money"
           }
         },
         "type": "object",
@@ -99771,6 +100470,487 @@
           "limit"
         ],
         "title": "WorkerCandidatesResponse"
+      },
+      "WorkerCashBalance": {
+        "properties": {
+          "currency": {
+            "type": "string",
+            "enum": [
+              "BYN",
+              "USD",
+              "EUR"
+            ],
+            "title": "Currency"
+          },
+          "received": {
+            "type": "string",
+            "title": "Received"
+          },
+          "handed_over": {
+            "type": "string",
+            "title": "Handed Over"
+          },
+          "held": {
+            "type": "string",
+            "title": "Held"
+          },
+          "pending": {
+            "type": "string",
+            "title": "Pending"
+          },
+          "available": {
+            "type": "string",
+            "title": "Available"
+          }
+        },
+        "type": "object",
+        "required": [
+          "currency",
+          "received",
+          "handed_over",
+          "held",
+          "pending",
+          "available"
+        ],
+        "title": "WorkerCashBalance"
+      },
+      "WorkerCashHandoverAction": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Idempotency Key"
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "expected_version"
+        ],
+        "title": "WorkerCashHandoverAction",
+        "description": "expected_version is the handover row version."
+      },
+      "WorkerCashHandoverCreate": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Idempotency Key"
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Version"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,12}|(?=[\\d.]{1,15}0*$)\\d{0,12}\\.\\d{0,2}0*$)"
+              }
+            ],
+            "title": "Amount"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "BYN",
+              "USD",
+              "EUR"
+            ],
+            "title": "Currency"
+          },
+          "recipient_staff_user_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Recipient Staff User Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "expected_version",
+          "amount",
+          "currency",
+          "recipient_staff_user_id"
+        ],
+        "title": "WorkerCashHandoverCreate",
+        "description": "expected_version is the displayed worker cash account version."
+      },
+      "WorkerMoneyCommandResult": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "client_receipt",
+              "handover",
+              "receipt_reversal"
+            ],
+            "title": "Kind"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "account_version": {
+            "type": "integer",
+            "title": "Account Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "status",
+          "version",
+          "account_version"
+        ],
+        "title": "WorkerMoneyCommandResult"
+      },
+      "WorkerMoneyCorrection": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Idempotency Key"
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Version"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "expected_version",
+          "reason"
+        ],
+        "title": "WorkerMoneyCorrection"
+      },
+      "WorkerMoneyEntry": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "client_receipt",
+              "handover",
+              "receipt_reversal"
+            ],
+            "title": "Kind"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "recorded",
+              "pending",
+              "confirmed",
+              "rejected",
+              "cancelled",
+              "reversed"
+            ],
+            "title": "Status"
+          },
+          "amount": {
+            "type": "string",
+            "title": "Amount"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "BYN",
+              "USD",
+              "EUR"
+            ],
+            "title": "Currency"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "order_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "recipient_staff_user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipient Staff User Id"
+          },
+          "recipient_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipient Name"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version",
+            "default": 0
+          },
+          "can_reverse": {
+            "type": "boolean",
+            "title": "Can Reverse",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "status",
+          "amount",
+          "currency",
+          "created_at"
+        ],
+        "title": "WorkerMoneyEntry"
+      },
+      "WorkerMoneyOverview": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WorkerMoneyOverviewItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "can_manage": {
+            "type": "boolean",
+            "title": "Can Manage"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit",
+          "can_manage"
+        ],
+        "title": "WorkerMoneyOverview"
+      },
+      "WorkerMoneyOverviewItem": {
+        "properties": {
+          "worker_profile_id": {
+            "type": "integer",
+            "title": "Worker Profile Id"
+          },
+          "staff_user_id": {
+            "type": "integer",
+            "title": "Staff User Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "balances": {
+            "items": {
+              "$ref": "#/components/schemas/WorkerCashBalance"
+            },
+            "type": "array",
+            "title": "Balances"
+          }
+        },
+        "type": "object",
+        "required": [
+          "worker_profile_id",
+          "staff_user_id",
+          "display_name",
+          "balances"
+        ],
+        "title": "WorkerMoneyOverviewItem"
+      },
+      "WorkerMoneyRecipient": {
+        "properties": {
+          "staff_user_id": {
+            "type": "integer",
+            "title": "Staff User Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "staff_user_id",
+          "display_name"
+        ],
+        "title": "WorkerMoneyRecipient"
+      },
+      "WorkerMoneyRecipients": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WorkerMoneyRecipient"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit"
+        ],
+        "title": "WorkerMoneyRecipients"
+      },
+      "WorkerMoneyWorkspace": {
+        "properties": {
+          "worker_profile_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Profile Id"
+          },
+          "staff_user_id": {
+            "type": "integer",
+            "title": "Staff User Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "can_manage": {
+            "type": "boolean",
+            "title": "Can Manage"
+          },
+          "balances": {
+            "items": {
+              "$ref": "#/components/schemas/WorkerCashBalance"
+            },
+            "type": "array",
+            "title": "Balances"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WorkerMoneyEntry"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "worker_profile_id",
+          "staff_user_id",
+          "display_name",
+          "version",
+          "can_manage",
+          "balances",
+          "items",
+          "total",
+          "page",
+          "limit"
+        ],
+        "title": "WorkerMoneyWorkspace"
       },
       "WorkerPerson": {
         "properties": {

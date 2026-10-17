@@ -19,5 +19,6 @@ export type BotTaskResponse = {
     comment?: (string | null);
     manager_url?: (string | null);
     work_url?: (string | null);
+    money_url?: (string | null);
 };
 
