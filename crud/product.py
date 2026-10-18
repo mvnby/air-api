@@ -241,9 +241,16 @@ class ProductDAO:
         brand_slugs: Optional[List[str]] = None,
         series_id: Optional[int] = None,
         is_published: Optional[bool] = True,
+        max_noise_min_db: Optional[float] = None,
     ):
         if is_published is not None:
             stmt = stmt.where(Product.is_published == is_published)
+
+        if max_noise_min_db is not None:
+            # This numeric key is produced by the shared spec normalizer.
+            # Unknown/zero noise must not qualify as a quiet model.
+            noise = cast(ProductDAO._json_text_expr(session, "__filter_noise_min"), Float)
+            stmt = stmt.where(noise > 0, noise <= max_noise_min_db)
 
         area_expr = ProductDAO.area_expr(session)
         if area_min is not None:
