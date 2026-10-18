@@ -43,12 +43,14 @@ class CanonicalPublicCatalogDAO:
         color: Optional[str] = None,
         indoor_types: Optional[list[str]] = None,
         brand_slugs: Optional[list[str]] = None,
+        max_noise_min_db: Optional[float] = None,
         faceted_tag_ids: Optional[dict[int, list[int]]] = None,
         search_query: Optional[str] = None,
     ):
         statement = ProductDAO._apply_common_filters(
             session,
             statement,
+            max_noise_min_db=max_noise_min_db,
             area_min=area_min,
             area_max=area_max,
             min_price=min_price,
@@ -92,6 +94,7 @@ class CanonicalPublicCatalogDAO:
         color: Optional[str] = None,
         indoor_types: Optional[list[str]] = None,
         brand_slugs: Optional[list[str]] = None,
+        max_noise_min_db: Optional[float] = None,
         faceted_tag_ids: Optional[dict[int, list[int]]] = None,
         search_query: Optional[str] = None,
         sort: str = "recommended",
@@ -104,6 +107,7 @@ class CanonicalPublicCatalogDAO:
             CanonicalPublicCatalogDAO._select_products(
                 load_image_variants=load_image_variants
             ),
+            max_noise_min_db=max_noise_min_db,
             area_min=area_min,
             area_max=area_max,
             min_price=min_price,

@@ -19,6 +19,7 @@ from schemas import (
     ProductSeriesNavigationResponse,
     ProductSiblingResponse,
 )
+from services.public_catalog_filters import quiet_catalog_noise_limit
 from services.product_identity import public_product_identity
 from services.catalog import CatalogService
 from services.feature_resolver_service import FeatureResolverService
@@ -143,6 +144,7 @@ class PublicCatalogService:
             "indoor_types": indoor_types,
             "is_inverter": is_inverter,
             "brand_slugs": resolved_brand_slugs,
+            "max_noise_min_db": quiet_catalog_noise_limit(tag_slugs),
             "faceted_tag_ids": faceted_tag_ids,
             "search_query": search,
         }

@@ -9,6 +9,7 @@ from crud.canonical_public_catalog import CanonicalPublicCatalogDAO
 from crud.product import ProductDAO
 from crud.public_taxonomy import PublicTaxonomyDAO
 from models import Product
+from services.public_catalog_filters import quiet_catalog_noise_limit
 from services.product_dict_mapper import map_product_to_dict
 from services.product_filter_service import ProductFilterService
 from services.product_series_service import ProductSeriesService
@@ -86,6 +87,7 @@ class ProductReadService(ProductFilterService, ProductSeriesService):
 
         items = await CanonicalPublicCatalogDAO.get_filtered(
             session,
+            max_noise_min_db=quiet_catalog_noise_limit(tag_slugs),
             area_min=area_min,
             area_max=area_max,
             min_price=min_price,
@@ -106,6 +108,7 @@ class ProductReadService(ProductFilterService, ProductSeriesService):
         )
         total = await CanonicalPublicCatalogDAO.count_filtered(
             session,
+            max_noise_min_db=quiet_catalog_noise_limit(tag_slugs),
             area_min=area_min,
             area_max=area_max,
             min_price=min_price,

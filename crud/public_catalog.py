@@ -124,6 +124,7 @@ class PublicCatalogDAO:
         brand_ids: Optional[list[int]] = None,
         series_ids: Optional[list[int]] = None,
         product_kinds: Optional[list[str]] = None,
+        max_noise_min_db: Optional[float] = None,
         faceted_tag_ids: Optional[dict[int, list[int]]] = None,
         search_query: Optional[str] = None,
         sort: str = "recommended",
@@ -140,6 +141,7 @@ class PublicCatalogDAO:
         stmt = ProductDAO._apply_common_filters(
             session,
             stmt,
+            max_noise_min_db=max_noise_min_db,
             area_min=area_min,
             area_max=area_max,
             min_price=None,
@@ -214,6 +216,7 @@ class PublicCatalogDAO:
         color: Optional[str] = None,
         indoor_types: Optional[list[str]] = None,
         brand_slugs: Optional[list[str]] = None,
+        max_noise_min_db: Optional[float] = None,
         faceted_tag_ids: Optional[dict[int, list[int]]] = None,
         search_query: Optional[str] = None,
     ) -> int:
@@ -226,6 +229,7 @@ class PublicCatalogDAO:
         stmt = ProductDAO._apply_common_filters(
             session,
             stmt,
+            max_noise_min_db=max_noise_min_db,
             area_min=area_min,
             area_max=area_max,
             min_price=None,
