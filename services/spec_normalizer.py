@@ -144,6 +144,9 @@ def clean_value(key: str, val: Any, keep_units: bool = True, source_key: str | N
     if key in {"pipe_liquid", "pipe_gas"}:
         # Convert common metric diameters to canonical inch fractions for UI/filter selects.
         normalized = val.replace(",", ".")
+        fraction = re.fullmatch(r"\s*(\d+)\s*/\s*(\d+)\s*", normalized)
+        if fraction and int(fraction.group(2)) > 0:
+            return f'{fraction.group(1)}/{fraction.group(2)}"'
         if "/" in normalized and '"' in normalized:
             return normalized.strip()
         match = re.search(r"(\d+(?:\.\d+)?)", normalized)
