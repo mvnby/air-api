@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">AI-компрессор: интеллектуальная регулировка мощности</title>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="#eff6ff"/>
+  <g fill="none" stroke="#142033" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="14" y="14" width="36" height="36" rx="8"/>
+    <path d="M24 9v5M40 9v5M24 50v5M40 50v5M9 24h5M9 40h5M50 24h5M50 40h5"/>
+  </g>
+  <g fill="none" stroke="#1763e8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M22 39l5-14 5 14M24 34h6M39 25v14M36 25h6M36 39h6"/>
+  </g>
+</svg>

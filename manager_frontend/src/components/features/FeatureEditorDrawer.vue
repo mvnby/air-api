@@ -14,15 +14,19 @@ import MediaField from "../MediaField.vue";
 import { getApiErrorMessage } from "../../utils/api-errors";
 import { confirmDialog } from "../../services/ui-feedback";
 import { contentAiApi, type DraftMode } from "../content-ai/content-ai-api";
+import CatalogFeatureIconPicker from "./CatalogFeatureIconPicker.vue";
+import FeaturePresentationPreview from "./FeaturePresentationPreview.vue";
 
 type RuleDraft = FeatureRulePayload & { valueText: string };
 type FeatureDraft = Omit<FeatureCreatePayload, "rules" | "scope_type"> & {
   scope_type: "universal" | "brand";
   replaces_feature_id: number | null;
+  icon_caption: string | null;
   rules: RuleDraft[];
 };
 type CatalogFeature = ManagerFeatureResponse & {
   replaces_feature_id?: number | null;
+  icon_caption?: string | null;
 };
 
 const props = defineProps<{
@@ -39,6 +43,7 @@ const emit = defineEmits<{
 }>();
 
 const saving = ref(false);
+const iconLoading = ref(false);
 const contentAiLoading = ref(false);
 const contentAiError = ref("");
 
@@ -46,6 +51,7 @@ const blankDraft = (): FeatureDraft => ({
   name: "",
   slug: null,
   short_description: null,
+  icon_caption: null,
   full_description: null,
   category_id: props.categories[0]?.id || 0,
   scope_type: "universal",
@@ -95,6 +101,7 @@ const resetDraft = (feature: CatalogFeature | null) => {
         name: feature.name,
         slug: feature.slug,
         short_description: feature.short_description || null,
+        icon_caption: feature.icon_caption || null,
         full_description: feature.full_description || null,
         category_id: feature.category.id,
         scope_type: feature.scope_type === "brand" ? "brand" : "universal",
@@ -147,6 +154,11 @@ const selectIconAsset = (asset: ManagerMediaAssetResponse | null) => {
   draft.icon_media_id = asset?.id || null;
 };
 
+const selectCatalogIcon = (asset: ManagerMediaAssetResponse) => {
+  draft.icon = asset.url;
+  draft.icon_media_id = asset.id;
+};
+
 const selectImageAsset = (asset: ManagerMediaAssetResponse | null) => {
   draft.image_media_id = asset?.id || null;
 };
@@ -192,7 +204,7 @@ const parseRuleValue = (rule: RuleDraft) => {
 };
 
 const save = async () => {
-  if (!draft.name.trim() || !draft.category_id || saving.value) return;
+  if (!draft.name.trim() || !draft.category_id || saving.value || iconLoading.value) return;
 
   saving.value = true;
   try {
@@ -200,6 +212,7 @@ const save = async () => {
       ...draft,
       name: draft.name.trim(),
       slug: draft.slug?.trim() || null,
+      icon_caption: draft.icon_caption?.trim() || null,
       aliases: (draft.aliases || []).map((item) => item.trim()).filter(Boolean),
       brand_id: draft.scope_type === "brand" ? draft.brand_id : null,
       replaces_feature_id:
@@ -212,7 +225,7 @@ const save = async () => {
               sort_order: index * 10,
             }))
           : [],
-    } satisfies FeatureCreatePayload & { replaces_feature_id: number | null };
+    } satisfies FeatureCreatePayload & { replaces_feature_id: number | null; icon_caption: string | null };
     if (props.feature?.id) {
       await ManagerFeaturesService.updateManagerFeature(
         props.feature.id,
@@ -404,6 +417,16 @@ const generateContentDraft = async (mode: DraftMode) => {
           </select></label
         >
         <label class="sm:col-span-2"
+          ><span class="field-label">Подпись к иконке</span
+          ><input
+            v-model="draft.icon_caption"
+            maxlength="160"
+            class="field-input"
+            placeholder="Например, управление со смартфона"
+          />
+          <span class="mt-1 block text-xs text-gray-500">Короткое пояснение для компактного значка. Если пусто, используется краткое описание или название.</span>
+        </label>
+        <label class="sm:col-span-2"
           ><span class="field-label">Краткое описание</span
           ><input v-model="draft.short_description" class="field-input"
         /></label>
@@ -440,6 +463,10 @@ const generateContentDraft = async (mode: DraftMode) => {
           :tags="['feature', 'illustration']"
           @selected="selectImageAsset"
         />
+        <div class="sm:col-span-2">
+          <CatalogFeatureIconPicker @selected="selectCatalogIcon" @busy="iconLoading = $event" />
+        </div>
+        <FeaturePresentationPreview class="sm:col-span-2" :feature="draft" />
         <label
           ><span class="field-label flex items-center justify-between gap-2"
             ><span>Источник</span
@@ -553,9 +580,9 @@ const generateContentDraft = async (mode: DraftMode) => {
         ><button
           type="submit"
           class="h-10 rounded-md bg-brand-600 px-5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
-          :disabled="saving"
+          :disabled="saving || iconLoading"
         >
-          {{ saving ? "Сохранение…" : "Сохранить" }}
+          {{ iconLoading ? "Подготовка иконки…" : saving ? "Сохранение…" : "Сохранить" }}
         </button>
       </div>
     </form>
@@ -569,6 +596,11 @@ const generateContentDraft = async (mode: DraftMode) => {
   font-size: 0.75rem;
   font-weight: 700;
   color: rgb(75 85 99);
+}
+.field-label.flex {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
 }
 .field-input {
   width: 100%;

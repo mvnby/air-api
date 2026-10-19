@@ -37,6 +37,9 @@ def serialize_series_brand_features(
             id=feature.id,
             title=getattr(link, "override_title", None) or feature.name,
             slug=feature.slug,
+            short_description=feature.short_description,
+            icon_caption=feature.icon_caption,
+            display_mode=getattr(link, "display_mode", None) or "detailed",
             text=(
                 getattr(link, "override_description", None)
                 if getattr(link, "override_description", None) is not None
@@ -87,6 +90,7 @@ def build_product_series_response(
         seo_title=series.seo_title,
         seo_description=series.seo_description,
         source_url=series.source_url,
+        documents=list(series.__dict__.get("_catalog_documents") or []),
     )
     payload._disclose_source_url = disclosure_policy.expose_source_provenance
     return payload

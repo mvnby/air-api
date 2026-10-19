@@ -112,12 +112,15 @@ class LocalGeneralMediaStorage:
             size_bytes=len(content),
         )
         target_path = Path(stored.path)
+        async with self._write_lock:
+            await asyncio.to_thread(self._save_local_content, target_path, content)
+        return stored
+
+    @staticmethod
+    def _save_local_content(target_path: Path, content: bytes) -> None:
         target_path.parent.mkdir(parents=True, exist_ok=True)
         if not target_path.exists():
-            async with self._write_lock:
-                if not target_path.exists():
-                    target_path.write_bytes(content)
-        return stored
+            target_path.write_bytes(content)
 
     async def delete_media(self, path: str) -> None:
         target = Path(path).resolve()

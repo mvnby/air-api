@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Экономия энергии: эффективное использование мощности</title>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="#eff6ff"/>
+  <g fill="none" stroke="#142033" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M17 43C5 23 24 11 50 12c1 27-12 44-29 35M13 53l29-30"/>
+  </g>
+  <path d="m33 23-9 13h8l-1 9 12-15h-9l-1-7Z" fill="#dbeafe" stroke="#1763e8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

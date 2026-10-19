@@ -437,6 +437,13 @@ CREATE_MANAGER_TAG = "create_manager_tag"
 UPDATE_MANAGER_TAG = "update_manager_tag"
 DELETE_MANAGER_TAG = "delete_manager_tag"
 LIST_MANAGER_BRANDS = "list_manager_brands"
+GET_MANAGER_SERIES_ACCESSORIES = "get_manager_series_accessories"
+SET_MANAGER_SERIES_ACCESSORIES = "set_manager_series_accessories"
+GET_MANAGER_PRODUCT_ACCESSORIES = "get_manager_product_accessories"
+SET_MANAGER_PRODUCT_ACCESSORIES = "set_manager_product_accessories"
+GET_MANAGER_CATALOG_DOCUMENTS = "get_manager_catalog_documents"
+REPLACE_MANAGER_CATALOG_DOCUMENTS = "replace_manager_catalog_documents"
+UPLOAD_MANAGER_CATALOG_DOCUMENT = "upload_manager_catalog_document"
 CREATE_MANAGER_BRAND = "create_manager_brand"
 UPDATE_MANAGER_BRAND = "update_manager_brand"
 DELETE_MANAGER_BRAND = "delete_manager_brand"
@@ -639,6 +646,13 @@ LIST_MANAGER_ORDER_RESPONSIBLES = "list_manager_order_responsibles"
 PATCH_MANAGER_ORDER_RESPONSIBLE = "patch_manager_order_responsible"
 
 ALL_MANAGER_OPERATION_IDS = (
+    GET_MANAGER_SERIES_ACCESSORIES,
+    SET_MANAGER_SERIES_ACCESSORIES,
+    GET_MANAGER_PRODUCT_ACCESSORIES,
+    SET_MANAGER_PRODUCT_ACCESSORIES,
+    GET_MANAGER_CATALOG_DOCUMENTS,
+    REPLACE_MANAGER_CATALOG_DOCUMENTS,
+    UPLOAD_MANAGER_CATALOG_DOCUMENT,
     LIST_MANAGER_WORKER_MONEY,
     GET_MANAGER_WORKER_MONEY,
     CONFIRM_MANAGER_CASH_HANDOVER,

@@ -5,11 +5,15 @@ import MediaField from "../MediaField.vue";
 import SeriesContentAiActions from "./SeriesContentAiActions.vue";
 import SeriesFeatureAssignments from "./SeriesFeatureAssignments.vue";
 import type { SeriesForm } from "./brand-form-types";
+import CatalogDocumentsPanel from "../catalog/CatalogDocumentsPanel.vue";
+import CatalogAccessoriesPanel from "../catalog/CatalogAccessoriesPanel.vue";
+import { useCatalogDocumentsEditor } from "../../composables/useCatalogDocumentsEditor";
 
 const props = defineProps<{
   open: boolean;
   form: SeriesForm;
   editing: boolean;
+  seriesId?: number;
   brandName?: string;
   features: ManagerFeatureResponse[];
   featuresLoading: boolean;
@@ -29,6 +33,21 @@ const emit = defineEmits<{
 }>();
 
 const pendingGalleryImage = ref("");
+const { documentsBusy, saveDocuments, confirmDiscardDocuments } = useCatalogDocumentsEditor();
+const savingDocuments = ref(false);
+const save = async () => {
+  if (props.saving || savingDocuments.value) return;
+  savingDocuments.value = true;
+  try {
+    if (await saveDocuments()) emit("save");
+  } finally {
+    savingDocuments.value = false;
+  }
+};
+const close = async () => {
+  if (props.saving || savingDocuments.value || !await confirmDiscardDocuments()) return;
+  emit("close");
+};
 
 const addGallery = (url = pendingGalleryImage.value) => {
   if (!url.trim()) return;
@@ -41,7 +60,7 @@ const addGallery = (url = pendingGalleryImage.value) => {
   <div
     v-if="open"
     class="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
-    @click.self="emit('close')"
+    @click.self="close"
   >
     <div
       class="w-full max-w-5xl overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
@@ -389,6 +408,11 @@ const addGallery = (url = pendingGalleryImage.value) => {
             </label>
           </div>
         </section>
+        <template v-if="seriesId">
+          <CatalogAccessoriesPanel target-type="series" :target-id="seriesId" />
+          <CatalogDocumentsPanel ref="documentsPanel" target-type="series" :target-id="seriesId" />
+        </template>
+        <p v-else class="text-xs text-gray-500">Сохраните серию, чтобы добавить аксессуары и документы.</p>
         <label
           class="flex items-center gap-2 border-t border-gray-200 pt-4 text-sm dark:border-slate-700"
           ><input
@@ -414,16 +438,17 @@ const addGallery = (url = pendingGalleryImage.value) => {
           <button
             type="button"
             class="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-700"
-            @click="emit('close')"
+            :disabled="saving || savingDocuments || documentsBusy"
+            @click="close"
           >
             Отмена</button
           ><button
             type="button"
             class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
-            :disabled="saving"
-            @click="emit('save')"
+            :disabled="saving || savingDocuments || documentsBusy"
+            @click="save"
           >
-            {{ saving ? "Сохранение..." : "Сохранить" }}
+            {{ saving || savingDocuments ? "Сохранение..." : "Сохранить" }}
           </button>
         </div>
       </footer>

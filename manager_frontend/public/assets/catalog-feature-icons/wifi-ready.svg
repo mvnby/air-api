@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Wi-Fi Ready: подключение дополнительного модуля</title>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="#eff6ff"/>
+  <g fill="none" stroke="#142033" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="11" y="16" width="32" height="17" rx="4"/>
+    <path d="M16 27h22M17 21h10M37 40v-6h12v6"/>
+    <rect x="34" y="40" width="18" height="14" rx="3"/>
+    <path d="M41 34v3M45 34v3"/>
+  </g>
+  <g fill="none" stroke="#1763e8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M11 41a12 12 0 0 1 16 0M16 46a5 5 0 0 1 6 0M40 47h6M43 44v6"/>
+  </g>
+  <circle cx="19" cy="51" r="1.8" fill="#1763e8"/>
+</svg>

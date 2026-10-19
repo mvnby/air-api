@@ -19,6 +19,7 @@ from core.input_validation import (
     validate_optional_phone,
     validate_optional_unp,
     validate_public_manual_url,
+    validate_optional_source_url,
 )
 from models import EquipmentServiceEventType, PaymentCurrency
 from schemas_public_checkout import (
@@ -32,6 +33,8 @@ from schemas_public_checkout import (
     PublicOrderPricingErrorResponse,
 )
 from schemas_features import ManagerProductFeatureWorkspaceResponse, PublicFeatureResponse
+from schemas_catalog_accessories import PublicCatalogAccessory
+from schemas_catalog_documents import CatalogDocumentResponse
 from schemas_brand_series import (
     ProductSeriesBrandFeatureResponse,
     ProductSeriesContentBlockResponse,
@@ -458,6 +461,7 @@ class ProductSeriesResponse(BaseModel):
     seo_title: Optional[str] = None
     seo_description: Optional[str] = None
     source_url: Optional[str] = None
+    documents: List[CatalogDocumentResponse] = Field(default_factory=list)
     _disclose_source_url: bool = PrivateAttr(default=True)
 
     @model_serializer(mode="wrap")
@@ -492,6 +496,8 @@ class ProductResponse(ProductBase):
     images: List[str] = [] # Legacy
     gallery_images: List[ProductImageResponse] = [] # New
     manuals: List[ProductManualResponse] = []
+    documents: List[CatalogDocumentResponse] = Field(default_factory=list)
+    accessories: List[PublicCatalogAccessory] = Field(default_factory=list)
     warranty: Optional[PublicProductWarrantyResponse] = None
     series_siblings: List[ProductSiblingResponse] = []
     features: List[PublicFeatureResponse] = []
@@ -646,6 +652,7 @@ class PublicBrandResponse(BaseModel):
 
 class PublicBrandDetailResponse(PublicBrandResponse):
     features: List[ProductSeriesBrandFeatureResponse] = Field(default_factory=list)
+    documents: List[CatalogDocumentResponse] = Field(default_factory=list)
 
 
 class PublicRelatedSeriesResponse(BaseModel):
@@ -1936,6 +1943,7 @@ class ManagerBrandResponse(BaseModel):
     title: str
     slug: str
     logo_url: Optional[str] = None
+    official_url: Optional[str] = None
     short_description: Optional[str] = None
     description: Optional[str] = None
     is_published: bool
@@ -1952,20 +1960,26 @@ class ManagerBrandCreatePayload(BaseModel):
     title: str
     slug: Optional[str] = None
     logo_url: Optional[str] = None
+    official_url: Optional[str] = Field(default=None, max_length=2048)
     short_description: Optional[str] = Field(default=None, max_length=200)
     description: Optional[str] = None
     is_published: bool = True
     sort_order: int = 0
+
+    _normalize_official_url = field_validator("official_url")(validate_optional_source_url)
 
 
 class ManagerBrandUpdatePayload(BaseModel):
     title: Optional[str] = None
     slug: Optional[str] = None
     logo_url: Optional[str] = None
+    official_url: Optional[str] = Field(default=None, max_length=2048)
     short_description: Optional[str] = Field(default=None, max_length=200)
     description: Optional[str] = None
     is_published: Optional[bool] = None
     sort_order: Optional[int] = None
+
+    _normalize_official_url = field_validator("official_url")(validate_optional_source_url)
 
 
 class ManagerSeriesGalleryApplyPayload(BaseModel):

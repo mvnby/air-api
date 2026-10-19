@@ -8,6 +8,7 @@ from routers import manager_access
 from routers import manager_analytics_connections
 from routers import manager_backups
 from routers import manager_brands
+from routers import manager_catalog_accessories, manager_catalog_documents
 from routers import manager_calendar
 from routers import manager_catalog
 from routers import manager_catalog_management
@@ -120,6 +121,8 @@ router.include_router(manager_dashboard.router)
 router.include_router(manager_installers.router)
 router.include_router(manager_staff.router)
 router.include_router(manager_brands.router)
+router.include_router(manager_catalog_accessories.router)
+router.include_router(manager_catalog_documents.router)
 router.include_router(manager_settings.router)
 router.include_router(manager_platform_ai.router)
 router.include_router(manager_jev.router)

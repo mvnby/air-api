@@ -28,8 +28,12 @@ import type { WebRebuildStatusResponse } from '../client/models/WebRebuildStatus
 import ProductEditModal from '../components/ProductEditModal.vue';
 import ProductWorkspaceMedia from '../components/products/ProductWorkspaceMedia.vue';
 import ProductWorkspaceFeatures from '../components/products/ProductWorkspaceFeatures.vue';
+import CatalogDocumentsPanel from '../components/catalog/CatalogDocumentsPanel.vue';
+import CatalogAccessoriesPanel from '../components/catalog/CatalogAccessoriesPanel.vue';
 import { getApiErrorMessage } from '../utils/api-errors';
 import { confirmDialog } from '../services/ui-feedback';
+import { useCatalogDocumentsEditor } from '../composables/useCatalogDocumentsEditor';
+import { registerUnsavedNavigationGuard } from '../services/unsaved-navigation-guard';
 import {
   buildProductWorkspacePath,
   getProductWorkspaceNeighbors,
@@ -51,6 +55,8 @@ const loading = ref(true);
 const saving = ref(false);
 const deleting = ref(false);
 const dirty = ref(false);
+const { documentsDirty, documentsBusy, saveDocuments } = useCatalogDocumentsEditor();
+const hasUnsavedChanges = computed(() => dirty.value || documentsDirty.value);
 const errorMessage = ref('');
 const toast = ref('');
 const moreOpen = ref(false);
@@ -63,6 +69,7 @@ const expertMode = ref(window.localStorage.getItem('manager:product-workspace:ex
 const location = parseProductWorkspaceLocation(window.location.pathname);
 const productId = location.productId;
 const activeSection = ref<ProductWorkspaceSection>(location.section);
+const documentsOpened = ref(activeSection.value === 'publication');
 const context = loadProductWorkspaceContext();
 const neighbors = computed(() => getProductWorkspaceNeighbors(context?.productIds || [], productId || 0));
 
@@ -109,7 +116,7 @@ const qualityIssues = computed(() => {
   }));
 });
 
-const saveStateLabel = computed(() => saving.value ? 'Сохранение…' : dirty.value ? 'Есть несохранённые изменения' : 'Сохранено');
+const saveStateLabel = computed(() => saving.value ? 'Сохранение…' : hasUnsavedChanges.value ? 'Есть несохранённые изменения' : 'Сохранено');
 
 const setExpertMode = (value: boolean) => {
   expertMode.value = value;
@@ -124,7 +131,10 @@ const setToast = (message: string) => {
   }, 3500);
 };
 
+let approvedNavigation = false;
 const navigate = (path: string, replace = false) => {
+  // Local controls already obtained the same discard decision before dispatching.
+  approvedNavigation = true;
   if (replace) window.history.replaceState({}, '', path);
   else window.history.pushState({}, '', path);
   window.dispatchEvent(new PopStateEvent('popstate'));
@@ -181,11 +191,16 @@ const rebuildSite = async () => {
   }
 };
 
-const confirmLeave = async (): Promise<boolean> => !dirty.value || confirmDialog({
+const confirmLeave = async (): Promise<boolean> => !saving.value && !documentsBusy.value && (!hasUnsavedChanges.value || await confirmDialog({
   title: 'Выйти без сохранения?',
   description: 'В товаре есть несохранённые изменения. Они будут потеряны.',
   confirmText: 'Выйти без сохранения',
   variant: 'warning',
+}));
+
+const unregisterNavigationGuard = registerUnsavedNavigationGuard(async () => {
+  if (approvedNavigation) { approvedNavigation = false; return true; }
+  return confirmLeave();
 });
 
 const goBack = async () => {
@@ -199,6 +214,7 @@ const navigateProduct = async (targetId: number | null) => {
 };
 
 const scrollToSection = (section: ProductWorkspaceSection) => {
+  if (section === 'publication') documentsOpened.value = true;
   activeSection.value = section;
   window.history.replaceState({}, '', buildProductWorkspacePath(productId || 0, section));
 };
@@ -207,6 +223,10 @@ const saveCurrent = async (): Promise<boolean> => {
   if (!editor.value || saving.value) return false;
   saving.value = true;
   try {
+    if (!await saveDocuments()) {
+      scrollToSection('publication');
+      return false;
+    }
     const saved = await editor.value.save();
     if (saved) {
       await loadProduct();
@@ -268,7 +288,7 @@ const deleteProduct = async () => {
 };
 
 const beforeUnload = (event: BeforeUnloadEvent) => {
-  if (!dirty.value) return;
+  if (!hasUnsavedChanges.value && !documentsBusy.value) return;
   event.preventDefault();
   event.returnValue = '';
 };
@@ -278,7 +298,10 @@ onMounted(() => {
   void loadProduct();
 });
 
-onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload));
+onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', beforeUnload);
+  unregisterNavigationGuard();
+});
 </script>
 
 <template>
@@ -292,7 +315,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload));
           <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-slate-400">
               <span>Товары</span><span>/</span><span>#{{ productId }}</span>
-              <span class="rounded-md px-2 py-0.5 font-semibold" :class="dirty ? 'bg-amber-100 text-amber-800' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'">{{ saveStateLabel }}</span>
+              <span class="rounded-md px-2 py-0.5 font-semibold" :class="hasUnsavedChanges ? 'bg-amber-100 text-amber-800' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'">{{ saveStateLabel }}</span>
             </div>
             <h1 class="mt-0.5 truncate text-lg font-bold text-gray-950 dark:text-white sm:text-xl" :title="product?.title || ''">
               {{ product?.title || 'Карточка товара' }}
@@ -308,7 +331,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload));
           <button type="button" class="hidden h-9 items-center gap-2 rounded-lg border border-gray-200 px-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 sm:inline-flex" :disabled="!publicProductUrl" @click="openPublicProduct">
             <ExternalLink class="h-4 w-4" /> На сайте
           </button>
-          <button v-if="activeSection !== 'features'" type="button" class="inline-flex h-9 items-center gap-2 rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 disabled:opacity-50" :disabled="saving || loading || activeSection === 'media'" @click="saveCurrent">
+          <button v-if="activeSection !== 'features'" type="button" class="inline-flex h-9 items-center gap-2 rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 disabled:opacity-50" :disabled="saving || documentsBusy || loading || activeSection === 'media'" @click="saveCurrent">
             <Save class="h-4 w-4" /> <span class="hidden sm:inline">{{ saving ? 'Сохранение…' : 'Сохранить' }}</span>
           </button>
           <div class="relative">
@@ -356,6 +379,8 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload));
       <main class="min-w-0 overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <ProductWorkspaceMedia v-show="activeSection === 'media'" :product="product" @open-editor="openMediaEditor" />
         <ProductWorkspaceFeatures v-if="activeSection === 'features'" :product="product" />
+        <CatalogAccessoriesPanel v-if="activeSection === 'relations'" :key="`${product.id}:${product.series_id || ''}`" target-type="product" :target-id="product.id" />
+        <CatalogDocumentsPanel v-if="documentsOpened" v-show="activeSection === 'publication'" ref="documentsPanel" target-type="product" :target-id="product.id" />
         <ProductEditModal ref="editor" v-show="!['media', 'features'].includes(activeSection)" :model-value="true" :product="product" mode="edit" presentation="workspace" :workspace-section="activeSection" :expert-mode="expertMode" @update:model-value="goBack" @dirty-change="dirty = $event" @supplier-offers-loaded="supplierOfferCount = $event" />
       </main>
 

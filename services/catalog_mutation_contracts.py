@@ -114,6 +114,9 @@ PUBLIC_CATALOG_MUTATION_PRODUCERS = frozenset(
         *PRODUCT_IMAGE_VARIANT_GLOBAL_MUTATION_PRODUCERS,
         *BRAND_LOGO_GLOBAL_MUTATION_PRODUCERS,
         *MANAGER_BRAND_GLOBAL_MUTATION_PRODUCERS,
+        "catalog_accessory.set_series_accessories",
+        "catalog_accessory.set_product_accessories",
+        "catalog_documents.replace_documents",
     }
 )
 
@@ -121,6 +124,12 @@ PUBLIC_CATALOG_MUTATION_PRODUCERS = frozenset(
 # scanner. An empty producer set marks an explicitly non-mutating route.
 PUBLIC_CATALOG_MUTATION_ENTRYPOINTS: Mapping[str, frozenset[str]] = MappingProxyType(
     {
+        "CatalogAccessoryService.set_series_accessories": frozenset({"catalog_accessory.set_series_accessories"}),
+        "CatalogAccessoryService.set_product_accessories": frozenset({"catalog_accessory.set_product_accessories"}),
+        "CatalogDocumentService.replace_documents": frozenset({"catalog_documents.replace_documents"}),
+        "CatalogAccessoryService.get_workspace": frozenset(),
+        "CatalogDocumentService.get_workspace": frozenset(),
+        "CatalogDocumentService.require_target": frozenset(),
         "ImporterService.import_product": frozenset({"importer.import_product"}),
         "ManagerMediaService.set_main_image": frozenset(
             {"manager_media.set_main_image"}
@@ -244,6 +253,9 @@ GLOBAL_CATALOG_MUTATION_CONTRACTS: Mapping[
     GlobalCatalogMutationContract,
 ] = MappingProxyType(
     {
+        "catalog_accessory.set_series_accessories": _contract("catalog_accessory.set_series_accessories", "manager_series_accessories_update"),
+        "catalog_accessory.set_product_accessories": _contract("catalog_accessory.set_product_accessories", "manager_product_accessories_update"),
+        "catalog_documents.replace_documents": _contract("catalog_documents.replace_documents", "manager_catalog_documents_update"),
         "importer.import_product": _contract(
             "importer.import_product",
             "product_import",

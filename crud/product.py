@@ -764,6 +764,7 @@ class ProductDAO:
         category_slug: Optional[str] = None,
         category_status: Optional[str] = None,
         sort: str = "recommended",
+        product_kind: Optional[str] = None,
     ) -> tuple[List[Product], int]:
         normalized_category_status = (category_status or "").strip().lower()
         stmt = select(Product).options(
@@ -797,6 +798,10 @@ class ProductDAO:
             **common_filter_kwargs,
         )
         count_stmt = ProductDAO._apply_category_status_filter(count_stmt, normalized_category_status)
+
+        if product_kind is not None:
+            stmt = stmt.where(Product.product_kind == product_kind)
+            count_stmt = count_stmt.where(Product.product_kind == product_kind)
 
         if search:
             stmt = stmt.where(Product.title.ilike(f"%{search}%"))

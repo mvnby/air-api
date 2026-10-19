@@ -118,6 +118,8 @@ class ContentApiService:
         payload = ProductSeriesBrandFeatureResponse(
             id=int(feature.id),
             title=feature.name,
+            short_description=feature.short_description,
+            icon_caption=feature.icon_caption,
             slug=feature.slug,
             text=feature.full_description,
             image_url=feature.image_url,
@@ -386,7 +388,7 @@ class ContentApiService:
             )
         ]
         brand.__dict__["_resolved_brand_features"] = features
-        return ContentApiService._serialize_brand(
+        payload = ContentApiService._serialize_brand(
             brand,
             products_count=products_count,
             featured_series=featured_map.get(int(brand.id or 0), []),
@@ -397,6 +399,12 @@ class ContentApiService:
                 else TENANT_NEUTRAL_PUBLIC_DISCLOSURE
             ),
         )
+        from services.catalog_document_service import CatalogDocumentService
+
+        payload["documents"] = await CatalogDocumentService.get_effective_documents(
+            session, target_type="brand", target_id=int(brand.id), public_only=True,
+        )
+        return payload
 
     @staticmethod
     async def get_global_config_map(

@@ -183,6 +183,7 @@ async def test_product_detail_contains_series_and_series_id_siblings(async_clien
         "seo_title": None,
         "seo_description": None,
         "source_url": None,
+        "documents": [],
     }
 
     sibling_slugs = [item["slug"] for item in data["series_siblings"]]

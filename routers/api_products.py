@@ -23,6 +23,7 @@ from services.product_response_mapper import map_product_to_response
 from services.product_service import ProductService
 from services.feature_resolver_service import FeatureResolverService
 from services.public_catalog_service import PublicCatalogService
+from services.public_catalog_enrichment_service import enrich_public_products
 from services.warranty_policy_resolver import WarrantyPolicyResolver
 
 router = APIRouter(tags=["api"])
@@ -193,6 +194,7 @@ async def get_catalog(
     products = [projection.product for projection in payload["items"]]
     supply_metrics = await ProductService.get_supply_metrics_map(session, products)
     await FeatureResolverService.resolve_for_products(session, products)
+    await enrich_public_products(session, products, tenant_scope=tenant_scope)
     warranties = await WarrantyPolicyResolver.resolve_public(session, products)
 
     return CatalogResponse(
@@ -235,6 +237,7 @@ async def get_vitebsk_featured_products(
     products = [projection.product for projection in projections]
     supply_metrics = await ProductService.get_supply_metrics_map(session, products)
     await FeatureResolverService.resolve_for_products(session, products)
+    await enrich_public_products(session, products, tenant_scope=tenant_scope)
     warranties = await WarrantyPolicyResolver.resolve_public(session, products)
     return [
         map_product_to_response(
@@ -303,6 +306,7 @@ async def get_product_by_identifier(
     visible_products = [product, *siblings]
     supply_metrics = await ProductService.get_supply_metrics_map(session, [product])
     await FeatureResolverService.resolve_for_products(session, [product])
+    await enrich_public_products(session, [product], tenant_scope=tenant_scope)
     warranties = await WarrantyPolicyResolver.resolve_public(
         session,
         visible_products,

@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { CatalogDocumentResponse } from './CatalogDocumentResponse';
 import type { ProductSeriesBrandFeatureResponse } from './ProductSeriesBrandFeatureResponse';
 import type { ProductSeriesContentBlockResponse } from './ProductSeriesContentBlockResponse';
 import type { ProductSeriesFeatureBlockResponse } from './ProductSeriesFeatureBlockResponse';
@@ -24,5 +25,6 @@ export type ProductSeriesResponse = {
     seo_title?: (string | null);
     seo_description?: (string | null);
     source_url?: (string | null);
+    documents?: Array<CatalogDocumentResponse>;
 };
 

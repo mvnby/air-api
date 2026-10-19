@@ -5,7 +5,7 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field, PrivateAttr, model_serializer
 
-from schemas_features import ManagerFeatureSeriesAssignmentPayload
+from schemas_features import FeatureDisplayMode, ManagerFeatureSeriesAssignmentPayload
 
 
 class ProductSeriesFeatureBlockResponse(BaseModel):
@@ -21,6 +21,9 @@ class ProductSeriesBrandFeatureResponse(BaseModel):
     title: str
     slug: str
     text: Optional[str] = None
+    short_description: Optional[str] = None
+    icon_caption: Optional[str] = None
+    display_mode: FeatureDisplayMode = "detailed"
     image_url: Optional[str] = None
     icon: Optional[str] = None
     footnote: Optional[str] = None

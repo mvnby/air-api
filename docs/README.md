@@ -23,6 +23,7 @@
 | Подбор оборудования, рабочая область каталога | [Решение по каталогу](adr/catalog-decision-workspace.md) |
 | Конфигуратор мультисплитов | [Аудит, правила совместимости и MVP](multi-split-configurator-mvp.md) |
 | Библиотека характеристик | [Таксономия](catalog/feature-taxonomy-guide.md), [универсальные характеристики](catalog/universal-feature-library-v1.md) |
+| Материалы брендов/серий, совместимые аксессуары, форматы фич | [Наследование и источники каталога](catalog/series-knowledge-and-accessories.md) |
 | Парсеры и импорт | [Добавление парсера](adding-parser.md), разделы импорта/нормализации в [рабочих процедурах](development-workflow.md) |
 | Товарные подборки, инвалидация кэша | [Подборки](product-collections.md), [ревизии каталога](catalog-cache-invalidation.md) |
 | Гарантия оборудования и её публичное представление | [Политики гарантии](warranty-policies.md), [публичный контракт](public-product-warranty.md) |

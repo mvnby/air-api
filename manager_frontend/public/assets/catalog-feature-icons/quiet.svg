@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Тихий режим: мягкий поток для спокойного сна</title>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="#eff6ff"/>
+  <g fill="none" stroke="#142033" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="11" y="35" width="36" height="16" rx="4"/>
+    <path d="M16 46h26M17 40h10"/>
+  </g>
+  <g fill="none" stroke="#1763e8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M37 12a11 11 0 1 0 14 14 11 11 0 0 1-14-14ZM15 21h10M12 27h8M49 12v6M46 15h6"/>
+  </g>
+</svg>

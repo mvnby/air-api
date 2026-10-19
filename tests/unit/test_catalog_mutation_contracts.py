@@ -28,6 +28,8 @@ SCOPED_MUTATION_ROUTER_PATHS = (
     ROOT / "routers/manager_media_gallery_write.py",
     ROOT / "routers/manager_media_ingest_write.py",
     ROOT / "routers/manager_brands.py",
+    ROOT / "routers/manager_catalog_accessories.py",
+    ROOT / "routers/manager_catalog_documents.py",
 )
 SCOPED_COMMAND_CALLER_PATHS = (ROOT / "scripts/backfill_yandex_feed_images.py",)
 NESTED_CATALOG_MUTATION_METHODS = {
@@ -130,6 +132,7 @@ def test_public_catalog_mutation_inventory_covers_reviewed_entrypoints():
         | PRODUCT_IMAGE_VARIANT_GLOBAL_MUTATION_PRODUCERS
         | MANAGER_BRAND_GLOBAL_MUTATION_PRODUCERS
         | BRAND_LOGO_GLOBAL_MUTATION_PRODUCERS
+        | {"catalog_accessory.set_series_accessories", "catalog_accessory.set_product_accessories", "catalog_documents.replace_documents"}
     )
 
 

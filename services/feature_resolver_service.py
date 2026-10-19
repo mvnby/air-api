@@ -137,7 +137,10 @@ class FeatureResolverService:
                         source=source,
                         media=media,
                         applied_rule=describe_rules(list(feature.rules or [])) if source == "derived" else None,
+                        display_mode=FeatureResolverService._display_mode(p_link, s_link, b_link),
                     )
+                    if s_link is not None and s_link.is_enabled:
+                        item.is_featured = bool(s_link.is_featured)
                     effective.append(item)
                     if source in {"series", "brand"}:
                         inherited.append(item)
@@ -240,6 +243,19 @@ class FeatureResolverService:
         return payload
 
     @staticmethod
+    def _display_mode(product_link: Any, series_link: Any, brand_link: Any) -> str:
+        """Models inherit the series format; an assigned series owns its default."""
+        if (
+            product_link is not None and product_link.is_enabled
+            and product_link.source != "derived" and product_link.display_mode
+        ):
+            return product_link.display_mode
+        for link in (series_link, brand_link):
+            if link is not None and link.is_enabled:
+                return link.display_mode or "detailed"
+        return "detailed"
+
+    @staticmethod
     async def _load_media(session: AsyncSession, features: list[Feature], links: list[Any]):
         ids = {
             int(value)
@@ -264,6 +280,7 @@ class FeatureResolverService:
                 "override_image_url",
                 "override_icon",
                 "override_footnote",
+                "display_mode",
             )
         )
 
@@ -295,6 +312,7 @@ class FeatureResolverService:
                     source="manual",
                     is_enabled=link.is_enabled,
                     sort_order=link.sort_order,
+                    display_mode=link.display_mode,
                     override_title=link.override_title,
                     override_description=link.override_description,
                     override_media_id=link.override_media_id,
@@ -313,6 +331,7 @@ class FeatureResolverService:
         source: str,
         media: dict[int, str],
         applied_rule: str | None,
+        display_mode: str | None = None,
     ) -> PublicFeatureResponse:
         category = feature.category
         override_media_id = getattr(link, "override_media_id", None) if link else None
@@ -327,6 +346,8 @@ class FeatureResolverService:
             slug=feature.slug,
             name=(getattr(link, "override_title", None) if link else None) or feature.name,
             short_description=feature.short_description,
+            icon_caption=feature.icon_caption,
+            display_mode=display_mode or getattr(link, "display_mode", None) or "detailed",
             full_description=(
                 getattr(link, "override_description", None) if link and link.override_description is not None
                 else feature.full_description

@@ -6,6 +6,8 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 from schemas_connector_mcp import ConnectorInput, WriteInput
+from schemas_catalog_accessories import PublicCatalogAccessory
+from schemas_catalog_documents import CatalogDocumentKind, CatalogDocumentTarget
 
 
 class CatalogSelectionInput(ConnectorInput):
@@ -46,6 +48,26 @@ class CatalogProduct(BaseModel):
     heating_min_c: float | None
     wifi: Literal["builtin", "ready", "none", "unknown"]
     availability: Literal["in_stock", "on_request"]
+
+
+class CatalogProductReferenceDocument(BaseModel):
+    """Public research material without staff-only provenance or edit settings."""
+
+    id: int
+    title: str
+    url: str
+    kind: CatalogDocumentKind
+    language: str | None = None
+    year: int | None = None
+    origin_type: CatalogDocumentTarget
+    origin_id: int
+    origin_title: str
+    inherited: bool = False
+
+
+class CatalogProductDetail(CatalogProduct):
+    documents: list[CatalogProductReferenceDocument] = Field(default_factory=list)
+    accessories: list[PublicCatalogAccessory] = Field(default_factory=list)
 
 
 class CatalogSelectionOption(BaseModel):
