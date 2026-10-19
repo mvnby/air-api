@@ -110,7 +110,10 @@ def test_only_selected_families_are_rebuilt(catalog, monkeypatch):
     assert by_id[1309].specs["width_indoor"] == "1400"
     assert by_id[1309].specs["height_indoor"] == "300"
     assert by_id[1309].specs["depth_indoor"] == "700"
-    assert by_id[1301].specs.get("height_indoor") is None  # Not part of this reviewed projection.
+    for id, height in [(1301, "200"), (1304, "290")]:
+        assert by_id[id].specs["height_indoor"] == height
+        assert by_id[id].specs["__typed_specs"]["height_indoor"]["value"] == int(height)
+        assert by_id[id].specs["width_indoor"] == by_id[id].specs["depth_indoor"] == "840"
     for id in (764, 768, 769, 770):
         assert "ionizer" not in by_id[id].specs
         assert "ionizer" not in by_id[id].specs["__typed_specs"]
@@ -169,6 +172,20 @@ def test_manifest_rejects_scope_expansion_or_missing_guards(catalog, fault):
         m["products"][0]["source_before_sha256"] = digest(m["products"][0]["before"])
     with pytest.raises(RepairBlocked):
         validate_manifest(m)
+
+
+@pytest.mark.parametrize(("id", "key", "value"), [
+    (1301, "height_indoor", "210"),
+    (1304, "height_indoor", "200"),
+    (1301, "depth_indoor", "200"),
+    (1304, "width_indoor", "840"),
+])
+def test_confirmed_cassette_heights_do_not_authorize_other_dimension_edits(catalog, id, key, value):
+    row = next(row for row in catalog[0]["products"] if row["identity"]["id"] == id)
+    row["specs_set"][key] = value
+    row["rebuild_typed"] = sorted(set(row["rebuild_typed"]) | {key})
+    with pytest.raises(RepairBlocked, match="exact user-confirmed dimensions"):
+        validate_manifest(catalog[0])
 
 
 def test_review_requires_exact_digest_fresh_window_manifest_and_live_state(catalog):

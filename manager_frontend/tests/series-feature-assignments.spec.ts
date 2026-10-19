@@ -17,6 +17,17 @@ const feature = (id: number): ManagerFeatureResponse => ({
 });
 
 describe('SeriesFeatureAssignments', () => {
+  it('uses icons for an unconfigured ordinary feature and follows its featured flag', async () => {
+    const wrapper = mount(SeriesFeatureAssignments, {
+      props: { features: [feature(1)], modelValue: [{ feature_id: 1, is_featured: false, display_mode: null }] },
+    });
+    expect((wrapper.get('select').element as HTMLSelectElement).value).toBe('icon');
+    await wrapper.get('button[title="Отметить главной"]').trigger('click');
+    const next = [{ feature_id: 1, is_featured: true, display_mode: null }];
+    expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([next]);
+    await wrapper.setProps({ modelValue: next });
+    expect((wrapper.get('select').element as HTMLSelectElement).value).toBe('detailed');
+  });
   it('selects a catalog feature directly and limits featured choices to three', async () => {
     const wrapper = mount(SeriesFeatureAssignments, {
       props: { features: [feature(1), feature(2), feature(3), feature(4)], modelValue: [] },

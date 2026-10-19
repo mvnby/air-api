@@ -4095,6 +4095,18 @@
           "wifi_state": {
             "present": true,
             "value": "builtin"
+          },
+          "width_indoor": {
+            "present": true,
+            "value": "840"
+          },
+          "height_indoor": {
+            "present": true,
+            "value": "240"
+          },
+          "depth_indoor": {
+            "present": true,
+            "value": "840"
           }
         },
         "typed": {
@@ -4162,6 +4174,16 @@
               "type": "state",
               "value": "builtin"
             }
+          },
+          "height_indoor": {
+            "present": true,
+            "value": {
+              "raw": "240",
+              "kind": "length",
+              "type": "quantity",
+              "unit": "mm",
+              "value": 240
+            }
           }
         },
         "filters": {
@@ -4182,16 +4204,18 @@
           "description": "38a16554b4e28a2a766001f3d07b4e64af4ce4e1d6ee8b026fe53a4a224ef0e2"
         }
       },
-      "source_before_sha256": "8bbeb464932008d3bdce25f774cb72987dcba2eec33a951ddf5eb259ae6d90f6",
+      "source_before_sha256": "6d09076f93edd1030379b7643c9b46fd86de1a9a0ea3fa58c6a9aa898cf6aa13",
       "specs_set": {
         "power_cons_cooling_kw": "2.03",
         "noise_indoor": "34 — 39 дБ",
         "wifi_state": "ready",
-        "wifi_ready": "ready"
+        "wifi_ready": "ready",
+        "height_indoor": "200"
       },
       "specs_delete": [],
       "rebuild_typed": [
         "airflow_max",
+        "height_indoor",
         "noise_indoor",
         "power_cons_cooling_kw",
         "wifi_builtin",
@@ -4273,6 +4297,18 @@
           ],
           "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
           "reason": "Synchronize product summary with corrected official sound-pressure range and conditional Wi-Fi; remove unconfirmed Nordic ionizer claim.",
+          "confidence": "high"
+        },
+        {
+          "field": "height_indoor",
+          "source_id": "catalog2026_plus_explicit_user_confirmation",
+          "printed_pages": [
+            66
+          ],
+          "pdf_pages": [
+            67
+          ],
+          "detail": "2026-10-19 user confirms height200 for exact cassette model; width/depth remain840/840. Source table uses W×D×H physical order despite its axis label.",
           "confidence": "high"
         }
       ]
@@ -4853,6 +4889,18 @@
           "wifi_state": {
             "present": true,
             "value": "builtin"
+          },
+          "width_indoor": {
+            "present": true,
+            "value": "840"
+          },
+          "height_indoor": {
+            "present": true,
+            "value": "240"
+          },
+          "depth_indoor": {
+            "present": true,
+            "value": "840"
           }
         },
         "typed": {
@@ -4941,6 +4989,16 @@
               "type": "state",
               "value": "builtin"
             }
+          },
+          "height_indoor": {
+            "present": true,
+            "value": {
+              "raw": "240",
+              "kind": "length",
+              "type": "quantity",
+              "unit": "mm",
+              "value": 240
+            }
           }
         },
         "filters": {
@@ -4961,18 +5019,20 @@
           "description": "c36be0e3dc8eb73e760ceaaedc97016b97a95eb8e4ce99ef3082c987340d78a1"
         }
       },
-      "source_before_sha256": "45526e2ca1d56b8be81afe1a6f3d7f1ba860edc71d151d5087cb74cbf739fb31",
+      "source_before_sha256": "067999e5896f4b778d4ec7fdb8a45aab5c42bc9bcee18c7fd1a7002e378ec563",
       "specs_set": {
         "power_cons_cooling_kw": "4.3",
         "power_cons_heating_kw": "4.2",
         "weight_indoor": "25",
         "noise_indoor": "41 — 50 дБ",
         "wifi_state": "ready",
-        "wifi_ready": "ready"
+        "wifi_ready": "ready",
+        "height_indoor": "290"
       },
       "specs_delete": [],
       "rebuild_typed": [
         "airflow_max",
+        "height_indoor",
         "noise_indoor",
         "power_cons_cooling_kw",
         "power_cons_heating_kw",
@@ -5082,6 +5142,18 @@
           ],
           "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
           "reason": "Synchronize product summary with corrected official sound-pressure range and conditional Wi-Fi; remove unconfirmed Nordic ionizer claim.",
+          "confidence": "high"
+        },
+        {
+          "field": "height_indoor",
+          "source_id": "catalog2026_plus_explicit_user_confirmation",
+          "printed_pages": [
+            68
+          ],
+          "pdf_pages": [
+            69
+          ],
+          "detail": "2026-10-19 user confirms height290 for exact cassette model; width/depth remain840/840. Source table uses W×D×H physical order despite its axis label.",
           "confidence": "high"
         }
       ]
@@ -6996,8 +7068,9 @@
     }
   ],
   "held_dimensions": {
-    "count": 22,
-    "action": "no other commercial dimension mutation;1309 W1400 H300 D700 explicitly confirmed by user2026-10-19"
+    "axis_noop_comparisons": 20,
+    "unresolved": 0,
+    "action": "Preserve existing cassette/floor-ceiling physical orientation; only explicit user-confirmed dimensions of1301/1304/1309 are changed."
   },
-  "coverage": "All42 exact product identity plus scoped raw/typed/filter guards. Unrelated specs, prices, media, links, SEO and other commercial dimensions are preserved."
+  "coverage": "All42 exact product identity plus scoped raw/typed/filter guards. Unrelated specs, prices, media, links, SEO and other commercial dimensions are preserved;20 axis comparisons are no-ops and0 dimension questions remain unresolved."
 }

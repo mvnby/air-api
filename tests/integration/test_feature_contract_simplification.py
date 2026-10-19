@@ -15,6 +15,7 @@ from models import (
 )
 from services.feature_resolver_service import FeatureResolverService
 from services.feature_contract_legacy_report_service import FeatureContractLegacyReportService
+from services.catalog_revision_service import CatalogRevisionService
 
 
 async def _auth_headers(async_client):
@@ -214,11 +215,21 @@ async def test_manager_feature_scope_owner_and_series_assignment_contract(async_
     )
     assert assigned.status_code == 200, assigned.text
     assert assigned.json()["feature_assignments"] == [
-        {"feature_id": branded.json()["id"], "is_featured": True, "display_mode": "detailed"},
-        {"feature_id": universal.json()["id"], "is_featured": False, "display_mode": "detailed"},
+        {"feature_id": branded.json()["id"], "is_featured": True, "display_mode": None},
+        {"feature_id": universal.json()["id"], "is_featured": False, "display_mode": None},
     ]
     assert assigned.json()["catalog_features"][0]["id"] == branded.json()["id"]
     assert assigned.json()["catalog_features"][0]["is_featured"] is True
+    assert [item["display_mode"] for item in assigned.json()["catalog_features"]] == ["detailed", "icon"]
+    assert all("_assignment_display_mode" not in item for item in assigned.json()["catalog_features"])
+    revision = await CatalogRevisionService.get_current(db)
+    noop = await async_client.put(
+        f"/api/manager/brands/{brand.id}/series/{series.id}", headers=headers,
+        json={"feature_assignments": assigned.json()["feature_assignments"]},
+    )
+    assert noop.status_code == 200, noop.text
+    assert noop.json()["feature_assignments"] == assigned.json()["feature_assignments"]
+    assert await CatalogRevisionService.get_current(db) == revision
     missing_series_delete = await async_client.delete(
         f"/api/manager/features/{universal.json()['id']}/series/999999999",
         headers=headers,
@@ -286,8 +297,8 @@ async def test_series_update_preserves_existing_legacy_assignment_but_rejects_ne
     )
     assert saved.status_code == 200, saved.text
     assert saved.json()["feature_assignments"] == [
-        {"feature_id": universal.id, "is_featured": True, "display_mode": "detailed"},
-        {"feature_id": existing_legacy.id, "is_featured": False, "display_mode": "detailed"},
+        {"feature_id": universal.id, "is_featured": True, "display_mode": None},
+        {"feature_id": existing_legacy.id, "is_featured": False, "display_mode": None},
     ]
 
     rejected = await async_client.put(

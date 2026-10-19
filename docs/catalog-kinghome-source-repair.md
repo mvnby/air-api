@@ -7,7 +7,7 @@ run during deployment. Start with a read-only plan.
 
 The checked-in [manifest](../config/catalog_source_repairs/kinghome-2026.json)
 contains 42 exact product identities and nine series identities. Changes are
-limited to 36 products and seven series: 122 raw specification assignments,
+limited to 36 products and seven series: 124 raw specification assignments,
 four unconfirmed Nordic ionizer removals, 26 airflow typed-value repairs,
 23 product summaries and seven series' short/full descriptions. The original
 long descriptions are guarded by hashes; prices and secrets are absent.
@@ -17,7 +17,11 @@ The authoritative technical source is the official 2026 catalog with SHA256
 official supplier sheet referenced by the manifest. Printed page n is PDF
 page n+1. Product 1309's width 1400, height 300 and depth 700 mm additionally
 use the user's explicit 2026-10-19 orientation confirmation for KUD160PHS1/A-S.
-The other 22 ambiguous commercial dimension candidates remain excluded.
+The user also confirmed cassette heights: KUD71T1/A-S (1301) is 200 mm
+(printed page 66), and KUD140T1/A-S (1304) is 290 mm (printed page 68);
+both retain width/depth 840/840 mm. The other 20 field comparisons are
+axis no-ops: cassette dimension ordering or an alternative floor/ceiling
+mounting orientation. They require no swaps; no dimension questions remain open.
 
 Nordic ionization is unknown: the catalog narrative conflicts with the model
 feature table/supplier evidence and the user selected conservative claims.

@@ -66,9 +66,13 @@ def validate_manifest(manifest: dict[str, Any]) -> None:
             raise RepairBlocked("Unreviewed specification field")
         dimensions = keys & {"width_indoor", "height_indoor", "depth_indoor"}
         if identity["series_id"] >= 231 and dimensions:
-            confirmed = {"width_indoor": "1400", "height_indoor": "300", "depth_indoor": "700"}
-            if identity["id"] != 1309 or {key: row["specs_set"].get(key) for key in dimensions} != confirmed:
-                raise RepairBlocked("Only the user-confirmed dimensions of product 1309 are reviewed")
+            confirmed = {
+                1301: {"height_indoor": "200"},
+                1304: {"height_indoor": "290"},
+                1309: {"width_indoor": "1400", "height_indoor": "300", "depth_indoor": "700"},
+            }.get(identity["id"])
+            if confirmed is None or {key: row["specs_set"].get(key) for key in dimensions} != confirmed:
+                raise RepairBlocked("Only the exact user-confirmed dimensions of 1301/1304/1309 are reviewed")
         if set(row["fields_set"]) - {"description"}:
             raise RepairBlocked("Unreviewed product field")
         if row.get("source_before_sha256") != digest(row["before"]):

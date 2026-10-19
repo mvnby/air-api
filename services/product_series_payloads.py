@@ -5,6 +5,7 @@ from typing import Any, List
 from models import ProductSeries
 from schemas import ProductSeriesBrandFeatureResponse, ProductSeriesResponse
 from services.feature_scope_policy import FeatureScopePolicy
+from services.feature_presentation import feature_display_mode
 from services.public_catalog_disclosure import (
     CANONICAL_PUBLIC_DISCLOSURE,
     PublicCatalogDisclosurePolicy,
@@ -39,7 +40,7 @@ def serialize_series_brand_features(
             slug=feature.slug,
             short_description=feature.short_description,
             icon_caption=feature.icon_caption,
-            display_mode=getattr(link, "display_mode", None) or "detailed",
+            display_mode=feature_display_mode(getattr(link, "display_mode", None), is_featured=getattr(link, "is_featured", False)),
             text=(
                 getattr(link, "override_description", None)
                 if getattr(link, "override_description", None) is not None

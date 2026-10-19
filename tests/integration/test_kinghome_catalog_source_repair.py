@@ -170,6 +170,11 @@ async def test_cli_repair_rolls_back_staged_writes_commits_once_and_repeats_as_n
         for key in ("content_blocks", "feature_blocks", "seo_title", "hero_image"):
             assert item[key] == baseline["series"][id][key]
     assert after["products"][1309]["specs"]["height_indoor"] == "300"
+    for id, height in [(1301, "200"), (1304, "290")]:
+        specs = after["products"][id]["specs"]
+        assert specs["height_indoor"] == height
+        assert specs["__typed_specs"]["height_indoor"]["value"] == int(height)
+        assert specs["width_indoor"] == specs["depth_indoor"] == "840"
     assert "ionizer" not in after["products"][764]["specs"]
 
     noop = await run(manifest_path=manifest_path)

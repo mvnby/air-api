@@ -18,6 +18,7 @@ from models import (
 )
 from schemas_features import FeatureCategoryResponse, FeatureLinkPayload, PublicFeatureResponse
 from services.feature_rule_engine import describe_rules, matches_all_rules
+from services.feature_presentation import feature_display_mode
 from services.feature_scope_policy import FeatureScopePolicy
 
 
@@ -252,9 +253,7 @@ class FeatureResolverService:
             return product_link.display_mode
         for link in (series_link, brand_link):
             if link is not None and link.is_enabled:
-                return link.display_mode or (
-                    "detailed" if getattr(link, "is_featured", False) else "icon"
-                )
+                return feature_display_mode(link.display_mode, is_featured=getattr(link, "is_featured", False))
         return "icon"
 
     @staticmethod
@@ -349,9 +348,7 @@ class FeatureResolverService:
             name=(getattr(link, "override_title", None) if link else None) or feature.name,
             short_description=feature.short_description,
             icon_caption=feature.icon_caption,
-            display_mode=display_mode or getattr(link, "display_mode", None) or (
-                "detailed" if getattr(link, "is_featured", False) else "icon"
-            ),
+            display_mode=feature_display_mode(display_mode or getattr(link, "display_mode", None), is_featured=getattr(link, "is_featured", False)),
             full_description=(
                 getattr(link, "override_description", None) if link and link.override_description is not None
                 else feature.full_description
