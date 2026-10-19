@@ -160,7 +160,8 @@ python3 scripts/repair_biocond_catalog.py --manifest config/catalog_source_repai
 Planning uses a repeatable-read read-only transaction. Execution positively
 verifies the primary, takes a stable advisory/parent/link lock order, regenerates
 the complete live plan, and rejects any manifest or scoped-state drift. Business
-rows, one global revision, and one invalidation outbox event commit together.
+rows, one global revision, and the invalidation outbox events for active
+storefront targets commit together.
 Any failure rolls all of them back. A fresh plan after success has `changed:0`;
 executing that plan performs no writes and stages no revision/event.
 
