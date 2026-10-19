@@ -94,6 +94,25 @@ describe.each(['brand', 'series'] as const)('%s document save integration', kind
   });
 });
 
+it('explains a partially saved series when documents succeed and the series save fails', async () => {
+  mocks.replace.mockImplementation(() => cancelable({ own: [{ ...document, title: 'Edited operation' }], inherited: [], effective: [] }));
+  const wrapper = await startModal('series');
+  const save = wrapper.findAll('footer button').find(button => button.text() === 'Сохранить')!;
+  await save.trigger('click');
+  await flushPromises();
+  await wrapper.setProps({ saving: true });
+  await wrapper.setProps({ saving: false, error: 'Название серии не может быть пустым.' });
+  expect(wrapper.get('[role="alert"]').text()).toContain('Документы сохранены. Остальные изменения серии не сохранены.');
+  expect(wrapper.get('[role="alert"]').text()).toContain('Название серии не может быть пустым.');
+  expect(wrapper.emitted('close')).toBeUndefined();
+  await save.trigger('click');
+  await flushPromises();
+  expect(mocks.replace).toHaveBeenCalledOnce();
+  await wrapper.setProps({ open: false });
+  await wrapper.setProps({ open: true });
+  expect(wrapper.text()).not.toContain('Документы сохранены. Остальные изменения серии не сохранены.');
+});
+
 const startProduct = async () => {
   history.replaceState({}, '', '/manager/products/4/publication');
   vi.spyOn(api, 'getManagerProduct').mockResolvedValue(product);

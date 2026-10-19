@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, watch } from "vue";
 import type { ManagerFeatureResponse } from "../../client";
 import MediaField from "../MediaField.vue";
 import SeriesContentAiActions from "./SeriesContentAiActions.vue";
@@ -33,13 +33,19 @@ const emit = defineEmits<{
 }>();
 
 const pendingGalleryImage = ref("");
-const { documentsBusy, saveDocuments, confirmDiscardDocuments } = useCatalogDocumentsEditor();
+const { documentsDirty, documentsBusy, saveDocuments, confirmDiscardDocuments } = useCatalogDocumentsEditor();
+const documentsSaved = ref(false);
+watch(() => props.open, () => { documentsSaved.value = false; });
 const savingDocuments = ref(false);
 const save = async () => {
   if (props.saving || savingDocuments.value) return;
   savingDocuments.value = true;
   try {
-    if (await saveDocuments()) emit("save");
+    const hadDocumentChanges = documentsDirty.value;
+    if (await saveDocuments()) {
+      if (hadDocumentChanges) documentsSaved.value = true;
+      emit("save");
+    }
   } finally {
     savingDocuments.value = false;
   }
@@ -432,6 +438,9 @@ const addGallery = (url = pendingGalleryImage.value) => {
           role="alert"
           class="text-sm font-medium text-red-700 dark:text-red-300"
         >
+          <span v-if="documentsSaved && !saving && !savingDocuments" class="block">
+            Документы сохранены. Остальные изменения серии не сохранены.
+          </span>
           {{ error }}
         </p>
         <div class="flex items-center justify-end gap-2 sm:ml-auto">

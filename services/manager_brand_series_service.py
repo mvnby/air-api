@@ -174,20 +174,27 @@ class ManagerBrandSeriesOperations(ManagerBrandSeriesFeatureOperations):
             series.hero_image = cls._require_series_media(
                 cls._clean_optional_text(payload["hero_image"]),
                 field="series.hero_image",
+                existing_value=series.hero_image,
             )
         if "gallery_images" in payload and payload["gallery_images"] is not None:
             gallery_images = cls._normalize_string_list(payload["gallery_images"])
-            cls._require_series_media_collection(gallery_images=gallery_images)
+            cls._require_series_media_collection(
+                gallery_images=gallery_images, existing=series,
+            )
             series.gallery_images = gallery_images
         if "features" in payload and payload["features"] is not None:
             series.features = cls._normalize_features(payload["features"])
         if "feature_blocks" in payload and payload["feature_blocks"] is not None:
             feature_blocks = cls._normalize_feature_blocks(payload["feature_blocks"])
-            cls._require_series_media_collection(feature_blocks=feature_blocks)
+            cls._require_series_media_collection(
+                feature_blocks=feature_blocks, existing=series,
+            )
             series.feature_blocks = feature_blocks
         if "content_blocks" in payload and payload["content_blocks"] is not None:
             content_blocks = cls._normalize_content_blocks(payload["content_blocks"])
-            cls._require_series_media_collection(content_blocks=content_blocks)
+            cls._require_series_media_collection(
+                content_blocks=content_blocks, existing=series,
+            )
             series.content_blocks = content_blocks
         if "footnotes" in payload and payload["footnotes"] is not None:
             series.footnotes = cls._normalize_string_list(payload["footnotes"])
@@ -455,7 +462,13 @@ class ManagerBrandSeriesOperations(ManagerBrandSeriesFeatureOperations):
         return series_slug
 
     @staticmethod
-    def _require_series_media(value: str | None, *, field: str) -> str | None:
+    def _require_series_media(
+        value: str | None, *, field: str, existing_value: str | None = None,
+    ) -> str | None:
+        # Existing media may predate the library policy. Retaining the same
+        # field must not block unrelated edits; every replacement is validated.
+        if value and value == existing_value:
+            return value
         try:
             return CatalogMediaPolicy.require_allowed(
                 value,
@@ -472,20 +485,42 @@ class ManagerBrandSeriesOperations(ManagerBrandSeriesFeatureOperations):
         gallery_images: List[str] | None = None,
         feature_blocks: List[Dict[str, Any]] | None = None,
         content_blocks: List[Dict[str, Any]] | None = None,
+        existing: ProductSeries | None = None,
     ) -> None:
-        try:
-            CatalogMediaPolicy.require_many(
-                gallery_images or [],
-                kind=CatalogMediaKind.SERIES,
-                field="series.gallery_images",
+        # The locked target supplies grandfathered references, scoped to their
+        # original field. This permits removal/reordering without accepting new
+        # external media or copying legacy media from another series or field.
+        existing_gallery = set(existing.gallery_images or []) if existing else set()
+        for index, value in enumerate(gallery_images or [], start=1):
+            cls._require_series_media(
+                value,
+                field=f"series.gallery_images[{index}]",
+                existing_value=value if value in existing_gallery else None,
             )
-            CatalogMediaPolicy.require_series_blocks(
-                feature_blocks or [],
-                field="series.feature_blocks",
-            )
-            CatalogMediaPolicy.require_series_blocks(
-                content_blocks or [],
-                field="series.content_blocks",
-            )
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        for field, blocks, previous_blocks in (
+            ("feature_blocks", feature_blocks, existing.feature_blocks if existing else []),
+            ("content_blocks", content_blocks, existing.content_blocks if existing else []),
+        ):
+            retained = {
+                key: {
+                    str(block.get(key) or "")
+                    for block in previous_blocks or []
+                    if isinstance(block, dict)
+                }
+                for key in ("image_url", "icon")
+            }
+            for index, block in enumerate(blocks or [], start=1):
+                image_url = str(block.get("image_url") or "") or None
+                cls._require_series_media(
+                    image_url,
+                    field=f"series.{field}[{index}].image_url",
+                    existing_value=image_url if image_url in retained["image_url"] else None,
+                )
+                icon = str(block.get("icon") or "") or None
+                if icon not in retained["icon"]:
+                    try:
+                        CatalogMediaPolicy.require_optional_content_reference(
+                            icon, field=f"series.{field}[{index}].icon",
+                        )
+                    except ValueError as exc:
+                        raise HTTPException(status_code=400, detail=str(exc)) from exc
