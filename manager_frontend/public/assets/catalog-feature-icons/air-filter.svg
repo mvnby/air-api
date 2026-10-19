@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Фильтрация: очистка проходящего воздуха</title>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="#eff6ff"/>
+  <g fill="none" stroke="#142033" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="24" y="12" width="16" height="40" rx="3"/>
+    <path d="M29 17v30M35 17v30M25 24h14M25 32h14M25 40h14"/>
+  </g>
+  <g fill="none" stroke="#1763e8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10 32h9M15 28l4 4-4 4M45 32h9M50 28l4 4-4 4M47 18h6M50 15v6M47 46l2 2 5-5"/>
+  </g>
+  <circle cx="13" cy="20" r="2" fill="#1763e8"/>
+  <circle cx="15" cy="46" r="2" fill="#1763e8"/>
+</svg>

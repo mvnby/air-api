@@ -459,6 +459,7 @@ class FeatureLibraryService:
                     slug=feature.slug,
                     name=feature.name,
                     short_description=feature.short_description,
+                    icon_caption=feature.icon_caption,
                     full_description=feature.full_description,
                     category=FeatureCategoryResponse.model_validate(category, from_attributes=True),
                     scope_type=feature.scope_type,

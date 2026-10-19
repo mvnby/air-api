@@ -162,6 +162,7 @@ export class ManagerService {
      * @param seriesId Exact product series ID
      * @param categorySlug Category tag slug: cat-household/cat-multi/cat-industrial
      * @param categoryStatus Catalog category status: assigned/missing
+     * @param productKind Exact canonical product kind, applied before pagination
      * @param sort
      * @returns ManagerCatalogProductListResponse Successful Response
      * @throws ApiError
@@ -181,6 +182,7 @@ export class ManagerService {
         seriesId?: (number | null),
         categorySlug?: (string | null),
         categoryStatus?: ('assigned' | 'missing' | null),
+        productKind?: ('unknown' | 'complete_split_system' | 'indoor_unit' | 'outdoor_unit' | 'panel' | 'accessory' | 'consumable' | 'other' | null),
         sort: string = 'recommended',
     ): CancelablePromise<ManagerCatalogProductListResponse> {
         return __request(OpenAPI, {
@@ -201,6 +203,7 @@ export class ManagerService {
                 'series_id': seriesId,
                 'category_slug': categorySlug,
                 'category_status': categoryStatus,
+                'product_kind': productKind,
                 'sort': sort,
             },
             errors: {

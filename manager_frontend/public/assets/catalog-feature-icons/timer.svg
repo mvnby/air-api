@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Таймер: работа кондиционера по расписанию</title>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="#eff6ff"/>
+  <g fill="none" stroke="#142033" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="32" cy="35" r="19"/>
+    <path d="M32 16v-6M26 10h12M46 20l4-4M47 13l6 6M32 20v3M47 35h-3M32 50v-3M17 35h3"/>
+  </g>
+  <g fill="none" stroke="#1763e8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M32 27v8l8 5"/>
+  </g>
+  <circle cx="32" cy="35" r="2.5" fill="#1763e8"/>
+</svg>

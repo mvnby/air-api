@@ -272,6 +272,7 @@ class ProductManagerService:
         category_slug: Optional[str] = None,
         category_status: Optional[str] = None,
         sort: str = "recommended",
+        product_kind: Optional[str] = None,
     ) -> Dict[str, Any]:
         items, total = await ProductDAO.get_for_manager(
             session,
@@ -289,6 +290,7 @@ class ProductManagerService:
             series_id=series_id,
             category_slug=category_slug,
             category_status=category_status,
+            product_kind=product_kind,
             sort=sort,
         )
         supply_metrics = await ProductSupplyMetricsService.compute_for_products(session, list(items))

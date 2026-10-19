@@ -2,11 +2,13 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { CatalogDocumentResponse } from './CatalogDocumentResponse';
 import type { ProductBrandResponse } from './ProductBrandResponse';
 import type { ProductImageResponse } from './ProductImageResponse';
 import type { ProductManualResponse } from './ProductManualResponse';
 import type { ProductSeriesResponse } from './ProductSeriesResponse';
 import type { ProductSiblingResponse } from './ProductSiblingResponse';
+import type { PublicCatalogAccessory } from './PublicCatalogAccessory';
 import type { PublicFeatureResponse } from './PublicFeatureResponse';
 import type { PublicProductWarrantyResponse } from './PublicProductWarrantyResponse';
 import type { TagResponse } from './TagResponse';
@@ -46,6 +48,8 @@ export type ProductResponse = {
     images?: Array<string>;
     gallery_images?: Array<ProductImageResponse>;
     manuals?: Array<ProductManualResponse>;
+    documents?: Array<CatalogDocumentResponse>;
+    accessories?: Array<PublicCatalogAccessory>;
     warranty?: (PublicProductWarrantyResponse | null);
     series_siblings?: Array<ProductSiblingResponse>;
     features?: Array<PublicFeatureResponse>;

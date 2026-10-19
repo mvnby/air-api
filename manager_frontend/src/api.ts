@@ -270,6 +270,7 @@ export const downloadManagerDocBlob = async (docId: number): Promise<{ blob: Blo
 };
 
 export interface ManagerProductFilterOptions {
+    productKind?: Product['product_kind'];
     heatingMin?: number;
     hasWifi?: boolean;
     hasFreshAir?: boolean;
@@ -830,6 +831,7 @@ export const api = {
             filters.seriesId ?? undefined,
             categorySlug ?? undefined,
             filters.categoryStatus ?? undefined,
+            filters.productKind ?? undefined,
             sort,
         );
     },

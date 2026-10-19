@@ -8,6 +8,8 @@ export type PublicFeatureResponse = {
     slug: string;
     name: string;
     short_description?: (string | null);
+    icon_caption?: (string | null);
+    display_mode?: 'icon' | 'compact' | 'detailed';
     full_description?: (string | null);
     category: FeatureCategoryResponse;
     scope_type: 'universal' | 'brand' | 'series' | 'product' | 'derived';

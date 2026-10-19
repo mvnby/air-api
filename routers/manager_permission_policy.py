@@ -26,6 +26,13 @@ from services.manager_capability_service import ManagerCapabilityService
 
 PLATFORM_MANAGER_OPERATION_IDS = frozenset(
     {
+        operation_ids.GET_MANAGER_SERIES_ACCESSORIES,
+        operation_ids.SET_MANAGER_SERIES_ACCESSORIES,
+        operation_ids.GET_MANAGER_PRODUCT_ACCESSORIES,
+        operation_ids.SET_MANAGER_PRODUCT_ACCESSORIES,
+        operation_ids.GET_MANAGER_CATALOG_DOCUMENTS,
+        operation_ids.REPLACE_MANAGER_CATALOG_DOCUMENTS,
+        operation_ids.UPLOAD_MANAGER_CATALOG_DOCUMENT,
         # Catalog products and imports.
         operation_ids.GET_MANAGER_PRODUCTS,
         operation_ids.QUERY_MANAGER_CATALOG,
@@ -184,6 +191,13 @@ PLATFORM_MANAGER_OPERATION_IDS = frozenset(
 # A collaborator receives only shared reference/product editing. Procurement,
 # imports, bulk operations and platform media remain operator-owned.
 CATALOG_EDIT_OPERATION_IDS = frozenset({
+    operation_ids.GET_MANAGER_SERIES_ACCESSORIES,
+    operation_ids.SET_MANAGER_SERIES_ACCESSORIES,
+    operation_ids.GET_MANAGER_PRODUCT_ACCESSORIES,
+    operation_ids.SET_MANAGER_PRODUCT_ACCESSORIES,
+    operation_ids.GET_MANAGER_CATALOG_DOCUMENTS,
+    operation_ids.REPLACE_MANAGER_CATALOG_DOCUMENTS,
+    operation_ids.UPLOAD_MANAGER_CATALOG_DOCUMENT,
     operation_ids.GET_MANAGER_PRODUCTS, operation_ids.GET_MANAGER_PRODUCT,
     operation_ids.QUERY_MANAGER_CATALOG, operation_ids.SELECT_MANAGER_CATALOG,
     operation_ids.SMART_SEARCH_PRODUCTS, operation_ids.CREATE_MANAGER_PRODUCT,

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Турборежим: быстрое достижение температуры</title>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="#eff6ff"/>
+  <g fill="none" stroke="#142033" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="36" cy="32" r="17"/>
+    <path d="M12 19h9M9 27h10M9 37h10M12 45h9"/>
+  </g>
+  <path d="M38 21 27 34h8l-1 10 12-15h-9l1-8Z" fill="#dbeafe" stroke="#1763e8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -9,6 +9,7 @@ EditableFeatureScopeType = Literal["universal", "brand"]
 FeatureRuleOperator = Literal["eq", "neq", "gt", "gte", "lt", "lte", "in", "contains", "exists"]
 FeatureLinkSource = Literal["manual", "inherited", "derived"]
 ResolvedFeatureSource = Literal["product_override", "product_manual", "series", "brand", "derived"]
+FeatureDisplayMode = Literal["icon", "compact", "detailed"]
 
 
 class FeatureCategoryResponse(BaseModel):
@@ -52,6 +53,7 @@ class FeatureCreatePayload(BaseModel):
     slug: Optional[str] = Field(default=None, max_length=160)
     name: str = Field(min_length=1, max_length=200)
     short_description: Optional[str] = None
+    icon_caption: Optional[str] = Field(default=None, max_length=160)
     full_description: Optional[str] = None
     category_id: int
     scope_type: EditableFeatureScopeType = "universal"
@@ -84,6 +86,7 @@ class FeatureUpdatePayload(BaseModel):
     slug: Optional[str] = Field(default=None, max_length=160)
     name: Optional[str] = Field(default=None, min_length=1, max_length=200)
     short_description: Optional[str] = None
+    icon_caption: Optional[str] = Field(default=None, max_length=160)
     full_description: Optional[str] = None
     category_id: Optional[int] = None
     scope_type: Optional[EditableFeatureScopeType] = None
@@ -118,6 +121,8 @@ class PublicFeatureResponse(BaseModel):
     slug: str
     name: str
     short_description: Optional[str] = None
+    icon_caption: Optional[str] = None
+    display_mode: FeatureDisplayMode = "detailed"
     full_description: Optional[str] = None
     category: FeatureCategoryResponse
     scope_type: FeatureScopeType
@@ -139,6 +144,7 @@ class ManagerFeatureResponse(BaseModel):
     slug: str
     name: str
     short_description: Optional[str] = None
+    icon_caption: Optional[str] = None
     full_description: Optional[str] = None
     category: FeatureCategoryResponse
     scope_type: FeatureScopeType
@@ -178,6 +184,7 @@ class FeatureLinkPayload(BaseModel):
     source: FeatureLinkSource = "manual"
     is_enabled: bool = True
     sort_order: int = 0
+    display_mode: Optional[FeatureDisplayMode] = None
     override_title: Optional[str] = None
     override_description: Optional[str] = None
     override_media_id: Optional[int] = None
@@ -190,6 +197,7 @@ class FeatureTargetLinkPayload(BaseModel):
     is_enabled: bool = True
     is_featured: bool = False
     sort_order: int = 0
+    display_mode: Optional[FeatureDisplayMode] = None
     override_title: Optional[str] = None
     override_description: Optional[str] = None
     override_media_id: Optional[int] = None
@@ -218,6 +226,7 @@ class ManagerFeatureSuggestionsApplyPayload(BaseModel):
 class ManagerFeatureSeriesAssignmentPayload(BaseModel):
     feature_id: int
     is_featured: bool = False
+    display_mode: Optional[FeatureDisplayMode] = None
 
 
 class ManagerFeatureSeriesMigrationCandidate(BaseModel):

@@ -128,7 +128,10 @@ class FeatureAssignmentService:
                 )
                 changed = True
                 link_changed = True
-            for key, value in item.model_dump(exclude={"feature_id"}).items():
+            link_data = item.model_dump(exclude={"feature_id"})
+            if "display_mode" not in item.model_fields_set:
+                link_data.pop("display_mode", None)
+            for key, value in link_data.items():
                 if getattr(link, key) != value:
                     setattr(link, key, value)
                     changed = True
@@ -314,6 +317,8 @@ class FeatureAssignmentService:
             if len(featured_count) >= 3:
                 raise HTTPException(status_code=400, detail="У серии может быть не более трёх главных фич")
         link_data = payload.model_dump()
+        if "display_mode" not in payload.model_fields_set:
+            link_data.pop("display_mode", None)
         if target_type == "brand":
             link_data.pop("is_featured", None)
         for key, value in link_data.items():

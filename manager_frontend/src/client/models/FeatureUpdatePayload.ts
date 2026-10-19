@@ -7,6 +7,7 @@ export type FeatureUpdatePayload = {
     slug?: (string | null);
     name?: (string | null);
     short_description?: (string | null);
+    icon_caption?: (string | null);
     full_description?: (string | null);
     category_id?: (number | null);
     scope_type?: ('universal' | 'brand' | null);

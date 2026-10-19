@@ -41,7 +41,7 @@ async def test_series_response_keeps_own_save_when_another_writer_commits(monkey
     )
 
     assert response["title"] == "My save"
-    assert response["feature_assignments"] == [{"feature_id": 101, "is_featured": True}]
+    assert response["feature_assignments"] == [{"feature_id": 101, "is_featured": True, "display_mode": "detailed"}]
     assert response["brand_features"] == [{"id": 101, "is_featured": True}]
     assert response["products_count"] == 4
     commit.assert_awaited_once_with(

@@ -214,8 +214,8 @@ async def test_manager_feature_scope_owner_and_series_assignment_contract(async_
     )
     assert assigned.status_code == 200, assigned.text
     assert assigned.json()["feature_assignments"] == [
-        {"feature_id": branded.json()["id"], "is_featured": True},
-        {"feature_id": universal.json()["id"], "is_featured": False},
+        {"feature_id": branded.json()["id"], "is_featured": True, "display_mode": "detailed"},
+        {"feature_id": universal.json()["id"], "is_featured": False, "display_mode": "detailed"},
     ]
     assert assigned.json()["catalog_features"][0]["id"] == branded.json()["id"]
     assert assigned.json()["catalog_features"][0]["is_featured"] is True
@@ -286,8 +286,8 @@ async def test_series_update_preserves_existing_legacy_assignment_but_rejects_ne
     )
     assert saved.status_code == 200, saved.text
     assert saved.json()["feature_assignments"] == [
-        {"feature_id": universal.id, "is_featured": True},
-        {"feature_id": existing_legacy.id, "is_featured": False},
+        {"feature_id": universal.id, "is_featured": True, "display_mode": "detailed"},
+        {"feature_id": existing_legacy.id, "is_featured": False, "display_mode": "detailed"},
     ]
 
     rejected = await async_client.put(

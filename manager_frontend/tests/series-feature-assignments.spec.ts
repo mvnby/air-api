@@ -35,4 +35,30 @@ describe('SeriesFeatureAssignments', () => {
     expect(starButtons).toHaveLength(1);
     expect(starButtons[0]?.attributes('disabled')).toBeDefined();
   });
+
+  it('shows inherited detailed mode and keeps the featured choice when changing presentation', async () => {
+    const wrapper = mount(SeriesFeatureAssignments, {
+      props: {
+        features: [feature(1), feature(2)],
+        modelValue: [{ feature_id: 1, is_featured: true }, { feature_id: 2, is_featured: false, display_mode: 'compact' }],
+      },
+    });
+    const mode = wrapper.get('select[aria-label="Вид показа: Фича 1"]');
+    expect((mode.element as HTMLSelectElement).value).toBe('detailed');
+    await mode.setValue('icon');
+    expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([[
+      { feature_id: 1, is_featured: true, display_mode: 'icon' },
+      { feature_id: 2, is_featured: false, display_mode: 'compact' },
+    ]]);
+  });
+
+  it('keeps a compact presentation when marking the feature as important', async () => {
+    const wrapper = mount(SeriesFeatureAssignments, {
+      props: { features: [feature(1)], modelValue: [{ feature_id: 1, is_featured: false, display_mode: 'compact' }] },
+    });
+    await wrapper.get('button[title="Отметить главной"]').trigger('click');
+    expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([[
+      { feature_id: 1, is_featured: true, display_mode: 'compact' },
+    ]]);
+  });
 });

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Обогрев: тёплый воздух в холодное время года</title>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="#eff6ff"/>
+  <g fill="none" stroke="#142033" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="43" cy="21" r="7"/>
+    <path d="M43 10V7M43 35v-3M32 21h-3M57 21h-3M35 13l-2-2M53 31l-2-2M51 13l2-2M33 31l2-2"/>
+  </g>
+  <g fill="none" stroke="#1763e8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M15 51V27M10 32l5-5 5 5M28 54V35M23 40l5-5 5 5M41 54V42M36 47l5-5 5 5"/>
+  </g>
+</svg>

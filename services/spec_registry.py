@@ -167,6 +167,14 @@ SPEC_DEFINITIONS: Mapping[str, SpecDefinition] = {
         SpecValueType.BOOLEAN,
         aliases=("Компрессор: Инверторный компрессор",),
     ),
+    "accessory_type": _spec(
+        "accessory_type",
+        "Тип аксессуара",
+        SpecValueType.ENUM,
+        aliases=("Вид аксессуара", "Accessory type"),
+        enum_values=("wifi_module", "remote", "controller", "other"),
+        description="Подвид отдельного товара accessory; совместимость задаётся явными связями.",
+    ),
     "wifi_state": _spec(
         "wifi_state",
         "Состояние Wi-Fi",

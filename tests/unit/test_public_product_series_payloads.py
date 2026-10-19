@@ -208,6 +208,9 @@ async def test_public_product_queries_eager_load_series_and_siblings(sqlite_sess
                 "title": "Gentle Breeze",
                 "slug": "gentle-breeze",
                 "text": "Soft airflow without direct draft",
+                    "short_description": None,
+                    "icon_caption": None,
+                    "display_mode": "detailed",
                 "image_url": "/media/series/gentle-breeze.webp",
                 "icon": "wind",
                 "footnote": "Available on selected models",
@@ -240,6 +243,7 @@ async def test_public_product_queries_eager_load_series_and_siblings(sqlite_sess
         "seo_title": "MDV Elite series",
         "seo_description": "Quiet MDV Elite inverter air conditioners",
         "source_url": "https://example.com/mdv-elite",
+        "documents": [],
     }
 
     catalog_products = await ProductDAO.get_filtered(

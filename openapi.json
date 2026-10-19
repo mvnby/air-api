@@ -7660,6 +7660,34 @@
             "description": "Catalog category status: assigned/missing"
           },
           {
+            "name": "product_kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "unknown",
+                    "complete_split_system",
+                    "indoor_unit",
+                    "outdoor_unit",
+                    "panel",
+                    "accessory",
+                    "consumable",
+                    "other"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exact canonical product kind, applied before pagination",
+              "title": "Product Kind"
+            },
+            "description": "Exact canonical product kind, applied before pagination"
+          },
+          {
             "name": "sort",
             "in": "query",
             "required": false,
@@ -30392,6 +30420,425 @@
         }
       }
     },
+    "/api/manager/catalog-accessories/series/{target_id}": {
+      "get": {
+        "tags": [
+          "manager catalog accessories"
+        ],
+        "summary": "Get Series Accessories",
+        "description": "Read ordered accessory product links for a shared series. Catalog master edit\npermission is required; missing series returns 404. Published and unpublished\naccessories are shown for editing. Compatibility does not imply availability,\nautomatic order lines or a Wi-Fi capability. Prices are resolved on public read.",
+        "operationId": "get_manager_series_accessories",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "target_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Target Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerAccessoriesWorkspace"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "manager catalog accessories"
+        ],
+        "summary": "Set Series Accessories",
+        "description": "Replace the complete ordered accessory set for a shared series (up to 100).\nCatalog master edit permission is required. Missing series returns 404; missing\nproducts, non-accessory products or a self-compatible series returns 400;\nduplicate/nonpositive IDs return 422. Empty list clears links. Model exceptions\nremain intact. Identical saves preserve catalog revision and ordering; repeating\nthe exact PUT is safe. This updates compatibility only, never orders or offers.",
+        "operationId": "set_manager_series_accessories",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "target_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Target Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeriesAccessoriesUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerAccessoriesWorkspace"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/catalog-accessories/products/{target_id}": {
+      "get": {
+        "tags": [
+          "manager catalog accessories"
+        ],
+        "summary": "Get Product Accessories",
+        "description": "Read series accessories and explicit model includes/excludes for a shared\nproduct. Catalog master edit permission is required; missing product returns\n404. inherited records their series origin, override is true/false for model\ndecisions or null for inheritance, and is_enabled is the effective decision.\nCompatibility never follows from matching brands or Wi-Fi flags.",
+        "operationId": "get_manager_product_accessories",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "target_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Target Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerAccessoriesWorkspace"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "manager catalog accessories"
+        ],
+        "summary": "Set Product Accessories",
+        "description": "Replace all explicit model overrides (up to 100). Catalog master edit\npermission is required. is_enabled=true includes an accessory, false excludes\nit, and omitting a previous override restores series inheritance. Series order\nstays intact; additional model items follow it in submitted order. Missing\nproduct returns 404; invalid accessory kind, missing accessory or self-link\nreturns 400; duplicate IDs return 422. Repeating an unchanged PUT is safe and\ncreates no new catalog revision. No order, price or tenant offer is changed.",
+        "operationId": "set_manager_product_accessories",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "target_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Target Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductAccessoriesUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerAccessoriesWorkspace"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/catalog-documents/{target_type}/{target_id}": {
+      "get": {
+        "tags": [
+          "manager catalog documents"
+        ],
+        "summary": "Get Manager Catalog Documents",
+        "description": "Read own, inherited and effective shared catalog reference documents.\n\nRequires platform-owner or delegated catalog.master.edit permission. Internal research sources are included;\nthese are not order documents. Inherited documents preserve their original brand\nor series owner and are edited there. Missing target returns 404. No content is\nfetched from external URLs. Effective references deduplicate identical canonical\nURLs, preferring the product, then series, then brand; separate URLs are retained.",
+        "operationId": "get_manager_catalog_documents",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "target_type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "brand",
+                "series",
+                "product"
+              ],
+              "type": "string",
+              "title": "Target Type"
+            }
+          },
+          {
+            "name": "target_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Target Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogDocumentWorkspace"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "manager catalog documents"
+        ],
+        "summary": "Replace Manager Catalog Documents",
+        "description": "Replace up to 100 own technical/reference documents in the shared catalog.\n\nRequires platform-owner or delegated catalog.master.edit permission. An empty set\nremoves only the target's own references; inherited files remain attached to their\nowner. References default to public and inherited; set visibility=internal for\nstaff/AI research and inherit_to_products=false for owner-only materials. Missing\ntarget returns 404; duplicate URLs return 400. Metadata and catalog invalidation\ncommit together; an unchanged ordered set does not bump the catalog revision.\nNo external URLs are fetched and no stored files are physically deleted.",
+        "operationId": "replace_manager_catalog_documents",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "target_type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "brand",
+                "series",
+                "product"
+              ],
+              "type": "string",
+              "title": "Target Type"
+            }
+          },
+          {
+            "name": "target_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Target Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogDocumentsReplacePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogDocumentWorkspace"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/catalog-documents/{target_type}/{target_id}/upload": {
+      "post": {
+        "tags": [
+          "manager catalog documents"
+        ],
+        "summary": "Upload Manager Catalog Document",
+        "description": "Upload a public PDF/DOCX (up to 25 MiB) and return its immutable material URL.\n\nRequires platform-owner or delegated catalog.master.edit permission. Missing target\nreturns 404; invalid type/content returns 400, oversized input 413. Uses the existing\npublic media store under a dedicated catalog-documents namespace, separate from\nbusiness documents. The returned URL is attached by the subsequent whole-set PUT;\nupload alone does not change the catalog. Upload only materials approved for public\nhosting; private research documents must be attached as links to their source.",
+        "operationId": "upload_manager_catalog_document",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "target_type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "brand",
+                "series",
+                "product"
+              ],
+              "type": "string",
+              "title": "Target Type"
+            }
+          },
+          {
+            "name": "target_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Target Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_manager_catalog_document"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogDocumentUploadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/settings": {
       "get": {
         "tags": [
@@ -41628,6 +42075,20 @@
         ],
         "title": "Body_upload_local_images"
       },
+      "Body_upload_manager_catalog_document": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_manager_catalog_document"
+      },
       "Body_upload_manager_customer_contract": {
         "properties": {
           "number": {
@@ -47240,6 +47701,274 @@
           "is_published"
         ],
         "title": "CatalogDecisionProductResponse"
+      },
+      "CatalogDocumentInput": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 250,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "url": {
+            "type": "string",
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Url"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "catalog",
+              "operation",
+              "installation",
+              "service",
+              "brochure",
+              "certificate",
+              "other"
+            ],
+            "title": "Kind",
+            "default": "other"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 16,
+                "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 2200.0,
+                "minimum": 1900.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "public",
+              "internal"
+            ],
+            "title": "Visibility",
+            "default": "public"
+          },
+          "inherit_to_products": {
+            "type": "boolean",
+            "title": "Inherit To Products",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "url"
+        ],
+        "title": "CatalogDocumentInput"
+      },
+      "CatalogDocumentResponse": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 250,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "url": {
+            "type": "string",
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Url"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "catalog",
+              "operation",
+              "installation",
+              "service",
+              "brochure",
+              "certificate",
+              "other"
+            ],
+            "title": "Kind",
+            "default": "other"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 16,
+                "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 2200.0,
+                "minimum": 1900.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "public",
+              "internal"
+            ],
+            "title": "Visibility",
+            "default": "public"
+          },
+          "inherit_to_products": {
+            "type": "boolean",
+            "title": "Inherit To Products",
+            "default": true
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "origin_type": {
+            "type": "string",
+            "enum": [
+              "brand",
+              "series",
+              "product"
+            ],
+            "title": "Origin Type"
+          },
+          "origin_id": {
+            "type": "integer",
+            "title": "Origin Id"
+          },
+          "origin_title": {
+            "type": "string",
+            "title": "Origin Title"
+          },
+          "inherited": {
+            "type": "boolean",
+            "title": "Inherited",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "url",
+          "id",
+          "origin_type",
+          "origin_id",
+          "origin_title"
+        ],
+        "title": "CatalogDocumentResponse"
+      },
+      "CatalogDocumentUploadResponse": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "title"
+        ],
+        "title": "CatalogDocumentUploadResponse"
+      },
+      "CatalogDocumentWorkspace": {
+        "properties": {
+          "own": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogDocumentResponse"
+            },
+            "type": "array",
+            "title": "Own"
+          },
+          "inherited": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogDocumentResponse"
+            },
+            "type": "array",
+            "title": "Inherited"
+          },
+          "effective": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogDocumentResponse"
+            },
+            "type": "array",
+            "title": "Effective"
+          }
+        },
+        "type": "object",
+        "title": "CatalogDocumentWorkspace"
+      },
+      "CatalogDocumentsReplacePayload": {
+        "properties": {
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogDocumentInput"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Documents"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CatalogDocumentsReplacePayload"
       },
       "CatalogImportJobStartResponse": {
         "properties": {
@@ -53185,6 +53914,18 @@
             ],
             "title": "Short Description"
           },
+          "icon_caption": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 160
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon Caption"
+          },
           "full_description": {
             "anyOf": [
               {
@@ -53410,6 +54151,22 @@
             "title": "Sort Order",
             "default": 0
           },
+          "display_mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "icon",
+                  "compact",
+                  "detailed"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Mode"
+          },
           "override_title": {
             "anyOf": [
               {
@@ -53598,6 +54355,22 @@
             "title": "Sort Order",
             "default": 0
           },
+          "display_mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "icon",
+                  "compact",
+                  "detailed"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Mode"
+          },
           "override_title": {
             "anyOf": [
               {
@@ -53705,6 +54478,18 @@
               }
             ],
             "title": "Short Description"
+          },
+          "icon_caption": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 160
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon Caption"
           },
           "full_description": {
             "anyOf": [
@@ -62275,6 +63060,106 @@
         ],
         "title": "ManagerAccessUpdate"
       },
+      "ManagerAccessoriesWorkspace": {
+        "properties": {
+          "target_type": {
+            "type": "string",
+            "enum": [
+              "series",
+              "product"
+            ],
+            "title": "Target Type"
+          },
+          "target_id": {
+            "type": "integer",
+            "title": "Target Id"
+          },
+          "series_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Id"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerAccessoryItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "target_type",
+          "target_id"
+        ],
+        "title": "ManagerAccessoriesWorkspace"
+      },
+      "ManagerAccessoryItem": {
+        "properties": {
+          "accessory_product_id": {
+            "type": "integer",
+            "title": "Accessory Product Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "accessory_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accessory Type"
+          },
+          "is_published": {
+            "type": "boolean",
+            "title": "Is Published"
+          },
+          "inherited": {
+            "type": "boolean",
+            "title": "Inherited"
+          },
+          "override": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Override"
+          },
+          "is_enabled": {
+            "type": "boolean",
+            "title": "Is Enabled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "accessory_product_id",
+          "title",
+          "slug",
+          "is_published",
+          "inherited",
+          "is_enabled"
+        ],
+        "title": "ManagerAccessoryItem"
+      },
       "ManagerAccountCompaniesResponse": {
         "properties": {
           "staff_user_id": {
@@ -62820,6 +63705,18 @@
             ],
             "title": "Logo Url"
           },
+          "official_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Official Url"
+          },
           "short_description": {
             "anyOf": [
               {
@@ -62996,6 +63893,38 @@
               }
             ],
             "title": "Text"
+          },
+          "short_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Description"
+          },
+          "icon_caption": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon Caption"
+          },
+          "display_mode": {
+            "type": "string",
+            "enum": [
+              "icon",
+              "compact",
+              "detailed"
+            ],
+            "title": "Display Mode",
+            "default": "detailed"
           },
           "image_url": {
             "anyOf": [
@@ -63248,6 +64177,17 @@
               }
             ],
             "title": "Logo Url"
+          },
+          "official_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Official Url"
           },
           "short_description": {
             "anyOf": [
@@ -63954,6 +64894,18 @@
               }
             ],
             "title": "Logo Url"
+          },
+          "official_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Official Url"
           },
           "short_description": {
             "anyOf": [
@@ -70462,6 +71414,17 @@
             ],
             "title": "Short Description"
           },
+          "icon_caption": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon Caption"
+          },
           "full_description": {
             "anyOf": [
               {
@@ -70725,6 +71688,22 @@
             "type": "boolean",
             "title": "Is Featured",
             "default": false
+          },
+          "display_mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "icon",
+                  "compact",
+                  "detailed"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Mode"
           }
         },
         "type": "object",
@@ -80915,6 +81894,38 @@
             ],
             "title": "Text"
           },
+          "short_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Description"
+          },
+          "icon_caption": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon Caption"
+          },
+          "display_mode": {
+            "type": "string",
+            "enum": [
+              "icon",
+              "compact",
+              "detailed"
+            ],
+            "title": "Display Mode",
+            "default": "detailed"
+          },
           "image_url": {
             "anyOf": [
               {
@@ -90273,6 +91284,39 @@
         ],
         "title": "PrepareMaintenanceOffer"
       },
+      "ProductAccessoriesUpdate": {
+        "properties": {
+          "overrides": {
+            "items": {
+              "$ref": "#/components/schemas/ProductAccessoryOverridePayload"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Overrides"
+          }
+        },
+        "type": "object",
+        "title": "ProductAccessoriesUpdate"
+      },
+      "ProductAccessoryOverridePayload": {
+        "properties": {
+          "accessory_product_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Accessory Product Id"
+          },
+          "is_enabled": {
+            "type": "boolean",
+            "title": "Is Enabled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "accessory_product_id",
+          "is_enabled"
+        ],
+        "title": "ProductAccessoryOverridePayload"
+      },
       "ProductAvailabilityLeadPayload": {
         "properties": {
           "product_id": {
@@ -92521,6 +93565,20 @@
             "title": "Manuals",
             "default": []
           },
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogDocumentResponse"
+            },
+            "type": "array",
+            "title": "Documents"
+          },
+          "accessories": {
+            "items": {
+              "$ref": "#/components/schemas/PublicCatalogAccessory"
+            },
+            "type": "array",
+            "title": "Accessories"
+          },
           "warranty": {
             "anyOf": [
               {
@@ -92587,6 +93645,38 @@
               }
             ],
             "title": "Text"
+          },
+          "short_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Description"
+          },
+          "icon_caption": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon Caption"
+          },
+          "display_mode": {
+            "type": "string",
+            "enum": [
+              "icon",
+              "compact",
+              "detailed"
+            ],
+            "title": "Display Mode",
+            "default": "detailed"
           },
           "image_url": {
             "anyOf": [
@@ -93082,6 +94172,13 @@
               }
             ],
             "title": "Source Url"
+          },
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogDocumentResponse"
+            },
+            "type": "array",
+            "title": "Documents"
           }
         },
         "type": "object",
@@ -93471,6 +94568,13 @@
             },
             "type": "array",
             "title": "Features"
+          },
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogDocumentResponse"
+            },
+            "type": "array",
+            "title": "Documents"
           }
         },
         "type": "object",
@@ -93555,6 +94659,115 @@
           "sort_order"
         ],
         "title": "PublicBrandResponse"
+      },
+      "PublicCatalogAccessory": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "accessory_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accessory Type"
+          },
+          "main_image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Main Image"
+          },
+          "price": {
+            "type": "integer",
+            "title": "Price"
+          },
+          "old_price": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Old Price"
+          },
+          "availability_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Availability Status"
+          },
+          "delivery_min_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivery Min Days"
+          },
+          "delivery_max_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivery Max Days"
+          },
+          "compatibility_source": {
+            "type": "string",
+            "enum": [
+              "series",
+              "product"
+            ],
+            "title": "Compatibility Source"
+          },
+          "suggested_for_purchase": {
+            "type": "boolean",
+            "title": "Suggested For Purchase",
+            "description": "Wi-Fi modules are suggested only for a model explicitly marked Wi-Fi Ready; compatibility alone never changes capability.",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "title",
+          "slug",
+          "price",
+          "compatibility_source"
+        ],
+        "title": "PublicCatalogAccessory"
       },
       "PublicContactLeadPayload": {
         "properties": {
@@ -93663,6 +94876,27 @@
               }
             ],
             "title": "Short Description"
+          },
+          "icon_caption": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon Caption"
+          },
+          "display_mode": {
+            "type": "string",
+            "enum": [
+              "icon",
+              "compact",
+              "detailed"
+            ],
+            "title": "Display Mode",
+            "default": "detailed"
           },
           "full_description": {
             "anyOf": [
@@ -94852,6 +96086,20 @@
           "resolved_at"
         ],
         "title": "ResolveMaintenanceObservation"
+      },
+      "SeriesAccessoriesUpdate": {
+        "properties": {
+          "accessory_product_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Accessory Product Ids"
+          }
+        },
+        "type": "object",
+        "title": "SeriesAccessoriesUpdate"
       },
       "ServiceCatalogCounts": {
         "properties": {

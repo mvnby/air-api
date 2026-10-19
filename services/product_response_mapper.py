@@ -229,6 +229,25 @@ def map_product_to_response(
         )
         manuals_payload.append(manual_payload)
 
+    documents = list(product.__dict__.get("_catalog_documents") or [])
+    if series_payload is not None:
+        # A model's private override must also hide a duplicate ancestor URL in
+        # the nested series payload. Never mutate the shared series ORM object.
+        series_payload.documents = [
+            item for item in documents if item.origin_type in {"brand", "series"}
+        ]
+    manual_urls = {item.url for item in manuals_payload}
+    for document in documents:
+        if document.kind != "operation" or document.url in manual_urls:
+            continue
+        manual_urls.add(document.url)
+        inherited_manual = ProductManualResponse(
+            id=document.id, kind="manual", title=document.title, url=document.url,
+            source=document.origin_type,
+        )
+        inherited_manual._disclose_source = projection.disclosure_policy.expose_source_provenance
+        manuals_payload.append(inherited_manual)
+
     availability = projection.disclosure_policy.project_availability(
         supply_metrics
     )
@@ -271,6 +290,8 @@ def map_product_to_response(
         images=_public_legacy_image_urls(product, images or []),
         gallery_images=gallery,
         manuals=manuals_payload,
+        documents=documents,
+        accessories=list(product.__dict__.get("_catalog_accessories") or []),
         warranty=(warranties or {}).get(int(product.id or 0)),
         series_siblings=siblings_payload,
         features=list(getattr(product, "__dict__", {}).get("_resolved_features") or []),

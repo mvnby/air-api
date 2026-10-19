@@ -37,6 +37,7 @@ class Feature(SQLModel, table=True):
     slug: str = Field(unique=True, index=True)
     name: str = Field(index=True)
     short_description: Optional[str] = Field(default=None, sa_column=Column(Text))
+    icon_caption: Optional[str] = Field(default=None, max_length=160)
     full_description: Optional[str] = Field(default=None, sa_column=Column(Text))
     category_id: int = Field(foreign_key="feature_category.id", index=True)
     scope_type: str = Field(default="universal", index=True)
@@ -99,6 +100,7 @@ class FeatureLinkFields(SQLModel):
     source: str = Field(default="manual", index=True)
     is_enabled: bool = Field(default=True, index=True)
     sort_order: int = Field(default=0, index=True)
+    display_mode: Optional[str] = Field(default=None, max_length=16)
     override_title: Optional[str] = None
     override_description: Optional[str] = Field(default=None, sa_type=Text)
     override_media_id: Optional[int] = Field(default=None, foreign_key="media_asset.id", ondelete="SET NULL")
@@ -113,6 +115,7 @@ class FeatureBrandLink(FeatureLinkFields, table=True):
     __tablename__ = "feature_brand_link"
     __table_args__ = (
         UniqueConstraint("brand_id", "feature_id", name="uq_feature_brand_link"),
+        CheckConstraint("display_mode IS NULL OR display_mode IN ('icon', 'compact', 'detailed')", name="ck_feature_brand_display_mode"),
         CheckConstraint(
             "source IN ('manual', 'inherited', 'derived')",
             name="ck_feature_brand_link_source",
@@ -131,6 +134,7 @@ class FeatureSeriesLink(FeatureLinkFields, table=True):
     __tablename__ = "feature_series_link"
     __table_args__ = (
         UniqueConstraint("series_id", "feature_id", name="uq_feature_series_link"),
+        CheckConstraint("display_mode IS NULL OR display_mode IN ('icon', 'compact', 'detailed')", name="ck_feature_series_display_mode"),
         CheckConstraint(
             "source IN ('manual', 'inherited', 'derived')",
             name="ck_feature_series_link_source",
@@ -156,6 +160,7 @@ class FeatureProductLink(FeatureLinkFields, table=True):
     __tablename__ = "feature_product_link"
     __table_args__ = (
         UniqueConstraint("product_id", "feature_id", name="uq_feature_product_link"),
+        CheckConstraint("display_mode IS NULL OR display_mode IN ('icon', 'compact', 'detailed')", name="ck_feature_product_display_mode"),
         CheckConstraint(
             "source IN ('manual', 'inherited', 'derived')",
             name="ck_feature_product_link_source",

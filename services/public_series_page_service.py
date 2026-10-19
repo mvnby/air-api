@@ -18,6 +18,8 @@ from services.product_read_service import ProductReadService
 from services.product_response_mapper import map_product_to_response
 from services.product_series_payloads import build_product_series_response
 from services.public_catalog_service import PublicCatalogService
+from services.public_catalog_enrichment_service import enrich_public_products
+from services.catalog_document_service import CatalogDocumentService
 from services.public_catalog_disclosure import (
     CANONICAL_PUBLIC_DISCLOSURE,
     TENANT_NEUTRAL_PUBLIC_DISCLOSURE,
@@ -73,6 +75,10 @@ class PublicSeriesPageService:
         products = [projection.product for projection in projections]
         supply_metrics = await ProductReadService.get_supply_metrics_map(session, products)
         await FeatureResolverService.resolve_for_products(session, products)
+        await enrich_public_products(session, products, tenant_scope=tenant_scope)
+        series.__dict__["_catalog_documents"] = await CatalogDocumentService.get_effective_documents(
+            session, target_type="series", target_id=int(series.id), public_only=True,
+        )
         warranties = await WarrantyPolicyResolver.resolve_public(session, products)
 
         disclosure_policy = (

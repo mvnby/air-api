@@ -25,6 +25,8 @@ from .maintenance_observation import (
     MaintenanceObservation, MaintenanceObservationRevision, MaintenanceObservationPhoto,
 )
 from .brand import Brand, ProductSeries
+from .catalog_accessory import SeriesAccessoryLink, ProductAccessoryOverride
+from .catalog_document import CatalogDocument
 from .feature import (
     Feature,
     FeatureBrandLink,

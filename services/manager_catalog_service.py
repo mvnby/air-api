@@ -47,6 +47,7 @@ class ManagerCatalogService:
         category_slug: Optional[str],
         category_status: Optional[str],
         sort: str,
+        product_kind: Optional[str] = None,
     ) -> Dict[str, Any]:
         return await ProductService.get_manager_list(
             session=session,
@@ -64,6 +65,7 @@ class ManagerCatalogService:
             series_id=series_id,
             category_slug=category_slug,
             category_status=category_status,
+            product_kind=product_kind,
             sort=sort,
         )
 

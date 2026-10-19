@@ -11,6 +11,7 @@ class Brand(SQLModel, table=True):
     title: str = Field(index=True)
     slug: str = Field(unique=True, index=True)
     logo_url: Optional[str] = Field(default=None)
+    official_url: Optional[str] = Field(default=None, max_length=2048)
     short_description: Optional[str] = Field(default=None, sa_column=Column(Text))
     description: Optional[str] = Field(default=None, sa_column=Column(Text))
     is_published: bool = Field(default=True, index=True)

@@ -6,6 +6,8 @@ from slugify import slugify
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.input_validation import validate_optional_source_url
+
 from models import (
     Brand,
     Feature,
@@ -24,6 +26,7 @@ from services.manager_brand_mutation_state import (
     snapshot_brand_feature,
 )
 from services.manager_brand_series_service import ManagerBrandSeriesOperations
+from services.manager_brand_presenter import serialize_manager_brand
 
 
 class ManagerBrandService(ManagerBrandSeriesOperations):
@@ -246,6 +249,7 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
             title=title,
             slug=slug,
             logo_url=logo_url,
+            official_url=validate_optional_source_url(payload.get("official_url")),
             short_description=ManagerBrandService._clean_optional_text(
                 payload.get("short_description")
             ),
@@ -310,6 +314,8 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
                 payload["logo_url"],
                 field="brand.logo_url",
             )
+        if "official_url" in payload:
+            brand.official_url = validate_optional_source_url(payload["official_url"])
         if "short_description" in payload:
             brand.short_description = ManagerBrandService._clean_optional_text(
                 payload["short_description"]
@@ -420,20 +426,7 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
             brand_slugs=[brand_slug],
         )
 
-    @staticmethod
-    def _serialize_brand(brand: Brand, *, products_count: int = 0) -> Dict[str, Any]:
-        return {
-            "id": brand.id,
-            "title": brand.title,
-            "slug": brand.slug,
-            "logo_url": brand.logo_url,
-            "short_description": brand.short_description,
-            "description": brand.description,
-            "is_published": brand.is_published,
-            "sort_order": brand.sort_order,
-            "created_at": brand.created_at,
-            "products_count": int(products_count or 0),
-        }
+    _serialize_brand = staticmethod(serialize_manager_brand)
 
     @staticmethod
     def _serialize_brand_feature(feature: Feature, *, series_count: int = 0) -> Dict[str, Any]:

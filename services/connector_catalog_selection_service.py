@@ -12,10 +12,12 @@ from core.config import settings
 from crud.connector_catalog_selection import ConnectorCatalogSelectionDAO
 from models.product_constants import BTU_MAPPING
 from schemas_connector_catalog import (
-    CatalogProduct, CatalogProductInput, CatalogSelectionInput,
+    CatalogProduct, CatalogProductDetail, CatalogProductInput, CatalogProductReferenceDocument, CatalogSelectionInput,
     CatalogSelectionOption, CatalogSelectionResult,
 )
 from services.catalog_purge_service import build_catalog_purge_paths
+from services.catalog_accessory_service import CatalogAccessoryService
+from services.catalog_document_service import CatalogDocumentService
 from services.public_catalog_visibility_service import PublicCatalogVisibilityService
 from services.storefront_context_service import InvalidStorefrontHostError, StorefrontContextService
 
@@ -170,7 +172,7 @@ class ConnectorCatalogSelectionService:
         )
 
     @classmethod
-    async def get_product(cls, session: AsyncSession, actor: CommandActor, inputs: CatalogProductInput) -> CatalogProduct:
+    async def get_product(cls, session: AsyncSession, actor: CommandActor, inputs: CatalogProductInput) -> CatalogProductDetail:
         canonical = await cls._canonical_scope(session, actor)
         candidates = ConnectorCatalogSelectionDAO.candidates(
             session, tenant_scope=actor.tenant_scope, canonical=canonical, product_id=inputs.product_id,
@@ -178,4 +180,21 @@ class ConnectorCatalogSelectionService:
         row = (await session.execute(select(candidates))).mappings().one_or_none()
         if row is None:
             raise HTTPException(status_code=404, detail="Product unavailable in this storefront catalog")
-        return cls._product(row, await cls._site_base(session, actor, canonical))
+        projection = await PublicCatalogVisibilityService.get_visible_product_by_id(
+            session, tenant_scope=actor.tenant_scope, product_id=inputs.product_id,
+        )
+        if projection is None:
+            raise HTTPException(status_code=404, detail="Product unavailable in this storefront catalog")
+        product = cls._product(row, await cls._site_base(session, actor, canonical))
+        documents = await CatalogDocumentService.resolve_for_products(
+            session, [projection.product], public_only=True,
+        )
+        accessories = await CatalogAccessoryService.resolve_public(
+            session, [projection.product], tenant_scope=actor.tenant_scope,
+        )
+        return CatalogProductDetail(
+            **product.model_dump(),
+            documents=[CatalogProductReferenceDocument(**document.model_dump())
+                       for document in documents.get(inputs.product_id, [])],
+            accessories=accessories.get(inputs.product_id, []),
+        )

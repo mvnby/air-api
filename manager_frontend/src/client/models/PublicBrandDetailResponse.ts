@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { CatalogDocumentResponse } from './CatalogDocumentResponse';
 import type { ProductSeriesBrandFeatureResponse } from './ProductSeriesBrandFeatureResponse';
 import type { PublicFeaturedSeriesResponse } from './PublicFeaturedSeriesResponse';
 export type PublicBrandDetailResponse = {
@@ -15,5 +16,6 @@ export type PublicBrandDetailResponse = {
     sort_order: number;
     featured_series?: Array<PublicFeaturedSeriesResponse>;
     features?: Array<ProductSeriesBrandFeatureResponse>;
+    documents?: Array<CatalogDocumentResponse>;
 };
 

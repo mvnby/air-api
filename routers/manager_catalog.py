@@ -44,6 +44,7 @@ from schemas import (
     OnlinerImportResultResponse,
     ProductCreate,
     ProductDuplicatePayload,
+    ProductKind,
     ProductUpdate,
 )
 from services.catalog_import_runtime_service import catalog_import_runtime_service
@@ -82,6 +83,7 @@ async def list_products_for_manager(
     series_id: Optional[int] = Query(None, ge=1, description="Exact product series ID"),
     category_slug: Optional[str] = Query(None, description="Category tag slug: cat-household/cat-multi/cat-industrial"),
     category_status: Optional[Literal["assigned", "missing"]] = Query(None, description="Catalog category status: assigned/missing"),
+    product_kind: Optional[ProductKind] = Query(None, description="Exact canonical product kind, applied before pagination"),
     sort: str = Query("recommended"),
     session: AsyncSession = Depends(get_session),
     _user: str = Depends(get_current_catalog_username),
@@ -115,6 +117,7 @@ async def list_products_for_manager(
         series_id=series_id,
         category_slug=category_slug,
         category_status=category_status,
+        product_kind=product_kind,
         sort=sort,
     )
     return CatalogAccessService.project_product(result, is_platform_owner=auth.is_platform_owner)

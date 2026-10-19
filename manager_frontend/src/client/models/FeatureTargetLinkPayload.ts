@@ -6,6 +6,7 @@ export type FeatureTargetLinkPayload = {
     is_enabled?: boolean;
     is_featured?: boolean;
     sort_order?: number;
+    display_mode?: ('icon' | 'compact' | 'detailed' | null);
     override_title?: (string | null);
     override_description?: (string | null);
     override_media_id?: (number | null);

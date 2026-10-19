@@ -20,6 +20,9 @@ class ManagerBrandSeriesFeatureOperations:
             "id": feature.id,
             "title": link.override_title or feature.name,
             "slug": feature.slug,
+            "short_description": feature.short_description,
+            "icon_caption": feature.icon_caption,
+            "display_mode": link.display_mode or "detailed",
             "text": (
                 link.override_description
                 if link.override_description is not None
@@ -89,7 +92,7 @@ class ManagerBrandSeriesFeatureOperations:
         brand_id: int,
         assignments: Any,
     ) -> bool:
-        normalized: list[tuple[int, bool]] = []
+        normalized: list[tuple[int, bool, str | None]] = []
         seen: set[int] = set()
         for raw in assignments or []:
             data = raw.model_dump() if hasattr(raw, "model_dump") else dict(raw)
@@ -100,8 +103,11 @@ class ManagerBrandSeriesFeatureOperations:
                     detail="Фича серии указана повторно или некорректно",
                 )
             seen.add(feature_id)
-            normalized.append((feature_id, bool(data.get("is_featured", False))))
-        if sum(1 for _, is_featured in normalized if is_featured) > 3:
+            display_mode = data.get("display_mode")
+            if display_mode not in {None, "icon", "compact", "detailed"}:
+                raise HTTPException(status_code=400, detail="Некорректный формат фичи")
+            normalized.append((feature_id, bool(data.get("is_featured", False)), display_mode))
+        if sum(1 for _, is_featured, _ in normalized if is_featured) > 3:
             raise HTTPException(
                 status_code=400,
                 detail="У серии может быть не более трёх главных фич",
@@ -119,13 +125,13 @@ class ManagerBrandSeriesFeatureOperations:
         await cls._validate_series_feature_ids(
             session,
             brand_id=brand_id,
-            feature_ids=[feature_id for feature_id, _ in normalized],
+            feature_ids=[feature_id for feature_id, _, _ in normalized],
             preserved_legacy_feature_ids={
                 int(link.feature_id) for link in existing_links if link.is_enabled
             },
         )
         existing = {int(link.feature_id): link for link in existing_links}
-        requested = {feature_id: is_featured for feature_id, is_featured in normalized}
+        requested = {feature_id: is_featured for feature_id, is_featured, _ in normalized}
         changed = set(existing) != set(requested)
         for link in existing_links:
             if int(link.feature_id) not in requested:
@@ -135,7 +141,7 @@ class ManagerBrandSeriesFeatureOperations:
             (int(link.sort_order or 0) for link in existing_links),
             default=0,
         )
-        for feature_id, is_featured in normalized:
+        for feature_id, is_featured, display_mode in normalized:
             link = existing.get(feature_id)
             if link is None:
                 next_sort_order += 10
@@ -146,11 +152,15 @@ class ManagerBrandSeriesFeatureOperations:
                 )
             if (
                 bool(link.is_featured) != is_featured
+                or (display_mode is not None and (link.display_mode or "detailed") != display_mode)
                 or not link.is_enabled
                 or link.source != "manual"
             ):
                 changed = True
             link.is_featured = is_featured
+            # A missing presentation field preserves existing clients' assignments.
+            if display_mode is not None:
+                link.display_mode = display_mode
             link.is_enabled = True
             link.source = "manual"
             session.add(link)

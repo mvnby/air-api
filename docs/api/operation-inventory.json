@@ -9,6 +9,7 @@
     "reviewed_stage"
   ],
   "review_stages": {
+    "24": "Reusable series accessories with explicit model exceptions and storefront commercial visibility, public/internal inherited catalog documents with verified PDF/DOCX uploads, contextual feature presentation and official brand sources; reviewed 2026-10-19",
     "23": "Fixed scoped remuneration agreements and frozen BYN order expenses, explicit accrual, exact FIFO payouts and dual-authority cash offsets, shared account mutex/versions/durable UUID, independent pay delegation, safe own history, preserved payout/handover corrections and no duplicate legacy expenses; reviewed 2026-10-17",
     "22": "Client cash receipt against a reviewed live collection instruction, atomic Payment/custody/instruction/audit, exact money, durable command replay, company/site/worker cash history, reserved source allocations, selected-recipient handover acknowledgement, explicit finance delegation and non-destructive correction; reviewed 2026-10-17",
     "21": "Read-only installer workspace: actual company/site membership and explicit per-order/visit grants, safe technical projections and private publications, one versioned recipient collection instruction with live financial review, shared bot/queued notification ACL and installer invitations without implicit grants; reviewed 2026-10-16",
@@ -34,6 +35,17 @@
     "11": "Native tender direct push; dedicated key, fixed active system scope, writable-primary gates, bounded payload, shared pull/push deduplication, staff preservation, stale guards and unchanged pull checkpoint reviewed 2026-10-09 for issue 849"
   },
   "operations": {
+    "routers/manager_catalog_accessories.py": [
+      ["GET /api/manager/catalog-accessories/series/{target_id}", "get_manager_series_accessories", false, 24],
+      ["PUT /api/manager/catalog-accessories/series/{target_id}", "set_manager_series_accessories", false, 24],
+      ["GET /api/manager/catalog-accessories/products/{target_id}", "get_manager_product_accessories", false, 24],
+      ["PUT /api/manager/catalog-accessories/products/{target_id}", "set_manager_product_accessories", false, 24]
+    ],
+    "routers/manager_catalog_documents.py": [
+      ["GET /api/manager/catalog-documents/{target_type}/{target_id}", "get_manager_catalog_documents", false, 24],
+      ["PUT /api/manager/catalog-documents/{target_type}/{target_id}", "replace_manager_catalog_documents", false, 24],
+      ["POST /api/manager/catalog-documents/{target_type}/{target_id}/upload", "upload_manager_catalog_document", false, 24]
+    ],
     "routers/worker_pay.py": [
       ["GET /api/installer/pay", "get_installer_pay", false, 23],
       ["GET /api/manager/worker-pay", "list_manager_worker_pay", false, 23],

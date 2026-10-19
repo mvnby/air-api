@@ -7,6 +7,9 @@ export type ProductSeriesBrandFeatureResponse = {
     title: string;
     slug: string;
     text?: (string | null);
+    short_description?: (string | null);
+    icon_caption?: (string | null);
+    display_mode?: 'icon' | 'compact' | 'detailed';
     image_url?: (string | null);
     icon?: (string | null);
     footnote?: (string | null);

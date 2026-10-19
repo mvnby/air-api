@@ -2,8 +2,13 @@
 import { computed, ref } from "vue";
 import { Check, Search, Star } from "lucide-vue-next";
 import type { ManagerFeatureResponse } from "../../client";
+import { FEATURE_DISPLAY_MODES, type FeatureDisplayMode } from "../features/feature-presentation";
 
-export type FeatureAssignment = { feature_id: number; is_featured: boolean };
+export type FeatureAssignment = {
+  feature_id: number;
+  is_featured: boolean;
+  display_mode?: FeatureDisplayMode | null;
+};
 
 const props = defineProps<{
   features: ManagerFeatureResponse[];
@@ -55,6 +60,16 @@ const toggleFeatured = (featureId: number) => {
     ),
   );
 };
+
+const setDisplayMode = (featureId: number, event: Event) => {
+  const mode = (event.target as HTMLSelectElement).value as FeatureDisplayMode;
+  emit(
+    "update:modelValue",
+    props.modelValue.map((item) =>
+      item.feature_id === featureId ? { ...item, display_mode: mode } : item,
+    ),
+  );
+};
 </script>
 
 <template>
@@ -70,7 +85,7 @@ const toggleFeatured = (featureId: number) => {
         </h3>
         <p class="mt-1 text-xs text-gray-500 dark:text-slate-400">
           Выберите общие фичи или фичи этого бренда. До трёх звёзд — главное для
-          карточек.
+          карточек. Вид показа на странице товара выбирается для каждой фичи.
         </p>
       </div>
       <span class="text-xs font-semibold text-amber-700 dark:text-amber-300"
@@ -91,7 +106,7 @@ const toggleFeatured = (featureId: number) => {
       <div
         v-for="feature in visibleFeatures"
         :key="feature.id"
-        class="flex items-center gap-2 px-3 py-2.5"
+        class="flex flex-wrap items-center gap-2 px-3 py-2.5"
       >
         <button
           type="button"
@@ -102,6 +117,7 @@ const toggleFeatured = (featureId: number) => {
               : 'border-gray-300 text-transparent dark:border-slate-600'
           "
           :aria-pressed="selected.has(feature.id)"
+          :aria-label="`${selected.has(feature.id) ? 'Убрать из серии' : 'Добавить в серию'}: ${feature.name}`"
           :title="
             selected.has(feature.id) ? 'Убрать из серии' : 'Добавить в серию'
           "
@@ -111,7 +127,7 @@ const toggleFeatured = (featureId: number) => {
         </button>
         <button
           type="button"
-          class="min-w-0 flex-1 text-left"
+          class="min-w-[100px] flex-1 text-left"
           @click="toggle(feature.id)"
         >
           <span
@@ -122,6 +138,17 @@ const toggleFeatured = (featureId: number) => {
             {{ feature.category.name }}</span
           >
         </button>
+        <label v-if="selected.has(feature.id)" class="order-last ml-9 w-full sm:order-none sm:ml-0 sm:w-auto">
+          <span class="sr-only">Вид показа: {{ feature.name }}</span>
+          <select
+            :value="selected.get(feature.id)?.display_mode || 'detailed'"
+            :aria-label="`Вид показа: ${feature.name}`"
+            class="h-8 w-full rounded-md border border-gray-200 bg-transparent px-2 text-xs text-gray-700 dark:border-slate-700 dark:text-slate-200 sm:w-28"
+            @change="setDisplayMode(feature.id, $event)"
+          >
+            <option v-for="mode in FEATURE_DISPLAY_MODES" :key="mode.value" :value="mode.value">{{ mode.label }}</option>
+          </select>
+        </label>
         <button
           v-if="selected.has(feature.id)"
           type="button"
@@ -134,6 +161,8 @@ const toggleFeatured = (featureId: number) => {
               ? 'Убрать из главных'
               : 'Отметить главной'
           "
+          :aria-label="`${selected.get(feature.id)?.is_featured ? 'Убрать из главных' : 'Отметить главной'}: ${feature.name}`"
+          :aria-pressed="selected.get(feature.id)?.is_featured"
           @click="toggleFeatured(feature.id)"
         >
           <Star

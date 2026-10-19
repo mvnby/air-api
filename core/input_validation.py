@@ -145,3 +145,13 @@ def validate_public_manual_url(value: str) -> str:
         raise ValueError(MANUAL_URL_ERROR)
 
     return urlunsplit(("", "", parsed.path, parsed.query, ""))
+
+
+def validate_optional_source_url(value: Optional[str]) -> Optional[str]:
+    """Normalize an HTTP(S) reference without downloading untrusted content."""
+    cleaned = clean_optional(value)
+    if not cleaned:
+        return None
+    if urlsplit(cleaned).scheme.lower() not in {"http", "https"}:
+        raise ValueError("Ссылка на источник должна использовать HTTP(S)")
+    return validate_public_manual_url(cleaned)

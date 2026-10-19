@@ -171,6 +171,7 @@ export const useSeriesWorkspace = ({
       return responseAssignments.map((assignment) => ({
         feature_id: assignment.feature_id,
         is_featured: Boolean(assignment.is_featured),
+        display_mode: assignment.display_mode || null,
       }));
     }
 

@@ -11,6 +11,7 @@ def snapshot_brand(brand: Brand) -> tuple[object, ...]:
         brand.title,
         brand.slug,
         brand.logo_url,
+        getattr(brand, "official_url", None),
         brand.short_description,
         brand.description,
         brand.is_published,

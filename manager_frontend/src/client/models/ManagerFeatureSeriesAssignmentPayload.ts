@@ -5,5 +5,6 @@
 export type ManagerFeatureSeriesAssignmentPayload = {
     feature_id: number;
     is_featured?: boolean;
+    display_mode?: ('icon' | 'compact' | 'detailed' | null);
 };
 
