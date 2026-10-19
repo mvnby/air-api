@@ -56,6 +56,13 @@ async def test_cli_atomic_rollback_success_noop_and_preserved_unrelated_state(db
     import core.database
     monkeypatch.setattr(core.database, 'async_session_maker', factory)
     m, brands, series, category, feature, products, link = fixture_catalog()
+    feature.brand_id, feature.scope_type = 1, 'brand'
+    feature.short_description = 'Unsupported percentage'
+    m['reviewed_features'] = [{
+        'identity': {'id': feature.id, 'brand_id': 1, 'slug': feature.slug},
+        'before_sha256': {'short_description': digest(feature.short_description)},
+        'fields_set': {'short_description': 'Source-reviewed explanation'},
+    }]
     async with factory() as session:
         session.add_all(brands + [category])
         await session.flush()
@@ -95,6 +102,7 @@ async def test_cli_atomic_rollback_success_noop_and_preserved_unrelated_state(db
     paths = after['events'][0]['payload']['paths']
     assert set(paths) == set(plan['series_paths']) | {f'/product/{quote(p.slug, safe="")}/' for p in products} | {'/brands/', '/catalog/'} | {f'/brands/{b.slug}/' for b in brands}
     assert len(after['product_series']) == 2 and len(after['feature']) == 2 and len(after['catalog_document']) == 1
+    assert next(f for f in after['feature'] if f['id'] == feature.id)['short_description'] == 'Source-reviewed explanation'
     for before, product in zip(baseline['product'], after['product']):
         for field in ('title', 'price', 'main_image', 'product_kind', 'slug'):
             assert product[field] == before[field]

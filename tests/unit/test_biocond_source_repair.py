@@ -195,3 +195,22 @@ def test_reviewed_legacy_series_feature_prose_array_is_allowed():
     m['series'][0]['fields_set']['content_blocks'] = []
     with pytest.raises(RepairBlocked, match='Unreviewed'):
         build_plan(m, c, now=NOW)
+
+
+def test_existing_brand_feature_copy_is_guarded_without_media_or_scope_changes():
+    m, c = fixture_catalog()
+    feature = c['features'][0]
+    feature.brand_id, feature.scope_type = 1, 'brand'
+    feature.short_description = 'Unsupported percentage'
+    row = {'identity': {'id': feature.id, 'brand_id': 1, 'slug': feature.slug},
+           'before_sha256': {'short_description': digest(feature.short_description)},
+           'fields_set': {'short_description': 'Source-reviewed explanation'}}
+    m['reviewed_features'] = [row]
+    assert build_plan(m, c, now=NOW)['changed'] == 3
+    row['fields_set']['image_url'] = 'https://example.invalid/new.webp'
+    with pytest.raises(RepairBlocked, match='Only exact brand feature copy'):
+        build_plan(m, c, now=NOW)
+    row['fields_set'].pop('image_url')
+    feature.short_description = 'Manual edit after source review'
+    with pytest.raises(RepairBlocked, match='unknown or partially'):
+        build_plan(m, c, now=NOW)

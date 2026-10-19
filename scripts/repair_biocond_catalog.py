@@ -84,6 +84,7 @@ async def run(*, manifest_path: Path, execute=False, reviewed_plan=None, execute
                     refs[source][row['key']] = obj.id
                     maps[source][obj.id] = obj
         patches = {kind: {r['identity']['id']: r for r in m[kind]} for kind in ('products', 'series', 'brands')}
+        patches['features'] = {r['identity']['id']: r for r in m.get('reviewed_features', [])}
         for op in plan['operations']:
             kind = op['kind']
             if kind not in patches:

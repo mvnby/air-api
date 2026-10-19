@@ -34,6 +34,7 @@ Top-level keys:
 | `series` | Exact `{id,brand_id,slug}` identity, `before_sha256`, `fields_set` limited to title/description/short_description/source_url/features |
 | `new_series` | Unique `key`, exact `{brand_id,slug}` identity, `before: {present:false}`, reviewed `fields_set` |
 | `new_features` | Unique `key`, exact `{brand_id,slug}` identity, `before: {present:false}`, reviewed active brand-scoped feature fields and source provenance |
+| `reviewed_features` | Exact `{id,brand_id,slug}` identity and before hashes; only source-reviewed short/full descriptions and source provenance of an existing active brand feature |
 | `documents` | Exact `{brand_id,url}` identity, `before: {present:false}`, document metadata with `source_url` |
 | `manual_links_before` | All existing brand/series/product feature links, including inherited/derived links, as canonical full projections |
 | `feature_links` | Explicit series/product link upserts; omitted links remain untouched |

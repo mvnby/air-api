@@ -17,6 +17,7 @@ BRAND_IDS = {1, 3, 14}
 PRODUCT_FIELDS = {'description', 'power_cooling', 'source_url', 'series_assignment_source'}
 SERIES_FIELDS = {'title', 'description', 'short_description', 'source_url', 'features'}
 FEATURE_FIELDS = {'name', 'category_id', 'scope_type', 'is_active', 'short_description', 'full_description', 'source_url', 'source_notes', 'footnote', 'icon_caption', 'sort_order', 'aliases'}
+REVIEWED_FEATURE_COPY_FIELDS = {'short_description', 'full_description', 'source_url', 'source_notes'}
 DOCUMENT_FIELDS = {'title', 'kind', 'source_url', 'year', 'language', 'visibility', 'inherit_to_products', 'sort_order'}
 LINK_FIELDS = {'source', 'is_enabled', 'sort_order', 'display_mode', 'override_title', 'override_description', 'override_media_id', 'override_image_url', 'override_icon', 'override_footnote'}
 LINK_EDITS = LINK_FIELDS - {'override_media_id', 'override_image_url', 'override_icon'}
@@ -166,6 +167,15 @@ def validate_manifest(m: dict) -> None:
                 _validate_series_features(row['fields_set']['features'])
             if kind == 'brands' and row['fields_set'] and row['before_sha256'].get('official_url') not in {digest(None), digest('')}:
                 raise RepairBlocked('Brand official URL may only fill an empty value')
+    reviewed_features = m.get('reviewed_features', [])
+    if len({r['identity']['id'] for r in reviewed_features}) != len(reviewed_features):
+        raise RepairBlocked('Duplicate reviewed feature copy')
+    for row in reviewed_features:
+        if (set(row['identity']) != {'id', 'brand_id', 'slug'}
+                or row['identity']['brand_id'] not in BRAND_IDS
+                or set(row['fields_set']) - REVIEWED_FEATURE_COPY_FIELDS
+                or set(row['fields_set']) - set(row['before_sha256'])):
+            raise RepairBlocked('Only exact brand feature copy with before guards may change')
     for row in m['products']:
         if set(row['identity']) != {'id', 'brand_id', 'slug', 'title'} or row['identity'].get('brand_id') not in BRAND_IDS:
             raise RepairBlocked('Product requires exact identity within brand scope')
@@ -274,6 +284,15 @@ def build_plan(m: dict, catalog: dict, *, now: datetime | None = None) -> dict:
             actual = {key: digest(getattr(obj, key)) for key in before}
             target = {**before, **{key: digest(value) for key, value in row['fields_set'].items()}}
             compare(kind, obj.id, actual, before, target, row['fields_set'])
+    for row in m.get('reviewed_features', []):
+        obj = indexed['features'].get(row['identity']['id'])
+        if obj is None or obj.scope_type != 'brand' or obj.is_active is not True:
+            raise RepairBlocked('Reviewed copy requires an existing active brand feature')
+        _identity(obj, row['identity'])
+        before = row['before_sha256']
+        actual = {key: digest(getattr(obj, key)) for key in before}
+        target = {**before, **{key: digest(value) for key, value in row['fields_set'].items()}}
+        compare('features', obj.id, actual, before, target, row['fields_set'])
     for row in m['products']:
         obj = indexed['products'][row['identity']['id']]
         _identity(obj, row['identity'])
