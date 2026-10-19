@@ -9,6 +9,7 @@ from services.spec_registry import (
     REGISTRY_UNORDERED_DIMENSION_KEYS,
     build_typed_specs,
     canonical_indoor_type_slug,
+    normalize_airflow_digit_groups,
     normalize_numeric_range_separators,
     normalize_registered_value,
 )
@@ -180,6 +181,7 @@ def clean_value(key: str, val: Any, keep_units: bool = True, source_key: str | N
         return text
 
     if key == "airflow_max":
+        val = normalize_airflow_digit_groups(val)
         numbers = re.findall(r"[-+]?\d+(?:[.,]\d+)?", val)
         if numbers:
             parsed = [float(number.replace(",", ".")) for number in numbers]

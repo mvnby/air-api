@@ -94896,7 +94896,7 @@
               "detailed"
             ],
             "title": "Display Mode",
-            "default": "detailed"
+            "default": "icon"
           },
           "full_description": {
             "anyOf": [

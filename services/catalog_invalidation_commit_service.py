@@ -45,6 +45,7 @@ class CatalogInvalidationCommitService:
         product_ids: Iterable[int] | None = None,
         slugs: Iterable[str] | None = None,
         brand_slugs: Iterable[str] | None = None,
+        additional_paths: Iterable[str] | None = None,
     ) -> dict[str, Any]:
         """Commit business changes and their revision/outbox event together."""
 
@@ -54,6 +55,7 @@ class CatalogInvalidationCommitService:
             product_ids=product_ids,
             slugs=slugs,
             brand_slugs=brand_slugs,
+            **({"additional_paths": additional_paths} if additional_paths is not None else {}),
         )
         await session.commit()
         return revision

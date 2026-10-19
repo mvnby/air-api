@@ -60,6 +60,17 @@ def normalize_numeric_range_separators(value: Any) -> str:
     return re.sub(r"(?<=\d)\s*-\s*(?=[+]?\d)", " to ", text)
 
 
+def normalize_airflow_digit_groups(value: Any) -> Any:
+    """Join only complete space-separated thousands groups in airflow values."""
+    if not isinstance(value, str):
+        return value
+    return re.sub(
+        r"(?<![\d.,])[-+]?\d{1,3}(?:[ \u00a0\u202f]\d{3})+(?:[.,]\d+)?(?![\d.,])",
+        lambda match: re.sub(r"[ \u00a0\u202f]", "", match.group()),
+        value,
+    )
+
+
 class SpecValueType(str, Enum):
     TEXT = "text"
     BOOLEAN = "boolean"
@@ -1799,7 +1810,8 @@ def _build_quantity_payload(
 
 
 def _build_number_list_payload(spec: SpecDefinition, value: Any) -> dict[str, Any] | None:
-    numbers = _extract_numbers(value)
+    parsed_value = normalize_airflow_digit_groups(value) if spec.quantity_kind == QuantityKind.AIRFLOW else value
+    numbers = _extract_numbers(parsed_value)
     if not numbers:
         return None
     values = [

@@ -244,7 +244,7 @@ class FeatureResolverService:
 
     @staticmethod
     def _display_mode(product_link: Any, series_link: Any, brand_link: Any) -> str:
-        """Models inherit the series format; an assigned series owns its default."""
+        """Keep authored formats; unconfigured ordinary features stay compact."""
         if (
             product_link is not None and product_link.is_enabled
             and product_link.source != "derived" and product_link.display_mode
@@ -252,8 +252,10 @@ class FeatureResolverService:
             return product_link.display_mode
         for link in (series_link, brand_link):
             if link is not None and link.is_enabled:
-                return link.display_mode or "detailed"
-        return "detailed"
+                return link.display_mode or (
+                    "detailed" if getattr(link, "is_featured", False) else "icon"
+                )
+        return "icon"
 
     @staticmethod
     async def _load_media(session: AsyncSession, features: list[Feature], links: list[Any]):
@@ -347,7 +349,9 @@ class FeatureResolverService:
             name=(getattr(link, "override_title", None) if link else None) or feature.name,
             short_description=feature.short_description,
             icon_caption=feature.icon_caption,
-            display_mode=display_mode or getattr(link, "display_mode", None) or "detailed",
+            display_mode=display_mode or getattr(link, "display_mode", None) or (
+                "detailed" if getattr(link, "is_featured", False) else "icon"
+            ),
             full_description=(
                 getattr(link, "override_description", None) if link and link.override_description is not None
                 else feature.full_description
