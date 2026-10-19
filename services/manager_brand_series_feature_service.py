@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import Feature, FeatureSeriesLink, ProductSeries
 from services.feature_scope_policy import FeatureScopePolicy
+from services.feature_presentation import feature_display_mode
 from services.manager_brand_mutation_state import normalize_brand_feature_ids
 
 
@@ -22,7 +23,8 @@ class ManagerBrandSeriesFeatureOperations:
             "slug": feature.slug,
             "short_description": feature.short_description,
             "icon_caption": feature.icon_caption,
-            "display_mode": link.display_mode or "detailed",
+            "display_mode": feature_display_mode(link.display_mode, is_featured=link.is_featured),
+            "_assignment_display_mode": link.display_mode,
             "text": (
                 link.override_description
                 if link.override_description is not None
@@ -152,7 +154,7 @@ class ManagerBrandSeriesFeatureOperations:
                 )
             if (
                 bool(link.is_featured) != is_featured
-                or (display_mode is not None and (link.display_mode or "detailed") != display_mode)
+                or (display_mode is not None and link.display_mode != display_mode)
                 or not link.is_enabled
                 or link.source != "manual"
             ):

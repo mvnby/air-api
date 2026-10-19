@@ -393,7 +393,7 @@ class ManagerBrandSeriesOperations(ManagerBrandSeriesFeatureOperations):
                 {
                     "feature_id": int(item["id"]),
                     "is_featured": bool(item.get("is_featured", False)),
-                    "display_mode": item.get("display_mode") or "detailed",
+                    "display_mode": item.get("_assignment_display_mode"),
                 }
                 for item in selected_features
                 if item.get("id") is not None

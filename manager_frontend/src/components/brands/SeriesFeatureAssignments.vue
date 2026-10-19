@@ -141,7 +141,7 @@ const setDisplayMode = (featureId: number, event: Event) => {
         <label v-if="selected.has(feature.id)" class="order-last ml-9 w-full sm:order-none sm:ml-0 sm:w-auto">
           <span class="sr-only">Вид показа: {{ feature.name }}</span>
           <select
-            :value="selected.get(feature.id)?.display_mode || 'detailed'"
+            :value="selected.get(feature.id)?.display_mode || (selected.get(feature.id)?.is_featured ? 'detailed' : 'icon')"
             :aria-label="`Вид показа: ${feature.name}`"
             class="h-8 w-full rounded-md border border-gray-200 bg-transparent px-2 text-xs text-gray-700 dark:border-slate-700 dark:text-slate-200 sm:w-28"
             @change="setDisplayMode(feature.id, $event)"

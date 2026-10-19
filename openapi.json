@@ -63924,7 +63924,7 @@
               "detailed"
             ],
             "title": "Display Mode",
-            "default": "detailed"
+            "default": "icon"
           },
           "image_url": {
             "anyOf": [
@@ -81924,7 +81924,7 @@
               "detailed"
             ],
             "title": "Display Mode",
-            "default": "detailed"
+            "default": "icon"
           },
           "image_url": {
             "anyOf": [
@@ -93676,7 +93676,7 @@
               "detailed"
             ],
             "title": "Display Mode",
-            "default": "detailed"
+            "default": "icon"
           },
           "image_url": {
             "anyOf": [
@@ -94896,7 +94896,7 @@
               "detailed"
             ],
             "title": "Display Mode",
-            "default": "detailed"
+            "default": "icon"
           },
           "full_description": {
             "anyOf": [

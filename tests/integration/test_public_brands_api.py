@@ -174,7 +174,7 @@ async def test_public_brands_include_only_published_brands_with_published_produc
             "text": "Фильтрация воздуха в бытовых сериях.",
             "short_description": None,
             "icon_caption": None,
-            "display_mode": "detailed",
+            "display_mode": "icon",
             "image_url": "/media/brands/tcl/fresh-air.webp",
             "icon": "air",
             "footnote": "Доступно не во всех моделях",

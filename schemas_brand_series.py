@@ -23,7 +23,7 @@ class ProductSeriesBrandFeatureResponse(BaseModel):
     text: Optional[str] = None
     short_description: Optional[str] = None
     icon_caption: Optional[str] = None
-    display_mode: FeatureDisplayMode = "detailed"
+    display_mode: FeatureDisplayMode = "icon"
     image_url: Optional[str] = None
     icon: Optional[str] = None
     footnote: Optional[str] = None

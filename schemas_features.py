@@ -122,7 +122,7 @@ class PublicFeatureResponse(BaseModel):
     name: str
     short_description: Optional[str] = None
     icon_caption: Optional[str] = None
-    display_mode: FeatureDisplayMode = "detailed"
+    display_mode: FeatureDisplayMode = "icon"
     full_description: Optional[str] = None
     category: FeatureCategoryResponse
     scope_type: FeatureScopeType
