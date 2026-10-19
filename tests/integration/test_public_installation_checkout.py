@@ -12,6 +12,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import func, select
 
 from models import (
+    GlobalConfig,
     InstallationEstimateRevision, InstallationPriceBook, InstallationPreviewSnapshot,
     IntegrationOutboxEvent,
     Order, OrderServiceLink, Product, PublicInstallationPreviewClaim, Tenant,
@@ -53,6 +54,7 @@ async def _seed(session: AsyncSession):
                       specs={"type": "wall", "indoor_type": "wall", "capacity_cooling_kw": "2.5",
                              "pipe_liquid": '1/4"', "pipe_gas": '3/8"'})
     session.add(product)
+    session.add(GlobalConfig(key="install_discount", value="100"))
     session.add(InstallationPriceBook(tenant_id=1, revision=1,
                                       fingerprint="public-checkout-book-one", entries=[_entry()]))
     await session.commit()
@@ -106,8 +108,9 @@ async def test_public_checkout_attaches_exact_preview_and_bounded_event(async_cl
     preview = await _preview(db, product_id, key=f"public-{count}-ac-preview",
                              with_pump=True, count=count)
     assert preview.status == "fixed"
+    assert preview.discount == Decimal("100.00") * count
     if count == 2:
-        assert preview.total == Decimal("1180.73")
+        assert preview.total == Decimal("980.75")
     assert not any(part.code == "access.lift" for part in preview.components)
     body = _order_payload(product_id, preview, quantity=count)
     response = await async_client.post("/api/v1/orders", json=body,

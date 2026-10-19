@@ -110,7 +110,7 @@ async def test_upload_rejects_invalid_or_oversized_content_before_storage(name, 
         '</Types>'
     ))),
     ("Entity.docx", _docx(document='<!DOCTYPE word [<!ENTITY file SYSTEM "file:///etc/passwd">]><word>&file;</word>')),
-])
+], ids=lambda value: value if isinstance(value, str) else "content")
 @pytest.mark.asyncio
 async def test_upload_parses_real_pdf_pages_and_safe_docx_xml_before_storage(name, content, monkeypatch):
     storage = AsyncMock()

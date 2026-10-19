@@ -254,6 +254,34 @@ async def test_named_bundle_discount_allocates_cents_without_new_charge(monkeypa
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('catalog_discount,expected', [(100, '500.00'), (250, '350.00'), (0, '600.00'), (900, '0.00')])
+async def test_canonical_product_discount_replaces_book_rule_and_caps_at_base(monkeypatch, catalog_discount, expected):
+    _mock_receipts(monkeypatch)
+    scope = TenantScope(tenant_id=12, storefront_id=34, is_canonical_storefront=True)
+    entry = _entry()
+    entry['base_price'] = '600.00'
+    entry['rules'].append({'code': 'discount.equipment_bundle', 'unit_price': '10.00'})
+    book = InstallationPriceBook(id=9, tenant_id=12, revision=1, fingerprint='x', entries=[entry])
+    async def latest(_session, _scope):
+        return book
+    async def resolve(_session, _scope, _target, *, book=None):
+        return InstallationResolveResponse(status='fixed', scope_ref='scope'), entry
+    async def discounts(_session, _scope, ids):
+        assert ids == {1}
+        return {1: Decimal(catalog_discount)}
+    monkeypatch.setattr(BookService, 'latest', latest)
+    monkeypatch.setattr(BookService, 'resolve', resolve)
+    monkeypatch.setattr('services.installation_price_book_service.catalog_bundle_discounts', discounts)
+    result = await BookService.preview(None, scope, InstallationPreviewPayload.model_validate({
+        'installations': [{'key': 'A', 'product_id': 1, 'route_length_m': 3, 'holes_by_type': {}}],
+    }), idempotency_key='catalog-discount')
+    assert result.subtotal == Decimal('600.00')
+    assert result.total == Decimal(expected)
+    assert result.discount == Decimal('600.00') - result.total
+    assert sum(item.net for item in result.components) == result.total
+
+
+@pytest.mark.asyncio
 async def test_quote_tariff_never_exposes_zero_as_a_price(monkeypatch):
     scope = TenantScope(tenant_id=1, storefront_id=3)
     entry = _entry(mode="quote")
