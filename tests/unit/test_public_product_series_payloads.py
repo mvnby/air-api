@@ -210,7 +210,7 @@ async def test_public_product_queries_eager_load_series_and_siblings(sqlite_sess
                 "text": "Soft airflow without direct draft",
                     "short_description": None,
                     "icon_caption": None,
-                    "display_mode": "detailed",
+                    "display_mode": "icon",
                 "image_url": "/media/series/gentle-breeze.webp",
                 "icon": "wind",
                 "footnote": "Available on selected models",
