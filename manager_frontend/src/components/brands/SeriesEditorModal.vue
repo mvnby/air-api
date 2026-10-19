@@ -438,7 +438,7 @@ const addGallery = (url = pendingGalleryImage.value) => {
           role="alert"
           class="text-sm font-medium text-red-700 dark:text-red-300"
         >
-          <span v-if="documentsSaved && !saving && !savingDocuments" class="block">
+          <span v-if="documentsSaved && !documentsDirty && !saving && !savingDocuments" class="block">
             Документы сохранены. Остальные изменения серии не сохранены.
           </span>
           {{ error }}

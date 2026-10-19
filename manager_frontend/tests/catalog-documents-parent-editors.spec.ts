@@ -113,6 +113,32 @@ it('explains a partially saved series when documents succeed and the series save
   expect(wrapper.text()).not.toContain('Документы сохранены. Остальные изменения серии не сохранены.');
 });
 
+it('hides the partial-save notice while subsequent document changes remain unsaved', async () => {
+  mocks.replace.mockImplementation(() => cancelable({ own: [{ ...document, title: 'Edited operation' }], inherited: [], effective: [] }));
+  const wrapper = await startModal('series');
+  const save = wrapper.findAll('footer button').find(button => button.text() === 'Сохранить')!;
+  await save.trigger('click');
+  await flushPromises();
+  await wrapper.setProps({ error: 'Ошибка сохранения серии.' });
+  const notice = 'Документы сохранены. Остальные изменения серии не сохранены.';
+  expect(wrapper.get('footer [role="alert"]').text()).toContain(notice);
+
+  await wrapper.getComponent(CatalogDocumentsPanel).get('fieldset input').setValue('New document changes');
+  expect(wrapper.get('footer [role="alert"]').text()).not.toContain(notice);
+  mocks.replace.mockImplementation(() => cancelable(Promise.reject(new Error('Ошибка повторного сохранения документа'))));
+  await save.trigger('click');
+  await flushPromises();
+  expect(wrapper.text()).toContain('Ошибка повторного сохранения документа');
+  expect(wrapper.get('footer [role="alert"]').text()).not.toContain(notice);
+  expect(wrapper.emitted('save')).toHaveLength(1);
+
+  mocks.replace.mockImplementation(() => cancelable({ own: [{ ...document, title: 'New document changes' }], inherited: [], effective: [] }));
+  await save.trigger('click');
+  await flushPromises();
+  expect(wrapper.get('footer [role="alert"]').text()).toContain(notice);
+  expect(wrapper.emitted('save')).toHaveLength(2);
+});
+
 const startProduct = async () => {
   history.replaceState({}, '', '/manager/products/4/publication');
   vi.spyOn(api, 'getManagerProduct').mockResolvedValue(product);
