@@ -319,6 +319,7 @@ def test_map_product_to_response_serializes_public_series():
         "seo_title": None,
         "seo_description": None,
         "source_url": None,
+        "documents": [],
     }
 
 

@@ -19,6 +19,8 @@ from core.security import (
 )
 from models.tenancy import TenantScope
 from routers import (
+    manager_catalog_accessories,
+    manager_catalog_documents,
     api_yandex_business,
     manager_backups,
     manager_brands,
@@ -80,6 +82,8 @@ from services.tenant_offer_service import TenantOfferService
 
 
 PLATFORM_ROUTERS = (
+    manager_catalog_accessories.router,
+    manager_catalog_documents.router,
     manager_catalog.router,
     manager_catalog_usage.router,
     manager_catalog_management.router,
@@ -111,6 +115,8 @@ PLATFORM_ROUTERS = (
 )
 
 PURE_GLOBAL_MUTATION_ROUTERS = (
+    manager_catalog_accessories.router,
+    manager_catalog_documents.router,
     manager_brands.router,
     manager_tags.router,
     manager_features.router,

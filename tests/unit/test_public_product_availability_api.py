@@ -8,6 +8,7 @@ from core.tenant_scope import get_public_tenant_scope
 from main import app
 from models import Product, Tag, TagGroup
 from models.tenancy import TenantScope
+from routers import api_products
 from services.feature_resolver_service import FeatureResolverService
 from services.public_catalog_service import PublicCatalogService, PublicProductPage
 from services.public_catalog_visibility_service import PublicProductProjection
@@ -114,6 +115,7 @@ async def test_public_catalog_includes_city_availability(monkeypatch):
     monkeypatch.setattr(PublicCatalogService, "get_catalog_page", fake_get_catalog_page)
     monkeypatch.setattr(ProductService, "get_supply_metrics_map", fake_get_supply_metrics_map)
     monkeypatch.setattr(FeatureResolverService, "resolve_for_products", fake_resolve_features)
+    monkeypatch.setattr(api_products, "enrich_public_products", AsyncMock(return_value=None))
     monkeypatch.setattr(WarrantyPolicyResolver, "resolve_public", AsyncMock(return_value={}))
     app.dependency_overrides[get_session] = override_get_session
     app.dependency_overrides[get_public_tenant_scope] = override_tenant_scope
@@ -178,6 +180,7 @@ async def test_public_product_detail_includes_city_availability(monkeypatch):
     monkeypatch.setattr(PublicCatalogService, "get_product_page", fake_get_product_page)
     monkeypatch.setattr(ProductService, "get_supply_metrics_map", fake_get_supply_metrics_map)
     monkeypatch.setattr(FeatureResolverService, "resolve_for_products", fake_resolve_features)
+    monkeypatch.setattr(api_products, "enrich_public_products", AsyncMock(return_value=None))
     monkeypatch.setattr(WarrantyPolicyResolver, "resolve_public", AsyncMock(return_value={}))
     app.dependency_overrides[get_session] = override_get_session
     app.dependency_overrides[get_public_tenant_scope] = override_tenant_scope
