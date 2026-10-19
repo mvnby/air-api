@@ -36,6 +36,7 @@ from services.product_kind_service import ProductKindService
 from services.tariffs_service import TariffsService
 from services.service_catalog_scope import service_catalog_scope_clause
 from services.installation_preview_receipt_service import InstallationPreviewReceiptService
+from services.installation_book_discount import catalog_bundle_discounts
 
 
 class InstallationPriceBookService:
@@ -673,6 +674,10 @@ class InstallationPriceBookService:
         site_work: list[InstallationSelectedWork] = []
         resolutions: list[dict[str, Any]] = []
         matched_entries: list[dict[str, Any]] = []
+        product_discounts = await catalog_bundle_discounts(session, scope, {
+            item.product_id for item in payload.installations
+            if item.product_id is not None and item.work_kind == "standard"
+        })
         status = "fixed"
         for installation in payload.installations:
             result, entry = await cls.resolve(session, scope, installation, book=book,
@@ -706,10 +711,13 @@ class InstallationPriceBookService:
             selected_extras = []
             rules = {rule["code"]: rule for rule in entry["rules"]}
             bundle_discount = rules.get("discount.equipment_bundle")
-            if installation.product_id is not None and bundle_discount is not None:
+            discount_amount = product_discounts.get(installation.product_id)
+            if discount_amount is None and installation.product_id is not None and bundle_discount is not None:
+                discount_amount = Decimal(bundle_discount["unit_price"])
+            if discount_amount is not None and discount_amount > 0:
                 applied_discounts.append(InstallationAppliedDiscount(
                     code="discount.equipment_bundle", installation_key=installation.key,
-                    amount=Decimal(bundle_discount["unit_price"])))
+                    amount=min(discount_amount, money(line.line_total))))
             included_route = Decimal(entry["included_route_m"]) * units
             measured.append(InstallationMeasuredWork(
                 code="route.length_m", label=("Новая трасса" if matcher.work_kind == "prelaid_route" else "Трасса"), unit="м",
