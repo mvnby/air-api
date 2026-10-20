@@ -9,6 +9,7 @@ assert(['127.0.0.1', 'localhost'].includes(new URL(base).hostname), 'Only local 
 const output = path.resolve(process.env.KITLANE_SCREENSHOTS || '.codex-tmp/order-navigation');
 fs.mkdirSync(output, {recursive:true});
 const checks = [];
+const caseFilter = process.env.KITLANE_NAV_CASES && new RegExp(process.env.KITLANE_NAV_CASES);
 const line = (id, title, price) => ({ id, proposal_id: id, service_title: title, quantity: 1, price, cost: 0, line_total: price });
 const order = {
   id: 477, title: 'Аудит заказа', status: 'negotiation', lead_source: 'email', workflow_type: 'repair',
@@ -28,6 +29,7 @@ async function fixture(width = 1440, height = 900) {
   page.setDefaultTimeout(7000);
   const requests = [], patches = [], errors = [];
   let current = {...structuredClone(order), workflow_type:'sales_installation'}, failSave = false;
+  const documents = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.route('**/*', async route => {
     const url = new URL(route.request().url());
@@ -47,6 +49,11 @@ async function fixture(width = 1440, height = 900) {
       if (route.request().method() === 'PATCH') { if (failSave) return route.fulfill({status:500,json:{detail:'Synthetic save failure'}}); patches.push(route.request().postDataJSON()); current = { ...current, ...patches.at(-1) }; }
       data = current;
     }
+    else if (url.pathname === '/api/manager/orders/477/proposals/25/archive' && route.request().method() === 'POST') {
+      current.proposals[1].is_archived = true;
+      data = current;
+    }
+    else if (url.pathname === '/api/manager/document-system/orders/477/documents') data = {items:documents};
     else if (url.pathname === '/api/manager/calendar/events') data = [];
     else if (url.pathname === '/api/manager/orders/work-stages/stale') data = {items:[{id:1,order_id:477,order_title:current.title,name:'Тестовая работа',status:'scheduled',customer_name:current.customer.name}],total:1};
     else if (url.pathname === '/api/manager/customers/12') data = current.customer;
@@ -56,12 +63,13 @@ async function fixture(width = 1440, height = 900) {
     return route.fulfill({ json: data });
   });
   const workspace = page.getByRole('region', { name: 'Рабочая область заказа', exact: true });
-  return { context, page, workspace, requests, patches, errors, current:()=>current, failSave:(value)=>{failSave=value;} };
+  return { context, page, workspace, requests, patches, errors, documents, current:()=>current, failSave:(value)=>{failSave=value;} };
 }
 
 const boardPath='/manager/orders/kanban?segment=b2b&view=kanban&groupBy=none&search=office&assigned_to_me=1&status=negotiation&sort=margin_desc&workFilter=unpaid&hideOnHold=false&filtersOpen=true';
 const location=page=>page.evaluate(()=>window.location.pathname+window.location.search);
 async function runCase(width,name,task) {
+ if(caseFilter && !caseFilter.test(name)) return;
  const f=await fixture(width,850);
  try { await task(f);assert.deepEqual(f.errors,[]);checks.push({width,name});console.log(width,name,'passed'); }
  finally { await f.context.close(); }
@@ -112,6 +120,15 @@ async function chooseB(f) {
  await f.page.reload();await f.workspace.waitFor();
  await f.page.getByText('Услуга варианта Б',{exact:true}).waitFor();
 }
+async function openIncompleteDocument(f) {
+ f.documents.push({id:77,order_id:477,proposal_id:25,legal_entity_id:5,doc_type:'contract',status:'draft',provider:'native',
+  internal_reference:'draft77',display_number:'draft77',date:'2026-10-20',created_at:'2026-10-20T08:00:00Z',artifacts:[],
+  customer_readiness:{checked:true,can_issue:false,missing_fields:[{key:'legal_address',label:'Юридический адрес клиента',critical:true}]}});
+ await f.workspace.getByRole('button',{name:'Документы',exact:true}).click();
+ const warning=f.page.getByTestId('native-draft-missing-fields');
+ await warning.getByText(/Юридический адрес клиента/).waitFor();
+ return warning.getByRole('button',{name:'Заполнить карточку',exact:true});
+}
 (async()=>{
  browser=await chromium.launch({headless:true});
  try{
@@ -132,6 +149,50 @@ async function chooseB(f) {
    assert.equal(await f.workspace.count(),0);assert.equal(f.patches.length,0);
    await f.page.getByRole('button',{name:'К актуальному предложению',exact:true}).click();await f.workspace.waitFor();
    await f.page.getByText('Услуга варианта А',{exact:true}).waitFor();
+  });
+  await runCase(width,'archive viewed alternative',async f=>{
+   const expected=await openBoard(f,true);await chooseB(f);
+   const before=new URL(f.page.url()),entry=await f.page.evaluate(()=>history.state.managerNavigation.id);
+   await f.workspace.getByRole('button',{name:'Действия с предложением',exact:true}).click();
+   await f.page.getByRole('button',{name:'Перенести в архив',exact:true}).click();
+   await f.page.getByRole('button',{name:'Архивировать',exact:true}).click();
+   await f.page.getByText('Услуга варианта А',{exact:true}).waitFor();
+   assert.equal(await f.workspace.count(),1);
+   const after=new URL(f.page.url());
+   assert.equal(after.searchParams.get('proposalId'),'24');
+   before.searchParams.set('proposalId','24');assert.equal(after.href,before.href);
+   assert.equal(await f.page.getByText('Вариант предложения по этой ссылке в архиве.',{exact:true}).count(),0);
+   assert.equal(await f.page.evaluate(()=>history.state.managerNavigation.id),entry);
+   assert.equal(f.requests.filter(r=>r.method==='POST' && r.path.endsWith('/proposals/25/archive')).length,1);
+   assert.equal(f.patches.length,0);
+   await f.page.reload();await f.workspace.waitFor();await f.page.getByText('Услуга варианта А',{exact:true}).waitFor();
+   await f.workspace.getByRole('button',{name:'К заказам',exact:true}).click();await assertBoard(f,expected);
+  });
+  for(const grouped of [false,true]) await runCase(width,'documents customer return '+(grouped?'grouped-board':'board'),async f=>{
+   const expected=await openBoard(f,grouped);await chooseB(f);
+   const entry=await f.page.evaluate(()=>history.state.managerNavigation.id),orderUrl=await location(f.page);
+   const fill=await openIncompleteDocument(f);await fill.click();
+   await f.page.waitForURL(url=>url.pathname==='/manager/customers/profile');
+   assert.equal(new URL(f.page.url()).searchParams.get('returnTo'),orderUrl);
+   await f.page.getByRole('button',{name:'Назад',exact:true}).click();await f.workspace.waitFor();
+   assert.equal(await f.page.evaluate(()=>history.state.managerNavigation.id),entry);
+   assert.equal(await location(f.page),orderUrl);
+   await f.workspace.getByRole('button',{name:'К заказам',exact:true}).click();await assertBoard(f,expected);
+   assert.equal(f.requests.filter(r=>r.method!=='GET' && r.path.startsWith('/api/manager/')).length,0);
+  });
+  await runCase(width,'documents customer cancel unsaved exit',async f=>{
+   const expected=await openBoard(f,true);
+   await f.workspace.getByRole('switch',{name:'Автосохранение заказа'}).click();
+   await f.workspace.getByTitle('Изменить название').click();await f.workspace.getByRole('textbox',{name:'Название заказа',exact:true}).fill('Не терять из документов');
+   const fill=await openIncompleteDocument(f),orderUrl=await location(f.page),length=await f.page.evaluate(()=>history.length);
+   await fill.click();await f.page.getByRole('button',{name:'Отмена',exact:true}).click();
+   assert.equal(await location(f.page),orderUrl);assert.equal(await f.page.evaluate(()=>history.length),length);
+   assert.equal(await f.workspace.getByRole('textbox',{name:'Название заказа',exact:true}).inputValue(),'Не терять из документов');
+   await fill.click();await f.page.getByRole('button',{name:'Закрыть без сохранения',exact:true}).click();
+   await f.page.waitForURL(url=>url.pathname==='/manager/customers/profile');
+   await f.page.getByRole('button',{name:'Назад',exact:true}).click();await f.workspace.waitFor();
+   await f.workspace.getByRole('button',{name:'К заказам',exact:true}).click();await assertBoard(f,expected);
+   assert.equal(f.patches.length,0);
   });
   await runCase(width,'cancel customer then Back and Forward',async f=>{
    const expected=await openBoard(f);

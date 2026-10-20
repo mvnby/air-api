@@ -80,7 +80,13 @@ describe('useOrderProposalLifecycle', () => {
       { ...remaining, is_selected: true },
     ] } as ManagerOrderDetailResponse;
     const localOrder = ref(initial);
-    const { lifecycle, options } = createLifecycle({ order: localOrder, onUpdated: (value) => { localOrder.value = value; } });
+    const publishedArchiveProposalIds: Array<number | null> = [];
+    const { lifecycle, options } = createLifecycle({ order: localOrder, onUpdated: (value) => {
+      if (value.proposals?.find((item) => item.id === 17)?.is_archived) {
+        publishedArchiveProposalIds.push(lifecycle.activeProposalId.value);
+      }
+      localOrder.value = value;
+    } });
     lifecycle.loadProposalLines(proposal as any, initial);
     ordersMock.patchManagerOrder.mockResolvedValueOnce(initial).mockResolvedValueOnce(updated);
     ordersMock.archiveManagerOrderProposal.mockResolvedValueOnce(updated);
@@ -88,6 +94,7 @@ describe('useOrderProposalLifecycle', () => {
     await lifecycle.archiveProposal();
 
     expect(ordersMock.archiveManagerOrderProposal).toHaveBeenCalledWith(42, 17);
+    expect(publishedArchiveProposalIds).toEqual([18]);
     expect(lifecycle.activeProposalId.value).toBe(18);
     expect(lifecycle.activeProposal.value?.id).toBe(18);
     expect(lifecycle.activeProposalStatus.value).toBe('ready_to_send');

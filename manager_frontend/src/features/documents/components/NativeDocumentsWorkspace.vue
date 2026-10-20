@@ -6,6 +6,7 @@ import DocumentSendModal from '../../../components/orders/DocumentSendModal.vue'
 import { getOrderDocumentAccess } from '../../../components/orders/order-document-access';
 import { MANAGER_CAPABILITY, hasManagerCapability } from '../../../manager-capabilities';
 import { managerSession } from '../../../services/manager-session';
+import { openManagerChild } from '../../../services/manager-navigation-history';
 import { useManagedDocumentWorkspace } from '../composables/use-managed-document-workspace';
 import ConsumerDocumentTermsPanel from './ConsumerDocumentTermsPanel.vue';
 import DraftParametersEditor from './DraftParametersEditor.vue';
@@ -276,8 +277,7 @@ watch(() => props.workflowType, (next, previous) => {
 const openCustomerProfile = () => {
   if (!props.order.customer?.id) return;
   const returnTo = `${window.location.pathname}${window.location.search}`;
-  window.history.pushState({}, '', `/manager/customers/profile?customerId=${props.order.customer.id}&returnTo=${encodeURIComponent(returnTo)}`);
-  window.dispatchEvent(new PopStateEvent('popstate'));
+  return openManagerChild(`/manager/customers/profile?customerId=${props.order.customer.id}&returnTo=${encodeURIComponent(returnTo)}`);
 };
 
 const openSettings = () => {
