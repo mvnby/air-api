@@ -18,7 +18,7 @@ import KitlaneShell from './components/kitlane/KitlaneShell.vue';
 import KitlaneNavigation from './components/kitlane/KitlaneNavigation.vue';
 import { useKitlaneIdentity } from './composables/useKitlaneIdentity';
 import { confirmDialog } from './services/ui-feedback';
-import { runGuardedNavigation } from './services/unsaved-navigation-guard';
+import { navigateManager, replaceManagerLocation, startManagerNavigation } from './services/manager-navigation-history';
 import { normalizeOrderLocation, readOrderPage } from './services/order-navigation';
 import {
   clearManagerSession,
@@ -131,8 +131,6 @@ const toast = ref('');
 const toastType = ref<'success' | 'error'>('success');
 const currentLocation = ref(normalizeOrderLocation());
 const orderPage = computed(() => readOrderPage(currentLocation.value));
-const acceptedBrowserLocation = ref(currentLocation.value);
-let acceptedBrowserState = window.history.state;
 const viewRevision = ref(0);
 const THEME_STORAGE_KEY = 'manager_theme';
 const NAV_SECTIONS_STORAGE_KEY = 'manager_nav_sections_v1';
@@ -295,36 +293,12 @@ const rebuildButtonTitle = computed(() => {
   if (!isDesktopNavCollapsed.value) return '';
   return rebuildButtonLabel.value;
 });
-const onPopState = async () => {
-  const acceptedLocation = acceptedBrowserLocation.value;
-  const previousState = acceptedBrowserState;
-  const targetState = window.history.state;
-  const targetLocation = normalizeOrderLocation();
-  await runGuardedNavigation(
-    () => {
-      const browserLocation = `${window.location.pathname}${window.location.search}`;
-      if (browserLocation !== targetLocation) {
-        window.history.pushState(targetState, '', targetLocation);
-      }
-      currentLocation.value = targetLocation;
-      acceptedBrowserLocation.value = targetLocation;
-      acceptedBrowserState = targetState;
-      viewRevision.value += 1;
-    },
-    () => window.history.pushState(previousState, '', acceptedLocation),
-  );
-};
+const stopNavigation = startManagerNavigation((location) => {
+  currentLocation.value = location;
+  viewRevision.value += 1;
+}, normalizeOrderLocation);
 const navigate = async (path: string) => {
-  if (window.location.pathname !== path) {
-    const navigated = await runGuardedNavigation(() => {
-      window.history.pushState({}, '', path);
-      currentLocation.value = `${window.location.pathname}${window.location.search}`;
-      acceptedBrowserLocation.value = currentLocation.value;
-      acceptedBrowserState = window.history.state;
-      viewRevision.value += 1;
-    });
-    if (!navigated) return;
-  }
+  if (window.location.pathname !== path && !await navigateManager(path)) return;
   isMobileNavOpen.value = false;
 };
 const enforceAuthorizedLocation = () => {
@@ -471,7 +445,6 @@ onMounted(() => {
   if (window.location.pathname === '/manager') {
     navigate('/manager');
   }
-  window.addEventListener('popstate', onPopState);
   window.addEventListener(inboxChangedEvent, fetchLeadsCount);
   webRebuildStatusInterval = window.setInterval(() => {
     if (isAuthenticated.value && canManagePlatform.value) void fetchWebRebuildStatus();
@@ -479,7 +452,7 @@ onMounted(() => {
   if (!isInvitationRoute) checkAuth();
 });
 onBeforeUnmount(() => {
-  window.removeEventListener('popstate', onPopState);
+  stopNavigation();
   window.removeEventListener(inboxChangedEvent, fetchLeadsCount);
   if (webRebuildStatusInterval) {
     window.clearInterval(webRebuildStatusInterval);
@@ -609,7 +582,7 @@ watch(currentPath, () => {
       <MediaLibraryView v-else-if="authorizedView === 'media-library'" :key="currentLocation" />
       <CatalogQualityView v-else-if="authorizedView === 'catalog-quality'" :key="currentLocation" />
       <CatalogDecisionWorkspaceView v-else-if="authorizedView === 'catalog-decision'" :key="currentLocation" />
-      <ProductCollectionsView v-else-if="authorizedView === 'product-collections'" :key="`${currentLocation}:${viewRevision}`" @location-change="acceptedBrowserLocation = $event" />
+      <ProductCollectionsView v-else-if="authorizedView === 'product-collections'" :key="`${currentLocation}:${viewRevision}`" @location-change="replaceManagerLocation" />
       <CustomerProfileView v-else-if="authorizedView === 'customer-profile'" :key="currentLocation" />
       <CustomersView v-else-if="authorizedView === 'customers'" :key="currentLocation" />
       <InstallersView v-else-if="authorizedView === 'installers'" :key="currentLocation" />

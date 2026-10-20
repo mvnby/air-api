@@ -149,7 +149,7 @@ describe('inline customer and object context', () => {
     const w = make({ beforeNavigate: vi.fn().mockResolvedValue(false) }); await open(w, 'customer'); const push = vi.spyOn(window.history, 'pushState');
     await w.get('[aria-label="Открыть полную карточку клиента"]').trigger('click'); await flushPromises(); expect(push).not.toHaveBeenCalled();
     await w.setProps({ beforeNavigate: async () => { w.unmount(); return true; } }); await w.get('[aria-label="Открыть полную карточку клиента"]').trigger('click'); await flushPromises();
-    expect(push).toHaveBeenCalledWith({}, '', expect.stringContaining('customerId=11')); push.mockRestore();
+    expect(push).toHaveBeenCalledWith(expect.objectContaining({ managerReturn: expect.any(Object) }), '', expect.stringContaining('customerId=11')); push.mockRestore();
   });
   it('ignores customer-save response after changing orders', async () => {
     const pending = deferred<{}>(); api.patchManagerCustomer.mockReturnValueOnce(pending.promise); const w = make();

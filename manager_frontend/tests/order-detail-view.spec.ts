@@ -10,10 +10,22 @@ vi.mock('../src/components/orders/OrderEditDrawer.vue', () => ({ default: {
   methods: { prepareToLeave: prepare }, template: '<div />',
 } }));
 let wrapper: VueWrapper | undefined;
-beforeEach(() => { vi.spyOn(window, 'scrollTo').mockImplementation(() => {}); prepare.mockResolvedValue(true); });
+beforeEach(() => { window.history.replaceState({}, '', '/manager/orders/477'); vi.spyOn(window, 'scrollTo').mockImplementation(() => {}); prepare.mockResolvedValue(true); });
 afterEach(() => { wrapper?.unmount(); wrapper = undefined; vi.restoreAllMocks(); });
 const mountView = () => mount(OrderDetailView, { props: { orderId: 477, returnTo: '/manager/orders/kanban?segment=b2b' } });
 describe('standalone order page', () => {
+  it.each(['missing', 'archived', 'malformed'])('does not silently show another proposal when the link is %s', async kind => {
+    window.history.replaceState({}, '', `/manager/orders/477?proposalId=${kind === 'malformed' ? 'bad' : 25}`);
+    vi.spyOn(api, 'getManagerOrderDetail').mockResolvedValue({ id: 477, proposals: [
+      { id: 24, is_selected: true }, ...(kind === 'archived' ? [{ id: 25, is_archived: true }] : []),
+    ] } as any);
+    wrapper = mountView(); await flushPromises();
+    expect(wrapper.get('[role="alert"]').text()).toContain(kind === 'archived' ? 'в архиве' : 'недоступен');
+    expect(wrapper.findComponent({ name: 'OrderEditDrawer' }).exists()).toBe(false);
+    expect(await canNavigateAway()).toBe(true);
+    await wrapper.get('[role="alert"] button').trigger('click'); await flushPromises();
+    expect(window.location.search).toBe('');
+  });
   it('loads only the requested order and registers the shared save barrier', async () => {
     const load = vi.spyOn(api, 'getManagerOrderDetail').mockResolvedValue({ id: 477 } as any);
     const list = vi.spyOn(api, 'getManagerOrders');

@@ -23,24 +23,24 @@ describe('order page navigation', () => {
     normalizeOrderLocation();
     expect(new URLSearchParams(window.location.search).getAll('company')).toEqual(['42', '99']);
   });
-  it('retains all filters and board position in the history entry being left', () => {
+  it('retains all filters and board position in the history entry being left', async () => {
     const url = '/manager/orders/kanban?segment=b2b&assigned_to_me=1&workFilter=unpaid&hideOnHold=false&status=execution&sort=margin_desc&groupBy=none&search=office';
     window.history.replaceState({ other: 'preserved' }, '', url);
     const replace = vi.spyOn(window.history, 'replaceState');
-    openOrderPage(477, { expandedOrderId: 12, expandedGroupIds: ['42'], columnFilters: { execution: 'needs_schedule' }, scrollLeft: 640 });
+    await openOrderPage(477, { expandedOrderId: 12, expandedGroupIds: ['42'], columnFilters: { execution: 'needs_schedule' }, scrollLeft: 640 });
     const saved = replace.mock.calls[0]![0];
     expect(saved.other).toBe('preserved');
     expect(saved.orderListPosition).toMatchObject({ url, board: { scrollLeft: 640, expandedGroupIds: ['42'] } });
     expect(readOrderPage(`${window.location.pathname}${window.location.search}`)).toEqual({ orderId: 477, returnTo: url });
-    const back = vi.spyOn(window.history, 'back').mockImplementation(() => {});
+    const back = vi.spyOn(window.history, 'go').mockImplementation(() => {});
     returnFromOrder(url);
-    expect(back).toHaveBeenCalledOnce();
+    expect(back).toHaveBeenCalledExactlyOnceWith(-1);
     window.history.replaceState(saved, '', url);
     expect(savedOrderListPosition()).toEqual(saved.orderListPosition);
   });
-  it('returns a direct order link to a safe board URL without a back-navigation loop', () => {
+  it('returns a direct order link to a safe board URL without a back-navigation loop', async () => {
     window.history.replaceState({}, '', orderPageUrl(477));
-    returnFromOrder('/manager/orders/list?segment=b2b');
+    await returnFromOrder('/manager/orders/list?segment=b2b');
     expect(window.location.pathname + window.location.search).toBe('/manager/orders/list?segment=b2b');
   });
   it.each(['https://example.com/manager/orders', '//example.com', 'http://[bad', '/manager/orders/477', '/manager/profile'])('rejects an unsuitable return URL: %s', value => {

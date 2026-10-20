@@ -25,3 +25,15 @@ The full app is checked at 320, 360, 384, 412, 768 and 1440 CSS pixels:
 
 Screenshots and measurements are saved locally. This does not claim testing on
 physical Android hardware or simulating the native software keyboard itself.
+
+The additional behavioral regression suite uses two proposals with different
+rows and totals, mobile/desktop clicks, canceled customer and native Back
+transitions, failed saves, and round trips through customers and catalog selection
+from grouped/ungrouped boards and the calendar. Run it against the same server:
+
+```sh
+KITLANE_PLAYWRIGHT_MODULE=/path/to/existing/playwright node manager_frontend/tests/visual/order-navigation/capture.cjs
+```
+
+Its default port is `5187` and output is `.codex-tmp/order-navigation`; the same
+preview URL and screenshot environment variables override these defaults.

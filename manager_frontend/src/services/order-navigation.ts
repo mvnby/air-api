@@ -1,4 +1,5 @@
-import { navigateManager } from './catalog-decision-context';
+import { currentManagerHistoryTarget, goToManagerHistoryTarget, navigateManager } from './manager-navigation-history';
+import type { ManagerOrderDetailResponse } from '../client';
 
 const BOARD_PATHS = ['/manager/orders', '/manager/orders/kanban', '/manager/orders/list'];
 const positiveId = (value: string | null) => value && /^[1-9]\d*$/.test(value) && Number.isSafeInteger(Number(value)) ? Number(value) : null;
@@ -23,7 +24,7 @@ export const orderPageUrl = (orderId: number, returnTo?: string, proposalId?: st
     const context = new URL(returnUrl, window.location.origin).searchParams;
     for (const key of ['company', 'site']) context.getAll(key).forEach(value => params.append(key, value));
   }
-  if (positiveId(proposalId || null)) params.set('proposalId', proposalId!);
+  if (proposalId != null) params.set('proposalId', proposalId);
   return `/manager/orders/${orderId}${params.size ? `?${params}` : ''}`;
 };
 
@@ -32,6 +33,21 @@ export const readOrderPage = (location: string) => {
   const match = url.pathname.match(/^\/manager\/orders\/([1-9]\d*)\/?$/);
   const orderId = match ? positiveId(match[1]!) : null;
   return orderId ? { orderId, returnTo: orderReturnUrl(url.searchParams.get('returnTo')) } : null;
+};
+
+export const readOrderProposalContext = (location: string) => {
+  const url = new URL(location, window.location.origin);
+  const orderId = readOrderPage(location)?.orderId
+    ?? (BOARD_PATHS.includes(url.pathname) ? positiveId(url.searchParams.get('orderId')) : null);
+  return { orderId, requested: url.searchParams.has('proposalId'), proposalId: url.searchParams.getAll('proposalId').length === 1 ? positiveId(url.searchParams.get('proposalId')) : null };
+};
+
+export const orderProposalLinkError = (order: ManagerOrderDetailResponse, location: string) => {
+  const context = readOrderProposalContext(location);
+  if (context.orderId !== order.id || !context.requested) return '';
+  const proposal = order.proposals?.find(item => item.id === context.proposalId);
+  if (!proposal) return 'Вариант предложения по этой ссылке недоступен. Откройте актуальное предложение заказа.';
+  return proposal.is_archived ? 'Вариант предложения по этой ссылке в архиве. Откройте актуальное предложение заказа.' : '';
 };
 
 // Old links from mail, tasks, customers and the catalog remain direct order links.
@@ -54,13 +70,12 @@ export const savedOrderListPosition = (): OrderListPosition | undefined => windo
 export const openOrderPage = (orderId: number, board?: OrderBoardState) => {
   const returnTo = orderReturnUrl(`${window.location.pathname}${window.location.search}`);
   window.history.replaceState({ ...window.history.state, orderListPosition: { url: returnTo, top: window.scrollY, board } }, '', returnTo);
-  navigateManager(orderPageUrl(orderId, returnTo), { orderReturn: returnTo });
+  return navigateManager(orderPageUrl(orderId, returnTo), { orderReturn: returnTo, orderOrigin: currentManagerHistoryTarget() });
 };
 
 export const returnFromOrder = (returnTo: string) => {
-  if (window.history.state?.orderReturn === returnTo) window.history.back();
-  else {
-    window.history.replaceState({}, '', orderReturnUrl(returnTo));
-    window.dispatchEvent(new PopStateEvent('popstate'));
-  }
+  const target = orderReturnUrl(returnTo);
+  const origin = window.history.state?.orderOrigin;
+  if (origin?.href === target && goToManagerHistoryTarget(origin, target)) return;
+  return navigateManager(target, {}, true);
 };

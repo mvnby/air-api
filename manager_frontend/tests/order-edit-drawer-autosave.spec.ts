@@ -1,5 +1,6 @@
 import { nextTick } from 'vue';
-import { registerUnsavedNavigationGuard, runGuardedNavigation } from '../src/services/unsaved-navigation-guard';
+import { registerUnsavedNavigationGuard } from '../src/services/unsaved-navigation-guard';
+import { startManagerNavigation } from '../src/services/manager-navigation-history';
 import { shallowMount, flushPromises, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import OrderWorkerAssignmentsPanel from '../src/components/orders/OrderWorkerAssignmentsPanel.vue';
@@ -45,7 +46,7 @@ let wrapper: VueWrapper;
 let stored: ManagerOrderDetailResponse;
 const commit = (payload: any) => {
   stored = { ...stored, ...payload, delivery_address: payload.customer_delivery_address ?? stored.delivery_address };
-  if (payload.services) stored.proposals![0] = { ...stored.proposals![0]!, service_lines: payload.services };
+  if (payload.services) { const index = Math.max(0, stored.proposals!.findIndex(item => item.id === payload.line_proposal_id)); stored.proposals![index] = { ...stored.proposals![index]!, service_lines: payload.services }; }
   return structuredClone(stored);
 };
 const mountDrawer = async (presentation: 'page' | 'dialog' = 'dialog', realCustomer = false) => {
@@ -412,13 +413,25 @@ describe('equipment picker navigation from the order', () => {
     expect(wrapper.emitted('update:modelValue')).toBeUndefined();
     expect(wrapper.text()).toContain('Не удалось сохранить заказ');
   });
-  it('returns to the original unselected proposal', async () => {
-    managerSession.auth.value = { capabilities: ['platform.manage'] } as any;
-    stored.proposals!.push({ ...stored.proposals![0]!, id: 26, name: 'Альтернатива', is_selected: false });
-    history.replaceState({}, '', '/manager/orders/kanban?orderId=395&proposalId=26');
-    await mountDrawer();
-    expect(wrapper.findComponent(OrderProposalWorkspace).props('proposal').activeProposalId.value).toBe(26);
+  it.each(['/manager/orders/395?proposalId=26', '/manager/orders/kanban?orderId=395&proposalId=26'])
+  ('opens the requested alternative with its own rows and total at %s without selecting it', async (url) => {
+    const service = (id: number, title: string, price: number) => ({ id, service_title: title, quantity: 1, price, cost: 0, line_total: price });
+    stored.proposals![0] = { ...stored.proposals![0]!, service_lines: [service(1, 'Вариант А', 1200)] as any, total_amount: 1200 };
+    stored.proposals!.push({ ...stored.proposals![0]!, id: 26, name: 'Альтернатива', is_selected: false, service_lines: [service(2, 'Вариант Б', 2300)] as any, total_amount: 2300 });
+    history.replaceState({}, '', url);
+    await mountDrawer('page');
+    const workspace = wrapper.findComponent(OrderProposalWorkspace);
+    expect(workspace.props('proposal').activeProposalId.value).toBe(26);
+    expect((workspace.props('commercial') as any).serviceLines.value).toEqual([expect.objectContaining({ title: 'Вариант Б', price: 2300 })]);
+    expect(header().props('total')).toBe(2300);
+    expect(stored.proposals!.find(item => item.is_selected)?.id).toBe(25);
     expect(ManagerOrdersService.patchManagerOrder).not.toHaveBeenCalled();
+    (workspace.props('commercial') as any).serviceLines.value[0].price = 2400;
+    await nextTick(); await vi.advanceTimersByTimeAsync(700); await flushPromises();
+    expect(ManagerOrdersService.patchManagerOrder).toHaveBeenLastCalledWith(395, expect.objectContaining({ line_proposal_id: 26 }));
+    expect(stored.proposals![0]!.service_lines![0]!.price).toBe(1200);
+    expect(stored.proposals![1]!.service_lines![0]!.price).toBe(2400);
+    expect(stored.proposals![0]!.is_selected).toBe(true);
   });
   it.each(['close', 'switch order', 'close and reopen', 'dispose'])
   ('cancels the delayed document-toast refresh on %s', async (change) => {
@@ -554,17 +567,14 @@ describe('order page editor', () => {
     const { confirmDialog } = await import('../src/services/ui-feedback');
     vi.mocked(confirmDialog).mockClear().mockResolvedValueOnce(true);
     const unregister = registerUnsavedNavigationGuard(() => (wrapper.vm as any).prepareToLeave());
-    let navigation: Promise<boolean> | undefined;
     const accept = vi.fn();
-    const onPopState = () => { navigation = runGuardedNavigation(accept); };
-    window.addEventListener('popstate', onPopState);
+    const stopNavigation = startManagerNavigation(accept, () => window.location.pathname + window.location.search);
     try {
       await customer().get('[aria-label="Открыть полную карточку клиента"]').trigger('click');
       await flushPromises();
-      expect(await navigation).toBe(true);
       expect(accept).toHaveBeenCalledOnce();
       expect(confirmDialog).toHaveBeenCalledOnce();
-    } finally { unregister(); window.removeEventListener('popstate', onPopState); }
+    } finally { unregister(); stopNavigation(); }
   });
 
   it('renders as a page without locking document scroll or trapping Escape', async () => {

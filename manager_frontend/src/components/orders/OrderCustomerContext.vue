@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { openManagerChild } from '../../services/manager-navigation-history';
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { ArrowLeftRight, Copy, ExternalLink, MapPin, Pencil } from 'lucide-vue-next';
 import { api } from '../../api';
@@ -77,8 +78,7 @@ const openCustomerProfile = async () => {
   // Successful navigation intentionally unmounts this editor.
   if (!id || (props.beforeNavigate && !await props.beforeNavigate()) || props.order.id !== orderId) return;
   const query = new URLSearchParams({ customerId: String(id), returnTo });
-  window.history.pushState({}, '', '/manager/customers/profile?' + query.toString());
-  window.dispatchEvent(new PopStateEvent('popstate'));
+  await openManagerChild('/manager/customers/profile?' + query.toString());
 };
 const saveCustomer = async () => {
   const id = customer.value?.id;
