@@ -47,9 +47,9 @@ const commit = (payload: any) => {
   if (payload.services) stored.proposals![0] = { ...stored.proposals![0]!, service_lines: payload.services };
   return structuredClone(stored);
 };
-const mountDrawer = async () => {
+const mountDrawer = async (presentation: 'page' | 'dialog' = 'dialog') => {
   wrapper = shallowMount(OrderEditDrawer, {
-    props: { modelValue: false, order: stored, onUpdated: (order: ManagerOrderDetailResponse) => { void wrapper.setProps({ order }); } },
+    props: { modelValue: false, presentation, order: stored, onUpdated: (order: ManagerOrderDetailResponse) => { void wrapper.setProps({ order }); } },
   });
   await wrapper.setProps({ modelValue: true });
   await flushPromises();
@@ -536,5 +536,34 @@ describe('worker instructions with the actual drawer save queue', () => {
     const panel = wrapper.findComponent(OrderWorkerAssignmentsPanel); await panel.get('[aria-label="Исполнитель работы"]').setValue('9'); await panel.findAll('form')[0]!.trigger('submit'); await flushPromises();
     expect(ManagerOrdersService.patchManagerOrder).toHaveBeenCalled(); expect(assign).toHaveBeenCalledWith(stored.id, 9, null); expect(stored.comment).toBe('Несохранённая информация менеджера'); expect(customer().props('comment')).toBe('Несохранённая информация менеджера');
     expect(wrapper.props('order')).not.toHaveProperty('assignments'); managerSession.auth.value = null;
+  });
+});
+
+
+describe('order page editor', () => {
+  it('renders as a page without locking document scroll or trapping Escape', async () => {
+    await mountDrawer('page');
+    expect(wrapper.get('aside').attributes('role')).toBe('region');
+    expect(wrapper.get('aside').attributes('aria-modal')).toBeUndefined();
+    expect(document.documentElement.style.overflowX).not.toBe('hidden');
+    await wrapper.get('aside').trigger('keydown', { key: 'Escape' });
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+  });
+  it('flushes pending edits before page navigation without closing the editor itself', async () => {
+    await mountDrawer('page');
+    customer().vm.$emit('update:comment', 'Сохранить при возврате к доске');
+    await nextTick();
+    expect(await (wrapper.vm as any).prepareToLeave()).toBe(true);
+    expect(stored.comment).toBe('Сохранить при возврате к доске');
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+  });
+  it('blocks page navigation and keeps the draft on a save failure', async () => {
+    await mountDrawer('page');
+    vi.mocked(ManagerOrdersService.patchManagerOrder).mockRejectedValue(new Error('offline'));
+    customer().vm.$emit('update:comment', 'Не потерять при ошибке');
+    await nextTick();
+    expect(await (wrapper.vm as any).prepareToLeave()).toBe(false);
+    expect(customer().props('comment')).toBe('Не потерять при ошибке');
+    expect(header().props('saveFailed')).toBe(true);
   });
 });

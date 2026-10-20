@@ -1,15 +1,15 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { nextTick, onMounted, ref } from 'vue';
 import FullCalendar from '@fullcalendar/vue3';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import ruLocale from '@fullcalendar/core/locales/ru';
 import type { CalendarOptions, EventSourceFunc } from '@fullcalendar/core';
-import { ManagerCalendarService, ManagerOrdersService, type CalendarEventResponse, type ManagerOrderDetailResponse, type ManagerOrderUpdatePayload, type ManagerStaleWorkStageItem } from '../client';
+import { ManagerCalendarService, ManagerOrdersService, type CalendarEventResponse, type ManagerOrderUpdatePayload, type ManagerStaleWorkStageItem } from '../client';
 import { api } from '../api';
 import { CalendarDays, Loader2, RefreshCw, Trash2, XCircle } from 'lucide-vue-next';
-import OrderEditDrawer from '../components/orders/OrderEditDrawer.vue';
+import { openOrderPage, savedOrderListPosition } from '../services/order-navigation';
 import EquipmentEditDialog from '../components/equipment/EquipmentEditDialog.vue';
 import { getApiErrorMessage, parseApiFieldErrors } from '../utils/api-errors';
 import { confirmDialog } from '../services/ui-feedback';
@@ -18,11 +18,6 @@ import { mapCalendarEvent, resolveCalendarEventClick } from './calendar-event-pr
 const isLoading = ref(false);
 const error = ref<string | null>(null);
 
-// Order Drawer State
-const drawerOpen = ref(false);
-const selectedOrder = ref<ManagerOrderDetailResponse | null>(null);
-const orderServerErrors = ref<Record<string, string>>({});
-const orderFormError = ref('');
 const toast = ref('');
 const calendarRef = ref<any>(null);
 const staleStages = ref<ManagerStaleWorkStageItem[]>([]);
@@ -87,19 +82,10 @@ const handleEventDrop = async (info: any) => {
   }
 };
 
-const openOrder = async (orderId: number) => {
-  try {
-    isLoading.value = true;
-    orderServerErrors.value = {};
-    orderFormError.value = '';
-    selectedOrder.value = await api.getManagerOrderDetail(orderId);
-    drawerOpen.value = true;
-  } catch (err: any) {
-    console.error('Failed to open order details', err);
-    setToast('Не удалось открыть заказ');
-  } finally {
-    isLoading.value = false;
-  }
+const openOrder = (orderId: number) => {
+  const calendar = calendarRef.value?.getApi();
+  if (calendar) window.history.replaceState({ ...window.history.state, orderCalendar: { date: calendar.getDate().toISOString(), view: calendar.view.type } }, '');
+  openOrderPage(orderId);
 };
 
 const loadStaleStages = async () => {
@@ -148,11 +134,6 @@ const deleteStaleStage = async (stage: ManagerStaleWorkStageItem) => {
   }
 };
 
-const applyOrderUpdate = (order: ManagerOrderDetailResponse) => {
-  selectedOrder.value = order;
-  refreshCalendar();
-};
-
 const closeEquipmentDialog = () => {
   selectedEquipmentId.value = null;
 };
@@ -160,15 +141,6 @@ const closeEquipmentDialog = () => {
 const handleEquipmentSaved = () => {
   refreshCalendar();
   closeEquipmentDialog();
-};
-
-const handleOrderDeleted = (orderId: number) => {
-  drawerOpen.value = false;
-  if (selectedOrder.value?.id === orderId) {
-    selectedOrder.value = null;
-  }
-  setToast('Сделка удалена');
-  refreshCalendar();
 };
 
 const formatStageDate = (value?: string | null) => {
@@ -182,7 +154,12 @@ const formatStageDate = (value?: string | null) => {
   });
 };
 
-onMounted(loadStaleStages);
+onMounted(async () => {
+  await loadStaleStages();
+  await nextTick();
+  const position = savedOrderListPosition();
+  if (position?.url === `${window.location.pathname}${window.location.search}`) window.scrollTo(0, position.top);
+});
 
 const fetchEvents: EventSourceFunc = async (fetchInfo, successCallback, failureCallback) => {
   isLoading.value = true;
@@ -204,9 +181,11 @@ const fetchEvents: EventSourceFunc = async (fetchInfo, successCallback, failureC
   }
 };
 
+const previousCalendar = window.history.state?.orderCalendar;
 const calendarOptions = ref<CalendarOptions>({
   plugins: [ dayGridPlugin, timeGridPlugin, interactionPlugin ],
-  initialView: 'dayGridMonth',
+  initialView: ['dayGridMonth', 'timeGridWeek', 'timeGridDay'].includes(previousCalendar?.view) ? previousCalendar.view : 'dayGridMonth',
+  initialDate: typeof previousCalendar?.date === 'string' && Number.isFinite(Date.parse(previousCalendar.date)) ? previousCalendar.date : undefined,
   locale: ruLocale,
   headerToolbar: {
     left: 'prev,next today',
@@ -343,17 +322,6 @@ const calendarOptions = ref<CalendarOptions>({
       </p>
       <FullCalendar ref="calendarRef" :options="calendarOptions" />
     </div>
-
-    <!-- Edit Drawer -->
-    <OrderEditDrawer
-      v-model="drawerOpen"
-      :order="selectedOrder"
-      :server-errors="orderServerErrors"
-      :form-error="orderFormError"
-      @updated="applyOrderUpdate"
-      @deleted="handleOrderDeleted"
-      @reload="openOrder($event)"
-    />
 
     <EquipmentEditDialog
       v-if="selectedEquipmentId !== null"

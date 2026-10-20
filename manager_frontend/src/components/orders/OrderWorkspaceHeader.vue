@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
-import { ArrowRight, Check, Clock3, MoreVertical, Pause, Pencil, Play, Save, Trash2, Undo2, X } from 'lucide-vue-next';
+import { ArrowLeft, ArrowRight, Check, Clock3, MoreVertical, Pause, Pencil, Play, Save, Trash2, Undo2, X } from 'lucide-vue-next';
 import OrderMoney from './OrderMoney.vue';
 import MoneyText from '../money/MoneyText.vue';
 import { ORDER_WORKFLOW_OPTIONS, type OrderWorkflowType, type OrderWorkspaceViewModel } from './order-workspace';
@@ -8,6 +8,7 @@ import { STICKY_HEADER_RESIZE_DURATION_MS } from '../../composables/useSmartStic
 
 const props = defineProps<{
   orderId?: number;
+  backLabel?: string;
   title: string;
   customerName?: string;
   workflow: OrderWorkflowType;
@@ -167,6 +168,7 @@ const onWorkflowChange = async (event: Event) => {
     @focusout="refreshFocusLock"
   >
     <div ref="contentRef">
+    <button v-if="backLabel" type="button" class="mb-1 inline-flex min-h-9 items-center gap-1.5 text-sm font-semibold text-brand-700 dark:text-brand-200" @click="emit('close')"><ArrowLeft :size="17" />{{ backLabel }}</button>
     <div class="flex gap-2 sm:gap-3" :class="effectiveCompact ? 'min-h-9 items-center' : 'items-start'">
       <div class="min-w-0 flex-1">
         <div v-if="effectiveCompact" class="flex min-w-0 items-center gap-2">
@@ -261,7 +263,7 @@ const onWorkflowChange = async (event: Event) => {
             </button>
           </div>
         </div>
-        <button type="button" class="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800" aria-label="Закрыть карточку заказа" @click="emit('close')">
+        <button v-if="!backLabel" type="button" class="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800" aria-label="Закрыть карточку заказа" @click="emit('close')">
           <X :size="20" />
         </button>
       </div>

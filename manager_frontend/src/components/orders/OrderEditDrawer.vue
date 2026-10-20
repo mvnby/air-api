@@ -57,6 +57,8 @@ import { useOrderSourceCommand } from '../../composables/useOrderSourceCommand';
 
 const props = defineProps<{
   modelValue: boolean;
+  presentation?: 'page' | 'dialog';
+  backLabel?: string;
   order: OrderWithResponsibility | null;
   serverErrors?: Record<string, string>;
   formError?: string;
@@ -64,6 +66,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean];
+  back: [];
   updated: [order: ManagerOrderDetailResponse];
   deleted: [orderId: number];
   reload: [orderId: number];
@@ -75,7 +78,8 @@ const proposalClientPreview = ref(false);
 const showProposalCosts = ref(false);
 const mobileContextOpen = ref(false);
 const demoReadOnly = useDemoReadOnly();
-useDocumentScrollLock(() => props.modelValue);
+const isPage = computed(() => props.presentation === 'page');
+useDocumentScrollLock(() => props.modelValue && !isPage.value);
 const { captureFocus, focusContainer, restoreFocus, trapFocus } = useDrawerFocusTrap(drawerScrollContainer);
 const { compact: compactWorkspaceHeader, reset: resetWorkspaceHeader } = useSmartStickyHeader(workspaceScrollContainer);
 watch(() => [props.order?.id, props.modelValue], () => {
@@ -372,6 +376,7 @@ const displayOrderTitle = computed(() => (
   || 'Без названия'
 ));
 const {
+  prepareToLeave,
   closeDrawer,
   copyText,
   deleteOrder,
@@ -493,7 +498,7 @@ watch(
   async ([open, order], [wasOpen, previousOrder]) => {
     if (!open) {
       usageReportOpen.value = false;
-      if (wasOpen) {
+      if (wasOpen && !isPage.value) {
         await nextTick();
         restoreFocus();
       }
@@ -502,7 +507,7 @@ watch(
     if (!order) return;
     if (wasOpen && previousOrder?.id === order.id && responsibilityResponses.has(toRaw(order))) return;
     if (!wasOpen || order.id !== previousOrder?.id) {
-      captureFocus();
+      if (!isPage.value) captureFocus();
       await initForm(order);
       await nextTick();
       resetWorkspaceHeader();
@@ -572,22 +577,24 @@ const saveContextObject = async (draft: { address: string; branchId: number | nu
   return saved;
 };
 
+defineExpose({ prepareToLeave });
 </script>
 
 <template>
-  <div v-if="modelValue" class="fixed inset-0 z-50 flex h-dvh w-screen overflow-hidden">
+  <div v-if="modelValue" :class="isPage ? 'order-page-workspace flex w-full min-w-0 overflow-hidden' : 'fixed inset-0 z-50 flex h-dvh w-screen overflow-hidden'">
     <Transition name="fade">
       <div v-if="toast" class="fixed top-6 right-6 z-[100] bg-brand-600 text-white px-6 py-3 rounded-xl shadow-2xl font-medium">
         {{ toast }}
       </div>
     </Transition>
-    <div class="flex-1 bg-black/60" aria-hidden="true" @click="closeDrawer" />
-    <aside ref="drawerScrollContainer" tabindex="-1" role="dialog" aria-modal="true" aria-label="Рабочая область заказа" :inert="installationAttaching || sourceApplying || responsibilityBusy || workerAssignmentBusy || workerPayBusy ? true : undefined" :aria-busy="installationAttaching || sourceApplying || responsibilityBusy || workerAssignmentBusy || workerPayBusy" class="relative flex h-full w-full min-w-0 flex-col overflow-hidden bg-white text-gray-900 shadow-2xl outline-none dark:bg-slate-950 dark:text-slate-100 md:my-4 md:h-[calc(100%-2rem)] md:w-[calc(100%-2rem)] md:rounded-2xl xl:max-w-[1680px] xl:border xl:border-gray-200 dark:xl:border-slate-700" @keydown="trapFocus" @keydown.esc.stop="closeDrawer" @click="trackUsageControl" @change="trackUsageControl">
+    <div v-if="!isPage" class="flex-1 bg-black/60" aria-hidden="true" @click="closeDrawer" />
+    <aside ref="drawerScrollContainer" tabindex="-1" :role="isPage ? 'region' : 'dialog'" :aria-modal="isPage ? undefined : true" aria-label="Рабочая область заказа" :inert="installationAttaching || sourceApplying || responsibilityBusy || workerAssignmentBusy || workerPayBusy ? true : undefined" :aria-busy="installationAttaching || sourceApplying || responsibilityBusy || workerAssignmentBusy || workerPayBusy" class="relative flex h-full w-full min-w-0 flex-col overflow-hidden bg-white text-gray-900 outline-none dark:bg-slate-950 dark:text-slate-100" :class="isPage ? '' : 'shadow-2xl md:my-4 md:h-[calc(100%-2rem)] md:w-[calc(100%-2rem)] md:rounded-2xl xl:max-w-[1680px] xl:border xl:border-gray-200 dark:xl:border-slate-700'" @keydown="!isPage && trapFocus($event)" @keydown.esc="!isPage && closeDrawer()" @click="trackUsageControl" @change="trackUsageControl">
       <OrderWorkspaceHeader
         v-show="!proposalClientPreview"
         class="shrink-0"
         :workspace="activeWorkspaceSection === 'proposal'"
         :order-id="order?.id"
+        :back-label="isPage ? backLabel : undefined"
         :title="displayOrderTitle"
         :customer-name="customerDisplayName"
         :workflow="workflowType"
@@ -618,7 +625,7 @@ const saveContextObject = async (draft: { address: string; branchId: number | nu
         :can-view-usage-report="orderWorkspaceUsage.canViewReport.value"
         @usage-toggle="orderWorkspaceUsage.toggle"
         @usage-report="usageReportOpen = true"
-        @close="closeDrawer"
+        @close="isPage ? emit('back') : closeDrawer()"
       />
 
       <OrderWorkspaceUsageReport :open="usageReportOpen" @close="usageReportOpen = false" />
@@ -749,7 +756,7 @@ const saveContextObject = async (draft: { address: string; branchId: number | nu
                 :order="order" :current-fx-rate="currentFxRate" :is-b2c-customer="isB2cCustomer" :total="totalPreview" :total-payments="totalPaymentsPreview" :balance-due="balanceDuePreview" :margin="marginPreview" :calculated-target-currency-payments="calculatedTargetCurrencyPayments" :target-currency-balance-due="targetCurrencyBalanceDue"
                 @toast="setToast($event.message, $event.type)" @reload="emit('reload', $event)"
               />
-              <DealExecutionTab v-if="status === 'execution' && order && executionWorkspaceOpen" id="order-workspace-execution-details" :order="order" class="mt-4" @refresh="emit('reload', order.id)" @close="closeDrawer" />
+              <DealExecutionTab v-if="status === 'execution' && order && executionWorkspaceOpen" id="order-workspace-execution-details" :order="order" class="mt-4" @refresh="emit('reload', order.id)" @close="isPage ? emit('back') : closeDrawer()" />
             </section>
           </fieldset>
         </div>
@@ -772,7 +779,7 @@ const saveContextObject = async (draft: { address: string; branchId: number | nu
             :address-error="getFieldError('customer_delivery_address')"
             :comment-error="getFieldError('comment')"
             :save-error="displayFormError"
-            :before-navigate="closeDrawer"
+            :before-navigate="isPage ? prepareToLeave : closeDrawer"
             :before-save="orderSaving.flush"
             :persist-object="saveContextObject"
             @toast="setToast($event.message, $event.type)"
@@ -822,3 +829,7 @@ const saveContextObject = async (draft: { address: string; branchId: number | nu
 
   </div>
 </template>
+
+<style scoped>
+.order-page-workspace { height: 100%; min-height: 0; }
+</style>

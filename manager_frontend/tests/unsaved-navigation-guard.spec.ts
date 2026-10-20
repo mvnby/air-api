@@ -13,6 +13,21 @@ describe('unsaved navigation guard', () => {
     expect(await canNavigateAway()).toBe(true);
   });
 
+  it('protects the order page while a nested editor is open and after it closes', async () => {
+    const page = vi.fn(async () => false);
+    const nested = vi.fn(async () => true);
+    unregister = registerUnsavedNavigationGuard(page);
+    const closeNested = registerUnsavedNavigationGuard(nested);
+    try {
+      expect(await canNavigateAway()).toBe(false);
+      expect(nested).toHaveBeenCalledOnce();
+      expect(page).toHaveBeenCalledOnce();
+      closeNested();
+      expect(await canNavigateAway()).toBe(false);
+      expect(page).toHaveBeenCalledTimes(2);
+    } finally { closeNested(); }
+  });
+
   it('keeps the accepted location when navigation is rejected', async () => {
     const accept = vi.fn();
     const reject = vi.fn();

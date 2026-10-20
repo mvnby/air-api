@@ -76,7 +76,7 @@ export const useOrderDrawerActions = ({
     }
   };
 
-  const closeDrawer = async (options?: { force?: boolean } | Event) => {
+  const prepareToLeave = async (options?: { force?: boolean } | Event) => {
     const isDomEvent = typeof Event !== 'undefined' && options instanceof Event;
     const force = Boolean(options && !isDomEvent && (options as { force?: boolean }).force);
     if (!force && beforeClose && !await beforeClose()) return false;
@@ -92,6 +92,10 @@ export const useOrderDrawerActions = ({
     }
     onBeforeClose();
     clearDraft();
+    return true;
+  };
+  const closeDrawer = async (options?: { force?: boolean } | Event) => {
+    if (!await prepareToLeave(options)) return false;
     onModelValue(false);
     return true;
   };
@@ -119,5 +123,5 @@ export const useOrderDrawerActions = ({
     }
   };
 
-  return { closeDrawer, copyText, deleteOrder, toggleHold };
+  return { prepareToLeave, closeDrawer, copyText, deleteOrder, toggleHold };
 };

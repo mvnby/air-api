@@ -14,9 +14,10 @@ export const orderWorkspaceUrl = (orderId: number, proposalId: number, returnTo?
   const fallback = '/manager/orders/kanban';
   const url = new URL(returnTo || fallback, 'https://manager.local');
   const allowed = url.origin === 'https://manager.local'
-    && ['/manager/orders', '/manager/orders/kanban', '/manager/orders/list'].includes(url.pathname);
+    && (['/manager/orders', '/manager/orders/kanban', '/manager/orders/list'].includes(url.pathname) || /^\/manager\/orders\/[1-9]\d*$/.test(url.pathname));
   const target = allowed ? url : new URL(fallback, 'https://manager.local');
-  target.searchParams.set('orderId', String(orderId));
+  if (/^\/manager\/orders\/[1-9]\d*$/.test(target.pathname)) target.pathname = `/manager/orders/${orderId}`;
+  else target.searchParams.set('orderId', String(orderId));
   target.searchParams.set('proposalId', String(proposalId));
   return `${target.pathname}${target.search}`;
 };
@@ -35,7 +36,7 @@ export const catalogDecisionUrl = (orderId: number, proposalId: number, returnTo
   return `/manager/catalog-decision?${params}`;
 };
 
-export const navigateManager = (href: string) => {
-  window.history.pushState({}, '', href);
+export const navigateManager = (href: string, state: Record<string, unknown> = {}) => {
+  window.history.pushState(state, '', href);
   window.dispatchEvent(new PopStateEvent('popstate'));
 };

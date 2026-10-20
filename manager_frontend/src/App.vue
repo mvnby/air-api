@@ -19,6 +19,7 @@ import KitlaneNavigation from './components/kitlane/KitlaneNavigation.vue';
 import { useKitlaneIdentity } from './composables/useKitlaneIdentity';
 import { confirmDialog } from './services/ui-feedback';
 import { runGuardedNavigation } from './services/unsaved-navigation-guard';
+import { normalizeOrderLocation, readOrderPage } from './services/order-navigation';
 import {
   clearManagerSession,
   loginManagerWithPassword,
@@ -56,6 +57,7 @@ const MediaLibraryView = defineAsyncComponent(() => import('./views/MediaLibrary
 const CustomersView = defineAsyncComponent(() => import('./views/CustomersView.vue'));
 const CustomerProfileView = defineAsyncComponent(() => import('./views/CustomerProfileView.vue'));
 const OrdersKanbanView = defineAsyncComponent(() => import('./views/OrdersKanbanView.vue'));
+const OrderDetailView = defineAsyncComponent(() => import('./views/OrderDetailView.vue'));
 const LeadsView = defineAsyncComponent(() => import('./views/LeadsView.vue'));
 const PersonalTasksView = defineAsyncComponent(() => import('./views/PersonalTasksView.vue'));
 const CallRecordingsView = defineAsyncComponent(() => import('./views/CallRecordingsView.vue'));
@@ -127,8 +129,10 @@ const theme = ref<'light' | 'dark'>('light');
 const leadsCount = ref(0);
 const toast = ref('');
 const toastType = ref<'success' | 'error'>('success');
-const currentLocation = ref(`${window.location.pathname}${window.location.search}`);
+const currentLocation = ref(normalizeOrderLocation());
+const orderPage = computed(() => readOrderPage(currentLocation.value));
 const acceptedBrowserLocation = ref(currentLocation.value);
+let acceptedBrowserState = window.history.state;
 const viewRevision = ref(0);
 const THEME_STORAGE_KEY = 'manager_theme';
 const NAV_SECTIONS_STORAGE_KEY = 'manager_nav_sections_v1';
@@ -293,18 +297,21 @@ const rebuildButtonTitle = computed(() => {
 });
 const onPopState = async () => {
   const acceptedLocation = acceptedBrowserLocation.value;
-  const targetLocation = `${window.location.pathname}${window.location.search}`;
+  const previousState = acceptedBrowserState;
+  const targetState = window.history.state;
+  const targetLocation = normalizeOrderLocation();
   await runGuardedNavigation(
     () => {
       const browserLocation = `${window.location.pathname}${window.location.search}`;
       if (browserLocation !== targetLocation) {
-        window.history.pushState({}, '', targetLocation);
+        window.history.pushState(targetState, '', targetLocation);
       }
       currentLocation.value = targetLocation;
       acceptedBrowserLocation.value = targetLocation;
+      acceptedBrowserState = targetState;
       viewRevision.value += 1;
     },
-    () => window.history.pushState({}, '', acceptedLocation),
+    () => window.history.pushState(previousState, '', acceptedLocation),
   );
 };
 const navigate = async (path: string) => {
@@ -313,6 +320,7 @@ const navigate = async (path: string) => {
       window.history.pushState({}, '', path);
       currentLocation.value = `${window.location.pathname}${window.location.search}`;
       acceptedBrowserLocation.value = currentLocation.value;
+      acceptedBrowserState = window.history.state;
       viewRevision.value += 1;
     });
     if (!navigated) return;
@@ -524,7 +532,7 @@ watch(currentPath, () => {
     data-testid="manager-root"
     class="manager-root min-h-screen flex"
   >
-    <KitlaneShell :name="partnerName" :logo-url="partnerLogoUrl" :compact-logo-url="partnerCompactLogoUrl" :context-key="partnerContextKey" v-model:collapsed="isDesktopNavCollapsed" v-model:mobile-open="isMobileNavOpen" :theme="theme" @toggle-theme="toggleTheme" @home="navigate('/manager')">
+    <KitlaneShell :workspace="authorizedView === 'orders' && Boolean(orderPage)" :name="partnerName" :logo-url="partnerLogoUrl" :compact-logo-url="partnerCompactLogoUrl" :context-key="partnerContextKey" v-model:collapsed="isDesktopNavCollapsed" v-model:mobile-open="isMobileNavOpen" :theme="theme" @toggle-theme="toggleTheme" @home="navigate('/manager')">
       <template #navigation>
         <KitlaneNavigation :items="visibleCoreNavItems" :sections="visibleNavSections" :collapsed="isDesktopNavCollapsed" :leads-count="leadsCount" :expanded="expandedNavSections" :is-nav-item-active="isNavItemActive" :is-nav-section-active="isNavSectionActive" @navigate="navigate" @toggle-section="toggleNavSection" />
       </template>
@@ -594,6 +602,7 @@ watch(currentPath, () => {
       <PersonalTasksView v-else-if="authorizedView === 'personal-tasks'" :key="currentLocation" />
       <CallRecordingsView v-else-if="authorizedView === 'call-recordings'" :key="currentLocation" />
       <LeadsView v-else-if="authorizedView === 'leads'" :key="currentLocation" />
+      <OrderDetailView v-else-if="authorizedView === 'orders' && orderPage" :key="currentLocation" :order-id="orderPage.orderId" :return-to="orderPage.returnTo" />
       <OrdersKanbanView v-else-if="authorizedView === 'orders'" :key="currentLocation" />
       <CalendarDashboard v-else-if="authorizedView === 'calendar'" :key="currentLocation" />
       <EquipmentRegistryView v-else-if="authorizedView === 'equipment'" :key="currentLocation" />
