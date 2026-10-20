@@ -779,7 +779,7 @@ defineExpose({ prepareToLeave });
             :address-error="getFieldError('customer_delivery_address')"
             :comment-error="getFieldError('comment')"
             :save-error="displayFormError"
-            :before-navigate="isPage ? prepareToLeave : closeDrawer"
+            :before-navigate="isPage ? undefined : closeDrawer"
             :before-save="orderSaving.flush"
             :persist-object="saveContextObject"
             @toast="setToast($event.message, $event.type)"
