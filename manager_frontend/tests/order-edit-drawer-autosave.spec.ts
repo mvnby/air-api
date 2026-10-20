@@ -1,4 +1,5 @@
 import { nextTick } from 'vue';
+import { registerUnsavedNavigationGuard, runGuardedNavigation } from '../src/services/unsaved-navigation-guard';
 import { shallowMount, flushPromises, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import OrderWorkerAssignmentsPanel from '../src/components/orders/OrderWorkerAssignmentsPanel.vue';
@@ -21,7 +22,7 @@ import { managerStorefrontSelection } from '../src/services/manager-storefront-s
 import type { ManagerOrderDetailResponse } from '../src/client';
 
 const apiMock = vi.hoisted(() => ({
-  getManagerInstallers: vi.fn(), listManagerServiceEstimates: vi.fn(), listSupplyRequests: vi.fn(),
+  getManagerCustomerBranches: vi.fn(), getManagerInstallers: vi.fn(), listManagerServiceEstimates: vi.fn(), listSupplyRequests: vi.fn(),
 }));
 vi.mock('../src/api', () => ({ api: apiMock }));
 vi.mock('../src/composables/useSmartStickyHeader', async () => {
@@ -47,9 +48,10 @@ const commit = (payload: any) => {
   if (payload.services) stored.proposals![0] = { ...stored.proposals![0]!, service_lines: payload.services };
   return structuredClone(stored);
 };
-const mountDrawer = async (presentation: 'page' | 'dialog' = 'dialog') => {
+const mountDrawer = async (presentation: 'page' | 'dialog' = 'dialog', realCustomer = false) => {
   wrapper = shallowMount(OrderEditDrawer, {
     props: { modelValue: false, presentation, order: stored, onUpdated: (order: ManagerOrderDetailResponse) => { void wrapper.setProps({ order }); } },
+    global: { stubs: { OrderCustomerContext: !realCustomer, OrderWorkspaceContext: !realCustomer } },
   });
   await wrapper.setProps({ modelValue: true });
   await flushPromises();
@@ -541,6 +543,30 @@ describe('worker instructions with the actual drawer save queue', () => {
 
 
 describe('order page editor', () => {
+  it('uses the page navigation guard once when leaving for the customer with manual saving', async () => {
+    window.history.replaceState({}, '', '/manager/orders/395');
+    await mountDrawer('page', true);
+    customer().vm.$emit('update:editTarget', 'customer');
+    await nextTick();
+    header().vm.$emit('toggle-autosave');
+    header().vm.$emit('update:title', 'Несохранённая правка');
+    await nextTick();
+    const { confirmDialog } = await import('../src/services/ui-feedback');
+    vi.mocked(confirmDialog).mockClear().mockResolvedValueOnce(true);
+    const unregister = registerUnsavedNavigationGuard(() => (wrapper.vm as any).prepareToLeave());
+    let navigation: Promise<boolean> | undefined;
+    const accept = vi.fn();
+    const onPopState = () => { navigation = runGuardedNavigation(accept); };
+    window.addEventListener('popstate', onPopState);
+    try {
+      await customer().get('[aria-label="Открыть полную карточку клиента"]').trigger('click');
+      await flushPromises();
+      expect(await navigation).toBe(true);
+      expect(accept).toHaveBeenCalledOnce();
+      expect(confirmDialog).toHaveBeenCalledOnce();
+    } finally { unregister(); window.removeEventListener('popstate', onPopState); }
+  });
+
   it('renders as a page without locking document scroll or trapping Escape', async () => {
     await mountDrawer('page');
     expect(wrapper.get('aside').attributes('role')).toBe('region');
