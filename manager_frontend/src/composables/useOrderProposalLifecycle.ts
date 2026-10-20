@@ -117,13 +117,14 @@ export const useOrderProposalLifecycle = ({
     preferredProposalId?: number | null,
     emitReload = true,
   ) => {
-    onUpdated(updatedOrder);
     const nextProposal = preferredProposalId
       ? (updatedOrder.proposals || []).find((proposal) => proposal.id === preferredProposalId && !proposal.is_archived)
       : ((updatedOrder.proposals || []).find((proposal) => proposal.is_selected && !proposal.is_archived)
         || (updatedOrder.proposals || []).find((proposal) => !proposal.is_archived));
     loadProposalLines(nextProposal || null, updatedOrder);
     resetLookupState();
+    // Publish only after the viewed proposal (and its page URL) has switched.
+    onUpdated(updatedOrder);
     await loadSupplyRequests(updatedOrder.id);
     if (emitReload) onReload(updatedOrder.id);
   };

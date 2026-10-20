@@ -360,7 +360,7 @@ watch(activeProposalId, (proposalId) => {
   const url = new URL(window.location.href);
   url.searchParams.set('proposalId', String(proposalId));
   replaceManagerLocation(`${url.pathname}${url.search}`);
-});
+}, { flush: 'sync' });
 const EnvelopePrintDialog = defineAsyncComponent(() => import('../envelopes/EnvelopePrintDialog.vue'));
 const showEnvelope = ref(false);
 const customer = computed(() => props.order?.customer ?? null);
