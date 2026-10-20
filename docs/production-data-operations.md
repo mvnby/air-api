@@ -77,6 +77,9 @@ Production server intentionally runs from Docker images only (no git checkout in
      [product media URL backfill](product-media-url-backfill.md).
    - Brand logo CDN plan (read-only default):
      `python3 scripts/manage_brand_logo_cdn_backfill.py plan`
+   - Reviewed feature media publication (read-only default): use the exact
+     guarded manifest and expiring digest from
+     [feature media publication](feature-media-publication.md).
    - Brand logo execution is primary-only and accepts only the expiring token
      printed by a fresh ready plan. It is limited to the six exact reviewed
      legacy logo URLs and records SVG/WEBP files in the media library.
