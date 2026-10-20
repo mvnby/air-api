@@ -2,7 +2,6 @@ import { computed, ref } from 'vue';
 
 import type { DashboardView, Segment } from '../../api';
 import type {
-  ManagerOrderDetailResponse,
   ManagerOrderImportPreviewResponse,
   ManagerOrderListItemResponse,
   ManagerOrderTransferPackage_Input,
@@ -25,7 +24,7 @@ const setQueryParam = (key: string, value: string) => {
   const url = new URL(window.location.href);
   if (value) url.searchParams.set(key, value);
   else url.searchParams.delete(key);
-  window.history.replaceState({}, '', `${url.pathname}${url.search}`);
+  window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}`);
 };
 
 export const useOrdersDashboardModel = (notify: (message: string) => void) => {
@@ -42,13 +41,6 @@ export const useOrdersDashboardModel = (notify: (message: string) => void) => {
   const orders = ref<ManagerOrderListItemResponse[]>([]);
   const movingOrderIds = ref<number[]>([]);
   const isHydrated = ref(false);
-
-  const drawerOpen = ref(false);
-  const selectedOrder = ref<ManagerOrderDetailResponse | null>(null);
-  const pendingOpenOrderId = ref<number | null>(null);
-  const openedByUrlOrderId = ref<number | null>(null);
-  const orderServerErrors = ref<Record<string, string>>({});
-  const orderFormError = ref('');
 
   const hideOnHold = ref(true);
   const groupByCustomer = ref(true);
@@ -143,7 +135,13 @@ export const useOrdersDashboardModel = (notify: (message: string) => void) => {
     }
     if (resolvedView === 'kanban' || resolvedView === 'list') view.value = resolvedView;
     if (groupByFromUrl === 'customer') groupByCustomer.value = true;
-    else if (!groupByFromUrl && groupByFromStorage === 'false') groupByCustomer.value = false;
+    else if (groupByFromUrl === 'none' || !groupByFromUrl && groupByFromStorage === 'false') groupByCustomer.value = false;
+    statusFilter.value = params.get('status') || '';
+    sort.value = params.get('sort') || 'created_at_desc';
+    const work = params.get('workFilter');
+    if (ORDER_WORK_FILTERS.some(filter => filter.value === work)) workFilter.value = work as OrderWorkFilter;
+    hideOnHold.value = params.get('hideOnHold') !== 'false';
+    filtersOpen.value = params.get('filtersOpen') === 'true';
   };
   const persistSegmentAndView = () => {
     window.localStorage.setItem(ORDERS_SEGMENT_STORAGE_KEY, segment.value);
@@ -156,7 +154,7 @@ export const useOrdersDashboardModel = (notify: (message: string) => void) => {
       ORDERS_GROUP_BY_CUSTOMER_STORAGE_KEY,
       groupByCustomer.value ? 'true' : 'false',
     );
-    setQueryParam('groupBy', groupByCustomer.value ? 'customer' : '');
+    setQueryParam('groupBy', groupByCustomer.value ? 'customer' : 'none');
   };
 
   const customerAliasesStorageKey = (): string | null => {
@@ -194,23 +192,10 @@ export const useOrdersDashboardModel = (notify: (message: string) => void) => {
     notify(payload.alias ? 'Название группы сохранено' : 'Название группы сброшено');
   };
 
-  const clearOrderIdFromUrl = () => {
-    const url = new URL(window.location.href);
-    if (!url.searchParams.has('orderId')) return;
-    url.searchParams.delete('orderId');
-    url.searchParams.delete('proposalId');
-    window.history.replaceState({}, '', `${url.pathname}${url.search}`);
-  };
   const clearIdentityScopedState = () => {
     orders.value = [];
     movingOrderIds.value = [];
     selectedOrderIds.value = [];
-    drawerOpen.value = false;
-    selectedOrder.value = null;
-    pendingOpenOrderId.value = null;
-    openedByUrlOrderId.value = null;
-    orderServerErrors.value = {};
-    orderFormError.value = '';
     customerAliases.value = {};
     search.value = '';
     assignedToMe.value = false;
@@ -224,19 +209,17 @@ export const useOrdersDashboardModel = (notify: (message: string) => void) => {
     importFileName.value = '';
     importModalOpen.value = false;
     if (importFileInput.value) importFileInput.value.value = '';
-    clearOrderIdFromUrl();
   };
 
   return {
     segment, view, assignedToMe, canFilterMine, statusFilter, workFilter, workFilterCounts, hiddenOnHoldCount, sort, search, loading, saving, orders,
-    movingOrderIds, isHydrated, drawerOpen, selectedOrder, pendingOpenOrderId,
-    openedByUrlOrderId, orderServerErrors, orderFormError, hideOnHold,
+    movingOrderIds, isHydrated, hideOnHold,
     groupByCustomer, filtersOpen, customerAliases, selectedOrderIds, transferLoading,
     importFileInput, importPackage, importPreview, importFileName, importModalOpen,
     normalizedSearch, hasActiveOrderFilters, groupedOrderItems, listItems, visibleOrderIds,
     setQueryParam, restorePreferences, persistSegmentAndView, persistGrouping,
     restoreCustomerAliases, renameCustomerGroup, toggleOrderSelection,
-    toggleManySelection, selectAllVisible, clearSelection, clearOrderIdFromUrl,
+    toggleManySelection, selectAllVisible, clearSelection,
     clearIdentityScopedState,
   };
 };

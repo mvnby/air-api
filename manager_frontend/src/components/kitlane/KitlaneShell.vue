@@ -6,7 +6,7 @@ import KitlanePlatformBrand from './KitlanePlatformBrand.vue';
 import { managerStorefrontSelection } from '../../services/manager-storefront-selection';
 import ManagerStorefrontSwitcherHost from '../manager/ManagerStorefrontSwitcherHost.vue';
 
-const props = defineProps<{ name: string | null; logoUrl?: string | null; compactLogoUrl?: string | null; contextKey: string; collapsed: boolean; mobileOpen: boolean; theme: 'light' | 'dark' }>();
+const props = defineProps<{ name: string | null; logoUrl?: string | null; compactLogoUrl?: string | null; contextKey: string; collapsed: boolean; workspace?: boolean; mobileOpen: boolean; theme: 'light' | 'dark' }>();
 const emit = defineEmits<{
   'update:collapsed': [value: boolean];
   'update:mobileOpen': [value: boolean];
@@ -65,7 +65,7 @@ onBeforeUnmount(() => {
         <div class="kitlane-sidebar-footer"><slot name="footer" /></div>
       </div>
     </aside>
-    <main class="kitlane-main" :inert="drawerOpen">
+    <main class="kitlane-main" :class="{ 'kitlane-main-workspace': workspace }" :inert="drawerOpen">
       <header class="kitlane-topbar">
         <div class="kitlane-mobile-company">
           <button ref="menuButton" class="kitlane-icon-button" type="button" aria-label="Открыть меню" aria-controls="manager-mobile-navigation" :aria-expanded="mobileOpen" @click="emit('update:mobileOpen', true)"><Menu :size="20" /></button>
@@ -77,7 +77,7 @@ onBeforeUnmount(() => {
           <div class="kitlane-platform-divider"><KitlanePlatformBrand /></div>
         </div>
       </header>
-      <div class="border-b bg-[var(--kitlane-surface)] px-4 py-2 text-xs text-[var(--kitlane-muted)] md:hidden"><span class="font-medium">Компания:</span> {{ managerStorefrontSelection.companies.value.find(item => item.tenant_id === managerStorefrontSelection.selectedTenantId.value)?.display_name || name }}<span class="ml-3 font-medium">Сайт:</span> {{ managerStorefrontSelection.storefronts.value.find(item => item.slug === managerStorefrontSelection.selectedSlug.value)?.display_name || '—' }}</div>
+      <div class="kitlane-context-bar border-b bg-[var(--kitlane-surface)] px-4 py-2 text-xs text-[var(--kitlane-muted)] md:hidden"><span class="font-medium">Компания:</span> {{ managerStorefrontSelection.companies.value.find(item => item.tenant_id === managerStorefrontSelection.selectedTenantId.value)?.display_name || name }}<span class="ml-3 font-medium">Сайт:</span> {{ managerStorefrontSelection.storefronts.value.find(item => item.slug === managerStorefrontSelection.selectedSlug.value)?.display_name || '—' }}</div>
       <slot />
     </main>
   </div>
@@ -93,6 +93,8 @@ onBeforeUnmount(() => {
 .kitlane-storefront { margin: 16px 12px 8px; }
 .kitlane-sidebar-footer { margin-top: auto; }
 .kitlane-main { flex: 1; min-width: 0; }
+.kitlane-main-workspace { display: flex; flex-direction: column; height: 100dvh; min-height: 0; }
+.kitlane-main-workspace > .kitlane-topbar, .kitlane-main-workspace > .kitlane-context-bar { flex-shrink: 0; }
 .kitlane-topbar { position: sticky; top: 0; display: flex; align-items: center; justify-content: flex-end; height: var(--kitlane-header-height); padding: 0 28px; border-bottom: 1px solid var(--kitlane-border); background: var(--kitlane-surface); z-index: 30; }
 .kitlane-topbar-actions { display: flex; align-items: center; gap: 16px; min-width: 0; }
 .kitlane-platform-divider { display: flex; padding-left: 20px; border-left: 1px solid var(--kitlane-border); }

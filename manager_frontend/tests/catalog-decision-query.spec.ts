@@ -1,3 +1,4 @@
+import { readCatalogDecisionContext } from '../src/services/catalog-decision-context';
 import { describe, expect, it } from 'vitest';
 import { catalogDecisionChips, readCatalogDecisionQuery, writeCatalogDecisionQuery } from '../src/services/catalog-decision-query';
 
@@ -19,4 +20,11 @@ describe('catalog query navigation', () => {
     const chips = catalogDecisionChips(filters, [{ id: 1, title: 'Gree' }], [{ id: 11, title: 'Amber', brandId: 1 }, { id: 22, title: 'Flexis', brandId: 2 }]);
     expect(chips.find(item => item.key === 'brandIds-1')?.remove()).toEqual({ brandIds: [2], seriesIds: [22], isPublished: true });
   });
+});
+
+
+it('returns catalog selections to the standalone order and preserves its board URL', () => {
+  const search = new URLSearchParams({ orderId: '477', proposalId: '25', returnTo: '/manager/orders/477?returnTo=%2Fmanager%2Forders%2Fkanban%3Fsegment%3Db2b' });
+  const context = readCatalogDecisionContext(`?${search}`)!;
+  expect(context.returnTo).toBe('/manager/orders/477?returnTo=%2Fmanager%2Forders%2Fkanban%3Fsegment%3Db2b&proposalId=25');
 });

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import type { OrderBoardState } from '../../services/order-navigation';
 import type { Segment } from '../../api';
 import type { OrderRenderItem } from './order-utils';
 import OrderColumn from './OrderColumn.vue';
@@ -22,6 +23,8 @@ const emit = defineEmits<{
   renameOrder: [payload: { orderId: number; title: string | null }];
 }>();
 
+const scroller = ref<HTMLElement | null>(null);
+const columns = ref<InstanceType<typeof OrderColumn>[]>([]);
 const dragContext = ref<{ orderId: number; oldStatus: string } | null>(null);
 const expandedOrderId = ref<number | null>(null);
 const expandedGroupIds = ref<string[]>([]);
@@ -53,12 +56,26 @@ const onToggleGroup = (groupId: string) => {
     ? expandedGroupIds.value.filter((id) => id !== groupId)
     : [...expandedGroupIds.value, groupId];
 };
+defineExpose({
+  captureState: (): OrderBoardState => ({
+    expandedOrderId: expandedOrderId.value, expandedGroupIds: [...expandedGroupIds.value],
+    columnFilters: Object.fromEntries(columns.value.map(column => [column.$props.status, column.getFilter()])),
+    scrollLeft: scroller.value?.scrollLeft || 0,
+  }),
+  restoreState: (state: OrderBoardState) => {
+    expandedOrderId.value = state.expandedOrderId;
+    expandedGroupIds.value = [...state.expandedGroupIds];
+    columns.value.forEach(column => column.restoreFilter(state.columnFilters[column.$props.status] || ''));
+    if (scroller.value) scroller.value.scrollLeft = state.scrollLeft;
+  },
+});
 </script>
 
 <template>
-  <div class="flex gap-4 overflow-x-auto pb-4">
+  <div ref="scroller" class="flex gap-4 overflow-x-auto pb-4">
     <OrderColumn
       v-for="column in BOARD_COLUMNS"
+      ref="columns"
       :key="column.value"
       :status="column.value"
       :label="BOARD_COLUMN_LABELS[column.value] || column.label"

@@ -168,3 +168,16 @@ describe('My orders server filter', () => {
     wrapper = mountDashboard(); await flushPromises(); managerStorefrontSelection.selectedSlug.value = 'other'; await nextTick(); late.resolve(response([order(77)])); await flushPromises(); expect(JSON.stringify(wrapper.findComponent({ name: 'OrderKanbanBoard' }).props('groupedItems'))).not.toContain('Заказ 77');
   });
 });
+
+
+it('restores every board filter from the return URL and keeps its history position', () => {
+  window.history.replaceState({ orderListPosition: { top: 300 } }, '', '/manager/orders/kanban?segment=b2b&view=list&groupBy=none&assigned_to_me=1&workFilter=unpaid&hideOnHold=false&status=execution&sort=margin_desc&filtersOpen=true');
+  managerSession.auth.value = { staff_user_id: 7 } as any;
+  const model = useOrdersDashboardModel(vi.fn());
+  model.restorePreferences();
+  expect([model.segment.value, model.view.value, model.groupByCustomer.value, model.assignedToMe.value]).toEqual(['b2b', 'list', false, true]);
+  expect([model.workFilter.value, model.hideOnHold.value, model.statusFilter.value, model.sort.value, model.filtersOpen.value]).toEqual(['unpaid', false, 'execution', 'margin_desc', true]);
+  model.persistGrouping();
+  expect(window.history.state.orderListPosition.top).toBe(300);
+  managerSession.auth.value = null;
+});

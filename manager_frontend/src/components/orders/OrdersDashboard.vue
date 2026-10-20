@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { managerStorefrontSelection } from '../../services/manager-storefront-selection';
-import type { OrderWithResponsibility } from '../../services/order-responsibility';
 import { api } from '../../api';
 import {
   ManagerOrdersService,
@@ -12,7 +11,7 @@ import {
 import OrdersToolbar from './OrdersToolbar.vue';
 import OrderKanbanBoard from './OrderKanbanBoard.vue';
 import OrdersListTable from './OrdersListTable.vue';
-import OrderEditDrawer from './OrderEditDrawer.vue';
+import { openOrderPage, savedOrderListPosition } from '../../services/order-navigation';
 import {
   formatMoney,
 } from './order-utils';
@@ -40,14 +39,13 @@ const setToast = (message: string) => {
 };
 const {
   segment, view, assignedToMe, canFilterMine, statusFilter, workFilter, workFilterCounts, hiddenOnHoldCount, sort, search, loading, orders,
-  movingOrderIds, isHydrated, drawerOpen, selectedOrder, pendingOpenOrderId,
-  openedByUrlOrderId, orderServerErrors, orderFormError, hideOnHold,
+  movingOrderIds, isHydrated, hideOnHold,
   groupByCustomer, filtersOpen, selectedOrderIds, transferLoading, importFileInput,
   importPackage, importPreview, importFileName, importModalOpen, normalizedSearch,
   hasActiveOrderFilters, groupedOrderItems, listItems, visibleOrderIds, setQueryParam,
   restorePreferences, persistSegmentAndView, persistGrouping, restoreCustomerAliases,
   renameCustomerGroup, toggleOrderSelection, toggleManySelection, selectAllVisible,
-  clearSelection, clearOrderIdFromUrl, clearIdentityScopedState,
+  clearSelection, clearIdentityScopedState,
 } = useOrdersDashboardModel(setToast);
 
 const downloadJson = (payload: unknown, filename: string) => {
@@ -141,6 +139,8 @@ const commitImport = async () => {
 };
 
 let loadRequestId = 0;
+let restoredPosition = false;
+const board = ref<InstanceType<typeof OrderKanbanBoard> | null>(null);
 const identityScope = computed(() => `${managerSession.auth.value?.staff_user_id || managerSession.auth.value?.username}:${managerSession.auth.value?.tenant_id}:${managerStorefrontSelection.selectedSlug.value}`);
 watch(identityScope, () => { loadRequestId++; clearIdentityScopedState(); }, { flush: 'sync' });
 
@@ -148,10 +148,8 @@ const renameOrderTitle = async (payload: { orderId: number; title: string | null
   const nextTitle = payload.title?.trim() || null;
   const snapshot = orders.value.map((item) => ({ ...item }));
   const item = orders.value.find((order) => order.id === payload.orderId);
-  const previousSelectedTitle = selectedOrder.value?.id === payload.orderId ? selectedOrder.value.title : undefined;
 
   if (item) item.title = nextTitle;
-  if (selectedOrder.value?.id === payload.orderId) selectedOrder.value.title = nextTitle;
 
   try {
     await api.patchManagerOrder(payload.orderId, { title: nextTitle });
@@ -159,7 +157,6 @@ const renameOrderTitle = async (payload: { orderId: number; title: string | null
   } catch (error) {
     console.error(error);
     orders.value = snapshot;
-    if (selectedOrder.value?.id === payload.orderId) selectedOrder.value.title = previousSelectedTitle ?? null;
     setToast(`Не удалось сохранить название: ${getApiErrorMessage(error)}`);
   }
 };
@@ -196,9 +193,13 @@ const loadOrders = async () => {
     orders.value = loadedOrders;
     const loadedIds = new Set(orders.value.map((order) => order.id));
     selectedOrderIds.value = selectedOrderIds.value.filter((orderId) => loadedIds.has(orderId));
-    if (pendingOpenOrderId.value && openedByUrlOrderId.value !== pendingOpenOrderId.value) {
-      await openOrder(pendingOpenOrderId.value, false);
-      openedByUrlOrderId.value = pendingOpenOrderId.value;
+    await nextTick();
+    const position = savedOrderListPosition();
+    if (!restoredPosition && position?.url === `${window.location.pathname}${window.location.search}`) {
+      restoredPosition = true;
+      if (position.board) board.value?.restoreState(position.board);
+      await nextTick();
+      window.scrollTo(0, position.top);
     }
   } catch (error) {
     if (requestId !== loadRequestId) return;
@@ -233,6 +234,8 @@ watch(
     persistSegmentAndView();
     setQueryParam('search', normalizedSearch.value);
     setQueryParam('assigned_to_me', assignedToMe.value ? '1' : '');
+    setQueryParam('status', statusFilter.value);
+    setQueryParam('sort', sort.value);
     if (searchTimer) window.clearTimeout(searchTimer);
     if (next.slice(0, 4).some((value, index) => value !== previous[index])) {
       void refreshOrders();
@@ -244,6 +247,12 @@ watch(
 watch(view, persistSegmentAndView);
 watch(groupByCustomer, () => {
   if (isHydrated.value) persistGrouping();
+});
+watch([workFilter, hideOnHold, filtersOpen], () => {
+  if (!isHydrated.value) return;
+  setQueryParam('workFilter', workFilter.value);
+  setQueryParam('hideOnHold', String(hideOnHold.value));
+  setQueryParam('filtersOpen', String(filtersOpen.value));
 });
 const boardFilterReset = ref(0);
 const clearOrderFilters = () => {
@@ -412,51 +421,12 @@ const onGenerateDoc = async (payload: { orderId: number; docType: string }) => {
   }
 };
 
-const openOrder = async (orderId: number, updateUrl = true) => {
-  try {
-    orderServerErrors.value = {};
-    orderFormError.value = '';
-    selectedOrder.value = await api.getManagerOrderDetail(orderId);
-    drawerOpen.value = true;
-    if (updateUrl) {
-      const url = new URL(window.location.href);
-      url.searchParams.set('orderId', String(orderId));
-      window.history.replaceState({}, '', `${url.pathname}${url.search}`);
-      pendingOpenOrderId.value = orderId;
-      openedByUrlOrderId.value = orderId;
-    }
-  } catch (error) {
-    console.error(error);
-    setToast('Не удалось открыть сделку');
-  }
-};
+const openOrder = (orderId: number) => openOrderPage(orderId, board.value?.captureState());
 
 const clearCustomerFilter = () => {
   customerIdFilter.value = undefined;
   setQueryParam('customerId', '');
   void refreshOrders();
-};
-
-const reloadOrder = async (orderId: number) => {
-  await openOrder(orderId, false);
-  await loadOrders();
-};
-
-const handleOrderDeleted = async (orderId: number) => {
-  orders.value = orders.value.filter((order) => order.id !== orderId);
-  drawerOpen.value = false;
-  selectedOrder.value = null;
-  setToast('Сделка удалена');
-  await loadOrders();
-};
-
-const applyOrderUpdate = (order: OrderWithResponsibility) => {
-  selectedOrder.value = order;
-  const index = orders.value.findIndex((item) => item.id === order.id);
-  if (index !== -1) {
-    orders.value.splice(index, 1, order);
-  }
-  if (assignedToMe.value && order.responsible_person?.staff_user_id !== managerSession.auth.value?.staff_user_id) void refreshOrders();
 };
 
 onMounted(async () => {
@@ -468,14 +438,7 @@ onMounted(async () => {
   const searchParam = params.get('search');
   if (searchParam) {
     search.value = searchParam;
-    filtersOpen.value = true;
-  }
-  const orderIdParam = params.get('orderId');
-  if (orderIdParam) {
-    const parsed = Number(orderIdParam);
-    if (Number.isFinite(parsed) && parsed > 0) {
-      pendingOpenOrderId.value = parsed;
-    }
+    filtersOpen.value = params.get('filtersOpen') !== 'false';
   }
   persistSegmentAndView();
   persistGrouping();
@@ -485,15 +448,6 @@ onMounted(async () => {
   await loadOrders();
 });
 
-watch(drawerOpen, (isOpen) => {
-  if (!isOpen) {
-    clearOrderIdFromUrl();
-    openedByUrlOrderId.value = null;
-    pendingOpenOrderId.value = null;
-    orderServerErrors.value = {};
-    orderFormError.value = '';
-  }
-});
 </script>
 
 <template>
@@ -529,7 +483,7 @@ watch(drawerOpen, (isOpen) => {
         <p>{{ loadError }}</p>
         <button type="button" class="mt-3 rounded-lg bg-white px-3 py-2 text-sm font-semibold dark:bg-slate-800" @click="refreshOrders">Повторить</button>
       </div>
-      <OrderKanbanBoard
+      <OrderKanbanBoard ref="board"
         v-else-if="view === 'kanban'"
         :grouped-items="groupedOrderItems"
         :filter-reset="boardFilterReset"
@@ -558,16 +512,6 @@ watch(drawerOpen, (isOpen) => {
         @toggle-select-many="toggleManySelection"
       />
     </div>
-
-    <OrderEditDrawer
-      v-model="drawerOpen"
-      :order="selectedOrder"
-      :server-errors="orderServerErrors"
-      :form-error="orderFormError"
-      @updated="applyOrderUpdate"
-      @deleted="handleOrderDeleted"
-      @reload="reloadOrder"
-    />
 
     <OrdersImportPreviewModal
       v-if="importModalOpen && importPreview"

@@ -38,6 +38,10 @@ const emit = defineEmits<{
 }>();
 
 const activeFilter = ref('');
+defineExpose({
+  getFilter: () => activeFilter.value,
+  restoreFilter: (value: string) => { activeFilter.value = props.filterOptions?.some(option => option.value === value) ? value : ''; },
+});
 const filterOpen = ref(false);
 watch(() => props.filterReset, () => {
   activeFilter.value = '';

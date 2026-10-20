@@ -110,7 +110,7 @@ afterEach(() => {
 });
 
 describe('OrdersDashboard local session cleanup', () => {
-  it('clears loaded, selected and opened order state immediately after list 401', async () => {
+  it('clears loaded and selected order state immediately after list 401', async () => {
     mocks.getOrders
       .mockResolvedValueOnce({
         items: [oldOrder],
@@ -124,14 +124,11 @@ describe('OrdersDashboard local session cleanup', () => {
 
     const list = wrapper.getComponent({ name: 'OrdersListTable' });
     list.vm.$emit('toggle-select', { orderId: oldOrder.id, selected: true });
-    list.vm.$emit('open', oldOrder.id);
     await flushPromises();
 
-    const drawer = wrapper.getComponent({ name: 'OrderEditDrawer' });
     expect(list.props('items')).toHaveLength(1);
     expect(list.props('selectedOrderIds')).toEqual([oldOrder.id]);
-    expect(drawer.props('modelValue')).toBe(true);
-    expect(drawer.props('order')).toMatchObject({ id: oldOrder.id });
+    expect(wrapper.find('[data-testid="order-drawer"]').exists()).toBe(false);
 
     list.vm.$emit('update:sort', 'margin_desc');
     await flushPromises();
@@ -139,8 +136,6 @@ describe('OrdersDashboard local session cleanup', () => {
     expect(mocks.getOrders).toHaveBeenCalledTimes(2);
     expect(list.props('items')).toEqual([]);
     expect(list.props('selectedOrderIds')).toEqual([]);
-    expect(drawer.props('modelValue')).toBe(false);
-    expect(drawer.props('order')).toBeNull();
     expect(managerSession.isAuthenticated.value).toBe(false);
     expect(managerSession.auth.value).toBeNull();
     expect(managerSession.recoveryRequired.value).toBe(true);

@@ -95,7 +95,8 @@ vi.mock('../src/components/orders/OrdersListTable.vue', () => ({
 vi.mock('../src/components/orders/OrderEditDrawer.vue', () => ({
   default: {
     name: 'OrderEditDrawer',
-    props: ['modelValue', 'order', 'serverErrors', 'formError', 'saving'],
+    props: ['modelValue', 'order', 'serverErrors', 'formError', 'saving', 'presentation', 'backLabel'],
+    methods: { prepareToLeave: () => true },
     emits: ['update:modelValue', 'save', 'updated', 'deleted', 'reload'],
     template: '<div data-testid="order-drawer" />',
   },
@@ -403,7 +404,7 @@ describe('App Manager session boundary', () => {
     list.vm.$emit('open', oldOrder.id);
     await flushPromises();
 
-    expect(managerSession.recoveryRequired.value).toBe(true);
+    await vi.waitFor(() => expect(managerSession.recoveryRequired.value).toBe(true));
     expect(wrapper!.find('[data-testid="manager-root"]').exists()).toBe(false);
     expect(wrapper!.find('[data-testid="orders-list"]').exists()).toBe(false);
   });
