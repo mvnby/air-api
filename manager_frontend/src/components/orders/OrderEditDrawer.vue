@@ -48,6 +48,7 @@ import { useOrderWorkspaceNavigation } from '../../composables/useOrderWorkspace
 import { useOrderDrawerSaving } from '../../composables/useOrderDrawerSaving';
 import { useOrderDrawerActions } from '../../composables/useOrderDrawerActions';
 import { useDrawerFocusTrap } from '../../composables/useDrawerFocusTrap';
+import { useDocumentScrollLock } from '../../composables/useDocumentScrollLock';
 import { useOrderWorkspaceUsage } from '../../composables/useOrderWorkspaceUsage';
 import { useOrderWorkspaceUsageControls } from '../../composables/useOrderWorkspaceUsageControls';
 import { useOrderCatalogNavigation } from '../../composables/useOrderCatalogNavigation';
@@ -74,6 +75,7 @@ const proposalClientPreview = ref(false);
 const showProposalCosts = ref(false);
 const mobileContextOpen = ref(false);
 const demoReadOnly = useDemoReadOnly();
+useDocumentScrollLock(() => props.modelValue);
 const { captureFocus, focusContainer, restoreFocus, trapFocus } = useDrawerFocusTrap(drawerScrollContainer);
 const { compact: compactWorkspaceHeader, reset: resetWorkspaceHeader } = useSmartStickyHeader(workspaceScrollContainer);
 watch(() => [props.order?.id, props.modelValue], () => {
@@ -573,7 +575,7 @@ const saveContextObject = async (draft: { address: string; branchId: number | nu
 </script>
 
 <template>
-  <div v-if="modelValue" class="fixed inset-0 z-50 flex">
+  <div v-if="modelValue" class="fixed inset-0 z-50 flex h-dvh w-screen overflow-hidden">
     <Transition name="fade">
       <div v-if="toast" class="fixed top-6 right-6 z-[100] bg-brand-600 text-white px-6 py-3 rounded-xl shadow-2xl font-medium">
         {{ toast }}
@@ -622,7 +624,7 @@ const saveContextObject = async (draft: { address: string; branchId: number | nu
       <OrderWorkspaceUsageReport :open="usageReportOpen" @close="usageReportOpen = false" />
       <EnvelopePrintDialog v-if="showEnvelope && customer?.id" :key="customer.id" :customer-id="customer.id" :order-address="compactObjectAddress" @close="showEnvelope = false" />
 
-      <div ref="workspaceScrollContainer" class="grid min-h-0 flex-1 content-start gap-3 overflow-y-auto p-3" :class="proposalClientPreview ? '' : 'lg:grid-cols-[minmax(0,1fr)_18rem]'">
+      <div ref="workspaceScrollContainer" class="grid min-h-0 min-w-0 flex-1 grid-cols-1 content-start gap-3 overflow-y-auto p-3" :class="proposalClientPreview ? '' : 'lg:grid-cols-[minmax(0,1fr)_18rem]'">
         <div class="min-w-0">
           <OrderWorkspaceNav
             v-show="!proposalClientPreview"
