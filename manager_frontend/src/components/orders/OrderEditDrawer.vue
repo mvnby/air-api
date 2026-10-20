@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { readOrderProposalContext } from '../../services/order-navigation';
+import { replaceManagerLocation } from '../../services/manager-navigation-history';
 import { computed, defineAsyncComponent, nextTick, onScopeDispose, ref, toRaw, watch } from 'vue';
 import OrderWorkerPayPanel from './OrderWorkerPayPanel.vue';
 import OrderWorkerAssignmentsPanel from './OrderWorkerAssignmentsPanel.vue';
@@ -352,7 +354,13 @@ watch(activeWorkspaceSection, (section) => {
   if (section !== 'proposal') proposalClientPreview.value = false;
   if (section === 'documents') documentsMounted.value = true;
 }, { immediate: true });
-watch(activeProposalId, () => { proposalClientPreview.value = false; });
+watch(activeProposalId, (proposalId) => {
+  proposalClientPreview.value = false;
+  if (!isPage.value || !proposalId || readOrderProposalContext(window.location.href).orderId !== props.order?.id) return;
+  const url = new URL(window.location.href);
+  url.searchParams.set('proposalId', String(proposalId));
+  replaceManagerLocation(`${url.pathname}${url.search}`);
+});
 const EnvelopePrintDialog = defineAsyncComponent(() => import('../envelopes/EnvelopePrintDialog.vue'));
 const showEnvelope = ref(false);
 const customer = computed(() => props.order?.customer ?? null);
@@ -472,8 +480,8 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   }
   hydrateOrder(order);
 
-  const params = new URLSearchParams(window.location.search);
-  const returnProposalId = Number(params.get('orderId')) === order.id ? Number(params.get('proposalId')) : null;
+  const context = readOrderProposalContext(window.location.href);
+  const returnProposalId = context.orderId === order.id ? context.proposalId : null;
   const selectedProposal = (order.proposals || []).find((proposal) => proposal.id === (activeProposalId.value || returnProposalId) && !proposal.is_archived)
     || (order.proposals || []).find((proposal) => proposal.is_selected && !proposal.is_archived)
     || (order.proposals || []).find((proposal) => !proposal.is_archived)

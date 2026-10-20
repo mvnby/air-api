@@ -36,7 +36,4 @@ export const catalogDecisionUrl = (orderId: number, proposalId: number, returnTo
   return `/manager/catalog-decision?${params}`;
 };
 
-export const navigateManager = (href: string, state: Record<string, unknown> = {}) => {
-  window.history.pushState(state, '', href);
-  window.dispatchEvent(new PopStateEvent('popstate'));
-};
+export { navigateManager } from './manager-navigation-history';

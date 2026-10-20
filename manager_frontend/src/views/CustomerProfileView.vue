@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { navigateManager, returnToManager } from '../services/manager-navigation-history';
 import { computed, defineAsyncComponent, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { ArrowLeft, Archive, Plus } from 'lucide-vue-next';
 import { api } from '../api';
@@ -49,12 +50,8 @@ async function load() {
 function updated(value: ManagerCatalogCustomerItemResponse) { customer.value = value; dispatchCustomerUpdated(value); }
 async function refreshContacts() { await load(); if (customer.value) dispatchCustomerUpdated(customer.value); }
 function chooseTab(tab: Tab) { visited.add(tab); activeTab.value = tab; }
-function navigate(path: string) {
-  // App handles popstate and checks this profile's unsaved changes once.
-  window.history.pushState({}, '', path);
-  window.dispatchEvent(new PopStateEvent('popstate'));
-}
-function back() { const target = params.get('returnTo'); navigate(target?.startsWith('/manager/') ? target : '/manager/customers'); }
+const navigate = navigateManager;
+function back() { const target = params.get('returnTo'); returnToManager(target?.startsWith('/manager/') ? target : '/manager/customers'); }
 function openOrders() { navigate(`/manager/orders/kanban?customerId=${customerId}&segment=all`); }
 function createdOrder(orderId: number) { showCreateOrder.value = false; navigate(`/manager/orders/kanban?orderId=${orderId}`); }
 function recognized(value: ManagerCatalogCustomerItemResponse) { showIntake.value = false; updated(value); savedContacts.value = null; contactsRevision.value++; }

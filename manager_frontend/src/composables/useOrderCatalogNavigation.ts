@@ -1,7 +1,8 @@
 import { computed, ref, type Ref } from 'vue';
 import { MANAGER_CAPABILITY, hasManagerCapability } from '../manager-capabilities';
 import { managerSession } from '../services/manager-session';
-import { catalogDecisionUrl, navigateManager } from '../services/catalog-decision-context';
+import { catalogDecisionUrl } from '../services/catalog-decision-context';
+import { openManagerChild } from '../services/manager-navigation-history';
 
 export const useOrderCatalogNavigation = (options: {
   orderId: Readonly<Ref<number | undefined>>;
@@ -26,7 +27,7 @@ export const useOrderCatalogNavigation = (options: {
       if (!await options.flush()) return;
       if (!available.value || orderId !== options.orderId.value || proposalId !== options.proposalId.value) return;
       options.close();
-      navigateManager(catalogDecisionUrl(orderId, proposalId, returnTo));
+      await openManagerChild(catalogDecisionUrl(orderId, proposalId, returnTo));
     } finally { opening.value = false; }
   };
   return { available, opening, open };

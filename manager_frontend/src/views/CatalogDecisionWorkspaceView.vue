@@ -19,7 +19,7 @@ import {
 } from '../services/catalog-decision-selection';
 import { managerSession } from '../services/manager-session';
 import { useCatalogDecisionTarget } from '../composables/useCatalogDecisionTarget';
-import { navigateManager } from '../services/catalog-decision-context';
+import { returnToManager } from '../services/manager-navigation-history';
 import { getApiErrorMessage } from '../utils/api-errors';
 
 const target = useCatalogDecisionTarget();
@@ -153,7 +153,7 @@ const orderCreated = (orderId: number) => {
 const attachToTarget = async () => {
   if (await target.attach(Object.values(selected.value).map(item => item.id)) && !disposed) {
     selected.value = {};
-    if (target.context.value) navigateManager(target.context.value.returnTo);
+    if (target.context.value) returnToManager(target.context.value.returnTo);
   }
 };
 watch(filters, (next, previous) => {
@@ -199,7 +199,7 @@ onBeforeUnmount(() => { disposed = true; compareGeneration += 1; selectionCheckG
             <p v-else-if="target.order.value && target.proposal.value" class="mt-1 text-sm text-brand-800">{{ target.order.value.title || target.order.value.customer?.name || 'Без названия' }} · {{ target.proposal.value.name }}</p>
             <p v-if="target.canAttach.value" class="mt-1 text-xs text-brand-800">Выбранные модели дополнят этот вариант предложения.</p>
           </div>
-          <a v-if="target.context.value" :href="target.context.value.returnTo" class="text-sm font-semibold text-brand-800 underline underline-offset-2" @click.prevent="!target.saving.value && navigateManager(target.context.value!.returnTo)">Вернуться в заказ</a>
+          <a v-if="target.context.value" :href="target.context.value.returnTo" class="text-sm font-semibold text-brand-800 underline underline-offset-2" @click.prevent="!target.saving.value && returnToManager(target.context.value!.returnTo)">Вернуться в заказ</a>
         </div>
         <p v-if="target.error.value" role="alert" class="mt-2 text-sm text-red-700">{{ target.error.value }}</p>
       </div>
