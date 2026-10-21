@@ -63,4 +63,11 @@ export type OrderDrawerDraft = {
   serviceLines: ServiceLine[];
   scope?: OrderDrawerDraftScope;
   formDraft?: Record<string, unknown>;
+  version?: 2;
+  orderId?: number;
+  proposalId?: number | null;
+  baseForm?: Record<string, unknown>;
+  baseLines?: { products: unknown[]; services: unknown[] };
+  linesDraft?: { products: unknown[]; services: unknown[] };
+  resolutions?: import('./order-draft-merge').DraftChoices;
 };

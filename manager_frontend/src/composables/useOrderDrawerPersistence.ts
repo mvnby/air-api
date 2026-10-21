@@ -3,11 +3,10 @@ import type { ManagerOrderDetailResponse } from '../client';
 import type {
   OrderDrawerDraft,
   OrderDrawerDraftScope,
-  OrderLogisticsComponent,
   ProductLine,
-  ProductLogisticsTemplateComponent,
   ServiceLine,
 } from '../components/orders/order-editor-types';
+import { isRecord, mergeOrderDraft, type DraftConflict, type DraftChoices } from '../components/orders/order-draft-merge';
 import { useDemoReadOnly } from '../services/manager-demo';
 import { managerSession } from '../services/manager-session';
 import { managerStorefrontSelection } from '../services/manager-storefront-selection';
@@ -35,6 +34,7 @@ type UseOrderDrawerPersistenceOptions = {
   currentLinesSnapshot: () => string;
   currentFormSnapshot: () => string;
   restoreFormDraft?: (draft: unknown) => void;
+  ready?: Readonly<Ref<boolean>>;
 };
 
 export const useOrderDrawerPersistence = ({
@@ -47,7 +47,14 @@ export const useOrderDrawerPersistence = ({
   currentLinesSnapshot,
   currentFormSnapshot,
   restoreFormDraft,
+  ready,
 }: UseOrderDrawerPersistenceOptions) => {
+  const draftConflicts = ref<DraftConflict[]>([]);
+  const draftBlocked = computed(() => draftConflicts.value.length > 0);
+  let recovery: { payload: Partial<OrderDrawerDraft>; server: Record<string, unknown>; products: ProductLine[]; services: ServiceLine[]; choices: DraftChoices; sourceKey: string; contextKey: string } | null = null;
+  const readSnapshot = (raw: string): Record<string, unknown> => {
+    try { const value: unknown = JSON.parse(raw); return isRecord(value) ? value : {}; } catch { return {}; }
+  };
   const demoReadOnly = useDemoReadOnly();
   const draftScope = computed<OrderDrawerDraftScope | null>(() => {
     const auth = managerSession.auth.value;
@@ -67,32 +74,40 @@ export const useOrderDrawerPersistence = ({
   const expandedDrawerSections = ref(createDefaultDrawerSections());
   const initializedOrderId = ref<number | null>(null);
   const pendingDraftClearOrderId = ref<number | null>(null);
-  const draftKey = computed(() => (
+  const legacyDraftKey = computed(() => (
     order.value ? `manager_order_drawer_draft_${order.value.id}_${activeProposalId.value || 'default'}` : ''
   ));
+  const draftKey = computed(() => draftScope.value && legacyDraftKey.value ? `${legacyDraftKey.value}_${encodeURIComponent(JSON.stringify(draftScope.value))}` : '');
   const drawerSectionsKey = computed(() => (
     order.value ? `manager_order_drawer_sections_${order.value.id}` : ''
   ));
   const hasUnsavedChanges = computed(() => (
     Boolean(order.value?.id)
-    && (
+    && (draftBlocked.value ||
       (Boolean(savedLinesSnapshot.value) && currentLinesSnapshot() !== savedLinesSnapshot.value)
       || (Boolean(savedFormSnapshot.value) && currentFormSnapshot() !== savedFormSnapshot.value)
     )
   ));
 
   const persistDraft = () => {
-    if (!draftKey.value) return;
+    if (!draftKey.value || ready?.value === false || (recovery && recovery.contextKey !== draftKey.value)) return;
     try {
       if (demoReadOnly.value) {
         window.sessionStorage.removeItem(draftKey.value);
         return;
       }
+      if (draftBlocked.value) return; // Keep both original versions until every decision is explicit.
       if (!hasUnsavedChanges.value) {
+        if (recovery) window.sessionStorage.removeItem(recovery.sourceKey);
         window.sessionStorage.removeItem(draftKey.value);
         return;
       }
+      if (!draftScope.value) return;
       const payload: OrderDrawerDraft = {
+        version: 2, orderId: order.value!.id, proposalId: activeProposalId.value,
+        baseForm: readSnapshot(savedFormSnapshot.value),
+        baseLines: readSnapshot(savedLinesSnapshot.value) as OrderDrawerDraft['baseLines'],
+        linesDraft: readSnapshot(currentLinesSnapshot()) as OrderDrawerDraft['linesDraft'],
         productLines: productLines.value.map((line) => ({ ...line })),
         serviceLines: serviceLines.value.map((line) => ({ ...line })),
       };
@@ -104,65 +119,81 @@ export const useOrderDrawerPersistence = ({
         }
       }
       window.sessionStorage.setItem(draftKey.value, JSON.stringify(payload));
+      if (recovery && recovery.sourceKey !== draftKey.value) window.sessionStorage.removeItem(recovery.sourceKey);
     } catch (error) {
       console.warn('Failed to persist order drawer draft', error);
     }
   };
 
+  const applyRecovery = () => {
+    if (!recovery || recovery.contextKey !== draftKey.value) return;
+    const { payload, server, choices } = recovery;
+    const hasBase = payload.version === 2 && isRecord(payload.baseForm) && isRecord(payload.baseLines)
+      && Array.isArray(payload.baseLines.products) && Array.isArray(payload.baseLines.services) && isRecord(payload.linesDraft);
+    const legacyProducts = payload.productLines?.map(line => ({
+      ...line, link_id: Number(line.link_id || 0) || null, product_id: Number(line.product_id || 0),
+      product_query: String(line.product_query || ''), client_description: String(line.client_description || '').trim() || null,
+      quantity: Number(line.quantity || 1), price: Number(line.price || 0), cost: Number(line.cost || 0),
+      product_logistics_components: Array.isArray(line.product_logistics_components) ? line.product_logistics_components : [],
+      logistics_components: Array.isArray(line.logistics_components) ? line.logistics_components : null,
+    }));
+    const legacyServices = payload.serviceLines?.map(line => ({
+      ...line, link_id: Number(line.link_id || 0) || null, service_id: line.service_id ?? null,
+      title: String(line.title || ''), description: line.description || null,
+      quantity: Number(line.quantity || 1), price: Number(line.price || 0), cost: Number(line.cost || 0),
+    }));
+    const local = {
+      form: payload.formDraft || {},
+      products: hasBase ? payload.linesDraft!.products : legacyProducts ?? server.products,
+      services: hasBase ? payload.linesDraft!.services : legacyServices ?? server.services,
+    };
+    const merged = mergeOrderDraft({ form: payload.baseForm, ...payload.baseLines }, local, server, choices, !hasBase);
+    draftConflicts.value = merged.conflicts;
+    restoreFormDraft?.(merged.value.form);
+    // Editable snapshots omit display/template metadata. Retain the current server metadata for existing rows.
+    const enrich = <T extends { link_id?: number | null }>(rows: unknown, fresh: T[], cached: T[]) => {
+      const additions = cached.filter(item => !item.link_id);
+      return (Array.isArray(rows) ? rows : []).map(row => {
+        const value = row as T;
+        const metadata = value.link_id ? fresh.find(item => item.link_id === value.link_id) || cached.find(item => item.link_id === value.link_id) : additions.shift();
+        return { ...metadata, ...value };
+      });
+    };
+    productLines.value = enrich(merged.value.products, recovery.products, payload.productLines || []);
+    serviceLines.value = enrich(merged.value.services, recovery.services, payload.serviceLines || []);
+  };
+  const resolveDraftConflict = (id: string, choice: 'local' | 'server') => {
+    if (!recovery || recovery.contextKey !== draftKey.value || !draftConflicts.value.some(item => item.id === id)) return;
+    recovery.choices[id] = { choice, server: draftConflicts.value.find(item => item.id === id)!.server };
+    try { window.sessionStorage.setItem(recovery.sourceKey, JSON.stringify({ ...recovery.payload, resolutions: recovery.choices })); }
+    catch (error) { console.warn('Failed to persist order draft decision', error); }
+    applyRecovery();
+    if (!draftBlocked.value) persistDraft();
+  };
+
   const restoreDraft = () => {
+    draftConflicts.value = [];
+    recovery = null;
     if (!draftKey.value) return;
     try {
       if (demoReadOnly.value) {
         window.sessionStorage.removeItem(draftKey.value);
         return;
       }
-      const raw = window.sessionStorage.getItem(draftKey.value);
+      const sourceKey = window.sessionStorage.getItem(draftKey.value) ? draftKey.value : legacyDraftKey.value;
+      const raw = window.sessionStorage.getItem(sourceKey);
       if (!raw) return;
       const parsed: unknown = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
       const payload = parsed as Partial<OrderDrawerDraft>;
-      // Old line-only drafts keep their previous behavior; all new scoped data must belong to this identity.
       if ((payload.scope !== undefined || payload.formDraft !== undefined) && !matchesDraftScope(payload.scope)) return;
-      if (payload.formDraft !== undefined) restoreFormDraft?.(payload.formDraft);
-      if (Array.isArray(payload.productLines)) {
-        productLines.value = payload.productLines.map((line) => ({
-          link_id: Number((line as any).link_id || 0) || null,
-          product_id: Number(line.product_id || 0),
-          product_query: String(line.product_query || ''),
-          client_description: String(line.client_description || '').trim() || null,
-          catalog_price: line.catalog_price ?? null,
-          quantity: Number(line.quantity || 1),
-          price: Number(line.price || 0),
-          cost: Number(line.cost || 0),
-          product_country: (line as any).product_country || null,
-          product_logistics_components: Array.isArray((line as any).product_logistics_components)
-            ? [...((line as any).product_logistics_components as ProductLogisticsTemplateComponent[])]
-            : [],
-          logistics_components: Array.isArray((line as any).logistics_components)
-            ? [...((line as any).logistics_components as OrderLogisticsComponent[])]
-            : null,
-        }));
-      }
-      if (Array.isArray(payload.serviceLines)) {
-        serviceLines.value = payload.serviceLines.map((line) => ({
-          link_id: Number(line.link_id || 0) || null,
-          installation_estimate_revision_id: Number(line.installation_estimate_revision_id || 0) || null,
-          installation_projection_mode: line.installation_projection_mode || null,
-          service_id: line.service_id ?? null,
-          title: String(line.title || ''),
-          description: line.description || null,
-          installation_display_lines: line.installation_display_lines,
-          quantity: Number(line.quantity || 1),
-          price: Number(line.price || 0),
-          cost: Number(line.cost || 0),
-          tariff_id: Number(line.tariff_id || 0) || null,
-          template_short_name: line.template_short_name || null,
-          template_full_description: line.template_full_description || null,
-          template_applied_text: line.template_applied_text || null,
-          description_mode: line.description_mode === 'full' ? 'full' : 'short',
-          installation_standard: line.installation_standard || null,
-        }));
-      }
+      if (payload.version === 2 && (payload.orderId !== order.value?.id || payload.proposalId !== activeProposalId.value)) return;
+      recovery = {
+        payload, sourceKey, contextKey: draftKey.value, choices: { ...payload.resolutions },
+        server: { form: readSnapshot(savedFormSnapshot.value), products: productLines.value, services: serviceLines.value, ...readSnapshot(savedLinesSnapshot.value) },
+        products: productLines.value, services: serviceLines.value,
+      };
+      applyRecovery();
     } catch (error) {
       console.warn('Failed to restore order drawer draft', error);
     }
@@ -194,9 +225,13 @@ export const useOrderDrawerPersistence = ({
   };
 
   const clearDraft = () => {
+    const sourceKey = recovery?.contextKey === draftKey.value ? recovery.sourceKey : undefined;
+    draftConflicts.value = [];
+    recovery = null;
     if (!draftKey.value) return;
     try {
       window.sessionStorage.removeItem(draftKey.value);
+      if (sourceKey) window.sessionStorage.removeItem(sourceKey);
     } catch (error) {
       console.warn('Failed to clear order drawer draft', error);
     }
@@ -205,9 +240,11 @@ export const useOrderDrawerPersistence = ({
   watch(productLines, persistDraft, { deep: true });
   watch(serviceLines, persistDraft, { deep: true });
   watch(currentFormSnapshot, persistDraft);
+  watch([savedFormSnapshot, savedLinesSnapshot, () => ready?.value], persistDraft, { flush: 'post' });
   watch(expandedDrawerSections, persistDrawerSections, { deep: true });
 
   return {
+    draftConflicts, draftBlocked, resolveDraftConflict,
     clearDraft,
     expandedDrawerSections,
     hasUnsavedChanges,

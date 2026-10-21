@@ -9,6 +9,7 @@ type Options = {
   dirty: Readonly<Ref<boolean>>;
   save: () => Promise<boolean>;
   delay?: number;
+  blocked?: Readonly<Ref<boolean>>;
 };
 
 /** One write at a time; a barrier also drains edits made while a write was in flight. */
@@ -32,7 +33,7 @@ export const useOrderAutosave = (options: Options) => {
       if (!automatic) barrierRequested = true;
       return pending;
     }
-    if (!options.ready.value || disposed) return false;
+    if (options.blocked?.value || !options.ready.value || disposed) return false;
     barrierRequested = !automatic;
     const currentGeneration = generation;
     saving.value = true;
@@ -40,7 +41,7 @@ export const useOrderAutosave = (options: Options) => {
     // Yield once so pending is installed before save can synchronously change refs.
     pending = Promise.resolve().then(async () => {
       while (options.dirty.value) {
-        if (disposed || generation !== currentGeneration || !options.ready.value) return false;
+        if (disposed || options.blocked?.value || generation !== currentGeneration || !options.ready.value) return false;
         if (automatic && !barrierRequested && !options.enabled.value) return false;
         const before = options.snapshot.value;
         if (!await options.save()) {
@@ -74,9 +75,9 @@ export const useOrderAutosave = (options: Options) => {
     failed.value = false;
   }, { flush: 'sync' });
 
-  watch([options.snapshot, options.enabled, options.ready], () => {
+  watch([options.snapshot, options.enabled, options.ready, () => options.blocked?.value], () => {
     cancelScheduled();
-    if (disposed || !options.enabled.value || !options.ready.value || !options.dirty.value || pending) return;
+    if (disposed || options.blocked?.value || !options.enabled.value || !options.ready.value || !options.dirty.value || pending) return;
     failed.value = false;
     timer = setTimeout(() => void flush(true), options.delay ?? 700);
   }, { flush: 'post' });

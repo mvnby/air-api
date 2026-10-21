@@ -147,6 +147,74 @@ async function openIncompleteDocument(f) {
  browser=await chromium.launch({headless:true});
  try{
  for(const width of [384,1440]) {
+  await runCase(width,'draft restore preserves fresh server fields and estimate',async f=>{
+   await f.page.goto(base+'/manager/orders/477?proposalId=24');await f.page.getByText('Услуга варианта А',{exact:true}).waitFor();
+   f.failSave(true);
+   await f.workspace.getByRole('button',{name:/^Изменить название:/}).click();
+   await f.page.getByRole('textbox',{name:'Название заказа',exact:true}).fill('Моё новое название');
+   await f.workspace.locator('header [role="status"]').filter({hasText:'Не удалось сохранить'}).waitFor();
+   Object.assign(f.current(),{comment:'Комментарий коллеги',installation_date:'2026-11-15T12:00:00',status:'execution',delivery_address:'Другой объект'});
+   f.current().proposals[0].service_lines[0].price=1800;
+   f.current().service_lines[0].price=1800;
+   f.failSave(false);f.page.on('dialog',dialog=>dialog.accept());
+   await f.page.reload();await f.workspace.waitFor();
+   await f.workspace.locator('header [role="status"]').filter({hasText:'Сохранено'}).waitFor();
+   fs.writeFileSync(path.join(output,`draft-patch-${width}.json`),JSON.stringify(f.patches,null,2));
+   assert.deepEqual(f.patches,[{title:'Моё новое название'}]);
+   assert.equal(f.current().comment,'Комментарий коллеги');assert.equal(f.current().installation_date,'2026-11-15T12:00:00');
+   assert.equal(f.current().proposals[0].service_lines[0].price,1800);
+   fs.writeFileSync(path.join(output,`draft-patch-${width}.json`),JSON.stringify(f.patches,null,2));
+  });
+  for(const automatic of [true,false]) await runCase(width,'draft conflict blocks writes and survives reload '+automatic,async f=>{
+   await f.page.goto(base+'/manager/orders/477');await f.page.getByText('Услуга варианта А',{exact:true}).waitFor();
+   if(!automatic) await f.workspace.getByRole('switch',{name:'Автосохранение заказа'}).click();
+   f.failSave(true);await f.workspace.getByRole('button',{name:/^Изменить название:/}).click();
+   await f.page.getByRole('textbox',{name:'Название заказа',exact:true}).fill('Локальная версия');
+   if(automatic) await f.workspace.locator('header [role="status"]').filter({hasText:'Не удалось сохранить'}).waitFor();
+   else await f.page.getByRole('textbox',{name:'Название заказа',exact:true}).press('Enter');
+   f.current().title='Версия коллеги';f.failSave(false);f.page.on('dialog',dialog=>dialog.accept());
+   await f.page.reload();const recovery=f.page.getByRole('alert',{name:'Восстановление черновика'});await recovery.waitFor();
+   await recovery.getByText('Локальная версия',{exact:true}).waitFor();await recovery.getByText('Версия коллеги',{exact:true}).waitFor();
+   await f.page.waitForTimeout(1000);assert.equal(f.patches.length,0);
+   await f.page.reload();await recovery.waitFor();assert.equal(f.patches.length,0);
+   assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth),false);
+   await f.page.screenshot({path:path.join(output,`draft-conflict-${width}-${automatic}.png`)});
+   await recovery.getByRole('button',{name:'Использовать черновик',exact:true}).click();
+   if(!automatic) {assert.equal(f.patches.length,0);await f.workspace.getByRole('button',{name:'Сохранить изменения',exact:true}).click();}
+   await f.workspace.locator('header [role="status"]').filter({hasText:'Сохранено'}).waitFor();assert.deepEqual(f.patches,[{title:'Локальная версия'}]);
+  });
+  for(const conflict of [false,true]) await runCase(width,'draft estimate field recovery '+conflict,async f=>{
+   await f.page.goto(base+'/manager/orders/477');await f.page.getByText('Услуга варианта А',{exact:true}).waitFor();
+   await f.workspace.getByRole('switch',{name:'Автосохранение заказа'}).click();
+   await f.workspace.getByRole('button',{name:'Редактировать услугу #1.1',exact:true}).click();
+   await f.workspace.getByLabel(conflict?'Цена':'Кол-во',{exact:true}).fill(conflict?'1400':'2');
+   f.current().proposals[0].service_lines[0].price=1800;f.current().service_lines[0].price=1800;
+   f.page.on('dialog',dialog=>dialog.accept());await f.page.reload();await f.workspace.waitFor();
+   if(conflict) {const recovery=f.page.getByRole('alert',{name:'Восстановление черновика'});await recovery.waitFor();assert.equal(f.patches.length,0);await recovery.getByRole('button',{name:'Оставить серверное',exact:true}).click();assert.equal(f.patches.length,0);}
+   else {await f.page.getByText('Услуга варианта А',{exact:true}).waitFor();await f.workspace.getByRole('button',{name:'Сохранить изменения',exact:true}).click();await f.workspace.locator('header [role="status"]').filter({hasText:'Сохранено'}).waitFor();assert.equal(f.patches.length,1);assert.equal(f.patches[0].services[0].quantity,2);assert.equal(f.patches[0].services[0].price,1800);}
+  });
+  await runCase(width,'draft legacy requires explicit review',async f=>{
+   await f.page.goto(base+'/manager/orders/477');await f.page.getByText('Услуга варианта А',{exact:true}).waitFor();
+   await f.workspace.getByRole('switch',{name:'Автосохранение заказа'}).click();
+   await f.workspace.getByRole('button',{name:/^Изменить название:/}).click();await f.page.getByRole('textbox',{name:'Название заказа',exact:true}).fill('Старый черновик');
+   await f.page.evaluate(()=>{const key=Object.keys(sessionStorage).find(k=>k.startsWith('manager_order_drawer_draft_477_24'));const draft=JSON.parse(sessionStorage.getItem(key));delete draft.version;delete draft.baseForm;delete draft.baseLines;delete draft.linesDraft;sessionStorage.removeItem(key);sessionStorage.setItem('manager_order_drawer_draft_477_24',JSON.stringify(draft));});
+   f.current().comment='Новый комментарий';f.page.on('dialog',dialog=>dialog.accept());await f.page.reload();
+   const recovery=f.page.getByRole('alert',{name:'Восстановление черновика'});await recovery.waitFor();await recovery.getByText(/В старом черновике нет исходной версии/).waitFor();assert.equal(f.patches.length,0);
+   while(await recovery.locator('article').count()) await recovery.locator('article').first().getByRole('button',{name:'Оставить серверное',exact:true}).click();
+   assert.equal(f.patches.length,0);assert.equal(f.current().comment,'Новый комментарий');
+  });
+  await runCase(width,'draft lost save response cannot duplicate a service',async f=>{
+   await f.page.goto(base+'/manager/orders/477');await f.page.getByText('Услуга варианта А',{exact:true}).waitFor();
+   await f.workspace.getByRole('switch',{name:'Автосохранение заказа'}).click();
+   await f.page.getByTestId('add-service-line').click();await f.page.getByTestId('service-title-input').fill('Уже сохраненная услуга');
+   await f.workspace.getByLabel('Цена',{exact:true}).fill('50');
+   // The server committed this row, but the local editor never received its link ID.
+   f.current().proposals[0].service_lines.push({id:82,service_title:'Уже сохраненная услуга',quantity:1,price:50,cost:0});
+   f.page.on('dialog',dialog=>dialog.accept());await f.page.reload();
+   const recovery=f.page.getByRole('alert',{name:'Восстановление черновика'});await recovery.waitFor();assert.equal(f.patches.length,0);
+   await recovery.getByRole('button',{name:'Оставить серверное',exact:true}).click();
+   assert.equal(f.patches.length,0);assert.equal(f.current().proposals[0].service_lines.length,2);
+  });
   await runCase(width,'second package invalid section defaults to proposal',async f=>{
    await f.page.goto(base+'/manager/orders/477?proposalId=25&section=unknown');await f.page.getByText('Услуга варианта Б',{exact:true}).waitFor();
    assert.equal(await f.workspace.getByRole('navigation').getByRole('button',{name:'Предложение',exact:true}).getAttribute('aria-current'),'page');
