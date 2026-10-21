@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Literal
 
-from sqlalchemy import Float, String, and_, case, cast, exists, func, not_, or_
+from sqlalchemy import Float, Numeric, String, and_, case, cast, exists, func, not_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -18,6 +19,7 @@ from models.tenancy import TenantScope
 from services.fx_rate_service import FxRateService
 from services.catalog_form_factor import indoor_form_factor_expr
 from services.catalog_decision_search import split_catalog_decision_search
+from services.product_kind_service import SPEC_BOOLEAN_FALSE_VALUES
 
 
 SUPPORTED_COOLING_BTU_CLASSES = frozenset({7, 9, 12, 18, 24, 30, 36, 42, 60})
@@ -124,6 +126,7 @@ class CatalogDecisionQueryService:
                     and_(
                         normalized.op("GLOB")("*[0-9]*"),
                         normalized.op("NOT GLOB")("*[^0-9.+-]*"),
+                        func.json_type(Product.specs, "$." + ".".join(path)).in_(("integer", "real", "text")),
                     ),
                     normalized,
                 ),
@@ -140,24 +143,53 @@ class CatalogDecisionQueryService:
             (normalized.op("~")(r"^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$"), normalized),
             else_=None,
         )
-        return cast(numeric, Float)
+        # Guard before the float cast: a corrupt but numeric JSON value can
+        # exceed double precision and must not fail the entire catalog query.
+        finite = case(
+            (func.abs(cast(numeric, Numeric)) <= Decimal(str(sys.float_info.max)), numeric),
+            else_=None,
+        )
+        return cast(finite, Float)
 
     @classmethod
     def _json_float(cls, session: AsyncSession, key: str):
         return cls._json_float_path(session, key)
 
     @staticmethod
-    def _json_text(session: AsyncSession, key: str):
+    def _json_text_path(session: AsyncSession, *path: str):
         if session.bind is not None and session.bind.dialect.name == "sqlite":
-            return func.json_extract(Product.specs, f"$.{key}")
+            return func.json_extract(Product.specs, "$." + ".".join(path))
         from sqlalchemy.dialects.postgresql import JSONB
-        return func.jsonb_extract_path_text(cast(Product.specs, JSONB), key)
+        return func.jsonb_extract_path_text(cast(Product.specs, JSONB), *path)
+
+    @classmethod
+    def _json_text(cls, session: AsyncSession, key: str):
+        return cls._json_text_path(session, key)
+
+    @staticmethod
+    def _positive_finite(value):
+        # PostgreSQL orders NaN above Infinity; the upper bound rejects both.
+        return case((and_(value > 0, value < float("inf")), value), else_=None)
 
     @classmethod
     def _complete_split_condition(cls, session: AsyncSession):
-        """Canonical complete kind with a veto for contradictory multi data."""
-        system_type = func.lower(func.trim(cls._json_text(session, "type")))
-        indoor_count = func.trim(cls._json_text(session, "indoor_units_count"))
+        """Retain manual kind choices, but veto explicit component contradictions."""
+        def spec_value(key):
+            return func.coalesce(
+                cls._json_text(session, key),
+                cls._json_text_path(session, "__typed_specs", key, "value"),
+                cls._json_text_path(session, "__typed_specs", key, "raw"),
+            )
+
+        system_type = func.lower(func.trim(spec_value("type")))
+        indoor_count = func.trim(spec_value("indoor_units_count"))
+        # Missing/unknown data does not negate an existing manual complete kind.
+        # Any explicit denial, including typed evidence, blocks every selector.
+        component_conditions = [
+            func.coalesce(func.lower(func.trim(cls._json_text_path(session, *path))), "").notin_(SPEC_BOOLEAN_FALSE_VALUES)
+            for key in ("includes_indoor_unit", "includes_outdoor_unit")
+            for path in ((key,), ("__typed_specs", key, "value"), ("__typed_specs", key, "raw"))
+        ]
         multi_category = exists(
             select(ProductTagLink.product_id)
             .join(Tag, Tag.id == ProductTagLink.tag_id)
@@ -169,6 +201,7 @@ class CatalogDecisionQueryService:
                 "внутренний блок", "наружный блок", "мульти-сплит-система", "мобильный",
             ))),
             or_(indoor_count.is_(None), indoor_count == "1"),
+            *component_conditions,
             not_(multi_category),
         )
 
@@ -331,8 +364,12 @@ class CatalogDecisionQueryService:
         availability = case((total_qty > 0, "in_stock"), else_="out_of_stock").label("availability")
         area = cls._json_float(session, "area_m2")
         # Historical power_cooling can contain electrical consumption. The
-        # normalized capacity spec is authoritative whenever it is available.
-        cooling_nominal = func.coalesce(cls._json_float(session, "capacity_cooling_kw"), Product.power_cooling).label("cooling_power_kw")
+        # Only a positive finite nominal can override a valid core fallback,
+        # matching nominal_cooling_capacity in the import/write paths.
+        cooling_nominal = func.coalesce(
+            cls._positive_finite(cls._json_float(session, "capacity_cooling_kw")),
+            cls._positive_finite(Product.power_cooling),
+        ).label("cooling_power_kw")
         cooling_min = func.coalesce(cls._json_float(session, "capacity_cooling_min_kw"), cooling_nominal).label("cooling_min_kw")
         cooling_max = func.coalesce(cls._json_float(session, "capacity_cooling_max_kw"), cooling_nominal).label("cooling_max_kw")
         heating_min = func.coalesce(

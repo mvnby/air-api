@@ -12,6 +12,7 @@ from services.product_cooling_capacity import nominal_cooling_capacity
 @pytest.mark.parametrize("raw,expected", [
     ("16.12", 16.12), ("16,12 кВт", 16.12),
     ("16120 Вт", 16.12), ("3.68 / 10.50 / 11.03", 10.5),
+    ("100", 100), ("125", 125),
 ])
 def test_canonical_nominal_capacity_wins_over_consumption_and_modulation(raw, expected):
     assert nominal_cooling_capacity({
@@ -21,9 +22,13 @@ def test_canonical_nominal_capacity_wins_over_consumption_and_modulation(raw, ex
     }, fallback=5.69) == expected
 
 
-@pytest.mark.parametrize("invalid", [None, "неизвестно", True, float("nan"), -1, 0])
+@pytest.mark.parametrize("invalid", [None, "неизвестно", True, float("nan"), -1, 0, "1e309", "NaN", "Infinity", 10**400])
 def test_invalid_capacity_does_not_become_zero_or_electrical_consumption(invalid):
     assert nominal_cooling_capacity({"capacity_cooling_kw": invalid, "power_cons_cooling_kw": "5.69"}) is None
+
+
+def test_overflowing_core_fallback_is_not_a_valid_nominal():
+    assert nominal_cooling_capacity({}, fallback=10**400) is None
 
 
 @pytest.mark.parametrize("extract", [

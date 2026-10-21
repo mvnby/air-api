@@ -111,3 +111,4 @@ def test_split_type_does_not_override_explicit_standalone_or_multi_components():
     assert ProductKindService.derive_from_specs({"type": "сплит-система", "includes_indoor_unit": True, "includes_outdoor_unit": False}) == "indoor_unit"
     assert ProductKindService.derive_from_specs({"type": "сплит-система", "includes_indoor_unit": False, "includes_outdoor_unit": True}) == "outdoor_unit"
     assert ProductKindService.derive_from_specs({"type": "сплит-система", "indoor_units_count": 2}) == "other"
+    assert ProductKindService.derive_from_specs({"type": "сплит-система", "includes_indoor_unit": 1, "includes_outdoor_unit": 0}) == "indoor_unit"
