@@ -7,6 +7,7 @@ import pytest
 from services.catalog_decision_data_repair import RepairBlocked, digest, validate_reviewed_plan
 from services.catalog_decision_price_repair import SCOPE_IDS, apply_operation, build_plan, load_manifest, validate_manifest
 from services.catalog_decision_source_repair import load_manifest as load_original_manifest
+from services.catalog_decision_data_repair import POWER_TARGETS, load_manifest as load_prior_repairs
 from services.product_cooling_capacity import nominal_cooling_capacity
 from tests.catalog_decision_price_repair_support import pin_fixture, prepared_catalog, refresh_guards
 
@@ -57,6 +58,25 @@ def test_public_manifest_omits_private_prices_records_and_sheet_urls():
             assert "docs.google.com/spreadsheets/" not in value
 
     inspect(load_manifest())
+
+
+def test_previous_34_targets_survive_later_individually_approved_tcl_kinds():
+    rows = {r["identity"]["id"]: r for r in load_manifest()["products"]}
+    prior = {r["identity"]["id"]: r for r in load_prior_repairs()["products"]}
+    later_kinds = []
+    for pid, power in POWER_TARGETS.items():
+        if pid in rows:
+            row = rows[pid]
+            assert not row["patches"]
+            assert row["target"]["power_cooling"] == power
+            assert row["target"]["specs_sha256"] == prior[pid]["before"]["specs_sha256"]
+            if row["fields_set"]:
+                later_kinds.append(pid)
+                assert prior[pid]["before"]["product_kind"] == "other"
+                assert row["target"]["product_kind"] == "complete_split_system"
+    # The old kind guard is deliberately superseded for these cards. Verify
+    # its repaired fields directly instead of rerunning that historical plan.
+    assert sorted(later_kinds) == [179, 181, 182, 183, 184, 185, 186, 187, 190, 192, 193]
 
 
 def test_readonly_plan_exact_patches_manual_review_and_idempotence(catalog):
