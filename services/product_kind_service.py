@@ -76,8 +76,18 @@ class ProductKindService:
             return system_type_kind
         if str(_spec_value(values, "type") or "").strip().lower() == "полупромышленный кондиционер":
             # This source type alone does not prove a complete system. Explicit
-            # component flags can, while partial historical data remains other.
-            return "complete_split_system" if includes_indoor is True and includes_outdoor is True and indoor_count == "1" else "other"
+            # components can. Keep incomplete new imports unknown so later
+            # source confirmation can resolve them without overriding a manual
+            # other choice. A known multi-unit set remains outside this scope.
+            if includes_indoor is True and includes_outdoor is False:
+                return "indoor_unit"
+            if includes_indoor is False and includes_outdoor is True:
+                return "outdoor_unit"
+            if indoor_count.isdigit() and int(indoor_count) > 1:
+                return "other"
+            if includes_indoor is True and includes_outdoor is True and indoor_count == "1":
+                return "complete_split_system"
+            return "unknown"
         if includes_indoor is True and includes_outdoor is True:
             return "complete_split_system" if indoor_count in {"", "1"} else "other"
         if includes_indoor is True and includes_outdoor is False:

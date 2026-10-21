@@ -115,3 +115,29 @@ async def test_full_manager_save_derives_unknown_kind_and_respects_explicit_manu
     assert product.power_cooling == 10
     await ProductWriteService.update_product(db, product.id, {"specs": specs, "product_kind": "other"})
     assert product.product_kind == "other"
+
+
+@pytest.mark.asyncio
+async def test_incomplete_semi_import_can_become_confirmed_on_reimport(db, monkeypatch):
+    confirmed = False
+
+    class Parser:
+        def supports(self, url):
+            return True
+
+        async def parse(self, url):
+            specs = {"type": "полупромышленный кондиционер", "indoor_type": "канальный", "capacity_cooling_kw": "10"}
+            if confirmed:
+                specs.update(includes_indoor_unit=True, includes_outdoor_unit=True, indoor_units_count=1)
+            return {"title": "KINGHOME pending kit", "slug": "kinghome-pending-kit", "description": "", "price": 5000, "specs": specs}
+
+    monkeypatch.setattr("services.importer_service.async_session_maker", lambda: _SessionContext(db))
+    importer = ImporterService()
+    importer.parsers = [Parser()]
+    url = "https://example.test/pending-kit"
+    product = (await importer.import_product(url))["product"]
+    assert product.product_kind == "unknown"
+    confirmed = True
+    updated = (await importer.import_product(url, update_existing=True))["product"]
+    assert updated.id == product.id
+    assert updated.product_kind == "complete_split_system"
