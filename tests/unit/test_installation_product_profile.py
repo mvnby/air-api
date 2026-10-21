@@ -53,11 +53,13 @@ def test_profile_rejects_ineligible_product_kinds_before_tags(product_kind):
     assert profile.reason == "ineligible_product_kind"
 
 
-def test_profile_allows_known_semi_industrial_complete_form_factor():
+@pytest.mark.parametrize("product_kind", ["unknown", "other"])
+def test_profile_preserves_legacy_semi_industrial_installation_eligibility(product_kind):
     product = Product(
         title="Semi-industrial",
         slug="semi-industrial",
         price=5000,
+        product_kind=product_kind,
         specs={
             "type": "полупромышленный кондиционер",
             "indoor_type": "напольно-потолочный",
@@ -67,7 +69,7 @@ def test_profile_allows_known_semi_industrial_complete_form_factor():
 
     profile = build_installation_product_profile(product)
 
-    assert profile.product_kind == "other"
+    assert profile.product_kind == product_kind
     assert profile.eligible is True
     assert profile.equipment_category == "ceiling"
     assert profile.cooling_capacity_kw == 10.5

@@ -10322,7 +10322,7 @@
           "manager catalog decision"
         ],
         "summary": "List Catalog Decision Products",
-        "description": "Read eligible complete split systems with technical and commercial projections; limit is\n1\u2013100. Availability defaults to in_stock; include_orderable removes that restriction.\ncategory=multi, unsupported BTU classes or inverted retail bounds return 422. Explicit\nproduct_ids is limited to 24. Demo purchase-cost projection uses a synthetic discount\nfrom RRC rather than actual supplier cost. This endpoint only reads.\n\nAccess and scope: Manager access is required; data is restricted to the authenticated\ntenant and selected storefront. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Read eligible complete split systems with technical and commercial projections; limit is\n1\u2013100. Availability defaults to in_stock; include_orderable removes that restriction.\nRecommended order puts wall-mounted systems first when no indoor form is selected,\nthen sorts by title and ID; other forms remain available in the same result set.\nSearch values with kW/\u043a\u0412\u0442 units match exact nominal cooling capacity.\ncategory=multi, unsupported BTU classes or inverted power/retail bounds return 422. Explicit\nproduct_ids is limited to 24. Demo purchase-cost projection uses a synthetic discount\nfrom RRC rather than actual supplier cost. This endpoint only reads.\n\nAccess and scope: Manager access is required; data is restricted to the authenticated\ntenant and selected storefront. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "list_manager_catalog_decision_products",
         "security": [
           {
@@ -10700,6 +10700,7 @@
             "required": false,
             "schema": {
               "enum": [
+                "recommended",
                 "retail_price",
                 "purchase_cost",
                 "rrc",
@@ -10710,7 +10711,7 @@
                 "title"
               ],
               "type": "string",
-              "default": "title",
+              "default": "recommended",
               "title": "Sort"
             }
           },

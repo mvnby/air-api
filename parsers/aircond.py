@@ -271,11 +271,11 @@ class AircondParser(BaseParser):
                     metrics["area"] = int(m.group(1))
             elif "инвертор" in key_lower:
                 metrics["is_inverter"] = value_lower.startswith("да") or "инвертор" in value_lower
-            elif "мощность охлаждения" in key_lower:
+            elif "мощность охлаждения" in key_lower and "потреб" not in key_lower:
                 m = re.search(r"([\d.]+)", normalized_value)
                 if m:
                     metrics["power_cooling"] = float(m.group(1))
-            elif "мощность обогрева" in key_lower:
+            elif "мощность обогрева" in key_lower and "потреб" not in key_lower:
                 m = re.search(r"([\d.]+)", normalized_value)
                 if m:
                     metrics["power_heating"] = float(m.group(1))

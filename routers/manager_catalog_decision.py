@@ -67,14 +67,17 @@ async def list_catalog_decision_products(
     brand_ids: list[int] | None = Query(None), series_ids: list[int] | None = Query(None), is_inverter: bool | None = None,
     has_wifi: bool | None = None, wifi: Literal["builtin", "ready", "none"] | None = None, availability: Literal["in_stock", "out_of_stock"] | None = None,
     include_orderable: bool = False, product_ids: list[int] | None = Query(None, min_length=1, max_length=24),
-    is_published: bool | None = None, sort: CatalogDecisionSort = "title", direction: Literal["asc", "desc"] = "asc",
+    is_published: bool | None = None, sort: CatalogDecisionSort = "recommended", direction: Literal["asc", "desc"] = "asc",
     heating_min: int | None = Query(None, ge=-30, le=-20, multiple_of=5, description="Required outdoor heating temperature in Celsius; includes colder-rated models."),
     session: AsyncSession = Depends(get_session), tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     """
     Read eligible complete split systems with technical and commercial projections; limit is
     1–100. Availability defaults to in_stock; include_orderable removes that restriction.
-    category=multi, unsupported BTU classes or inverted retail bounds return 422. Explicit
+    Recommended order puts wall-mounted systems first when no indoor form is selected,
+    then sorts by title and ID; other forms remain available in the same result set.
+    Search values with kW/кВт units match exact nominal cooling capacity.
+    category=multi, unsupported BTU classes or inverted power/retail bounds return 422. Explicit
     product_ids is limited to 24. Demo purchase-cost projection uses a synthetic discount
     from RRC rather than actual supplier cost. This endpoint only reads.
 
@@ -82,6 +85,8 @@ async def list_catalog_decision_products(
     tenant and selected storefront. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
+    if cooling_min_kw is not None and cooling_max_kw is not None and cooling_min_kw > cooling_max_kw:
+        raise HTTPException(status_code=422, detail="cooling_min_kw cannot exceed cooling_max_kw")
     if retail_min_byn is not None and retail_max_byn is not None and retail_min_byn > retail_max_byn:
         raise HTTPException(status_code=422, detail="retail_min_byn cannot exceed retail_max_byn")
     if any(btu not in SUPPORTED_COOLING_BTU_CLASSES for btu in cooling_btu_classes or ()):

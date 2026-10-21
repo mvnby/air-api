@@ -4,6 +4,15 @@ import { catalogDecisionApi } from '../src/services/catalog-decision-api';
 afterEach(() => vi.unstubAllGlobals());
 
 describe('catalog decision HTTP filters', () => {
+  it('sends wall-first ordering without hiding other forms or categories', async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [], meta: { page: 1, pages: 0, total: 0, limit: 40 } }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetch);
+    await catalogDecisionApi.list(1, 40, { isPublished: true }, 'recommended', 'asc');
+    const url = new URL(String(fetch.mock.calls[0]?.[0]), 'https://manager.test');
+    expect(url.searchParams.get('sort')).toBe('recommended');
+    expect(url.searchParams.has('indoor_form_factor')).toBe(false);
+    expect(url.searchParams.has('category')).toBe(false);
+  });
   it('sends the explicit all-stock flag, exact selection and budget through the generated client', async () => {
     const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [], meta: { page: 1, pages: 0, total: 0, limit: 24 } }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     vi.stubGlobal('fetch', fetch);

@@ -18,6 +18,7 @@ import {
   type CatalogDecisionSelectionItem,
 } from '../services/catalog-decision-selection';
 import { managerSession } from '../services/manager-session';
+import { hasManagerCapability, isManagerPathAllowed, MANAGER_CAPABILITY } from '../manager-capabilities';
 import { useCatalogDecisionTarget } from '../composables/useCatalogDecisionTarget';
 import { returnToManager } from '../services/manager-navigation-history';
 import { getApiErrorMessage } from '../utils/api-errors';
@@ -50,6 +51,8 @@ const compareError = ref('');
 const detailItem = ref<CatalogDecisionItem | null>(null);
 let compareGeneration = 0;
 const chips = computed(() => catalogDecisionChips(filters.value, brands.value, series.value));
+const canManageCatalog = computed(() => hasManagerCapability(managerSession.auth.value, MANAGER_CAPABILITY.catalogMasterEdit)
+  && isManagerPathAllowed(managerSession.auth.value, '/manager/products'));
 const collectionDialogOpen = ref(false);
 const orderDialogOpen = ref(false);
 const quickOrderDialogOpen = ref(false);
@@ -82,8 +85,8 @@ const load = async () => {
   finally { if (generation === loadGeneration) loading.value = false; }
 };
 const updateFilters = (next: Filters) => { filters.value = next; page.value = 1; };
-const reset = () => { filterResetKey.value += 1; filters.value = defaultCatalogDecisionFilters(); page.value = 1; };
-const changeSort = (next: CatalogDecisionSort) => { direction.value = sort.value === next && direction.value === 'asc' ? 'desc' : 'asc'; sort.value = next; page.value = 1; void load(); };
+const reset = () => { filterResetKey.value += 1; sort.value = 'recommended'; direction.value = 'asc'; filters.value = defaultCatalogDecisionFilters(); page.value = 1; };
+const changeSort = (next: CatalogDecisionSort) => { direction.value = next !== 'recommended' && sort.value === next && direction.value === 'asc' ? 'desc' : 'asc'; sort.value = next; page.value = 1; void load(); };
 const go = (next: number) => { if (next >= 1 && next <= pages.value && !loading.value) { page.value = next; void load(); } };
 const toggleSelection = (item: CatalogDecisionItem) => {
   if (target.saving.value || loading.value || error.value) return;
@@ -214,13 +217,21 @@ onBeforeUnmount(() => { disposed = true; compareGeneration += 1; selectionCheckG
       <div class="relative min-h-48" :aria-busy="loading">
         <p class="min-h-5 text-xs text-gray-500" role="status">{{ loading ? 'Обновляем каталог…' : error ? 'Результаты не обновлены. Повторите загрузку.' : '' }}</p>
         <div :class="loading || error ? 'pointer-events-none opacity-50' : ''" :inert="loading || Boolean(error)">
-          <CatalogDecisionTable :items="items" :selected-ids="Object.keys(selected).map(Number)" :sort="sort" :direction="direction" :busy="target.saving.value || loading || Boolean(error)" :existing-ids="targetProductIds" @sort="changeSort" @toggle="toggleSelection" @details="detailItem = $event" />
+          <CatalogDecisionTable :items="items" :selected-ids="Object.keys(selected).map(Number)" :sort="sort" :direction="direction" :has-form-filter="Boolean(filters.indoorFormFactor)" :busy="target.saving.value || loading || Boolean(error)" :existing-ids="targetProductIds" @sort="changeSort" @toggle="toggleSelection" @details="detailItem = $event">
+            <template #empty><div v-if="!loading && !error" class="rounded-xl border border-dashed border-gray-200 bg-white p-5 text-center text-sm text-gray-600">
+              <p class="font-semibold text-gray-900">Подтверждённых комплектов по этим условиям нет</p>
+              <p class="mt-2">В подбор попадают только подтверждённые комплекты сплит-систем. Технические фильтры не ослабляются автоматически.</p>
+              <p class="mt-1">Применённые ограничения показаны выше. Можно снять отдельный фильтр или явно изменить условия.</p>
+            </div></template>
+          </CatalogDecisionTable>
         </div>
         <div v-if="!loading && !error && !items.length" class="mt-2 flex flex-wrap justify-center gap-3 text-sm">
+          <button v-if="filters.search" type="button" class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-brand-700" @click="updateFilters({ ...filters, search: undefined })">Убрать поисковый запрос</button>
           <button v-if="!filters.includeOrderable" class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-brand-700" @click="updateFilters({ ...filters, includeOrderable: true })">Показать также заказные</button>
           <button class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-brand-700" @click="reset">Сбросить фильтры</button>
         </div>
       </div>
+      <p v-if="canManageCatalog" class="rounded-xl border border-amber-100 bg-amber-50 p-3 text-sm text-amber-900">Не хватает нужной модели? Неполные или неподтверждённые данные о комплекте и мощности могут исключать её из подбора. <a href="/manager/products" class="font-semibold underline underline-offset-2">Проверить в управлении каталогом</a></p>
       <div class="flex items-center justify-between text-sm"><button class="rounded-lg border border-gray-200 px-3 py-2 disabled:opacity-40" :disabled="page <= 1 || loading" @click="go(page - 1)">Назад</button><span>Страница {{ page }} из {{ pages }}</span><button class="rounded-lg border border-gray-200 px-3 py-2 disabled:opacity-40" :disabled="page >= pages || loading" @click="go(page + 1)">Далее</button></div>
       <CatalogDecisionSelectionTray :items="Object.values(selected)" :invalid-ids="invalidSelectionIds" :validating="selectionValidating" :validation-error="selectionCheckError" :target-order-id="target.context.value?.orderId" :targeted="target.requested" :busy="target.saving.value" :can-attach="target.canAttach.value" @compare="openCompare" @remove="removeSelection" @clear="selected = {}; selectionError = ''" @attach-target="attachToTarget" @create-collection="collectionDialogOpen = true" @attach-order="orderDialogOpen = true" @create-order="quickOrderDialogOpen = true" />
       <CatalogDecisionCompareDialog :open="compareOpen" :items="compareItems" :loading="compareLoading" :error="compareError" @close="closeCompare" />

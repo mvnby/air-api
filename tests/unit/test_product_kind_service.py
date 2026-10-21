@@ -52,7 +52,7 @@ def test_product_kind_requires_confirmed_components_for_semi_industrial_splits()
     ) == "complete_split_system"
     assert ProductKindService.derive_from_specs(
         {"type": "полупромышленный кондиционер", "includes_indoor_unit": True},
-    ) == "other"
+    ) == "unknown"
     assert ProductKindService.derive_from_specs(
         {"type": "полупромышленный кондиционер", "includes_indoor_unit": True, "includes_outdoor_unit": True, "indoor_units_count": 2},
     ) == "other"
@@ -105,3 +105,9 @@ def test_product_kind_resolve_keeps_explicit_kind_and_uses_fallback():
         specs={},
         fallback="outdoor_unit",
     ) == "outdoor_unit"
+
+
+def test_split_type_does_not_override_explicit_standalone_or_multi_components():
+    assert ProductKindService.derive_from_specs({"type": "сплит-система", "includes_indoor_unit": True, "includes_outdoor_unit": False}) == "indoor_unit"
+    assert ProductKindService.derive_from_specs({"type": "сплит-система", "includes_indoor_unit": False, "includes_outdoor_unit": True}) == "outdoor_unit"
+    assert ProductKindService.derive_from_specs({"type": "сплит-система", "indoor_units_count": 2}) == "other"

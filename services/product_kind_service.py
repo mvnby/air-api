@@ -59,16 +59,35 @@ class ProductKindService:
     def derive_from_specs(specs: dict[str, Any] | None) -> str:
         values = specs or {}
         system_type_kind = _kind_from_system_type(_spec_value(values, "type"))
-        if system_type_kind is not None:
+        if system_type_kind is not None and system_type_kind != "complete_split_system":
             return system_type_kind
 
         includes_indoor = _as_bool(_spec_value(values, "includes_indoor_unit"))
         includes_outdoor = _as_bool(_spec_value(values, "includes_outdoor_unit"))
         indoor_count = str(_spec_value(values, "indoor_units_count") or "").strip()
+        if system_type_kind == "complete_split_system":
+            # A type label must not overrule explicit standalone/multi evidence.
+            if includes_indoor is True and includes_outdoor is False:
+                return "indoor_unit"
+            if includes_indoor is False and includes_outdoor is True:
+                return "outdoor_unit"
+            if includes_indoor is False or includes_outdoor is False or indoor_count not in {"", "1"}:
+                return "other"
+            return system_type_kind
         if str(_spec_value(values, "type") or "").strip().lower() == "полупромышленный кондиционер":
             # This source type alone does not prove a complete system. Explicit
-            # component flags can, while partial historical data remains other.
-            return "complete_split_system" if includes_indoor is True and includes_outdoor is True and indoor_count == "1" else "other"
+            # components can. Keep incomplete new imports unknown so later
+            # source confirmation can resolve them without overriding a manual
+            # other choice. A known multi-unit set remains outside this scope.
+            if includes_indoor is True and includes_outdoor is False:
+                return "indoor_unit"
+            if includes_indoor is False and includes_outdoor is True:
+                return "outdoor_unit"
+            if indoor_count.isdigit() and int(indoor_count) > 1:
+                return "other"
+            if includes_indoor is True and includes_outdoor is True and indoor_count == "1":
+                return "complete_split_system"
+            return "unknown"
         if includes_indoor is True and includes_outdoor is True:
             return "complete_split_system" if indoor_count in {"", "1"} else "other"
         if includes_indoor is True and includes_outdoor is False:

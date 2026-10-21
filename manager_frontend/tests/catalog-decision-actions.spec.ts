@@ -20,7 +20,7 @@ afterEach(() => {
 
 describe('catalog decision basket actions', () => {
   it('offers collection and order actions from the fixed basket', async () => {
-    const wrapper = mount(CatalogDecisionSelectionTray, { props: { items: selection } });
+    const wrapper = mount(CatalogDecisionSelectionTray, { props: { items: selection, invalidIds: [], validating: false, validationError: '' } });
     const buttons = wrapper.findAll('button');
 
     await buttons.find(button => button.text() === 'Создать подборку')!.trigger('click');
@@ -71,7 +71,7 @@ describe('catalog decision basket actions', () => {
   });
 
   it('enables comparison only for two to four selections', async () => {
-    const wrapper = mount(CatalogDecisionSelectionTray, { props: { items: selection } });
+    const wrapper = mount(CatalogDecisionSelectionTray, { props: { items: selection, invalidIds: [], validating: false, validationError: '' } });
     const compare = () => wrapper.findAll('button').find(button => button.text().startsWith('Сравнить'))!;
     await compare().trigger('click');
     expect(wrapper.emitted('compare')).toHaveLength(1);

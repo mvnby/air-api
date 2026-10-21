@@ -17,6 +17,7 @@ from models.supplier import ProductLocalStock, ProductSupplierMapping, Supplier,
 from models.tenancy import TenantScope
 from services.fx_rate_service import FxRateService
 from services.catalog_form_factor import indoor_form_factor_expr
+from services.catalog_decision_search import split_catalog_decision_search
 
 
 SUPPORTED_COOLING_BTU_CLASSES = frozenset({7, 9, 12, 18, 24, 30, 36, 42, 60})
@@ -100,6 +101,8 @@ class CatalogDecisionQueryService:
     def _validate_filters(filters: CatalogDecisionFilters) -> None:
         if filters.category == "multi":
             raise ValueError("Multi-split products are outside the complete split selection")
+        if filters.cooling_min_kw is not None and filters.cooling_max_kw is not None and filters.cooling_min_kw > filters.cooling_max_kw:
+            raise ValueError("cooling_min_kw cannot exceed cooling_max_kw")
         if filters.retail_min_byn is not None and filters.retail_max_byn is not None and filters.retail_min_byn > filters.retail_max_byn:
             raise ValueError("retail_min_byn cannot exceed retail_max_byn")
         unsupported_btu_classes = set(filters.cooling_btu_classes) - SUPPORTED_COOLING_BTU_CLASSES
@@ -231,7 +234,9 @@ class CatalogDecisionQueryService:
         conditions = []
         search = (filters.search or "").strip()
         if search:
-            for token in search.split():
+            tokens, exact_capacities = split_catalog_decision_search(search)
+            conditions.extend(cooling_nominal == capacity for capacity in exact_capacities)
+            for token in tokens:
                 if token.isdigit() and token in BTU_MAPPING:
                     ranges = BTU_MAPPING[token]
                     conditions.append(or_(
@@ -325,7 +330,9 @@ class CatalogDecisionQueryService:
         total_qty = func.coalesce(metrics.c.supplier_qty, 0) + func.coalesce(local_stock.c.local_qty, 0)
         availability = case((total_qty > 0, "in_stock"), else_="out_of_stock").label("availability")
         area = cls._json_float(session, "area_m2")
-        cooling_nominal = func.coalesce(Product.power_cooling, cls._json_float(session, "capacity_cooling_kw")).label("cooling_power_kw")
+        # Historical power_cooling can contain electrical consumption. The
+        # normalized capacity spec is authoritative whenever it is available.
+        cooling_nominal = func.coalesce(cls._json_float(session, "capacity_cooling_kw"), Product.power_cooling).label("cooling_power_kw")
         cooling_min = func.coalesce(cls._json_float(session, "capacity_cooling_min_kw"), cooling_nominal).label("cooling_min_kw")
         cooling_max = func.coalesce(cls._json_float(session, "capacity_cooling_max_kw"), cooling_nominal).label("cooling_max_kw")
         heating_min = func.coalesce(
@@ -361,10 +368,15 @@ class CatalogDecisionQueryService:
             "margin_abs": margin_abs, "margin_pct": margin_pct, "availability": availability,
             "cooling_power": cooling_nominal, "title": Product.title,
         }
-        sort_column = sort_columns[sort]
+        sort_column = sort_columns["title" if sort == "recommended" else sort]
         order_value = sort_column.asc() if direction == "asc" else sort_column.desc()
+        preferred_form = (
+            [case((indoor_form == "wall", 0), else_=1).asc()]
+            if sort == "recommended" and filters.indoor_form_factor is None
+            else []
+        )
         # Nulls are always last, and product id makes every page boundary stable.
-        rows = list((await session.execute(base.order_by(sort_column.is_(None).asc(), order_value, Product.id.asc()).offset((page - 1) * limit).limit(limit))).all())
+        rows = list((await session.execute(base.order_by(*preferred_form, sort_column.is_(None).asc(), order_value, Product.id.asc()).offset((page - 1) * limit).limit(limit))).all())
         count = int((await session.execute(select(func.count()).select_from(base.subquery()))).scalar_one())
         items = []
         for row in rows:

@@ -32,6 +32,25 @@ const item: CatalogDecisionItem = {
 };
 
 describe('CatalogDecisionTable', () => {
+  it('does not claim other forms are included when an explicit form filter applies', () => {
+    const wrapper = mount(CatalogDecisionTable, { props: { items: [], selectedIds: [], sort: 'recommended', direction: 'asc', hasFormFilter: true } });
+    expect(wrapper.text()).not.toContain('Другие формы блоков тоже в подборе');
+    expect(wrapper.find('button[aria-label^="Изменить порядок"]').exists()).toBe(false);
+    expect(wrapper.get('select[aria-label="Сортировать модели"]').element.value).toBe('recommended');
+  });
+  it('offers wall-first ordering on every screen without a reverse control or a form restriction', async () => {
+    const cassette = { ...item, id: 2, title: 'Cassette', indoor_form_factor: 'cassette' };
+    const wrapper = mount(CatalogDecisionTable, { props: { items: [item, cassette], selectedIds: [], sort: 'recommended', direction: 'asc' } });
+    expect(wrapper.get('select[aria-label="Сортировать модели"]').element.value).toBe('recommended');
+    expect(wrapper.get('section[aria-label="Сортировка каталога"]').classes()).not.toContain('md:hidden');
+    expect(wrapper.find('button[aria-label^="Изменить порядок"]').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Другие формы блоков тоже в подборе');
+    expect(wrapper.text()).toContain('Cassette');
+    await wrapper.setProps({ sort: 'cooling_power', direction: 'desc' });
+    expect(wrapper.find('button[aria-label^="Изменить порядок"]').exists()).toBe(true);
+    await wrapper.get('select[aria-label="Сортировать модели"]').setValue('recommended');
+    expect(wrapper.emitted('sort')?.at(-1)).toEqual(['recommended']);
+  });
   it('keeps commercial precision and the accessible BYN text together', () => {
     const wrapper = mount(CatalogDecisionTable, { props: { items: [item], selectedIds: [], sort: 'title', direction: 'asc' } });
 

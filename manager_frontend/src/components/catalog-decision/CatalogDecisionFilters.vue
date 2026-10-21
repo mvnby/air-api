@@ -101,13 +101,14 @@ const setWifi = (wifi: FilterState['wifi'] | undefined) => update({ wifi, hasWif
 <template>
   <section class="space-y-3 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm md:p-4" aria-label="Быстрые фильтры">
     <div class="flex flex-wrap items-center gap-2">
-      <label v-if="!hideSearch" class="relative basis-full sm:basis-72 sm:flex-1"><Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" /><input :value="modelValue.search ?? ''" class="w-full rounded-xl border border-gray-200 py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" placeholder="Например, Gree 12" aria-label="Поиск модели, бренда или серии" @input="update({ search: ($event.target as HTMLInputElement).value || undefined })" /></label>
+      <label v-if="!hideSearch" class="relative basis-full sm:basis-72 sm:flex-1"><Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" /><input :value="modelValue.search ?? ''" class="w-full rounded-xl border border-gray-200 py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" placeholder="Модель, бренд или 7 кВт" aria-label="Поиск модели, бренда или номинальной мощности" aria-describedby="catalog-search-hint" @input="update({ search: ($event.target as HTMLInputElement).value || undefined })" /></label>
       <button type="button" :class="modelValue.isInverter ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-gray-200 text-gray-700'" class="inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl border px-3 text-sm transition" :aria-pressed="Boolean(modelValue.isInverter)" @click="update({ isInverter: modelValue.isInverter ? undefined : true })">Только инвертор</button>
       <div class="inline-flex overflow-hidden rounded-xl border border-gray-200" aria-label="Наличие">
         <button type="button" class="min-h-10 border-r border-gray-200 px-3 text-sm transition" :class="!modelValue.includeOrderable ? 'bg-brand-600 text-white' : 'text-gray-700'" :aria-pressed="!modelValue.includeOrderable" @click="update({ includeOrderable: false })">В наличии</button>
         <button type="button" class="min-h-10 px-3 text-sm transition" :class="modelValue.includeOrderable ? 'bg-brand-600 text-white' : 'text-gray-700'" :aria-pressed="Boolean(modelValue.includeOrderable)" @click="update({ includeOrderable: true })">Все</button>
       </div>
     </div>
+    <p v-if="!hideSearch" id="catalog-search-hint" class="text-xs text-gray-500">«7 кВт» — номинальная мощность охлаждения 7 кВт. Класс БТЕ/ч выбирайте кнопками ниже.</p>
 
     <div class="flex flex-wrap items-end gap-x-3 gap-y-3 sm:gap-x-5">
       <div class="min-w-0 basis-full space-y-1.5 xl:basis-auto xl:flex-1">
@@ -138,7 +139,7 @@ const setWifi = (wifi: FilterState['wifi'] | undefined) => update({ wifi, hasWif
 
     <div class="grid gap-4 lg:grid-cols-2">
       <div class="space-y-2">
-        <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Мощность охлаждения · тыс. БТЕ/ч</p>
+        <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Номинальная мощность охлаждения, кВт</p>
         <div class="flex flex-wrap items-center gap-2 text-sm text-gray-600">
           <span class="w-full text-xs sm:w-auto">Номинальная, кВт</span>
           <input :value="coolingRange.min" type="number" min="0" step="0.1" placeholder="От" aria-label="Мощность охлаждения от, кВт" class="w-24 rounded-lg border border-gray-200 px-3 py-2" :aria-invalid="Boolean(coolingRangeError)" @input="updateRange('cooling', 'min', ($event.target as HTMLInputElement).value)" />

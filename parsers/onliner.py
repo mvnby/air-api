@@ -134,12 +134,12 @@ class OnlinerParser(BaseParser):
                         all_specs[key] = value
                         
                         # Extract target fields logic
-                        if 'Мощность охлаждения' in key:
+                        if 'мощность охлаждения' in key.lower() and 'потреб' not in key.lower():
                             match = re.search(r'([\d\.]+)', value)
                             if match:
                                 target_specs['power_cooling'] = float(match.group(1))
                         
-                        elif 'Мощность обогрева' in key:
+                        elif 'мощность обогрева' in key.lower() and 'потреб' not in key.lower():
                             match = re.search(r'([\d\.]+)', value)
                             if match:
                                 target_specs['power_heating'] = float(match.group(1))

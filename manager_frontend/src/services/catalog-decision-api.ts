@@ -6,7 +6,7 @@ import {
 } from '../client';
 
 export type CatalogDecisionItem = CatalogDecisionProductResponse;
-export type CatalogDecisionSort = 'retail_price' | 'purchase_cost' | 'rrc' | 'margin_abs' | 'margin_pct' | 'availability' | 'cooling_power' | 'title';
+export type CatalogDecisionSort = 'recommended' | 'retail_price' | 'purchase_cost' | 'rrc' | 'margin_abs' | 'margin_pct' | 'availability' | 'cooling_power' | 'title';
 export type CatalogDecisionFilters = {
   search?: string;
   coolingBtuClasses?: number[];

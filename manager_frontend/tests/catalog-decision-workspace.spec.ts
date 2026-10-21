@@ -27,14 +27,14 @@ const targetOrder = { id: 42, title: 'Офис', status: 'negotiation', proposal
   { id: 51, name: 'Для кабинета', status: 'draft', is_selected: false },
 ] } as any;
 let workspace: ReturnType<typeof mount> | undefined;
-const startWorkspace = async (search = '') => {
+const startWorkspace = async (search = '', options: { empty?: boolean; capabilities?: string[]; renderTable?: boolean } = {}) => {
   history.replaceState({}, '', `/manager/catalog-decision${search}`);
-  managerSession.auth.value = identity;
-  vi.spyOn(catalogDecisionApi, 'list').mockResolvedValue({ items: [selectedModel], meta: { page: 1, pages: 1, total: 1, limit: 40 } });
+  managerSession.auth.value = options.capabilities ? { ...identity, capabilities: options.capabilities } : identity;
+  vi.spyOn(catalogDecisionApi, 'list').mockResolvedValue({ items: options.empty ? [] : [selectedModel], meta: { page: 1, pages: 1, total: options.empty ? 0 : 1, limit: 40 } });
   vi.spyOn(catalogDecisionApi, 'filterOptions').mockResolvedValue({ brands: [], series: [] });
   vi.spyOn(ManagerOrdersService, 'getManagerOrderDetail').mockResolvedValue(targetOrder);
   workspace = mount(CatalogDecisionWorkspaceView, { global: { stubs: {
-    CatalogDecisionFilters: true, CatalogDecisionTable: true, CatalogDecisionSelectionTray: true,
+    CatalogDecisionFilters: true, CatalogDecisionTable: !options.renderTable, CatalogDecisionSelectionTray: true,
     CatalogDecisionCollectionDialog: true, CatalogDecisionOrderDialog: true, CatalogDecisionQuickOrderDialog: true,
     CatalogDecisionCompareDialog: true, CatalogDecisionProductDetailsDialog: true,
   } } });
@@ -121,6 +121,70 @@ describe('order-bound equipment selection', () => {
 
 
 describe('catalog workspace usability', () => {
+  it('starts with wall-first ordering and restores it explicitly after title sorting or a full reset', async () => {
+    const wrapper = await startWorkspace('?orderId=42&proposalId=51');
+    const table = wrapper.findComponent(CatalogDecisionTable);
+    expect(catalogDecisionApi.list).toHaveBeenCalledWith(1, 40, { isPublished: true }, 'recommended', 'asc');
+    table.vm.$emit('sort', 'title');
+    await flushPromises();
+    expect(new URLSearchParams(location.search).get('sort')).toBe('title');
+    table.vm.$emit('sort', 'title');
+    await flushPromises();
+    expect(new URLSearchParams(location.search).get('direction')).toBe('desc');
+    table.vm.$emit('sort', 'recommended');
+    await flushPromises();
+    expect(table.props('sort')).toBe('recommended');
+    expect(table.props('direction')).toBe('asc');
+    expect(new URLSearchParams(location.search).has('sort')).toBe(false);
+    expect(new URLSearchParams(location.search).has('direction')).toBe(false);
+    table.vm.$emit('sort', 'cooling_power');
+    wrapper.findComponent(CatalogDecisionFilters).vm.$emit('update:modelValue', { isPublished: true, heatingMin: -25, indoorFormFactor: 'cassette' });
+    await flushPromises();
+    await wrapper.findAll('button').find(button => button.text() === 'Сбросить всё')!.trigger('click');
+    await flushPromises();
+    expect(catalogDecisionApi.list).toHaveBeenLastCalledWith(1, 40, { isPublished: true }, 'recommended', 'asc');
+    expect(new URLSearchParams(location.search).get('proposalId')).toBe('51');
+    expect(new URLSearchParams(location.search).has('form')).toBe(false);
+  });
+
+  it('explains empty results and changes stock or search only after the explicit action, preserving technical criteria', async () => {
+    const wrapper = await startWorkspace('?form=cassette&heating=-25&coolingMinKw=7&wifi=builtin&q=Gree', { empty: true, renderTable: true });
+    expect(wrapper.text()).toContain('только подтверждённые комплекты');
+    expect(wrapper.text()).toContain('Технические фильтры не ослабляются автоматически');
+    expect(wrapper.get('[aria-label="Выбранные фильтры"]').text()).toContain('Кассетный');
+    expect(catalogDecisionApi.list).toHaveBeenCalledTimes(1);
+    const technicalCriteria = { isPublished: true, indoorFormFactor: 'cassette', heatingMin: -25, coolingMinKw: 7, wifi: 'builtin' };
+    await wrapper.findAll('button').find(button => button.text() === 'Показать также заказные')!.trigger('click');
+    await flushPromises();
+    expect(catalogDecisionApi.list).toHaveBeenLastCalledWith(1, 40, { ...technicalCriteria, search: 'Gree', includeOrderable: true }, 'recommended', 'asc');
+    await wrapper.findAll('button').find(button => button.text() === 'Убрать поисковый запрос')!.trigger('click');
+    await new Promise(resolve => setTimeout(resolve, 250));
+    await flushPromises();
+    expect(catalogDecisionApi.list).toHaveBeenLastCalledWith(1, 40, { ...technicalCriteria, search: undefined, includeOrderable: true }, 'recommended', 'asc');
+    await wrapper.get('button[aria-label="Снять фильтр: Wi-Fi: встроенный"]').trigger('click');
+    await flushPromises();
+    expect(catalogDecisionApi.list).toHaveBeenLastCalledWith(1, 40, { ...technicalCriteria, search: undefined, wifi: undefined, includeOrderable: true }, 'recommended', 'asc');
+    expect(new URLSearchParams(location.search).get('heating')).toBe('-25');
+    expect(new URLSearchParams(location.search).get('form')).toBe('cassette');
+    await wrapper.findAll('button').find(button => button.text() === 'Сбросить фильтры')!.trigger('click');
+    await flushPromises();
+    expect(catalogDecisionApi.list).toHaveBeenLastCalledWith(1, 40, { isPublished: true }, 'recommended', 'asc');
+  });
+
+  it.each([
+    { capabilities: ['crm.manage'], visible: false },
+    { capabilities: ['crm.manage', 'catalog.master.read'], visible: false },
+    { capabilities: ['crm.manage', 'catalog.master.edit'], visible: false },
+    { capabilities: ['crm.manage', 'catalog.master.read', 'catalog.master.edit'], visible: true },
+  ])('shows catalog data guidance only with catalog management access: $visible', async ({ capabilities, visible }) => {
+    const wrapper = await startWorkspace('', { capabilities, empty: true });
+    expect(wrapper.find('a[href="/manager/products"]').exists()).toBe(visible);
+    if (visible) {
+      expect(wrapper.text()).toContain('Неполные или неподтверждённые данные');
+      expect(wrapper.text()).not.toMatch(/Проблем[ыа]:?\s*\d/);
+    }
+  });
+
   it('blocks transfer and comparison while a restored item is outside the split scope', () => {
     const tray = mount(CatalogDecisionSelectionTray, { props: {
       items: [{ id: 11, title: 'Complete split' }, { id: 22, title: 'Indoor component' }],

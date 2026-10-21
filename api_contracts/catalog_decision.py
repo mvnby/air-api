@@ -13,6 +13,7 @@ from schemas_common import Meta
 
 
 CatalogDecisionSort = Literal[
+    "recommended",
     "retail_price", "purchase_cost", "rrc", "margin_abs", "margin_pct",
     "availability", "cooling_power", "title",
 ]

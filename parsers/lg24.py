@@ -407,12 +407,12 @@ class Lg24Parser(BaseParser):
                 if match and not metrics["area"]:
                     metrics["area"] = int(match.group(1))
 
-            if "мощност" in key_lower and "охлажд" in key_lower:
+            if "мощност" in key_lower and "охлажд" in key_lower and "потреб" not in key_lower:
                 parsed = Lg24Parser._parse_first_number(value)
                 if parsed is not None:
                     metrics["power_cooling"] = parsed
 
-            if "мощност" in key_lower and ("нагрев" in key_lower or "обогрев" in key_lower):
+            if "мощност" in key_lower and ("нагрев" in key_lower or "обогрев" in key_lower) and "потреб" not in key_lower:
                 parsed = Lg24Parser._parse_first_number(value)
                 if parsed is not None:
                     metrics["power_heating"] = parsed
