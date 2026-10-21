@@ -9,6 +9,7 @@ import { DEMO_READ_ONLY_MESSAGE, useDemoReadOnly } from '../services/manager-dem
 type Options = {
   order: Readonly<Ref<ManagerOrderDetailResponse | null>>;
   ready: Readonly<Ref<boolean>>;
+  blocked?: Readonly<Ref<boolean>>;
   activeProposalId: Ref<number | null>;
   activeProposalLocked: Readonly<Ref<boolean>>;
   productLines: Ref<ProductLine[]>;
@@ -54,7 +55,7 @@ export const useOrderDrawerSaving = (options: Options) => {
 
   const save = async () => {
     const order = options.order.value;
-    if (!order) return false;
+    if (!order || options.blocked?.value) return false;
     const fullPayload = options.buildSavePayload(
       options.activeProposalLocked.value,
       true,
@@ -131,6 +132,7 @@ export const useOrderDrawerSaving = (options: Options) => {
   const autosave = useOrderAutosave({
     enabled: autosaveEnabled,
     ready: options.ready,
+    blocked: options.blocked,
     scope,
     snapshot: computed(() => `${options.currentFormSnapshot()}\n${options.currentLinesSnapshot()}`),
     dirty: options.hasUnsavedChanges,
@@ -150,6 +152,10 @@ export const useOrderDrawerSaving = (options: Options) => {
     return { mutated };
   };
   const beforeClose = async () => {
+    if (options.blocked?.value) {
+      options.localFormError.value = 'Сначала выберите значения в восстановленном черновике.';
+      return false;
+    }
     if (demoReadOnly.value) return true;
     if (enabled.value) return autosave.flush();
     await autosave.waitForIdle();

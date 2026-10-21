@@ -33,6 +33,7 @@ import { useSmartStickyHeader } from '../../composables/useSmartStickyHeader';
 import { useOrderCommercialEditor } from '../../composables/useOrderCommercialEditor';
 import { useOrderProposalLifecycle } from '../../composables/useOrderProposalLifecycle';
 import { useOrderDrawerForm } from '../../composables/useOrderDrawerForm';
+import OrderDraftRecovery from './OrderDraftRecovery.vue';
 import { useOrderDrawerPersistence } from '../../composables/useOrderDrawerPersistence';
 import { useOrderDocumentStatus } from '../../composables/useOrderDocumentStatus';
 import { useOrderWorkspaceNavigation } from '../../composables/useOrderWorkspaceNavigation';
@@ -187,6 +188,11 @@ const proposalLifecycle = useOrderProposalLifecycle({
   },
   onLoaded: () => {
     savedLinesSnapshot.value = buildCurrentLinesSnapshot(activeProposalId.value);
+    if (!initializing.value) {
+      orderSaving.resetBaseline();
+      restoreDraft();
+      syncProductLookupFromLines();
+    }
   },
 });
 const {
@@ -203,6 +209,7 @@ const {
 
 const {
   clearDraft,
+  draftConflicts, draftBlocked, resolveDraftConflict,
   expandedDrawerSections,
   hasUnsavedChanges,
   initializedOrderId,
@@ -219,6 +226,7 @@ const {
   currentLinesSnapshot: () => buildCurrentLinesSnapshot(activeProposalId.value),
   currentFormSnapshot: () => buildCurrentFormSnapshot(proposalStatus.value),
   restoreFormDraft: drawerForm.restoreFormDraft,
+  ready: computed(() => !initializing.value),
 });
 
 const {
@@ -257,6 +265,7 @@ const {
   onUpdated: (updated) => emit('updated', updated),
 });
 const orderSaving = useOrderDrawerSaving({
+  blocked: draftBlocked,
   order: computed(() => props.order),
   ready: computed(() => props.modelValue && !initializing.value && !installationAutosavePaused.value && !sourceApplying.value && !responsibilityPaused.value && Boolean(props.order)),
   activeProposalId,
@@ -506,7 +515,7 @@ watch(
       await nextTick();
       resetWorkspaceHeader();
       focusContainer();
-    } else if (!orderSaving.isOwnResponse(order) && !saving.value && !hasUnsavedChanges.value) {
+    } else if (!orderSaving.isOwnResponse(order) && !saving.value && (!hasUnsavedChanges.value || draftBlocked.value)) {
       await initForm(order);
     } else {
       payments.value = [...(order.payments || [])];
@@ -586,6 +595,7 @@ defineExpose({ prepareToLeave });
         v-show="!proposalClientPreview"
         class="shrink-0"
         :workspace="true"
+        :inert="draftBlocked ? true : undefined"
         :order-id="order?.id"
         :back-label="isPage ? backLabel : undefined"
         :title="displayOrderTitle"
@@ -641,7 +651,8 @@ defineExpose({ prepareToLeave });
           <p v-if="displayFormError && !proposalClientPreview" class="mt-4 rounded-xl border border-red-500/40 bg-red-50 px-3 py-2 text-sm text-red-700">
             {{ displayFormError }}
           </p>
-          <fieldset :disabled="proposalActionLoading || installationAttaching || sourceApplying" class="min-w-0">
+          <OrderDraftRecovery v-if="draftBlocked" :conflicts="draftConflicts" @resolve="resolveDraftConflict" />
+          <fieldset :disabled="draftBlocked || proposalActionLoading || installationAttaching || sourceApplying" class="min-w-0">
             <TenderWorkflowPanel v-if="order && !proposalClientPreview && (order.lead_source === 'email' || order.lead_source === 'belzakupki')" :order-id="order.id" />
             <section v-if="proposalMounted" v-show="activeWorkspaceSection === 'proposal'" :key="`proposal-${order?.id}`" class="min-w-0" data-order-usage="workspace-proposal-panel">
               <OrderManagerLabels v-show="!proposalClientPreview" v-model="managerLabels" />
@@ -756,6 +767,7 @@ defineExpose({ prepareToLeave });
             :save-error="displayFormError"
             :before-navigate="isPage ? undefined : closeDrawer"
             :before-save="orderSaving.flush"
+            :inert="draftBlocked ? true : undefined"
             :persist-object="saveContextObject"
             @toast="setToast($event.message, $event.type)"
             @updated="handleCustomerUpdated"

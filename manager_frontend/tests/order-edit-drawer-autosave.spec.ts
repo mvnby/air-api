@@ -14,6 +14,7 @@ import OrderDocumentsWorkspace from '../src/components/orders/OrderDocumentsWork
 import OrderPaymentsPanel from '../src/components/orders/OrderPaymentsPanel.vue';
 import OrderPaymentWorkspace from '../src/components/orders/OrderPaymentWorkspace.vue';
 import OrderWorkWorkspace from '../src/components/orders/OrderWorkWorkspace.vue';
+import OrderDraftRecovery from '../src/components/orders/OrderDraftRecovery.vue';
 import OrderWorkspaceHeader from '../src/components/orders/OrderWorkspaceHeader.vue';
 import OrderWorkspaceNav from '../src/components/orders/OrderWorkspaceNav.vue';
 import OrderRequestSourceCard from '../src/components/orders/OrderRequestSourceCard.vue';
@@ -83,9 +84,103 @@ beforeEach(() => {
   vi.spyOn(ManagerDocumentSystemService, 'listManagerManagedOrderDocuments').mockResolvedValue({ items: [] });
   vi.spyOn(ManagerOrdersService, 'patchManagerOrder').mockImplementation(async (_id, payload) => commit(payload));
 });
-afterEach(() => { wrapper?.unmount(); vi.restoreAllMocks(); vi.useRealTimers(); });
+afterEach(() => { wrapper?.unmount(); vi.restoreAllMocks(); vi.useRealTimers(); managerSession.auth.value = null; managerStorefrontSelection.selectedSlug.value = null; });
 
 describe('order drawer autosave integration', () => {
+  it.each([true, false])('restores only a failed local title edit over fresh server fields and estimate (autosave %s)', async automatic => {
+    managerSession.auth.value = { tenant_id: 1, staff_user_id: 99, username: 'draft-test' } as any;
+    managerStorefrontSelection.selectedSlug.value = 'main';
+    vi.spyOn(ManagerSettingsService, 'getFxRate').mockResolvedValue({ eur_byn: 3.5, usd_byn: 3 } as any);
+    stored.proposals![0]!.service_lines = [{ id: 81, service_title: 'Диагностика', quantity: 1, price: 1200, cost: 0 } as any];
+    await mountDrawer();
+    if (!automatic) { header().vm.$emit('toggle-autosave'); await nextTick(); }
+    vi.mocked(ManagerOrdersService.patchManagerOrder).mockRejectedValueOnce(new Error('offline'));
+    header().vm.$emit('update:title', 'Моё название');
+    await nextTick();
+    await vi.advanceTimersByTimeAsync(1000);
+    if (!automatic) { header().vm.$emit('save'); await flushPromises(); }
+    expect(header().props('saveFailed')).toBe(true);
+    wrapper.unmount();
+    stored = { ...stored, comment: 'Новый комментарий коллеги', installation_date: '2026-11-15T12:00:00',
+      status: 'execution', delivery_address: 'Новый объект', target_currency: 'EUR', target_currency_amount: 1500, repair_meta: { diagnostic_notes: 'Новая диагностика' } } as any;
+    stored.proposals![0]!.service_lines![0]!.price = 1800;
+    vi.mocked(ManagerOrdersService.patchManagerOrder).mockClear();
+    await mountDrawer();
+    await vi.advanceTimersByTimeAsync(1000);
+    if (!automatic) { expect(ManagerOrdersService.patchManagerOrder).not.toHaveBeenCalled(); header().vm.$emit('save'); await flushPromises(); }
+    expect(ManagerOrdersService.patchManagerOrder).toHaveBeenCalledExactlyOnceWith(395, { title: 'Моё название' });
+    expect(stored.comment).toBe('Новый комментарий коллеги');
+    expect(stored.installation_date).toBe('2026-11-15T12:00:00');
+    expect(stored.proposals![0]!.service_lines![0]!.price).toBe(1800);
+    managerSession.auth.value = null;
+    managerStorefrontSelection.selectedSlug.value = null;
+  });
+  it.each([true, false])('keeps both conflicting title versions across reload and blocks writes (autosave %s)', async automatic => {
+    managerSession.auth.value = { tenant_id: 1, staff_user_id: 99, username: 'draft-test' } as any;
+    await mountDrawer();
+    if (!automatic) { header().vm.$emit('toggle-autosave'); await nextTick(); }
+    vi.mocked(ManagerOrdersService.patchManagerOrder).mockRejectedValueOnce(new Error('offline'));
+    header().vm.$emit('update:title', 'Локальное название');
+    await nextTick();
+    if (automatic) await vi.advanceTimersByTimeAsync(1000);
+    wrapper.unmount();
+    stored = { ...stored, title: 'Название коллеги' };
+    vi.mocked(ManagerOrdersService.patchManagerOrder).mockReset().mockImplementation(async (_id, payload) => commit(payload));
+    await mountDrawer();
+    const conflictPanel = () => wrapper.findComponent(OrderDraftRecovery);
+    expect(conflictPanel().props('conflicts')).toEqual([expect.objectContaining({ local: 'Локальное название', server: 'Название коллеги' })]);
+    header().vm.$emit('save');
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(ManagerOrdersService.patchManagerOrder).not.toHaveBeenCalled();
+    expect(await customer().props('beforeNavigate')!()).toBe(false);
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+    // An already received newer response must update the conflict, too.
+    stored = { ...stored, title: 'Еще более новое название' };
+    await wrapper.setProps({ order: stored }); await flushPromises();
+    expect(conflictPanel().props('conflicts')[0]!.server).toBe('Еще более новое название');
+    wrapper.unmount(); await mountDrawer();
+    const conflict = conflictPanel().props('conflicts')[0]!;
+    expect(conflict.local).toBe('Локальное название');
+    conflictPanel().vm.$emit('resolve', conflict.id, 'local');
+    await nextTick(); await vi.advanceTimersByTimeAsync(1000);
+    if (!automatic) {
+      expect(ManagerOrdersService.patchManagerOrder).not.toHaveBeenCalled();
+      expect(header().props('dirty')).toBe(true);
+      header().vm.$emit('save'); await flushPromises();
+    }
+    expect(ManagerOrdersService.patchManagerOrder).toHaveBeenCalledExactlyOnceWith(395, { title: 'Локальное название' });
+  });
+
+  it('restores changed service quantity without rolling back a newer server price', async () => {
+    managerSession.auth.value = { tenant_id: 1, staff_user_id: 99, username: 'draft-test' } as any;
+    stored.proposals![0]!.service_lines = [{ id: 81, service_title: 'Диагностика', quantity: 1, price: 1200, cost: 0 } as any];
+    await mountDrawer(); header().vm.$emit('toggle-autosave'); await nextTick();
+    const commercial = wrapper.findComponent(OrderProposalWorkspace).props('commercial');
+    commercial.serviceLines.value[0]!.quantity = 2; await nextTick(); wrapper.unmount();
+    stored.proposals![0]!.service_lines![0]!.price = 1800;
+    await mountDrawer();
+    expect(wrapper.findComponent(OrderProposalWorkspace).props('commercial').serviceLines.value[0]).toMatchObject({ quantity: 2, price: 1800 });
+    expect(wrapper.findComponent(OrderDraftRecovery).exists()).toBe(false);
+    expect(ManagerOrdersService.patchManagerOrder).not.toHaveBeenCalled();
+    header().vm.$emit('save'); await flushPromises();
+    expect(ManagerOrdersService.patchManagerOrder).toHaveBeenCalledWith(395, expect.objectContaining({ services: [expect.objectContaining({ quantity: 2, price: 1800 })] }));
+  });
+
+  it('restores product quantity over the new server price and retains logistics metadata', async () => {
+    managerSession.auth.value = { tenant_id: 1, staff_user_id: 99, username: 'draft-test' } as any;
+    stored.proposals![0]!.product_lines = [{ id: 82, product_id: 9, product_title: 'Тестовый товар', quantity: 1, price: 1200, cost: 0, product_country: 'Китай' } as any];
+    await mountDrawer(); header().vm.$emit('toggle-autosave'); await nextTick();
+    wrapper.findComponent(OrderProposalWorkspace).props('commercial').productLines.value[0]!.quantity = 2;
+    await nextTick(); wrapper.unmount();
+    stored.proposals![0]!.product_lines![0]!.price = 1800;
+    (stored.proposals![0]!.product_lines![0] as any).product_country = 'Япония';
+    await mountDrawer();
+    expect(wrapper.findComponent(OrderProposalWorkspace).props('commercial').productLines.value[0]).toMatchObject({ quantity: 2, price: 1800, product_country: 'Япония' });
+    expect(ManagerOrdersService.patchManagerOrder).not.toHaveBeenCalled();
+    header().vm.$emit('save'); await flushPromises();
+    expect(ManagerOrdersService.patchManagerOrder).toHaveBeenCalledWith(395, expect.objectContaining({ products: [expect.objectContaining({ quantity: 2, price: 1800 })] }));
+  });
+
   it('opens customer editing under the order context instead of rendering it in Work', async () => {
     await mountDrawer();
     expect(customer().props('editTarget')).toBe(null);
