@@ -23,19 +23,19 @@ const items = [
 </script>
 
 <template>
-  <nav class="flex min-w-0 items-center gap-0.5 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900" aria-label="Рабочая область заказа" data-order-usage="workspace-navigation">
+  <nav class="grid min-w-0 grid-cols-1 items-center gap-0.5 rounded-xl border border-slate-200 bg-slate-50 p-1 min-[280px]:grid-cols-2 sm:flex dark:border-slate-700 dark:bg-slate-900" aria-label="Рабочая область заказа" data-order-usage="workspace-navigation">
     <button
       v-for="item in items"
       :key="item.id"
       type="button"
-      class="inline-flex min-h-9 min-w-0 flex-1 items-center justify-center gap-1 rounded-lg px-1 text-xs font-semibold transition sm:flex-none sm:px-3 sm:text-sm"
+      class="inline-flex min-h-11 min-w-0 items-center justify-center gap-1 rounded-lg px-1 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-brand-500 sm:flex-none sm:px-3 sm:text-sm"
       :class="active === item.id ? 'bg-white text-brand-700 shadow-sm dark:bg-slate-800 dark:text-brand-200' : 'text-slate-600 hover:bg-white/80 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white'"
       :aria-current="active === item.id ? 'page' : undefined"
       :data-order-usage="`workspace-${item.id}`"
       @click="emit('select', item.id)"
     >
       <component :is="item.icon" :size="15" class="hidden shrink-0 sm:block" aria-hidden="true" />
-      {{ item.id === 'work' && workflow === 'repair' ? 'Ремонт' : item.label }}
+      <span class="whitespace-nowrap" data-workspace-label>{{ item.id === 'work' && workflow === 'repair' ? 'Ремонт' : item.label }}</span>
     </button>
     <button
       type="button"

@@ -11,13 +11,15 @@ const { auth, stores } = require('../kitlane/fixtures.json');
 const dist = path.resolve(process.env.KITLANE_BENCH_DIST || 'dist');
 const output = path.resolve(process.env.KITLANE_SCREENSHOTS || '/tmp/order-workspace-package');
 const label = process.env.KITLANE_BENCH_LABEL || 'baseline';
+const cachePolicy = process.env.KITLANE_BENCH_CACHE_POLICY || 'immutable';
+assert(['no-store','immutable'].includes(cachePolicy));
 const iconFont = process.env.KITLANE_BENCH_ICON_FONT;
 const pairs = Number(process.env.KITLANE_BENCH_PAIRS || 5);
 const port = Number(process.env.KITLANE_BENCH_PORT || 5193);
 const base = `http://127.0.0.1:${port}`;
 const serviceTitle = 'Выездная диагностика кондиционеров на нескольких объектах с учётом транспортных расходов';
 const settings = { cpuSlowdown: 4, latencyMs: 80, downloadBytesPerSecond: 200000, uploadBytesPerSecond: 93750, viewport: { width: 384, height: 850 }, pairs,
-  nodeVersion: process.version, iconFontSha256: iconFont ? crypto.createHash('sha256').update(fs.readFileSync(iconFont)).digest('hex') : null };
+  cachePolicy, requestInterception: false, nodeVersion: process.version, iconFontSha256: iconFont ? crypto.createHash('sha256').update(fs.readFileSync(iconFont)).digest('hex') : null };
 fs.mkdirSync(output, { recursive: true });
 let workflow = 'sales_installation';
 const makeOrder = () => {
@@ -66,6 +68,7 @@ const server = http.createServer((req, res) => {
   }
   let filename = path.resolve(dist, '.' + url.pathname.replace(/^\/manager(?=\/assets\/)/, ''));
   if (!filename.startsWith(dist + path.sep)) filename = path.join(dist, 'index.html');
+  if ((!fs.existsSync(filename) || fs.statSync(filename).isDirectory()) && url.pathname.startsWith('/manager/assets/')) { res.writeHead(404, {'Cache-Control':'no-store'}); return res.end('Missing build asset'); }
   if (!fs.existsSync(filename) || fs.statSync(filename).isDirectory()) filename = path.join(dist, 'index.html');
   if (!assetCache.has(filename)) {
     let body = fs.readFileSync(filename);
@@ -73,13 +76,14 @@ const server = http.createServer((req, res) => {
     assetCache.set(filename, { raw: body, gzip: zlib.gzipSync(body, { level: 9 }) });
   }
   const asset = assetCache.get(filename), gzip = /gzip/.test(req.headers['accept-encoding'] || '') && /\.(js|css|html|svg)$/.test(filename);
-  res.writeHead(200, { 'Content-Type': mime(filename), 'Cache-Control': filename.endsWith('index.html') ? 'no-cache' : 'public, max-age=31536000, immutable',
+  res.writeHead(200, { 'Content-Type': mime(filename), 'Cache-Control': filename.endsWith('index.html') || (/\.(js|css)$/.test(filename) && cachePolicy === 'no-store') ? 'no-store, no-cache, must-revalidate, max-age=0' : 'public, max-age=31536000, immutable',
     ...(gzip ? { 'Content-Encoding': 'gzip', Vary: 'Accept-Encoding' } : {}),
     'Content-Security-Policy': "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; font-src 'self' data:; img-src 'self' data: blob:" });
   res.end(gzip ? asset.gzip : asset.raw);
 });
 const median = values => { const v = [...values].sort((a, b) => a - b); return v.length % 2 ? v[(v.length - 1) / 2] : (v[v.length / 2 - 1] + v[v.length / 2]) / 2; };
 const rounded = value => Math.round(value * 10) / 10;
+const isBuildFile = request => { const name=new URL(request.url).pathname;return name.startsWith('/manager/assets/') && /\.(js|css)$/.test(name); };
 const rows = [], errors = [];
 async function measure(context, type, iteration, screenshots) {
   const page = await context.newPage();
@@ -108,6 +112,7 @@ async function measure(context, type, iteration, screenshots) {
     await page.screenshot({ path: path.join(output, `${label}-failure.png`) });
     throw error;
   }
+  const estimateVisibleMs = await page.evaluate(() => performance.now());
   await workspace.getByTestId('add-service-line').click({ trial: true });
   const readyMs = await page.evaluate(() => performance.now());
   await page.waitForLoadState('networkidle');
@@ -155,7 +160,22 @@ async function measure(context, type, iteration, screenshots) {
     await nav.getByRole('button', { name: workName, exact: true }).click();
     await page.screenshot({ path: path.join(output, `${label}-${workflow}-1440-work.png`), animations: 'disabled' });
   }
-  const result = { workflow, type, iteration, readyMs, documentsFirstMs, documentsRepeatMs, workFirstMs, workRepeatMs, initialJsGzipBytes,
+  let reloadReadyMs = null, reloadEstimateVisibleMs = null, reloadBuildNetworkBytes = null, reloadBuildCachedFiles = null;
+  if (type === 'warm') {
+    stage = 'reload';
+    await page.reload({waitUntil:'commit'});
+    await workspace.getByText(serviceTitle,{exact:true}).waitFor();
+    reloadEstimateVisibleMs = await page.evaluate(()=>performance.now());
+    await workspace.getByTestId('add-service-line').click({trial:true});
+    reloadReadyMs = await page.evaluate(()=>performance.now());
+    await page.waitForLoadState('networkidle');
+    const build = requests.filter(r=>r.stage==='reload' && isBuildFile(r));
+    reloadBuildNetworkBytes=build.reduce((sum,r)=>sum+r.bytes,0);
+    reloadBuildCachedFiles=build.filter(r=>r.cached).length;
+  }
+  const result = { workflow, type, iteration, estimateVisibleMs, readyMs, reloadReadyMs, reloadEstimateVisibleMs, reloadBuildNetworkBytes, reloadBuildCachedFiles,
+    initialBuildNetworkBytes: initial.filter(r=>isBuildFile(r)).reduce((sum,r)=>sum+r.bytes,0),
+    initialFileNetworkBytes: initial.filter(r=>!new URL(r.url).pathname.startsWith('/api/')).reduce((sum,r)=>sum+r.bytes,0), documentsFirstMs, documentsRepeatMs, workFirstMs, workRepeatMs, initialJsGzipBytes,
     initialJsNetworkBytes: initial.filter(r => new URL(r.url).pathname.endsWith('.js')).reduce((s, r) => s + r.bytes, 0),
     initialJsCachedFiles: initial.filter(r => new URL(r.url).pathname.endsWith('.js') && r.cached).length, initialJsFiles: js, initialApis, requests, layout };
   assert.deepEqual(requests.filter(r => r.status >= 400), [], 'All synthetic HTTP responses must succeed');
@@ -179,7 +199,7 @@ async function measure(context, type, iteration, screenshots) {
     const summary = [];
     for (const wf of ['sales_installation', 'repair']) for (const type of ['cold', 'warm']) {
       const group = rows.filter(row => row.workflow === wf && row.type === type), item = { workflow: wf, type, n: group.length };
-      for (const key of ['readyMs', 'documentsFirstMs', 'documentsRepeatMs', 'workFirstMs', 'workRepeatMs', 'initialJsGzipBytes', 'initialJsNetworkBytes', 'initialJsCachedFiles']) item[key] = rounded(median(group.map(row => row[key])));
+      for (const key of ['estimateVisibleMs', 'readyMs', 'documentsFirstMs', 'documentsRepeatMs', 'workFirstMs', 'workRepeatMs', 'initialJsGzipBytes', 'initialJsNetworkBytes', 'initialJsCachedFiles','initialBuildNetworkBytes','initialFileNetworkBytes','reloadReadyMs','reloadEstimateVisibleMs','reloadBuildNetworkBytes','reloadBuildCachedFiles']) item[key] = rounded(median(group.map(row => row[key])));
       item.startupApiCount = median(group.map(row => row.initialApis.length)); summary.push(item);
     }
     fs.writeFileSync(path.join(output, `${label}-summary.json`), JSON.stringify({ label, dist, settings, summary, errors }, null, 2));
