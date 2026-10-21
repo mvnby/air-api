@@ -1,5 +1,8 @@
+import { effectScope, ref } from 'vue';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { normalizeOrderLocation, openOrderPage, orderPageUrl, orderReturnUrl, readOrderPage, returnFromOrder, savedOrderListPosition } from '../src/services/order-navigation';
+import { normalizeOrderLocation, openOrderPage, orderPageUrl, orderReturnUrl, readOrderPage, returnFromOrder, savedOrderListPosition, readOrderWorkspaceSection } from '../src/services/order-navigation';
+
+import { useManagerDocumentTitle } from '../src/services/manager-document-title';
 
 afterEach(() => { vi.restoreAllMocks(); window.history.replaceState({}, '', '/manager/orders'); });
 describe('order page navigation', () => {
@@ -50,5 +53,62 @@ describe('order page navigation', () => {
     window.history.replaceState({}, '', `/manager/orders?orderId=${value}`);
     expect(normalizeOrderLocation()).toBe(`/manager/orders?orderId=${value}`);
     expect(readOrderPage(`/manager/orders/${value}`)).toBeNull();
+  });
+});
+
+
+describe('order section links', () => {
+  it('keeps an explicit return route and independent bootstrap context on legacy links', () => {
+    const params = new URLSearchParams({ orderId: '477', proposalId: '25', section: 'documents', returnTo: '/manager/calendar?view=week', company: '42', site: 'minsk' });
+    window.history.replaceState({}, '', `/manager/orders?${params}`);
+    const canonical = normalizeOrderLocation();
+    expect(readOrderPage(canonical)?.returnTo).toBe('/manager/calendar?view=week');
+    const query = new URLSearchParams(window.location.search);
+    for (const key of ['proposalId', 'section', 'company', 'site']) expect(query.get(key)).toBe(params.get(key));
+  });
+
+  it.each(['proposal', 'documents', 'work', 'payments'] as const)('retains %s when normalizing a legacy link and building a canonical link', section => {
+    window.history.replaceState({}, '', `/manager/orders/list?orderId=477&section=${section}&proposalId=25&company=42&site=minsk&search=office`);
+    const canonical = normalizeOrderLocation();
+    expect(readOrderWorkspaceSection(canonical)).toBe(section);
+    expect(new URLSearchParams(window.location.search).get('proposalId')).toBe('25');
+    expect(new URLSearchParams(window.location.search).get('company')).toBe('42');
+    expect(new URLSearchParams(window.location.search).get('site')).toBe('minsk');
+    expect(readOrderPage(canonical)?.returnTo).toBe('/manager/orders/list?company=42&site=minsk&search=office');
+    expect(normalizeOrderLocation()).toBe(canonical);
+    expect(readOrderWorkspaceSection(orderPageUrl(477, '/manager/orders/list', '25', section))).toBe(section);
+  });
+});
+
+describe('coordinated Manager document title', () => {
+  it('keeps the order title through late identity updates and restores identity when leaving', () => {
+    const identity = ref<string | null>('MVN');
+    const identityScope = effectScope();
+    identityScope.run(() => useManagerDocumentTitle(identity, 'identity'));
+    expect(document.title).toBe('MVN · KitLane');
+    const page = ref('Заказ №477');
+    const pageScope = effectScope();
+    pageScope.run(() => useManagerDocumentTitle(page));
+    expect(document.title).toBe('Заказ №477 · KitLane');
+    page.value = 'Заказ №477 · Клиент';
+    identity.value = 'Другой бренд';
+    expect(document.title).toBe('Заказ №477 · Клиент · KitLane');
+    identity.value = null;
+    expect(document.title).toBe('Заказ №477 · Клиент · KitLane');
+    identity.value = 'MVN';
+    pageScope.stop();
+    expect(document.title).toBe('MVN · KitLane');
+    identityScope.stop();
+    expect(document.title).toBe('KitLane');
+  });
+
+  it('does not restore a disposed page over its replacement', () => {
+    const first = effectScope(), second = effectScope();
+    first.run(() => useManagerDocumentTitle(ref('Заказ №477')));
+    second.run(() => useManagerDocumentTitle(ref('Заказ №478')));
+    first.stop();
+    expect(document.title).toBe('Заказ №478 · KitLane');
+    second.stop();
+    expect(document.title).toBe('KitLane');
   });
 });

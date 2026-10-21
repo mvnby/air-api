@@ -1,4 +1,4 @@
-import { computed, nextTick, ref, watch, type Ref } from 'vue';
+import { computed, nextTick, onScopeDispose, ref, watch, type Ref } from 'vue';
 import { api } from '../api';
 import type {
   FxRateResponse,
@@ -14,7 +14,8 @@ import { fromLocalDateTimeInput, toLocalDateTimeInput } from '../utils/datetime'
 import { getApiErrorMessage } from '../utils/api-errors';
 import { isB2cCustomer as isB2cCustomerParty } from '../utils/customer-party';
 import type { OrderWorkflowType } from '../components/orders/order-workspace';
-import { normalizeOrderWorkflowType } from '../components/orders/order-workspace';
+import { normalizeOrderWorkflowType, ORDER_WORKFLOW_OPTIONS } from '../components/orders/order-workspace';
+import { EXECUTION_STATUS_OPTIONS, NEGOTIATION_STATUS_OPTIONS, STATUS_LABELS } from '../components/orders/order-utils';
 import { emptyRepairMeta, normalizeRepairMeta, type RepairMeta } from '../components/orders/repair-meta';
 import type { ProductLine, ServiceLine } from '../components/orders/order-editor-types';
 
@@ -31,6 +32,7 @@ type UseOrderDrawerFormOptions = {
   buildLinesPayload: () => LinePayload;
   validateLines: () => string;
   setToast: ToastHandler;
+  loadExecutorsOnHydrate?: boolean;
 };
 
 export const useOrderDrawerForm = ({
@@ -43,6 +45,7 @@ export const useOrderDrawerForm = ({
   buildLinesPayload,
   validateLines,
   setToast,
+  loadExecutorsOnHydrate = true,
 }: UseOrderDrawerFormOptions) => {
   const status = ref('new_lead');
   const orderTitle = ref('');
@@ -74,6 +77,29 @@ export const useOrderDrawerForm = ({
   const autoExecutionOnPayment = ref(false);
   const autoCloseOnPayment = ref(false);
   const installersList = ref<ManagerInstallerResponse[]>([]);
+  const executorsLoading = ref(false);
+  const executorsError = ref('');
+  let executorsLoaded = false;
+  let executorsRequest = 0;
+  let executorsTask: Promise<void> | null = null;
+  onScopeDispose(() => { executorsRequest++; });
+  const loadExecutors = (retry = false): Promise<void> => {
+    if (executorsTask) return executorsTask;
+    if (executorsLoaded && !retry) return Promise.resolve();
+    const request = ++executorsRequest;
+    executorsLoading.value = true;
+    executorsError.value = '';
+    executorsTask = api.getManagerInstallers(1, 100).then(response => {
+      if (request !== executorsRequest) return;
+      installersList.value = response.items;
+      executorsLoaded = true;
+    }).catch(() => {
+      if (request === executorsRequest) executorsError.value = 'Не удалось загрузить список исполнителей';
+    }).finally(() => {
+      if (request === executorsRequest) { executorsLoading.value = false; executorsTask = null; }
+    });
+    return executorsTask;
+  };
   const payments = ref<PaymentResponse[]>([]);
   const localServerErrors = ref<Record<string, string>>({});
   const localFormError = ref('');
@@ -221,11 +247,7 @@ export const useOrderDrawerForm = ({
         currentFxRate.value = rate;
       }).catch((error) => console.warn('Failed to load fx rate on init', error));
     }
-    if (!installersList.value.length) {
-      void api.getManagerInstallers(1, 100).then((response) => {
-        installersList.value = response.items;
-      }).catch((error) => console.error('Failed to load installers', error));
-    }
+    if (loadExecutorsOnHydrate) void loadExecutors();
   };
 
   const currentFormSnapshot = (_proposalStatus?: string) => JSON.stringify({
@@ -255,6 +277,66 @@ export const useOrderDrawerForm = ({
     targetCurrency: targetCurrency.value,
     targetCurrencyAmount: targetCurrencyAmount.value,
   });
+
+  // Browser drafts contain only editable values; never hydrate server-owned fields or run workflow commands.
+  const restoreFormDraft = (draft: unknown) => {
+    if (!draft || typeof draft !== 'object' || Array.isArray(draft)) return;
+    const stored = draft as Record<string, unknown>;
+    const hydrationEpoch = beginCurrencyHydration();
+    const fxRequestEpoch = ++fxRateRequestEpoch;
+    ++workflowChangeRequestId;
+    const textFields: Record<string, Ref<string>> = {
+      title: orderTitle, comment, customerDeliveryAddress, measurementResult, additionalConditions,
+      executionWithoutPaymentReason,
+    };
+    for (const [key, field] of Object.entries(textFields)) {
+      if (typeof stored[key] === 'string') field.value = stored[key];
+    }
+    const dates = { nextFollowupDate, assessmentDate, installationDate };
+    for (const [key, field] of Object.entries(dates)) {
+      const value = stored[key];
+      if (typeof value === 'string' && (!value || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(value))) field.value = value;
+    }
+    const flags = { measurementRequired, executionWithoutPayment, autoExecutionOnPayment, autoCloseOnPayment, enableCurrency };
+    for (const [key, field] of Object.entries(flags)) {
+      if (typeof stored[key] === 'boolean') field.value = stored[key];
+    }
+    for (const [key, field] of Object.entries({ installerId, customerBranchId, measurerId })) {
+      const value = stored[key];
+      if (value === null || (typeof value === 'number' && Number.isSafeInteger(value) && value > 0)) field.value = value;
+    }
+    if (typeof stored.status === 'string' && Object.prototype.hasOwnProperty.call(STATUS_LABELS, stored.status)) status.value = stored.status;
+    if (ORDER_WORKFLOW_OPTIONS.some(option => option.value === stored.workflowType)) workflowType.value = stored.workflowType as OrderWorkflowType;
+    if (NEGOTIATION_STATUS_OPTIONS.some(option => option.value === stored.negotiationStatus)) negotiationStatus.value = stored.negotiationStatus as string;
+    if (EXECUTION_STATUS_OPTIONS.some(option => option.value === stored.executionStatus)) executionStatus.value = stored.executionStatus as string;
+    if (Array.isArray(stored.managerLabels)) managerLabels.value = stored.managerLabels.filter((value): value is string => typeof value === 'string');
+    if (stored.targetCurrency === null || stored.targetCurrency === 'USD' || stored.targetCurrency === 'EUR' || stored.targetCurrency === 'BYN') targetCurrency.value = stored.targetCurrency;
+    if (stored.targetCurrencyAmount === null || (typeof stored.targetCurrencyAmount === 'number' && Number.isFinite(stored.targetCurrencyAmount) && stored.targetCurrencyAmount >= 0)) targetCurrencyAmount.value = stored.targetCurrencyAmount;
+    if (stored.repairMeta && typeof stored.repairMeta === 'object' && !Array.isArray(stored.repairMeta)) {
+      const raw = stored.repairMeta as Record<string, unknown>;
+      const safe: Record<string, unknown> = {};
+      for (const [key, fallback] of Object.entries(emptyRepairMeta())) {
+        const value = raw[key];
+        if (typeof fallback === 'string' && typeof value === 'string') safe[key] = value;
+        else if (typeof fallback === 'boolean' && typeof value === 'boolean') safe[key] = value;
+        else if (Array.isArray(fallback) && Array.isArray(value)) safe[key] = value.filter(item => typeof item === 'string');
+        else if (fallback && typeof fallback === 'object' && !Array.isArray(fallback) && value && typeof value === 'object' && !Array.isArray(value)) {
+          try {
+            safe[key] = key === 'defect_act_blocks'
+              ? Object.fromEntries(Object.entries(value).filter(([, text]) => typeof text === 'string'))
+              : JSON.parse(JSON.stringify(value));
+          } catch { /* An invalid optional repair object does not discard the rest of the draft. */ }
+        }
+      }
+      repairMeta.value = normalizeRepairMeta(safe, { defaultRepairStatus: workflowType.value === 'repair' });
+    }
+    releaseCurrencyWatcherAfterHydration(hydrationEpoch);
+    if (enableCurrency.value && !currentFxRate.value) {
+      void ManagerSettingsService.getFxRate().then(rate => {
+        if (fxRequestEpoch === fxRateRequestEpoch) currentFxRate.value = rate;
+      }).catch(() => { /* Keep the fixed draft amount when the rate cannot be read. */ });
+    }
+  };
 
   const normalizeManagerLabel = (value: string) => value.trim().replace(/\s+/g, ' ');
   const addManagerLabel = () => {
@@ -424,7 +506,11 @@ export const useOrderDrawerForm = ({
     executionWithoutPayment,
     executionWithoutPaymentReason,
     executorOptions,
+    executorsError,
+    executorsLoading,
+    loadExecutors,
     hydrateOrder,
+    restoreFormDraft,
     installationDate,
     installerId,
     isB2cCustomer,

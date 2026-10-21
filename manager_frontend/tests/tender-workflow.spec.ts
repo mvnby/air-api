@@ -46,4 +46,92 @@ describe('Tender workflow', () => {
     expect(wrapper.get('[role="alert"]').text()).toContain('Связь изменилась');
     expect(wrapper.emitted('changed')).toBeUndefined(); expect(api.update).not.toHaveBeenCalled(); wrapper.unmount();
   });
+  it('keeps an empty email order as one setup entry without populating tender data', async () => {
+    api.get.mockResolvedValueOnce({ ...workflow, stage: null, deadline_at: null });
+    const wrapper = mount(TenderWorkflowPanel, { props: { orderId: 22 } }); await flushPromises();
+    expect(wrapper.classes()).toContain('tender-workflow--compact');
+    expect(wrapper.find('h3').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Срок текущего этапа не указан');
+    expect(wrapper.get('button').text()).toBe('Настроить этапы закупки');
+    expect(wrapper.find('form').exists()).toBe(false);
+    await wrapper.get('button').trigger('click');
+    expect(wrapper.find('form').exists()).toBe(true);
+    expect(api.update).not.toHaveBeenCalled();
+    expect(api.link).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('shows loading and local retry instead of pretending that a failed load is empty', async () => {
+    let reject!: (reason: Error) => void;
+    api.get.mockReturnValueOnce(new Promise((_resolve, fail) => { reject = fail; }));
+    const wrapper = mount(TenderWorkflowPanel, { props: { orderId: 22 } });
+    expect(wrapper.get('[role="status"]').text()).toContain('Загружаем');
+    expect(wrapper.find('button').exists()).toBe(false);
+    reject(new Error('Нет соединения')); await flushPromises();
+    expect(wrapper.get('[role="alert"]').text()).toContain('Не удалось загрузить');
+    expect(wrapper.find('form').exists()).toBe(false);
+    await wrapper.get('button').trigger('click'); await flushPromises();
+    expect(api.get).toHaveBeenNthCalledWith(2, 22);
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Объявлена / готовим заявку');
+    wrapper.unmount();
+  });
+
+  it('ignores a previous order load that finishes after a newer order', async () => {
+    let resolve!: (value: unknown) => void;
+    api.get.mockReturnValueOnce(new Promise(done => { resolve = done; }));
+    api.get.mockResolvedValueOnce({ ...workflow, order_id: 33, stage: 'completed' });
+    const wrapper = mount(TenderWorkflowPanel, { props: { orderId: 22 } });
+    await wrapper.setProps({ orderId: 33 }); await flushPromises();
+    resolve(workflow); await flushPromises();
+    expect(wrapper.text()).toContain('Завершена');
+    expect(wrapper.text()).not.toContain('Объявлена / готовим заявку');
+    wrapper.unmount();
+  });
+
+  it('ignores a previous order save response and keeps the newer order editable', async () => {
+    let resolve!: (value: unknown) => void;
+    api.update.mockReturnValueOnce(new Promise(done => { resolve = done; }));
+    const wrapper = mount(TenderWorkflowPanel, { props: { orderId: 22 } }); await flushPromises();
+    await wrapper.get('button').trigger('click');
+    await wrapper.get('form').trigger('submit');
+    api.get.mockResolvedValueOnce({ ...workflow, order_id: 33, stage: 'completed' });
+    await wrapper.setProps({ orderId: 33 }); await flushPromises();
+    resolve(workflow); await flushPromises();
+    expect(wrapper.text()).toContain('Завершена');
+    expect(wrapper.emitted('changed')).toBeUndefined();
+    await wrapper.get('button').trigger('click');
+    expect(wrapper.get('select').attributes('disabled')).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it('discards search candidates from an earlier order', async () => {
+    let resolve!: (value: unknown) => void;
+    api.candidates.mockReturnValueOnce(new Promise(done => { resolve = done; }));
+    const wrapper = mount(TenderWorkflowPanel, { props: { orderId: 22 } }); await flushPromises();
+    await wrapper.get('button').trigger('click');
+    await wrapper.findAll('form')[1]!.trigger('submit');
+    await wrapper.setProps({ orderId: 33 }); await flushPromises();
+    resolve([{ order_id: 11, title: 'Старый результат' }]); await flushPromises();
+    await wrapper.get('button').trigger('click');
+    expect(wrapper.find('.candidate').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Старый результат');
+    wrapper.unmount();
+  });
+
+  it('does not continue linking an earlier candidate after switching orders', async () => {
+    let resolve!: (value: unknown) => void;
+    api.candidates.mockResolvedValueOnce([{ order_id: 11, title: 'Цена', stage: null }]);
+    api.update.mockReturnValueOnce(new Promise(done => { resolve = done; }));
+    const wrapper = mount(TenderWorkflowPanel, { props: { orderId: 22 } }); await flushPromises();
+    await wrapper.get('button').trigger('click');
+    await wrapper.findAll('form')[1]!.trigger('submit'); await flushPromises();
+    await wrapper.get('.candidate button').trigger('click');
+    await wrapper.setProps({ orderId: 33 }); await flushPromises();
+    resolve({ ...workflow, order_id: 11, stage: 'price_request' }); await flushPromises();
+    expect(api.link).not.toHaveBeenCalled();
+    expect(wrapper.emitted('changed')).toBeUndefined();
+    wrapper.unmount();
+  });
+
 });

@@ -93,7 +93,7 @@ describe('orders list table', () => {
     await wrapper.find('input[aria-label="Выбрать группу ООО Северный ветер"]').setValue(true);
     expect(wrapper.emitted('toggleSelectMany')).toEqual([[{ orderIds: [501, 502], selected: true }]]);
 
-    const firstOpen = wrapper.findAll('button').find((button) => button.text() === 'Открыть');
+    const firstOpen = wrapper.findAll('a').find((link) => link.text() === 'Открыть');
     await firstOpen!.trigger('click');
     expect(wrapper.emitted('open')).toEqual([[501]]);
   });
@@ -190,4 +190,50 @@ describe('order list money presentation', () => {
       wrapper.unmount();
     }
   });
+});
+
+
+describe('native order opening links', () => {
+  afterEach(() => { window.history.replaceState({}, '', '/manager/orders'); });
+  for (const [name, component, extra] of [
+    ['list', OrderListRow, { segment: 'b2b' }],
+    ['B2B board', OrderCardB2B, { expanded: true }],
+    ['B2C board', OrderCardB2C, { expanded: true }],
+  ] as const) {
+    it(`keeps a native URL and intercepts only an ordinary click in ${name}`, async () => {
+      window.history.replaceState({}, '', '/manager/orders/kanban?company=42&site=minsk&search=office&groupBy=customer');
+      const wrapper = mount(component as any, { props: { order: order(), ...extra } });
+      const links = wrapper.findAll('a[href^="/manager/orders/501"]');
+      expect(links.length).toBeGreaterThanOrEqual(2);
+      for (const link of links) {
+        const url = new URL(link.attributes('href')!, window.location.origin);
+        expect(url.searchParams.get('returnTo')).toBe('/manager/orders/kanban?company=42&site=minsk&search=office&groupBy=customer');
+        expect(url.searchParams.get('company')).toBe('42');
+        expect(url.searchParams.get('site')).toBe('minsk');
+      }
+      const link = links[0]!;
+      const ordinary = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 });
+      link.element.dispatchEvent(ordinary);
+      expect(ordinary.defaultPrevented).toBe(true);
+      expect(wrapper.emitted('open')).toEqual([[501]]);
+      expect(wrapper.emitted('toggleExpanded')).toBeUndefined();
+      const events = [
+        new MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: true }),
+        new MouseEvent('click', { bubbles: true, cancelable: true, metaKey: true }),
+        new MouseEvent('click', { bubbles: true, cancelable: true, shiftKey: true }),
+        new MouseEvent('auxclick', { bubbles: true, cancelable: true, button: 1 }),
+        new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }),
+      ];
+      for (const event of events) {
+        let intercepted: boolean | undefined;
+        const record = () => { intercepted = event.defaultPrevented; event.preventDefault(); };
+        link.element.addEventListener(event.type, record, { once: true });
+        link.element.dispatchEvent(event);
+        expect(intercepted).toBe(false);
+      }
+      expect(wrapper.emitted('open')).toEqual([[501]]);
+      expect(wrapper.emitted('toggleExpanded')).toBeUndefined();
+      wrapper.unmount();
+    });
+  }
 });

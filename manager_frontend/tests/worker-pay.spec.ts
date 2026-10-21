@@ -67,4 +67,63 @@ describe('order remuneration agreement', () => {
   it('explicitly accrues using both current account and displayed agreement versions', async () => {
     vi.mocked(api.order).mockResolvedValue({ order_id: 77, candidates: [candidate], agreements: [{ ...agreement, status: 'agreed', paid: '0.00' }], can_manage: true }); vi.mocked(api.agreementAction).mockResolvedValue({}); wrapper = mount(OrderWorkerPayPanel, { props: { orderId: 77, beforeAction: vi.fn().mockResolvedValue(true) }, attachTo: document.body }); await flushPromises(); await button('Начислить').trigger('click'); await flushPromises(); expect(api.agreementAction).not.toHaveBeenCalled(); await button('Подтверждаю').trigger('click'); await flushPromises(); expect(api.agreementAction).toHaveBeenCalledWith(4, 12, 'accrue', expect.objectContaining({ expected_version: 6, expected_agreement_version: 2 }));
   });
+  it('refreshes context without clearing a local agreement edit or payment inputs', async () => {
+    vi.mocked(api.order).mockResolvedValue({ order_id: 77, candidates: [candidate], agreements: [{ ...agreement, status: 'agreed', paid: '0.00' }], can_manage: true });
+    wrapper = mount(OrderWorkerPayPanel, { props: { orderId: 77, contextVersion: 'initial', beforeAction: vi.fn().mockResolvedValue(true) }, attachTo: document.body }); await flushPromises();
+    expect(api.order).toHaveBeenCalledOnce();
+    await button('Изменить').trigger('click');
+    await content().get('[aria-label="Вознаграждение за работу"]').setValue('37,50');
+    await content().get('[aria-label="Валюта вознаграждения"]').setValue('EUR');
+    await content().get('[aria-label="Расход вознаграждения в BYN"]').setValue('130.00');
+    await content().get('[aria-label="Причина отмены вознаграждения"]').setValue('Локальная причина');
+    vi.mocked(api.order).mockResolvedValue({ order_id: 77, candidates: [{ ...candidate, display_name: 'Обновлённый исполнитель' }], agreements: [{ ...agreement, title: 'Обновлённое соглашение', status: 'agreed', paid: '0.00' }], can_manage: true });
+    await wrapper.setProps({ contextVersion: 'new-payment' }); await flushPromises();
+    expect(api.order).toHaveBeenCalledTimes(2);
+    expect(wrapper.text()).toContain('Обновлённое соглашение');
+    expect(wrapper.text()).toContain('Обновлённый исполнитель');
+    expect(content().find('[aria-label="Работа для вознаграждения"]').exists()).toBe(false);
+    for (const [label, value] of [['Вознаграждение за работу', '37,50'], ['Валюта вознаграждения', 'EUR'], ['Расход вознаграждения в BYN', '130.00'], ['Причина отмены вознаграждения', 'Локальная причина']]) {
+      expect(content().get(`[aria-label="${label}"]`).element).toHaveProperty('value', value);
+    }
+    expect(button('Отмена изменения')).toBeDefined();
+    expect(api.revise).not.toHaveBeenCalled();
+  });
+
+  it('keeps the reviewed command through context updates and refreshes after its write completes', async () => {
+    let finishBarrier!: (value: boolean) => void, finishWrite!: (value: unknown) => void;
+    const beforeAction = vi.fn(() => new Promise<boolean>(resolve => { finishBarrier = resolve; }));
+    vi.mocked(api.agree).mockReturnValueOnce(new Promise(resolve => { finishWrite = resolve; }));
+    wrapper = mount(OrderWorkerPayPanel, { props: { orderId: 77, contextVersion: 'initial', beforeAction }, attachTo: document.body }); await flushPromises();
+    await content().get('[aria-label="Работа для вознаграждения"]').setValue('11');
+    await content().get('[aria-label="Вознаграждение за работу"]').setValue('25.50');
+    await content().get('form').trigger('submit');
+    await wrapper.setProps({ contextVersion: 'while-confirming' }); await flushPromises();
+    expect(api.order).toHaveBeenCalledOnce();
+    await button('Подтверждаю').trigger('click');
+    await wrapper.setProps({ contextVersion: 'saved-order' }); await flushPromises();
+    expect(api.order).toHaveBeenCalledOnce();
+    finishBarrier(true); await flushPromises();
+    expect(api.agree).toHaveBeenCalledWith(77, expect.objectContaining({ assignment_id: 11, amount: '25.50', expected_version: 6 }));
+    await wrapper.setProps({ contextVersion: 'during-write' }); await flushPromises();
+    expect(api.order).toHaveBeenCalledOnce();
+    finishWrite({}); await flushPromises();
+    expect(api.order).toHaveBeenCalledTimes(2);
+    expect(wrapper.emitted('changed')).toHaveLength(1);
+    expect(beforeAction).toHaveBeenCalledOnce();
+  });
+
+  it('discards a context refresh response after changing the order scope', async () => {
+    let finishRefresh!: (value: any) => void;
+    wrapper = mount(OrderWorkerPayPanel, { props: { orderId: 77, contextVersion: 'initial', beforeAction: vi.fn().mockResolvedValue(true) }, attachTo: document.body }); await flushPromises();
+    vi.mocked(api.order).mockReturnValueOnce(new Promise(resolve => { finishRefresh = resolve; }));
+    await wrapper.setProps({ contextVersion: 'changed' });
+    vi.mocked(api.order).mockResolvedValueOnce({ order_id: 78, candidates: [{ ...candidate, display_name: 'Новая область' }], agreements: [], can_manage: true });
+    await wrapper.setProps({ orderId: 78, contextVersion: 'new-scope-context' }); await flushPromises();
+    expect(api.order).toHaveBeenCalledTimes(3);
+    finishRefresh({ order_id: 77, candidates: [{ ...candidate, display_name: 'Устаревший исполнитель' }], agreements: [], can_manage: true }); await flushPromises();
+    expect(wrapper.text()).toContain('Новая область');
+    expect(wrapper.text()).not.toContain('Устаревший исполнитель');
+    expect(api.agree).not.toHaveBeenCalled();
+  });
+
 });

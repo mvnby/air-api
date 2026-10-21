@@ -8,7 +8,7 @@ import { MANAGER_CAPABILITY, hasManagerCapability } from '../../manager-capabili
 import { useMoneyCommand } from '../../composables/useMoneyCommand';
 import MoneyCommandDialog from '../worker-pay/MoneyCommandDialog.vue';
 import { getApiErrorMessage } from '../../utils/api-errors';
-const props = defineProps<{ orderId: number; disabled?: boolean; beforeAction: () => Promise<boolean> }>();
+const props = defineProps<{ orderId: number; contextVersion?: string; disabled?: boolean; beforeAction: () => Promise<boolean> }>();
 const emit = defineEmits<{ busy: [value: boolean]; changed: [] }>();
 const state = ref<PayOrderWorkspace | null>(null), loading = ref(false), preparing = ref(false), error = ref('');
 const assignment = ref(''), amount = ref(''), currency = ref<Currency>('BYN'), costByn = ref(''), editing = ref<ManagerPayAgreement | null>(null), reason = ref('');
@@ -16,14 +16,29 @@ const scope = computed(() => `${props.orderId}:${managerSession.auth.value?.staf
 const canRead = computed(() => hasManagerCapability(managerSession.auth.value, MANAGER_CAPABILITY.workerPayRead));
 const canManage = computed(() => state.value?.can_manage && hasManagerCapability(managerSession.auth.value, MANAGER_CAPABILITY.workerPayManage) && !managerSession.auth.value?.demo_read_only);
 let generation = 0;
-const load = async () => { const request = ++generation; loading.value = true; state.value = null; error.value = ''; editing.value = null; try { const result = await api.order(props.orderId); if (request === generation) state.value = result; } catch (cause) { if (request === generation) error.value = getApiErrorMessage(cause); } finally { if (request === generation) loading.value = false; } };
-const command = useMoneyCommand({ scope, allowed: () => Boolean(canManage.value && !props.disabled && !loading.value), beforeAction: props.beforeAction, onSuccess: async () => { await load(); emit('changed'); } });
+let refreshRequested = false;
+let activeScope = scope.value;
+const load = async (preserveDraft = false) => { const request = ++generation; loading.value = true; if (!preserveDraft) { state.value = null; editing.value = null; } error.value = ''; try { const result = await api.order(props.orderId); if (request === generation) state.value = result; } catch (cause) { if (request === generation) error.value = getApiErrorMessage(cause); } finally { if (request === generation) loading.value = false; } };
+const command = useMoneyCommand({ scope, allowed: () => Boolean(canManage.value && !props.disabled && !loading.value), beforeAction: props.beforeAction, onSuccess: async () => { refreshRequested = false; await load(); emit('changed'); } });
 const { draft, busy, pending, error: commandError, stale } = command;
 const blocked = computed(() => props.disabled || loading.value || preparing.value || pending.value || !canManage.value);
 watch(() => pending.value || preparing.value, value => emit('busy', value), { flush: 'sync' });
+const refreshContext = () => {
+  if (scope.value !== activeScope || !refreshRequested || loading.value || preparing.value || pending.value || !canRead.value) return;
+  refreshRequested = false;
+  void load(true);
+};
+watch([scope, () => props.contextVersion], ([nextScope], previous) => {
+  if (nextScope !== previous?.[0]) {
+    activeScope = nextScope; refreshRequested = false; ++generation; state.value = null; preparing.value = false; assignment.value = ''; amount.value = ''; costByn.value = ''; reason.value = ''; if (canRead.value) void load();
+  } else {
+    refreshRequested = true;
+    refreshContext();
+  }
+}, { immediate: true });
+watch([loading, preparing, pending], refreshContext);
 const refresh = () => { command.reset(); void load(); };
-watch(scope, () => { ++generation; state.value = null; preparing.value = false; assignment.value = ''; amount.value = ''; costByn.value = ''; reason.value = ''; if (canRead.value) void load(); }, { immediate: true });
-onScopeDispose(() => { ++generation; emit('busy', false); });
+onScopeDispose(() => { refreshRequested = false; ++generation; emit('busy', false); });
 const prepareAmount = async () => {
   if (blocked.value || !state.value) return;
   const value = exactAmount(amount.value), cost = currency.value === 'BYN' ? value : exactAmount(costByn.value);

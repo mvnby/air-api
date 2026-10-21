@@ -27,11 +27,14 @@ async function fixture(width = 1440, height = 900) {
   const context = await browser.newContext({ viewport: { width, height }, isMobile: width < 768, hasTouch: width < 768 });
   const page = await context.newPage();
   page.setDefaultTimeout(7000);
-  const requests = [], patches = [], errors = [];
+  const requests = [], patches = [], errors = [], scripts = [];
   let current = {...structuredClone(order), workflow_type:'sales_installation'}, failSave = false;
   const documents = [];
+  const tender = {order_id:477,stage:null,deadline_at:null,price_enquiry:null,publications:[],history:[]};
+  let failWorkers = false, failDetail = false, detailDelay = 0;
   page.on('pageerror', e => errors.push(e.message));
-  await page.route('**/*', async route => {
+  page.on('request', request => { if(request.resourceType()==='script') scripts.push(request.url()); });
+  await context.route('**/*', async route => {
     const url = new URL(route.request().url());
     if (['fonts.googleapis.com', 'fonts.gstatic.com'].includes(url.hostname)) return route.continue();
     if (url.origin !== base) return route.abort();
@@ -42,10 +45,12 @@ async function fixture(width = 1440, height = 900) {
       staff_user_id: 999, username: auth.username, is_platform_owner: true, default_tenant_id: 999,
       items: [{ tenant_id: 999, slug: 'test', display_name: 'Тестовая компания', role: 'owner', membership_id: 999, access_kind: 'membership', is_system: true, demo_read_only: false, default_storefront_slug: 'minsk' }], total: 1, page: 1, limit: 100,
     };
-    else if (url.pathname.endsWith('/me')) data = auth;
+    else if (url.pathname.endsWith('/me')) data = {...auth,capabilities:[...auth.capabilities,'worker.pay.read','worker.pay.manage']};
     else if (url.pathname.endsWith('/storefronts')) data = { items: stores.map(store => ({ ...store, id: store.slug === 'minsk' ? 999 : 998 })) };
     else if (url.pathname === '/api/manager/orders') data = { items: Array.from({ length: 18 }, (_, index) => ({ ...current, id: index === 8 ? 477 : 500 + index, title: index === 8 ? current.title : `Тестовый заказ ${index + 1}` })), meta: { pages: 1, total: 18 } };
     else if (url.pathname === '/api/manager/orders/477') {
+      if(route.request().method()==='GET' && failDetail) return route.fulfill({status:503,json:{detail:'Synthetic order failure'}});
+      if(route.request().method()==='GET' && detailDelay) await new Promise(done=>setTimeout(done,detailDelay));
       if (route.request().method() === 'PATCH') { if (failSave) return route.fulfill({status:500,json:{detail:'Synthetic save failure'}}); patches.push(route.request().postDataJSON()); current = { ...current, ...patches.at(-1) }; }
       data = current;
     }
@@ -54,16 +59,21 @@ async function fixture(width = 1440, height = 900) {
       data = current;
     }
     else if (url.pathname === '/api/manager/document-system/orders/477/documents') data = {items:documents};
+    else if (url.pathname === '/api/manager/document-system/runtime/pdf') data = {available:true,backend:'gotenberg',configured_backend:'gotenberg',reason:null};
+    else if (url.pathname === '/api/manager/document-system/legal-entities') data = {items:[{id:5,tenant_id:999,display_name:'Тестовый поставщик',is_active:true,is_default:true,signing_mode:'director',requisites:{full_name:'ООО Тест',unp:'123456789',legal_address:'Минск',director_name:'Тестовый',director_position:'Директор',director_basis:'Устав'}}]};
     else if (url.pathname === '/api/manager/calendar/events') data = [];
     else if (url.pathname === '/api/manager/orders/work-stages/stale') data = {items:[{id:1,order_id:477,order_title:current.title,name:'Тестовая работа',status:'scheduled',customer_name:current.customer.name}],total:1};
     else if (url.pathname === '/api/manager/customers/12') data = current.customer;
-    else if (url.pathname.endsWith('/installer-workspace')) data = { order_id: 477, assignments: [], materials: [], collection: { version: 1, assignment_id: null, amount: null, currency: null, status: 'not_assigned', updated_at: null }, balances: [], financial_fingerprint: 'synthetic' };
+    else if (url.pathname.endsWith('/installer-workspace')) {
+      if(failWorkers) return route.fulfill({status:503,json:{detail:'Работы временно недоступны'}});
+      data = { order_id: 477, assignments: [], materials: [], collection: { version: 1, assignment_id: null, amount: null, currency: null, status: 'not_assigned', updated_at: null }, balances: [], financial_fingerprint: 'synthetic' };
+    }
     else if (url.pathname.endsWith('/worker-pay')) data = { order_id: 477, agreements: [], candidates: [] };
-    else if (url.pathname.endsWith('/tender-workflow')) data = { order_id: 477, stage: null, deadline_at: null, price_enquiry: null, publications: [], history: [] };
+    else if (url.pathname.endsWith('/tender-workflow')) data = tender;
     return route.fulfill({ json: data });
   });
   const workspace = page.getByRole('region', { name: 'Рабочая область заказа', exact: true });
-  return { context, page, workspace, requests, patches, errors, documents, current:()=>current, failSave:(value)=>{failSave=value;} };
+  return { context, page, workspace, requests, patches, errors, scripts, documents, tender, current:()=>current, failSave:(value)=>{failSave=value;}, failWorkers:value=>{failWorkers=value;}, failDetail:value=>{failDetail=value;}, detailDelay:value=>{detailDelay=value;} };
 }
 
 const boardPath='/manager/orders/kanban?segment=b2b&view=kanban&groupBy=none&search=office&assigned_to_me=1&status=negotiation&sort=margin_desc&workFilter=unpaid&hideOnHold=false&filtersOpen=true';
@@ -72,6 +82,7 @@ async function runCase(width,name,task) {
  if(caseFilter && !caseFilter.test(name)) return;
  const f=await fixture(width,850);
  try { await task(f);assert.deepEqual(f.errors,[]);checks.push({width,name});console.log(width,name,'passed'); }
+ catch(error) { await f.page.screenshot({path:path.join(output,`${width}-failure.png`)}).catch(()=>{});console.error(await location(f.page));throw error; }
  finally { await f.context.close(); }
 }
 async function openBoard(f,grouped=false) {
@@ -85,7 +96,7 @@ async function openBoard(f,grouped=false) {
  await card.getByRole('button',{name:'Раскрыть заказ',exact:true}).click();
  await board.evaluate(el=>el.scrollLeft=160);await f.page.evaluate(()=>scrollTo(0,500));
  const expected={url:await location(f.page),state:await f.page.evaluate(()=>({top:scrollY}))};
- await card.getByRole('button',{name:'Открыть заказ',exact:true}).evaluate(el=>el.click());await f.workspace.waitFor();
+ await card.getByRole('link',{name:'Открыть заказ',exact:true}).evaluate(el=>el.click());await f.workspace.waitFor();
  return {...expected,board,column,grouped};
 }
 async function assertBoard(f,expected) {
@@ -133,6 +144,93 @@ async function openIncompleteDocument(f) {
  browser=await chromium.launch({headless:true});
  try{
  for(const width of [384,1440]) {
+  await runCase(width,'second package invalid section defaults to proposal',async f=>{
+   await f.page.goto(base+'/manager/orders/477?proposalId=25&section=unknown');await f.page.getByText('Услуга варианта Б',{exact:true}).waitFor();
+   assert.equal(await f.workspace.getByRole('navigation').getByRole('button',{name:'Предложение',exact:true}).getAttribute('aria-current'),'page');
+  });
+  for(const origin of ['board','list']) await runCase(width,'second package order link URL '+origin+(width>=768?' and native tabs':''),async f=>{
+   await f.page.goto(base+(origin==='board'?boardPath:'/manager/orders/list?segment=b2b&view=list&groupBy=none'));
+   let link;
+   if(origin==='board') {const card=f.page.locator('article[draggable]').filter({hasText:'№477'});await card.getByRole('button',{name:'Раскрыть заказ',exact:true}).click();link=card.getByRole('link',{name:'Открыть заказ',exact:true});}
+   else link=f.page.getByRole('link',{name:'Открыть заказ №477',exact:true});
+   const previous=await location(f.page),target=new URL(await link.getAttribute('href'),base);assert.equal(target.pathname,'/manager/orders/477');assert.equal(target.searchParams.get('returnTo'),previous);
+   if(width<768) return; // Native mouse/keyboard browser actions are exercised at desktop width.
+   for(const click of [{modifiers:[process.platform==='darwin'?'Meta':'Control']},{button:'middle'}]) {
+    const [tab]=await Promise.all([f.context.waitForEvent('page'),link.click(click)]);await tab.getByText('Услуга варианта А',{exact:true}).waitFor();assert.equal(new URL(tab.url()).pathname,'/manager/orders/477');assert.equal(await location(f.page),previous);await tab.close();
+   }
+  });
+  await runCase(width,'second package retained sections and copied URL',async f=>{
+   const query=new URLSearchParams({proposalId:'25',company:'999',site:'minsk',returnTo:boardPath,section:'proposal'});
+   await f.page.goto(base+'/manager/orders/477?'+query);await f.page.getByText('Услуга варианта Б',{exact:true}).waitFor();
+   const nav=f.workspace.getByRole('navigation'),entry=await f.page.evaluate(()=>history.state.managerNavigation.id),length=await f.page.evaluate(()=>history.length);
+   assert.equal(f.requests.filter(r=>r.path.includes('/installers')||r.path.includes('/repair-complaints')).length,0);
+   assert.equal(f.scripts.some(url=>/OrderWorkWorkspace-|OrderDocumentsWorkspace-|OrderPaymentWorkspace-/.test(url)),false);
+   await f.workspace.getByRole('switch',{name:'Автосохранение заказа'}).click();
+   await f.workspace.getByRole('button',{name:/^Изменить название:/}).click();await f.page.getByRole('textbox',{name:'Название заказа',exact:true}).fill('Черновик во всех разделах');
+   for(const [section,label] of [['documents','Документы'],['work','Работы'],['payments','Оплаты'],['proposal','Предложение']]) {
+    await nav.getByRole('button',{name:label,exact:true}).click();
+    assert.equal(new URL(f.page.url()).searchParams.get('section'),section);
+    assert.equal(await f.page.evaluate(()=>history.state.managerNavigation.id),entry);
+    assert.equal(await f.page.evaluate(()=>history.length),length);
+    assert.equal(await f.page.getByRole('textbox',{name:'Название заказа',exact:true}).inputValue(),'Черновик во всех разделах');
+   }
+   assert.equal(f.patches.length,0);assert.equal(f.current().proposals.find(p=>p.is_selected).id,24);
+   await nav.getByRole('button',{name:'Документы',exact:true}).click();await f.page.getByTestId('native-documents-workspace').waitFor();
+   const copied=await location(f.page);await f.page.reload();await f.page.getByTestId('native-documents-workspace').waitFor();
+   assert.equal(await location(f.page),copied);assert.equal(new URL(f.page.url()).searchParams.get('proposalId'),'25');
+   await f.workspace.getByRole('button',{name:/^Изменить название:/}).click();
+   assert.equal(await f.page.getByRole('textbox',{name:'Название заказа',exact:true}).inputValue(),'Черновик во всех разделах');
+   assert.match(await f.page.title(),/Заказ №477 · Тестовый клиент · KitLane/);
+  });
+  for(const section of ['documents','work','payments']) await runCase(width,'second package direct '+section,async f=>{
+   await f.page.goto(base+`/manager/orders/477?proposalId=25&section=${section}`);
+   const panel=f.page.locator(`[data-order-usage="workspace-${section}-panel"]`);await panel.waitFor();
+   await panel.locator('button,input,select').first().waitFor();
+   assert.equal(f.requests.filter(r=>r.path==='/api/manager/orders/477'&&r.method==='GET').length,1);
+   assert.equal(f.requests.some(r=>r.path.startsWith('/api/manager/orders?')),false);
+   assert.equal(f.patches.length,0);
+   if(section==='documents') {assert.equal(f.scripts.some(url=>/OrderWorkWorkspace-|OrderPaymentWorkspace-|OrderProposalWorkspace-/.test(url)),false);assert.equal(f.requests.some(r=>r.path.includes('/installers')||r.path.includes('/repair-complaints')),false);}
+   if(section==='work') {const field=panel.getByRole('combobox',{name:'Исполнитель работы',exact:true});await field.waitFor();await field.evaluate(el=>el.dataset.retained='yes');await f.workspace.getByRole('button',{name:'Предложение',exact:true}).click();const count=f.requests.filter(r=>r.path.endsWith('/installer-workspace')).length;await f.workspace.getByRole('button',{name:'Работы',exact:true}).click();assert.equal(await field.getAttribute('data-retained'),'yes');assert.equal(f.requests.filter(r=>r.path.endsWith('/installer-workspace')).length,count);}
+  });
+  if(width>=768) await runCase(width,'second package first add product from documents',async f=>{
+   await f.page.goto(base+'/manager/orders/477?section=documents');await f.page.getByTestId('native-documents-workspace').waitFor();
+   await f.workspace.getByRole('navigation').getByRole('button',{name:'Товар',exact:true}).click();
+   await f.page.getByTestId('product-line-row').waitFor();assert.equal(await f.page.getByTestId('product-line-row').count(),1);
+   assert.equal(new URL(f.page.url()).searchParams.get('section'),'proposal');
+  });
+  await runCase(width,'second package local work error and retry',async f=>{
+   f.failWorkers(true);await f.page.goto(base+'/manager/orders/477?section=work');
+   const panel=f.page.locator('[data-order-usage="workspace-work-panel"]'),error=panel.getByRole('alert').filter({hasText:'Работы временно недоступны'});await error.waitFor();
+   assert.equal(await f.workspace.count(),1);f.failWorkers(false);await error.getByRole('button',{name:'Повторить',exact:true}).click();
+   await panel.getByRole('combobox',{name:'Исполнитель работы',exact:true}).waitFor();
+   await f.workspace.getByRole('button',{name:'Предложение',exact:true}).click();await f.page.getByText('Услуга варианта А',{exact:true}).waitFor();
+  });
+  await runCase(width,'second package repair lazy work and populated tender',async f=>{
+   f.current().workflow_type='repair';f.tender.stage='announced';f.tender.deadline_at='2026-10-25T20:59:00Z';
+   await f.page.goto(base+'/manager/orders/477');await f.page.getByText('Услуга варианта А',{exact:true}).waitFor();
+   assert.equal(f.requests.some(r=>r.path.includes('/repair-complaints')||r.path.includes('/installers')||r.path.includes('/equipment')),false);
+   const tender=f.workspace.getByRole('region',{name:'Этапы закупки'});await tender.getByText(/Объявлена/).waitFor();await tender.getByText(/Срок текущего этапа:/).waitFor();
+   await f.workspace.getByRole('button',{name:'Ремонт',exact:true}).click();await f.workspace.getByText('Библиотека жалоб',{exact:true}).waitFor();
+   assert.equal(f.requests.some(r=>r.path.includes('/repair-complaints')),true);
+   await tender.getByText(/Срок текущего этапа:/).waitFor();
+   await f.workspace.getByRole('button',{name:'Документы',exact:true}).click();await f.page.getByTestId('native-documents-workspace').waitFor();await tender.getByText(/Объявлена/).waitFor();
+  });
+  await runCase(width,'second package slow order and detail retry',async f=>{
+   f.detailDelay(900);await f.page.goto(base+'/manager/orders/477?section=documents');await f.page.getByText('Загружаем заказ…',{exact:true}).waitFor();
+   await f.page.getByTestId('native-documents-workspace').waitFor();
+   f.failDetail(true);await f.page.reload();const alert=f.page.getByRole('alert').filter({hasText:'Не удалось открыть заказ'});await alert.waitFor();
+   f.failDetail(false);f.detailDelay(0);await alert.getByRole('button',{name:'Повторить',exact:true}).click();await f.page.getByTestId('native-documents-workspace').waitFor();
+  });
+  await runCase(width,'second package saving retry and keyboard focus',async f=>{
+   await f.page.goto(base+'/manager/orders/477');await f.page.getByText('Услуга варианта А',{exact:true}).waitFor();f.failSave(true);
+   await f.workspace.getByRole('button',{name:/^Изменить название:/}).click();await f.page.getByRole('textbox',{name:'Название заказа',exact:true}).fill('Сохранить после ошибки');
+   await f.workspace.locator('header [role="status"]').filter({hasText:'Не удалось сохранить'}).waitFor();
+   assert.equal(await f.page.getByRole('textbox',{name:'Название заказа',exact:true}).inputValue(),'Сохранить после ошибки');
+   f.failSave(false);await f.workspace.getByRole('button',{name:'Повторить сохранение',exact:true}).click();await f.workspace.locator('header [role="status"]').filter({hasText:'Сохранено'}).waitFor();
+   await f.page.getByRole('textbox',{name:'Название заказа',exact:true}).press('Enter');
+   const menu=f.workspace.getByRole('button',{name:'Дополнительные действия',exact:true});await menu.focus();await f.page.keyboard.press('Enter');await f.page.keyboard.press('Escape');
+   assert.equal(await menu.evaluate(el=>el===document.activeElement),true);
+  });
   for(const route of ['/manager/orders/477?proposalId=25','/manager/orders/kanban?orderId=477&proposalId=25']) await runCase(width,'alternative '+route,async f=>{
    await f.page.goto(base+route);await f.workspace.waitFor();
    await f.page.getByText('Услуга варианта Б',{exact:true}).waitFor();
@@ -170,8 +268,8 @@ async function openIncompleteDocument(f) {
   });
   for(const grouped of [false,true]) await runCase(width,'documents customer return '+(grouped?'grouped-board':'board'),async f=>{
    const expected=await openBoard(f,grouped);await chooseB(f);
-   const entry=await f.page.evaluate(()=>history.state.managerNavigation.id),orderUrl=await location(f.page);
-   const fill=await openIncompleteDocument(f);await fill.click();
+   const entry=await f.page.evaluate(()=>history.state.managerNavigation.id);
+   const fill=await openIncompleteDocument(f),orderUrl=await location(f.page);await fill.click();
    await f.page.waitForURL(url=>url.pathname==='/manager/customers/profile');
    assert.equal(new URL(f.page.url()).searchParams.get('returnTo'),orderUrl);
    await f.page.getByRole('button',{name:'Назад',exact:true}).click();await f.workspace.waitFor();
@@ -183,7 +281,7 @@ async function openIncompleteDocument(f) {
   await runCase(width,'documents customer cancel unsaved exit',async f=>{
    const expected=await openBoard(f,true);
    await f.workspace.getByRole('switch',{name:'Автосохранение заказа'}).click();
-   await f.workspace.getByTitle('Изменить название').click();await f.workspace.getByRole('textbox',{name:'Название заказа',exact:true}).fill('Не терять из документов');
+   await f.workspace.getByRole('button', {name: /^Изменить название:/}).click();await f.workspace.getByRole('textbox',{name:'Название заказа',exact:true}).fill('Не терять из документов');
    const fill=await openIncompleteDocument(f),orderUrl=await location(f.page),length=await f.page.evaluate(()=>history.length);
    await fill.click();await f.page.getByRole('button',{name:'Отмена',exact:true}).click();
    assert.equal(await location(f.page),orderUrl);assert.equal(await f.page.evaluate(()=>history.length),length);
@@ -197,7 +295,7 @@ async function openIncompleteDocument(f) {
   await runCase(width,'cancel customer then Back and Forward',async f=>{
    const expected=await openBoard(f);
    await f.workspace.getByRole('switch',{name:'Автосохранение заказа'}).click();
-   await f.workspace.getByTitle('Изменить название').click();await f.workspace.getByRole('textbox',{name:'Название заказа',exact:true}).fill('Не терять');
+   await f.workspace.getByRole('button', {name: /^Изменить название:/}).click();await f.workspace.getByRole('textbox',{name:'Название заказа',exact:true}).fill('Не терять');
    const orderUrl=await location(f.page),length=await f.page.evaluate(()=>history.length);
    await openCustomer(f);await f.page.getByRole('button',{name:'Отмена',exact:true}).click();
    assert.equal(await location(f.page),orderUrl);assert.equal(await f.page.evaluate(()=>history.length),length);
@@ -210,7 +308,7 @@ async function openIncompleteDocument(f) {
   });
   await runCase(width,'failed save blocks customer and native Back',async f=>{
    const expected=await openBoard(f);f.failSave(true);
-   await f.workspace.getByTitle('Изменить название').click();await f.workspace.getByRole('textbox',{name:'Название заказа',exact:true}).fill('Не потерять при ошибке');
+   await f.workspace.getByRole('button', {name: /^Изменить название:/}).click();await f.workspace.getByRole('textbox',{name:'Название заказа',exact:true}).fill('Не потерять при ошибке');
    const orderUrl=await location(f.page),length=await f.page.evaluate(()=>history.length);
    await openCustomer(f);await f.workspace.getByText(/Не удалось сохранить заказ/).waitFor();
    assert.equal(await location(f.page),orderUrl);assert.equal(await f.page.evaluate(()=>history.length),length);
@@ -244,6 +342,25 @@ async function openIncompleteDocument(f) {
    await f.page.screenshot({path:path.join(output,width+'-'+origin+'-'+child+'.png')});
   });
  }
+ for(const width of [320,384,768,1440]) await runCase(width,'second package layout all sections',async f=>{
+  f.current().title='Очень длинное название заказа '.repeat(8);f.current().customer.name='Клиент с очень длинным названием '.repeat(8);
+  await f.page.goto(base+'/manager/orders/477');await f.page.getByText('Услуга варианта А',{exact:true}).waitFor();
+  await f.page.evaluate(()=>document.fonts.ready);
+  const header=f.workspace.locator(':scope > header'),nav=f.workspace.getByRole('navigation');const heights=[];
+  const probes=[['proposal','Предложение',()=>f.page.getByTestId('add-service-line')],['documents','Документы',()=>f.page.getByRole('button',{name:'Новый документ',exact:true})],['work','Работы',()=>f.page.getByRole('combobox',{name:'Исполнитель работы',exact:true})],['payments','Оплаты',()=>f.page.getByTestId('payment-amount')]];
+  for(const [section,label,probe] of probes) {
+   await nav.getByRole('button',{name:label,exact:true}).click();await probe().waitFor();
+   const box=await probe().boundingBox(),navBox=await nav.boundingBox();assert(box.y>=navBox.y+navBox.height-1&&box.y+box.height<=850,`${width} ${section} primary control outside viewport ${JSON.stringify(box)}`);
+   heights.push((await header.boundingBox()).height);
+   assert.equal(await header.locator('[data-order-header-customer]').isVisible(),true);
+   assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth),false);
+   const scroller=f.workspace.locator('div.overflow-y-auto').first();await scroller.evaluate(el=>el.scrollTop=el.scrollHeight);
+   const after=await nav.boundingBox();assert(Math.abs(after.y-navBox.y)<1,'Section navigation must remain available while scrolling');await scroller.evaluate(el=>el.scrollTop=0);
+  }
+  assert(Math.max(...heights)-Math.min(...heights)<=2,JSON.stringify(heights));
+  assert.equal(await header.getByRole('button',{name:/^Изменить название:/}).getAttribute('title'),f.current().title.trim());
+  assert.equal(await header.locator('[data-order-header-customer]').getAttribute('title'),f.current().customer.name);
+ });
  fs.writeFileSync(path.join(output,'results.json'),JSON.stringify({checks},null,2));
  console.log(JSON.stringify({checks:checks.length,output}));
  }finally{await browser.close();}

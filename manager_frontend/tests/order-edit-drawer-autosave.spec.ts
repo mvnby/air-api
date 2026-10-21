@@ -12,11 +12,13 @@ import OrderCustomerContext from '../src/components/orders/OrderCustomerContext.
 import OrderProposalWorkspace from '../src/components/orders/OrderProposalWorkspace.vue';
 import OrderDocumentsWorkspace from '../src/components/orders/OrderDocumentsWorkspace.vue';
 import OrderPaymentsPanel from '../src/components/orders/OrderPaymentsPanel.vue';
+import OrderPaymentWorkspace from '../src/components/orders/OrderPaymentWorkspace.vue';
+import OrderWorkWorkspace from '../src/components/orders/OrderWorkWorkspace.vue';
 import OrderWorkspaceHeader from '../src/components/orders/OrderWorkspaceHeader.vue';
 import OrderWorkspaceNav from '../src/components/orders/OrderWorkspaceNav.vue';
 import OrderRequestSourceCard from '../src/components/orders/OrderRequestSourceCard.vue';
 import LeadSourceReviewModal from '../src/components/leads/LeadSourceReviewModal.vue';
-import { ManagerOrdersService, ManagerMailService, ManagerSettingsService, ManagerDocumentSystemService } from '../src/client';
+import { ManagerOrdersService, ManagerMailService, ManagerSettingsService, ManagerDocumentSystemService, ManagerRepairComplaintsService } from '../src/client';
 import { ManagerOrderUsageService, CancelablePromise } from '../src/client';
 import { managerSession } from '../src/services/manager-session';
 import { managerStorefrontSelection } from '../src/services/manager-storefront-selection';
@@ -49,21 +51,28 @@ const commit = (payload: any) => {
   if (payload.services) { const index = Math.max(0, stored.proposals!.findIndex(item => item.id === payload.line_proposal_id)); stored.proposals![index] = { ...stored.proposals![index]!, service_lines: payload.services }; }
   return structuredClone(stored);
 };
-const mountDrawer = async (presentation: 'page' | 'dialog' = 'dialog', realCustomer = false) => {
+const mountDrawer = async (presentation: 'page' | 'dialog' = 'dialog', realCustomer = false, openContext = true) => {
   wrapper = shallowMount(OrderEditDrawer, {
     props: { modelValue: false, presentation, order: stored, onUpdated: (order: ManagerOrderDetailResponse) => { void wrapper.setProps({ order }); } },
-    global: { stubs: { OrderCustomerContext: !realCustomer, OrderWorkspaceContext: !realCustomer } },
+    global: { components: { OrderPaymentWorkspace, OrderWorkWorkspace }, stubs: { OrderAsyncPanel: false, OrderPaymentWorkspace: false, OrderCustomerContext: !realCustomer, OrderWorkspaceContext: !realCustomer } },
   });
   await wrapper.setProps({ modelValue: true });
+  await flushPromises();
+  if (openContext) await openCustomerContext();
+};
+const openCustomerContext = async () => {
+  const disclosure = wrapper.get('[aria-controls="order-context-details"]');
+  if (disclosure.attributes('aria-expanded') !== 'true') await disclosure.trigger('click');
   await flushPromises();
 };
 const customer = () => wrapper.findComponent(OrderCustomerContext);
 const header = () => wrapper.findComponent(OrderWorkspaceHeader);
 const payments = () => wrapper.findComponent(OrderPaymentsPanel);
-const openDocuments = async () => {
-  wrapper.findComponent(OrderWorkspaceNav).vm.$emit('select', 'documents');
-  await nextTick();
+const openSection = async (section: 'proposal' | 'documents' | 'work' | 'payments') => {
+  wrapper.findComponent(OrderWorkspaceNav).vm.$emit('select', section);
+  await flushPromises();
 };
+const openDocuments = () => openSection('documents');
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -129,6 +138,7 @@ describe('order drawer autosave integration', () => {
     expect(source.props('orderId')).toBe(395);
     expect(source.props('sourceEnrichment')).toEqual(stored.source_enrichment);
     expect(source.element.parentElement).toBe(customer().element.parentElement);
+    await openSection('work');
     expect(wrapper.find('[data-order-usage="workspace-work-panel"]').text()).not.toContain('Данные из закупки');
     expect(wrapper.find('[data-order-usage="workspace-work-panel"]').text()).not.toContain('Дозаполнить из источника');
   });
@@ -216,6 +226,7 @@ describe('order drawer autosave integration', () => {
     await mountDrawer();
     await vi.advanceTimersByTimeAsync(1_000);
 
+    await openSection('payments');
     expect(payments().props('targetCurrency')).toBe('EUR');
     expect(payments().props('targetCurrencyAmount')).toBe(1_250.75);
     expect(ManagerOrdersService.patchManagerOrder).not.toHaveBeenCalled();
@@ -257,6 +268,7 @@ describe('order drawer autosave integration', () => {
     } as any);
 
     await mountDrawer();
+    await openSection('payments');
     payments().vm.$emit('update:targetCurrencyAmount', 1_300);
     await nextTick();
     await vi.advanceTimersByTimeAsync(1_000);
@@ -468,6 +480,112 @@ describe('equipment picker navigation from the order', () => {
 });
 
 
+describe('lazy order section integration', () => {
+  afterEach(() => history.replaceState({}, '', '/'));
+
+  it('starts with Proposal only and defers work requests, documents and customer details until opened', async () => {
+    const complaints = vi.spyOn(ManagerRepairComplaintsService, 'listManagerRepairComplaintPresets').mockResolvedValue({ items: [] } as any);
+    stored = { ...stored, workflow_type: 'repair' };
+    await mountDrawer('dialog', false, false);
+    expect(wrapper.findComponent(OrderProposalWorkspace).exists()).toBe(true);
+    expect(wrapper.findComponent(OrderWorkWorkspace).exists()).toBe(false);
+    expect(wrapper.findComponent(OrderDocumentsWorkspace).exists()).toBe(false);
+    expect(wrapper.findComponent(OrderPaymentWorkspace).exists()).toBe(false);
+    expect(customer().exists()).toBe(false);
+    expect(apiMock.getManagerInstallers).not.toHaveBeenCalled();
+    expect(complaints).not.toHaveBeenCalled();
+
+    await openSection('work');
+    expect(wrapper.findComponent(OrderWorkWorkspace).exists()).toBe(true);
+    expect(apiMock.getManagerInstallers).toHaveBeenCalledOnce();
+    await openSection('proposal');
+    await openSection('work');
+    expect(apiMock.getManagerInstallers).toHaveBeenCalledOnce();
+    await openCustomerContext();
+    const context = customer().vm;
+    await wrapper.get('[aria-controls="order-context-details"]').trigger('click');
+    expect(customer().vm).toBe(context);
+    expect(wrapper.get('#order-context-details').attributes('style')).toContain('display: none');
+  });
+
+  it('keeps the same proposal draft and manual save mode across every section', async () => {
+    await mountDrawer();
+    const proposal = wrapper.findComponent(OrderProposalWorkspace);
+    const commercial = proposal.props('commercial');
+    header().vm.$emit('toggle-autosave');
+    commercial.addServiceLine();
+    commercial.serviceLines.value[0].title = 'Несохранённая услуга';
+    commercial.serviceLines.value[0].price = 740;
+    await nextTick();
+    for (const section of ['work', 'documents', 'payments', 'proposal'] as const) {
+      await openSection(section);
+      expect(wrapper.findComponent(OrderWorkspaceNav).props('active')).toBe(section);
+      expect(header().props('dirty')).toBe(true);
+      expect(header().props('autosaveEnabled')).toBe(false);
+    }
+    const returned = wrapper.findComponent(OrderProposalWorkspace);
+    expect(returned.vm).toBe(proposal.vm);
+    expect(returned.props('commercial').serviceLines.value).toEqual(expect.arrayContaining([
+      expect.objectContaining({ title: 'Несохранённая услуга', price: 740 }),
+    ]));
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(ManagerOrdersService.patchManagerOrder).not.toHaveBeenCalled();
+    header().vm.$emit('save'); await flushPromises();
+    expect(stored.proposals![0].service_lines).toEqual(expect.arrayContaining([
+      expect.objectContaining({ title: 'Несохранённая услуга', price: 740 }),
+    ]));
+    expect(header().props('dirty')).toBe(false);
+  });
+
+  it('keeps a pending autosave alive when the manager switches sections', async () => {
+    let finish!: () => void;
+    vi.mocked(ManagerOrdersService.patchManagerOrder).mockImplementationOnce((_id, payload) => {
+      const saved = commit(payload);
+      return new Promise(resolve => { finish = () => resolve(saved); }) as any;
+    });
+    await mountDrawer();
+    customer().vm.$emit('update:comment', 'Сохранение между разделами');
+    await nextTick(); await vi.advanceTimersByTimeAsync(750);
+    expect(header().props('saving')).toBe(true);
+    await openSection('work'); await openSection('documents');
+    expect(header().props('saving')).toBe(true);
+    expect(wrapper.findComponent(OrderWorkspaceNav).props('active')).toBe('documents');
+    finish(); await flushPromises();
+    expect(ManagerOrdersService.patchManagerOrder).toHaveBeenCalledOnce();
+    expect(stored.comment).toBe('Сохранение между разделами');
+    expect(header().props('saving')).toBe(false);
+    expect(header().props('dirty')).toBe(false);
+  });
+
+  it('honors the exact page section URL and keeps the draft and current section when leaving is canceled', async () => {
+    history.replaceState({}, '', '/manager/orders/395?proposalId=25&section=work&source=synthetic');
+    await mountDrawer('page');
+    expect(wrapper.findComponent(OrderWorkspaceNav).props('active')).toBe('work');
+    expect(wrapper.findComponent(OrderProposalWorkspace).exists()).toBe(false);
+    expect(wrapper.findComponent(OrderDocumentsWorkspace).exists()).toBe(false);
+    expect(apiMock.getManagerInstallers).toHaveBeenCalledOnce();
+    await openSection('documents');
+    const url = new URL(location.href);
+    expect(url.pathname).toBe('/manager/orders/395');
+    expect(url.searchParams.get('section')).toBe('documents');
+    expect(url.searchParams.get('proposalId')).toBe('25');
+    expect(url.searchParams.get('source')).toBe('synthetic');
+    header().vm.$emit('toggle-autosave');
+    header().vm.$emit('update:title', 'Не терять при отмене перехода');
+    await nextTick();
+    const { confirmDialog } = await import('../src/services/ui-feedback');
+    vi.mocked(confirmDialog).mockResolvedValueOnce(false);
+    expect(await (wrapper.vm as any).prepareToLeave()).toBe(false);
+    expect(wrapper.findComponent(OrderWorkspaceNav).props('active')).toBe('documents');
+    expect(header().props('title')).toBe('Не терять при отмене перехода');
+    expect(header().props('dirty')).toBe(true);
+    expect(location.href).toBe(url.href);
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+    expect(ManagerOrdersService.patchManagerOrder).not.toHaveBeenCalled();
+  });
+});
+
+
 describe('order responsibility with the actual drawer save queue', () => {
   const person = { staff_user_id: 7, display_name: 'Мария', avatar_url: null, is_active: true };
   const responsibility = () => wrapper.findComponent(OrderResponsiblePanel);
@@ -544,9 +662,10 @@ describe('worker instructions with the actual drawer save queue', () => {
     vi.spyOn(orderWorkerAssignmentsApi, 'get').mockResolvedValue(workspace);
     vi.spyOn(orderWorkerAssignmentsApi, 'candidates').mockResolvedValue({ items: [{ staff_user_id: 9, display_name: 'Монтажник' }], total: 1, page: 1, limit: 100 });
     const assign = vi.spyOn(orderWorkerAssignmentsApi, 'assign').mockResolvedValue(workspace);
-    wrapper = shallowMount(OrderEditDrawer, { props: { modelValue: false, order: stored, onUpdated: (order: ManagerOrderDetailResponse) => { void wrapper.setProps({ order }); } }, global: { stubs: { OrderWorkerAssignmentsPanel: false } } });
+    wrapper = shallowMount(OrderEditDrawer, { props: { modelValue: false, order: stored, onUpdated: (order: ManagerOrderDetailResponse) => { void wrapper.setProps({ order }); } }, global: { components: { OrderWorkWorkspace }, stubs: { OrderAsyncPanel: false, OrderWorkWorkspace: false, OrderWorkerAssignmentsPanel: false } } });
     await wrapper.setProps({ modelValue: true }); await flushPromises();
-    wrapper.findComponent(OrderWorkspaceNav).vm.$emit('select', 'work'); await flushPromises();
+    await openSection('work');
+    await openCustomerContext();
     customer().vm.$emit('update:comment', 'Несохранённая информация менеджера'); await nextTick();
     const panel = wrapper.findComponent(OrderWorkerAssignmentsPanel); await panel.get('[aria-label="Исполнитель работы"]').setValue('9'); await panel.findAll('form')[0]!.trigger('submit'); await flushPromises();
     expect(ManagerOrdersService.patchManagerOrder).toHaveBeenCalled(); expect(assign).toHaveBeenCalledWith(stored.id, 9, null); expect(stored.comment).toBe('Несохранённая информация менеджера'); expect(customer().props('comment')).toBe('Несохранённая информация менеджера');

@@ -7,29 +7,64 @@ import { managerSession } from '../../services/manager-session';
 import { managerStorefrontSelection } from '../../services/manager-storefront-selection';
 import { MANAGER_CAPABILITY, hasManagerCapability } from '../../manager-capabilities';
 import { getApiErrorMessage } from '../../utils/api-errors';
-const props = defineProps<{ orderId: number; workStages?: { id: number; name: string }[]; disabled?: boolean; beforeAction: () => Promise<boolean> }>();
+const props = defineProps<{ orderId: number; contextVersion?: string; workStages?: { id: number; name: string }[]; disabled?: boolean; beforeAction: () => Promise<boolean> }>();
 const emit = defineEmits<{ busy: [value: boolean] }>();
 const state = ref<ManagerInstallerWorkspace | null>(null), people = ref<WorkerPerson[]>([]), loading = ref(false), busy = ref(false), error = ref('');
 const staffId = ref(''), stageId = ref(''), editingId = ref<number | null>(null), title = ref(''), instructions = ref(''), materialIds = ref<number[]>([]);
+const editingVersion = ref<number | null>(null);
 const recipient = ref(''), amount = ref(''), currency = ref<'BYN' | 'USD' | 'EUR'>('BYN');
 const canEdit = computed(() => Boolean(managerSession.auth.value?.staff_user_id && hasManagerCapability(managerSession.auth.value, MANAGER_CAPABILITY.crmManage) && !managerSession.auth.value?.demo_read_only));
 const blocked = computed(() => !canEdit.value || props.disabled || busy.value || loading.value);
 const assignments = computed(() => state.value?.assignments.filter(item => item.is_active && !item.revoked_at) ?? []);
 const scope = computed(() => `${props.orderId}:${managerSession.auth.value?.staff_user_id}:${managerStorefrontSelection.selectedTenantId.value}:${managerStorefrontSelection.selectedSlug.value}`);
 let generation = 0;
-const apply = (result: ManagerInstallerWorkspace) => { state.value = result; recipient.value = result.collection.assignment_id === null ? '' : String(result.collection.assignment_id); amount.value = result.collection.amount ?? ''; currency.value = result.collection.currency ?? 'BYN'; editingId.value = null; };
-const load = async () => {
-  const requested = ++generation; loading.value = true; error.value = '';
+let refreshRequested = false;
+let activeScope = scope.value;
+const collectionFields = (result: ManagerInstallerWorkspace) => ({
+  recipient: result.collection.assignment_id === null ? '' : String(result.collection.assignment_id),
+  amount: result.collection.amount ?? '',
+  currency: result.collection.currency ?? 'BYN',
+});
+let collectionReview: (ReturnType<typeof collectionFields> & { version: number; fingerprint: string }) | null = null;
+const collectionDirty = () => Boolean(collectionReview && (
+  recipient.value !== collectionReview.recipient
+  || amount.value.trim().replace(',', '.') !== collectionReview.amount
+  || currency.value !== collectionReview.currency
+));
+const apply = (result: ManagerInstallerWorkspace, preserveDraft = false, reviewedConflict = false) => {
+  const keepCollection = preserveDraft && (reviewedConflict || collectionDirty());
+  state.value = result;
+  if (!preserveDraft) { editingId.value = null; editingVersion.value = null; }
+  else if (reviewedConflict && editingId.value !== null) editingVersion.value = result.assignments.find(item => item.id === editingId.value)?.version ?? null;
+  const fields = collectionFields(result);
+  if (!keepCollection) { recipient.value = fields.recipient; amount.value = fields.amount; currency.value = fields.currency; }
+  // A retained draft must keep the versions reviewed with it until an explicit conflict review.
+  if (!keepCollection || reviewedConflict) collectionReview = { ...fields, version: result.collection.version, fingerprint: result.financial_fingerprint };
+};
+const load = async (preserveDraft = false) => {
+  const requested = ++generation; loading.value = true; if (!preserveDraft) error.value = '';
   try {
-    const result = await api.get(props.orderId); if (requested !== generation) return; apply(result);
+    const result = await api.get(props.orderId); if (requested !== generation) return; apply(result, preserveDraft);
     const first = await api.candidates(1), candidates = [...first.items];
     for (let page = 2; candidates.length < first.total; page++) { if (requested !== generation) return; const next = await api.candidates(page); if (!next.items.length) break; candidates.push(...next.items); }
     if (requested === generation) people.value = candidates;
   } catch (cause) { if (requested === generation) error.value = getApiErrorMessage(cause); }
-  finally { if (requested === generation) loading.value = false; }
+  finally { if (requested === generation) { loading.value = false; refreshContext(); } }
 };
-watch(scope, () => { ++generation; state.value = null; people.value = []; staffId.value = ''; stageId.value = ''; editingId.value = null; busy.value = false; emit('busy', false); void load(); }, { immediate: true });
-onScopeDispose(() => { ++generation; emit('busy', false); });
+const refreshContext = () => {
+  if (scope.value !== activeScope || !refreshRequested || busy.value || loading.value) return;
+  refreshRequested = false;
+  void load(true);
+};
+watch([scope, () => props.contextVersion], ([nextScope], previous) => {
+  if (nextScope !== previous?.[0]) {
+    activeScope = nextScope; refreshRequested = false; ++generation; state.value = null; people.value = []; staffId.value = ''; stageId.value = ''; editingId.value = null; editingVersion.value = null; collectionReview = null; busy.value = false; emit('busy', false); void load();
+  } else {
+    refreshRequested = true;
+    refreshContext();
+  }
+}, { immediate: true });
+onScopeDispose(() => { refreshRequested = false; ++generation; emit('busy', false); });
 const run = async (operation: () => PromiseLike<ManagerInstallerWorkspace>) => {
   if (blocked.value) return false;
   const requested = generation, orderId = props.orderId; busy.value = true; emit('busy', true); error.value = '';
@@ -41,21 +76,21 @@ const run = async (operation: () => PromiseLike<ManagerInstallerWorkspace>) => {
   } catch (cause) {
     if (!current()) return false;
     if ((cause as { status?: number })?.status === 409) {
-      try { const fresh = await api.get(orderId); if (current()) { apply(fresh); error.value = 'Данные работы или оплаты изменились. Проверьте актуальные данные и сохраните заново.'; } }
+      try { const fresh = await api.get(orderId); if (current()) { apply(fresh, true, true); error.value = 'Данные работы или оплаты изменились. Проверьте актуальные данные и сохраните заново.'; } }
       catch (refreshError) { if (current()) error.value = getApiErrorMessage(refreshError); }
     } else error.value = getApiErrorMessage(cause);
     return false;
-  } finally { if (current()) { busy.value = false; emit('busy', false); } }
+  } finally { if (current()) { busy.value = false; emit('busy', false); refreshContext(); } }
 };
 const assign = async () => { const person = Number(staffId.value), stage = stageId.value ? Number(stageId.value) : null, orderId = props.orderId; if (!people.value.some(item => item.staff_user_id === person)) return; if (await run(() => api.assign(orderId, person, stage))) staffId.value = ''; };
-const edit = (item: WorkerAssignment) => { editingId.value = item.id; title.value = item.title; instructions.value = item.instructions; materialIds.value = [...item.material_link_ids]; };
-const publish = () => { const item = assignments.value.find(item => item.id === editingId.value); if (!item || !title.value.trim()) return; const orderId = props.orderId, id = item.id, body = { expected_version: item.version, title: title.value.trim(), instructions: instructions.value, material_link_ids: [...materialIds.value] }; void run(() => api.publish(orderId, id, body)); };
+const edit = (item: WorkerAssignment) => { editingId.value = item.id; editingVersion.value = item.version; title.value = item.title; instructions.value = item.instructions; materialIds.value = [...item.material_link_ids]; };
+const publish = () => { const item = assignments.value.find(item => item.id === editingId.value); if (!item || editingVersion.value === null || !title.value.trim()) return; const orderId = props.orderId, id = item.id, body = { expected_version: editingVersion.value, title: title.value.trim(), instructions: instructions.value, material_link_ids: [...materialIds.value] }; void run(() => api.publish(orderId, id, body)); };
 const revoke = (item: WorkerAssignment) => { const orderId = props.orderId, id = item.id, version = item.version; void run(() => api.revoke(orderId, id, version)); };
 const saveCollection = () => {
-  if (!state.value) return; const assignmentId = recipient.value ? Number(recipient.value) : null;
+  if (!state.value || !collectionReview) return; const assignmentId = recipient.value ? Number(recipient.value) : null;
   const normalized = amount.value.trim().replace(',', '.');
   if (assignmentId !== null && (!/^\d{1,12}(?:\.\d{1,2})?$/.test(normalized) || !assignments.value.some(item => item.id === assignmentId))) { error.value = 'Укажите получателя и неотрицательную сумму с точностью до копеек.'; return; }
-  const orderId = props.orderId, body: CollectionUpdate = { expected_version: state.value.collection.version, assignment_id: assignmentId, amount: assignmentId === null ? null : normalized, currency: assignmentId === null ? null : currency.value, financial_fingerprint: state.value.financial_fingerprint };
+  const orderId = props.orderId, body: CollectionUpdate = { expected_version: collectionReview.version, assignment_id: assignmentId, amount: assignmentId === null ? null : normalized, currency: assignmentId === null ? null : currency.value, financial_fingerprint: collectionReview.fingerprint };
   void run(() => api.collection(orderId, body));
 };
 </script>
@@ -63,7 +98,7 @@ const saveCollection = () => {
   <section class="mt-4 space-y-4 rounded-xl border border-gray-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900" aria-label="Работы исполнителей">
     <header><h2 class="flex items-center gap-2 font-semibold"><HardHat class="h-5 w-5 text-gray-400" aria-hidden="true" />Работы исполнителей</h2><p class="mt-1 text-xs text-gray-500">Личные назначения и указания, которые сотрудник увидит в «Моих работах».</p></header>
     <p v-if="loading" class="flex items-center gap-2 text-sm text-gray-500" role="status"><Loader2 class="h-4 w-4 animate-spin" aria-hidden="true" />Загрузка назначений…</p>
-    <p v-if="error" role="alert" class="text-sm text-red-700">{{ error }} <button v-if="!state" type="button" class="underline" @click="load">Повторить</button></p>
+    <p v-if="error" role="alert" class="text-sm text-red-700">{{ error }} <button v-if="!state" type="button" class="underline" @click="load(Boolean(state))">Повторить</button></p>
     <template v-if="state">
       <p v-if="!assignments.length" class="text-sm text-gray-500">Работы пока никому не назначены.</p>
       <article v-for="item in assignments" :key="item.id" class="rounded-lg border border-gray-200 p-3 dark:border-slate-700">

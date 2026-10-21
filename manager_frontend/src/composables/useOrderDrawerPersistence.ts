@@ -2,12 +2,15 @@ import { computed, ref, watch, type Ref } from 'vue';
 import type { ManagerOrderDetailResponse } from '../client';
 import type {
   OrderDrawerDraft,
+  OrderDrawerDraftScope,
   OrderLogisticsComponent,
   ProductLine,
   ProductLogisticsTemplateComponent,
   ServiceLine,
 } from '../components/orders/order-editor-types';
 import { useDemoReadOnly } from '../services/manager-demo';
+import { managerSession } from '../services/manager-session';
+import { managerStorefrontSelection } from '../services/manager-storefront-selection';
 
 const createDefaultDrawerSections = () => ({
   website: false,
@@ -31,6 +34,7 @@ type UseOrderDrawerPersistenceOptions = {
   savedFormSnapshot: Ref<string>;
   currentLinesSnapshot: () => string;
   currentFormSnapshot: () => string;
+  restoreFormDraft?: (draft: unknown) => void;
 };
 
 export const useOrderDrawerPersistence = ({
@@ -42,8 +46,24 @@ export const useOrderDrawerPersistence = ({
   savedFormSnapshot,
   currentLinesSnapshot,
   currentFormSnapshot,
+  restoreFormDraft,
 }: UseOrderDrawerPersistenceOptions) => {
   const demoReadOnly = useDemoReadOnly();
+  const draftScope = computed<OrderDrawerDraftScope | null>(() => {
+    const auth = managerSession.auth.value;
+    const account = auth?.staff_user_id ? `staff:${auth.staff_user_id}` : auth?.username ? `legacy:${auth.username}` : null;
+    return auth?.tenant_id && account ? {
+      tenantId: auth.tenant_id,
+      account,
+      storefrontId: auth.storefront_id ?? null,
+      storefrontSlug: managerStorefrontSelection.selectedSlug.value,
+    } : null;
+  });
+  const matchesDraftScope = (stored: unknown) => {
+    if (!stored || typeof stored !== 'object' || !draftScope.value) return false;
+    const scope = stored as Record<string, unknown>;
+    return Object.entries(draftScope.value).every(([key, value]) => scope[key] === value);
+  };
   const expandedDrawerSections = ref(createDefaultDrawerSections());
   const initializedOrderId = ref<number | null>(null);
   const pendingDraftClearOrderId = ref<number | null>(null);
@@ -76,6 +96,13 @@ export const useOrderDrawerPersistence = ({
         productLines: productLines.value.map((line) => ({ ...line })),
         serviceLines: serviceLines.value.map((line) => ({ ...line })),
       };
+      if (draftScope.value) {
+        payload.scope = draftScope.value;
+        if (restoreFormDraft) {
+          const form = JSON.parse(currentFormSnapshot()) as unknown;
+          if (form && typeof form === 'object' && !Array.isArray(form)) payload.formDraft = form as Record<string, unknown>;
+        }
+      }
       window.sessionStorage.setItem(draftKey.value, JSON.stringify(payload));
     } catch (error) {
       console.warn('Failed to persist order drawer draft', error);
@@ -91,7 +118,12 @@ export const useOrderDrawerPersistence = ({
       }
       const raw = window.sessionStorage.getItem(draftKey.value);
       if (!raw) return;
-      const payload = JSON.parse(raw) as Partial<OrderDrawerDraft>;
+      const parsed: unknown = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+      const payload = parsed as Partial<OrderDrawerDraft>;
+      // Old line-only drafts keep their previous behavior; all new scoped data must belong to this identity.
+      if ((payload.scope !== undefined || payload.formDraft !== undefined) && !matchesDraftScope(payload.scope)) return;
+      if (payload.formDraft !== undefined) restoreFormDraft?.(payload.formDraft);
       if (Array.isArray(payload.productLines)) {
         productLines.value = payload.productLines.map((line) => ({
           link_id: Number((line as any).link_id || 0) || null,
@@ -172,6 +204,7 @@ export const useOrderDrawerPersistence = ({
 
   watch(productLines, persistDraft, { deep: true });
   watch(serviceLines, persistDraft, { deep: true });
+  watch(currentFormSnapshot, persistDraft);
   watch(expandedDrawerSections, persistDrawerSections, { deep: true });
 
   return {

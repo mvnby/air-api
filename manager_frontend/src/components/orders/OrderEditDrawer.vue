@@ -2,38 +2,27 @@
 import { readOrderProposalContext } from '../../services/order-navigation';
 import { replaceManagerLocation } from '../../services/manager-navigation-history';
 import { computed, defineAsyncComponent, nextTick, onScopeDispose, ref, toRaw, watch } from 'vue';
-import OrderWorkerPayPanel from './OrderWorkerPayPanel.vue';
-import OrderWorkerAssignmentsPanel from './OrderWorkerAssignmentsPanel.vue';
 import OrderResponsiblePanel from './OrderResponsiblePanel.vue';
 import { useOrderResponsibility } from '../../composables/useOrderResponsibility';
 import type { OrderWithResponsibility } from '../../services/order-responsibility';
-import DealExecutionTab from './DealExecutionTab.vue';
-import OrderAttachmentsPanel from '../service-attachments/OrderAttachmentsPanel.vue';
-import EmailContractReviewLauncher from '../leads/EmailContractReviewLauncher.vue';
-import OrderEquipmentPanel from '../equipment/OrderEquipmentPanel.vue';
-import MaintenanceObservationsPanel from '../maintenance-observations/MaintenanceObservationsPanel.vue';
+import type OrderEquipmentPanel from '../equipment/OrderEquipmentPanel.vue';
 import OrderWorkspaceHeader from './OrderWorkspaceHeader.vue';
-import OrderSalesInstallationWorkspace from './OrderSalesInstallationWorkspace.vue';
-import OrderPaymentsPanel from './OrderPaymentsPanel.vue';
-import OrderWebsiteIntakePanel from './OrderWebsiteIntakePanel.vue';
-import OrderIncomingContext from './OrderIncomingContext.vue';
 import TenderWorkflowPanel from './TenderWorkflowPanel.vue';
-import OrderPlanningPanel from './OrderPlanningPanel.vue';
-import OrderRepairPanel from './OrderRepairPanel.vue';
 import OrderCustomerContext from './OrderCustomerContext.vue';
 import LeadSourceReviewModal from '../leads/LeadSourceReviewModal.vue';
 import OrderRequestSourceCard from './OrderRequestSourceCard.vue';
 import OrderSourceEquipmentAction from './OrderSourceEquipmentAction.vue';
 import { sourceEquipmentPrefillMessage, type SourceAppliedEvent } from '../../services/order-source-review';
-import OrderExecutionPanel from './OrderExecutionPanel.vue';
-import OrderDocumentsWorkspace from './OrderDocumentsWorkspace.vue';
+import type OrderDocumentsWorkspace from './OrderDocumentsWorkspace.vue';
+import OrderAsyncPanel from './OrderAsyncPanel.vue';
+import { loadProposalWorkspace, loadDocumentsWorkspace, loadWorkWorkspace, loadPaymentsWorkspace } from './order-workspace-loaders';
+import type { OrderWorkspaceSection } from './OrderWorkspaceNav.vue';
 import OrderManagerLabels from './OrderManagerLabels.vue';
-import OrderProposalWorkspace from './OrderProposalWorkspace.vue';
+import type OrderProposalWorkspace from './OrderProposalWorkspace.vue';
 import OrderProposalTotalsBar from './OrderProposalTotalsBar.vue';
 import { useDemoReadOnly } from '../../services/manager-demo';
 import OrderWorkspaceNav from './OrderWorkspaceNav.vue';
 import OrderWorkspaceUsageReport from './OrderWorkspaceUsageReport.vue';
-import type { ServiceAttachmentEquipmentOption } from '../service-attachments/types';
 import type {
   ManagerOrderDetailResponse,
 } from '../../client';
@@ -77,6 +66,14 @@ const emit = defineEmits<{
 const drawerScrollContainer = ref<HTMLElement | null>(null);
 const workspaceScrollContainer = ref<HTMLElement | null>(null);
 const proposalClientPreview = ref(false);
+const proposalPanelRef = ref<InstanceType<typeof OrderAsyncPanel> | null>(null);
+const documentsPanelRef = ref<InstanceType<typeof OrderAsyncPanel> | null>(null);
+const workPanelRef = ref<InstanceType<typeof OrderAsyncPanel> | null>(null);
+const paymentsPanelRef = ref<InstanceType<typeof OrderAsyncPanel> | null>(null);
+const ensureSection = async (section: OrderWorkspaceSection) => {
+  await nextTick();
+  await ({proposal: proposalPanelRef, documents: documentsPanelRef, work: workPanelRef, payments: paymentsPanelRef}[section].value?.ready());
+};
 const showProposalCosts = ref(false);
 const mobileContextOpen = ref(false);
 const demoReadOnly = useDemoReadOnly();
@@ -134,60 +131,36 @@ const {
   total: totalPreview,
   validateLines: validateProposalLines,
 } = commercialEditor;
+const drawerForm = useOrderDrawerForm({
+  total: totalPreview, productLines, serviceLines, serviceTariffOptions, activeServiceSuggestionIndex,
+  applyTariffTemplateToLine, buildLinesPayload: () => buildLinesPayload(activeProposalId.value),
+  validateLines: validateProposalLines, setToast, loadExecutorsOnHydrate: false,
+});
 const {
-  assessmentDate,
-  autoCloseOnPayment,
   autoExecutionOnPayment,
   balanceDue: balanceDuePreview,
   buildSavePayload,
-  calculatedTargetCurrencyPayments,
   comment,
   currentFormSnapshot: buildCurrentFormSnapshot,
-  currentFxRate,
   customerBranchId,
   customerDeliveryAddress,
-  enableCurrency,
   executionStatus,
-  executionWithoutPayment,
-  executionWithoutPaymentReason,
-  executorOptions,
   hydrateOrder,
   installationDate,
-  installerId,
-  isB2cCustomer: buildIsB2cCustomer,
   isRepairWorkflow,
   localFormError,
   localServerErrors,
   managerLabels,
-  measurementRequired,
-  measurementResult,
-  measurerId,
   negotiationStatus,
-  newBranchAddress,
   orderTitle,
   payments,
-  repairMeta,
   setWorkflowType,
   status,
-  targetCurrency,
-  targetCurrencyAmount,
-  targetCurrencyBalanceDue,
   totalPayments: totalPaymentsPreview,
   workflowType,
-} = useOrderDrawerForm({
-  total: totalPreview,
-  productLines,
-  serviceLines,
-  serviceTariffOptions,
-  activeServiceSuggestionIndex,
-  applyTariffTemplateToLine,
-  buildLinesPayload: () => buildLinesPayload(activeProposalId.value),
-  validateLines: validateProposalLines,
-  setToast,
-});
+} = drawerForm;
 const workerAssignmentBusy = ref(false), workerPayBusy = ref(false), workerPayRevision = ref(0);
 const setWorkerAssignmentBusy = (value: boolean) => { if (workerAssignmentBusy.value && !value) workerPayRevision.value++; workerAssignmentBusy.value = value; };
-const linkedEquipmentOptions = ref<ServiceAttachmentEquipmentOption[]>([]);
 const equipmentPanelRef = ref<InstanceType<typeof OrderEquipmentPanel> | null>(null);
 const documentsWorkspaceRef = ref<InstanceType<typeof OrderDocumentsWorkspace> | null>(null);
 const proposalWorkspaceRef = ref<InstanceType<typeof OrderProposalWorkspace> | null>(null);
@@ -245,6 +218,7 @@ const {
   savedFormSnapshot,
   currentLinesSnapshot: () => buildCurrentLinesSnapshot(activeProposalId.value),
   currentFormSnapshot: () => buildCurrentFormSnapshot(proposalStatus.value),
+  restoreFormDraft: drawerForm.restoreFormDraft,
 });
 
 const {
@@ -323,21 +297,25 @@ const {
   payments,
 });
 
+const workspaceNavigation = useOrderWorkspaceNavigation({
+  status, workflowType, expandedSections: expandedDrawerSections, equipmentPanelRef, documentsWorkspaceRef,
+  syncLocation: isPage, orderId: computed(() => props.order?.id),
+  ensureSection,
+});
 const {
-  activeWorkspaceTarget,
   activeWorkspaceSection,
   executionWorkspaceOpen,
   openWorkspaceTarget,
   resetWorkspaceNavigation,
   selectWorkspaceSection,
-} = useOrderWorkspaceNavigation({
-  status,
-  workflowType,
-  expandedSections: expandedDrawerSections,
-  equipmentPanelRef,
-  documentsWorkspaceRef,
-});
+} = workspaceNavigation;
+const proposalMounted = ref(false);
 const documentsMounted = ref(false);
+const workMounted = ref(false);
+const paymentsMounted = ref(false);
+const contextMounted = ref(false);
+const setEquipmentPanel = (panel: InstanceType<typeof OrderEquipmentPanel> | null) => { equipmentPanelRef.value = panel; };
+watch(mobileContextOpen, open => { if (open) contextMounted.value = true; });
 const customerContextTarget = ref<'customer' | 'object' | null>(null);
 const customerContextRef = ref<InstanceType<typeof OrderCustomerContext> | null>(null);
 const sourceReviewOpen = ref(false);
@@ -352,7 +330,10 @@ const handleSourceApplied = (result: SourceAppliedEvent) => {
 };
 watch(activeWorkspaceSection, (section) => {
   if (section !== 'proposal') proposalClientPreview.value = false;
+  if (section === 'proposal') proposalMounted.value = true;
   if (section === 'documents') documentsMounted.value = true;
+  if (section === 'work') { workMounted.value = true; void drawerForm.loadExecutors(); }
+  if (section === 'payments') paymentsMounted.value = true;
 }, { immediate: true });
 watch(activeProposalId, (proposalId) => {
   proposalClientPreview.value = false;
@@ -376,7 +357,6 @@ const orderWorkspaceUsage = useOrderWorkspaceUsage({
 const usageReportOpen = ref(false);
 const { trackControl: trackUsageControl } = useOrderWorkspaceUsageControls(orderWorkspaceUsage.track);
 const isWebsiteOrder = computed(() => props.order?.lead_source === 'site');
-const isB2cCustomer = buildIsB2cCustomer(computed(() => props.order));
 const displayOrderTitle = computed(() => (
   orderTitle.value.trim()
   || customer.value?.full_legal_name
@@ -468,17 +448,23 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   initializing.value = true;
   localServerErrors.value = {};
   localFormError.value = '';
-  if (initializedOrderId.value !== order.id) {
+  const newOrder = initializedOrderId.value !== order.id;
+  if (newOrder) {
     showEnvelope.value = false;
     customerContextTarget.value = null;
     initializedOrderId.value = order.id;
     expandedDrawerSections.value = restoreDrawerSections();
-    selectWorkspaceSection('proposal');
-    linkedEquipmentOptions.value = [];
-    resetWorkspaceNavigation();
+    proposalMounted.value = false; documentsMounted.value = false; workMounted.value = false; paymentsMounted.value = false; contextMounted.value = false;
     resetOrderEmails();
   }
   hydrateOrder(order);
+  if (newOrder) {
+    resetWorkspaceNavigation();
+    if (activeWorkspaceSection.value === 'proposal') proposalMounted.value = true;
+    if (activeWorkspaceSection.value === 'documents') documentsMounted.value = true;
+    if (activeWorkspaceSection.value === 'work') { workMounted.value = true; void drawerForm.loadExecutors(); }
+    if (activeWorkspaceSection.value === 'payments') paymentsMounted.value = true;
+  }
 
   const context = readOrderProposalContext(window.location.href);
   const returnProposalId = context.orderId === order.id ? context.proposalId : null;
@@ -530,7 +516,7 @@ watch(
 
 const openProposalForProduct = async () => {
   selectWorkspaceSection('proposal');
-  await nextTick();
+  await ensureSection('proposal');
   proposalWorkspaceRef.value?.addProduct();
   document.getElementById('order-workspace-proposal')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 };
@@ -540,8 +526,7 @@ const handleWorkspaceNextAction = async () => {
   if (action.command === 'create_proposal') return createProposal();
   if (action.command === 'finish_proposal') return changeActiveProposalStatus('ready_to_send');
   if (action.command === 'record_proposal_response') {
-    openWorkspaceTarget('proposal');
-    await nextTick();
+    await openWorkspaceTarget('proposal');
     proposalWorkspaceRef.value?.openResponse();
     return;
   }
@@ -600,11 +585,12 @@ defineExpose({ prepareToLeave });
       <OrderWorkspaceHeader
         v-show="!proposalClientPreview"
         class="shrink-0"
-        :workspace="activeWorkspaceSection === 'proposal'"
+        :workspace="true"
         :order-id="order?.id"
         :back-label="isPage ? backLabel : undefined"
         :title="displayOrderTitle"
         :customer-name="customerDisplayName"
+        :object-label="compactObjectAddress && compactObjectAddress !== displayOrderTitle ? compactObjectAddress : undefined"
         :workflow="workflowType"
         :view-model="orderWorkspace"
         :total="totalPreview"
@@ -635,12 +621,7 @@ defineExpose({ prepareToLeave });
         @usage-report="usageReportOpen = true"
         @close="isPage ? emit('back') : closeDrawer()"
       />
-
-      <OrderWorkspaceUsageReport :open="usageReportOpen" @close="usageReportOpen = false" />
-      <EnvelopePrintDialog v-if="showEnvelope && customer?.id" :key="customer.id" :customer-id="customer.id" :order-address="compactObjectAddress" @close="showEnvelope = false" />
-
-      <div ref="workspaceScrollContainer" class="grid min-h-0 min-w-0 flex-1 grid-cols-1 content-start gap-3 overflow-y-auto p-3" :class="proposalClientPreview ? '' : 'lg:grid-cols-[minmax(0,1fr)_18rem]'">
-        <div class="min-w-0">
+      <div v-show="!proposalClientPreview" class="shrink-0 border-b border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950" data-testid="order-section-navigation">
           <OrderWorkspaceNav
             v-show="!proposalClientPreview"
             :active="activeWorkspaceSection"
@@ -648,14 +629,25 @@ defineExpose({ prepareToLeave });
             @select="selectWorkspaceSection"
             @add-product="openProposalForProduct"
           />
+        <button type="button" class="mt-1 flex min-h-9 w-full items-center justify-between rounded-lg px-1 text-left text-xs font-semibold text-slate-600 focus-visible:ring-2 focus-visible:ring-brand-500 dark:text-slate-300" :aria-expanded="mobileContextOpen" aria-controls="order-context-details" @click="mobileContextOpen = !mobileContextOpen"><span>Ответственный, клиент и объект</span><span aria-hidden="true">{{ mobileContextOpen ? '−' : '+' }}</span></button>
+      </div>
+
+      <OrderWorkspaceUsageReport :open="usageReportOpen" @close="usageReportOpen = false" />
+      <EnvelopePrintDialog v-if="showEnvelope && customer?.id" :key="customer.id" :customer-id="customer.id" :order-address="compactObjectAddress" @close="showEnvelope = false" />
+
+      <div ref="workspaceScrollContainer" class="grid min-h-0 min-w-0 flex-1 grid-cols-1 content-start gap-3 overflow-y-auto p-3" :class="!proposalClientPreview && mobileContextOpen ? 'lg:grid-cols-[minmax(0,1fr)_18rem]' : ''">
+        <div class="min-w-0">
+
           <p v-if="displayFormError && !proposalClientPreview" class="mt-4 rounded-xl border border-red-500/40 bg-red-50 px-3 py-2 text-sm text-red-700">
             {{ displayFormError }}
           </p>
           <fieldset :disabled="proposalActionLoading || installationAttaching || sourceApplying" class="min-w-0">
             <TenderWorkflowPanel v-if="order && !proposalClientPreview && (order.lead_source === 'email' || order.lead_source === 'belzakupki')" :order-id="order.id" />
-            <section v-show="activeWorkspaceSection === 'proposal'" class="min-w-0" data-order-usage="workspace-proposal-panel">
+            <section v-if="proposalMounted" v-show="activeWorkspaceSection === 'proposal'" :key="`proposal-${order?.id}`" class="min-w-0" data-order-usage="workspace-proposal-panel">
               <OrderManagerLabels v-show="!proposalClientPreview" v-model="managerLabels" />
-              <OrderProposalWorkspace
+              <OrderAsyncPanel ref="proposalPanelRef" :load="loadProposalWorkspace" label="Предложение">
+                <template #default="{ component }">
+              <component :is="component"
                 ref="proposalWorkspaceRef"
                 v-model:expanded="expandedDrawerSections.proposals"
                 v-model:client-preview="proposalClientPreview"
@@ -697,11 +689,15 @@ defineExpose({ prepareToLeave });
                     @toast="setToast($event.message, $event.type)"
                   />
                 </template>
-              </OrderProposalWorkspace>
+              </component>
+                </template>
+              </OrderAsyncPanel>
             </section>
 
-            <section v-if="documentsMounted" v-show="activeWorkspaceSection === 'documents'" class="min-w-0" data-order-usage="workspace-documents-panel">
-              <OrderDocumentsWorkspace
+            <section v-if="documentsMounted" v-show="activeWorkspaceSection === 'documents'" :key="`documents-${order?.id}`" class="min-w-0" data-order-usage="workspace-documents-panel">
+              <OrderAsyncPanel ref="documentsPanelRef" :load="loadDocumentsWorkspace" label="Документы">
+                <template #default="{ component }">
+              <component :is="component"
                 v-if="order"
                 ref="documentsWorkspaceRef"
                 v-model:expanded="expandedDrawerSections.documents"
@@ -715,62 +711,33 @@ defineExpose({ prepareToLeave });
                 @refresh="refreshOrderFromDocumentsPanel"
                 @toast="handleDocumentPanelToast"
               />
+                </template>
+              </OrderAsyncPanel>
             </section>
 
-            <section v-show="activeWorkspaceSection === 'work'" class="min-w-0" data-order-usage="workspace-work-panel">
-              <OrderWorkerAssignmentsPanel v-if="order && activeWorkspaceSection === 'work'" :key="`worker-assignments-${order.id}`" :order-id="order.id" :work-stages="order.work_stages" :disabled="demoReadOnly || initializing || installationAttaching || sourceApplying || proposalActionLoading || responsibilityBusy || workerPayBusy" :before-action="orderSaving.flush" @busy="setWorkerAssignmentBusy" />
-              <OrderWorkerPayPanel v-if="order && activeWorkspaceSection === 'work'" :key="`worker-pay-${order.id}-${workerPayRevision}`" :order-id="order.id" :disabled="demoReadOnly || initializing || installationAttaching || sourceApplying || proposalActionLoading || responsibilityBusy || workerAssignmentBusy" :before-action="orderSaving.flush" @busy="workerPayBusy = $event" @changed="emit('reload', order.id)" />
-              <OrderIncomingContext v-if="order?.incoming_context" :context="order.incoming_context" />
-              <OrderSalesInstallationWorkspace
-                v-if="workflowType === 'sales_installation'"
-                class="mt-4"
-                :lanes="orderWorkspace.lanes"
-                :active-target="activeWorkspaceTarget"
-                @open="openWorkspaceTarget($event, true)"
-              />
-              <OrderEquipmentPanel
-                v-if="order"
-                ref="equipmentPanelRef"
-                id="order-workspace-equipment"
-                :key="`order-equipment-${order.id}`"
-                class="mt-4"
-                :order-id="order.id"
-                :customer-id="customer?.id"
-                :customer-branch-id="customerBranchId"
-                :initial-count="order.linked_equipment_count"
-                :has-catalog-products="productLines.some((line) => Boolean(line.product_id))"
-                @options-change="linkedEquipmentOptions = $event"
-                @reload="emit('reload', order.id)"
-                @error="setToast($event, 'error')"
-              />
-              <a v-if="order?.maintenance_source_order_id" :href="`/manager/orders/kanban?orderId=${order.maintenance_source_order_id}`" class="block mt-4 text-sm text-blue-600" target="_blank" rel="noopener">Исходное ТО #{{ order.maintenance_source_order_id }} · предложения, согласование и устранение ↗</a>
-              <MaintenanceObservationsPanel v-if="order?.workflow_type === 'maintenance'" :key="`observations-${order.id}`" class="mt-4" :order-id="order.id" :customer-id="order.customer?.id" :customer-branch-id="order.customer_branch?.id" />
-              <EmailContractReviewLauncher v-if="order && order.attachment_count" :order-id="order.id" />
-              <OrderAttachmentsPanel v-if="order" :key="`order-attachments-${order.id}`" class="mt-4" :order-id="order.id" :initial-count="order.attachment_count" :equipment-options="linkedEquipmentOptions" @need-equipment-options="equipmentPanelRef?.ensureLoaded()" @error="setToast($event, 'error')" />
-              <OrderWebsiteIntakePanel v-if="isWebsiteOrder" v-model:expanded="expandedDrawerSections.website" :order="order!" :delivery-address="customerDeliveryAddress" :comment="comment" @copy="copyText($event.value, $event.label)" />
-              <OrderPlanningPanel
-                v-if="status === 'negotiation'"
-                v-model:measurement-required="measurementRequired" v-model:assessment-date="assessmentDate" v-model:negotiation-status="negotiationStatus" v-model:auto-execution-on-payment="autoExecutionOnPayment" v-model:details-expanded="expandedDrawerSections.planningDetails" v-model:measurer-id="measurerId" v-model:measurement-result="measurementResult" v-model:installation-date="installationDate" v-model:installer-id="installerId"
-                :workflow-type="workflowType" :executor-options="executorOptions" :customer-branch-id="customerBranchId" :new-branch-address="newBranchAddress" :measurement-error="getFieldError('measurement_date')" :installation-error="getFieldError('installation_date')"
-              />
-              <OrderRepairPanel v-if="isRepairWorkflow && order" v-model:expanded="expandedDrawerSections.repair" v-model:repair-meta="repairMeta" :order="order" :order-title="orderTitle" :measurement-result="measurementResult" :customer-branch-id="customerBranchId" :object-address="compactObjectAddress" @toast="setToast($event.message, $event.type)" @reload="emit('reload', $event)" />
-              <OrderExecutionPanel v-if="status === 'execution'" v-model:expanded="expandedDrawerSections.execution" v-model:execution-status="executionStatus" v-model:execution-without-payment="executionWithoutPayment" v-model:execution-without-payment-reason="executionWithoutPaymentReason" v-model:auto-close-on-payment="autoCloseOnPayment" :workflow-type="workflowType" />
+            <section v-if="workMounted && order" v-show="activeWorkspaceSection === 'work'" :key="`work-${order.id}`" class="min-w-0" data-order-usage="workspace-work-panel">
+              <OrderAsyncPanel ref="workPanelRef" :load="loadWorkWorkspace" label="Работы">
+                <template #default="{ component }">
+                  <component :is="component" :order="order" :form="drawerForm" :sections="expandedDrawerSections" :navigation="workspaceNavigation" :view-model="orderWorkspace" :products="productLines" :object-address="compactObjectAddress"
+                    :disabled="demoReadOnly || initializing || installationAttaching || sourceApplying || proposalActionLoading || responsibilityBusy" :assignment-busy="workerAssignmentBusy" :pay-busy="workerPayBusy" :pay-revision="workerPayRevision"
+                    :before-action="orderSaving.flush" :equipment-ref="setEquipmentPanel" :field-error="getFieldError"
+                    @assignment-busy="setWorkerAssignmentBusy" @pay-busy="workerPayBusy = $event" @reload="emit('reload', $event)" @open="openWorkspaceTarget($event, true)" @toast="setToast($event.message, $event.type)" @copy="copyText($event.value, $event.label)" />
+                </template>
+              </OrderAsyncPanel>
             </section>
 
-            <section v-show="activeWorkspaceSection === 'payments'" class="min-w-0" data-order-usage="workspace-payments-panel">
-              <OrderPaymentsPanel
-                v-if="order && status !== 'execution'"
-                v-model:expanded="expandedDrawerSections.payments" v-model:payments="payments" v-model:enable-currency="enableCurrency" v-model:target-currency="targetCurrency" v-model:target-currency-amount="targetCurrencyAmount"
-                :order="order" :current-fx-rate="currentFxRate" :is-b2c-customer="isB2cCustomer" :total="totalPreview" :total-payments="totalPaymentsPreview" :balance-due="balanceDuePreview" :margin="marginPreview" :calculated-target-currency-payments="calculatedTargetCurrencyPayments" :target-currency-balance-due="targetCurrencyBalanceDue"
-                @toast="setToast($event.message, $event.type)" @reload="emit('reload', $event)"
-              />
-              <DealExecutionTab v-if="status === 'execution' && order && executionWorkspaceOpen" id="order-workspace-execution-details" :order="order" class="mt-4" @refresh="emit('reload', order.id)" @close="isPage ? emit('back') : closeDrawer()" />
+            <section v-if="paymentsMounted && order" v-show="activeWorkspaceSection === 'payments'" :key="`payments-${order.id}`" class="min-w-0" data-order-usage="workspace-payments-panel">
+              <OrderAsyncPanel ref="paymentsPanelRef" :load="loadPaymentsWorkspace" label="Оплаты">
+                <template #default="{ component }">
+                  <component :is="component" :order="order" :form="drawerForm" :sections="expandedDrawerSections" :execution-open="executionWorkspaceOpen" :total="totalPreview" :margin="marginPreview"
+                    @toast="setToast($event.message, $event.type)" @reload="emit('reload', $event)" @close="isPage ? emit('back') : closeDrawer()" />
+                </template>
+              </OrderAsyncPanel>
             </section>
           </fieldset>
         </div>
-        <div v-show="!proposalClientPreview" class="order-first min-w-0 lg:order-none lg:self-start">
-          <button type="button" class="flex min-h-9 w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold dark:border-slate-700 dark:bg-slate-900 lg:hidden" :aria-expanded="mobileContextOpen" @click="mobileContextOpen = !mobileContextOpen"><span>Ответственный, клиент и объект</span><span aria-hidden="true">{{ mobileContextOpen ? '−' : '+' }}</span></button>
-          <div class="space-y-3 pt-2 lg:pt-0" :class="mobileContextOpen ? '' : 'hidden lg:block'">
+        <div v-if="contextMounted" v-show="!proposalClientPreview && mobileContextOpen" id="order-context-details" class="order-first min-w-0 lg:order-none lg:self-start">
+          <div class="space-y-3">
           <OrderResponsiblePanel v-if="order" :order="order" :can-assign="canAssignResponsible" :busy="responsibilityBusy" :disabled="initializing || installationAttaching || sourceApplying || proposalActionLoading || workerAssignmentBusy || workerPayBusy" :error="responsibilityError" :assign="assignResponsible" />
           <OrderCustomerContext
             v-if="order"

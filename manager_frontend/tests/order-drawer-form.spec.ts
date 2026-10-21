@@ -40,7 +40,7 @@ const order = {
   ready_for_execution: false,
 } as ManagerOrderDetailResponse;
 
-const createForm = (validationError = '') => {
+const createForm = (validationError = '', options: Partial<Parameters<typeof useOrderDrawerForm>[0]> = {}) => {
   const productLines = ref([{
     link_id: null,
     product_id: 9,
@@ -68,6 +68,7 @@ const createForm = (validationError = '') => {
     buildLinesPayload,
     validateLines: vi.fn().mockReturnValue(validationError),
     setToast: vi.fn(),
+    ...options,
   }))!;
   return { form, buildLinesPayload };
 };
@@ -213,5 +214,114 @@ describe('useOrderDrawerForm', () => {
     expect(form.currentFxRate.value).toEqual({ usd_byn: 3.2, eur_byn: 3.5 });
     expect(form.targetCurrency.value).toBe('EUR');
     expect(form.targetCurrencyAmount.value).toBe(880.5);
+  });
+});
+
+
+describe('lazy executor lookup', () => {
+  it('does not fetch work-only data when hydrating the proposal and caches an empty lookup', async () => {
+    const { form } = createForm('', { loadExecutorsOnHydrate: false });
+    form.hydrateOrder(order);
+    expect(apiMock.getManagerInstallers).not.toHaveBeenCalled();
+    await Promise.all([form.loadExecutors(), form.loadExecutors()]);
+    await form.loadExecutors();
+    expect(apiMock.getManagerInstallers).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a retryable local error and ignores a response after disposal', async () => {
+    const { form } = createForm('', { loadExecutorsOnHydrate: false });
+    apiMock.getManagerInstallers.mockRejectedValueOnce(new Error('offline'));
+    await form.loadExecutors();
+    expect(form.executorsError.value).toContain('Не удалось');
+    const lookup = deferred<{items: any[]}>();
+    apiMock.getManagerInstallers.mockReturnValueOnce(lookup.promise);
+    const retry = form.loadExecutors(true);
+    scope.stop();
+    lookup.resolve({ items: [{ id: 9, name: 'Старый исполнитель' }] });
+    await retry;
+    expect(form.executorOptions.value).toEqual([]);
+  });
+});
+
+
+describe('local order form draft restoration', () => {
+  it('round-trips title, comment, repair and fixed currency fields without hydration API calls or amount recalculation', async () => {
+    const { form } = createForm('', { loadExecutorsOnHydrate: false });
+    form.hydrateOrder(order);
+    await nextTick();
+    form.currentFxRate.value = { usd_byn: 3.2, eur_byn: 3.5 };
+    form.restoreFormDraft({
+      title: 'Несохранённое название', comment: 'Новый комментарий', workflowType: 'repair',
+      repairMeta: { customer_complaint: 'Не охлаждает', repair_status: 'diagnostic-in-progress', risks: ['Утечка'], hidden_defects_possible: true },
+      enableCurrency: true, targetCurrency: 'EUR', targetCurrencyAmount: 999.75,
+      installerId: 18, customerBranchId: 21, measurementRequired: true, measurerId: null,
+      assessmentDate: '2026-10-21T10:30', customerDeliveryAddress: 'Новый объект',
+    });
+    await nextTick();
+    const draft = JSON.parse(form.currentFormSnapshot());
+    form.hydrateOrder(order);
+    form.restoreFormDraft(draft);
+    await nextTick();
+    expect(form.orderTitle.value).toBe('Несохранённое название');
+    expect(form.comment.value).toBe('Новый комментарий');
+    expect(form.workflowType.value).toBe('repair');
+    expect(form.repairMeta.value).toMatchObject({ customer_complaint: 'Не охлаждает', repair_status: 'diagnostic_in_progress', risks: ['Утечка'], hidden_defects_possible: true });
+    expect(form.currentFormSnapshot()).toBe(JSON.stringify(draft));
+    expect(form.targetCurrencyAmount.value).toBe(999.75);
+    expect(settingsMock.getFxRate).not.toHaveBeenCalled();
+    expect(apiMock.listManagerQuickTariffs).not.toHaveBeenCalled();
+    expect(apiMock.getManagerInstallers).not.toHaveBeenCalled();
+    expect(order.title).toBe('Монтаж в офисе');
+    expect(order.comment).toBe('Позвонить заранее');
+  });
+
+  it('restores only known typed fields and rejects malformed values', async () => {
+    const { form } = createForm('', { loadExecutorsOnHydrate: false });
+    form.hydrateOrder(order);
+    const baseline = form.currentFormSnapshot();
+    for (const invalid of [null, [], 'not-an-object', 23]) form.restoreFormDraft(invalid);
+    expect(form.currentFormSnapshot()).toBe(baseline);
+    form.restoreFormDraft({
+      title: 17, comment: {}, status: 'unknown', workflowType: 'bad', managerLabels: ['важный', 7, null],
+      installerId: -1, customerBranchId: '12', measurerId: Number.NaN,
+      nextFollowupDate: 'bad-date', measurementRequired: 'false',
+      targetCurrency: 'BAD', targetCurrencyAmount: Infinity,
+      payments: [{ amount: 999 }], isPaid: true, unknown: 'ignored',
+      repairMeta: { customer_complaint: { invalid: true }, unknown: 'ignored', risks: ['Риск', 17], hidden_defects_possible: 'false' },
+    });
+    await nextTick();
+    expect(form.orderTitle.value).toBe(order.title);
+    expect(form.comment.value).toBe(order.comment);
+    expect(form.status.value).toBe('negotiation');
+    expect(form.workflowType.value).toBe('sales_installation');
+    expect(form.managerLabels.value).toEqual(['важный']);
+    expect(form.installerId.value).toBeNull();
+    expect(form.customerBranchId.value).toBeNull();
+    expect(form.measurerId.value).toBeNull();
+    expect(form.nextFollowupDate.value).toBe('');
+    expect(form.measurementRequired.value).toBe(false);
+    expect(form.targetCurrency.value).toBeNull();
+    expect(form.targetCurrencyAmount.value).toBeNull();
+    expect(form.payments.value).toEqual([]);
+    expect(form.isPaid.value).toBe(false);
+    expect(form.repairMeta.value.customer_complaint).toBe('');
+    expect(form.repairMeta.value.risks).toEqual(['Риск']);
+    expect(form.repairMeta.value).not.toHaveProperty('unknown');
+    expect(settingsMock.getFxRate).not.toHaveBeenCalled();
+  });
+
+  it('invalidates an earlier currency request before restoring the saved fixed amount', async () => {
+    const rate = deferred<{ usd_byn: number; eur_byn: number }>();
+    settingsMock.getFxRate.mockReturnValueOnce(rate.promise);
+    const { form } = createForm('', { loadExecutorsOnHydrate: false });
+    form.hydrateOrder({ ...order, target_currency: 'USD', target_currency_amount: 100 });
+    form.restoreFormDraft({ enableCurrency: true, targetCurrency: 'EUR', targetCurrencyAmount: 200 });
+    rate.resolve({ usd_byn: 3, eur_byn: 3.5 });
+    await Promise.resolve();
+    await nextTick();
+    expect(form.targetCurrency.value).toBe('EUR');
+    expect(form.targetCurrencyAmount.value).toBe(200);
+    expect(form.currentFxRate.value).toEqual({ usd_byn: 3.2, eur_byn: null });
+    expect(settingsMock.getFxRate).toHaveBeenCalledTimes(2);
   });
 });
