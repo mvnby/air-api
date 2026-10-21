@@ -22,6 +22,7 @@ const props = defineProps<{
   canPrintEnvelope?: boolean;
   dirty?: boolean;
   saving?: boolean;
+  writeBlocked?: boolean;
   autosaveEnabled?: boolean;
   saveFailed?: boolean;
   saveStatusText?: string;
@@ -210,10 +211,10 @@ const onWorkflowChange = async (event: Event) => {
         <div v-if="effectiveCompact" class="flex h-6 min-w-0 items-center gap-2">
           <span class="shrink-0 text-xs font-semibold text-slate-600 dark:text-slate-300">№{{ orderId }}</span>
           <div v-if="editingTitle" class="flex h-6 min-w-0 flex-1 items-center gap-1">
-            <input ref="titleInputRef" v-model="titleDraft" class="field-input h-7 min-w-0 flex-1 py-0 text-sm font-semibold" maxlength="160" aria-label="Название заказа" @input="emit('update:title', ($event.target as HTMLInputElement).value)" @keydown.enter.prevent="commitTitle" @keydown.esc.stop.prevent="finishTitleEdit" />
+            <input ref="titleInputRef" :disabled="writeBlocked" v-model="titleDraft" class="field-input h-7 min-w-0 flex-1 py-0 text-sm font-semibold" maxlength="160" aria-label="Название заказа" @input="emit('update:title', ($event.target as HTMLInputElement).value)" @keydown.enter.prevent="commitTitle" @keydown.esc.stop.prevent="finishTitleEdit" />
             <button type="button" class="btn-mini-outline h-7 px-1" aria-label="Применить название" @click="commitTitle"><Check :size="15" aria-hidden="true" /></button>
           </div>
-          <button v-else ref="titleTriggerRef" type="button" class="min-w-0 flex-1 truncate rounded text-left text-sm font-semibold leading-5 text-slate-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600 dark:text-white" :title="title || 'Без названия'" :aria-label="`Изменить название: ${title || 'Без названия'}`" @click="startTitleEdit">{{ title || 'Без названия' }}</button>
+          <button v-else ref="titleTriggerRef" :disabled="writeBlocked" type="button" class="min-w-0 flex-1 truncate rounded text-left text-sm font-semibold leading-5 text-slate-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600 dark:text-white" :title="title || 'Без названия'" :aria-label="`Изменить название: ${title || 'Без названия'}`" @click="startTitleEdit">{{ title || 'Без названия' }}</button>
         </div>
         <p v-if="effectiveCompact" class="h-5 truncate text-xs leading-5 text-slate-600 dark:text-slate-300" :title="[customerName || 'Клиент не указан', objectLabel].filter(Boolean).join(' · ')" data-order-header-customer>{{ customerName || 'Клиент не указан' }}<span v-if="objectLabel"> · {{ objectLabel }}</span></p>
         <template v-else>
@@ -228,7 +229,7 @@ const onWorkflowChange = async (event: Event) => {
 
         <div v-if="editingTitle" class="mt-1.5 flex gap-2">
           <input
-            ref="titleInputRef"
+            ref="titleInputRef" :disabled="writeBlocked"
             v-model="titleDraft"
             @input="emit('update:title', ($event.target as HTMLInputElement).value)"
             class="field-input h-9 min-w-0 flex-1 font-semibold"
@@ -241,7 +242,7 @@ const onWorkflowChange = async (event: Event) => {
             <Check :size="17" />
           </button>
         </div>
-        <button v-else ref="titleTriggerRef" type="button" class="mt-1 flex max-w-full items-start gap-1.5 text-left" :title="title || 'Без названия'" :aria-label="`Изменить название: ${title || 'Без названия'}`" @click="startTitleEdit">
+        <button v-else ref="titleTriggerRef" :disabled="writeBlocked" type="button" class="mt-1 flex max-w-full items-start gap-1.5 text-left" :title="title || 'Без названия'" :aria-label="`Изменить название: ${title || 'Без названия'}`" @click="startTitleEdit">
           <span class="break-words text-base font-semibold leading-5 text-slate-950 dark:text-white sm:text-lg sm:leading-6">{{ title || 'Без названия' }}</span>
           <Pencil :size="14" class="mt-1 shrink-0 text-slate-400" aria-hidden="true" />
         </button>
@@ -256,7 +257,7 @@ const onWorkflowChange = async (event: Event) => {
           v-if="(effectiveCompact || workspace) && (dirty || saveFailed)"
           type="button"
           class="btn-mini h-9 w-9 justify-center p-0"
-          :disabled="saving"
+          :disabled="saving || writeBlocked"
           :title="saving ? 'Сохраняем' : saveFailed ? 'Повторить сохранение' : 'Сохранить изменения'"
           :aria-label="saving ? 'Сохраняем изменения' : saveFailed ? 'Повторить сохранение' : 'Сохранить изменения'"
           @click="emit('save')"
@@ -281,7 +282,7 @@ const onWorkflowChange = async (event: Event) => {
             <button v-if="canPrintEnvelope" type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800" @click="runMenuAction(() => emit('envelope'))">Печать конверта</button>
             <label class="block px-3 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
               Сценарий заказа
-              <select :value="workflow" class="field-input mt-1.5 h-8 w-full text-xs" data-order-usage="workflow-change" @change="onWorkflowChange">
+              <select :disabled="writeBlocked" :value="workflow" class="field-input mt-1.5 h-8 w-full text-xs" data-order-usage="workflow-change" @change="onWorkflowChange">
                 <option v-for="option in ORDER_WORKFLOW_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
               </select>
             </label>
@@ -294,13 +295,13 @@ const onWorkflowChange = async (event: Event) => {
               Отчёт по использованию
             </button>
             <div v-if="usageEnabled !== undefined || canViewUsageReport" class="my-1 border-t border-slate-200 dark:border-slate-700" />
-            <button type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800" @click="runMenuAction(() => emit('hold'))">
+            <button type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800" :disabled="writeBlocked" @click="runMenuAction(() => emit('hold'))">
               <Play v-if="isOnHold" :size="16" />
               <Pause v-else :size="16" />
               {{ isOnHold ? 'Вернуть в работу' : 'Отложить заказ' }}
             </button>
             <div class="my-1 border-t border-slate-200 dark:border-slate-700" />
-            <button type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-950/30" @click="runMenuAction(() => emit('delete'))">
+            <button type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-950/30" :disabled="writeBlocked" @click="runMenuAction(() => emit('delete'))">
               <Trash2 :size="16" />
               Удалить заказ
             </button>
@@ -344,7 +345,7 @@ const onWorkflowChange = async (event: Event) => {
         type="button"
         class="btn-mini h-8 min-w-0 flex-1 justify-center gap-1.5 px-2.5 text-xs"
         :title="viewModel.nextAction.label"
-        @click="emit('next')"
+        :disabled="writeBlocked" @click="emit('next')"
       >
         <span class="truncate"><MoneyText :text="viewModel.nextAction.label" /></span>
         <ArrowRight :size="14" class="shrink-0" aria-hidden="true" />
@@ -360,13 +361,13 @@ const onWorkflowChange = async (event: Event) => {
     </div>
 
     <div v-if="!effectiveCompact && !workspace" class="mt-2.5 flex items-center gap-2">
-      <button type="button" class="btn-mini min-w-0 flex-1 justify-center text-xs sm:flex-none" @click="emit('next')"><MoneyText :text="viewModel.nextAction.label" /></button>
+      <button type="button" class="btn-mini min-w-0 flex-1 justify-center text-xs sm:flex-none" :disabled="writeBlocked" @click="emit('next')"><MoneyText :text="viewModel.nextAction.label" /></button>
       <button v-if="balance > 0" type="button" class="btn-mini-outline hidden h-9 text-xs sm:inline-flex" @click="emit('payments')">Внести оплату</button>
       <div v-if="dirty" class="flex shrink-0 items-center gap-1.5">
         <button type="button" class="btn-mini-outline h-9 w-9 justify-center p-0" :disabled="saving" title="Отменить изменения" aria-label="Отменить изменения" @click="emit('discard')">
           <Undo2 :size="15" />
         </button>
-        <button type="button" class="btn-mini h-9 gap-1.5 px-3 text-xs" :disabled="saving" @click="emit('save')">
+        <button type="button" class="btn-mini h-9 gap-1.5 px-3 text-xs" :disabled="saving || writeBlocked" @click="emit('save')">
           <Save :size="15" />
           <span class="hidden sm:inline">{{ saving ? 'Сохраняем' : 'Сохранить' }}</span>
         </button>

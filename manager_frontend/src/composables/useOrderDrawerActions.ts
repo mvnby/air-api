@@ -14,6 +14,7 @@ type UseOrderDrawerActionsOptions = {
   localFormError: Ref<string>;
   persistDraft: () => void;
   clearDraft: () => void;
+  preserveDraftOnLeave?: Readonly<Ref<boolean>>;
   setToast: ToastHandler;
   beforeClose?: () => Promise<boolean>;
   onBeforeClose: () => void;
@@ -29,6 +30,7 @@ export const useOrderDrawerActions = ({
   localFormError,
   persistDraft,
   clearDraft,
+  preserveDraftOnLeave,
   setToast,
   beforeClose,
   onBeforeClose,
@@ -80,6 +82,11 @@ export const useOrderDrawerActions = ({
     const isDomEvent = typeof Event !== 'undefined' && options instanceof Event;
     const force = Boolean(options && !isDomEvent && (options as { force?: boolean }).force);
     if (!force && beforeClose && !await beforeClose()) return false;
+    if (!force && preserveDraftOnLeave?.value) {
+      persistDraft();
+      onBeforeClose();
+      return true;
+    }
     if (!force && hasUnsavedChanges.value) {
       persistDraft();
       const discard = await confirmDialog({

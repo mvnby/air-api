@@ -193,6 +193,8 @@ const loadOrders = async () => {
     orders.value = loadedOrders;
     const loadedIds = new Set(orders.value.map((order) => order.id));
     selectedOrderIds.value = selectedOrderIds.value.filter((orderId) => loadedIds.has(orderId));
+    // Render loaded filter counts before restoring scroll; their wrapping changes mobile height.
+    loading.value = false;
     await nextTick();
     const position = savedOrderListPosition();
     if (!restoredPosition && position?.url === `${window.location.pathname}${window.location.search}`) {

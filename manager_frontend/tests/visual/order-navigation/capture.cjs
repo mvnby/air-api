@@ -25,10 +25,11 @@ const order = {
 };
 let browser;
 async function fixture(width = 1440, height = 900) {
-  const context = await browser.newContext({ viewport: { width, height }, isMobile: width < 768, hasTouch: width < 768 });
+  const context = await browser.newContext({ serviceWorkers: 'block', viewport: { width, height }, isMobile: width < 768, hasTouch: width < 768 });
   const page = await context.newPage();
   page.setDefaultTimeout(7000);
-  const requests = [], patches = [], errors = [], scripts = [];
+  const requests = [], patches = [], attempts = [], errors = [], scripts = [];
+  let nextLinkId=1000, loseResponse=false;
   let current = {...structuredClone(order), workflow_type:'sales_installation'}, failSave = false;
   const documents = [];
   const tender = {order_id:477,stage:null,deadline_at:null,price_enquiry:null,publications:[],history:[]};
@@ -54,7 +55,21 @@ async function fixture(width = 1440, height = 900) {
     else if (url.pathname === '/api/manager/orders/477') {
       if(route.request().method()==='GET' && failDetail) return route.fulfill({status:503,json:{detail:'Synthetic order failure'}});
       if(route.request().method()==='GET' && detailDelay) await new Promise(done=>setTimeout(done,detailDelay));
-      if (route.request().method() === 'PATCH') { if (failSave) return route.fulfill({status:500,json:{detail:'Synthetic save failure'}}); patches.push(route.request().postDataJSON()); current = { ...current, ...patches.at(-1) }; }
+      if (route.request().method() === 'PATCH') {
+        const payload=route.request().postDataJSON();attempts.push(payload);
+        if(failSave) return route.fulfill({status:500,json:{detail:'Synthetic save failure'}});
+        const proposal=current.proposals.find(item=>item.id===payload.line_proposal_id);
+        for(const [field,rows] of [['products','product_lines'],['services','service_lines']]) if(payload[field]) {
+          const ids=new Set((proposal?.[rows]||[]).map(row=>row.id));const incoming=payload[field].filter(row=>row.link_id!=null).map(row=>row.link_id);
+          if(new Set(incoming).size!==incoming.length||incoming.some(id=>!ids.has(id))) return route.fulfill({status:400,json:{detail:'Line does not belong to the target proposal'}});
+        }
+        const {products,services,line_proposal_id,...form}=payload;current={...current,...form};
+        if(products) proposal.product_lines=products.map(row=>({...row,id:row.link_id??nextLinkId++,product_title:row.product_id===9?'Тестовый товар':'Другой товар'}));
+        if(services) proposal.service_lines=services.map(row=>({...row,id:row.link_id??nextLinkId++,service_title:row.title}));
+        const selected=current.proposals.find(item=>item.is_selected);current.product_lines=selected.product_lines;current.service_lines=selected.service_lines;
+        patches.push(payload);
+        if(loseResponse) {loseResponse=false;return route.abort('failed');}
+      }
       data = current;
     }
     else if (url.pathname === '/api/manager/orders/477/proposals/25/archive' && route.request().method() === 'POST') {
@@ -76,7 +91,7 @@ async function fixture(width = 1440, height = 900) {
     return route.fulfill({ json: data });
   });
   const workspace = page.getByRole('region', { name: 'Рабочая область заказа', exact: true });
-  return { context, page, workspace, requests, patches, errors, scripts, documents, tender, current:()=>current, failSave:(value)=>{failSave=value;}, failWorkers:value=>{failWorkers=value;}, failDetail:value=>{failDetail=value;}, detailDelay:value=>{detailDelay=value;}, failWorkChunk:value=>{failWorkChunk=value;} };
+  return { context, page, workspace, requests, patches, attempts, loseNextSave:()=>{loseResponse=true;}, errors, scripts, documents, tender, current:()=>current, failSave:(value)=>{failSave=value;}, failWorkers:value=>{failWorkers=value;}, failDetail:value=>{failDetail=value;}, detailDelay:value=>{detailDelay=value;}, failWorkChunk:value=>{failWorkChunk=value;} };
 }
 
 const boardPath='/manager/orders/kanban?segment=b2b&view=kanban&groupBy=none&search=office&assigned_to_me=1&status=negotiation&sort=margin_desc&workFilter=unpaid&hideOnHold=false&filtersOpen=true';
@@ -85,7 +100,7 @@ async function runCase(width,name,task) {
  if(caseFilter && !caseFilter.test(name)) return;
  const f=await fixture(width,850);
  try { await task(f);assert.deepEqual(f.errors,[]);checks.push({width,name});console.log(width,name,'passed'); }
- catch(error) { await f.page.screenshot({path:path.join(output,`${width}-failure.png`)}).catch(()=>{});console.error(await location(f.page));throw error; }
+ catch(error) { await f.page.screenshot({path:path.join(output,`${width}-failure.png`)}).catch(()=>{});console.error(await f.page.evaluate(()=>({url:location.pathname+location.search,top:scrollY,height:document.documentElement.scrollHeight,saved:history.state?.orderListPosition})));throw error; }
  finally { await f.context.close(); }
 }
 async function openBoard(f,grouped=false) {
@@ -146,6 +161,7 @@ async function openIncompleteDocument(f) {
 (async()=>{
  browser=await chromium.launch({headless:true});
  try{
+ await require('./draft-recovery-cases.cjs')({runCase,base,output,openBoard,assertBoard});
  for(const width of [384,1440]) {
   await runCase(width,'draft restore preserves fresh server fields and estimate',async f=>{
    await f.page.goto(base+'/manager/orders/477?proposalId=24');await f.page.getByText('Услуга варианта А',{exact:true}).waitFor();

@@ -73,6 +73,20 @@ describe('work filters', () => {
 });
 
 describe('dashboard search and completeness', () => {
+  it('renders loaded filter counts before restoring the list position', async () => {
+    const url = '/manager/orders/kanban?segment=b2b';
+    window.history.replaceState({}, '', url);
+    const loaded = deferred<ReturnType<typeof response>>();
+    vi.spyOn(api, 'getManagerOrders').mockReturnValue(loaded.promise);
+    const scroll = vi.spyOn(window, 'scrollTo').mockImplementation(() => {
+      expect(wrapper!.text()).toContain('По фильтрам: 1');
+      expect(wrapper!.text()).not.toContain('Загрузка заказов…');
+    });
+    wrapper = mountDashboard(); await flushPromises();
+    window.history.replaceState({ orderListPosition: { url: window.location.pathname + window.location.search, top: 500 } }, '');
+    loaded.resolve(response([order(1)])); await flushPromises();
+    expect(scroll).toHaveBeenCalledExactlyOnceWith(0, 500);
+  });
   it('keeps the exact customer filter on every page and explicitly clears it', async () => {
     window.history.replaceState({}, '', '/manager/orders/kanban?segment=all&customerId=42');
     const getOrders = vi.spyOn(api, 'getManagerOrders').mockResolvedValue(response([order(1)], 2));
