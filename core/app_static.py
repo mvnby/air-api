@@ -1,8 +1,10 @@
 import mimetypes
+import re
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException
 from starlette.responses import Response
 
 from core.app_constants import MANAGER_ASSETS_DIRNAME, MANAGER_ASSETS_ROUTE
@@ -15,6 +17,9 @@ MANAGER_NO_CACHE_HEADERS = {
     "Pragma": "no-cache",
     "Expires": "0",
 }
+MANAGER_IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable"
+# Vite's default build names end in an eight-character URL-safe content hash.
+MANAGER_HASHED_BUILD_ASSET = re.compile(r".+-[A-Za-z0-9_-]{8}\.(?:js|css)\Z")
 
 
 mimetypes.add_type("image/webp", ".webp")
@@ -29,9 +34,18 @@ def apply_manager_no_cache_headers(response: Response) -> Response:
 
 class ManagerAssetsStaticFiles(StaticFiles):
     async def get_response(self, path: str, scope) -> Response:
-        response = await super().get_response(path, scope)
-        if response.status_code == 200 and path.endswith((".js", ".css")):
-            apply_manager_no_cache_headers(response)
+        try:
+            response = await super().get_response(path, scope)
+        except HTTPException as exc:
+            if exc.status_code == 404:
+                # A retired chunk may become available again after a rollback.
+                exc.headers = {**(exc.headers or {}), **MANAGER_NO_CACHE_HEADERS}
+            raise
+        if response.status_code in (200, 304) and path.endswith((".js", ".css")):
+            if MANAGER_HASHED_BUILD_ASSET.fullmatch(Path(path).name):
+                response.headers["Cache-Control"] = MANAGER_IMMUTABLE_CACHE_CONTROL
+            else:
+                apply_manager_no_cache_headers(response)
         return response
 
 

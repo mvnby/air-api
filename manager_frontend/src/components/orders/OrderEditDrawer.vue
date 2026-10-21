@@ -460,7 +460,7 @@ const refreshOrderFromDocumentsPanel = () => {
   }
 };
 
-const initForm = async (order: ManagerOrderDetailResponse | null) => {
+const initForm = async (order: ManagerOrderDetailResponse | null, onReady?: () => void) => {
   if (!order) return;
   initializing.value = true;
   localServerErrors.value = {};
@@ -497,6 +497,7 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
   syncProductLookupFromLines();
   await nextTick();
   initializing.value = false;
+  onReady?.();
   await Promise.all([
     loadOrderSupplyRequests(order.id),
     loadOrderEmails(order.id),
@@ -506,7 +507,9 @@ const initForm = async (order: ManagerOrderDetailResponse | null) => {
 
 watch(
   [() => props.modelValue, () => props.order],
-  async ([open, order], [wasOpen, previousOrder]) => {
+  async ([open, order], [wasOpen, previousOrder], onCleanup) => {
+    let current = true;
+    onCleanup(() => { current = false; });
     if (!open) {
       usageReportOpen.value = false;
       if (wasOpen && !isPage.value) {
@@ -519,10 +522,11 @@ watch(
     if (wasOpen && previousOrder?.id === order.id && (responsibilityResponses.has(toRaw(order)) || discardResponses.has(toRaw(order)))) return;
     if (!wasOpen || order.id !== previousOrder?.id) {
       if (!isPage.value) captureFocus();
-      await initForm(order);
-      await nextTick();
-      resetWorkspaceHeader();
-      focusContainer();
+      await initForm(order, () => {
+        if (!current || drawerDisposed || !props.modelValue || props.order?.id !== order.id) return;
+        resetWorkspaceHeader();
+        focusContainer();
+      });
     } else if (!orderSaving.isOwnResponse(order) && !saving.value && (!hasUnsavedChanges.value || draftBlocked.value)) {
       await initForm(order);
     } else {

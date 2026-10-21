@@ -11,6 +11,7 @@ Run from the repository root with these environment variables:
 KITLANE_PLAYWRIGHT_MODULE=/absolute/path/to/playwright \
 KITLANE_BENCH_DIST=/absolute/path/to/frozen/dist \
 KITLANE_BENCH_LABEL=before \
+KITLANE_BENCH_CACHE_POLICY=no-store \
 KITLANE_BENCH_PAIRS=5 \
 KITLANE_BENCH_ICON_FONT=/absolute/path/to/material-icons.woff2 \
 KITLANE_SCREENSHOTS=/absolute/path/to/results \
@@ -30,10 +31,15 @@ Screenshots additionally show a 1440 × 850 viewport. Each pair creates a fresh
 browser context for the cold run and reuses it with a new page for the warm run.
 The cold run visits Documents and Work before warming the next page. Five pairs
 provide five cold and five warm runs for each workflow. HTTP cache stays enabled;
-the harness uses no browser request interception. Versioned assets are served
-with immutable caching. API responses use `no-store`.
+the harness uses no browser request interception. Set `KITLANE_BENCH_CACHE_POLICY=no-store` for the published PR #1187
+baseline and `immutable` for the candidate. This mirrors the separately verified
+Manager JS/CSS response-header contract; it does not claim to measure production
+routing or server compression. API responses and HTML use `no-store`. Fonts remain
+identical and cacheable in both runs. Each warm run also performs a full reload
+with cache enabled and records readiness, build transfer bytes and cache hits.
 
-Readiness requires the fixture service text to be visible and the proposal's
+`estimateVisibleMs` records the first observed visibility of the fixture service
+text. Readiness additionally requires the proposal's
 `+ Услуга` action to pass a Playwright trial click. Startup requests include all
 requests before the initial network-idle boundary, after readiness. Documents
 readiness requires the provider toggle and loaded empty document list. Work
@@ -64,3 +70,11 @@ For deterministic behavioral screenshots, the sibling
 to the same frozen Material Icons Round WOFF2 file. It substitutes only the
 external font stylesheet/font responses; application assets and synthetic API
 flows are unchanged. This avoids screenshot timeouts waiting for Google Fonts.
+
+For native 200% browser zoom checks, run that behavioral harness with
+`KITLANE_NAV_CASES='nav labels' KITLANE_NATIVE_ZOOM=2`. It uses a temporary
+extension in isolated profiles to call Chromium's `chrome.tabs.setZoom`, verifies
+the returned zoom and CSS viewport, and removes each profile after closing it.
+This is separate from the additional narrow CSS viewport reflow checks. Actual
+text ranges must remain inside their own nonoverlapping button rectangles in
+both themes and workflows; keyboard activation is checked at native zoom too.

@@ -135,6 +135,50 @@ const seedDeletedDraft = async (kind: 'services' | 'products') => {
   return field;
 };
 
+describe('initial focus before background loading', () => {
+  it.each([false,true])('preserves the active input, selection and scroll after background completion (failure %s)', async failure => {
+    let finish!: (result:any)=>void, fail!: (reason:any)=>void;
+    apiMock.listSupplyRequests.mockImplementationOnce(()=>new Promise((resolve,reject)=>{finish=resolve;fail=reject;}));
+    await mountDrawer('page',false,false,true);
+    await header().get('[aria-label="Автосохранение заказа"]').trigger('click');
+    await header().get('[aria-label^="Изменить название:"]').trigger('click');
+    const input=header().get<HTMLInputElement>('[aria-label="Название заказа"]');
+    await input.setValue('Продолжаю ввод');input.element.focus();input.element.setSelectionRange(3,8);
+    const scroller=wrapper.get('aside > .grid').element;scroller.scrollTop=123;
+    vi.spyOn(console,'error').mockImplementation(()=>{});
+    if(failure) fail(new Error('background offline'));else finish({items:[]});
+    await flushPromises();
+    expect(document.activeElement).toBe(input.element);
+    expect(input.element.value).toBe('Продолжаю ввод');
+    expect([input.element.selectionStart,input.element.selectionEnd]).toEqual([3,8]);
+    expect(scroller.scrollTop).toBe(123);
+    expect(ManagerOrdersService.patchManagerOrder).not.toHaveBeenCalled();
+  });
+  it('does not move focus from a newer order when an earlier request completes', async () => {
+    let finish!: (result:any)=>void;
+    apiMock.listSupplyRequests.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+    await mountDrawer('page',false,false,true);
+    await wrapper.setProps({order:{...stored,id:396,title:'Другой заказ'}});await flushPromises();
+    await header().get('[aria-label="Автосохранение заказа"]').trigger('click');
+    await header().get('[aria-label^="Изменить название:"]').trigger('click');
+    const input=header().get<HTMLInputElement>('[aria-label="Название заказа"]');await input.setValue('Другой ввод');input.element.focus();input.element.setSelectionRange(2,5);
+    finish({items:[]});await flushPromises();
+    expect(document.activeElement).toBe(input.element);
+    expect([input.element.selectionStart,input.element.selectionEnd]).toEqual([2,5]);
+    expect(ManagerOrdersService.patchManagerOrder).not.toHaveBeenCalled();
+  });
+  it('sets initial focus while requests are pending and does not focus after leaving', async () => {
+    let finish!: (result:any)=>void;
+    apiMock.listSupplyRequests.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+    await mountDrawer('page',false,false,true);
+    expect(document.activeElement).toBe(wrapper.get('aside').element);
+    await wrapper.setProps({modelValue:false});
+    const outside=document.createElement('input');document.body.append(outside);outside.focus();
+    finish({items:[]});await flushPromises();
+    expect(document.activeElement).toBe(outside);outside.remove();
+  });
+});
+
 describe('discard with the real title editor', () => {
   const input = () => header().find<HTMLInputElement>('[aria-label="Название заказа"]');
   const draftEntries = () => Object.fromEntries(Object.entries(sessionStorage).filter(([key])=>key.startsWith('manager_order_drawer_draft_395_25_')));

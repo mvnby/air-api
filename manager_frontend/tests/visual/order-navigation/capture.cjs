@@ -24,8 +24,16 @@ const order = {
   ],
 };
 let browser;
+const nativeZoom = Number(process.env.KITLANE_NATIVE_ZOOM || 1);
+assert([1, 2].includes(nativeZoom), 'Native zoom must be 1 or 2');
+const zoomExtension = nativeZoom === 1 ? null : fs.mkdtempSync('/tmp/order-nav-zoom-extension-');
+if (zoomExtension) {
+  fs.writeFileSync(path.join(zoomExtension,'manifest.json'),JSON.stringify({manifest_version:3,name:'Local navigation zoom test',version:'1.0',permissions:['tabs'],background:{service_worker:'worker.js'}}));
+  fs.writeFileSync(path.join(zoomExtension,'worker.js'),'chrome.runtime.onInstalled.addListener(()=>{});');
+}
 async function fixture(width = 1440, height = 900) {
-  const context = await browser.newContext({ serviceWorkers: 'block', viewport: { width, height }, isMobile: width < 768, hasTouch: width < 768 });
+  const profile = zoomExtension ? fs.mkdtempSync('/tmp/order-nav-zoom-profile-') : null;
+  const context = profile ? await chromium.launchPersistentContext(profile,{channel:'chromium',headless:true,viewport:{width,height},args:['--disable-extensions-except='+zoomExtension,'--load-extension='+zoomExtension]}) : await browser.newContext({ serviceWorkers: 'block', viewport: { width, height }, isMobile: width < 768, hasTouch: width < 768 });
   const page = await context.newPage();
   page.setDefaultTimeout(7000);
   const requests = [], patches = [], attempts = [], errors = [], scripts = [];
@@ -91,7 +99,14 @@ async function fixture(width = 1440, height = 900) {
     return route.fulfill({ json: data });
   });
   const workspace = page.getByRole('region', { name: 'Рабочая область заказа', exact: true });
-  return { context, page, workspace, requests, patches, attempts, loseNextSave:()=>{loseResponse=true;}, errors, scripts, documents, tender, current:()=>current, failSave:(value)=>{failSave=value;}, failWorkers:value=>{failWorkers=value;}, failDetail:value=>{failDetail=value;}, detailDelay:value=>{detailDelay=value;}, failWorkChunk:value=>{failWorkChunk=value;} };
+  const setNativeZoom=async()=>{
+    if(!zoomExtension)return;
+    const worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker');
+    const actual=await worker.evaluate(async({url,zoom})=>{const tabs=await chrome.tabs.query({});const tab=tabs.find(t=>t.url===url);await chrome.tabs.setZoom(tab.id,zoom);return chrome.tabs.getZoom(tab.id);},{url:page.url(),zoom:nativeZoom});
+    assert.equal(actual,nativeZoom);
+    await page.waitForFunction(({width,zoom})=>Math.abs(innerWidth-width/zoom)<=1,{width,zoom:nativeZoom});
+  };
+  return { context, profile, page, workspace, requests, patches, attempts, setNativeZoom, nativeZoom, loseNextSave:()=>{loseResponse=true;}, errors, scripts, documents, tender, current:()=>current, failSave:(value)=>{failSave=value;}, failWorkers:value=>{failWorkers=value;}, failDetail:value=>{failDetail=value;}, detailDelay:value=>{detailDelay=value;}, failWorkChunk:value=>{failWorkChunk=value;} };
 }
 
 const boardPath='/manager/orders/kanban?segment=b2b&view=kanban&groupBy=none&search=office&assigned_to_me=1&status=negotiation&sort=margin_desc&workFilter=unpaid&hideOnHold=false&filtersOpen=true';
@@ -101,7 +116,7 @@ async function runCase(width,name,task) {
  const f=await fixture(width,850);
  try { await task(f);assert.deepEqual(f.errors,[]);checks.push({width,name});console.log(width,name,'passed'); }
  catch(error) { await f.page.screenshot({path:path.join(output,`${width}-failure.png`)}).catch(()=>{});console.error(await f.page.evaluate(()=>({url:location.pathname+location.search,top:scrollY,height:document.documentElement.scrollHeight,saved:history.state?.orderListPosition})));throw error; }
- finally { await f.context.close(); }
+ finally { await f.context.close();if(f.profile)await fs.promises.rm(f.profile,{recursive:true,force:true,maxRetries:5,retryDelay:100}); }
 }
 async function openBoard(f,grouped=false) {
  await f.page.goto(base+(grouped?boardPath.replace('groupBy=none','groupBy=customer'):boardPath));
@@ -161,6 +176,8 @@ async function openIncompleteDocument(f) {
 (async()=>{
  browser=await chromium.launch({headless:true});
  try{
+ await require('./nav-layout-cases.cjs')({runCase,base,output});
+ await require('./focus-load-cases.cjs')({runCase,base,output});
  await require('./title-discard-cases.cjs')({runCase,base,output});
  await require('./draft-recovery-cases.cjs')({runCase,base,output,openBoard,assertBoard});
  for(const width of [384,1440]) {
@@ -486,5 +503,5 @@ async function openIncompleteDocument(f) {
  });
  fs.writeFileSync(path.join(output,'results.json'),JSON.stringify({checks},null,2));
  console.log(JSON.stringify({checks:checks.length,output}));
- }finally{await browser.close();}
+ }finally{await browser.close();if(zoomExtension)fs.rmSync(zoomExtension,{recursive:true,force:true});}
 })().catch(e=>{console.error(e);process.exitCode=1;});
