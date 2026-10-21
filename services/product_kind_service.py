@@ -21,14 +21,16 @@ PRODUCT_KIND_BY_SYSTEM_TYPE = {
     "мульти-сплит-система": "other",
 }
 
+SPEC_BOOLEAN_FALSE_VALUES = ("false", "0", "no", "нет", "не входит")
+
 
 def _as_bool(value: Any) -> bool | None:
     if isinstance(value, bool):
         return value
-    normalized = str(value or "").strip().lower()
+    normalized = str(value if value is not None else "").strip().lower()
     if normalized in {"true", "1", "yes", "да", "есть", "в комплекте"}:
         return True
-    if normalized in {"false", "0", "no", "нет", "не входит"}:
+    if normalized in SPEC_BOOLEAN_FALSE_VALUES:
         return False
     return None
 
