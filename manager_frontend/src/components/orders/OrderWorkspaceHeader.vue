@@ -23,6 +23,7 @@ const props = defineProps<{
   dirty?: boolean;
   saving?: boolean;
   writeBlocked?: boolean;
+  titleResetVersion?: number;
   autosaveEnabled?: boolean;
   saveFailed?: boolean;
   saveStatusText?: string;
@@ -159,6 +160,11 @@ const finishTitleEdit = async () => {
   await nextTick();
   titleTriggerRef.value?.focus();
 };
+// Only an explicit successful discard resets an open editor; normal saves preserve input and caret.
+watch(() => props.titleResetVersion, () => {
+  titleDraft.value = props.title;
+  if (editingTitle.value) void finishTitleEdit();
+});
 const closeMenu = async (restoreFocus = true) => {
   menuOpen.value = false;
   if (!restoreFocus) return;

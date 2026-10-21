@@ -110,6 +110,7 @@ function setToast(message: string, type: 'success' | 'error' = 'success') {
 
 const initializing = ref(false);
 const discardingDraft = ref(false), discardFailed = ref(false);
+const titleResetVersion = ref(0);
 const discardResponses = new WeakSet<object>();
 let drawerDisposed = false;
 onScopeDispose(() => { drawerDisposed = true; });
@@ -572,6 +573,7 @@ const discardUnsavedChanges = async () => {
     if (drawerDisposed || !props.modelValue || props.order !== originalOrder || draftIdentityKey.value !== identity) return;
     discardResponses.add(toRaw(fresh));
     emit('updated', fresh);
+    titleResetVersion.value += 1;
     discardFailed.value = false;
     setToast('Изменения отменены', 'success');
   } catch {
@@ -626,6 +628,7 @@ defineExpose({ prepareToLeave });
         class="shrink-0"
         :workspace="true"
         :write-blocked="draftBlocked"
+        :title-reset-version="titleResetVersion"
         :order-id="order?.id"
         :back-label="isPage ? backLabel : undefined"
         :title="displayOrderTitle"
