@@ -51,7 +51,16 @@ export type ProductLine = {
 
 export type ServiceLine = ServiceDescriptionLine;
 
+export type OrderDrawerDraftScope = {
+  tenantId: number;
+  account: string;
+  storefrontId: number | null;
+  storefrontSlug: string | null;
+};
+
 export type OrderDrawerDraft = {
   productLines: ProductLine[];
   serviceLines: ServiceLine[];
+  scope?: OrderDrawerDraftScope;
+  formDraft?: Record<string, unknown>;
 };

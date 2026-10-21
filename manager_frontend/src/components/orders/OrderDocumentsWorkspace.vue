@@ -3,7 +3,7 @@ import { computed, nextTick, ref } from 'vue';
 import type { ManagedDocumentItem, ManagerOrderDetailResponse } from '../../client';
 import type { ProductLine } from './order-editor-types';
 import NativeDocumentsWorkspace from '../../features/documents/components/NativeDocumentsWorkspace.vue';
-import OrderDocumentsPanel from './OrderDocumentsPanel.vue';
+import OrderAsyncPanel from './OrderAsyncPanel.vue';
 import OrderDrawerSection from './OrderDrawerSection.vue';
 
 type BeforeGenerateResult = boolean | void | { proceed?: boolean; mutated?: boolean };
@@ -27,6 +27,7 @@ const expanded = defineModel<boolean>('expanded', { required: true });
 const nativeRef = ref<InstanceType<typeof NativeDocumentsWorkspace> | null>(null);
 const activeProvider = ref<'native' | 'google'>('native');
 const googleProviderMounted = ref(false);
+const loadGoogleDocuments = () => import('./OrderDocumentsPanel.vue');
 
 const documents = computed(() => props.order.documents || []);
 const activeManagedDocuments = computed(() => (props.managedDocuments || []).filter((document) => !['void', 'replaced'].includes(document.status)));
@@ -127,7 +128,9 @@ defineExpose({ openSend, openCreate, openNative });
     </div>
 
     <div v-if="googleProviderMounted" v-show="activeProvider === 'google'">
-      <OrderDocumentsPanel
+      <OrderAsyncPanel :load="loadGoogleDocuments" label="Документы Google">
+        <template #default="{ component }">
+      <component :is="component"
         :order="order"
         :active-proposal-id="activeProposalId"
         :product-lines="productLines"
@@ -135,6 +138,8 @@ defineExpose({ openSend, openCreate, openNative });
         @refresh="emit('refresh')"
         @toast="emit('toast', $event)"
       />
+        </template>
+      </OrderAsyncPanel>
     </div>
   </OrderDrawerSection>
 </template>

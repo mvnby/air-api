@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { navigateManager, openManagerChild, returnToManager, startManagerNavigation } from '../src/services/manager-navigation-history';
+import { navigateManager, openManagerChild, replaceManagerLocation, returnToManager, startManagerNavigation } from '../src/services/manager-navigation-history';
 import { normalizeOrderLocation, openOrderPage, returnFromOrder } from '../src/services/order-navigation';
 import { registerUnsavedNavigationGuard } from '../src/services/unsaved-navigation-guard';
 
@@ -48,6 +48,7 @@ describe('guarded Manager history', () => {
   it.each(['customer', 'catalog'])('returns via %s to the original order and board entries', async child => {
     const boardState = { expandedOrderId: 477, expandedGroupIds: ['12'], columnFilters: { negotiation: 'awaiting_offer' }, scrollLeft: 160 };
     await openOrderPage(477, boardState);
+    replaceManagerLocation(`${location()}&section=documents`);
     const order = location();
     const orderEntry = history.state.managerNavigation.id;
     await openManagerChild(child === 'customer' ? '/manager/customers/profile?customerId=12' : '/manager/catalog-decision?orderId=477&proposalId=25');

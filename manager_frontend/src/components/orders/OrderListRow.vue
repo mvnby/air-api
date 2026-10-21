@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { handleOrderLinkClick, orderLinkUrl } from '../../services/order-navigation';
 import OrderResponsibleBadge from './OrderResponsibleBadge.vue';
 import type { OrderResponsibilityFields } from '../../services/order-responsibility';
 import { computed } from 'vue';
@@ -52,7 +53,7 @@ const demoReadOnly = useDemoReadOnly();
       <div class="flex min-w-0 items-start gap-2">
         <span v-if="nested" class="mt-1 h-2 w-2 shrink-0 rounded-full bg-slate-300" />
         <div class="min-w-0">
-          <p class="text-xs font-semibold text-slate-500 dark:text-slate-400">#{{ order.id }}</p>
+          <a :href="orderLinkUrl(order.id)" :aria-label="`Открыть заказ №${order.id}`" class="block text-xs font-semibold text-slate-500 hover:underline dark:text-slate-400" @click="handleOrderLinkClick($event, () => emit('open', order.id))">#{{ order.id }}</a>
           <OrderTitleEditor
             class="max-w-full"
             :order-id="order.id"
@@ -101,7 +102,7 @@ const demoReadOnly = useDemoReadOnly();
     </td>
     <td class="px-3 py-2.5 align-top">
       <div class="flex flex-col items-start gap-1.5">
-        <button class="btn-mini-outline whitespace-nowrap" @click="emit('open', order.id)">Открыть</button>
+        <a :href="orderLinkUrl(order.id)" class="btn-mini-outline whitespace-nowrap" @click="handleOrderLinkClick($event, () => emit('open', order.id))">Открыть</a>
         <details class="relative text-xs">
           <summary class="cursor-pointer text-brand-700 hover:text-brand-800 dark:text-brand-300 dark:hover:text-brand-200">Документы</summary>
           <div class="mt-1 flex w-full flex-col gap-1">

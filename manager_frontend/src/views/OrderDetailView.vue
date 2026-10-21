@@ -5,7 +5,9 @@ import { api } from '../api';
 import type { OrderWithResponsibility } from '../services/order-responsibility';
 import OrderEditDrawer from '../components/orders/OrderEditDrawer.vue';
 import { registerUnsavedNavigationGuard } from '../services/unsaved-navigation-guard';
-import { orderProposalLinkError, returnFromOrder } from '../services/order-navigation';
+import { orderProposalLinkError, returnFromOrder, readOrderWorkspaceSection } from '../services/order-navigation';
+import { loadOrderWorkspaceSection } from '../components/orders/order-workspace-loaders';
+import { useManagerDocumentTitle } from '../services/manager-document-title';
 import { navigateManager } from '../services/manager-navigation-history';
 import { managerSession } from '../services/manager-session';
 import { managerStorefrontSelection } from '../services/manager-storefront-selection';
@@ -13,6 +15,10 @@ import { getApiErrorMessage } from '../utils/api-errors';
 
 const props = defineProps<{ orderId: number; returnTo: string }>();
 const order = ref<OrderWithResponsibility | null>(null);
+useManagerDocumentTitle(computed(() => {
+  const customer = order.value?.customer?.full_legal_name || order.value?.customer?.name;
+  return `Заказ №${props.orderId}${customer ? ` · ${customer}` : ''}`;
+}));
 const workspace = ref<InstanceType<typeof OrderEditDrawer> | null>(null);
 const loading = ref(false);
 const error = ref('');
@@ -48,7 +54,13 @@ const openCurrentProposal = () => {
   return navigateManager(`${url.pathname}${url.search}`, window.history.state, true);
 };
 const handleDeleted = () => { deleted = true; order.value = null; back(); };
-onMounted(() => { mounted = true; window.scrollTo(0, 0); void load(); });
+onMounted(() => {
+  mounted = true;
+  window.scrollTo(0, 0);
+  // Fetch the visible section code alongside the order, before its component mounts.
+  void loadOrderWorkspaceSection(readOrderWorkspaceSection(window.location.href)).catch(() => {});
+  void load();
+});
 </script>
 
 <template>

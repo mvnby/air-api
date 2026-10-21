@@ -1,4 +1,4 @@
-import { runGuardedNavigation } from './unsaved-navigation-guard';
+import { runGuardedNavigation, runGuardedUnload } from './unsaved-navigation-guard';
 
 type Entry = { id: string; session: string; position: number };
 export type ManagerHistoryTarget = Entry & { href: string };
@@ -90,6 +90,11 @@ export const navigateManager = (value: string, state: Record<string, unknown> = 
     window.history[replace ? 'replaceState' : 'pushState']({ ...state, [KEY]: metadata }, '', targetHref);
     commit();
   });
+};
+
+export const reloadManagerLocation = () => {
+  if (pendingPop || restoring) return Promise.resolve(false);
+  return runGuardedUnload(() => window.location.reload());
 };
 
 // Updating the viewed proposal must not remount the order or run its leave guard.

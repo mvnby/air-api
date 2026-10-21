@@ -3,6 +3,7 @@ import { hasManagerCapability, MANAGER_CAPABILITY } from '../manager-capabilitie
 import { storefrontSettingsApi } from '../features/settings/storefront-settings-api';
 import { managerSession } from '../services/manager-session';
 import { managerStorefrontSelection } from '../services/manager-storefront-selection';
+import { useManagerDocumentTitle } from '../services/manager-document-title';
 
 export function useKitlaneIdentity() {
   const brand = ref<{ display_name: string; logo_url: string | null; compact_logo_url: string | null } | null>(null);
@@ -30,7 +31,7 @@ export function useKitlaneIdentity() {
   const name = computed(() => brand.value?.display_name.trim() || storefront.value?.display_name.trim() || null);
   const logoUrl = computed(() => storefront.value ? brand.value?.logo_url ?? null : null);
   const compactLogoUrl = computed(() => storefront.value ? brand.value?.compact_logo_url ?? null : null);
-  watch(name, value => { document.title = value ? `${value} · KitLane` : 'KitLane'; }, { immediate: true, flush: 'sync' });
+  useManagerDocumentTitle(name, 'identity');
   return { name, logoUrl, compactLogoUrl, contextKey };
 }
 

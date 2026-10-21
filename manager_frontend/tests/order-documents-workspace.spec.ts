@@ -1,9 +1,11 @@
-import { shallowMount, type VueWrapper } from '@vue/test-utils';
+import { flushPromises, shallowMount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ManagerOrderDetailResponse } from '../src/client';
 import OrderDocumentsWorkspace from '../src/components/orders/OrderDocumentsWorkspace.vue';
+import OrderDocumentsPanel from '../src/components/orders/OrderDocumentsPanel.vue';
 
 const documentStubs = {
+  OrderAsyncPanel: false,
   OrderDrawerSection: {
     name: 'OrderDrawerSection',
     props: ['summary', 'hasError'],
@@ -54,7 +56,7 @@ describe('OrderDocumentsWorkspace', () => {
         productLines: [],
         total: 3_200,
       },
-      global: { stubs: documentStubs },
+      global: { components: { OrderDocumentsPanel }, stubs: documentStubs },
     });
     mountedWrappers.push(wrapper);
 
@@ -75,7 +77,7 @@ describe('OrderDocumentsWorkspace', () => {
         productLines: [],
         total: 0,
       },
-      global: { stubs: documentStubs },
+      global: { components: { OrderDocumentsPanel }, stubs: documentStubs },
     });
     mountedWrappers.push(wrapper);
 
@@ -87,12 +89,13 @@ describe('OrderDocumentsWorkspace', () => {
   it('mounts the Google editor only on first use and keeps it mounted when returning to CRM documents', async () => {
     const wrapper = shallowMount(OrderDocumentsWorkspace, {
       props: { order: baseOrder, expanded: true, productLines: [], total: 0 },
-      global: { stubs: documentStubs },
+      global: { components: { OrderDocumentsPanel }, stubs: documentStubs },
     });
     mountedWrappers.push(wrapper);
 
     expect(wrapper.findComponent({ name: 'OrderDocumentsPanel' }).exists()).toBe(false);
     await wrapper.get('button:nth-of-type(2)').trigger('click');
+    await flushPromises();
     expect(wrapper.findComponent({ name: 'OrderDocumentsPanel' }).exists()).toBe(true);
     await wrapper.get('[data-testid="google-doc-draft"]').setValue('Незаписанный черновик');
     (wrapper.vm as unknown as { openNative: () => void }).openNative();

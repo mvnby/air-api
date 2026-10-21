@@ -2,12 +2,17 @@ import { nextTick, ref, type Ref } from 'vue';
 import type { OrderDrawerSectionsState } from './useOrderDrawerPersistence';
 import type { OrderWorkflowType, OrderWorkspaceTarget } from '../components/orders/order-workspace';
 import type { OrderWorkspaceSection } from '../components/orders/OrderWorkspaceNav.vue';
+import { readOrderPage, readOrderWorkspaceSection } from '../services/order-navigation';
+import { replaceManagerLocation } from '../services/manager-navigation-history';
 
 type EquipmentPanelHandle = { collapse: () => void; expand: () => Promise<void> | void };
 type DocumentsWorkspaceHandle = { openNative: () => void };
 
 type UseOrderWorkspaceNavigationOptions = {
   status: Readonly<Ref<string>>;
+  syncLocation?: Readonly<Ref<boolean>>;
+  orderId?: Readonly<Ref<number | null | undefined>>;
+  ensureSection?: (section: OrderWorkspaceSection) => Promise<void>;
   workflowType: Readonly<Ref<OrderWorkflowType>>;
   expandedSections: Ref<OrderDrawerSectionsState>;
   equipmentPanelRef: Ref<EquipmentPanelHandle | null>;
@@ -16,6 +21,9 @@ type UseOrderWorkspaceNavigationOptions = {
 
 export const useOrderWorkspaceNavigation = ({
   status,
+  syncLocation,
+  orderId,
+  ensureSection,
   workflowType,
   expandedSections,
   equipmentPanelRef,
@@ -23,7 +31,9 @@ export const useOrderWorkspaceNavigation = ({
 }: UseOrderWorkspaceNavigationOptions) => {
   const executionWorkspaceOpen = ref(false);
   const activeWorkspaceTarget = ref<OrderWorkspaceTarget | null>(null);
-  const activeWorkspaceSection = ref<OrderWorkspaceSection>('proposal');
+  const locationMatches = () => Boolean(syncLocation?.value && orderId?.value && readOrderPage(window.location.href)?.orderId === orderId.value);
+  const locationSection = () => locationMatches() ? readOrderWorkspaceSection(window.location.href) : 'proposal';
+  const activeWorkspaceSection = ref<OrderWorkspaceSection>(locationSection());
 
   const sectionForTarget = (target: OrderWorkspaceTarget): OrderWorkspaceSection => {
     if (target === 'proposal') return 'proposal';
@@ -32,8 +42,13 @@ export const useOrderWorkspaceNavigation = ({
     return 'work';
   };
 
-  const selectWorkspaceSection = (section: OrderWorkspaceSection) => {
+  const selectWorkspaceSection = (section: OrderWorkspaceSection, sync = true) => {
     activeWorkspaceSection.value = section;
+    if (sync && locationMatches()) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('section', section);
+      replaceManagerLocation(`${url.pathname}${url.search}`);
+    }
     if (section === 'proposal') expandedSections.value.proposals = true;
     if (section === 'documents') expandedSections.value.documents = true;
     if (section === 'payments') {
@@ -45,7 +60,7 @@ export const useOrderWorkspaceNavigation = ({
   const resetWorkspaceNavigation = () => {
     executionWorkspaceOpen.value = false;
     activeWorkspaceTarget.value = null;
-    activeWorkspaceSection.value = 'proposal';
+    selectWorkspaceSection(locationSection(), false);
   };
 
   const openWorkspaceTarget = async (target: OrderWorkspaceTarget, allowToggle = false) => {
@@ -55,7 +70,9 @@ export const useOrderWorkspaceNavigation = ({
       activeWorkspaceTarget.value = null;
       return;
     }
-    selectWorkspaceSection(sectionForTarget(target));
+    const section = sectionForTarget(target);
+    selectWorkspaceSection(section);
+    await ensureSection?.(section);
     if (target !== 'object') activeWorkspaceTarget.value = target;
     if (target === 'object') expandedSections.value.clientDetails = true;
     if (target === 'planning') {

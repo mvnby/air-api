@@ -1,5 +1,6 @@
 import { currentManagerHistoryTarget, goToManagerHistoryTarget, navigateManager } from './manager-navigation-history';
 import type { ManagerOrderDetailResponse } from '../client';
+import type { OrderWorkspaceSection } from '../components/orders/OrderWorkspaceNav.vue';
 
 const BOARD_PATHS = ['/manager/orders', '/manager/orders/kanban', '/manager/orders/list'];
 const positiveId = (value: string | null) => value && /^[1-9]\d*$/.test(value) && Number.isSafeInteger(Number(value)) ? Number(value) : null;
@@ -11,11 +12,18 @@ export const orderReturnUrl = (value?: string | null): string => {
   if (url.origin !== window.location.origin || ![...BOARD_PATHS, '/manager/calendar'].includes(url.pathname)) return fallback;
   url.searchParams.delete('orderId');
   url.searchParams.delete('proposalId');
+  url.searchParams.delete('section');
   url.searchParams.delete('returnTo');
   return `${url.pathname}${url.search}`;
 };
 
-export const orderPageUrl = (orderId: number, returnTo?: string, proposalId?: string | null) => {
+export const readOrderWorkspaceSection = (location: string): OrderWorkspaceSection => {
+  const values = new URL(location, window.location.origin).searchParams.getAll('section');
+  const section = values.length === 1 ? values[0] : null;
+  return section === 'documents' || section === 'work' || section === 'payments' ? section : 'proposal';
+};
+
+export const orderPageUrl = (orderId: number, returnTo?: string, proposalId?: string | null, section?: OrderWorkspaceSection) => {
   const params = new URLSearchParams();
   if (returnTo) {
     const returnUrl = orderReturnUrl(returnTo);
@@ -25,6 +33,7 @@ export const orderPageUrl = (orderId: number, returnTo?: string, proposalId?: st
     for (const key of ['company', 'site']) context.getAll(key).forEach(value => params.append(key, value));
   }
   if (proposalId != null) params.set('proposalId', proposalId);
+  if (section) params.set('section', section);
   return `/manager/orders/${orderId}${params.size ? `?${params}` : ''}`;
 };
 
@@ -54,7 +63,20 @@ export const orderProposalLinkError = (order: ManagerOrderDetailResponse, locati
 export const normalizeOrderLocation = () => {
   const url = new URL(window.location.href);
   const orderId = BOARD_PATHS.includes(url.pathname) ? positiveId(url.searchParams.get('orderId')) : null;
-  if (orderId) window.history.replaceState(window.history.state, '', orderPageUrl(orderId, orderReturnUrl(url.href), url.searchParams.get('proposalId')));
+  if (orderId) {
+    const canonical = new URL(orderPageUrl(
+      orderId,
+      orderReturnUrl(url.searchParams.get('returnTo') || url.href),
+      url.searchParams.get('proposalId'),
+      url.searchParams.has('section') ? readOrderWorkspaceSection(url.href) : undefined,
+    ), window.location.origin);
+    for (const key of ['company', 'site']) {
+      if (!url.searchParams.has(key)) continue;
+      canonical.searchParams.delete(key);
+      url.searchParams.getAll(key).forEach(value => canonical.searchParams.append(key, value));
+    }
+    window.history.replaceState(window.history.state, '', `${canonical.pathname}${canonical.search}`);
+  }
   return `${window.location.pathname}${window.location.search}`;
 };
 
@@ -66,6 +88,16 @@ export type OrderBoardState = {
 };
 export type OrderListPosition = { url: string; top: number; board?: OrderBoardState };
 export const savedOrderListPosition = (): OrderListPosition | undefined => window.history.state?.orderListPosition;
+
+// Native anchor navigation keeps browser actions available; only a plain click uses the guarded app transition.
+export const handleOrderLinkClick = (event: MouseEvent, open: () => void) => {
+  event.stopPropagation();
+  if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  open();
+};
+
+export const orderLinkUrl = (orderId: number) => orderPageUrl(orderId, orderReturnUrl(window.location.href));
 
 export const openOrderPage = (orderId: number, board?: OrderBoardState) => {
   const returnTo = orderReturnUrl(`${window.location.pathname}${window.location.search}`);

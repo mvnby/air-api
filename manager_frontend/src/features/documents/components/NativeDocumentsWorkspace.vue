@@ -6,7 +6,7 @@ import DocumentSendModal from '../../../components/orders/DocumentSendModal.vue'
 import { getOrderDocumentAccess } from '../../../components/orders/order-document-access';
 import { MANAGER_CAPABILITY, hasManagerCapability } from '../../../manager-capabilities';
 import { managerSession } from '../../../services/manager-session';
-import { openManagerChild } from '../../../services/manager-navigation-history';
+import { navigateManager, openManagerChild } from '../../../services/manager-navigation-history';
 import { useManagedDocumentWorkspace } from '../composables/use-managed-document-workspace';
 import ConsumerDocumentTermsPanel from './ConsumerDocumentTermsPanel.vue';
 import DraftParametersEditor from './DraftParametersEditor.vue';
@@ -282,8 +282,7 @@ const openCustomerProfile = () => {
 
 const openSettings = () => {
   if (!canManageDocumentSettings.value) return;
-  window.history.pushState({}, '', '/manager/settings/documents');
-  window.dispatchEvent(new PopStateEvent('popstate'));
+  return navigateManager('/manager/settings/documents');
 };
 const prepareReplacement = (document: Parameters<typeof workspace.prepareReplacement>[0]) => {
   workspace.prepareReplacement(document);
@@ -379,8 +378,12 @@ const createDraft = async (allowIncomplete = false) => {
     preparingDraft.value = false;
   }
 };
+const openCreateForm = () => {
+  formRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  formRef.value?.querySelector<HTMLButtonElement>('[data-testid="native-document-type"] button')?.focus({ preventScroll: true });
+};
 defineExpose({
-  openCreate: () => formRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+  openCreate: openCreateForm,
   openSend: () => { if (access.value.canSend && canSendNativeEmail.value) sendOpen.value = true; },
 });
 </script>
@@ -409,6 +412,7 @@ defineExpose({
           <template v-else>Для онлайн-редактирования обратитесь к владельцу аккаунта.</template>
         </p>
       </div>
+      <button v-if="access.canCreate" type="button" class="btn-mini min-h-9 w-fit shrink-0 px-3 focus-visible:ring-2 focus-visible:ring-brand-500" @click="openCreateForm">Новый документ</button>
     </div>
 
     <div v-if="workspace.loading.value" class="flex items-center justify-center gap-2 py-10 text-sm text-slate-500">

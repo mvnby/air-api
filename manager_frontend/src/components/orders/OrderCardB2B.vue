@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { handleOrderLinkClick, orderLinkUrl } from '../../services/order-navigation';
 import OrderResponsibleBadge from './OrderResponsibleBadge.vue';
 import type { OrderResponsibilityFields } from '../../services/order-responsibility';
 import { computed, ref } from 'vue';
@@ -125,7 +126,7 @@ const paymentSummary = computed(() => {
   >
     <header class="space-y-1.5">
       <div class="flex min-w-0 items-center justify-between gap-2">
-        <span class="-ml-1 shrink-0 rounded-r-full bg-white/80 px-2 py-0.5 text-[10px] font-bold text-slate-500 dark:bg-slate-900/40 dark:text-slate-400">№{{ order.id }}</span>
+        <a :href="orderLinkUrl(order.id)" :aria-label="`Открыть заказ №${order.id}`" class="-ml-1 shrink-0 rounded-r-full bg-white/80 px-2 py-0.5 text-[10px] font-bold text-slate-500 hover:underline dark:bg-slate-900/40 dark:text-slate-400" @click="handleOrderLinkClick($event, () => emit('open', order.id))">№{{ order.id }}</a>
         <span class="-mr-1 max-w-[70%] truncate rounded-l-full px-2 py-0.5 text-[10px] font-semibold" :class="boardBadgeClass">{{ boardLabel }}</span>
       </div>
       <div class="flex min-w-0 items-start gap-1">
@@ -214,10 +215,10 @@ const paymentSummary = computed(() => {
         </div>
 
         <footer class="mt-3 flex flex-wrap gap-2">
-          <button type="button" class="btn-mini-outline inline-flex items-center gap-1" @click.stop="emit('open', order.id)">
+          <a :href="orderLinkUrl(order.id)" class="btn-mini-outline inline-flex items-center gap-1" @click="handleOrderLinkClick($event, () => emit('open', order.id))">
             <ExternalLink class="h-3.5 w-3.5" />
             Открыть заказ
-          </button>
+          </a>
         </footer>
       </section>
     </Transition>

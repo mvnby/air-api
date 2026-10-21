@@ -136,13 +136,13 @@ async function run() {
         await column.getByRole('button', { name: /Ждет предложение/ }).click();
         const card = column.locator('article').filter({ hasText: '№477' });
         await card.getByRole('button', { name: 'Раскрыть заказ', exact: true }).click();
-        await card.getByRole('button', { name: 'Открыть заказ', exact: true }).waitFor();
+        await card.getByRole('link', { name: 'Открыть заказ', exact: true }).waitFor();
         await board.evaluate(el => { el.scrollLeft = 160; });
         await page.evaluate(() => window.scrollTo(0, 500));
         const expectedUrl = new URL(page.url()).pathname + new URL(page.url()).search;
-        await card.getByRole('button', { name: 'Открыть заказ', exact: true }).evaluate(el => el.click());
+        await card.getByRole('link', { name: 'Открыть заказ', exact: true }).evaluate(el => el.click());
         await workspace.waitFor(); await measure('opened from board');
-        await workspace.getByTitle('Изменить название').click();
+        await workspace.getByRole('button', {name: /^Изменить название:/}).click();
         await workspace.getByRole('textbox', { name: 'Название заказа', exact: true }).fill('Название сохранено при возврате');
         await workspace.getByRole('button', { name: 'К заказам', exact: true }).click();
         await page.waitForURL(url => url.pathname !== '/manager/orders/477');
@@ -154,10 +154,10 @@ async function run() {
         assert.equal(await column.getByTitle('Фильтр: Ждет предложение').count(), 1);
         assert.equal(await column.locator('article').filter({ hasText: '№477' }).getByRole('button', { name: 'Свернуть заказ', exact: true }).count(), 1);
         // Browser Back must be blocked on an unsuccessful save, then remain usable after recovery.
-        await column.locator('article').filter({ hasText: '№477' }).getByRole('button', { name: 'Открыть заказ', exact: true }).evaluate(el => el.click());
+        await column.locator('article').filter({ hasText: '№477' }).getByRole('link', { name: 'Открыть заказ', exact: true }).evaluate(el => el.click());
         await workspace.waitFor();
         failSave = true;
-        await workspace.getByTitle('Изменить название').click();
+        await workspace.getByRole('button', {name: /^Изменить название:/}).click();
         await workspace.getByRole('textbox', { name: 'Название заказа', exact: true }).fill('Не потерять при ошибке');
         await page.evaluate(() => window.history.back());
         await workspace.getByText(/Не удалось сохранить заказ/).waitFor();
