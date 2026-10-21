@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const { auth, stores } = require('../kitlane/fixtures.json');
 const assert = require('node:assert/strict');
 const path = require('node:path');
+const iconFont = process.env.KITLANE_ICON_FONT && fs.readFileSync(process.env.KITLANE_ICON_FONT);
 const base = process.env.KITLANE_PREVIEW_URL || 'http://127.0.0.1:5187';
 assert(['127.0.0.1', 'localhost'].includes(new URL(base).hostname), 'Only local preview is allowed');
 const output = path.resolve(process.env.KITLANE_SCREENSHOTS || '.codex-tmp/order-navigation');
@@ -31,13 +32,15 @@ async function fixture(width = 1440, height = 900) {
   let current = {...structuredClone(order), workflow_type:'sales_installation'}, failSave = false;
   const documents = [];
   const tender = {order_id:477,stage:null,deadline_at:null,price_enquiry:null,publications:[],history:[]};
-  let failWorkers = false, failDetail = false, detailDelay = 0;
+  let failWorkers = false, failDetail = false, detailDelay = 0, failWorkChunk = false;
   page.on('pageerror', e => errors.push(e.message));
   page.on('request', request => { if(request.resourceType()==='script') scripts.push(request.url()); });
   await context.route('**/*', async route => {
     const url = new URL(route.request().url());
-    if (['fonts.googleapis.com', 'fonts.gstatic.com'].includes(url.hostname)) return route.continue();
+    if (url.hostname === 'fonts.googleapis.com') return iconFont ? route.fulfill({contentType:'text/css',body:"@font-face{font-family:'Material Icons Round';font-style:normal;font-weight:400;src:url('https://fonts.gstatic.com/kitlane-fixture-icons.woff2') format('woff2')}.material-icons-round{font-family:'Material Icons Round';font-weight:normal;font-style:normal;font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;-webkit-font-feature-settings:'liga';-webkit-font-smoothing:antialiased}"}) : route.continue();
+    if (url.hostname === 'fonts.gstatic.com') return iconFont ? route.fulfill({contentType:'font/woff2',body:iconFont}) : route.continue();
     if (url.origin !== base) return route.abort();
+    if (failWorkChunk && /OrderWorkWorkspace-[^/]+\.js$/.test(url.pathname)) { failWorkChunk=false;return route.abort('failed'); }
     if (!url.pathname.startsWith('/api') && !url.pathname.startsWith('/login')) return route.continue();
     requests.push({ method: route.request().method(), path: url.pathname + url.search });
     let data = { items: [], total: 0, meta: { pages: 1 }, enabled: false };
@@ -73,7 +76,7 @@ async function fixture(width = 1440, height = 900) {
     return route.fulfill({ json: data });
   });
   const workspace = page.getByRole('region', { name: 'Рабочая область заказа', exact: true });
-  return { context, page, workspace, requests, patches, errors, scripts, documents, tender, current:()=>current, failSave:(value)=>{failSave=value;}, failWorkers:value=>{failWorkers=value;}, failDetail:value=>{failDetail=value;}, detailDelay:value=>{detailDelay=value;} };
+  return { context, page, workspace, requests, patches, errors, scripts, documents, tender, current:()=>current, failSave:(value)=>{failSave=value;}, failWorkers:value=>{failWorkers=value;}, failDetail:value=>{failDetail=value;}, detailDelay:value=>{detailDelay=value;}, failWorkChunk:value=>{failWorkChunk=value;} };
 }
 
 const boardPath='/manager/orders/kanban?segment=b2b&view=kanban&groupBy=none&search=office&assigned_to_me=1&status=negotiation&sort=margin_desc&workFilter=unpaid&hideOnHold=false&filtersOpen=true';
@@ -230,6 +233,41 @@ async function openIncompleteDocument(f) {
    await f.page.getByRole('textbox',{name:'Название заказа',exact:true}).press('Enter');
    const menu=f.workspace.getByRole('button',{name:'Дополнительные действия',exact:true});await menu.focus();await f.page.keyboard.press('Enter');await f.page.keyboard.press('Escape');
    assert.equal(await menu.evaluate(el=>el===document.activeElement),true);
+  });
+  await runCase(width,'second package chunk failure and guarded refresh',async f=>{
+   const query=new URLSearchParams({proposalId:'25',company:'999',site:'minsk',returnTo:boardPath,section:'documents'});
+   await f.page.goto(base+'/manager/orders/477?'+query);await f.page.getByTestId('native-documents-workspace').waitFor();
+   await f.workspace.getByRole('switch',{name:'Автосохранение заказа'}).click();
+   await f.workspace.getByRole('button',{name:/^Изменить название:/}).click();await f.page.getByRole('textbox',{name:'Название заказа',exact:true}).fill('Сохранить перед восстановлением');
+   f.failWorkChunk(true);await f.workspace.getByRole('navigation').getByRole('button',{name:'Работы',exact:true}).click();
+   await f.workspace.getByText('Не удалось загрузить раздел «Работы».',{exact:true}).waitFor();
+   const url=await location(f.page),length=await f.page.evaluate(()=>history.length);
+   await f.workspace.getByRole('button',{name:'Обновить страницу',exact:true}).click();await f.page.getByRole('button',{name:'Отмена',exact:true}).click();
+   assert.equal(await location(f.page),url);assert.equal(await f.page.evaluate(()=>history.length),length);
+   assert.equal(await f.workspace.getByRole('button',{name:'Обновить страницу',exact:true}).evaluate(el=>el===document.activeElement),true);
+   assert.equal(await f.page.getByRole('textbox',{name:'Название заказа',exact:true}).inputValue(),'Сохранить перед восстановлением');assert.equal(f.patches.length,0);
+   await f.workspace.getByRole('button',{name:'Сохранить изменения',exact:true}).click();await f.workspace.locator('header [role="status"]').filter({hasText:'Сохранено'}).waitFor();
+   const refreshed=f.page.waitForEvent('domcontentloaded');await f.workspace.getByRole('button',{name:'Обновить страницу',exact:true}).click();await refreshed;
+   await f.workspace.getByRole('combobox',{name:'Исполнитель работы',exact:true}).waitFor();
+   assert.equal(await location(f.page),url);assert.equal(await f.page.evaluate(()=>history.length),length);
+   assert.equal(f.current().title,'Сохранить перед восстановлением');assert.equal(f.current().proposals.find(p=>p.is_selected).id,24);
+   await f.workspace.getByRole('navigation').getByRole('button',{name:'Предложение',exact:true}).click();await f.page.getByText('Услуга варианта Б',{exact:true}).waitFor();
+  });
+  await runCase(width,'second package chunk recovery with explicit discard',async f=>{
+   const query=new URLSearchParams({proposalId:'25',company:'999',site:'minsk',returnTo:boardPath,section:'documents'});
+   await f.page.goto(base+'/manager/orders/477?'+query);await f.page.getByTestId('native-documents-workspace').waitFor();
+   await f.workspace.getByRole('switch',{name:'Автосохранение заказа'}).click();
+   await f.workspace.getByRole('button',{name:/^Изменить название:/}).click();await f.page.getByRole('textbox',{name:'Название заказа',exact:true}).fill('Явно отменённый черновик');
+   f.failWorkChunk(true);await f.workspace.getByRole('navigation').getByRole('button',{name:'Работы',exact:true}).click();
+   await f.workspace.getByText('Не удалось загрузить раздел «Работы».',{exact:true}).waitFor();
+   const url=await location(f.page),length=await f.page.evaluate(()=>history.length);let nativeDialogs=0;
+   f.page.on('dialog',async dialog=>{ nativeDialogs++;await dialog.dismiss(); });
+   await f.workspace.getByRole('button',{name:'Обновить страницу',exact:true}).click();
+   const refreshed=f.page.waitForEvent('domcontentloaded');await f.page.getByRole('button',{name:'Закрыть без сохранения',exact:true}).click();await refreshed;
+   await f.workspace.getByRole('combobox',{name:'Исполнитель работы',exact:true}).waitFor();
+   assert.equal(nativeDialogs,0);assert.equal(await location(f.page),url);assert.equal(await f.page.evaluate(()=>history.length),length);
+   assert.equal(f.patches.length,0);assert.equal(f.current().title,order.title);
+   await f.workspace.getByRole('navigation').getByRole('button',{name:'Предложение',exact:true}).click();await f.page.getByText('Услуга варианта Б',{exact:true}).waitFor();
   });
   for(const route of ['/manager/orders/477?proposalId=25','/manager/orders/kanban?orderId=477&proposalId=25']) await runCase(width,'alternative '+route,async f=>{
    await f.page.goto(base+route);await f.workspace.waitFor();

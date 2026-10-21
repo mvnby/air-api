@@ -58,3 +58,9 @@ not measurements of production backend latency, real customer data or production
 server compression/cache policy. The fixture's populated line intentionally
 avoids optional product lookup and installation recommendation requests. Other
 regression harnesses own editing, save errors and navigation acceptance.
+
+For deterministic behavioral screenshots, the sibling
+`tests/visual/order-navigation/capture.cjs` accepts `KITLANE_ICON_FONT` pointing
+to the same frozen Material Icons Round WOFF2 file. It substitutes only the
+external font stylesheet/font responses; application assets and synthetic API
+flows are unchanged. This avoids screenshot timeouts waiting for Google Fonts.

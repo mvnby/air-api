@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onMounted, onScopeDispose, shallowRef, ref, type Component } from 'vue';
+import { reloadManagerLocation } from '../../services/manager-navigation-history';
 const props = defineProps<{ load: () => Promise<{ default: Component }>; label: string }>();
 const component = shallowRef<Component | null>(null);
 const loading = ref(false);
@@ -38,7 +39,8 @@ defineExpose({ ready: load });
   <div v-else class="min-h-48 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900" :aria-busy="loading" :aria-label="label">
     <div v-if="failed" role="alert">
       <p class="text-sm">Не удалось загрузить раздел «{{ label }}».</p>
-      <button type="button" class="btn-mini-outline mt-3 min-h-9 focus-visible:ring-2 focus-visible:ring-brand-500" @click="load">Повторить загрузку раздела</button>
+      <!-- Browsers cache failed module imports; recovery needs a fresh module graph. -->
+      <button type="button" class="btn-mini-outline mt-3 min-h-9 focus-visible:ring-2 focus-visible:ring-brand-500" @click="reloadManagerLocation">Обновить страницу</button>
     </div>
     <div v-else role="status" class="space-y-3">
       <p class="text-sm text-slate-600 dark:text-slate-300">Загружаем раздел «{{ label }}»…</p>

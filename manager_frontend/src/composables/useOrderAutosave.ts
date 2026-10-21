@@ -1,4 +1,5 @@
 import { computed, onScopeDispose, ref, watch, type Ref } from 'vue';
+import { isApprovedUnloadEvent } from '../services/unsaved-navigation-guard';
 
 type Options = {
   enabled: Ref<boolean>;
@@ -81,7 +82,7 @@ export const useOrderAutosave = (options: Options) => {
   }, { flush: 'post' });
 
   const beforeUnload = (event: BeforeUnloadEvent) => {
-    if (!options.ready.value || (!options.dirty.value && !saving.value)) return;
+    if (isApprovedUnloadEvent(event) || !options.ready.value || (!options.dirty.value && !saving.value)) return;
     event.preventDefault();
     event.returnValue = '';
   };

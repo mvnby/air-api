@@ -2,6 +2,8 @@ type NavigationGuard = () => boolean | Promise<boolean>;
 
 const guards = new Set<NavigationGuard>();
 let navigationPending = false;
+const approvedUnloadEvents = new WeakSet<BeforeUnloadEvent>();
+let pendingUnloadApproval: ((event: BeforeUnloadEvent) => void) | null = null;
 
 export const registerUnsavedNavigationGuard = (guard: NavigationGuard) => {
   guards.add(guard);
@@ -36,3 +38,29 @@ export const runGuardedNavigation = async (
     navigationPending = false;
   }
 };
+
+export const isApprovedUnloadEvent = (event: BeforeUnloadEvent) => {
+  if (event.type !== 'beforeunload') return false;
+  if (!approvedUnloadEvents.has(event)) pendingUnloadApproval?.(event);
+  return approvedUnloadEvents.has(event);
+};
+
+// Native Window unload listeners can run before a later capture listener. The first check or
+// the one-shot listener claims the approved event; unrelated unload handlers remain active.
+export const runGuardedUnload = (unload: () => void) => runGuardedNavigation(() => {
+  const approve = (event: BeforeUnloadEvent) => {
+    approvedUnloadEvents.add(event);
+    if (pendingUnloadApproval === approve) pendingUnloadApproval = null;
+    window.removeEventListener('beforeunload', approve, true);
+  };
+  if (pendingUnloadApproval) window.removeEventListener('beforeunload', pendingUnloadApproval, true);
+  pendingUnloadApproval = approve;
+  window.addEventListener('beforeunload', approve, { capture: true, once: true });
+  try {
+    unload();
+  } catch (error) {
+    if (pendingUnloadApproval === approve) pendingUnloadApproval = null;
+    window.removeEventListener('beforeunload', approve, true);
+    throw error;
+  }
+});

@@ -1,6 +1,7 @@
 import { computed, effectScope, nextTick, ref, type EffectScope } from 'vue';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useOrderAutosave } from '../src/composables/useOrderAutosave';
+import { registerUnsavedNavigationGuard, runGuardedUnload } from '../src/services/unsaved-navigation-guard';
 
 type Deferred = {
   promise: Promise<boolean>;
@@ -148,5 +149,57 @@ describe('useOrderAutosave', () => {
     expect(state.saved.value).toBe('отправлено');
     expect(state.snapshot.value).toBe('ручная правка');
     expect(state.autosave.failed.value).toBe(false);
+  });
+});
+
+
+describe('approved unload with an unsaved order', () => {
+  it('skips only the approved unload event without clearing dirty form state or writing', async () => {
+    const save = vi.fn().mockResolvedValue(true);
+    const state = createAutosave(save);
+    state.enabled.value = false;
+    state.snapshot.value = 'Ручной черновик';
+    await nextTick();
+    const unregister = registerUnsavedNavigationGuard(() => true);
+    try {
+      const approved = new Event('beforeunload', { cancelable: true });
+      expect(await runGuardedUnload(() => { window.dispatchEvent(approved); })).toBe(true);
+      expect(approved.defaultPrevented).toBe(false);
+      expect(state.snapshot.value).toBe('Ручной черновик');
+      expect(state.saved.value).toBe('saved');
+      expect(save).not.toHaveBeenCalled();
+      const later = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(later);
+      expect(later.defaultPrevented).toBe(true);
+    } finally { unregister(); }
+  });
+
+  it('keeps native unload protection after a canceled app guard', async () => {
+    const state = createAutosave(vi.fn().mockResolvedValue(true));
+    state.enabled.value = false;
+    state.snapshot.value = 'Ручной черновик';
+    await nextTick();
+    const unregister = registerUnsavedNavigationGuard(() => false);
+    try {
+      expect(await runGuardedUnload(vi.fn())).toBe(false);
+      const native = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(native);
+      expect(native.defaultPrevented).toBe(true);
+    } finally { unregister(); }
+  });
+
+  it('does not suppress an independent beforeunload blocker', async () => {
+    const state = createAutosave(vi.fn().mockResolvedValue(true));
+    state.enabled.value = false;
+    state.snapshot.value = 'Ручной черновик';
+    await nextTick();
+    const block = vi.fn((event: BeforeUnloadEvent) => event.preventDefault());
+    window.addEventListener('beforeunload', block);
+    try {
+      const approved = new Event('beforeunload', { cancelable: true });
+      expect(await runGuardedUnload(() => { window.dispatchEvent(approved); })).toBe(true);
+      expect(block).toHaveBeenCalledOnce();
+      expect(approved.defaultPrevented).toBe(true);
+    } finally { window.removeEventListener('beforeunload', block); }
   });
 });
