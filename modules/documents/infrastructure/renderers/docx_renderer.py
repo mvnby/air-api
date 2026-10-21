@@ -26,6 +26,7 @@ from .contracts import (
 from .docx_party_roles import replace_party_role_words
 from .docx_conditions import DocxConditionProcessor, iter_section_story_areas
 from .docx_form_fields import flatten_legacy_form_fields
+from .docx_content_controls import iter_story_roots, unwrap_content_controls
 from .line_text import parse_line_text
 
 
@@ -35,6 +36,12 @@ _RAW_PLACEHOLDER_PATTERN = re.compile(r"{{(.*?)}}", re.DOTALL)
 
 class ContextFieldError(ValueError):
     """The context contains data which the selected template has not approved."""
+
+
+def _load_document(source: bytes):
+    document = Document(BytesIO(source))
+    unwrap_content_controls(document)
+    return document
 
 
 class NativeDocxRenderer:
@@ -56,9 +63,12 @@ class NativeDocxRenderer:
     def discover_placeholder_counts(self, source: bytes) -> dict[str, int]:
         """Count every syntactically valid placeholder occurrence in a DOCX."""
         try:
-            document = Document(BytesIO(source))
+            document = _load_document(source)
         except Exception as exc:
             raise ValueError(f"Template is not a readable DOCX: {exc}") from exc
+        return self._placeholder_counts(document)
+
+    def _placeholder_counts(self, document) -> dict[str, int]:
         discovered: Counter[str] = Counter()
         for paragraph, _location, _row_id in self._iter_paragraphs(document):
             parsed, _malformed = self._parse_placeholders(
@@ -67,12 +77,37 @@ class NativeDocxRenderer:
             discovered.update(parsed)
         return dict(discovered)
 
+    def discover_content_control_omissions(
+        self, source: bytes
+    ) -> tuple[frozenset[str], frozenset[str]]:
+        """Find identifiers omitted by the old content-control-blind scanner.
+
+        This is a compatibility hint, not an allowlist. Application callers
+        must intersect it with the server-owned placeholder catalogue.
+        """
+        document = Document(BytesIO(source))
+        # Most templates have no controls; avoid traversing their paragraphs
+        # twice, and never create missing header/footer parts during this probe.
+        if not any(
+            next(root.iter(qn("w:sdt")), None) is not None
+            for root in iter_story_roots(document)
+        ):
+            return frozenset(), frozenset()
+        fields_before = set(self._placeholder_counts(document))
+        processor = DocxConditionProcessor()
+        conditions_before = processor.discover(document)
+        unwrap_content_controls(document)
+        return (
+            frozenset(self._placeholder_counts(document)) - fields_before,
+            processor.discover(document) - conditions_before,
+        )
+
     def discover_active_placeholders(
         self, source: bytes, conditions: Mapping[str, bool]
     ) -> frozenset[str]:
         """Discover fields in the surviving body/table/header/footer branches."""
         try:
-            document = Document(BytesIO(flatten_legacy_form_fields(source)))
+            document = _load_document(flatten_legacy_form_fields(source))
         except Exception as exc:
             raise ValueError("Исходный DOCX шаблона повреждён или не читается") from exc
         if not isinstance(conditions, Mapping) or any(
@@ -120,7 +155,7 @@ class NativeDocxRenderer:
     def discover_conditions(self, source: bytes) -> frozenset[str]:
         """Return safe condition identifiers found in conditional markers."""
         try:
-            document = Document(BytesIO(source))
+            document = _load_document(source)
         except Exception as exc:
             raise ValueError(f"Template is not a readable DOCX: {exc}") from exc
         return DocxConditionProcessor().discover(document)
@@ -131,7 +166,7 @@ class NativeDocxRenderer:
         context: RenderContext | None = None,
     ) -> TemplateValidationResult:
         try:
-            document = Document(BytesIO(template.source))
+            document = _load_document(template.source)
         except Exception as exc:  # python-docx exposes several ZIP/XML exceptions
             return TemplateValidationResult(
                 (
@@ -280,7 +315,7 @@ class NativeDocxRenderer:
                 )
             raise TemplateValidationError(validation)
 
-        document = Document(BytesIO(flatten_legacy_form_fields(template.source)))
+        document = _load_document(flatten_legacy_form_fields(template.source))
         DocxConditionProcessor().render(document, context.conditions)
         if context.document_role_type is not None:
             for paragraph, _, _ in self._iter_paragraphs(document):

@@ -16,8 +16,8 @@ from modules.documents.infrastructure.artifact_storage import StoredDocumentArti
 from modules.documents.infrastructure.renderers import (
     DocumentTemplateVersion as RenderTemplateVersion,
     RenderContext,
-    TableBlockSpec,
 )
+from .native_template_discovery import resolve_native_placeholder_contract
 
 
 def build_render_inputs(
@@ -27,16 +27,12 @@ def build_render_inputs(
     source: bytes,
     snapshot: dict[str, Any],
 ) -> tuple[RenderTemplateVersion, RenderContext]:
-    schema = version.placeholder_schema or {}
-    field_catalog = frozenset(str(value) for value in schema.get("fields", []))
-    condition_catalog = frozenset(str(value) for value in schema.get("conditions", []))
-    table_blocks = tuple(
-        TableBlockSpec(
-            name=str(item.get("name", "")),
-            row_fields=frozenset(str(value) for value in item.get("row_fields", [])),
-        )
-        for item in schema.get("tables", [])
+    contract = resolve_native_placeholder_contract(
+        source, version.placeholder_schema or {}
     )
+    field_catalog = contract.field_catalog
+    condition_catalog = contract.condition_catalog
+    table_blocks = contract.table_blocks
     readiness = snapshot_customer_readiness(
         snapshot,
         source=source,
