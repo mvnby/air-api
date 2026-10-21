@@ -22,7 +22,7 @@
 | Редактирование товаров, групповые действия, статистика удобства | [Управление каталогом](catalog-management-workspace.md) |
 | Подбор оборудования, рабочая область каталога | [Решение по каталогу](adr/catalog-decision-workspace.md) |
 | Подбор комплектных систем: исправление классификации и мощности | [Адресный план исправления](catalog-decision-selection-repair.md) |
-| Проверка источников оставшихся 217 позиций подбора | [Аудит и отдельный адресный manifest](catalog-decision-source-audit-1190.md) |
+| Проверка источников оставшихся 217 позиций подбора | [Исходный аудит](catalog-decision-source-audit-1190.md), [согласованная сверка с прайсами и применение](catalog-decision-price-review-1190.md) |
 | Конфигуратор мультисплитов | [Аудит, правила совместимости и MVP](multi-split-configurator-mvp.md) |
 | Библиотека характеристик | [Таксономия](catalog/feature-taxonomy-guide.md), [универсальные характеристики](catalog/universal-feature-library-v1.md) |
 | Материалы брендов/серий, совместимые аксессуары, форматы фич | [Наследование и источники каталога](catalog/series-knowledge-and-accessories.md) |

@@ -21,6 +21,23 @@ async def run(*, manifest_path: Path = DEFAULT_MANIFEST, execute: bool = False,
               reviewed_plan: Path | None = None, execute_plan_digest: str | None = None,
               manual_kind_review_digest: str | None = None) -> dict:
     manifest = load_manifest(manifest_path)
+
+    def apply_kind(product, operation):
+        product.product_kind = operation["fields_set"]["product_kind"]
+
+    return await run_reviewed_repair(
+        manifest=manifest, plan_builder=build_plan, operation_applier=apply_kind,
+        reason="catalog_decision_source_review_1190", execute=execute,
+        reviewed_plan=reviewed_plan, execute_plan_digest=execute_plan_digest,
+        manual_kind_review_digest=manual_kind_review_digest,
+    )
+
+
+async def run_reviewed_repair(*, manifest: dict, plan_builder, operation_applier, reason: str,
+                              execute: bool = False, reviewed_plan: Path | None = None,
+                              execute_plan_digest: str | None = None,
+                              manual_kind_review_digest: str | None = None) -> dict:
+    """Share the same transaction fences between separately pinned policies."""
     if execute and (reviewed_plan is None or not execute_plan_digest):
         raise RepairBlocked("Execute requires --reviewed-plan and --execute-plan-digest")
     if not execute and any(value is not None for value in (reviewed_plan, execute_plan_digest, manual_kind_review_digest)):
@@ -81,7 +98,7 @@ async def run(*, manifest_path: Path = DEFAULT_MANIFEST, execute: bool = False,
                 "local_stocks": [columns(stock) for stock in stocks if stock.product_id == product.id],
             }, [columns(source) for source in sources]) for product in products
         }
-        plan = build_plan(manifest, products, commerce)
+        plan = plan_builder(manifest, products, commerce)
         if not execute:
             await session.rollback()
             return plan
@@ -91,18 +108,21 @@ async def run(*, manifest_path: Path = DEFAULT_MANIFEST, execute: bool = False,
             return {"mode": "execute", "changed": 0, "reviewed_plan_digest": execute_plan_digest, "revision": None}
         by_id = {product.id: product for product in products}
         for operation in plan["operations"]:
-            by_id[operation["id"]].product_kind = operation["fields_set"]["product_kind"]
+            operation_applier(by_id[operation["id"]], operation)
             session.add(by_id[operation["id"]])
         await session.flush()
+        if plan_builder(manifest, products, commerce)["changed"]:
+            raise RepairBlocked("The applied fields do not match the exact reviewed target")
         eligible = await CatalogDecisionQueryService.eligible_system_product_ids(session, plan["product_ids"])
         if eligible != set(plan["product_ids"]):
             raise RepairBlocked("A reviewed target contradicts strict catalog eligibility")
         revision = await CatalogInvalidationCommitService.commit_global_mutation(
-            session, reason="catalog_decision_source_review_1190", product_ids=plan["product_ids"],
+            session, reason=reason, product_ids=plan["product_ids"],
             brand_slugs=plan["brand_slugs"], additional_paths=plan["series_paths"],
         )
         return {"mode": "execute", "changed": plan["changed"], "revision": revision,
-                "reviewed_plan_digest": execute_plan_digest, "blocked_items": plan["blocked_items"]}
+                "reviewed_plan_digest": execute_plan_digest, "blocked_items": plan["blocked_items"],
+                **({"technical_changes": plan["technical_changes"]} if "technical_changes" in plan else {})}
 
 
 def main() -> None:
