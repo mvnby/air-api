@@ -93,7 +93,7 @@ const createSaving = () => {
     ready,
     activeProposalId,
     activeProposalLocked,
-    productLines,
+    productLines, serviceLines,
     currentFormSnapshot,
     currentLinesSnapshot,
     savedFormSnapshot,
@@ -269,7 +269,8 @@ describe('useOrderDrawerSaving', () => {
       ...orderResponse(),
       proposals: [{
         ...proposal(),
-        product_lines: [{ product_id: 9, id: 501 }],
+        product_lines: [{ product_id: 9, id: 501, quantity:2, price:1500, cost:1000 }],
+        service_lines: [{ id:502, service_id:7, service_title:'Монтаж', quantity:1,price:500,cost:200 }],
       }],
     });
 
@@ -293,6 +294,7 @@ describe('useOrderDrawerSaving', () => {
       }],
       line_proposal_id: 17,
     });
+    expect(state.serviceLines.value[0].link_id).toBe(502);
     expect(state.productLines.value[0].link_id).toBe(501);
     expect(JSON.parse(state.savedLinesSnapshot.value).products[0].link_id).toBe(501);
   });

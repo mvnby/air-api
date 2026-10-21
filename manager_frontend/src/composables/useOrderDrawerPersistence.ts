@@ -155,7 +155,8 @@ export const useOrderDrawerPersistence = ({
       const additions = cached.filter(item => !item.link_id);
       return (Array.isArray(rows) ? rows : []).map(row => {
         const value = row as T;
-        const metadata = value.link_id ? fresh.find(item => item.link_id === value.link_id) || cached.find(item => item.link_id === value.link_id) : additions.shift();
+        const restoredId = merged.restoredRows.get(row as object);
+        const metadata = restoredId ? cached.find(item => item.link_id === restoredId) : value.link_id ? fresh.find(item => item.link_id === value.link_id) || cached.find(item => item.link_id === value.link_id) : additions.shift();
         return { ...metadata, ...value };
       });
     };
@@ -244,7 +245,7 @@ export const useOrderDrawerPersistence = ({
   watch(expandedDrawerSections, persistDrawerSections, { deep: true });
 
   return {
-    draftConflicts, draftBlocked, resolveDraftConflict,
+    draftConflicts, draftBlocked, resolveDraftConflict, draftContextKey: draftKey, draftIdentityKey: computed(() => JSON.stringify(draftScope.value)),
     clearDraft,
     expandedDrawerSections,
     hasUnsavedChanges,

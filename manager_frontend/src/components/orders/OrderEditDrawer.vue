@@ -26,6 +26,7 @@ import OrderWorkspaceUsageReport from './OrderWorkspaceUsageReport.vue';
 import type {
   ManagerOrderDetailResponse,
 } from '../../client';
+import { ManagerOrdersService } from '../../client';
 import {
   buildOrderWorkspaceViewModel,
 } from './order-workspace';
@@ -108,6 +109,10 @@ function setToast(message: string, type: 'success' | 'error' = 'success') {
 }
 
 const initializing = ref(false);
+const discardingDraft = ref(false), discardFailed = ref(false);
+const discardResponses = new WeakSet<object>();
+let drawerDisposed = false;
+onScopeDispose(() => { drawerDisposed = true; });
 const savedLinesSnapshot = ref('');
 const savedFormSnapshot = ref('');
 const commercialEditor = useOrderCommercialEditor({
@@ -209,7 +214,7 @@ const {
 
 const {
   clearDraft,
-  draftConflicts, draftBlocked, resolveDraftConflict,
+  draftConflicts, draftBlocked, resolveDraftConflict, draftContextKey, draftIdentityKey,
   expandedDrawerSections,
   hasUnsavedChanges,
   initializedOrderId,
@@ -226,7 +231,7 @@ const {
   currentLinesSnapshot: () => buildCurrentLinesSnapshot(activeProposalId.value),
   currentFormSnapshot: () => buildCurrentFormSnapshot(proposalStatus.value),
   restoreFormDraft: drawerForm.restoreFormDraft,
-  ready: computed(() => !initializing.value),
+  ready: computed(() => !initializing.value && !discardingDraft.value),
 });
 
 const {
@@ -266,11 +271,12 @@ const {
 });
 const orderSaving = useOrderDrawerSaving({
   blocked: draftBlocked,
+  autosavePaused: discardFailed,
   order: computed(() => props.order),
-  ready: computed(() => props.modelValue && !initializing.value && !installationAutosavePaused.value && !sourceApplying.value && !responsibilityPaused.value && Boolean(props.order)),
+  ready: computed(() => props.modelValue && !initializing.value && !discardingDraft.value && !installationAutosavePaused.value && !sourceApplying.value && !responsibilityPaused.value && Boolean(props.order)),
   activeProposalId,
   activeProposalLocked,
-  productLines,
+  productLines, serviceLines,
   currentFormSnapshot: () => buildCurrentFormSnapshot(),
   currentLinesSnapshot: () => buildCurrentLinesSnapshot(activeProposalId.value),
   savedFormSnapshot,
@@ -385,8 +391,9 @@ const {
   localFormError,
   persistDraft,
   clearDraft,
+  preserveDraftOnLeave: computed(() => draftBlocked.value || discardFailed.value),
   setToast,
-  beforeClose: async () => !proposalActionLoading.value && !sourceApplying.value && !responsibilityBusy.value && !workerAssignmentBusy.value && !workerPayBusy.value
+  beforeClose: async () => !discardingDraft.value && !proposalActionLoading.value && !sourceApplying.value && !responsibilityBusy.value && !workerAssignmentBusy.value && !workerPayBusy.value
     && await (customerContextRef.value?.beforeClose?.() ?? true) && await orderSaving.beforeClose(),
   onBeforeClose: orderSaving.cancelScheduled,
   onModelValue: (open) => emit('update:modelValue', open),
@@ -508,7 +515,7 @@ watch(
       return;
     }
     if (!order) return;
-    if (wasOpen && previousOrder?.id === order.id && responsibilityResponses.has(toRaw(order))) return;
+    if (wasOpen && previousOrder?.id === order.id && (responsibilityResponses.has(toRaw(order)) || discardResponses.has(toRaw(order)))) return;
     if (!wasOpen || order.id !== previousOrder?.id) {
       if (!isPage.value) captureFocus();
       await initForm(order);
@@ -543,15 +550,38 @@ const handleWorkspaceNextAction = async () => {
   openWorkspaceTarget(action.target);
 };
 
-const handleSave = () => orderSaving.flush();
+watch(draftBlocked, blocked => {
+  if (!blocked && discardFailed.value) { discardFailed.value = false; localFormError.value = ''; }
+});
+const handleSave = async () => {
+  if (await orderSaving.flush()) discardFailed.value = false;
+};
 const getFieldError = (field: string): string => localServerErrors.value[field] || props.serverErrors?.[field] || '';
 const displayFormError = computed(() => localFormError.value || props.formError || '');
 const discardUnsavedChanges = async () => {
-  if (!props.order) return;
+  if (!props.order || saving.value || discardingDraft.value) return;
+  const context = draftContextKey.value, identity = draftIdentityKey.value;
+  const originalOrder = props.order;
+  discardingDraft.value = true;
   orderSaving.cancelScheduled();
-  clearDraft();
-  await initForm(props.order);
-  setToast('Изменения отменены', 'success');
+  try {
+    const fresh = await ManagerOrdersService.getManagerOrderDetail(props.order.id);
+    if (drawerDisposed || !props.modelValue || draftContextKey.value !== context || props.order !== originalOrder) return;
+    clearDraft();
+    await initForm(fresh);
+    if (drawerDisposed || !props.modelValue || props.order !== originalOrder || draftIdentityKey.value !== identity) return;
+    discardResponses.add(toRaw(fresh));
+    emit('updated', fresh);
+    discardFailed.value = false;
+    setToast('Изменения отменены', 'success');
+  } catch {
+    if (!drawerDisposed && draftContextKey.value === context) {
+      discardFailed.value = true;
+      localFormError.value = 'Не удалось отменить черновик: сервер недоступен. Черновик сохранён. Повторите отмену или сохраните изменения вручную.';
+    }
+  } finally {
+    discardingDraft.value = false;
+  }
 };
 
 const handleCustomerUpdated = async (updatedOrder: ManagerOrderDetailResponse) => {
@@ -590,12 +620,12 @@ defineExpose({ prepareToLeave });
       </div>
     </Transition>
     <div v-if="!isPage" class="flex-1 bg-black/60" aria-hidden="true" @click="closeDrawer" />
-    <aside ref="drawerScrollContainer" tabindex="-1" :role="isPage ? 'region' : 'dialog'" :aria-modal="isPage ? undefined : true" aria-label="Рабочая область заказа" :inert="installationAttaching || sourceApplying || responsibilityBusy || workerAssignmentBusy || workerPayBusy ? true : undefined" :aria-busy="installationAttaching || sourceApplying || responsibilityBusy || workerAssignmentBusy || workerPayBusy" class="relative flex h-full w-full min-w-0 flex-col overflow-hidden bg-white text-gray-900 outline-none dark:bg-slate-950 dark:text-slate-100" :class="isPage ? '' : 'shadow-2xl md:my-4 md:h-[calc(100%-2rem)] md:w-[calc(100%-2rem)] md:rounded-2xl xl:max-w-[1680px] xl:border xl:border-gray-200 dark:xl:border-slate-700'" @keydown="!isPage && trapFocus($event)" @keydown.esc="!isPage && closeDrawer()" @click="trackUsageControl" @change="trackUsageControl">
+    <aside ref="drawerScrollContainer" tabindex="-1" :role="isPage ? 'region' : 'dialog'" :aria-modal="isPage ? undefined : true" aria-label="Рабочая область заказа" :inert="discardingDraft || installationAttaching || sourceApplying || responsibilityBusy || workerAssignmentBusy || workerPayBusy ? true : undefined" :aria-busy="discardingDraft || installationAttaching || sourceApplying || responsibilityBusy || workerAssignmentBusy || workerPayBusy" class="relative flex h-full w-full min-w-0 flex-col overflow-hidden bg-white text-gray-900 outline-none dark:bg-slate-950 dark:text-slate-100" :class="isPage ? '' : 'shadow-2xl md:my-4 md:h-[calc(100%-2rem)] md:w-[calc(100%-2rem)] md:rounded-2xl xl:max-w-[1680px] xl:border xl:border-gray-200 dark:xl:border-slate-700'" @keydown="!isPage && trapFocus($event)" @keydown.esc="!isPage && closeDrawer()" @click="trackUsageControl" @change="trackUsageControl">
       <OrderWorkspaceHeader
         v-show="!proposalClientPreview"
         class="shrink-0"
         :workspace="true"
-        :inert="draftBlocked ? true : undefined"
+        :write-blocked="draftBlocked"
         :order-id="order?.id"
         :back-label="isPage ? backLabel : undefined"
         :title="displayOrderTitle"
@@ -617,12 +647,12 @@ defineExpose({ prepareToLeave });
         :save-status-text="saveStatusText"
         @toggle-autosave="orderSaving.toggle"
         :compact="compactWorkspaceHeader"
-        @update:title="orderTitle = $event"
-        @change-workflow="setWorkflowType"
+        @update:title="!draftBlocked && (orderTitle = $event)"
+        @change-workflow="!draftBlocked && setWorkflowType($event)"
         @next="handleWorkspaceNextAction"
         @payments="openWorkspaceTarget('payments')"
-        @hold="toggleHold"
-        @delete="deleteOrder"
+        @hold="!draftBlocked && toggleHold()"
+        @delete="!draftBlocked && deleteOrder()"
         @discard="discardUnsavedChanges"
         @save="handleSave"
         :usage-enabled="orderWorkspaceUsage.enabled.value"
@@ -791,7 +821,7 @@ defineExpose({ prepareToLeave });
         :services="serviceLines"
         :show-costs="showProposalCosts && !demoReadOnly"
         :preview="proposalClientPreview"
-        :busy="saving || proposalActionLoading || installationAttaching || sourceApplying"
+        :busy="draftBlocked || discardingDraft || saving || proposalActionLoading || installationAttaching || sourceApplying"
         :action-label="orderWorkspace.nextAction.command === 'finish_proposal' ? 'Подготовить КП' : orderWorkspace.nextAction.label"
         @next="handleWorkspaceNextAction"
       />

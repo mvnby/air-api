@@ -56,5 +56,21 @@ export function mergeOrderDraft(base: unknown, local: unknown, server: unknown, 
     conflicts.push({ id, path, base: before, local: mine, server: fresh, legacy });
     return fresh;
   };
-  return { value: visit(base, local, server, []) as Record<string, unknown>, conflicts };
+  const value = visit(base, local, server, []) as Record<string, unknown>;
+  const restoredRows = new Map<object, number>();
+  for (const kind of ['products', 'services']) {
+    if (!Array.isArray(value[kind]) || !isRecord(server) || !Array.isArray(server[kind])) continue;
+    const existing = new Set(server[kind].filter(isRecord).map(row => row.link_id));
+    value[kind] = value[kind].map((row: unknown) => {
+      if (!isRecord(row) || typeof row.link_id !== 'number' || existing.has(row.link_id)) return row;
+      // A resolved server deletion creates a new line, never a reference to the deleted record.
+      const detached = {
+        ...row, link_id: null,
+        ...(kind === 'services' ? { installation_estimate_revision_id: null, installation_line_index: null, installation_projection_mode: null, installation_display_lines: undefined } : {}),
+      };
+      restoredRows.set(detached, row.link_id);
+      return detached;
+    });
+  }
+  return { value, conflicts, restoredRows };
 }

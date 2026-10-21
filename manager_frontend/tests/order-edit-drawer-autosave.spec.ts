@@ -82,9 +82,176 @@ beforeEach(() => {
   stored = initialOrder();
   vi.spyOn(ManagerMailService, 'listManagerOrderOutgoingEmails').mockResolvedValue({ items: [] } as any);
   vi.spyOn(ManagerDocumentSystemService, 'listManagerManagedOrderDocuments').mockResolvedValue({ items: [] });
+  vi.spyOn(ManagerOrdersService, 'getManagerOrderDetail').mockImplementation(async () => structuredClone(stored));
   vi.spyOn(ManagerOrdersService, 'patchManagerOrder').mockImplementation(async (_id, payload) => commit(payload));
 });
 afterEach(() => { wrapper?.unmount(); vi.restoreAllMocks(); vi.useRealTimers(); managerSession.auth.value = null; managerStorefrontSelection.selectedSlug.value = null; });
+
+
+// This fixture enforces the backend's proposal-line ownership boundary.
+let assignedLinkId = 1000;
+const strictCommit = (payload: any) => {
+  const proposal = stored.proposals!.find(item => item.id === payload.line_proposal_id)!;
+  for (const [field, response] of [['products','product_lines'],['services','service_lines']] as const) {
+    if (!payload[field]) continue;
+    const ids = new Set((proposal[response] || []).map(row => row.id));
+    const requested = payload[field].filter((row: any) => row.link_id != null).map((row: any) => row.link_id);
+    if (new Set(requested).size !== requested.length || requested.some((id: number) => !ids.has(id))) throw new Error('Line does not belong to the target proposal');
+  }
+  const { products, services, line_proposal_id: _id, ...form } = payload;
+  stored = { ...stored, ...form };
+  const updated = { ...proposal };
+  if (products) updated.product_lines = products.map((row: any) => ({ ...row, id: row.link_id ?? assignedLinkId++, product_title: 'Тестовый товар' }));
+  if (services) updated.service_lines = services.map((row: any) => ({ ...row, id: row.link_id ?? assignedLinkId++, service_title: row.title }));
+  stored.proposals = stored.proposals!.map(item => item.id === proposal.id ? updated : item);
+  return structuredClone(stored);
+};
+const draftPanel = () => wrapper.findComponent(OrderDraftRecovery);
+const seedConflict = async () => {
+  managerSession.auth.value = { tenant_id: 1, staff_user_id: 99, username: 'draft-test' } as any;
+  await mountDrawer('page'); header().vm.$emit('toggle-autosave'); await nextTick();
+  header().vm.$emit('update:title', 'Мой заголовок'); customer().vm.$emit('update:comment', 'Мой комментарий');
+  await nextTick(); wrapper.unmount();
+  stored = { ...stored, title: 'Заголовок коллеги', comment: 'Комментарий коллеги' };
+  await mountDrawer('page');
+};
+
+const seedDeletedDraft = async (kind: 'services' | 'products') => {
+  sessionStorage.clear(); localStorage.clear(); assignedLinkId = 1000; stored = initialOrder();
+  managerSession.auth.value = { tenant_id: 1, staff_user_id: 99, username: 'draft-test' } as any;
+  const field = kind === 'services' ? 'service_lines' : 'product_lines';
+  stored.proposals![0]![field] = [
+    { id:81, service_id:7, service_title:'Моя услуга', product_id:9, product_title:'Тестовый товар', quantity:1, price:1200, cost:100, description:'Описание клиента', client_description:'Описание товара', installation_estimate_revision_id:55, installation_projection_mode:'combined', installation_display_lines:[{title:'Часть расчёта',quantity:1,price:1200}] },
+    { id:82, service_id:8, service_title:'Другая услуга', product_id:10, product_title:'Другой товар', quantity:1, price:300, cost:50 },
+  ] as any;
+  await mountDrawer(); header().vm.$emit('toggle-autosave'); await nextTick();
+  const rows = wrapper.findComponent(OrderProposalWorkspace).props('commercial')[kind === 'services' ? 'serviceLines' : 'productLines'];
+  rows.value[0]!.price = 1400; await nextTick(); wrapper.unmount();
+  stored = structuredClone(stored); stored.comment = 'Свежий комментарий';
+  stored.proposals![0]![field]!.shift(); stored.proposals![0]![field]![0]!.price = 600;
+  vi.mocked(ManagerOrdersService.patchManagerOrder).mockClear().mockImplementation(async (_id,payload) => strictCommit(payload));
+  await mountDrawer();
+  return field;
+};
+
+describe('draft recovery follow-up regressions', () => {
+  it.each(['services','products'] as const)('sends restored deleted %s with a new identity in manual and automatic modes', async kind => {
+    for (const automatic of [false, true]) {
+      const field = await seedDeletedDraft(kind);
+      if (automatic) { header().vm.$emit('toggle-autosave'); await nextTick(); }
+      const conflict = draftPanel().props('conflicts')[0]!;
+      draftPanel().vm.$emit('resolve', conflict.id, 'local'); await nextTick();
+      if (!automatic) { header().vm.$emit('save'); await flushPromises(); }
+      else await vi.advanceTimersByTimeAsync(1000);
+      expect(ManagerOrdersService.patchManagerOrder).toHaveBeenCalledWith(395, expect.objectContaining({
+        [kind]: expect.arrayContaining([expect.objectContaining({link_id:null,price:1400,cost:100,quantity:1})]),
+      }));
+      expect(header().props('saveFailed')).toBe(false);
+      expect(stored.comment).toBe('Свежий комментарий');
+      expect(stored.proposals![0]![field]).toHaveLength(2);
+      expect(stored.proposals![0]![field]!.find(row=>row.id===82)!.price).toBe(600);
+      const restored = wrapper.findComponent(OrderProposalWorkspace).props('commercial')[kind === 'services' ? 'serviceLines' : 'productLines'].value.find((row:any)=>row.price===1400)!;
+      expect(restored.link_id).toBe(1000);
+      if (kind === 'services') {
+        expect(restored.description).toBe('Описание клиента');
+        expect(restored.installation_estimate_revision_id).toBeNull();
+        expect(restored.installation_projection_mode).toBeNull();
+        expect(restored.installation_display_lines).toBeUndefined();
+      }
+      restored.quantity=2; await nextTick(); header().vm.$emit('save'); await flushPromises();
+      expect(stored.proposals![0]![field]).toHaveLength(2);
+      expect(stored.proposals![0]![field]!.find(row=>row.id===1000)!.quantity).toBe(2);
+      wrapper.unmount();
+    }
+  });
+  it.each(['services','products'] as const)('preserves restored %s across failed save, reload and lost acknowledgement without duplicates', async kind => {
+    for (const lostAck of [false, true]) {
+      const field = await seedDeletedDraft(kind);
+      draftPanel().vm.$emit('resolve', draftPanel().props('conflicts')[0]!.id, 'local'); await nextTick();
+      vi.mocked(ManagerOrdersService.patchManagerOrder).mockImplementationOnce(async (_id,payload) => {
+        if (lostAck) strictCommit(payload);
+        throw new Error('offline');
+      });
+      header().vm.$emit('save'); await flushPromises();
+      expect(header().props('saveFailed')).toBe(true);
+      expect(wrapper.findComponent(OrderProposalWorkspace).props('commercial')[kind === 'services' ? 'serviceLines' : 'productLines'].value.some((row:any)=>row.price===1400)).toBe(true);
+      wrapper.unmount();
+      vi.mocked(ManagerOrdersService.patchManagerOrder).mockClear();
+      await mountDrawer();
+      if (lostAck) {
+        expect(draftPanel().props('conflicts')).toHaveLength(1);
+        draftPanel().vm.$emit('resolve', draftPanel().props('conflicts')[0]!.id, 'server'); await nextTick();
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(ManagerOrdersService.patchManagerOrder).not.toHaveBeenCalled();
+      } else {
+        expect(draftPanel().exists()).toBe(false);
+        header().vm.$emit('save'); await flushPromises();
+        expect(ManagerOrdersService.patchManagerOrder).toHaveBeenCalledExactlyOnceWith(395, expect.objectContaining({[kind]:expect.arrayContaining([expect.objectContaining({link_id:null,price:1400})])}));
+      }
+      expect(stored.proposals![0]![field]).toHaveLength(2);
+      expect(stored.proposals![0]![field]!.filter(row=>row.price===1400)).toHaveLength(1);
+      expect(stored.comment).toBe('Свежий комментарий');
+      wrapper.unmount(); await mountDrawer();
+      expect(draftPanel().exists()).toBe(false);
+      expect(stored.proposals![0]![field]).toHaveLength(2);
+      wrapper.unmount();
+    }
+  });
+  it.each(['services','products'] as const)('keeps server-deleted %s deleted after the server choice', async kind => {
+    const field = await seedDeletedDraft(kind);
+    draftPanel().vm.$emit('resolve',draftPanel().props('conflicts')[0]!.id,'server'); await nextTick();
+    header().vm.$emit('save'); await flushPromises(); await vi.advanceTimersByTimeAsync(1500);
+    expect(ManagerOrdersService.patchManagerOrder).not.toHaveBeenCalled();
+    expect(stored.proposals![0]![field]).toHaveLength(1);
+    expect(stored.proposals![0]![field]![0]!.id).toBe(82);
+  });
+  it('leaves unresolved recovery without writing or clearing earlier choices', async () => {
+    await seedConflict();
+    const title = draftPanel().props('conflicts').find(item=>item.path.at(-1)==='title')!;
+    draftPanel().vm.$emit('resolve',title.id,'local'); await nextTick();
+    const entries = JSON.stringify({...sessionStorage});
+    expect(await (wrapper.vm as any).prepareToLeave()).toBe(true);
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(ManagerOrdersService.patchManagerOrder).not.toHaveBeenCalled();
+    expect(JSON.stringify({...sessionStorage})).toBe(entries);
+    wrapper.unmount(); await mountDrawer('page');
+    expect(draftPanel().props('conflicts')).toHaveLength(1);
+    expect(header().props('title')).toBe('Мой заголовок');
+  });
+  it('does not replace newer order data while cancellation waits for ancillary loading', async () => {
+    await seedConflict();
+    const fresh = { ...stored, title: 'Название при отмене' };
+    vi.mocked(ManagerOrdersService.getManagerOrderDetail).mockResolvedValue(fresh);
+    let finishLoading!: (result: any) => void;
+    apiMock.listSupplyRequests.mockImplementationOnce(() => new Promise(resolve => { finishLoading = resolve; }));
+    header().vm.$emit('discard'); await flushPromises();
+    const newer = { ...stored, title: 'Более новое название', comment: 'Более новый комментарий' };
+    await wrapper.setProps({ order: newer }); await flushPromises();
+    finishLoading({ items: [] }); await flushPromises();
+    expect(wrapper.props('order')).toEqual(newer);
+    expect(wrapper.emitted('updated')).toBeUndefined();
+    expect(header().props('title')).toBe(newer.title);
+    expect(customer().props('comment')).toBe(newer.comment);
+    expect(ManagerOrdersService.patchManagerOrder).not.toHaveBeenCalled();
+  });
+  it('cancels recovery using fresh server data, preserves other drafts, and never schedules a PATCH', async () => {
+    await seedConflict();
+    sessionStorage.setItem('manager_order_drawer_draft_999_17_other','other input');
+    stored = { ...stored, title:'Самое свежее название', comment:'Самый свежий комментарий' };
+    vi.spyOn(ManagerOrdersService,'getManagerOrderDetail').mockResolvedValue(structuredClone(stored));
+    expect(header().attributes('inert')).toBeUndefined();
+    header().vm.$emit('save'); await flushPromises();
+    expect(wrapper.text()).toContain('Сначала выберите значения в восстановленном черновике.');
+    header().vm.$emit('discard'); await flushPromises(); await vi.advanceTimersByTimeAsync(2000);
+    expect(draftPanel().exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Сначала выберите значения в восстановленном черновике.');
+    expect(header().props('title')).toBe('Самое свежее название');
+    expect(customer().props('comment')).toBe('Самый свежий комментарий');
+    expect(ManagerOrdersService.patchManagerOrder).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem('manager_order_drawer_draft_999_17_other')).toBe('other input');
+    expect(Object.keys(sessionStorage).filter(key=>key.startsWith('manager_order_drawer_draft_395_25_'))).toEqual([]);
+  });
+});
 
 describe('order drawer autosave integration', () => {
   it.each([true, false])('restores only a failed local title edit over fresh server fields and estimate (autosave %s)', async automatic => {
@@ -132,8 +299,8 @@ describe('order drawer autosave integration', () => {
     header().vm.$emit('save');
     await vi.advanceTimersByTimeAsync(2000);
     expect(ManagerOrdersService.patchManagerOrder).not.toHaveBeenCalled();
-    expect(await customer().props('beforeNavigate')!()).toBe(false);
-    expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+    expect(await customer().props('beforeNavigate')!()).toBe(true);
+    expect(wrapper.emitted('update:modelValue')).toEqual([[false]]);
     // An already received newer response must update the conflict, too.
     stored = { ...stored, title: 'Еще более новое название' };
     await wrapper.setProps({ order: stored }); await flushPromises();
