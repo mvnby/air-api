@@ -161,6 +161,7 @@ async function openIncompleteDocument(f) {
 (async()=>{
  browser=await chromium.launch({headless:true});
  try{
+ await require('./title-discard-cases.cjs')({runCase,base,output});
  await require('./draft-recovery-cases.cjs')({runCase,base,output,openBoard,assertBoard});
  for(const width of [384,1440]) {
   await runCase(width,'draft restore preserves fresh server fields and estimate',async f=>{

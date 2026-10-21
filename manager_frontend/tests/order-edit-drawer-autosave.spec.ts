@@ -52,10 +52,11 @@ const commit = (payload: any) => {
   if (payload.services) { const index = Math.max(0, stored.proposals!.findIndex(item => item.id === payload.line_proposal_id)); stored.proposals![index] = { ...stored.proposals![index]!, service_lines: payload.services }; }
   return structuredClone(stored);
 };
-const mountDrawer = async (presentation: 'page' | 'dialog' = 'dialog', realCustomer = false, openContext = true) => {
+const mountDrawer = async (presentation: 'page' | 'dialog' = 'dialog', realCustomer = false, openContext = true, realHeader = false) => {
   wrapper = shallowMount(OrderEditDrawer, {
+    attachTo: realHeader ? document.body : undefined,
     props: { modelValue: false, presentation, order: stored, onUpdated: (order: ManagerOrderDetailResponse) => { void wrapper.setProps({ order }); } },
-    global: { components: { OrderPaymentWorkspace, OrderWorkWorkspace }, stubs: { OrderAsyncPanel: false, OrderPaymentWorkspace: false, OrderCustomerContext: !realCustomer, OrderWorkspaceContext: !realCustomer } },
+    global: { components: { OrderPaymentWorkspace, OrderWorkWorkspace }, stubs: { OrderWorkspaceHeader: !realHeader, OrderAsyncPanel: false, OrderPaymentWorkspace: false, OrderCustomerContext: !realCustomer, OrderWorkspaceContext: !realCustomer } },
   });
   await wrapper.setProps({ modelValue: true });
   await flushPromises();
@@ -133,6 +134,74 @@ const seedDeletedDraft = async (kind: 'services' | 'products') => {
   await mountDrawer();
   return field;
 };
+
+describe('discard with the real title editor', () => {
+  const input = () => header().find<HTMLInputElement>('[aria-label="Название заказа"]');
+  const draftEntries = () => Object.fromEntries(Object.entries(sessionStorage).filter(([key])=>key.startsWith('manager_order_drawer_draft_395_25_')));
+  const edit = async (automatic: boolean) => {
+    managerSession.auth.value = { tenant_id: 1, staff_user_id: 99, username: 'title-test' } as any;
+    await mountDrawer('page',false,false,true);
+    if (!automatic) { await header().get('[aria-label="Автосохранение заказа"]').trigger('click'); }
+    await header().get('[aria-label^="Изменить название:"]').trigger('click');
+    await input().setValue('Отменённое название');
+  };
+  it.each([true,false])('ends title editing after successful delayed cancellation without replaying cancelled input (autosave %s)', async automatic => {
+    await edit(automatic);
+    let finish!: (order: ManagerOrderDetailResponse) => void;
+    vi.mocked(ManagerOrdersService.getManagerOrderDetail).mockImplementationOnce(()=>new Promise(resolve=>{ finish=resolve; }) as any);
+    await header().get('[aria-label="Отменить изменения"]').trigger('click');
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(input().element.value).toBe('Отменённое название');
+    expect(ManagerOrdersService.patchManagerOrder).not.toHaveBeenCalled();
+    finish({ ...stored, title:'Актуальное серверное название' }); await flushPromises();
+    expect(wrapper.text()).toContain('Изменения отменены');
+    expect(input().exists()).toBe(false);
+    const trigger = header().get('[aria-label="Изменить название: Актуальное серверное название"]');
+    expect(document.activeElement).toBe(trigger.element);
+    expect(Object.keys(draftEntries())).toHaveLength(0);
+    await trigger.trigger('keydown',{key:'Enter'});
+    for (const action of ['enter','apply','blur']) {
+      await trigger.trigger('click');
+      expect(input().element.value).toBe('Актуальное серверное название');
+      if (action==='enter') await input().trigger('keydown',{key:'Enter'});
+      if (action==='apply') await header().get('[aria-label="Применить название"]').trigger('click');
+      if (action==='blur') await input().trigger('blur');
+      await vi.advanceTimersByTimeAsync(1200);
+    }
+    expect(ManagerOrdersService.patchManagerOrder).not.toHaveBeenCalled();
+    expect(JSON.stringify(draftEntries())).not.toContain('Отменённое название');
+    expect(header().get('[role="status"]').text()).toBe('Сохранено');
+  });
+  it.each([true,false])('keeps the open editor and scoped draft when cancellation GET fails and allows safe exit (autosave %s)', async automatic => {
+    await edit(automatic); const before=draftEntries();
+    vi.mocked(ManagerOrdersService.getManagerOrderDetail).mockRejectedValueOnce(new Error('offline'));
+    await header().get('[aria-label="Отменить изменения"]').trigger('click'); await flushPromises();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(input().element.value).toBe('Отменённое название');
+    expect(draftEntries()).toEqual(before);
+    expect(wrapper.text()).toContain('Не удалось отменить черновик:');
+    expect(await (wrapper.vm as any).prepareToLeave()).toBe(true);
+    expect(ManagerOrdersService.patchManagerOrder).not.toHaveBeenCalled();
+    expect(draftEntries()).toEqual(before);
+  });
+  it('keeps focus, selection and newer title input when a normal autosave response arrives', async () => {
+    await edit(true);
+    let finish!: (order: ManagerOrderDetailResponse) => void;
+    let sent: any;
+    vi.mocked(ManagerOrdersService.patchManagerOrder).mockImplementationOnce((_id,payload)=>{sent=payload;return new Promise(resolve=>{finish=resolve;}) as any;});
+    await vi.advanceTimersByTimeAsync(700);
+    await input().setValue('Ещё более новое название');
+    input().element.focus(); input().element.setSelectionRange(3,8);
+    const element=input().element;
+    finish(commit(sent)); await flushPromises();
+    expect(input().element).toBe(element);
+    expect(element.value).toBe('Ещё более новое название');
+    expect(document.activeElement).toBe(element);
+    expect([element.selectionStart,element.selectionEnd]).toEqual([3,8]);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(stored.title).toBe('Ещё более новое название');
+  });
+});
 
 describe('draft recovery follow-up regressions', () => {
   it.each(['services','products'] as const)('sends restored deleted %s with a new identity in manual and automatic modes', async kind => {
