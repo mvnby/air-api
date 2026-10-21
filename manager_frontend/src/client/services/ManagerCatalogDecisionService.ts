@@ -36,7 +36,10 @@ export class ManagerCatalogDecisionService {
      * List Catalog Decision Products
      * Read eligible complete split systems with technical and commercial projections; limit is
      * 1–100. Availability defaults to in_stock; include_orderable removes that restriction.
-     * category=multi, unsupported BTU classes or inverted retail bounds return 422. Explicit
+     * Recommended order puts wall-mounted systems first when no indoor form is selected,
+     * then sorts by title and ID; other forms remain available in the same result set.
+     * Search values with kW/кВт units match exact nominal cooling capacity.
+     * category=multi, unsupported BTU classes or inverted power/retail bounds return 422. Explicit
      * product_ids is limited to 24. Demo purchase-cost projection uses a synthetic discount
      * from RRC rather than actual supplier cost. This endpoint only reads.
      *
@@ -92,7 +95,7 @@ export class ManagerCatalogDecisionService {
         includeOrderable: boolean = false,
         productIds?: (Array<number> | null),
         isPublished?: (boolean | null),
-        sort: 'retail_price' | 'purchase_cost' | 'rrc' | 'margin_abs' | 'margin_pct' | 'availability' | 'cooling_power' | 'title' = 'title',
+        sort: 'recommended' | 'retail_price' | 'purchase_cost' | 'rrc' | 'margin_abs' | 'margin_pct' | 'availability' | 'cooling_power' | 'title' = 'recommended',
         direction: 'asc' | 'desc' = 'asc',
         heatingMin?: (number | null),
     ): CancelablePromise<CatalogDecisionListResponse> {

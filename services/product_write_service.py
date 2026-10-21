@@ -15,6 +15,7 @@ from services.catalog_revision_service import CatalogRevisionService
 from services.catalog_media_policy import CatalogMediaKind, CatalogMediaPolicy
 from services.product_attachment_service import replace_manuals
 from services.product_kind_service import ProductKindService
+from services.product_cooling_capacity import nominal_cooling_capacity
 from services.product_original_media_service import ProductOriginalMediaService
 from services.product_series_assignment_service import ProductSeriesAssignmentService
 from services.spec_normalizer import normalize_specs
@@ -107,7 +108,7 @@ class ProductWriteService:
             ),
             catalog_category_override=payload.get("catalog_category_override"),
             is_inverter=bool(payload.get("is_inverter", False)),
-            power_cooling=payload.get("power_cooling"),
+            power_cooling=nominal_cooling_capacity(specs, fallback=payload.get("power_cooling")),
             main_image=ProductWriteService._validated_main_image(
                 payload.get("main_image")
             ),
@@ -230,7 +231,7 @@ class ProductWriteService:
                 "catalog_category_override", source.catalog_category_override
             ),
             is_inverter=bool(payload.get("is_inverter", source.is_inverter)),
-            power_cooling=payload.get("power_cooling", source.power_cooling),
+            power_cooling=nominal_cooling_capacity(specs, fallback=payload.get("power_cooling", source.power_cooling)),
             main_image=selected_main_image,
             images=selected_legacy_images,
             tags=selected_tags,
@@ -392,6 +393,18 @@ class ProductWriteService:
                 title=(
                     payload.get("title") or (existing_product.title if existing_product else "")
                 ) if sync_derived_fields else None,
+            )
+
+        if sync_derived_fields and ("specs" in payload or "power_cooling" in payload):
+            payload["power_cooling"] = nominal_cooling_capacity(
+                payload.get("specs", existing_product.specs),
+                fallback=payload.get("power_cooling", existing_product.power_cooling),
+            )
+        if sync_derived_fields and "product_kind" in payload:
+            payload["product_kind"] = ProductKindService.resolve(
+                payload["product_kind"],
+                specs=payload.get("specs", existing_product.specs),
+                fallback=existing_product.product_kind,
             )
 
         previous_brand_slugs = await CatalogRevisionService.get_product_brand_slugs(

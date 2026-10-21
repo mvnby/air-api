@@ -10,6 +10,7 @@ const props = defineProps<{
   direction: 'asc' | 'desc';
   busy?: boolean;
   existingIds?: number[];
+  hasFormFilter?: boolean;
 }>();
 const emit = defineEmits<{
   sort: [value: CatalogDecisionSort];
@@ -38,8 +39,10 @@ const specs = (item: CatalogDecisionItem) => [
   `Wi-Fi: ${wifiLabels[item.wifi || ''] || '—'}`,
 ].join(' · ');
 const identity = (item: CatalogDecisionItem) => [item.brand_title, item.series_title, formLabels[item.indoor_form_factor || '']].filter(Boolean).join(' · ');
-const mobileSorts: Array<{ key: CatalogDecisionSort; label: string }> = [
+const sortOptions: Array<{ key: CatalogDecisionSort; label: string }> = [
+  { key: 'recommended', label: 'Настенные первыми' },
   { key: 'title', label: 'Модель' },
+  { key: 'cooling_power', label: 'Мощность охлаждения' },
   { key: 'retail_price', label: 'Цена клиенту' },
   { key: 'purchase_cost', label: 'Закупка' },
   { key: 'rrc', label: 'РРЦ' },
@@ -51,13 +54,14 @@ const mobileSorts: Array<{ key: CatalogDecisionSort; label: string }> = [
 
 <template>
   <div class="space-y-2">
-    <section class="flex items-center gap-2 rounded-xl border border-gray-200 bg-white p-3 md:hidden" aria-label="Сортировка каталога">
-      <label class="min-w-0 flex-1 text-xs text-gray-500">Сортировка
-        <select :value="sort" class="ml-2 max-w-[65%] rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm font-medium text-gray-700" aria-label="Сортировать модели" @change="emit('sort', ($event.target as HTMLSelectElement).value as CatalogDecisionSort)">
-          <option v-for="item in mobileSorts" :key="item.key" :value="item.key">{{ item.label }}</option>
+    <section class="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white p-3" aria-label="Сортировка каталога">
+      <label class="flex min-w-0 flex-1 items-center gap-2 text-xs text-gray-500">Сортировка
+        <select :value="sort" class="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm font-medium text-gray-700 sm:max-w-xs sm:flex-none" aria-label="Сортировать модели" @change="emit('sort', ($event.target as HTMLSelectElement).value as CatalogDecisionSort)">
+          <option v-for="item in sortOptions" :key="item.key" :value="item.key">{{ item.label }}</option>
         </select>
       </label>
-      <button type="button" class="h-10 w-10 shrink-0 rounded-lg border border-gray-200 text-base text-gray-700" :aria-label="direction === 'asc' ? 'Изменить порядок: сейчас по возрастанию' : 'Изменить порядок: сейчас по убыванию'" @click="emit('sort', sort)">{{ direction === 'asc' ? '↑' : '↓' }}</button>
+      <span v-if="sort === 'recommended' && !hasFormFilter" class="basis-full text-xs text-gray-500 sm:basis-auto">Другие формы блоков тоже в подборе.</span>
+      <button v-if="sort !== 'recommended'" type="button" class="h-10 w-10 shrink-0 rounded-lg border border-gray-200 text-base text-gray-700" :aria-label="direction === 'asc' ? 'Изменить порядок: сейчас по возрастанию' : 'Изменить порядок: сейчас по убыванию'" @click="emit('sort', sort)">{{ direction === 'asc' ? '↑' : '↓' }}</button>
     </section>
 
     <div v-if="items.length" class="grid grid-cols-1 gap-2 md:hidden">

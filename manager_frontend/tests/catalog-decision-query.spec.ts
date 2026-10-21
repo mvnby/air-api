@@ -13,7 +13,20 @@ describe('catalog query navigation', () => {
   });
   it('rejects malformed or unsupported URL criteria', () => {
     const state = readCatalogDecisionQuery('?page=-9&coolingBtuClasses=0,30,30,99&retailMinByn=Infinity&coolingMinKw=10&coolingMaxKw=2&form=unknown&wifi=unknown&sort=secret&seriesIds=8');
-    expect(state).toEqual({ filters: { isPublished: true, coolingBtuClasses: [30] }, page: 1, sort: 'title', direction: 'asc' });
+    expect(state).toEqual({ filters: { isPublished: true, coolingBtuClasses: [30] }, page: 1, sort: 'recommended', direction: 'asc' });
+  });
+  it('defaults to all forms with wall-first ordering and clears its irrelevant descending direction', () => {
+    expect(readCatalogDecisionQuery('?direction=desc')).toEqual({ filters: { isPublished: true }, page: 1, sort: 'recommended', direction: 'asc' });
+    expect(readCatalogDecisionQuery('?sort=recommended&direction=desc').direction).toBe('asc');
+    expect(writeCatalogDecisionQuery('?sort=title&direction=desc&orderId=42', {
+      filters: { isPublished: true }, page: 1, sort: 'recommended', direction: 'desc',
+    })).toBe('?orderId=42');
+  });
+  it.each(['title', 'retail_price', 'cooling_power'] as const)('retains explicit %s sorting in bookmarks', sort => {
+    const state = { filters: { isPublished: true }, sort, direction: 'desc' as const, page: 1 };
+    const query = writeCatalogDecisionQuery('', state);
+    expect(new URLSearchParams(query).get('sort')).toBe(sort);
+    expect(readCatalogDecisionQuery(query)).toEqual(state);
   });
   it('removes dependent series when removing a selected brand', () => {
     const filters = { brandIds: [1, 2], seriesIds: [11, 22], isPublished: true };

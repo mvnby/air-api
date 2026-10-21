@@ -190,13 +190,13 @@ class TvoyKlimatParser(BaseParser):
                 )
 
             # Cooling power
-            elif "мощность" in key_lower and "охлажд" in key_lower:
+            elif "мощность" in key_lower and "охлажд" in key_lower and "потреб" not in key_lower:
                 m = re.search(r"([\d.]+)", value)
                 if m:
                     target_specs["power_cooling"] = float(m.group(1))
 
             # Heating power
-            elif "мощность" in key_lower and ("обогрев" in key_lower or "нагрев" in key_lower):
+            elif "мощность" in key_lower and ("обогрев" in key_lower or "нагрев" in key_lower) and "потреб" not in key_lower:
                 m = re.search(r"([\d.]+)", value)
                 if m:
                     target_specs["power_heating"] = float(m.group(1))

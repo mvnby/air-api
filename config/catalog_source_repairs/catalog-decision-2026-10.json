@@ -1,0 +1,1594 @@
+{
+  "schema_version": 1,
+  "sources": {
+    "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+    "https://tcl-shop.by/doc/poluprom.pdf": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+    "https://docs.google.com/spreadsheets/d/1oQIe3HonJQbTek7NTINg0x1eslNrJ6m_YaiOxRTD7-8/edit": "ae650424aef27bcd4d15c3e041deeee416ef1a492f7c6fbb019368facfdad1e9"
+  },
+  "products": [
+    {
+      "identity": {
+        "id": 94,
+        "title": "KINGHOME KUD160ZD1/A-S+ KUD160W1/NhA-X",
+        "brand_id": 4,
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud160zd1askud16",
+        "slug": "kud160zd1askud16",
+        "series_id": 231
+      },
+      "before": {
+        "product_kind": "other",
+        "power_cooling": 16.0,
+        "specs_sha256": "4bbb6732ec36e0d97e4c7c6dd098620871253d993d43e1e4566164b3c149f417",
+        "tag_slugs": [
+          "cat-industrial",
+          "ceiling",
+          "kinghome",
+          "winter-25"
+        ]
+      },
+      "before_sha256": "e7d5c0e125156a4f9e086c238d93c6668c17211819aa3f0fc04b41b51122ad33",
+      "fields_set": {
+        "product_kind": "complete_split_system"
+      },
+      "evidence": [
+        {
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "source_sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_pages": [
+              78,
+              79,
+              81,
+              82
+            ],
+            "model": "KUD160ZD1/A-S+ KUD160W1/NhA-X",
+            "component_evidence": "Explicit includes_indoor_unit=true + includes_outdoor_unit=true + indoor_units_count=1 in guarded source-derived specs; catalog exact indoor/outdoor model table"
+          },
+          "component_flags": {
+            "includes_indoor_unit": true,
+            "includes_outdoor_unit": true,
+            "indoor_units_count": 1
+          }
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 95,
+        "title": "KINGHOME KUD50ZD/A-S+ KUD50W1/NhA-S",
+        "brand_id": 4,
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud50zdaskud50w1",
+        "slug": "kud50zdaskud50w1",
+        "series_id": 231
+      },
+      "before": {
+        "product_kind": "other",
+        "power_cooling": 5.3,
+        "specs_sha256": "cf0284bf4638b377e1f4913de058acb19dcfbd4ed5852473fcc2f47a4be86bb4",
+        "tag_slugs": [
+          "cat-industrial",
+          "ceiling",
+          "kinghome",
+          "winter-25"
+        ]
+      },
+      "before_sha256": "334cc3d5db684a33428d9c74ca904a80d21355273c4960d36ee8f2ff6b5a43f1",
+      "fields_set": {
+        "product_kind": "complete_split_system"
+      },
+      "evidence": [
+        {
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "source_sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_pages": [
+              78,
+              79,
+              81
+            ],
+            "model": "KUD50ZD/A-S+ KUD50W1/NhA-S",
+            "component_evidence": "Explicit includes_indoor_unit=true + includes_outdoor_unit=true + indoor_units_count=1 in guarded source-derived specs; catalog exact indoor/outdoor model table"
+          },
+          "component_flags": {
+            "includes_indoor_unit": true,
+            "includes_outdoor_unit": true,
+            "indoor_units_count": 1
+          }
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 96,
+        "title": "KINGHOME KUD71ZD1/A-S+ KUD71W1/NhA-S",
+        "brand_id": 4,
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud71zd1askud71w",
+        "slug": "kud71zd1askud71w",
+        "series_id": 231
+      },
+      "before": {
+        "product_kind": "other",
+        "power_cooling": 7.1,
+        "specs_sha256": "22a44b3278b94519d9c62df579b0122df177c24f8506d332e18571432b7d3fbf",
+        "tag_slugs": [
+          "cat-industrial",
+          "ceiling",
+          "kinghome",
+          "winter-25"
+        ]
+      },
+      "before_sha256": "cef5bd16999b92586d9b3d49f369493a2cad49bcd1e54c935c1fec9ef198c658",
+      "fields_set": {
+        "product_kind": "complete_split_system"
+      },
+      "evidence": [
+        {
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "source_sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_pages": [
+              78,
+              79,
+              81
+            ],
+            "model": "KUD71ZD1/A-S+ KUD71W1/NhA-S",
+            "component_evidence": "Explicit includes_indoor_unit=true + includes_outdoor_unit=true + indoor_units_count=1 in guarded source-derived specs; catalog exact indoor/outdoor model table"
+          },
+          "component_flags": {
+            "includes_indoor_unit": true,
+            "includes_outdoor_unit": true,
+            "indoor_units_count": 1
+          }
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 97,
+        "title": "KINGHOME KUD100ZD1/A-S+ KUD100W1/NhA-S",
+        "brand_id": 4,
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud100zd1askud10",
+        "slug": "kinghome-kud100zd1-a-s-kud100w1-nha-s",
+        "series_id": 231
+      },
+      "before": {
+        "product_kind": "other",
+        "power_cooling": 10.0,
+        "specs_sha256": "3b19cbe73d2efea422ee6e985daaa2504805913650e65247596b39f400d9702c",
+        "tag_slugs": [
+          "cat-industrial",
+          "ceiling",
+          "kinghome",
+          "winter-25"
+        ]
+      },
+      "before_sha256": "a70f10630dc4d87fa9da4d2f8662e59332d49546f503a3c83ce58ab096c948ad",
+      "fields_set": {
+        "product_kind": "complete_split_system"
+      },
+      "evidence": [
+        {
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "source_sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_pages": [
+              78,
+              79,
+              81
+            ],
+            "model": "KUD100ZD1/A-S+ KUD100W1/NhA-S",
+            "component_evidence": "Explicit includes_indoor_unit=true + includes_outdoor_unit=true + indoor_units_count=1 in guarded source-derived specs; catalog exact indoor/outdoor model table"
+          },
+          "component_flags": {
+            "includes_indoor_unit": true,
+            "includes_outdoor_unit": true,
+            "indoor_units_count": 1
+          }
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 98,
+        "title": "KINGHOME KUD125ZD1/A-S+ KUD125W1/NhA-X",
+        "brand_id": 4,
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud125zd1askud12",
+        "slug": "kud125zd1askud12",
+        "series_id": 231
+      },
+      "before": {
+        "product_kind": "other",
+        "power_cooling": 12.1,
+        "specs_sha256": "24a0a95d93e3fae4093ee5ac8f37a4c62d04b56933efb10f384bbb20248deeb0",
+        "tag_slugs": [
+          "cat-industrial",
+          "ceiling",
+          "kinghome",
+          "winter-25"
+        ]
+      },
+      "before_sha256": "fb8cd10cd90465b8734c737d7b4bd11b94d46ff731fc05c89b5e96a0f84bb02d",
+      "fields_set": {
+        "product_kind": "complete_split_system"
+      },
+      "evidence": [
+        {
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "source_sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_pages": [
+              78,
+              79,
+              81
+            ],
+            "model": "KUD125ZD1/A-S+ KUD125W1/NhA-X",
+            "component_evidence": "Explicit includes_indoor_unit=true + includes_outdoor_unit=true + indoor_units_count=1 in guarded source-derived specs; catalog exact indoor/outdoor model table"
+          },
+          "component_flags": {
+            "includes_indoor_unit": true,
+            "includes_outdoor_unit": true,
+            "indoor_units_count": 1
+          }
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 99,
+        "title": "KINGHOME KUD140ZD1/A-S+ KUD140W1/NhA-X",
+        "brand_id": 4,
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud140zd1askud14",
+        "slug": "kud140zd1askud14",
+        "series_id": 231
+      },
+      "before": {
+        "product_kind": "other",
+        "power_cooling": 13.4,
+        "specs_sha256": "7cb376ac80a34984361f9ebde33a855d5ea4f30cbc629e46eb285df869c39912",
+        "tag_slugs": [
+          "cat-industrial",
+          "ceiling",
+          "kinghome",
+          "winter-25"
+        ]
+      },
+      "before_sha256": "0a9aab498f0df19d70d2b8de872e193c016a2c4a7d1e855fd092498ca3af9f54",
+      "fields_set": {
+        "product_kind": "complete_split_system"
+      },
+      "evidence": [
+        {
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "source_sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_pages": [
+              78,
+              79,
+              81,
+              82
+            ],
+            "model": "KUD140ZD1/A-S+ KUD140W1/NhA-X",
+            "component_evidence": "Explicit includes_indoor_unit=true + includes_outdoor_unit=true + indoor_units_count=1 in guarded source-derived specs; catalog exact indoor/outdoor model table"
+          },
+          "component_flags": {
+            "includes_indoor_unit": true,
+            "includes_outdoor_unit": true,
+            "indoor_units_count": 1
+          }
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 179,
+        "title": "Кассетный кондиционер TCL TCC-48CHRA/U3-L",
+        "brand_id": 3,
+        "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+        "slug": "kassetnyy-konditsioner-tcl-tcc-48chra-u3-l",
+        "series_id": 311
+      },
+      "before": {
+        "product_kind": "other",
+        "power_cooling": 4.64,
+        "specs_sha256": "387c8e3fe3788577f2ffc104ca8b82a6a6ba9921e979207be0714088fb86df13",
+        "tag_slugs": [
+          "cassette",
+          "cat-industrial",
+          "tcl"
+        ]
+      },
+      "before_sha256": "7c39733bdecd2920156434232b15da41731bc6684f3e9bb0e4cf70e05fd50ed7",
+      "fields_set": {
+        "power_cooling": 14.0
+      },
+      "evidence": [
+        {
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "source_sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 20,
+            "model": "TCC-48CHRA/U3-L"
+          },
+          "capacity_cooling_kw": 14.0
+        },
+        {
+          "source_url": "https://docs.google.com/spreadsheets/d/1oQIe3HonJQbTek7NTINg0x1eslNrJ6m_YaiOxRTD7-8/edit",
+          "source_sha256": "ae650424aef27bcd4d15c3e041deeee416ef1a492f7c6fbb019368facfdad1e9",
+          "locator": {
+            "tab": "TCL PAC ",
+            "row": 8,
+            "model": "TCC-48CHRA/U3-L",
+            "literal": "14,0 / 14,65"
+          },
+          "capacity_cooling_kw": 14.0
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 180,
+        "title": "Кассетный кондиционер TCL TCC-60CHRA/U3-L",
+        "brand_id": 3,
+        "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+        "slug": "kassetnyy-konditsioner-tcl-tcc-60chra-u3-l",
+        "series_id": 311
+      },
+      "before": {
+        "product_kind": "complete_split_system",
+        "power_cooling": 5.69,
+        "specs_sha256": "47f49385f6b6bbc764d1e60f8ea9b7da705a01631d8f4bba86e01991b2e88497",
+        "tag_slugs": [
+          "cat-industrial",
+          "tcl",
+          "wall"
+        ]
+      },
+      "before_sha256": "83bb927acb56cea7103b0abda17891e0096b3d857c1ad3b01429c4804fd6dc61",
+      "fields_set": {
+        "power_cooling": 16.12
+      },
+      "evidence": [
+        {
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "source_sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 20,
+            "model": "TCC-60CHRA/U3-L"
+          },
+          "capacity_cooling_kw": 16.12
+        },
+        {
+          "source_url": "https://docs.google.com/spreadsheets/d/1oQIe3HonJQbTek7NTINg0x1eslNrJ6m_YaiOxRTD7-8/edit",
+          "source_sha256": "ae650424aef27bcd4d15c3e041deeee416ef1a492f7c6fbb019368facfdad1e9",
+          "locator": {
+            "tab": "TCL PAC ",
+            "row": 9,
+            "model": "TCC-60CHRA/U3-L",
+            "literal": "16,12 / 17,73"
+          },
+          "capacity_cooling_kw": 16.12
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 181,
+        "title": "Кассетный кондиционер TCL TCC-36CHRA/U3-L",
+        "brand_id": 3,
+        "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+        "slug": "kassetnyy-konditsioner-tcl-tcc-36chra-u3-l",
+        "series_id": 311
+      },
+      "before": {
+        "product_kind": "other",
+        "power_cooling": 3.72,
+        "specs_sha256": "f0d712f24202f558089ff85f753e22478ebf69cda520ac0d14e18c0752faed8b",
+        "tag_slugs": [
+          "cassette",
+          "cat-industrial",
+          "tcl"
+        ]
+      },
+      "before_sha256": "c9c4be38029cc401fa60a9ccfc69856fae1b94e0ec9714a1ba3d27663884cb93",
+      "fields_set": {
+        "power_cooling": 10.5
+      },
+      "evidence": [
+        {
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "source_sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 20,
+            "model": "TCC-36CHRA/U3-L"
+          },
+          "capacity_cooling_kw": 10.5
+        },
+        {
+          "source_url": "https://docs.google.com/spreadsheets/d/1oQIe3HonJQbTek7NTINg0x1eslNrJ6m_YaiOxRTD7-8/edit",
+          "source_sha256": "ae650424aef27bcd4d15c3e041deeee416ef1a492f7c6fbb019368facfdad1e9",
+          "locator": {
+            "tab": "TCL PAC ",
+            "row": 7,
+            "model": "TCC-36CHRA/U3-L",
+            "literal": "10,5 / 12"
+          },
+          "capacity_cooling_kw": 10.5
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 182,
+        "title": "Кассетный кондиционер TCL TCC-24CHRA/U-L",
+        "brand_id": 3,
+        "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+        "slug": "kassetnyy-konditsioner-tcl-tcc-24chra-u-l",
+        "series_id": 311
+      },
+      "before": {
+        "product_kind": "other",
+        "power_cooling": 2.05,
+        "specs_sha256": "f7f73f4d2c6acb2da6c65046ec254549c220351a4643ca74a21c62030588c15a",
+        "tag_slugs": [
+          "cassette",
+          "cat-industrial",
+          "tcl"
+        ]
+      },
+      "before_sha256": "4cdd4a7ed35e041da7c9393db5a61d1a51d6a61d099b4be1e21a6f3a2ec429d1",
+      "fields_set": {
+        "power_cooling": 7.0
+      },
+      "evidence": [
+        {
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "source_sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 20,
+            "model": "TCC-24CHRA/U-L"
+          },
+          "capacity_cooling_kw": 7.0
+        },
+        {
+          "source_url": "https://docs.google.com/spreadsheets/d/1oQIe3HonJQbTek7NTINg0x1eslNrJ6m_YaiOxRTD7-8/edit",
+          "source_sha256": "ae650424aef27bcd4d15c3e041deeee416ef1a492f7c6fbb019368facfdad1e9",
+          "locator": {
+            "tab": "TCL PAC ",
+            "row": 6,
+            "model": "TCC-24CHRA/U-L",
+            "literal": "7,0 / 7,0"
+          },
+          "capacity_cooling_kw": 7.0
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 183,
+        "title": "Кассетный кондиционер TCL TCC-18CHRA/U-L",
+        "brand_id": 3,
+        "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+        "slug": "kassetnyy-konditsioner-tcl-tcc-18chra-u-l",
+        "series_id": 311
+      },
+      "before": {
+        "product_kind": "other",
+        "power_cooling": 1.64,
+        "specs_sha256": "5463dbfdb467553c18801fc65b7a6959395fcfc267f9eacaf912efcecb6b1b85",
+        "tag_slugs": [
+          "cassette",
+          "cat-industrial",
+          "tcl"
+        ]
+      },
+      "before_sha256": "5ac0a3ab811748284940f3dc766657aca7803b25dc2c2ca2d2891588a6eef0aa",
+      "fields_set": {
+        "power_cooling": 5.2
+      },
+      "evidence": [
+        {
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "source_sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 20,
+            "model": "TCC-18CHRA/U-L"
+          },
+          "capacity_cooling_kw": 5.2
+        },
+        {
+          "source_url": "https://docs.google.com/spreadsheets/d/1oQIe3HonJQbTek7NTINg0x1eslNrJ6m_YaiOxRTD7-8/edit",
+          "source_sha256": "ae650424aef27bcd4d15c3e041deeee416ef1a492f7c6fbb019368facfdad1e9",
+          "locator": {
+            "tab": "TCL PAC ",
+            "row": 5,
+            "model": "TCC-18CHRA/U-L",
+            "literal": "5,2 / 5,2"
+          },
+          "capacity_cooling_kw": 5.2
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 184,
+        "title": "Напольно-потолочный кондиционер TCL TUB-18HRA",
+        "brand_id": 3,
+        "source_url": "https://docs.google.com/spreadsheets/d/1oQIe3HonJQbTek7NTINg0x1eslNrJ6m_YaiOxRTD7-8/edit",
+        "slug": "napolno-potolochnyy-konditsioner-tcl-tub-18hra",
+        "series_id": 316
+      },
+      "before": {
+        "product_kind": "other",
+        "power_cooling": 1.71,
+        "specs_sha256": "32dc7d873080355c6ca8e94a9e4269c9999b6023204f3dc945915c1aff6c8442",
+        "tag_slugs": [
+          "cat-industrial",
+          "ceiling",
+          "tcl"
+        ]
+      },
+      "before_sha256": "88dad1599876221a4be46ce1d34f9afbc7b15cc80ea18ca4cb78575029d0b1d1",
+      "fields_set": {
+        "power_cooling": 5.3
+      },
+      "evidence": [
+        {
+          "source_url": "https://docs.google.com/spreadsheets/d/1oQIe3HonJQbTek7NTINg0x1eslNrJ6m_YaiOxRTD7-8/edit",
+          "source_sha256": "ae650424aef27bcd4d15c3e041deeee416ef1a492f7c6fbb019368facfdad1e9",
+          "locator": {
+            "tab": "TCL PAC ",
+            "row": 11,
+            "model": "TUB-18HRA",
+            "literal": "5,3 / 5,9"
+          },
+          "capacity_cooling_kw": 5.3
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 185,
+        "title": "Напольно-потолочный кондиционер TCL TCC-18ZHRA/U-L",
+        "brand_id": 3,
+        "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+        "slug": "napolno-potolochnyy-konditsioner-tcl-tcc-18zhra-u-l",
+        "series_id": 312
+      },
+      "before": {
+        "product_kind": "other",
+        "power_cooling": 1.71,
+        "specs_sha256": "fd26245b9d6c54b44e7cf4dcc3a8d774af3584cea939b1476c19e0e615656ea5",
+        "tag_slugs": [
+          "cat-industrial",
+          "ceiling",
+          "tcl"
+        ]
+      },
+      "before_sha256": "f688ab990df7e52f9e1f86989f571c86c51ba3ffa467960f90b02288a9d9e139",
+      "fields_set": {
+        "power_cooling": 5.2
+      },
+      "evidence": [
+        {
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "source_sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 26,
+            "model": "TCC-18ZHRA/U-L"
+          },
+          "capacity_cooling_kw": 5.2
+        },
+        {
+          "source_url": "https://docs.google.com/spreadsheets/d/1oQIe3HonJQbTek7NTINg0x1eslNrJ6m_YaiOxRTD7-8/edit",
+          "source_sha256": "ae650424aef27bcd4d15c3e041deeee416ef1a492f7c6fbb019368facfdad1e9",
+          "locator": {
+            "tab": "TCL PAC ",
+            "row": 12,
+            "model": "TCC-18ZHRA/U-L",
+            "literal": "5,2 /5,2"
+          },
+          "capacity_cooling_kw": 5.2
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 186,
+        "title": "Напольно-потолочный кондиционер  TCL TCC-24ZHRA/U-L",
+        "brand_id": 3,
+        "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+        "slug": "napolno-potolochnyy-konditsioner-tcl-tcc-24zhra-u-l",
+        "series_id": 312
+      },
+      "before": {
+        "product_kind": "other",
+        "power_cooling": 1.85,
+        "specs_sha256": "4f2393de6bc2efae29dd941d737b59e11f41482b5e745b6d977ac84f97687517",
+        "tag_slugs": [
+          "cat-industrial",
+          "ceiling",
+          "tcl"
+        ]
+      },
+      "before_sha256": "f8e30ca6bfffb8ed69286b12467d75c64ed10072ce86d6a8f8cf87f64b8e4921",
+      "fields_set": {
+        "power_cooling": 7.0
+      },
+      "evidence": [
+        {
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "source_sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 26,
+            "model": "TCC-24ZHRA/U-L"
+          },
+          "capacity_cooling_kw": 7.0
+        },
+        {
+          "source_url": "https://docs.google.com/spreadsheets/d/1oQIe3HonJQbTek7NTINg0x1eslNrJ6m_YaiOxRTD7-8/edit",
+          "source_sha256": "ae650424aef27bcd4d15c3e041deeee416ef1a492f7c6fbb019368facfdad1e9",
+          "locator": {
+            "tab": "TCL PAC ",
+            "row": 13,
+            "model": "TCC-24ZHRA/U-L",
+            "literal": "7,0  / 7,0"
+          },
+          "capacity_cooling_kw": 7.0
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 187,
+        "title": "Напольно-потолочный кондиционер  TCL TCC-36ZHRA/U3-L",
+        "brand_id": 3,
+        "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+        "slug": "napolno-potolochnyy-konditsioner-tcl-tcc-36zhra-u3-l",
+        "series_id": 312
+      },
+      "before": {
+        "product_kind": "other",
+        "power_cooling": 3.58,
+        "specs_sha256": "6cfbb2a98400867cb8cf0fa1e56f0cde65e6f65af9b4d239d4dd3d247b8e6e3e",
+        "tag_slugs": [
+          "cat-industrial",
+          "ceiling",
+          "tcl"
+        ]
+      },
+      "before_sha256": "9818edc3f6ecc3965fb91eadeea357ec8783341d054ab504ec2fa607151c25a4",
+      "fields_set": {
+        "power_cooling": 10.55
+      },
+      "evidence": [
+        {
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "source_sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 26,
+            "model": "TCC-36ZHRA/U3-L"
+          },
+          "capacity_cooling_kw": 10.55
+        },
+        {
+          "source_url": "https://docs.google.com/spreadsheets/d/1oQIe3HonJQbTek7NTINg0x1eslNrJ6m_YaiOxRTD7-8/edit",
+          "source_sha256": "ae650424aef27bcd4d15c3e041deeee416ef1a492f7c6fbb019368facfdad1e9",
+          "locator": {
+            "tab": "TCL PAC ",
+            "row": 14,
+            "model": "TCC-36ZHRA/U3-L",
+            "literal": "10,55 / 12,00"
+          },
+          "capacity_cooling_kw": 10.55
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 188,
+        "title": "Напольно-потолочный кондиционер  TCL TCC-48ZHRA/U3-L",
+        "brand_id": 3,
+        "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+        "slug": "napolno-potolochnyy-konditsioner-tcl-tcc-48zhra-u3-l",
+        "series_id": 312
+      },
+      "before": {
+        "product_kind": "other",
+        "power_cooling": 4.06,
+        "specs_sha256": "d3031caa129cca232a1870b7eabb1925b6208853cf6f7cf157fd8f0dd14a6069",
+        "tag_slugs": [
+          "cat-industrial",
+          "ceiling",
+          "tcl"
+        ]
+      },
+      "before_sha256": "c4708133b8218b9a42046c5f06eaea5c4ec8e4c663eb9cb9c6db4b72dd5ef748",
+      "fields_set": {
+        "power_cooling": 14.0
+      },
+      "evidence": [
+        {
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "source_sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 26,
+            "model": "TCC-48ZHRA/U3-L"
+          },
+          "capacity_cooling_kw": 14.0
+        },
+        {
+          "source_url": "https://docs.google.com/spreadsheets/d/1oQIe3HonJQbTek7NTINg0x1eslNrJ6m_YaiOxRTD7-8/edit",
+          "source_sha256": "ae650424aef27bcd4d15c3e041deeee416ef1a492f7c6fbb019368facfdad1e9",
+          "locator": {
+            "tab": "TCL PAC ",
+            "row": 16,
+            "model": "TCC-48ZHRA/U3-L",
+            "literal": "14,0 / 14,65"
+          },
+          "capacity_cooling_kw": 14.0
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 189,
+        "title": "Напольно-потолочный кондиционер  TCL TCC-60ZHRA/U3-L",
+        "brand_id": 3,
+        "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+        "slug": "napolno-potolochnyy-konditsioner-tcl-tcc-60zhra-u3-l",
+        "series_id": 312
+      },
+      "before": {
+        "product_kind": "other",
+        "power_cooling": 5.15,
+        "specs_sha256": "61f7786c42ab742562881392ed91b590a8f0c79c4dc9e791896fe1a80e89f807",
+        "tag_slugs": [
+          "cat-industrial",
+          "ceiling",
+          "tcl"
+        ]
+      },
+      "before_sha256": "38ff3eb9ee5602f4e2a9270b86e4333572dd78e2cfc42531344b37e34b1c2d48",
+      "fields_set": {
+        "power_cooling": 16.12
+      },
+      "evidence": [
+        {
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "source_sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 26,
+            "model": "TCC-60ZHRA/U3-L"
+          },
+          "capacity_cooling_kw": 16.12
+        },
+        {
+          "source_url": "https://docs.google.com/spreadsheets/d/1oQIe3HonJQbTek7NTINg0x1eslNrJ6m_YaiOxRTD7-8/edit",
+          "source_sha256": "ae650424aef27bcd4d15c3e041deeee416ef1a492f7c6fbb019368facfdad1e9",
+          "locator": {
+            "tab": "TCL PAC ",
+            "row": 18,
+            "model": "TCC-60ZHRA/U3-L",
+            "literal": "16,12 / 17,73"
+          },
+          "capacity_cooling_kw": 16.12
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 190,
+        "title": "Канальный кондиционер TCL TCC-24D2HRA/U-L",
+        "brand_id": 3,
+        "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+        "slug": "kanalnyy-konditsioner-tcl-tcc-24d2hra-u-l",
+        "series_id": 313
+      },
+      "before": {
+        "product_kind": "other",
+        "power_cooling": 1.85,
+        "specs_sha256": "7e2fa57958118edb918c18fda77e9fa20a661d769e22968685defcbb32a373c5",
+        "tag_slugs": [
+          "cat-industrial",
+          "duct",
+          "tcl"
+        ]
+      },
+      "before_sha256": "bf1ad8735517aabd62c9c7fa5a0894ef0e392b7cbe3e330227dd680ead8a68db",
+      "fields_set": {
+        "power_cooling": 7.0
+      },
+      "evidence": [
+        {
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "source_sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 23,
+            "model": "TCC-24D2HRA/U-L"
+          },
+          "capacity_cooling_kw": 7.0
+        },
+        {
+          "source_url": "https://docs.google.com/spreadsheets/d/1oQIe3HonJQbTek7NTINg0x1eslNrJ6m_YaiOxRTD7-8/edit",
+          "source_sha256": "ae650424aef27bcd4d15c3e041deeee416ef1a492f7c6fbb019368facfdad1e9",
+          "locator": {
+            "tab": "TCL PAC ",
+            "row": 20,
+            "model": "TCC-24D2HRA/U-L",
+            "literal": "7,0 / 7,0"
+          },
+          "capacity_cooling_kw": 7.0
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 191,
+        "title": "Канальный кондиционер TCL TCA-36D2HRA/DV3I",
+        "brand_id": 3,
+        "source_url": "https://docs.google.com/spreadsheets/d/1oQIe3HonJQbTek7NTINg0x1eslNrJ6m_YaiOxRTD7-8/edit",
+        "slug": "kanalnyy-konditsioner-tcl-tca-36d2hra-dv3i",
+        "series_id": 314
+      },
+      "before": {
+        "product_kind": "other",
+        "power_cooling": 3.6,
+        "specs_sha256": "499365e2c68a5d45cd9cd69ebaf71bfb50d71b94a33a105df4561431945533a5",
+        "tag_slugs": [
+          "cat-industrial",
+          "duct",
+          "tcl"
+        ]
+      },
+      "before_sha256": "309af40d56cc0c8217b033bdfec4e5bf441480d9a3ac9d06a84dad52e8c31b17",
+      "fields_set": {},
+      "evidence": [
+        {
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "source_sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 22,
+            "model": "TCA-36D2HRA/DV3I",
+            "row": "Производительность / охлаждение",
+            "literal": "10,50 (3,68—11,03)"
+          },
+          "capacity_cooling_kw": 10.5
+        },
+        {
+          "source_url": "https://docs.google.com/spreadsheets/d/1oQIe3HonJQbTek7NTINg0x1eslNrJ6m_YaiOxRTD7-8/edit",
+          "source_sha256": "ae650424aef27bcd4d15c3e041deeee416ef1a492f7c6fbb019368facfdad1e9",
+          "locator": {
+            "tab": "TCL PAC ",
+            "row": 51,
+            "model": "TCA-36D2HRA/DV3I",
+            "literal": "10,55 /12,00"
+          },
+          "capacity_cooling_kw": 10.55
+        }
+      ],
+      "blocked_reason": "blocked_source_conflict"
+    },
+    {
+      "identity": {
+        "id": 192,
+        "title": "Канальный кондиционер TCL TCB-24D2HRA/DV",
+        "brand_id": 3,
+        "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+        "slug": "kanalnyy-konditsioner-tcl-tcb-24d2hra-dv",
+        "series_id": 314
+      },
+      "before": {
+        "product_kind": "other",
+        "power_cooling": 2.73,
+        "specs_sha256": "9e86872896bce90da6d90af2ad589cfa781aa782203a17337021e20b9a4bd57f",
+        "tag_slugs": [
+          "cat-industrial",
+          "duct",
+          "tcl"
+        ]
+      },
+      "before_sha256": "6b3e72aaf50038d50ad73b941fe9491ba2434bad28e8d85848472e3520f68821",
+      "fields_set": {
+        "power_cooling": 7.1
+      },
+      "evidence": [
+        {
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "source_sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 22,
+            "model": "TCB-24D2HRA/DV"
+          },
+          "capacity_cooling_kw": 7.1
+        },
+        {
+          "source_url": "https://docs.google.com/spreadsheets/d/1oQIe3HonJQbTek7NTINg0x1eslNrJ6m_YaiOxRTD7-8/edit",
+          "source_sha256": "ae650424aef27bcd4d15c3e041deeee416ef1a492f7c6fbb019368facfdad1e9",
+          "locator": {
+            "tab": "TCL PAC ",
+            "row": 50,
+            "model": "TCB-24D2HRA/DV",
+            "literal": "7,1 / 7,6"
+          },
+          "capacity_cooling_kw": 7.1
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 193,
+        "title": "Канальный кондиционер TCL TCB-18D2HRA/DV",
+        "brand_id": 3,
+        "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+        "slug": "kanalnyy-konditsioner-tcl-tcb-18d2hra-dv",
+        "series_id": 314
+      },
+      "before": {
+        "product_kind": "other",
+        "power_cooling": 2.19,
+        "specs_sha256": "a8cb06985e93680dcdce576a1a4b9f507b2e2e23a1577ea842893e64ab642c2f",
+        "tag_slugs": [
+          "cat-industrial",
+          "duct",
+          "tcl"
+        ]
+      },
+      "before_sha256": "e99026e37eaee51e637afef23bff25ac15f335197a9d2e4bae2a3f0393954837",
+      "fields_set": {
+        "power_cooling": 5.27
+      },
+      "evidence": [
+        {
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "source_sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 22,
+            "model": "TCB-18D2HRA/DV"
+          },
+          "capacity_cooling_kw": 5.27
+        },
+        {
+          "source_url": "https://docs.google.com/spreadsheets/d/1oQIe3HonJQbTek7NTINg0x1eslNrJ6m_YaiOxRTD7-8/edit",
+          "source_sha256": "ae650424aef27bcd4d15c3e041deeee416ef1a492f7c6fbb019368facfdad1e9",
+          "locator": {
+            "tab": "TCL PAC ",
+            "row": 49,
+            "model": "TCB-18D2HRA/DV",
+            "literal": "5,27 / 5,82"
+          },
+          "capacity_cooling_kw": 5.27
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 196,
+        "title": "Напольно-потолочный кондиционер TCL TCB-18ZHRA/DV",
+        "brand_id": 3,
+        "source_url": "https://docs.google.com/spreadsheets/d/1oQIe3HonJQbTek7NTINg0x1eslNrJ6m_YaiOxRTD7-8/edit",
+        "slug": "napolno-potolochnyy-konditsioner-tcl-tcb-18zhra-dv",
+        "series_id": 315
+      },
+      "before": {
+        "product_kind": "complete_split_system",
+        "power_cooling": 2.19,
+        "specs_sha256": "d809603792253fe6261d2d7b821f5224133325da6a36816a26fb6f8a1fa66546",
+        "tag_slugs": [
+          "cat-industrial",
+          "ceiling",
+          "tcl"
+        ]
+      },
+      "before_sha256": "747fd468ccb4faaaa14f66f74984dd8be40f4567fc21ad1dc1ec0c3ac0babe62",
+      "fields_set": {
+        "power_cooling": 5.27
+      },
+      "evidence": [
+        {
+          "source_url": "https://docs.google.com/spreadsheets/d/1oQIe3HonJQbTek7NTINg0x1eslNrJ6m_YaiOxRTD7-8/edit",
+          "source_sha256": "ae650424aef27bcd4d15c3e041deeee416ef1a492f7c6fbb019368facfdad1e9",
+          "locator": {
+            "tab": "TCL PAC ",
+            "row": 41,
+            "model": "TCB-18ZHRA/DV",
+            "literal": "5,27 / 5,8"
+          },
+          "capacity_cooling_kw": 5.27
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1297,
+        "title": "KINGHOME KUD160T1/A-S+ KUD160W1/NhA-X",
+        "brand_id": 4,
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud160t1askud160",
+        "slug": "kud160t1askud160",
+        "series_id": 233
+      },
+      "before": {
+        "product_kind": "unknown",
+        "power_cooling": 16.0,
+        "specs_sha256": "47aa7ef8734e503e5360e35d115ba4a0615f5733e5a3b5d13c4a88bc5d1094e0",
+        "tag_slugs": [
+          "cassette",
+          "cat-industrial",
+          "kinghome",
+          "winter-25"
+        ]
+      },
+      "before_sha256": "c8569b7d3c452d57d576cb488057d9dc286d9f50fafa2e8daf84d147585a36d5",
+      "fields_set": {
+        "product_kind": "complete_split_system"
+      },
+      "evidence": [
+        {
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "source_sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_pages": [
+              66,
+              67,
+              69
+            ],
+            "model": "KUD160T1/A-S+ KUD160W1/NhA-X",
+            "component_evidence": "Explicit includes_indoor_unit=true + includes_outdoor_unit=true + indoor_units_count=1 in guarded source-derived specs; catalog exact indoor/outdoor model table"
+          },
+          "component_flags": {
+            "includes_indoor_unit": true,
+            "includes_outdoor_unit": true,
+            "indoor_units_count": 1
+          }
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1298,
+        "title": "KINGHOME KUD50PS1/A-S+ KUD50W1/NhA-S",
+        "brand_id": 4,
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud50ps1askud50",
+        "slug": "kud50ps1askud50",
+        "series_id": 232
+      },
+      "before": {
+        "product_kind": "unknown",
+        "power_cooling": 5.3,
+        "specs_sha256": "b89571b87fdc4f9a7032a83e3f12cffaf764ff008fdde5aabec8a4fe85be5707",
+        "tag_slugs": [
+          "cat-industrial",
+          "duct",
+          "kinghome",
+          "winter-25"
+        ]
+      },
+      "before_sha256": "535dfcbfaa0e30400fb6a4e0f4d4225d97837fd18cb288ce03ccd8b1a7d31183",
+      "fields_set": {
+        "product_kind": "complete_split_system"
+      },
+      "evidence": [
+        {
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "source_sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_pages": [
+              72,
+              73,
+              74,
+              75
+            ],
+            "model": "KUD50PS1/A-S+ KUD50W1/NhA-S",
+            "component_evidence": "Explicit includes_indoor_unit=true + includes_outdoor_unit=true + indoor_units_count=1 in guarded source-derived specs; catalog exact indoor/outdoor model table"
+          },
+          "component_flags": {
+            "includes_indoor_unit": true,
+            "includes_outdoor_unit": true,
+            "indoor_units_count": 1
+          }
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1299,
+        "title": "KINGHOME KUD35T1/A-S+ KUD35W1/NhA-S",
+        "brand_id": 4,
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud35t1askud35w1",
+        "slug": "kud35t1askud35w1",
+        "series_id": 233
+      },
+      "before": {
+        "product_kind": "unknown",
+        "power_cooling": 3.5,
+        "specs_sha256": "3c88be7330a8d7d806595bba8aa02d036ef60c97349af251010e6a2c79945d14",
+        "tag_slugs": [
+          "cassette",
+          "cat-industrial",
+          "kinghome",
+          "winter-25"
+        ]
+      },
+      "before_sha256": "8640713ff46ae68624de9a1da26300738caf82a15325da23ae1b0375ec5a0ad7",
+      "fields_set": {
+        "product_kind": "complete_split_system"
+      },
+      "evidence": [
+        {
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "source_sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_pages": [
+              66,
+              67,
+              69
+            ],
+            "model": "KUD35T1/A-S+ KUD35W1/NhA-S",
+            "component_evidence": "Explicit includes_indoor_unit=true + includes_outdoor_unit=true + indoor_units_count=1 in guarded source-derived specs; catalog exact indoor/outdoor model table"
+          },
+          "component_flags": {
+            "includes_indoor_unit": true,
+            "includes_outdoor_unit": true,
+            "indoor_units_count": 1
+          }
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1300,
+        "title": "KINGHOME KUD50T1/A1-S+ KUD50W1/NhA-S",
+        "brand_id": 4,
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud50t1a1skud50w",
+        "slug": "kud50t1a1skud50w",
+        "series_id": 233
+      },
+      "before": {
+        "product_kind": "unknown",
+        "power_cooling": 5.3,
+        "specs_sha256": "40583ec37af0b0413e19543f65a3afe1c0423b31680d447a2ac05e6a6925ba3e",
+        "tag_slugs": [
+          "cassette",
+          "cat-industrial",
+          "kinghome",
+          "winter-25"
+        ]
+      },
+      "before_sha256": "7f1dfbd3038f4a559061e5911820f0f1c73d52a0163340b367900dd32e395f48",
+      "fields_set": {
+        "product_kind": "complete_split_system"
+      },
+      "evidence": [
+        {
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "source_sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_pages": [
+              66,
+              67,
+              69
+            ],
+            "model": "KUD50T1/A1-S+ KUD50W1/NhA-S",
+            "component_evidence": "Explicit includes_indoor_unit=true + includes_outdoor_unit=true + indoor_units_count=1 in guarded source-derived specs; catalog exact indoor/outdoor model table"
+          },
+          "component_flags": {
+            "includes_indoor_unit": true,
+            "includes_outdoor_unit": true,
+            "indoor_units_count": 1
+          }
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1301,
+        "title": "KINGHOME KUD71T1/A-S+ KUD71W1/NhA-S",
+        "brand_id": 4,
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud71t1askud71w1",
+        "slug": "kud71t1askud71w1",
+        "series_id": 233
+      },
+      "before": {
+        "product_kind": "unknown",
+        "power_cooling": 7.1,
+        "specs_sha256": "c530a6f742438859c84874433f38391d3aa27a1255785935c2b6430bc3546873",
+        "tag_slugs": [
+          "cassette",
+          "cat-industrial",
+          "kinghome",
+          "winter-25"
+        ]
+      },
+      "before_sha256": "7fde5d402caf244d3f9ee14bd1f0ac56da7fb30521373954681c2847627707d1",
+      "fields_set": {
+        "product_kind": "complete_split_system"
+      },
+      "evidence": [
+        {
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "source_sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_pages": [
+              66,
+              67,
+              69
+            ],
+            "model": "KUD71T1/A-S+ KUD71W1/NhA-S",
+            "component_evidence": "Explicit includes_indoor_unit=true + includes_outdoor_unit=true + indoor_units_count=1 in guarded source-derived specs; catalog exact indoor/outdoor model table"
+          },
+          "component_flags": {
+            "includes_indoor_unit": true,
+            "includes_outdoor_unit": true,
+            "indoor_units_count": 1
+          }
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1302,
+        "title": "KINGHOME KUD100T1/A-S+ KUD100W1/NhA-S",
+        "brand_id": 4,
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud100t1askud100",
+        "slug": "kud100t1askud100",
+        "series_id": 233
+      },
+      "before": {
+        "product_kind": "unknown",
+        "power_cooling": 10.0,
+        "specs_sha256": "1e0a7fba18246186b249f45cef93d32ebf39612e96065b80a4230e9f7e9d8bdf",
+        "tag_slugs": [
+          "cassette",
+          "cat-industrial",
+          "kinghome",
+          "winter-25"
+        ]
+      },
+      "before_sha256": "27e668f7e9ed4c70a6d6334556062cb4123200956395d2cda90e8582422e5cc1",
+      "fields_set": {
+        "product_kind": "complete_split_system"
+      },
+      "evidence": [
+        {
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "source_sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_pages": [
+              66,
+              67,
+              69
+            ],
+            "model": "KUD100T1/A-S+ KUD100W1/NhA-S",
+            "component_evidence": "Explicit includes_indoor_unit=true + includes_outdoor_unit=true + indoor_units_count=1 in guarded source-derived specs; catalog exact indoor/outdoor model table"
+          },
+          "component_flags": {
+            "includes_indoor_unit": true,
+            "includes_outdoor_unit": true,
+            "indoor_units_count": 1
+          }
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1303,
+        "title": "KINGHOME KUD125T1/A-S+ KUD125W1/NhA-X",
+        "brand_id": 4,
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud125t1askud125",
+        "slug": "kud125t1askud125",
+        "series_id": 233
+      },
+      "before": {
+        "product_kind": "unknown",
+        "power_cooling": 12.1,
+        "specs_sha256": "09e2be12cf519a132ae948b10e3f2836660b119ee850f4e6ac6c36f04d18bea8",
+        "tag_slugs": [
+          "cassette",
+          "cat-industrial",
+          "kinghome",
+          "winter-25"
+        ]
+      },
+      "before_sha256": "6c365191117e6630b726a7ea0acbb21744cce5de5dc47d217ccc825f007c59bb",
+      "fields_set": {
+        "product_kind": "complete_split_system"
+      },
+      "evidence": [
+        {
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "source_sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_pages": [
+              66,
+              67,
+              69
+            ],
+            "model": "KUD125T1/A-S+ KUD125W1/NhA-X",
+            "component_evidence": "Explicit includes_indoor_unit=true + includes_outdoor_unit=true + indoor_units_count=1 in guarded source-derived specs; catalog exact indoor/outdoor model table"
+          },
+          "component_flags": {
+            "includes_indoor_unit": true,
+            "includes_outdoor_unit": true,
+            "indoor_units_count": 1
+          }
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1304,
+        "title": "KINGHOME KUD140T1/A-S+ KUD140W1/NhA-X",
+        "brand_id": 4,
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud140t1askud140",
+        "slug": "kud140t1askud140",
+        "series_id": 233
+      },
+      "before": {
+        "product_kind": "unknown",
+        "power_cooling": 13.4,
+        "specs_sha256": "1a426c15bf77b3caab92403203d8778721cee42775c93bbbb9085dc2e9953d2f",
+        "tag_slugs": [
+          "cassette",
+          "cat-industrial",
+          "kinghome",
+          "winter-25"
+        ]
+      },
+      "before_sha256": "7c1c92e08abaecff0c01fef583f411395473f80e7fa34e681927ee8ef4873593",
+      "fields_set": {
+        "product_kind": "complete_split_system"
+      },
+      "evidence": [
+        {
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "source_sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_pages": [
+              66,
+              67,
+              69
+            ],
+            "model": "KUD140T1/A-S+ KUD140W1/NhA-X",
+            "component_evidence": "Explicit includes_indoor_unit=true + includes_outdoor_unit=true + indoor_units_count=1 in guarded source-derived specs; catalog exact indoor/outdoor model table"
+          },
+          "component_flags": {
+            "includes_indoor_unit": true,
+            "includes_outdoor_unit": true,
+            "indoor_units_count": 1
+          }
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1305,
+        "title": "KINGHOME KUD71PHS1/A-S+ KUD71W1/NhA-S",
+        "brand_id": 4,
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud71phs1askud71",
+        "slug": "kud71phs1askud71",
+        "series_id": 232
+      },
+      "before": {
+        "product_kind": "unknown",
+        "power_cooling": 7.1,
+        "specs_sha256": "555ef439a452cfea311c95f78b7564b76c91398668d619ed48da52443d80358e",
+        "tag_slugs": [
+          "cat-industrial",
+          "duct",
+          "kinghome",
+          "winter-25"
+        ]
+      },
+      "before_sha256": "d59db817338607b592128d7f083bca7aed49a730b288c4eda458c617d5af1215",
+      "fields_set": {
+        "product_kind": "complete_split_system"
+      },
+      "evidence": [
+        {
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "source_sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_pages": [
+              72,
+              73,
+              74,
+              75
+            ],
+            "model": "KUD71PHS1/A-S+ KUD71W1/NhA-S",
+            "component_evidence": "Explicit includes_indoor_unit=true + includes_outdoor_unit=true + indoor_units_count=1 in guarded source-derived specs; catalog exact indoor/outdoor model table"
+          },
+          "component_flags": {
+            "includes_indoor_unit": true,
+            "includes_outdoor_unit": true,
+            "indoor_units_count": 1
+          }
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1306,
+        "title": "KINGHOME KUD100PHS1/A-S+ KUD100W1/NhA-S",
+        "brand_id": 4,
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud100phs1askud1",
+        "slug": "kud100phs1askud1",
+        "series_id": 232
+      },
+      "before": {
+        "product_kind": "unknown",
+        "power_cooling": 10.0,
+        "specs_sha256": "4ae8ed92ac14c174817f3597317ba4c76a25c703b2f01688d5eeec4fd765ceb0",
+        "tag_slugs": [
+          "cat-industrial",
+          "duct",
+          "kinghome",
+          "winter-25"
+        ]
+      },
+      "before_sha256": "10c27d8d5ad504469adfc64272a1ee8eee33c30d9468bf7216654f0a647e195a",
+      "fields_set": {
+        "product_kind": "complete_split_system"
+      },
+      "evidence": [
+        {
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "source_sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_pages": [
+              72,
+              73,
+              74,
+              75
+            ],
+            "model": "KUD100PHS1/A-S+ KUD100W1/NhA-S",
+            "component_evidence": "Explicit includes_indoor_unit=true + includes_outdoor_unit=true + indoor_units_count=1 in guarded source-derived specs; catalog exact indoor/outdoor model table"
+          },
+          "component_flags": {
+            "includes_indoor_unit": true,
+            "includes_outdoor_unit": true,
+            "indoor_units_count": 1
+          }
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1307,
+        "title": "KINGHOME KUD125PHS1/A-S+ KUD125W1/NhA-X",
+        "brand_id": 4,
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud125phs1askud1",
+        "slug": "kud125phs1askud1",
+        "series_id": 232
+      },
+      "before": {
+        "product_kind": "unknown",
+        "power_cooling": 12.1,
+        "specs_sha256": "acebe140beb844900d2963a756e366f4419dd2b8adb521a6869cd3e578360823",
+        "tag_slugs": [
+          "cat-industrial",
+          "duct",
+          "kinghome",
+          "winter-25"
+        ]
+      },
+      "before_sha256": "447dc7193492021de6dbd36406e361a4445ce18f5f0695c066dae58749c38380",
+      "fields_set": {
+        "product_kind": "complete_split_system"
+      },
+      "evidence": [
+        {
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "source_sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_pages": [
+              71,
+              72,
+              73,
+              75,
+              76
+            ],
+            "model": "KUD125PHS1/A-S+ KUD125W1/NhA-X",
+            "component_evidence": "Explicit includes_indoor_unit=true + includes_outdoor_unit=true + indoor_units_count=1 in guarded source-derived specs; catalog exact indoor/outdoor model table"
+          },
+          "component_flags": {
+            "includes_indoor_unit": true,
+            "includes_outdoor_unit": true,
+            "indoor_units_count": 1
+          }
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1308,
+        "title": "KINGHOME KUD140PHS1/A-S+ KUD140W1/NhA-X",
+        "brand_id": 4,
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud140phs1askud1",
+        "slug": "kud140phs1askud1",
+        "series_id": 232
+      },
+      "before": {
+        "product_kind": "unknown",
+        "power_cooling": 13.4,
+        "specs_sha256": "1be8b60d1603ce6184a73147a9f61fcc29123619d85205c4a1e0bef6269c8f34",
+        "tag_slugs": [
+          "cat-industrial",
+          "duct",
+          "kinghome",
+          "winter-25"
+        ]
+      },
+      "before_sha256": "3fbad4d81d3374bb596d338bc346e3caeb094a755044a82a595f779fca49e852",
+      "fields_set": {
+        "product_kind": "complete_split_system"
+      },
+      "evidence": [
+        {
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "source_sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_pages": [
+              72,
+              73,
+              75,
+              76
+            ],
+            "model": "KUD140PHS1/A-S+ KUD140W1/NhA-X",
+            "component_evidence": "Explicit includes_indoor_unit=true + includes_outdoor_unit=true + indoor_units_count=1 in guarded source-derived specs; catalog exact indoor/outdoor model table"
+          },
+          "component_flags": {
+            "includes_indoor_unit": true,
+            "includes_outdoor_unit": true,
+            "indoor_units_count": 1
+          }
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1309,
+        "title": "KINGHOME KUD160PHS1/A-S+ KUD160W1/NhA-X",
+        "brand_id": 4,
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud160phs1askud1",
+        "slug": "kud160phs1askud1",
+        "series_id": 232
+      },
+      "before": {
+        "product_kind": "unknown",
+        "power_cooling": 16.0,
+        "specs_sha256": "a82674c676497984f8f1cb3c2cce8a059d4d59ac172d3d0ac22278d21a04bd8a",
+        "tag_slugs": [
+          "cat-industrial",
+          "duct",
+          "kinghome",
+          "winter-25"
+        ]
+      },
+      "before_sha256": "718eac76eec7208e114acc9a694759483953a875cfdfbe800a8d416eb4e4ecaa",
+      "fields_set": {
+        "product_kind": "complete_split_system"
+      },
+      "evidence": [
+        {
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "source_sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_pages": [
+              72,
+              73,
+              75,
+              76
+            ],
+            "model": "KUD160PHS1/A-S+ KUD160W1/NhA-X",
+            "component_evidence": "Explicit includes_indoor_unit=true + includes_outdoor_unit=true + indoor_units_count=1 in guarded source-derived specs; catalog exact indoor/outdoor model table"
+          },
+          "component_flags": {
+            "includes_indoor_unit": true,
+            "includes_outdoor_unit": true,
+            "indoor_units_count": 1
+          }
+        }
+      ]
+    }
+  ],
+  "snapshot_note": "Read-only primary PostgreSQL snapshot production-only.json, 2026-10-21; manual kind provenance unavailable; empty command audits do not prove absence of historical manual edits. Product 191 remains unchanged pending supplier/manufacturer nominal conflict review."
+}

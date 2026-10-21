@@ -304,8 +304,6 @@ class HaierProffParser(BaseParser):
             "is_inverter": False,
             "min_temp_heating": None,
         }
-        has_explicit_cooling = False
-        has_explicit_heating = False
 
         for key, value in specs.items():
             key_lower = key.lower()
@@ -331,18 +329,12 @@ class HaierProffParser(BaseParser):
                     is_derived_power = any(token in key_lower for token in ("потребля", "потреблен", "годов", "/г"))
                     if not is_derived_power:
                         metrics["power_cooling"] = parsed
-                        has_explicit_cooling = True
-                    elif not has_explicit_cooling and metrics["power_cooling"] is None:
-                        metrics["power_cooling"] = parsed
 
             if ("нагрев" in key_lower or "обогрев" in key_lower or "мощность нагрева" in key_lower) and "квт" in key_lower:
                 parsed = HaierProffParser._parse_first_number(value)
                 if parsed is not None:
                     is_derived_power = any(token in key_lower for token in ("потребля", "потреблен", "годов", "/г"))
                     if not is_derived_power:
-                        metrics["power_heating"] = parsed
-                        has_explicit_heating = True
-                    elif not has_explicit_heating and metrics["power_heating"] is None:
                         metrics["power_heating"] = parsed
 
             if "нагрев" in key_lower and "°" in key_lower:

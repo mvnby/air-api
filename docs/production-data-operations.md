@@ -61,6 +61,9 @@ Production server intentionally runs from Docker images only (no git checkout in
      `python3 scripts/manage_product_media_url_backfill.py plan --manifest config/product_media_url_backfills/polotsk-presentation-v3.json`
    - Indoor form filter repair: start with the read-only plan, then use its
      exact digest on the verified primary; see [indoor form repair](catalog-indoor-filter-repair.md).
+   - Complete-system selection kind/capacity repair: review the exact 34-row
+     plan, legacy manual-kind decision and blocked TCL source conflict; use
+     [selection repair](catalog-decision-selection-repair.md) before execution.
    - Confirmed MDV Wi-Fi correction: use the separate read-only plan and its
      exact digest; see [Wi-Fi repair](catalog-indoor-filter-repair.md#подтверждённые-исправления-wi-fi).
    - TCL mixed-series Wi-Fi feature correction: use the exact read-only plan

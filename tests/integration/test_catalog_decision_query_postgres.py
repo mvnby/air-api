@@ -3,7 +3,7 @@ from sqlalchemy import event
 from sqlmodel import select
 
 from core.config import settings
-from models import Brand, Order, Product, ProductSeries, ProductTagLink, Tag, TagGroup
+from models import Brand, Order, Product, ProductSeries, ProductTagLink, Storefront, Tag, TagGroup, Tenant, TenantCatalogGrant, TenantOffer
 from models.supplier import ProductSupplierMapping, Supplier, SupplierOffer
 from models.tenancy import TenantScope
 from services.catalog_decision_projection import (
@@ -317,7 +317,8 @@ async def test_catalog_decision_filters_heating_by_typed_minimum_with_legacy_fal
             "__filter_min_heat": "invalid",
         },
     )
-    db.add_all([typed_wins, exact, colder_legacy, malformed])
+    missing = _complete_product(title="DECISION missing heating", slug="decision-missing-heating", price=1000)
+    db.add_all([typed_wins, exact, colder_legacy, malformed, missing])
     await db.commit()
 
     scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
@@ -348,6 +349,12 @@ async def test_catalog_decision_filters_heating_by_typed_minimum_with_legacy_fal
     assert first["items"][0]["heating_min_c"] == -25
     assert typed_wins.id not in [item["id"] for item in first["items"] + second["items"]]
     assert malformed.id not in [item["id"] for item in first["items"] + second["items"]]
+    minus_twenty = await CatalogDecisionQueryService.list_products(
+        db, tenant_scope=scope,
+        filters=CatalogDecisionFilters(search="DECISION", heating_min=-20),
+        page=1, limit=20, sort="recommended", direction="asc",
+    )
+    assert {item["id"] for item in minus_twenty["items"]} == {typed_wins.id, exact.id, colder_legacy.id}
 
 
 @pytest.mark.asyncio
@@ -408,6 +415,10 @@ async def test_catalog_decision_http_hydrates_exact_ids_and_validates_retail_and
         "/api/manager/catalog-decision/products?retail_min_byn=300&retail_max_byn=200",
         headers=headers,
     )
+    invalid_power_range = await async_client.get(
+        "/api/manager/catalog-decision/products?cooling_min_kw=7&cooling_max_kw=6.5",
+        headers=headers,
+    )
     invalid_btu = await async_client.get(
         "/api/manager/catalog-decision/products?cooling_btu_classes=48",
         headers=headers,
@@ -423,6 +434,7 @@ async def test_catalog_decision_http_hydrates_exact_ids_and_validates_retail_and
     assert default_availability.status_code == 200, default_availability.text
     assert default_availability.json()["items"] == []
     assert invalid_range.status_code == 422
+    assert invalid_power_range.status_code == 422
     assert invalid_btu.status_code == 422
     assert invalid_multi.status_code == 422
 
@@ -661,3 +673,159 @@ async def test_catalog_decision_filter_options_keep_series_owner(db):
     )
 
     assert {item["id"]: item["brand_id"] for item in options["series"]}[series.id] == brand.id
+
+
+@pytest.mark.asyncio
+async def test_recommended_orders_wall_before_other_forms_before_pagination(db):
+    products = [
+        _complete_product(title="RANK A cassette", slug="rank-cassette", price=100, specs={"indoor_type": "кассетный"}),
+        _complete_product(title="RANK Z wall", slug="rank-wall-z", price=400, specs={"indoor_type": "настенный"}),
+        _complete_product(title="RANK B wall", slug="rank-wall-b1", price=300, specs={"__filter_indoor_type": "wall"}),
+        _complete_product(title="RANK B wall", slug="rank-wall-b2", price=200, specs={"__filter_indoor_type": "wall"}),
+        _complete_product(title="RANK C unknown form", slug="rank-unknown-form", price=150),
+    ]
+    db.add_all(products)
+    await db.commit()
+    scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
+    pages = [await CatalogDecisionQueryService.list_products(
+        db, tenant_scope=scope, filters=CatalogDecisionFilters(search="RANK"),
+        page=page, limit=2, sort="recommended", direction="asc",
+    ) for page in (1, 2, 3)]
+    assert [item["id"] for page in pages for item in page["items"]] == [
+        products[2].id, products[3].id, products[1].id, products[0].id, products[4].id,
+    ]
+    assert all(page["meta"]["total"] == 5 for page in pages)
+    assert all(page["meta"]["pages"] == 3 for page in pages)
+    explicit = await CatalogDecisionQueryService.list_products(
+        db, tenant_scope=scope, filters=CatalogDecisionFilters(search="RANK"),
+        page=1, limit=20, sort="retail_price", direction="asc",
+    )
+    assert [item["id"] for item in explicit["items"]] == [
+        products[0].id, products[4].id, products[3].id, products[2].id, products[1].id,
+    ]
+    wall = await CatalogDecisionQueryService.list_products(
+        db, tenant_scope=scope, filters=CatalogDecisionFilters(search="RANK", indoor_form_factor="wall"),
+        page=1, limit=20, sort="recommended", direction="asc",
+    )
+    assert [item["id"] for item in wall["items"]] == [products[2].id, products[3].id, products[1].id]
+    no_wall = await CatalogDecisionQueryService.list_products(
+        db, tenant_scope=scope, filters=CatalogDecisionFilters(search="RANK cassette"),
+        page=1, limit=20, sort="recommended", direction="asc",
+    )
+    assert [item["id"] for item in no_wall["items"]] == [products[0].id]
+    empty = await CatalogDecisionQueryService.list_products(
+        db, tenant_scope=scope, filters=CatalogDecisionFilters(search="RANK", indoor_form_factor="duct"),
+        page=1, limit=20, sort="recommended", direction="asc",
+    )
+    assert empty["items"] == []
+    assert empty["meta"]["total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_http_default_recommended_keeps_orderable_other_forms_in_total(async_client, db):
+    cassette = _complete_product(title="DEFAULT A cassette", slug="default-cassette", price=1000, specs={"__filter_indoor_type": "cassette"})
+    wall = _complete_product(title="DEFAULT Z wall", slug="default-wall", price=1000, specs={"__filter_indoor_type": "wall"})
+    db.add_all([cassette, wall])
+    await db.commit()
+    headers = await _auth_headers(async_client)
+    default = await async_client.get("/api/manager/catalog-decision/products", headers=headers, params={"search": "DEFAULT", "include_orderable": "true", "limit": 1})
+    assert default.status_code == 200, default.text
+    assert [item["id"] for item in default.json()["items"]] == [wall.id]
+    assert default.json()["meta"]["total"] == 2
+    in_stock = await async_client.get("/api/manager/catalog-decision/products", headers=headers, params={"search": "DEFAULT"})
+    assert in_stock.status_code == 200, in_stock.text
+    assert in_stock.json()["items"] == []
+    explicit = await async_client.get("/api/manager/catalog-decision/products", headers=headers, params={"search": "DEFAULT", "include_orderable": "true", "sort": "title"})
+    assert explicit.status_code == 200, explicit.text
+    assert [item["id"] for item in explicit.json()["items"]] == [cassette.id, wall.id]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("search", ["CAPACITY 7 кВт", "CAPACITY 7kw", "CAPACITY 7,0 кВт"])
+async def test_kw_search_matches_exact_canonical_nominal_and_ands_filters(db, search):
+    products = [
+        _complete_product(title="CAPACITY wall", slug="capacity-wall", price=1000, power_cooling=2.1, specs={"capacity_cooling_kw": "7.0", "capacity_cooling_min_kw": "3", "capacity_cooling_max_kw": "9", "__filter_indoor_type": "wall"}),
+        _complete_product(title="CAPACITY cassette", slug="capacity-cassette", price=1000, power_cooling=7, specs={"__filter_indoor_type": "cassette"}),
+        _complete_product(title="CAPACITY seven BTU 7 кВт", slug="capacity-btu7", price=1000, power_cooling=2.1, specs={"capacity_cooling_max_kw": 7}),
+        _complete_product(title="CAPACITY nearby 7 кВт", slug="capacity-nearby", price=1000, power_cooling=7.1),
+        _complete_product(title="CAPACITY missing 7 кВт", slug="capacity-missing", price=1000),
+    ]
+    db.add_all(products)
+    await db.commit()
+    scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
+    found = await CatalogDecisionQueryService.list_products(
+        db, tenant_scope=scope, filters=CatalogDecisionFilters(search=search, cooling_btu_classes=(9, 24)),
+        page=1, limit=20, sort="recommended", direction="asc",
+    )
+    assert [item["id"] for item in found["items"]] == [products[0].id, products[1].id]
+    assert all(item["cooling_power_kw"] == 7 for item in found["items"])
+    wall = await CatalogDecisionQueryService.list_products(
+        db, tenant_scope=scope, filters=CatalogDecisionFilters(search=search, indoor_form_factor="wall"),
+        page=1, limit=20, sort="recommended", direction="asc",
+    )
+    assert [item["id"] for item in wall["items"]] == [products[0].id]
+    conflicting = await CatalogDecisionQueryService.list_products(
+        db, tenant_scope=scope, filters=CatalogDecisionFilters(search=search, cooling_max_kw=6.9),
+        page=1, limit=20, sort="recommended", direction="asc",
+    )
+    assert conflicting["meta"]["total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_historical_tcl180_uses_capacity_for_class60_and_corrected_kinghome_is_admitted(db):
+    tcl = _complete_product(title="HISTORY TCL TCC-180", slug="history-tcl180", price=9000, power_cooling=5.69, specs={"capacity_cooling_kw": "16.12", "__filter_indoor_type": "cassette"})
+    kinghome = Product(title="HISTORY KINGHOME KWH24", slug="history-kinghome", price=3000, power_cooling=7.03, product_kind="other", specs={"type": "сплит-система", "indoor_type": "настенный"})
+    unknown = Product(title="HISTORY unknown wall", slug="history-unknown", price=1000, power_cooling=7, product_kind="unknown", specs={"type": "сплит-система", "indoor_type": "настенный"})
+    component = _complete_product(title="HISTORY contradictory component", slug="history-component", price=1000, power_cooling=7, specs={"type": "внутренний блок", "indoor_type": "настенный"})
+    multi = _complete_product(title="HISTORY contradictory multi", slug="history-multi", price=1000, power_cooling=7, specs={"indoor_units_count": "2", "indoor_type": "настенный"})
+    db.add_all([tcl, kinghome, unknown, component, multi])
+    await db.commit()
+    scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
+    sixty = await CatalogDecisionQueryService.list_products(db, tenant_scope=scope, filters=CatalogDecisionFilters(search="HISTORY", cooling_btu_classes=(60,)), page=1, limit=20, sort="recommended", direction="asc")
+    eighteen = await CatalogDecisionQueryService.list_products(db, tenant_scope=scope, filters=CatalogDecisionFilters(search="HISTORY", cooling_btu_classes=(18,)), page=1, limit=20, sort="recommended", direction="asc")
+    assert [item["id"] for item in sixty["items"]] == [tcl.id]
+    assert sixty["items"][0]["cooling_power_kw"] == 16.12
+    assert eighteen["items"] == []
+    ids = [int(item.id) for item in [tcl, kinghome, unknown, component, multi]]
+    assert await CatalogDecisionQueryService.eligible_system_product_ids(db, ids) == {tcl.id}
+    # A reviewed, explicit kind correction is required; title/spec inference in
+    # this read projection must not silently widen admission for other/unknown.
+    kinghome.product_kind = "complete_split_system"
+    db.add(kinghome)
+    await db.commit()
+    # Compare/basket hydration by explicit IDs must keep the same admission rule.
+    selected = await CatalogDecisionQueryService.list_products(db, tenant_scope=scope, filters=CatalogDecisionFilters(product_ids=tuple(ids)), page=1, limit=20, sort="recommended", direction="asc")
+    assert [item["id"] for item in selected["items"]] == [kinghome.id, tcl.id]
+    assert await CatalogDecisionQueryService.eligible_system_product_ids(db, ids) == {tcl.id, kinghome.id}
+    snapshots = await CatalogDecisionQueryService.get_product_snapshots(db, tenant_scope=scope, product_ids=ids)
+    assert set(snapshots) == {tcl.id, kinghome.id}
+
+
+@pytest.mark.asyncio
+async def test_recommended_respects_tenant_grant_offer_storefront_and_publication(db):
+    tenant = Tenant(slug="rank-tenant", display_name="Rank tenant", status="active", is_system=False)
+    db.add(tenant)
+    await db.flush()
+    main = Storefront(tenant_id=tenant.id, slug="main", display_name="Main", status="active", is_default=True)
+    other = Storefront(tenant_id=tenant.id, slug="other", display_name="Other", status="active", is_default=False)
+    db.add_all([main, other])
+    await db.flush()
+    grants = [TenantCatalogGrant(tenant_id=tenant.id, storefront_id=storefront.id, status="active", created_by_username="system:test", updated_by_username="system:test") for storefront in [main, other]]
+    db.add_all(grants)
+    await db.flush()
+    products = [
+        _complete_product(title=f"TENANTRANK {name}", slug=f"tenantrank-{name}", price=1000, is_published=name != "unpublished", specs={"__filter_indoor_type": "cassette" if name == "visible" else "wall"})
+        for name in ["visible", "foreign", "ungranted", "disabled", "unpublished"]
+    ]
+    db.add_all(products)
+    await db.flush()
+    for index, product in enumerate(products):
+        db.add(TenantOffer(tenant_id=tenant.id, storefront_id=other.id if index == 1 else main.id, product_id=product.id, catalog_grant_id=None if index == 2 else grants[1 if index == 1 else 0].id, price=2500, status="disabled" if index == 3 else "active", is_published=True, created_by_username="system:test", updated_by_username="system:test"))
+    await db.commit()
+    scope = TenantScope(tenant_id=int(tenant.id), storefront_id=int(main.id), is_system=False)
+    selected = await CatalogDecisionQueryService.list_products(db, tenant_scope=scope, filters=CatalogDecisionFilters(search="TENANTRANK"), page=1, limit=1, sort="recommended", direction="asc")
+    assert [item["id"] for item in selected["items"]] == [products[0].id]
+    assert selected["items"][0]["retail_price_byn"] == 2500
+    assert selected["meta"]["total"] == 1
+    snapshots = await CatalogDecisionQueryService.get_product_snapshots(db, tenant_scope=scope, product_ids=[int(item.id) for item in products])
+    assert set(snapshots) == {products[0].id}

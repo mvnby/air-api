@@ -6,7 +6,7 @@ export type CatalogDecisionQuery = {
   direction: 'asc' | 'desc';
   page: number;
 };
-const sorts: CatalogDecisionSort[] = ['title', 'retail_price', 'purchase_cost', 'rrc', 'margin_abs', 'margin_pct', 'availability', 'cooling_power'];
+const sorts: CatalogDecisionSort[] = ['recommended', 'title', 'retail_price', 'purchase_cost', 'rrc', 'margin_abs', 'margin_pct', 'availability', 'cooling_power'];
 const numericKeys = ['retailMinByn', 'retailMaxByn', 'coolingMinKw', 'coolingMaxKw'] as const;
 const listKeys = ['coolingBtuClasses', 'brandIds', 'seriesIds'] as const;
 const queryKeys = ['q', 'form', 'wifi', 'inverter', 'orderable', 'heating', 'sort', 'direction', 'page', ...numericKeys, ...listKeys];
@@ -44,12 +44,13 @@ export const readCatalogDecisionQuery = (search: string): CatalogDecisionQuery =
     if (values.length) filters[key] = values;
   }
   if (!filters.brandIds?.length) delete filters.seriesIds;
-  const sort = params.get('sort') as CatalogDecisionSort;
+  const requestedSort = params.get('sort') as CatalogDecisionSort;
+  const sort = sorts.includes(requestedSort) ? requestedSort : 'recommended';
   const page = Number(params.get('page'));
   return {
     filters,
-    sort: sorts.includes(sort) ? sort : 'title',
-    direction: params.get('direction') === 'desc' ? 'desc' : 'asc',
+    sort,
+    direction: sort !== 'recommended' && params.get('direction') === 'desc' ? 'desc' : 'asc',
     page: Number.isSafeInteger(page) && page > 0 ? page : 1,
   };
 };
@@ -66,8 +67,8 @@ export const writeCatalogDecisionQuery = (search: string, state: CatalogDecision
   if (filters.heatingMin) params.set('heating', String(filters.heatingMin));
   for (const key of numericKeys) if (filters[key] !== undefined) params.set(key, String(filters[key]));
   for (const key of listKeys) if (filters[key]?.length) params.set(key, filters[key]!.join(','));
-  if (sort !== 'title') params.set('sort', sort);
-  if (direction !== 'asc') params.set('direction', direction);
+  if (sort !== 'recommended') params.set('sort', sort);
+  if (sort !== 'recommended' && direction !== 'asc') params.set('direction', direction);
   if (page > 1) params.set('page', String(page));
   const query = params.toString();
   return query ? `?${query}` : '';

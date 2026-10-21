@@ -26,6 +26,8 @@ from services.product_image_variant_service import ProductImageVariantService
 from services.product_import_match_service import find_existing_product_for_import
 from services.spec_normalizer import normalize_specs
 from services.product_area import canonicalize_area_specs
+from services.product_cooling_capacity import nominal_cooling_capacity
+from services.product_kind_service import ProductKindService
 from services.tag_logic import (
     extract_brand_name,
     extract_brand_slug,
@@ -157,6 +159,7 @@ def _product_public_state(product: Product) -> tuple[object, ...]:
         product.slug,
         product.description,
         product.price,
+        product.product_kind,
         product.is_inverter,
         product.power_cooling,
         product.main_image,
@@ -290,6 +293,11 @@ class ImporterService:
                 title=title,
                 auto_tag_slugs=auto_tag_slugs_from_normalizer,
             )
+            cooling_capacity = nominal_cooling_capacity(
+                normalized_specs, fallback=metrics.get("power_cooling"),
+            )
+            if cooling_capacity is not None:
+                metrics = {**metrics, "power_cooling": cooling_capacity}
             for slug in auto_tag_slugs_from_normalizer:
                 if slug not in auto_slugs:
                     auto_slugs.append(slug)
@@ -389,6 +397,12 @@ class ImporterService:
                 existing.is_inverter = metrics.get('is_inverter', existing.is_inverter)
                 existing.power_cooling = metrics.get('power_cooling', existing.power_cooling)
                 existing.specs = normalized_specs
+                # A legacy non-unknown kind may be a manager's deliberate
+                # choice. Repair those records only with an exact reviewed
+                # plan; reimports retain corrected complete kinds as well.
+                existing.product_kind = ProductKindService.resolve(
+                    existing.product_kind, specs=normalized_specs,
+                )
                 existing.source_url = canonical_source_url
                 if data.get("publish_on_update"):
                     existing.is_published = True
@@ -414,6 +428,9 @@ class ImporterService:
                     slug=slug,
                     description=data['description'],
                     price=data['price'],
+                    product_kind=ProductKindService.resolve(
+                        data.get("product_kind"), specs=normalized_specs,
+                    ),
                     is_inverter=metrics.get('is_inverter', False),
                     power_cooling=metrics.get('power_cooling'),
                     main_image=local_main_image,  # Use local path

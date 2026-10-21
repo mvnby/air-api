@@ -9,6 +9,17 @@ const series = [{ id: 10, title: 'MDSAG', brandId: 1 }, { id: 20, title: 'Pular'
 const buttonByText = (wrapper: ReturnType<typeof mount>, text: string) => wrapper.findAll('button').find(button => button.text() === text)!;
 
 describe('CatalogDecisionFilters', () => {
+  it('starts with every form available and distinguishes nominal kW search from BTU class buttons', () => {
+    const wrapper = mount(CatalogDecisionFilters, { props: { modelValue: defaultCatalogDecisionFilters(), brands, series } });
+    const search = wrapper.get('input[aria-describedby="catalog-search-hint"]');
+    expect(search.attributes('placeholder')).toContain('7 кВт');
+    expect(wrapper.get('#catalog-search-hint').text()).toContain('номинальная мощность охлаждения 7 кВт');
+    expect(wrapper.text()).not.toMatch(/Бытовые|Полупром/);
+    expect(buttonByText(wrapper, 'Настенный').attributes('aria-pressed')).toBe('false');
+    expect(buttonByText(wrapper, 'Кассетный').attributes('aria-pressed')).toBe('false');
+    expect(buttonByText(wrapper, '7').attributes('aria-pressed')).toBe('false');
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+  });
   it('keeps the result area compact while retaining active advanced criteria', async () => {
     const wrapper = mount(CatalogDecisionFilters, { props: { modelValue: { heatingMin: -25, brandIds: [1] }, brands, series }, attachTo: document.body });
     const toggle = wrapper.get('button[aria-controls="catalog-extra-filters"]');
