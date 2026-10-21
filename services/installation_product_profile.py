@@ -148,7 +148,10 @@ def build_installation_product_profile(product: Product) -> InstallationProductP
 
     system_type = _normalize(_spec_value(specs, "type"))
     eligible = product_kind == "complete_split_system"
-    if product_kind == "other" and system_type in SEMI_INDUSTRIAL_SYSTEM_TYPES:
+    # Installation quoting historically supports a known semi-industrial form
+    # before the source confirms its component composition. Import now keeps
+    # that unresolved kind unknown; preserve this separate quoting policy.
+    if product_kind in {"other", "unknown"} and system_type in SEMI_INDUSTRIAL_SYSTEM_TYPES:
         eligible = True
 
     if product_kind in INELIGIBLE_PRODUCT_KINDS or not eligible:
