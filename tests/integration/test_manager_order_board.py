@@ -474,6 +474,72 @@ async def test_board_endpoint_compatibility_and_limits(async_client, db):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("equipment_status,proposal_status", [
+    (None, None), (None, "sent"), ("issued", None), ("reserved", "approved"),
+])
+async def test_unknown_history_preserves_legacy_nulls_and_list_status_defaults(
+    async_client, db, equipment_status, proposal_status,
+):
+    customer = Customer(
+        tenant_id=1, name="Legacy company", phone="", type=CustomerType.company,
+    )
+    db.add(customer)
+    await db.flush()
+    # Core insertion deliberately persists SQL NULL instead of ORM defaults.
+    order_id = (await db.execute(
+        insert(Order.__table__).values(
+            tenant_id=1, storefront_id=1, customer_id=customer.id, status="closed",
+            equipment_status=equipment_status, proposal_status=proposal_status,
+            closing_result=None, closed_at=None, lead_source=None,
+            document_role_type=None, target_currency=None,
+        ).returning(Order.id)
+    )).scalar_one()
+    await db.commit()
+    stored = select(
+        Order.equipment_status, Order.proposal_status, Order.closing_result, Order.closed_at,
+    ).where(Order.id == order_id)
+    before = (await db.execute(stored)).one()
+    assert tuple(before) == (equipment_status, proposal_status, None, None)
+    login = await async_client.post(
+        "/login/access-token",
+        data={"username": settings.ADMIN_USERNAME, "password": settings.ADMIN_PASSWORD},
+    )
+    assert login.status_code == 200, login.text
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    legacy = await async_client.get("/api/manager/orders?segment=b2b", headers=headers)
+    assert legacy.status_code == 200, legacy.text
+    expected = legacy.json()["items"][0]
+    assert expected["equipment_status"] == (equipment_status or "pending")
+    assert expected["proposal_status"] == (proposal_status or "draft")
+    params = dict(
+        segment="b2b", queue="history", assigned_to_me=False, work_filter="all",
+        result="unknown", include_unknown_date=False, sort="closed_at_desc", page=1, limit=25,
+    )
+    for grouped in (False, True):
+        response = await async_client.get(
+            "/api/manager/orders/board", headers=headers,
+            params={**params, "group_by_customer": grouped},
+        )
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["total_orders"] == 1 and payload["total"] == 1
+        assert len(payload["items"]) == 1
+        card = payload["items"][0]
+        assert card["id"] == order_id and card["status"] == "closed"
+        assert card["equipment_status"] == expected["equipment_status"]
+        assert card["proposal_status"] == expected["proposal_status"]
+        assert card["closing_result"] is None and card["closed_at"] is None
+        assert card["lead_source"] is None and card["document_role_type"] is None
+        assert card["target_currency"] is None
+    bounded = await async_client.get(
+        "/api/manager/orders/board", headers=headers,
+        params={**params, "closed_from": "2026-10-01"},
+    )
+    assert bounded.status_code == 200 and bounded.json()["total"] == 0
+    assert (await db.execute(stored)).one() == before
+
+
+@pytest.mark.asyncio
 async def test_visibility_segment_customer_and_column_filters_are_shared(db):
     from models.tenancy import Tenant, Storefront, TenantMembership
     from models import StaffUser

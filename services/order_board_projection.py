@@ -414,6 +414,9 @@ class OrderBoardProjection:
             )
             for row in rows:
                 data = dict(row)
+                # Preserve the legacy list's read-only defaults for nullable statuses.
+                data["equipment_status"] = data["equipment_status"] or "pending"
+                data["proposal_status"] = data["proposal_status"] or "draft"
                 obj = SimpleNamespace(**data)
                 data["manager_labels"] = OrderService._get_manager_labels(obj)
                 data["title"] = OrderService._display_order_title(obj)
