@@ -9,15 +9,19 @@ from sqlmodel import select
 from api_contracts.catalog_management import CatalogManagementFilters
 from crud.product import ProductDAO
 from models import Brand, Product, ProductSeries
+from models.product_constants import BTU_MAPPING
 from models.supplier import ProductLocalStock, ProductSupplierMapping, Supplier, SupplierOffer
 from services.catalog_decision_projection import CatalogDecisionFilters, CatalogDecisionQueryService
+from services.catalog_decision_search import split_catalog_decision_search
 
 
 class CatalogManagementDAO:
     @staticmethod
     def selection(session: AsyncSession, filters: CatalogManagementFilters):
         query = CatalogDecisionQueryService
-        uses_specs = bool(filters.search or filters.cooling_btu_classes or filters.indoor_form_factor or filters.wifi) or any(
+        tokens, capacities = split_catalog_decision_search(filters.search or "")
+        technical_search = bool(capacities) or any(token in BTU_MAPPING for token in tokens)
+        uses_specs = bool(technical_search or filters.cooling_btu_classes or filters.indoor_form_factor or filters.wifi) or any(
             value is not None for value in (
                 filters.cooling_min_kw, filters.cooling_max_kw, filters.area_min, filters.area_max, filters.heating_min,
             )
