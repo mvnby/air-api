@@ -13,7 +13,6 @@ const search = defineModel<string>('search', { required: true });
 const statusFilter = defineModel<string>('statusFilter', { required: true });
 const workFilter = defineModel<OrderWorkFilter>('workFilter', { required: true });
 const groupByCustomer = defineModel<boolean>('groupByCustomer', { required: true });
-const hideOnHold = defineModel<boolean>('hideOnHold', { required: true });
 const filtersOpen = defineModel<boolean>('filtersOpen', { required: true });
 
 defineProps<{
@@ -42,7 +41,7 @@ const emit = defineEmits<{
     <div class="flex flex-wrap items-center gap-3">
       <h1 class="text-xl font-bold dark:text-white">Заказы</h1>
       <OrdersTabSwitcher v-model="segment" />
-      <button type="button" class="inline-flex min-h-9 items-center rounded-lg border px-3 py-1.5 text-sm font-semibold disabled:opacity-40" :class="assignedToMe ? 'border-brand-600 bg-brand-600 text-white' : 'border-gray-200 text-gray-700 dark:border-slate-600 dark:text-slate-200'" :aria-pressed="assignedToMe" :disabled="!canFilterMine" :title="canFilterMine ? 'Показать заказы, где вы назначены ответственным' : 'Нужна личная учётная запись'" @click="assignedToMe = !assignedToMe">Мои заказы</button>
+      <button type="button" class="inline-flex min-h-9 items-center rounded-lg border px-3 py-1.5 text-sm font-semibold disabled:opacity-40" :class="assignedToMe ? 'border-brand-600 bg-brand-600 text-white' : 'border-gray-200 text-gray-700 dark:border-slate-600 dark:text-slate-200'" :aria-pressed="assignedToMe" :disabled="!canFilterMine" :title="canFilterMine ? 'Показать заказы, где вы назначены ответственным' : 'Нужна личная учётная запись'" @click="assignedToMe = !assignedToMe">Мои<span class="hidden sm:inline">&nbsp;заказы</span></button>
       <div class="ml-auto flex items-center gap-2">
         <OrdersViewToggle v-model="view" />
         <button type="button" class="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-gray-200 px-2 text-sm text-gray-700 dark:border-slate-600 dark:text-slate-200"
@@ -75,16 +74,13 @@ const emit = defineEmits<{
         </select>
       </label>
       <label class="flex items-center gap-2"><input v-model="groupByCustomer" type="checkbox" /> По клиентам</label>
-      <label class="flex items-center gap-2"><input v-model="hideOnHold" type="checkbox" /> Скрывать отложенные</label>
+
       <button type="button" class="ml-auto inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-gray-600 disabled:opacity-50 dark:text-slate-300"
         :disabled="transferLoading" @click="emit('import')"><Upload class="h-4 w-4" /> Импорт заказов</button>
     </div>
     <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-600 dark:text-slate-300">
       <span role="status">{{ loading ? 'Загрузка заказов…' : loadFailed ? 'Заказы не загружены' : `По фильтрам: ${visibleCount}` }}</span>
       <span v-if="statusFilter">Этап: {{ STATUS_LABELS[statusFilter] }}</span>
-      <button v-if="hideOnHold" type="button" class="text-brand-700 hover:underline dark:text-brand-300" @click="hideOnHold = false">
-        Отложенные скрыты<span v-if="!loading && !loadFailed">: {{ hiddenOnHoldCount }}</span> · Показать
-      </button>
       <button v-if="hasActiveFilters" type="button" class="inline-flex items-center gap-1 hover:underline" @click="emit('reset')"><X class="h-3 w-3" /> Сбросить фильтры</button>
       <template v-if="view === 'list'">
         <button type="button" class="ml-auto text-brand-700 disabled:opacity-50 dark:text-brand-300" :disabled="!visibleCount || loading || loadFailed" @click="emit('selectAll')">Выбрать показанные</button>
@@ -97,6 +93,6 @@ const emit = defineEmits<{
     </div>
     <p v-if="workFilter === 'unpaid'" class="mt-2 text-xs text-gray-500 dark:text-slate-400">Остаток — сумма заказа за вычетом оплат. Он не означает просрочку платежа.</p>
     <p v-else-if="workFilter === 'planning'" class="mt-2 text-xs text-gray-500 dark:text-slate-400">Согласованные предложения и заказы, для которых нужно назначить работы.</p>
-    <p v-else-if="workFilter === 'followup'" class="mt-2 text-xs text-gray-500 dark:text-slate-400">Активные заказы, по которым прошла дата следующего контакта.</p>
+    <p v-else-if="workFilter === 'followup'" class="mt-2 text-xs text-gray-500 dark:text-slate-400">Активные и ожидающие заказы с наступившей датой контакта.</p>
   </header>
 </template>

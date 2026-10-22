@@ -29,6 +29,7 @@ export type ManagerOrderDetailResponse = {
     created_at: string;
     updated_at?: (string | null);
     status_changed_at?: (string | null);
+    closed_at?: (string | null);
     next_followup_date?: (string | null);
     measurement_date?: (string | null);
     installation_date?: (string | null);
@@ -57,6 +58,9 @@ export type ManagerOrderDetailResponse = {
     reject_reason?: (string | null);
     is_on_hold?: boolean;
     on_hold_reason?: (string | null);
+    on_hold_reason_code?: (string | null);
+    on_hold_started_at?: (string | null);
+    workflow_revision?: number;
     measurement_required?: boolean;
     measurer_id?: (number | null);
     measurement_result?: (string | null);

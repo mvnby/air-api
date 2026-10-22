@@ -19428,6 +19428,290 @@
         ]
       }
     },
+    "/api/manager/orders/board": {
+      "get": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "Get Manager Order Board",
+        "description": "Read bounded scalar cards or exact customer aggregates in the current Manager\ntenant/storefront/customer and assignment scope. Active excludes paused and closed;\nwaiting contains paused live orders; history includes every closed order, including\nlegacy NULL results/dates and old hold flags. Date bounds use closed_at only; without\nbounds unknown dates are included. include_unknown_date includes them with a range.\nDue contacts span both live queues without resuming an order. Search callers can use\nqueue=all. Groups have stable keys and no eager children; group_key pages at most 100\nchildren through the identical filters. Counts precede pagination, with deterministic\nID ties. Money is computed from proposal lines and currency payments, including complete group aggregates.\nThis read never loads proposal/product/service graphs or modifies orders. Existing\nGET /orders keeps its contract. Invalid filters return 400, invalid bounds 422.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "operationId": "get_manager_order_board",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "segment",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(all|b2c|b2b)$",
+              "default": "b2c",
+              "title": "Segment"
+            }
+          },
+          {
+            "name": "queue",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(active|waiting|history|all)$",
+              "default": "active",
+              "title": "Queue"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "name": "assigned_to_me",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Assigned To Me"
+            }
+          },
+          {
+            "name": "customer_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Customer Id"
+            }
+          },
+          {
+            "name": "work_filter",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(all|followup|planning|unpaid)$",
+              "default": "all",
+              "title": "Work Filter"
+            }
+          },
+          {
+            "name": "result",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(won|lost|unknown)$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Result"
+            }
+          },
+          {
+            "name": "closed_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Closed From"
+            }
+          },
+          {
+            "name": "closed_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Closed To"
+            }
+          },
+          {
+            "name": "include_unknown_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Unknown Date"
+            }
+          },
+          {
+            "name": "group_by_customer",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Group By Customer"
+            }
+          },
+          {
+            "name": "group_key",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Group Key"
+            }
+          },
+          {
+            "name": "phase",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Phase"
+            }
+          },
+          {
+            "name": "column",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(negotiation|execution)$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Column"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 25,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "created_at_desc",
+              "title": "Sort"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderBoardPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/orders/{order_id}": {
       "get": {
         "tags": [
@@ -20635,6 +20919,64 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/waiting": {
+      "post": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "Command Manager Order Waiting",
+        "description": "Wait indefinitely or resume an accessible live order in the current company/site.\n\nRequires live Manager access; demo writes return403, inaccessible IDs404. The\ncommand locks the parent before any children and checks expected_revision against\nthe shared order/payment/stage revision; stale input returns409 without changes.\nWaiting requires a reason; other requires a note. next_followup_date=null is valid,\nomission preserves the contact, and a contact never resumes work. Legacy note text\nis preserved on resume, unknown legacy start times are not invented. Changes are\natomically audited. No payment, document, reservation, equipment or visit changes.\nRetry only after reading current state; a successful repeat with an old revision\nreturns409. Validation errors return400/422.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "operationId": "command_manager_order_waiting",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerOrderWaitingCommand"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -74847,6 +75189,135 @@
         ],
         "title": "ManagerNormalizeLegacySpecsResponse"
       },
+      "ManagerOrderBoardGroup": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "customer_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Id"
+          },
+          "order_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Id"
+          },
+          "customer_name": {
+            "type": "string",
+            "title": "Customer Name"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "total_amount": {
+            "type": "number",
+            "title": "Total Amount"
+          },
+          "balance_due": {
+            "type": "number",
+            "title": "Balance Due"
+          },
+          "margin": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Margin"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "customer_name",
+          "count",
+          "total_amount",
+          "balance_due"
+        ],
+        "title": "ManagerOrderBoardGroup"
+      },
+      "ManagerOrderBoardPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerOrderListItemResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerOrderBoardGroup"
+            },
+            "type": "array",
+            "title": "Groups"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "total_orders": {
+            "type": "integer",
+            "title": "Total Orders"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More"
+          },
+          "queue_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Queue Counts"
+          },
+          "work_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Work Counts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "total_orders",
+          "page",
+          "limit",
+          "has_more",
+          "queue_counts",
+          "work_counts"
+        ],
+        "title": "ManagerOrderBoardPage"
+      },
       "ManagerOrderCreatePayload": {
         "properties": {
           "customer_id": {
@@ -75125,6 +75596,18 @@
             ],
             "title": "Status Changed At"
           },
+          "closed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          },
           "next_followup_date": {
             "anyOf": [
               {
@@ -75392,6 +75875,34 @@
               }
             ],
             "title": "On Hold Reason"
+          },
+          "on_hold_reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On Hold Reason Code"
+          },
+          "on_hold_started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On Hold Started At"
+          },
+          "workflow_revision": {
+            "type": "integer",
+            "title": "Workflow Revision",
+            "default": 0
           },
           "measurement_required": {
             "type": "boolean",
@@ -76385,6 +76896,18 @@
             ],
             "title": "Status Changed At"
           },
+          "closed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          },
           "next_followup_date": {
             "anyOf": [
               {
@@ -76652,6 +77175,34 @@
               }
             ],
             "title": "On Hold Reason"
+          },
+          "on_hold_reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On Hold Reason Code"
+          },
+          "on_hold_started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On Hold Started At"
+          },
+          "workflow_revision": {
+            "type": "integer",
+            "title": "Workflow Revision",
+            "default": 0
           },
           "measurement_required": {
             "type": "boolean",
@@ -79919,6 +80470,70 @@
         },
         "type": "object",
         "title": "ManagerOrderUpdatePayload"
+      },
+      "ManagerOrderWaitingCommand": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "wait",
+              "resume"
+            ],
+            "title": "Action"
+          },
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Revision"
+          },
+          "reason_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "next_stage",
+                  "site_readiness",
+                  "customer_decision",
+                  "other"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Code"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "next_followup_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Followup Date"
+          }
+        },
+        "type": "object",
+        "required": [
+          "action",
+          "expected_revision"
+        ],
+        "title": "ManagerOrderWaitingCommand"
       },
       "ManagerOwnAvatarDelete": {
         "properties": {

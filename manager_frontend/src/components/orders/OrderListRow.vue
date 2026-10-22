@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { handleOrderLinkClick, orderLinkUrl } from '../../services/order-navigation';
+import { orderQueueLabel } from '../../services/order-board';
 import OrderResponsibleBadge from './OrderResponsibleBadge.vue';
 import type { OrderResponsibilityFields } from '../../services/order-responsibility';
 import { computed } from 'vue';
@@ -14,6 +15,7 @@ const props = defineProps<{
   order: ManagerOrderListItemResponse & OrderResponsibilityFields;
   segment: Segment;
   nested?: boolean;
+  showQueue?: boolean;
   selectable?: boolean;
   selected?: boolean;
 }>();
@@ -31,6 +33,7 @@ const hasTitle = computed(() => Boolean(props.order.title?.trim()));
 const stage = computed(() => {
   if (props.order.status === 'negotiation') return { label: 'Переговоры', detail: getOrderNegotiationLabel(props.order) };
   if (props.order.status === 'execution') return { label: 'Работы', detail: getOrderExecutionLabel(props.order) };
+  if (props.order.status === 'closed' && !props.order.closing_result) return { label: 'Результат не указан', detail: null };
   return { label: getOrderBoardLabel(props.order), detail: null };
 });
 const balanceDue = computed(() => Number(props.order.balance_due || 0));
@@ -80,6 +83,7 @@ const demoReadOnly = useDemoReadOnly();
       </div>
     </td>
     <td class="px-3 py-2.5 align-top">
+      <div v-if="showQueue" class="text-xs font-semibold text-brand-700 dark:text-brand-300">{{ orderQueueLabel(order) }}</div>
       <div class="font-medium text-gray-900 dark:text-white">{{ stage.label }}</div>
       <div v-if="stage.detail" class="mt-0.5 text-xs text-gray-600 dark:text-slate-300">{{ stage.detail }}</div>
       <div class="flex flex-col items-start gap-1">

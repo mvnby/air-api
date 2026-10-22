@@ -85,6 +85,9 @@ export type OrderBoardState = {
   expandedGroupIds: string[];
   columnFilters: Record<string, string>;
   scrollLeft: number;
+  columnScrollTops?: Record<string, number>;
+  loadedPages?: Record<string, number>;
+  mobileColumn?: string;
 };
 export type OrderListPosition = { url: string; top: number; board?: OrderBoardState };
 export const savedOrderListPosition = (): OrderListPosition | undefined => window.history.state?.orderListPosition;

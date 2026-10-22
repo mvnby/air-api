@@ -1,5 +1,7 @@
 from typing import List, Optional
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from api_contracts.order_waiting import ManagerOrderWaitingCommand
+from services.order_waiting_service import OrderWaitingService, OrderWaitingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
@@ -12,6 +14,7 @@ from routers.manager_operation_ids import (
     DUPLICATE_MANAGER_ORDER_PROPOSAL,
     GENERATE_MANAGER_ORDER_DOCUMENT,
     PATCH_MANAGER_ORDER,
+    COMMAND_MANAGER_ORDER_WAITING,
     PATCH_MANAGER_ORDER_PROPOSAL,
     ARCHIVE_MANAGER_ORDER_PROPOSAL,
     SELECT_MANAGER_ORDER_PROPOSAL,
@@ -759,3 +762,31 @@ async def delete_manager_order(
             error_code=BAD_REQUEST,
             message=str(exc),
         ) from exc
+
+
+@router.post("/{order_id}/waiting", response_model=ManagerOrderDetailResponse, operation_id=COMMAND_MANAGER_ORDER_WAITING)
+async def command_manager_order_waiting(
+    order_id: int, payload: ManagerOrderWaitingCommand,
+    auth: AuthenticatedUser = Depends(require_manager_access),
+    session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
+):
+    """Wait indefinitely or resume an accessible live order in the current company/site.
+
+    Requires live Manager access; demo writes return403, inaccessible IDs404. The
+    command locks the parent before any children and checks expected_revision against
+    the shared order/payment/stage revision; stale input returns409 without changes.
+    Waiting requires a reason; other requires a note. next_followup_date=null is valid,
+    omission preserves the contact, and a contact never resumes work. Legacy note text
+    is preserved on resume, unknown legacy start times are not invented. Changes are
+    atomically audited. No payment, document, reservation, equipment or visit changes.
+    Retry only after reading current state; a successful repeat with an old revision
+    returns409. Validation errors return400/422.
+
+    Access requires an authenticated Manager session/JWT and live membership; see [Manager
+    access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+    """
+    try:
+        return await OrderWaitingService.execute(session, order_id, payload, auth=auth, tenant_scope=tenant_scope)
+    except OrderWaitingError as exc:
+        raise HTTPException(exc.status_code, detail={"code": exc.code, "message": str(exc)}) from None

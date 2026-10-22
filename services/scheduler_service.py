@@ -254,7 +254,9 @@ class SchedulerService:
             Order.status == OrderStatus.NEGOTIATION,
             Order.updated_at < cutoff_date,
             Order.negotiation_status != "follow_up",
-        )
+            Order.is_on_hold.is_(False),
+            (Order.next_followup_date.is_(None) | (Order.next_followup_date <= datetime.now())),
+        ).order_by(Order.id).with_for_update(skip_locked=True)
         res = await session.execute(stmt)
         stalled_orders = res.scalars().all()
         
@@ -271,7 +273,10 @@ class SchedulerService:
                 **(order.technical_meta or {}),
                 "stalled_follow_up_reason": "Auto follow-up: >14 days in Negotiation",
             }
-            order.next_followup_date = datetime.now() + timedelta(days=7)
+            if order.next_followup_date is None:
+                order.next_followup_date = datetime.now() + timedelta(days=7)
+            from services.order_workflow_revision import bump_order_workflow_revision
+            await bump_order_workflow_revision(session, order)
             session.add(order)
             
         if stalled_orders:

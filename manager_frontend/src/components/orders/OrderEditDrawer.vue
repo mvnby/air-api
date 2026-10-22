@@ -39,6 +39,8 @@ import { useOrderDrawerPersistence } from '../../composables/useOrderDrawerPersi
 import { useOrderDocumentStatus } from '../../composables/useOrderDocumentStatus';
 import { useOrderWorkspaceNavigation } from '../../composables/useOrderWorkspaceNavigation';
 import { useOrderDrawerSaving } from '../../composables/useOrderDrawerSaving';
+import { waitingDescription } from '../../services/order-waiting';
+import OrderWaitingDialog from './OrderWaitingDialog.vue';
 import { useOrderDrawerActions } from '../../composables/useOrderDrawerActions';
 import { useDrawerFocusTrap } from '../../composables/useDrawerFocusTrap';
 import { useDocumentScrollLock } from '../../composables/useDocumentScrollLock';
@@ -384,7 +386,7 @@ const {
   closeDrawer,
   copyText,
   deleteOrder,
-  toggleHold,
+  toggleHold, waiting,
 } = useOrderDrawerActions({
   order: computed(() => props.order),
   displayOrderTitle,
@@ -394,7 +396,8 @@ const {
   clearDraft,
   preserveDraftOnLeave: computed(() => draftBlocked.value || discardFailed.value),
   setToast,
-  beforeClose: async () => !discardingDraft.value && !proposalActionLoading.value && !sourceApplying.value && !responsibilityBusy.value && !workerAssignmentBusy.value && !workerPayBusy.value
+  beforeHold: async () => !discardingDraft.value && !proposalActionLoading.value && !sourceApplying.value && !responsibilityBusy.value && !workerAssignmentBusy.value && !workerPayBusy.value && await (customerContextRef.value?.beforeClose?.() ?? true) && await orderSaving.flush(),
+  beforeClose: async () => !waiting.busy.value && !discardingDraft.value && !proposalActionLoading.value && !sourceApplying.value && !responsibilityBusy.value && !workerAssignmentBusy.value && !workerPayBusy.value
     && await (customerContextRef.value?.beforeClose?.() ?? true) && await orderSaving.beforeClose(),
   onBeforeClose: orderSaving.cancelScheduled,
   onModelValue: (open) => emit('update:modelValue', open),
@@ -619,6 +622,7 @@ defineExpose({ prepareToLeave });
 </script>
 
 <template>
+  <OrderWaitingDialog :order="waiting.selected.value" :busy="waiting.busy.value" :error="waiting.error.value" :stale="waiting.stale.value" @submit="waiting.submit" @refresh="waiting.refresh" @close="waiting.close" />
   <div v-if="modelValue" :class="isPage ? 'order-page-workspace flex w-full min-w-0 overflow-hidden' : 'fixed inset-0 z-50 flex h-dvh w-screen overflow-hidden'">
     <Transition name="fade">
       <div v-if="toast" class="fixed top-6 right-6 z-[100] bg-brand-600 text-white px-6 py-3 rounded-xl shadow-2xl font-medium">
@@ -631,7 +635,7 @@ defineExpose({ prepareToLeave });
         v-show="!proposalClientPreview"
         class="shrink-0"
         :workspace="true"
-        :write-blocked="draftBlocked"
+        :write-blocked="draftBlocked || waiting.busy.value"
         :title-reset-version="titleResetVersion"
         :order-id="order?.id"
         :back-label="isPage ? backLabel : undefined"
@@ -644,7 +648,7 @@ defineExpose({ prepareToLeave });
         :paid="totalPaymentsPreview"
         :balance="balanceDuePreview"
         :is-website-order="isWebsiteOrder"
-        :is-on-hold="order?.is_on_hold"
+        :is-on-hold="order?.is_on_hold" :waiting-summary="order ? waitingDescription(order) : ''" :can-wait="order?.status === 'negotiation' || order?.status === 'execution'"
         :can-print-envelope="Boolean(customer?.id)"
         @envelope="showEnvelope = true"
         :dirty="hasUnsavedChanges"
@@ -689,7 +693,7 @@ defineExpose({ prepareToLeave });
             {{ displayFormError }}
           </p>
           <OrderDraftRecovery v-if="draftBlocked" :conflicts="draftConflicts" @resolve="resolveDraftConflict" />
-          <fieldset :disabled="draftBlocked || proposalActionLoading || installationAttaching || sourceApplying" class="min-w-0">
+          <fieldset :disabled="draftBlocked || waiting.busy.value || proposalActionLoading || installationAttaching || sourceApplying" class="min-w-0">
             <TenderWorkflowPanel v-if="order && !proposalClientPreview && (order.lead_source === 'email' || order.lead_source === 'belzakupki')" :order-id="order.id" />
             <section v-if="proposalMounted" v-show="activeWorkspaceSection === 'proposal'" :key="`proposal-${order?.id}`" class="min-w-0" data-order-usage="workspace-proposal-panel">
               <OrderManagerLabels v-show="!proposalClientPreview" v-model="managerLabels" />

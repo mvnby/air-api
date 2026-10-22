@@ -1,5 +1,5 @@
 import type { Ref } from 'vue';
-import { api } from '../api';
+import { useOrderWaiting } from './useOrderWaiting';
 import type { ManagerOrderDetailResponse } from '../client';
 import { ManagerOrdersService } from '../client';
 import { confirmDialog } from '../services/ui-feedback';
@@ -17,6 +17,7 @@ type UseOrderDrawerActionsOptions = {
   preserveDraftOnLeave?: Readonly<Ref<boolean>>;
   setToast: ToastHandler;
   beforeClose?: () => Promise<boolean>;
+  beforeHold?: () => Promise<boolean>;
   onBeforeClose: () => void;
   onModelValue: (open: boolean) => void;
   onUpdated: (order: ManagerOrderDetailResponse) => void;
@@ -33,6 +34,7 @@ export const useOrderDrawerActions = ({
   preserveDraftOnLeave,
   setToast,
   beforeClose,
+  beforeHold,
   onBeforeClose,
   onModelValue,
   onUpdated,
@@ -63,20 +65,9 @@ export const useOrderDrawerActions = ({
     }
   };
 
-  const toggleHold = async () => {
-    if (!order.value) return;
-    const hold = !order.value.is_on_hold;
-    try {
-      const updatedOrder = await api.patchManagerOrder(order.value.id, {
-        is_on_hold: hold,
-        on_hold_reason: hold ? 'Переговоры / Ручная пауза' : '',
-      });
-      onUpdated(updatedOrder);
-      setToast(hold ? 'Сделка поставлена на паузу' : 'Сделка снята с паузы', 'success');
-    } catch (error) {
-      setToast(getApiErrorMessage(error) || 'Ошибка паузы', 'error');
-    }
-  };
+  const waiting = useOrderWaiting({ current: () => order.value, beforeAction: beforeHold,
+    updated: onUpdated, notify: message => setToast(message) });
+  const toggleHold = () => waiting.toggle();
 
   const prepareToLeave = async (options?: { force?: boolean } | Event) => {
     const isDomEvent = typeof Event !== 'undefined' && options instanceof Event;
@@ -130,5 +121,5 @@ export const useOrderDrawerActions = ({
     }
   };
 
-  return { prepareToLeave, closeDrawer, copyText, deleteOrder, toggleHold };
+  return { waiting, prepareToLeave, closeDrawer, copyText, deleteOrder, toggleHold };
 };

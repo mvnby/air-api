@@ -2,8 +2,9 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from sqlalchemy.sql.dml import Update
 
-from models import OrderStageStatus
+from models import Order, OrderStageStatus
 from models.tenancy import TenantScope
 from services.bot_task_mutation_service import (
     BotTaskMutationConflictError,
@@ -44,25 +45,61 @@ class _FakeSession:
         self.statements = []
         self.added = []
         self.commit_count = 0
+        self.workflow_revision = 7
+        self.events = []
 
     async def execute(self, statement):
         self.statements.append(statement)
+        if isinstance(statement, Update):
+            self.workflow_revision += 1
+            self.events.append(("revision", self.workflow_revision))
+            return SimpleNamespace(scalar_one=lambda: self.workflow_revision)
         return _ScalarResult(self.stage)
 
     def add(self, item):
         self.added.append(item)
 
+    async def flush(self):
+        self.events.append(("flush", self.stage.status, self.stage.installer_report))
+
     async def commit(self):
+        self.events.append(("commit", self.workflow_revision))
         self.commit_count += 1
 
 
+def _assert_single_revision_before_commit(session, status, report):
+    # Exercise the real revision helper, including its flush/UPDATE/commit ordering.
+    # The idempotent second call must add neither a revision nor another commit.
+    assert session.workflow_revision == 8
+    assert session.events == [
+        ("flush", status, report),
+        ("revision", 8),
+        ("commit", 8),
+    ]
+    updates = [statement for statement in session.statements if isinstance(statement, Update)]
+    assert len(updates) == 1
+    statement = updates[0]
+    assert statement.entity_description["entity"] is Order
+    params = statement.compile().params
+    assert params["workflow_revision_1"] == 1
+    assert params["id_1"] == session.stage.order_id
+    assert [column.name for column in statement._returning] == ["workflow_revision"]
+    assert "workflow_revision +" in str(statement)
+
+
+@pytest.mark.parametrize("initial_status, target_status", [
+    (OrderStageStatus.PLANNED, OrderStageStatus.IN_PROGRESS),
+    (OrderStageStatus.IN_PROGRESS, OrderStageStatus.COMPLETED),
+])
 @pytest.mark.asyncio
-async def test_task_status_mutation_is_locked_idempotent_and_notifies_once(monkeypatch):
+async def test_task_status_mutation_is_locked_idempotent_and_notifies_once(
+    monkeypatch, initial_status, target_status,
+):
     stage = SimpleNamespace(
         id=10,
         order_id=42,
         installer_id=7,
-        status=OrderStageStatus.PLANNED,
+        status=initial_status,
         installer_report=None,
     )
     session = _FakeSession(stage)
@@ -83,28 +120,30 @@ async def test_task_status_mutation_is_locked_idempotent_and_notifies_once(monke
         session,
         telegram_id=777,
         stage_id=10,
-        status=OrderStageStatus.IN_PROGRESS,
+        status=target_status,
         tenant_scope=TEST_TENANT_SCOPE,
     )
     repeated = await BotTaskMutationService.update_stage_status(
         session,
         telegram_id=777,
         stage_id=10,
-        status=OrderStageStatus.IN_PROGRESS,
+        status=target_status,
         tenant_scope=TEST_TENANT_SCOPE,
     )
 
     assert first.changed is True
     assert repeated.changed is False
-    assert stage.status == OrderStageStatus.IN_PROGRESS
+    assert stage.status == target_status
     assert session.commit_count == 1
     notify.assert_awaited_once_with(
         session,
         10,
         tenant_scope=TEST_TENANT_SCOPE,
     )
-    assert len(session.statements) == 2
-    assert all(statement._for_update_arg is not None for statement in session.statements)
+    locks = [statement for statement in session.statements if not isinstance(statement, Update)]
+    assert len(locks) == 2
+    assert all(statement._for_update_arg is not None for statement in locks)
+    _assert_single_revision_before_commit(session, target_status, None)
 
 
 @pytest.mark.asyncio
@@ -133,6 +172,8 @@ async def test_completed_task_cannot_be_reopened_by_stale_accept(monkeypatch):
 
     assert stage.status == OrderStageStatus.COMPLETED
     assert session.commit_count == 0
+    assert session.workflow_revision == 7
+    assert session.events == []
 
 
 @pytest.mark.asyncio
@@ -169,6 +210,7 @@ async def test_task_report_mutation_is_normalized_and_idempotent(monkeypatch):
     assert repeated.changed is False
     assert stage.installer_report == "Монтаж завершен"
     assert session.commit_count == 1
+    _assert_single_revision_before_commit(session, OrderStageStatus.IN_PROGRESS, "Монтаж завершен")
 
 
 @pytest.mark.asyncio

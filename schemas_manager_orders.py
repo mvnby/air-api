@@ -200,6 +200,7 @@ class ManagerOrderListItemResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
     status_changed_at: Optional[datetime] = None
+    closed_at: Optional[datetime] = None
     next_followup_date: Optional[datetime] = None
     measurement_date: Optional[datetime] = None
     installation_date: Optional[datetime] = None
@@ -228,6 +229,9 @@ class ManagerOrderListItemResponse(BaseModel):
     reject_reason: Optional[str] = None
     is_on_hold: bool = False
     on_hold_reason: Optional[str] = None
+    on_hold_reason_code: Optional[str] = None
+    on_hold_started_at: Optional[datetime] = None
+    workflow_revision: int = 0
     measurement_required: bool = False
     measurer_id: Optional[int] = None
     measurement_result: Optional[str] = None

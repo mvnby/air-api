@@ -465,6 +465,9 @@ class Order(SQLModel, table=True):
     # --- Pause / On Hold ---
     is_on_hold: bool = Field(default=False, index=True)
     on_hold_reason: Optional[str] = Field(default=None)
+    on_hold_reason_code: Optional[str] = Field(default=None, max_length=40)
+    on_hold_started_at: Optional[datetime] = None
+    workflow_revision: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
 
     # --- Internal: Negotiation stage ---
     measurement_required: bool = Field(default=False)

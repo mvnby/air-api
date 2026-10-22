@@ -26,6 +26,11 @@ vi.mock('../src/services/connector-login-continuation', async importOriginal => 
 
 vi.mock('../src/services/manager-companies', () => ({ managerCompaniesApi: { choices: mocks.companies, sites: mocks.sites } }));
 
+vi.mock('../src/services/order-board', async importOriginal => ({
+  ...await importOriginal<typeof import('../src/services/order-board')>(),
+  orderBoardApi: { page: mocks.getManagerOrders },
+}));
+
 vi.mock('../src/api', () => ({
   api: {
     getLeadsCounter: mocks.getLeadsCounter,
@@ -210,6 +215,8 @@ const oldOrder = {
 };
 
 const oldOrdersResponse = {
+  groups: [], total: 1, total_orders: 1, page: 1, limit: 25, has_more: false,
+  queue_counts: { active: 1, waiting: 0, history: 0 }, work_counts: { all: 1, followup: 0, planning: 0, unpaid: 1 },
   items: [oldOrder],
   meta: { page: 1, limit: 100, total: 1, pages: 1 },
 };

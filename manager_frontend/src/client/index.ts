@@ -567,6 +567,8 @@ export type { ManagerMediaUploadLocalImagesResponse } from './models/ManagerMedi
 export type { ManagerMultiSplitPreviewResponse } from './models/ManagerMultiSplitPreviewResponse';
 export type { ManagerMultiSplitSavePayload } from './models/ManagerMultiSplitSavePayload';
 export type { ManagerNormalizeLegacySpecsResponse } from './models/ManagerNormalizeLegacySpecsResponse';
+export type { ManagerOrderBoardGroup } from './models/ManagerOrderBoardGroup';
+export type { ManagerOrderBoardPage } from './models/ManagerOrderBoardPage';
 export type { ManagerOrderCreatePayload } from './models/ManagerOrderCreatePayload';
 export type { ManagerOrderDetailResponse } from './models/ManagerOrderDetailResponse';
 export type { ManagerOrderDocumentGeneratePayload } from './models/ManagerOrderDocumentGeneratePayload';
@@ -615,6 +617,7 @@ export type { ManagerOrderTransferServiceLine } from './models/ManagerOrderTrans
 export type { ManagerOrderTransferServiceRef } from './models/ManagerOrderTransferServiceRef';
 export type { ManagerOrderTransferWorkStage } from './models/ManagerOrderTransferWorkStage';
 export type { ManagerOrderUpdatePayload } from './models/ManagerOrderUpdatePayload';
+export type { ManagerOrderWaitingCommand } from './models/ManagerOrderWaitingCommand';
 export type { ManagerOwnAvatarDelete } from './models/ManagerOwnAvatarDelete';
 export type { ManagerOwnProfileResponse } from './models/ManagerOwnProfileResponse';
 export type { ManagerOwnProfileUpdate } from './models/ManagerOwnProfileUpdate';

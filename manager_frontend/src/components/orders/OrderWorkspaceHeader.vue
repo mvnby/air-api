@@ -19,6 +19,8 @@ const props = defineProps<{
   balance: number;
   isWebsiteOrder?: boolean;
   isOnHold?: boolean;
+  canWait?: boolean;
+  waitingSummary?: string;
   canPrintEnvelope?: boolean;
   dirty?: boolean;
   saving?: boolean;
@@ -304,7 +306,7 @@ const onWorkflowChange = async (event: Event) => {
             <button type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800" :disabled="writeBlocked" @click="runMenuAction(() => emit('hold'))">
               <Play v-if="isOnHold" :size="16" />
               <Pause v-else :size="16" />
-              {{ isOnHold ? 'Вернуть в работу' : 'Отложить заказ' }}
+              {{ isOnHold ? 'Вернуть в работу' : 'В ожидание' }}
             </button>
             <div class="my-1 border-t border-slate-200 dark:border-slate-700" />
             <button type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-950/30" :disabled="writeBlocked" @click="runMenuAction(() => emit('delete'))">
@@ -313,12 +315,14 @@ const onWorkflowChange = async (event: Event) => {
             </button>
           </div>
         </div>
+        <button v-if="canWait" type="button" class="min-h-9 rounded-lg border px-3 py-1 text-xs font-semibold disabled:opacity-50" :disabled="writeBlocked" @click="emit('hold')">{{ isOnHold ? 'Вернуть в работу' : 'В ожидание' }}</button>
         <button v-if="!backLabel" type="button" class="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800" aria-label="Закрыть карточку заказа" @click="emit('close')">
           <X :size="20" />
         </button>
       </div>
     </div>
 
+    <p v-if="isOnHold" class="mt-1 break-words text-xs text-amber-800 dark:text-amber-300">Ожидание: {{ waitingSummary || 'Причина не указана' }}</p>
     <div class="mt-1 flex min-h-8 items-center gap-x-3 text-xs" :class="workspace ? 'flex-nowrap' : 'flex-wrap gap-y-1'">
       <button
         type="button"
