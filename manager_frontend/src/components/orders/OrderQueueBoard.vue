@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 import type { ManagerOrderBoardPage } from '../../client';
 import type { Segment } from '../../api';
 import type { OrderBoardState } from '../../services/order-navigation';
 import { useOrderColumnSwipe } from '../../composables/useOrderColumnSwipe';
+import { useOrderBoardDrag, useSharedOrderBoardDrag } from '../../composables/useOrderBoardDrag';
+import OrderDropTargets from './OrderDropTargets.vue';
 import { waitingDescription } from '../../services/order-waiting';
 import { orderQueueLabel } from '../../services/order-board';
 import { formatDate, formatMoney, getOrderSegment } from './order-utils';
@@ -40,7 +42,12 @@ const renameGroup = async (id: number, name: string) => {
   if (alias !== null) emit('renameCustomer', { customerId: id, alias: alias.trim() || null });
 };
 const labels: Record<string, string> = { negotiation: 'Переговоры', execution: 'Работы', '': 'Заказы' };
-const drag = ref<{ orderId: number; oldStatus: string } | null>(null);
+const sharedDrag = useSharedOrderBoardDrag();
+const drag = sharedDrag || useOrderBoardDrag({
+  context: () => JSON.stringify([props.columns, props.phases, props.segment, props.compact, props.listMode]),
+  disabled: () => Boolean(props.disabled), pending: () => props.movingOrderIds,
+  find: id => Object.values(props.pages).flatMap(page => page.items || []).find(order => order.id === id), phases: () => props.phases,
+});
 const isBoard = computed(() => props.columns.length > 1);
 const touchColumns = () => window.innerWidth < 768 && isBoard.value && !props.listMode && !props.compact;
 const selectColumn = async (column: string, focus = false) => {
@@ -51,7 +58,8 @@ const selectColumn = async (column: string, focus = false) => {
   emit('interact');
   await nextTick();
   if (window.innerWidth < 768) {
-    const header = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--kitlane-header-height')) || 72;
+    const style = getComputedStyle(workspace.value?.closest('main') || document.documentElement);
+    const header = Number.parseFloat(style.getPropertyValue('--kitlane-sticky-header-height') || style.getPropertyValue('--kitlane-header-height')) || 72;
     const boardTop = Math.max(0, (workspace.value?.getBoundingClientRect().top || 0) + window.scrollY - header);
     window.scrollTo(0, mobileScrollTops.value[column] ?? Math.min(pageTop, boardTop));
   }
@@ -71,14 +79,7 @@ const toggle = (column: string, key: string) => {
   if (expanded.value.includes(id)) expanded.value = expanded.value.filter(value => value !== id);
   else { expanded.value.push(id); if (!props.pages[id]) emit('more', column, key); }
 };
-watch(() => props.disabled, value => { if (value) drag.value = null; });
-const drop = (column: string) => {
-  if (drag.value && !props.disabled && !props.movingOrderIds.includes(drag.value.orderId)) {
-    const terminal = column === 'closed_lost' || column === 'closed_won';
-    emit('move', { ...drag.value, newStatus: !terminal && props.phases[column] ? column === 'execution' ? `execution:${props.phases[column]}` : props.phases[column]! : column });
-  }
-  drag.value = null;
-};
+const drop = (target: string) => { const payload = drag.drop(target); if (payload) emit('move', payload); };
 defineExpose({
   captureState: (): OrderBoardState => ({ expandedOrderId: expandedOrder.value, expandedGroupIds: [...expanded.value], columnFilters: { ...props.phases }, scrollLeft: 0,
     mobileScrollTops: { ...mobileScrollTops.value, ...(window.innerWidth < 768 ? { [mobileColumn.value]: window.scrollY } : {}) },
@@ -104,15 +105,13 @@ defineExpose({
       </button>
       <span class="column-swipe-hint min-w-8 flex-1 self-stretch text-center text-lg text-slate-400" aria-hidden="true" title="Смахните по свободной части шапки">↔</span>
     </nav>
-    <div v-if="drag && !disabled" class="mb-2 flex shrink-0 gap-2" aria-label="Завершение заказа">
-      <div data-drop-status="closed_lost" class="flex-1 rounded-lg border-2 border-dashed border-rose-300 bg-rose-50 p-3 text-center text-sm font-semibold text-rose-800 dark:bg-rose-950 dark:text-rose-200" @dragover.prevent @drop.stop.prevent="drop('closed_lost')">Отказ</div>
-      <div data-drop-status="closed_won" class="flex-1 rounded-lg border-2 border-dashed border-emerald-300 bg-emerald-50 p-3 text-center text-sm font-semibold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200" @dragover.prevent @drop.stop.prevent="drop('closed_won')">Завершить успешно</div>
-    </div>
+    <OrderDropTargets v-if="!sharedDrag" :drag="drag" @move="emit('move', $event)" />
     <div class="queue-columns" :class="{ 'queue-columns-board': isBoard }">
       <section v-for="column in columns" :key="column" :id="`order-column-panel-${column}`" :role="isBoard ? 'tabpanel' : undefined" :aria-labelledby="isBoard ? `order-column-tab-${column}` : undefined" class="queue-column rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800"
-        :class="{ 'mobile-inactive': isBoard && mobileColumn !== column }" @dragover.prevent @drop.prevent="drop(column)">
+        :class="{ 'mobile-inactive': isBoard && mobileColumn !== column, 'is-drop-target': drag.hover.value === column }" :data-drop-column="column || undefined" :data-drop-active="drag.hover.value === column" :data-drop-allowed="drag.allowed(column)"
+        @dragenter="drag.enter($event, column)" @dragover="drag.over($event, column)" @dragleave="drag.leave($event, column)" @drop.prevent="drop(column)">
         <header class="queue-column-heading flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2 font-semibold dark:border-slate-700">
-          <h2>{{ labels[column] }} <span v-if="pages[column] && !stale" class="text-sm tabular-nums">{{ pages[column].total_orders }}</span></h2>
+          <h2><span v-if="drag.hover.value === column" class="mr-1" aria-hidden="true">↓</span>{{ drag.hover.value === column ? `Перенести в ${column === 'execution' ? 'работы' : 'переговоры'}` : labels[column] }} <span v-if="pages[column] && !stale" class="text-sm tabular-nums">{{ pages[column].total_orders }}</span></h2>
         </header>
         <div class="queue-scroll space-y-3 p-2 md:p-3">
           <div v-if="errors[column]" role="alert" class="text-red-700">{{ errors[column] }} <button v-if="!pages[column]" type="button" class="rounded border px-3 py-2" @click="emit('more', column)">Повторить</button></div>
@@ -123,7 +122,7 @@ defineExpose({
                 <OrdersListTable v-if="listMode" :items="(pages[column].items || []).filter(order => order.id === group.order_id).map(order => ({ type: 'order' as const, order }))" :segment="segment" :sort="sort" :selected-order-ids="selectedOrderIds" :show-queue="showQueue" :pending-order-ids="movingOrderIds" :disabled="disabled" @open="emit('open', $event)" @generate="emit('generate', $event)" @rename-order="emit('renameOrder', $event)" @update:sort="emit('update:sort', $event)" @toggle-select="emit('toggleSelect', $event)" />
                 <template v-for="order in listMode ? [] : (pages[column].items || []).filter(order => order.id === group.order_id)" :key="order.id">
                   <component :is="getOrderSegment(order) === 'b2b' ? OrderCardB2B : OrderCardB2C" :order="order" :expanded="expandedOrder === order.id" :draggable-disabled="disabled || movingOrderIds.includes(order.id)" :pending="movingOrderIds.includes(order.id)"
-                    @open="emit('open', $event)" @toggle-expanded="expandedOrder = expandedOrder === $event ? null : $event" @generate="emit('generate', $event)" @quick-status="emit('move', { orderId: $event.orderId, oldStatus: order.status, newStatus: $event.status })" @cancel-order="emit('cancelOrder', $event)" @close-debt="emit('closeDebt', $event)" @rename-order="emit('renameOrder', $event)" @drag-start="drag = $event" @drag-end="drag = null" @waiting="emit('waiting', $event)" />
+                    @open="emit('open', $event)" @toggle-expanded="expandedOrder = expandedOrder === $event ? null : $event" @generate="emit('generate', $event)" @quick-status="emit('move', { orderId: $event.orderId, oldStatus: order.status, newStatus: $event.status })" @cancel-order="emit('cancelOrder', $event)" @close-debt="emit('closeDebt', $event)" @rename-order="emit('renameOrder', $event)" @drag-start="drag.start($event)" @drag-end="drag.cancel" @waiting="emit('waiting', $event)" />
                   <p v-if="order.is_on_hold && order.status !== 'closed'" class="text-xs text-amber-800 dark:text-amber-300">Ожидание: {{ waitingDescription(order) }}<template v-if="order.installation_date"> · Выезд {{ formatDate(order.installation_date) }}</template></p>
                 </template>
               </template>
@@ -140,7 +139,7 @@ defineExpose({
                   <label v-if="listMode" class="flex items-center gap-2 text-xs"><input type="checkbox" :aria-label="`Выбрать заказ ${order.id}`" :checked="selectedOrderIds?.includes(order.id)" @change="emit('toggleSelect', { orderId: order.id, selected: ($event.target as HTMLInputElement).checked })" /> #{{ order.id }}</label>
                   <p v-if="showQueue" class="text-xs text-slate-500">{{ orderQueueLabel(order) }}</p>
                   <component :is="getOrderSegment(order) === 'b2b' ? OrderCardB2B : OrderCardB2C" :order="order" :expanded="expandedOrder === order.id" :draggable-disabled="disabled || movingOrderIds.includes(order.id)" :pending="movingOrderIds.includes(order.id)"
-                    @open="emit('open', $event)" @toggle-expanded="expandedOrder = expandedOrder === $event ? null : $event" @generate="emit('generate', $event)" @quick-status="emit('move', { orderId: $event.orderId, oldStatus: order.status, newStatus: $event.status })" @cancel-order="emit('cancelOrder', $event)" @close-debt="emit('closeDebt', $event)" @rename-order="emit('renameOrder', $event)" @drag-start="drag = $event" @drag-end="drag = null" @waiting="emit('waiting', $event)" />
+                    @open="emit('open', $event)" @toggle-expanded="expandedOrder = expandedOrder === $event ? null : $event" @generate="emit('generate', $event)" @quick-status="emit('move', { orderId: $event.orderId, oldStatus: order.status, newStatus: $event.status })" @cancel-order="emit('cancelOrder', $event)" @close-debt="emit('closeDebt', $event)" @rename-order="emit('renameOrder', $event)" @drag-start="drag.start($event)" @drag-end="drag.cancel" @waiting="emit('waiting', $event)" />
                   <p v-if="order.is_on_hold && order.status !== 'closed'" class="mt-1 text-xs text-amber-800 dark:text-amber-300">Ожидание: {{ waitingDescription(order) }}<template v-if="order.installation_date"> · Выезд {{ formatDate(order.installation_date) }}</template></p>
                 </div>
                 <p v-if="errors[`${column}/${group.key}`]" role="alert" class="text-sm text-red-700">{{ errors[`${column}/${group.key}`] }}</p>
@@ -161,7 +160,7 @@ defineExpose({
               </button>
               <template v-else>
                 <component :is="getOrderSegment(order) === 'b2b' ? OrderCardB2B : OrderCardB2C" :order="order" :expanded="expandedOrder === order.id" :draggable-disabled="disabled || movingOrderIds.includes(order.id)" :pending="movingOrderIds.includes(order.id)"
-                  @open="emit('open', $event)" @toggle-expanded="expandedOrder = expandedOrder === $event ? null : $event" @generate="emit('generate', $event)" @quick-status="emit('move', { orderId: $event.orderId, oldStatus: order.status, newStatus: $event.status })" @cancel-order="emit('cancelOrder', $event)" @close-debt="emit('closeDebt', $event)" @rename-order="emit('renameOrder', $event)" @drag-start="drag = $event" @drag-end="drag = null" @waiting="emit('waiting', $event)" />
+                  @open="emit('open', $event)" @toggle-expanded="expandedOrder = expandedOrder === $event ? null : $event" @generate="emit('generate', $event)" @quick-status="emit('move', { orderId: $event.orderId, oldStatus: order.status, newStatus: $event.status })" @cancel-order="emit('cancelOrder', $event)" @close-debt="emit('closeDebt', $event)" @rename-order="emit('renameOrder', $event)" @drag-start="drag.start($event)" @drag-end="drag.cancel" @waiting="emit('waiting', $event)" />
                 <p v-if="order.is_on_hold && order.status !== 'closed'" class="mt-1 text-xs text-amber-800 dark:text-amber-300">Ожидание: {{ waitingDescription(order) }}<template v-if="order.installation_date"> · Выезд {{ formatDate(order.installation_date) }}</template></p>
               </template>
             </div>
@@ -178,12 +177,17 @@ defineExpose({
 .queue-workspace { min-width:0; }
 .queue-columns { display:flex; align-items:flex-start; gap:0.75rem; }
 .queue-column { flex:1; min-width:0; }
-.queue-column-heading { position:sticky; top:var(--kitlane-header-height); z-index:10; background:var(--kitlane-surface); border-radius:0.75rem 0.75rem 0 0; }
+.queue-column-heading { position:sticky; top:var(--kitlane-sticky-header-height, var(--kitlane-header-height)); z-index:10; background:var(--kitlane-surface); border-radius:0.75rem 0.75rem 0 0; }
 .queue-scroll { position:relative; }
+.queue-column.is-drop-target { outline:3px solid #2563eb; outline-offset:2px; border-color:#1d4ed8; background:#dbeafe; }
+.queue-column.is-drop-target .queue-column-heading { color:#1e3a8a; background:#bfdbfe; }
+.queue-column.is-drop-target .queue-scroll { background:rgb(219 234 254 / 0.5); }
+.dark .queue-column.is-drop-target { border-color:#60a5fa; background:#172554; }
+.dark .queue-column.is-drop-target .queue-column-heading { color:#dbeafe; background:#1e40af; }
 .mobile-column-tabs { display:none; }
 @media (max-width:767px) {
   .touch-columns .mobile-column-tabs { touch-action:pan-y pinch-zoom; }
-  .mobile-column-tabs { position:sticky; top:var(--kitlane-header-height); z-index:15; display:flex; align-items:center; gap:0.25rem; margin-bottom:0.25rem; padding:0.125rem; border-radius:0.75rem; background:var(--kitlane-surface); box-shadow:0 1px 0 var(--kitlane-border); }
+  .mobile-column-tabs { position:sticky; top:var(--kitlane-sticky-header-height, var(--kitlane-header-height)); z-index:15; display:flex; align-items:center; gap:0.25rem; margin-bottom:0.25rem; padding:0.125rem; border-radius:0.75rem; background:var(--kitlane-surface); box-shadow:0 1px 0 var(--kitlane-border); }
   .column-swipe-hint { display:flex; align-items:center; justify-content:center; }
   .mobile-inactive { display:none; }
   .queue-column { width:100%; }

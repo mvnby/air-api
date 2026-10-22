@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { provideManagerContextHeader } from '../../composables/useManagerContextHeader';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { ChevronLeft, ChevronRight, Menu, Moon, Sun, X } from 'lucide-vue-next';
 import KitlanePartnerIdentity from './KitlanePartnerIdentity.vue';
@@ -13,6 +14,12 @@ const emit = defineEmits<{
   toggleTheme: [];
   home: [];
 }>();
+const contextHeader = provideManagerContextHeader();
+const topbar = ref<HTMLElement | null>(null);
+const topbarHeight = ref(72);
+let headerObserver: ResizeObserver | null = null;
+const measureHeader = () => { topbarHeight.value = topbar.value?.getBoundingClientRect().height || 72; };
+watch(contextHeader.active, async () => { await nextTick(); measureHeader(); });
 const sidebar = ref<HTMLElement | null>(null);
 const menuButton = ref<HTMLButtonElement | null>(null);
 const desktop = ref(true);
@@ -35,12 +42,15 @@ watch(drawerOpen, async open => {
   if (open) sidebar.value?.focus(); else if (!desktop.value) menuButton.value?.focus();
 });
 onMounted(() => {
+  measureHeader();
+  if (typeof ResizeObserver !== 'undefined') { headerObserver = new ResizeObserver(measureHeader); if (topbar.value) headerObserver.observe(topbar.value); }
   if (typeof window.matchMedia !== 'function') return;
   breakpoint = window.matchMedia('(min-width: 768px)');
   updateDesktop(); breakpoint.addEventListener('change', updateDesktop);
   document.addEventListener('keydown', onKeydown);
 });
 onBeforeUnmount(() => {
+  headerObserver?.disconnect();
   breakpoint?.removeEventListener('change', updateDesktop);
   document.removeEventListener('keydown', onKeydown);
 });
@@ -65,12 +75,13 @@ onBeforeUnmount(() => {
         <div class="kitlane-sidebar-footer"><slot name="footer" /></div>
       </div>
     </aside>
-    <main class="kitlane-main" :class="{ 'kitlane-main-workspace': workspace }" :inert="drawerOpen">
-      <header class="kitlane-topbar">
+    <main class="kitlane-main" :class="{ 'kitlane-main-workspace': workspace }" :inert="drawerOpen" :style="{ '--kitlane-sticky-header-height': `${topbarHeight}px` }">
+      <header ref="topbar" class="kitlane-topbar" :class="{ 'has-context-header': contextHeader.active.value }">
         <div class="kitlane-mobile-company">
           <button ref="menuButton" class="kitlane-icon-button" type="button" aria-label="Открыть меню" aria-controls="manager-mobile-navigation" :aria-expanded="mobileOpen" @click="emit('update:mobileOpen', true)"><Menu :size="20" /></button>
           <button class="kitlane-home" type="button" :aria-label="`${name || 'Рабочее пространство'} — главная`" @click="emit('home')"><KitlanePartnerIdentity :name="name" :logo-url="logoUrl" :compact-logo-url="compactLogoUrl" :context-key="contextKey" compact /></button>
         </div>
+        <div :ref="element => { contextHeader.target.value = element as HTMLElement | null; }" class="kitlane-context-header" :hidden="!contextHeader.active.value" />
         <div class="kitlane-topbar-actions">
           <button class="kitlane-icon-button" type="button" :aria-label="theme === 'light' ? 'Тёмная тема' : 'Светлая тема'" :title="theme === 'light' ? 'Тёмная тема' : 'Светлая тема'" @click="emit('toggleTheme')"><Moon v-if="theme === 'light'" :size="19" /><Sun v-else :size="19" /></button>
           <slot name="account" />
@@ -102,6 +113,15 @@ onBeforeUnmount(() => {
 .kitlane-icon-button:hover { background: var(--kitlane-accent-soft); color: var(--kitlane-accent-text); }
 .kitlane-mobile-company, .kitlane-drawer-close { display: none; }
 .kitlane-backdrop { position: fixed; inset: 0; background: rgb(5 14 28 / .55); z-index: 45; }
+.kitlane-context-header { min-width:0; }
+.kitlane-topbar.has-context-header { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:0.75rem; height:auto; min-height:var(--kitlane-header-height); padding:0.5rem 1rem; }
+.has-context-header .kitlane-context-header { grid-column:1; grid-row:1; }
+.has-context-header .kitlane-topbar-actions { grid-column:2; grid-row:1; }
+@media (min-width:768px) and (max-width:1279px) {
+  .kitlane-topbar.has-context-header { grid-template-columns:minmax(0, 1fr) auto; gap:0.25rem; }
+  .has-context-header .kitlane-context-header { grid-column:1 / -1; grid-row:2; }
+  .has-context-header .kitlane-topbar-actions { grid-column:2; }
+}
 @media (min-width: 768px) {
   .is-collapsed .kitlane-sidebar { width: var(--kitlane-sidebar-compact); }
 }
@@ -115,5 +135,9 @@ onBeforeUnmount(() => {
   .kitlane-topbar { justify-content: space-between; padding: 0 12px; gap: 8px; }
   .kitlane-topbar-actions { gap: 6px; }
   .kitlane-platform-divider { padding-left: 8px; }
+  .kitlane-topbar.has-context-header { grid-template-columns:minmax(0, 1fr) auto; gap:0.25rem 0.5rem; padding:0.25rem 0.75rem; }
+  .has-context-header .kitlane-mobile-company { grid-column:1; grid-row:1; }
+  .has-context-header .kitlane-context-header { grid-column:1 / -1; grid-row:2; }
+  .has-context-header .kitlane-topbar-actions { grid-column:2; grid-row:1; }
 }
 </style>
