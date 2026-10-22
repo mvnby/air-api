@@ -1,3 +1,4 @@
+import { CancelablePromise } from '../src/client/core/CancelablePromise';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import CatalogDecisionWorkspaceView from '../src/views/CatalogDecisionWorkspaceView.vue';
@@ -247,5 +248,42 @@ describe('catalog workspace usability', () => {
     expect(dialog.props('open')).toBe(true);
     expect(dialog.props('items').map((item: any) => item.retail_price_byn)).toEqual([2200, 3300]);
     expect(loadCatalogDecisionSelection(catalogDecisionSelectionStorageKey(identity))).toEqual([{ id: 11, title: 'Old title' }, { id: 22, title: 'Other page' }]);
+  });
+});
+
+
+describe('catalog request cancellation', () => {
+  it('aborts the superseded request immediately, before search debounce expires', async () => {
+    vi.useFakeTimers();
+    const wrapper = await startWorkspace();
+    const cancelled = vi.fn();
+    const pending = new CancelablePromise<any>((_resolve, _reject, onCancel) => onCancel(cancelled));
+    const list = vi.mocked(catalogDecisionApi.list);
+    list.mockReturnValueOnce(pending);
+    wrapper.findComponent(CatalogDecisionFilters).vm.$emit('update:modelValue', { coolingBtuClasses: [24] });
+    await flushPromises();
+    wrapper.findComponent(CatalogDecisionFilters).vm.$emit('update:modelValue', { coolingBtuClasses: [24], search: 'Gree' });
+    await flushPromises();
+    expect(cancelled).toHaveBeenCalledTimes(1);
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    list.mockResolvedValueOnce({ items: [{ ...selectedModel, id: 24 }], meta: { page: 1, pages: 1, total: 1, limit: 40 } });
+    await vi.advanceTimersByTimeAsync(220);
+    await flushPromises();
+    expect(wrapper.findComponent(CatalogDecisionTable).props('items').map((item: any) => item.id)).toEqual([24]);
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+  });
+
+  it('aborts the active list request when leaving the workspace', async () => {
+    const wrapper = await startWorkspace();
+    const cancelled = vi.fn();
+    vi.mocked(catalogDecisionApi.list).mockReturnValueOnce(
+      new CancelablePromise<any>((_resolve, _reject, onCancel) => onCancel(cancelled)),
+    );
+    wrapper.findComponent(CatalogDecisionFilters).vm.$emit('update:modelValue', { coolingBtuClasses: [24] });
+    await flushPromises();
+    wrapper.unmount(); workspace = undefined;
+    await flushPromises();
+    expect(cancelled).toHaveBeenCalledTimes(1);
   });
 });

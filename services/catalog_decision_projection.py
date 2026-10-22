@@ -112,11 +112,28 @@ class CatalogDecisionQueryService:
             raise ValueError("Unsupported cooling BTU class")
 
     @staticmethod
-    def _json_float_path(session: AsyncSession, *path: str):
+    def _specs_cte(session: AsyncSession, *, product_ids=(), complete_only: bool = True):
+        # Product.specs is stored as JSON. Repeated casts inside numeric guards,
+        # filters and ordering reparse each large document dozens of times.
+        # PostgreSQL must materialize this conversion once per candidate row.
+        specs = Product.specs
+        if session.bind is not None and session.bind.dialect.name == "postgresql":
+            from sqlalchemy.dialects.postgresql import JSONB
+            specs = cast(specs, JSONB)
+        statement = select(Product.id, specs.label("specs"))
+        if complete_only:
+            statement = statement.where(Product.product_kind == "complete_split_system")
+        if product_ids:
+            statement = statement.where(Product.id.in_(product_ids))
+        return statement.cte("catalog_decision_specs").prefix_with("MATERIALIZED", dialect="postgresql")
+
+    @staticmethod
+    def _json_float_path(session: AsyncSession, *path: str, specs=None):
+        specs = Product.specs if specs is None else specs
         # The normalizer persists these canonical numeric keys.  The dialect
         # branch keeps unit tests on SQLite while production uses PostgreSQL.
         if session.bind is not None and session.bind.dialect.name == "sqlite":
-            raw_value = func.json_extract(Product.specs, "$." + ".".join(path))
+            raw_value = func.json_extract(specs, "$." + ".".join(path))
             normalized = func.replace(func.trim(cast(raw_value, String)), ",", ".")
             # SQLite silently casts arbitrary text to 0.0; reject values with
             # non-numeric characters before casting so malformed history never
@@ -126,7 +143,7 @@ class CatalogDecisionQueryService:
                     and_(
                         normalized.op("GLOB")("*[0-9]*"),
                         normalized.op("NOT GLOB")("*[^0-9.+-]*"),
-                        func.json_type(Product.specs, "$." + ".".join(path)).in_(("integer", "real", "text")),
+                        func.json_type(specs, "$." + ".".join(path)).in_(("integer", "real", "text")),
                     ),
                     normalized,
                 ),
@@ -134,7 +151,7 @@ class CatalogDecisionQueryService:
             )
             return cast(numeric, Float)
         from sqlalchemy.dialects.postgresql import JSONB
-        raw_value = func.jsonb_extract_path_text(cast(Product.specs, JSONB), *path)
+        raw_value = func.jsonb_extract_path_text(cast(specs, JSONB), *path)
         # Production catalog history includes values such as "0.88 кВт".  A
         # direct PostgreSQL cast makes one legacy value fail the whole page.
         # Cast only canonical numeric strings; malformed values stay NULL.
@@ -152,19 +169,20 @@ class CatalogDecisionQueryService:
         return cast(finite, Float)
 
     @classmethod
-    def _json_float(cls, session: AsyncSession, key: str):
-        return cls._json_float_path(session, key)
+    def _json_float(cls, session: AsyncSession, key: str, *, specs=None):
+        return cls._json_float_path(session, key, specs=specs)
 
     @staticmethod
-    def _json_text_path(session: AsyncSession, *path: str):
+    def _json_text_path(session: AsyncSession, *path: str, specs=None):
+        specs = Product.specs if specs is None else specs
         if session.bind is not None and session.bind.dialect.name == "sqlite":
-            return func.json_extract(Product.specs, "$." + ".".join(path))
+            return func.json_extract(specs, "$." + ".".join(path))
         from sqlalchemy.dialects.postgresql import JSONB
-        return func.jsonb_extract_path_text(cast(Product.specs, JSONB), *path)
+        return func.jsonb_extract_path_text(cast(specs, JSONB), *path)
 
     @classmethod
-    def _json_text(cls, session: AsyncSession, key: str):
-        return cls._json_text_path(session, key)
+    def _json_text(cls, session: AsyncSession, key: str, *, specs=None):
+        return cls._json_text_path(session, key, specs=specs)
 
     @staticmethod
     def _positive_finite(value):
@@ -172,13 +190,13 @@ class CatalogDecisionQueryService:
         return case((and_(value > 0, value < float("inf")), value), else_=None)
 
     @classmethod
-    def _complete_split_condition(cls, session: AsyncSession):
+    def _complete_split_condition(cls, session: AsyncSession, *, specs=None):
         """Retain manual kind choices, but veto explicit component contradictions."""
         def spec_value(key):
             return func.coalesce(
-                cls._json_text(session, key),
-                cls._json_text_path(session, "__typed_specs", key, "value"),
-                cls._json_text_path(session, "__typed_specs", key, "raw"),
+                cls._json_text(session, key, specs=specs),
+                cls._json_text_path(session, "__typed_specs", key, "value", specs=specs),
+                cls._json_text_path(session, "__typed_specs", key, "raw", specs=specs),
             )
 
         system_type = func.lower(func.trim(spec_value("type")))
@@ -186,7 +204,7 @@ class CatalogDecisionQueryService:
         # Missing/unknown data does not negate an existing manual complete kind.
         # Any explicit denial, including typed evidence, blocks every selector.
         component_conditions = [
-            func.coalesce(func.lower(func.trim(cls._json_text_path(session, *path))), "").notin_(SPEC_BOOLEAN_FALSE_VALUES)
+            func.coalesce(func.lower(func.trim(cls._json_text_path(session, *path, specs=specs))), "").notin_(SPEC_BOOLEAN_FALSE_VALUES)
             for key in ("includes_indoor_unit", "includes_outdoor_unit")
             for path in ((key,), ("__typed_specs", key, "value"), ("__typed_specs", key, "raw"))
         ]
@@ -263,7 +281,7 @@ class CatalogDecisionQueryService:
         )
 
     @classmethod
-    def _conditions(cls, session: AsyncSession, filters: CatalogDecisionFilters, *, availability, retail, cooling_nominal, cooling_min, cooling_max, area, heating_min):
+    def _conditions(cls, session: AsyncSession, filters: CatalogDecisionFilters, *, availability, retail, cooling_nominal, cooling_min, cooling_max, area, heating_min, specs=None):
         conditions = []
         search = (filters.search or "").strip()
         if search:
@@ -319,7 +337,7 @@ class CatalogDecisionQueryService:
         if filters.category:
             conditions.append(exists(select(ProductTagLink.product_id).join(Tag, Tag.id == ProductTagLink.tag_id).where(ProductTagLink.product_id == Product.id, Tag.slug == cls._CATEGORY_SLUGS[filters.category])))
         if filters.indoor_form_factor:
-            conditions.append(indoor_form_factor_expr(session) == filters.indoor_form_factor)
+            conditions.append(indoor_form_factor_expr(session, specs=specs) == filters.indoor_form_factor)
         if filters.brand_ids:
             conditions.append(Product.brand_id.in_(filters.brand_ids))
         if filters.series_ids:
@@ -327,10 +345,10 @@ class CatalogDecisionQueryService:
         if filters.is_inverter is not None:
             conditions.append(Product.is_inverter.is_(filters.is_inverter))
         if filters.has_wifi:
-            wifi = cls._json_text(session, "wifi_ready")
+            wifi = cls._json_text(session, "wifi_ready", specs=specs)
             conditions.append(wifi.in_((True, "true", "True", "1", "ready")))
         if filters.wifi:
-            wifi = cls._json_text(session, "wifi_ready")
+            wifi = cls._json_text(session, "wifi_ready", specs=specs)
             if filters.wifi == "builtin":
                 conditions.append(wifi.in_((True, "true", "True", "1")))
             elif filters.wifi == "ready":
@@ -351,6 +369,8 @@ class CatalogDecisionQueryService:
         page: int, limit: int, sort: str, direction: Literal["asc", "desc"],
     ) -> dict:
         cls._validate_filters(filters)
+        specs_cte = cls._specs_cte(session, product_ids=filters.product_ids)
+        specs = specs_cte.c.specs
         usd_byn_rate = await FxRateService.get_supplier_usd_byn_rate(session)
         metrics = cls._metrics_cte(usd_byn_rate=usd_byn_rate)
         local_stock = cls._local_stock_cte()
@@ -362,23 +382,23 @@ class CatalogDecisionQueryService:
         margin_pct = case((and_(purchase.is_not(None), retail > 0), (retail - purchase) / retail), else_=None).label("margin_pct")
         total_qty = func.coalesce(metrics.c.supplier_qty, 0) + func.coalesce(local_stock.c.local_qty, 0)
         availability = case((total_qty > 0, "in_stock"), else_="out_of_stock").label("availability")
-        area = cls._json_float(session, "area_m2")
+        area = cls._json_float(session, "area_m2", specs=specs)
         # Historical power_cooling can contain electrical consumption. The
         # Only a positive finite nominal can override a valid core fallback,
         # matching nominal_cooling_capacity in the import/write paths.
         cooling_nominal = func.coalesce(
-            cls._positive_finite(cls._json_float(session, "capacity_cooling_kw")),
+            cls._positive_finite(cls._json_float(session, "capacity_cooling_kw", specs=specs)),
             cls._positive_finite(Product.power_cooling),
         ).label("cooling_power_kw")
-        cooling_min = func.coalesce(cls._json_float(session, "capacity_cooling_min_kw"), cooling_nominal).label("cooling_min_kw")
-        cooling_max = func.coalesce(cls._json_float(session, "capacity_cooling_max_kw"), cooling_nominal).label("cooling_max_kw")
+        cooling_min = func.coalesce(cls._json_float(session, "capacity_cooling_min_kw", specs=specs), cooling_nominal).label("cooling_min_kw")
+        cooling_max = func.coalesce(cls._json_float(session, "capacity_cooling_max_kw", specs=specs), cooling_nominal).label("cooling_max_kw")
         heating_min = func.coalesce(
-            cls._json_float_path(session, "__typed_specs", "temp_range_heat", "min"),
-            cls._json_float(session, "__filter_min_heat"),
+            cls._json_float_path(session, "__typed_specs", "temp_range_heat", "min", specs=specs),
+            cls._json_float(session, "__filter_min_heat", specs=specs),
         ).label("heating_min_c")
-        indoor_form = indoor_form_factor_expr(session)
-        conditions = cls._conditions(session, filters, availability=availability, retail=retail, cooling_nominal=cooling_nominal, cooling_min=cooling_min, cooling_max=cooling_max, area=area, heating_min=heating_min)
-        conditions.append(cls._complete_split_condition(session))
+        indoor_form = indoor_form_factor_expr(session, specs=specs)
+        conditions = cls._conditions(session, filters, availability=availability, retail=retail, cooling_nominal=cooling_nominal, cooling_min=cooling_min, cooling_max=cooling_max, area=area, heating_min=heating_min, specs=specs)
+        conditions.append(cls._complete_split_condition(session, specs=specs))
         base = (
             select(
                 Product, Brand.title.label("brand_title"), ProductSeries.title.label("series_title"),
@@ -387,9 +407,10 @@ class CatalogDecisionQueryService:
                 margin_abs, margin_pct, availability, cooling_nominal, cooling_min, cooling_max, heating_min,
                 area.label("area_m2"),
                 indoor_form.label("indoor_form_factor"),
-                cls._json_text(session, "wifi_ready").label("wifi_raw"),
+                cls._json_text(session, "wifi_ready", specs=specs).label("wifi_raw"),
             )
             .select_from(Product)
+            .join(specs_cte, specs_cte.c.id == Product.id)
             .outerjoin(Brand, Brand.id == Product.brand_id)
             .outerjoin(ProductSeries, ProductSeries.id == Product.series_id)
             .outerjoin(metrics, metrics.c.product_id == Product.id)
@@ -486,17 +507,20 @@ class CatalogDecisionQueryService:
     @classmethod
     async def list_filter_options(cls, session: AsyncSession, *, tenant_scope: TenantScope) -> dict:
         """Small master-catalog dictionaries for the workspace filter controls."""
+        specs_cte = cls._specs_cte(session)
         brand_query = (
             select(Brand.id, Brand.title)
             .join(Product, Product.brand_id == Brand.id)
-            .where(cls._complete_split_condition(session))
+            .join(specs_cte, specs_cte.c.id == Product.id)
+            .where(cls._complete_split_condition(session, specs=specs_cte.c.specs))
             .group_by(Brand.id, Brand.title)
             .order_by(Brand.title.asc())
         )
         series_query = (
             select(ProductSeries.id, ProductSeries.title, ProductSeries.brand_id)
             .join(Product, Product.series_id == ProductSeries.id)
-            .where(cls._complete_split_condition(session))
+            .join(specs_cte, specs_cte.c.id == Product.id)
+            .where(cls._complete_split_condition(session, specs=specs_cte.c.specs))
             .group_by(ProductSeries.id, ProductSeries.title, ProductSeries.brand_id)
             .order_by(ProductSeries.brand_id.asc(), ProductSeries.title.asc())
         )

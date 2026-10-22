@@ -34,11 +34,13 @@ export const defaultCatalogDecisionFilters = (): CatalogDecisionFilters => ({
   isPublished: true,
 });
 
+type CatalogRequest<T> = Promise<T> & { cancel?: () => void };
+
 export const catalogDecisionApi = {
   filterOptions(): Promise<CatalogDecisionFilterOptionsResponse> {
     return ManagerCatalogDecisionService.listManagerCatalogDecisionFilterOptions();
   },
-  list(page: number, limit: number, filters: CatalogDecisionFilters, sort: CatalogDecisionSort, direction: 'asc' | 'desc'): Promise<CatalogDecisionListResponse> {
+  list(page: number, limit: number, filters: CatalogDecisionFilters, sort: CatalogDecisionSort, direction: 'asc' | 'desc'): CatalogRequest<CatalogDecisionListResponse> {
     return ManagerCatalogDecisionService.listManagerCatalogDecisionProducts(
       page, limit, filters.search, filters.coolingBtuClasses, filters.coolingMinKw, filters.coolingMaxKw,
       filters.retailMinByn, filters.retailMaxByn, filters.areaMin, filters.areaMax, filters.category, filters.indoorFormFactor,

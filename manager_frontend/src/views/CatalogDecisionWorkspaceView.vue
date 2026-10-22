@@ -58,6 +58,8 @@ const orderDialogOpen = ref(false);
 const quickOrderDialogOpen = ref(false);
 const success = ref<{ message: string; href: string; label: string } | null>(null);
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
+let activeListRequest: ReturnType<typeof catalogDecisionApi.list> | undefined;
+const cancelListRequest = () => { activeListRequest?.cancel?.(); activeListRequest = undefined; };
 const selectionStorageKey = computed(() => {
   const auth = managerSession.auth.value;
   if (!auth || (target.requested && !target.context.value)) return null;
@@ -75,14 +77,16 @@ const load = async () => {
   clearTimeout(searchTimer);
   syncQuery();
   const generation = ++loadGeneration;
+  cancelListRequest();
   loading.value = true; error.value = '';
   try {
-    const response = await catalogDecisionApi.list(page.value, 40, filters.value, sort.value, direction.value);
+    activeListRequest = catalogDecisionApi.list(page.value, 40, filters.value, sort.value, direction.value);
+    const response = await activeListRequest;
     if (generation !== loadGeneration) return;
     items.value = response.items ?? []; page.value = response.meta.page; pages.value = Math.max(1, response.meta.pages); total.value = response.meta.total;
     syncQuery();
   } catch (err) { if (generation === loadGeneration) error.value = getApiErrorMessage(err) || 'Не удалось загрузить рабочий каталог'; }
-  finally { if (generation === loadGeneration) loading.value = false; }
+  finally { if (generation === loadGeneration) { activeListRequest = undefined; loading.value = false; } }
 };
 const updateFilters = (next: Filters) => { filters.value = next; page.value = 1; };
 const reset = () => { filterResetKey.value += 1; sort.value = 'recommended'; direction.value = 'asc'; filters.value = defaultCatalogDecisionFilters(); page.value = 1; };
@@ -163,6 +167,7 @@ watch(filters, (next, previous) => {
   clearTimeout(searchTimer);
   // Invalidate the old response as soon as criteria change, even during debounce.
   loadGeneration += 1;
+  cancelListRequest();
   loading.value = true;
   if (next.search !== previous.search) searchTimer = setTimeout(() => void load(), 220);
   else void load();
@@ -184,7 +189,7 @@ onMounted(() => {
   void target.load();
   void loadFilterOptions();
 });
-onBeforeUnmount(() => { disposed = true; compareGeneration += 1; selectionCheckGeneration += 1; clearTimeout(searchTimer); loadGeneration += 1; });
+onBeforeUnmount(() => { disposed = true; compareGeneration += 1; selectionCheckGeneration += 1; clearTimeout(searchTimer); loadGeneration += 1; cancelListRequest(); });
 </script>
 
 <template>
