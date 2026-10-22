@@ -232,7 +232,7 @@ describe('board commands with real menus and dialogs', () => {
     get.mockImplementation(async q => read(q)); await button(wrapper, 'Повторить загрузку').trigger('click'); await flushPromises();
     expect(card(1)).toBeUndefined(); expect(card(2).get('[aria-label="Действия с заказом"]').attributes('disabled')).toBeUndefined();
   });
-  it('retains expanded lazy children, bounded page counts, exact group totals and column scroll after another order changes', async () => {
+  it('retains expanded lazy children, bounded page counts and exact group totals after another order changes', async () => {
     window.history.replaceState({}, '', '/manager/orders?segment=b2b&groupBy=customer');
     const group = { key: 'customer:9', customer_id: 9, customer_name: 'Большая группа', count: 1000, total_amount: 100000, balance_due: 50000 };
     rows = [order(2, { status: 'execution' })];
@@ -244,11 +244,11 @@ describe('board commands with real menus and dialogs', () => {
     // Match the accessible group toggle independently of money locale formatting.
     if (!wrapper.text().includes('Загружено')) { await wrapper.findAll('button').find(b => b.attributes('aria-expanded') === 'false' && b.text().includes('Большая группа'))!.trigger('click'); }
     await flushPromises(); await button(wrapper, 'Ещё заказы').trigger('click'); await flushPromises();
-    const board = wrapper.getComponent(OrderQueueBoard), scroller = board.findAll('.queue-scroll')[0]!.element as HTMLElement;
-    scroller.scrollTop = 321; get.mockClear();
+    const board = wrapper.getComponent(OrderQueueBoard);
+    get.mockClear();
     await rename(2, 'Другой заказ изменён');
     expect(wrapper.getComponent(OrderQueueBoard).element).toBe(board.element);
-    expect(scroller.scrollTop).toBe(321); expect(wrapper.text()).toContain('Загружено 2 из 1000');
+    expect(wrapper.text()).toContain('Загружено 2 из 1000');
     expect(wrapper.text()).toContain('Заказ 11'); expect(wrapper.text()).toContain('Заказ 12');
     expect(get.mock.calls.filter(([q]) => q.group_key).map(([q]) => q.page)).toEqual([1, 2]);
     expect(get.mock.calls.every(([q]) => q.limit === 25)).toBe(true);

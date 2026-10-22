@@ -12,6 +12,7 @@ import OrdersToolbar from './OrdersToolbar.vue';
 import OrderQueueBoard from './OrderQueueBoard.vue';
 import { useOrderQueueData } from './useOrderQueueData';
 import type { OrderQueue } from '../../services/order-board';
+import { EXECUTION_STATUS_OPTIONS, NEGOTIATION_STATUS_OPTIONS } from './order-utils';
 
 import { openOrderPage, savedOrderListPosition } from '../../services/order-navigation';
 import { getApiErrorMessage } from '../../utils/api-errors';
@@ -332,7 +333,18 @@ const onGenerateDoc = async (payload: { orderId: number; docType: string }) => {
   }
 };
 
-const openOrder = (orderId: number) => openOrderPage(orderId, board.value?.captureState());
+const closeFilters = () => { filtersOpen.value = false; setQueryParam('filtersOpen', 'false'); };
+const openOrder = async (orderId: number) => {
+  closeFilters();
+  await nextTick();
+  return openOrderPage(orderId, board.value?.captureState());
+};
+const filterSummary = computed(() => [
+  ...Object.entries(queuePhases.value).filter(([, value]) => value).map(([column, value]) => `${column === 'execution' ? 'Работы' : 'Переговоры'}: ${(column === 'execution' ? EXECUTION_STATUS_OPTIONS : NEGOTIATION_STATUS_OPTIONS).find(option => option.value === value)?.label || value}`),
+  historyResult.value ? `Результат: ${{ won: 'успех', lost: 'отказ', unknown: 'не указан' }[historyResult.value] || historyResult.value}` : '',
+  closedFrom.value ? `Закрыт с ${closedFrom.value}` : '', closedTo.value ? `по ${closedTo.value}` : '',
+  unknownDate.value ? 'Включая без даты' : '', customerIdFilter.value ? `Клиент #${customerIdFilter.value}` : '',
+].filter(Boolean));
 
 const clearCustomerFilter = () => {
   customerIdFilter.value = undefined;
@@ -356,7 +368,6 @@ onMounted(async () => {
   const searchParam = params.get('search');
   if (searchParam) {
     search.value = searchParam;
-    filtersOpen.value = params.get('filtersOpen') !== 'false';
   }
   persistSegmentAndView();
   persistGrouping();
@@ -370,37 +381,46 @@ onMounted(async () => {
 
 <template>
   <div class="orders-queue-page bg-gray-50 text-slate-900 dark:bg-slate-900 dark:text-slate-100">
-    <div class="orders-queue-inner mx-auto w-full max-w-[1400px] px-4 py-4 md:px-8">
+    <div class="orders-queue-inner mx-auto w-full max-w-[1400px] px-3 py-1 md:px-5 md:py-2">
       <OrdersToolbar
         v-model:assigned-to-me="assignedToMe" :can-filter-mine="canFilterMine"
         v-model:segment="segment" v-model:view="view" v-model:search="search"
         v-model:status-filter="statusFilter" v-model:work-filter="workFilter"
         v-model:group-by-customer="groupByCustomer"
         v-model:filters-open="filtersOpen" :counts="serverWorkCounts as typeof workFilterCounts"
-        :hidden-on-hold-count="hiddenOnHoldCount" :visible-count="filteredTotal"
+        :hidden-on-hold-count="hiddenOnHoldCount" :visible-count="filteredTotal" :extra-summary="filterSummary"
         :selected-count="selectedOrderIds.length" :has-active-filters="hasActiveOrderFilters || Boolean(historyResult || closedFrom || closedTo) || Object.values(queuePhases).some(Boolean)"
         :loading="loading || queueData.refreshing.value" :load-failed="Boolean(loadError) || queueData.stale.value || queueColumns.some(column => Boolean(queueErrors[column]))" :transfer-loading="transferLoading"
         @reset="clearOrderFilters" @search-now="refreshOrders"
         @import="openImportPicker" @export="exportSelectedOrders"
         @select-all="selectAllVisible" @clear-selection="clearSelection"
-      />
-      <nav class="mb-3 grid grid-cols-3 gap-1 sm:flex sm:gap-2" aria-label="Очереди заказов">
-        <button v-for="(label, key) in queueLabels" :key="key" type="button" class="rounded-lg border px-2 py-2 text-xs sm:px-3 sm:text-sm" :class="queue === key ? 'bg-brand-600 text-white' : 'bg-white dark:bg-slate-800'" :aria-pressed="queue === key" @click="queue = key; workFilter = 'all'">
-          {{ label }} <span v-if="!loading && !loadError && !queueData.stale.value && !queueData.refreshing.value">{{ queueCounts[key] || 0 }}</span>
-        </button>
-      </nav>
-      <p v-if="normalizedSearch" class="mb-2 text-sm text-slate-500">Поиск во всех очередях. Очередь указана рядом с заказом.</p>
-      <p v-else-if="workFilter === 'followup'" class="mb-2 text-sm text-slate-500">Контакты из активных и ожидающих заказов. Ожидание не снимается.</p>
-      <div v-if="queue === 'history' && !normalizedSearch && workFilter !== 'followup'" class="mb-3 flex flex-wrap items-center gap-2 text-sm">
-        <label>Результат <select v-model="historyResult" aria-label="Результат истории" class="rounded border bg-white p-2 dark:bg-slate-800"><option value="">Все</option><option value="won">Успех</option><option value="lost">Отказ</option><option value="unknown">Результат не указан</option></select></label>
-        <label>Закрыт с <input v-model="closedFrom" aria-label="Дата закрытия с" type="date" class="rounded border bg-white p-2 dark:bg-slate-800" /></label>
-        <label>по <input v-model="closedTo" aria-label="Дата закрытия по" type="date" class="rounded border bg-white p-2 dark:bg-slate-800" /></label>
-        <label v-if="closedFrom || closedTo"><input v-model="unknownDate" type="checkbox" /> Включить без даты закрытия</label>
-      </div>
-      <div v-if="customerIdFilter" class="flex items-center gap-3 mb-3 text-sm">
-        <a :href="`/manager/customers/profile?customerId=${customerIdFilter}`" class="text-brand-600">Заказы клиента #{{ customerIdFilter }}</a>
-        <button type="button" class="text-slate-500 underline" @click="clearCustomerFilter">Все клиенты</button>
-      </div>
+      >
+        <template #queues>
+          <nav class="grid grid-cols-3 gap-1 sm:flex sm:gap-2" aria-label="Очереди заказов">
+            <button v-for="(label, key) in queueLabels" :key="key" type="button" class="whitespace-nowrap rounded-lg border px-1 py-2 text-xs sm:px-3 sm:text-sm" :class="queue === key ? 'bg-brand-600 text-white' : 'bg-white dark:bg-slate-800'" :aria-pressed="queue === key" @click="queue = key; workFilter = 'all'">
+              {{ label }} <span v-if="!loading && !loadError && !queueData.stale.value && !queueData.refreshing.value">{{ queueCounts[key] || 0 }}</span>
+            </button>
+          </nav>
+        </template>
+        <template #filters>
+          <label v-for="column in queueColumns.filter(Boolean)" :key="column" class="flex items-center gap-2">{{ column === 'execution' ? 'Работы' : 'Переговоры' }}
+            <select :value="queuePhases[column] || ''" :aria-label="`Подэтап: ${column === 'execution' ? 'Работы' : 'Переговоры'}`" class="max-w-[180px] rounded border bg-white p-1.5 dark:bg-slate-800" @change="queueData.setPhase(column, ($event.target as HTMLSelectElement).value)">
+              <option value="">Все подэтапы</option><option v-for="option in column === 'execution' ? EXECUTION_STATUS_OPTIONS : NEGOTIATION_STATUS_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
+            </select>
+          </label>
+          <div v-if="queue === 'history' && !normalizedSearch && workFilter !== 'followup'" class="flex flex-wrap items-center gap-2 text-sm">
+            <label>Результат <select v-model="historyResult" aria-label="Результат истории" class="rounded border bg-white p-2 dark:bg-slate-800"><option value="">Все</option><option value="won">Успех</option><option value="lost">Отказ</option><option value="unknown">Результат не указан</option></select></label>
+            <label>Закрыт с <input v-model="closedFrom" aria-label="Дата закрытия с" type="date" class="rounded border bg-white p-2 dark:bg-slate-800" /></label>
+            <label>по <input v-model="closedTo" aria-label="Дата закрытия по" type="date" class="rounded border bg-white p-2 dark:bg-slate-800" /></label>
+            <label v-if="closedFrom || closedTo"><input v-model="unknownDate" type="checkbox" /> Включить без даты закрытия</label>
+          </div>
+          <div v-if="customerIdFilter" class="flex items-center gap-3 text-sm">
+            <a :href="`/manager/customers/profile?customerId=${customerIdFilter}`" class="text-brand-600">Заказы клиента #{{ customerIdFilter }}</a>
+            <button type="button" class="text-slate-500 underline" @click="clearCustomerFilter">Все клиенты</button>
+          </div>
+
+        </template>
+      </OrdersToolbar>
       <input ref="importFileInput" class="hidden" type="file" accept="application/json,.json" @change="handleImportFile" />
 
       <!-- Toast -->
@@ -418,7 +438,7 @@ onMounted(async () => {
         Не удалось обновить доску. Показаны предыдущие данные; действия временно недоступны.
         <button type="button" class="ml-2 underline" :disabled="queueData.refreshing.value" @click="refreshOrders">Повторить загрузку</button>
       </div>
-      <p v-if="!loadError" role="status" class="mb-2 min-h-5 text-xs text-slate-500">{{ queueData.refreshing.value ? 'Обновление доски…' : '' }}</p>
+      <p v-if="!loadError" role="status" class="sr-only">{{ queueData.refreshing.value ? 'Обновление доски…' : '' }}</p>
       <OrderQueueBoard ref="board" v-if="!loadError"
         :key="`${queue}:${segment}:${groupByCustomer}:${normalizedSearch}:${workFilter}`"
         :pages="queuePages" :phases="queuePhases" :columns="queueColumns" :busy="queueBusy" :errors="queueErrors"
@@ -426,7 +446,7 @@ onMounted(async () => {
         :show-queue="Boolean(normalizedSearch) || workFilter === 'followup'"
         :list-mode="view === 'list'" :sort="sort" :selected-order-ids="selectedOrderIds" :customer-aliases="customerAliases"
         @update:sort="sort = $event" @toggle-select="toggleOrderSelection" @toggle-select-many="toggleManySelection" @rename-customer="renameCustomerGroup"
-        @more="queueData.more" @phase="queueData.setPhase" @open="openOrder" @generate="onGenerateDoc"
+        @click.capture="closeFilters" @interact="closeFilters" @more="queueData.more" @open="openOrder" @generate="onGenerateDoc"
         @waiting="toggleOrderWaiting" @move="onMoveOrder" @cancel-order="onCancelOrder" @close-debt="onCloseDebt" @rename-order="renameOrderTitle"
       />
     </div>
@@ -444,11 +464,6 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.orders-queue-page { flex:1; min-height:0; overflow:hidden; }
-.orders-queue-inner { display:flex; height:100%; min-height:0; flex-direction:column; }
-.orders-queue-inner > header, .orders-queue-inner > nav { flex-shrink:0; }
-@media (max-width:767px) {
-  .orders-queue-page { flex:none; overflow:visible; }
-  .orders-queue-inner { height:auto; }
-}
+.orders-queue-page { min-width:0; }
+.orders-queue-inner { min-width:0; }
 </style>

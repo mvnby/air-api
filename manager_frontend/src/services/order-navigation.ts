@@ -88,6 +88,7 @@ export type OrderBoardState = {
   columnScrollTops?: Record<string, number>;
   loadedPages?: Record<string, number>;
   mobileColumn?: string;
+  mobileScrollTops?: Record<string, number>;
 };
 export type OrderListPosition = { url: string; top: number; board?: OrderBoardState };
 export const savedOrderListPosition = (): OrderListPosition | undefined => window.history.state?.orderListPosition;

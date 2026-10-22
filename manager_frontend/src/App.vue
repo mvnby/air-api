@@ -505,7 +505,7 @@ watch(currentPath, () => {
     data-testid="manager-root"
     class="manager-root min-h-screen flex"
   >
-    <KitlaneShell :workspace="authorizedView === 'orders'" :name="partnerName" :logo-url="partnerLogoUrl" :compact-logo-url="partnerCompactLogoUrl" :context-key="partnerContextKey" v-model:collapsed="isDesktopNavCollapsed" v-model:mobile-open="isMobileNavOpen" :theme="theme" @toggle-theme="toggleTheme" @home="navigate('/manager')">
+    <KitlaneShell :name="partnerName" :logo-url="partnerLogoUrl" :compact-logo-url="partnerCompactLogoUrl" :context-key="partnerContextKey" v-model:collapsed="isDesktopNavCollapsed" v-model:mobile-open="isMobileNavOpen" :theme="theme" @toggle-theme="toggleTheme" @home="navigate('/manager')">
       <template #navigation>
         <KitlaneNavigation :items="visibleCoreNavItems" :sections="visibleNavSections" :collapsed="isDesktopNavCollapsed" :leads-count="leadsCount" :expanded="expandedNavSections" :is-nav-item-active="isNavItemActive" :is-nav-section-active="isNavSectionActive" @navigate="navigate" @toggle-section="toggleNavSection" />
       </template>
