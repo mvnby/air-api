@@ -121,34 +121,103 @@ describe('board commands with real menus and dialogs', () => {
     expect(get.mock.calls.filter(([q]) => q.column === 'negotiation')).toHaveLength(3); // initial, stale, latest
     expect(wrapper.get('nav').text()).toContain('История 1');
   });
-  it.each(['search', 'segment', 'phase', 'tenant'])('ignores a late response after changing %s and allows a new current command', async context => {
+  it.each(['search', 'segment', 'phase'])('keeps the sent order locked across a %s change until the mock-server write and current read settle', async context => {
+    const old = deferred<void>(); let callsA = 0, activeA = 0, maxActiveA = 0;
+    const patch = vi.spyOn(api, 'patchManagerOrder').mockImplementation(async (id, payload) => {
+      if (id === 1) {
+        activeA++; maxActiveA = Math.max(maxActiveA, activeA);
+        if (++callsA === 1) await old.promise;
+      }
+      // The old request really writes on completion, after the filter has changed.
+      Object.assign(rows.find(o => o.id === id)!, payload);
+      if (id === 1) activeA--;
+      return structuredClone(rows.find(o => o.id === id)!) as any;
+    });
+    await start(); await rename(1, 'Заказ: отложенная запись');
+    if (context === 'search') { await wrapper.get('input[aria-label="Поиск заказов"]').setValue('Заказ'); await vi.advanceTimersByTimeAsync(250); }
+    if (context === 'segment') wrapper.getComponent({ name: 'OrdersToolbar' }).vm.$emit('update:segment', 'all');
+    if (context === 'phase') await wrapper.get('select[aria-label="Подэтап: Переговоры"]').setValue('follow_up');
+    await flushPromises();
+    expect(card(1).get('[aria-label="Действия с заказом"]').attributes('disabled')).toBeDefined();
+    wrapper.getComponent(OrderQueueBoard).vm.$emit('renameOrder', { orderId: 1, title: 'Нельзя отправить параллельно' }); await flushPromises();
+    expect(callsA).toBe(1);
+    await rename(2, 'Заказ B сохранён'); // Other orders remain independent.
+    expect(rows[1]!.title).toBe('Заказ B сохранён');
+    await vi.advanceTimersByTimeAsync(2500); await flushPromises();
+    const reads = vi.mocked(orderBoardApi.page).mock.calls.length;
+    old.resolve(); await flushPromises();
+    expect(rows[0]!.title).toBe('Заказ: отложенная запись');
+    expect(card(1).props('order').title).toBe('Заказ: отложенная запись');
+    expect(card(2).props('order').title).toBe('Заказ B сохранён');
+    expect(vi.mocked(orderBoardApi.page).mock.calls.length).toBeGreaterThan(reads);
+    expect(wrapper.text()).not.toContain('Название заказа сохранено'); // Obsolete success has no UI ownership.
+    expect(card(1).get('[aria-label="Действия с заказом"]').attributes('disabled')).toBeUndefined();
+    await rename(1, 'Заказ: новая запись');
+    expect(rows[0]!.title).toBe('Заказ: новая запись'); expect(card(1).props('order').title).toBe(rows[0]!.title);
+    expect(maxActiveA).toBe(1); expect(patch).toHaveBeenCalledTimes(3);
+  });
+  it('does not regain success ownership when filters return to the original values during a write', async () => {
+    const old = deferred<void>();
+    const patch = vi.spyOn(api, 'patchManagerOrder').mockImplementation(async (id, payload) => { await old.promise; Object.assign(rows.find(o => o.id === id)!, payload); return rows[0]! as any; });
+    await start(); await rename(1, 'Отложенная запись');
+    const toolbar = wrapper.getComponent({ name: 'OrdersToolbar' });
+    toolbar.vm.$emit('update:segment', 'all'); await flushPromises();
+    toolbar.vm.$emit('update:segment', 'b2b'); await flushPromises();
+    wrapper.getComponent(OrderQueueBoard).vm.$emit('renameOrder', { orderId: 1, title: 'Не отправлять' }); await flushPromises();
+    expect(patch).toHaveBeenCalledTimes(1);
+    old.resolve(); await flushPromises();
+    expect(card(1).props('order').title).toBe('Отложенная запись');
+    expect(wrapper.text()).not.toContain('Название заказа сохранено');
+    expect(card(1).get('[aria-label="Действия с заказом"]').attributes('disabled')).toBeUndefined();
+  });
+  it('keeps different identities independent and ignores a response from the previous tenant', async () => {
     const old = deferred<any>(); let call = 0;
     const patch = vi.spyOn(api, 'patchManagerOrder').mockImplementation(async (id, payload) => {
       if (++call === 1) return old.promise;
       Object.assign(rows.find(o => o.id === id)!, payload); return structuredClone(rows.find(o => o.id === id)!) as any;
     });
-    await start(); await rename(1, 'Старое значение');
-    if (context === 'search') { await wrapper.get('input[aria-label="Поиск заказов"]').setValue('Заказ'); await vi.advanceTimersByTimeAsync(250); }
-    if (context === 'segment') { const toolbar = wrapper.findComponent({ name: 'OrdersToolbar' }); toolbar.vm.$emit('update:segment', 'all'); }
-    if (context === 'phase') await wrapper.get('select[aria-label="Подэтап: Переговоры"]').setValue('follow_up');
-    if (context === 'tenant') managerSession.auth.value = { ...managerSession.auth.value, tenant_id: 2 } as any;
-    await flushPromises();
-    // Identity changes clear the board until its new context is explicitly loaded.
-    if (context === 'tenant') { wrapper.unmount(); host.unmount(); await start(); }
-    await rename(1, 'Заказ: текущее значение'); expect(patch).toHaveBeenCalledTimes(2);
-    const calls = vi.mocked(orderBoardApi.page).mock.calls.length;
-    old.resolve(order(1, { title: 'Поздний ответ' })); await flushPromises();
-    expect(card(1).props('order').title).toBe('Заказ: текущее значение');
-    expect(vi.mocked(orderBoardApi.page).mock.calls.length).toBe(calls);
+    await start(); await rename(1, 'Старый tenant');
+    managerSession.auth.value = { ...managerSession.auth.value, tenant_id: 2 } as any;
+    await flushPromises(); wrapper.unmount(); host.unmount(); await start();
+    await rename(1, 'Другой tenant'); expect(patch).toHaveBeenCalledTimes(2);
+    const reads = vi.mocked(orderBoardApi.page).mock.calls.length;
+    old.resolve(order(1, { title: 'Ответ предыдущего tenant' })); await flushPromises();
+    expect(card(1).props('order').title).toBe('Другой tenant'); expect(vi.mocked(orderBoardApi.page).mock.calls.length).toBe(reads);
+  });
+  it('releases a dialog cancelled by a filter change before any write was sent', async () => {
+    const patch = vi.spyOn(api, 'patchManagerOrder').mockImplementation(async (id, payload) => { Object.assign(rows.find(o => o.id === id)!, payload); return rows[0]! as any; });
+    await start(); await action(1, 'Пометить отказом');
+    await dialog().get('textarea').setValue('Не отправленная причина');
+    wrapper.getComponent({ name: 'OrdersToolbar' }).vm.$emit('update:segment', 'all'); await flushPromises();
+    expect(uiDialogState.open).toBe(false); expect(patch).not.toHaveBeenCalled();
+    expect(card(1).get('[aria-label="Действия с заказом"]').attributes('disabled')).toBeUndefined();
+    await action(1, 'Пометить отказом'); await dialog().get('textarea').setValue('Текущая причина');
+    await button(dialog(), 'Пометить отказом').trigger('click'); await flushPromises();
+    expect(patch).toHaveBeenCalledExactlyOnceWith(1, expect.objectContaining({ reject_reason: 'Текущая причина' }));
+  });
+  it('refreshes the new search immediately if an old write settles inside its debounce window', async () => {
+    const old = deferred<void>();
+    vi.spyOn(api, 'patchManagerOrder').mockImplementation(async (id, payload) => { await old.promise; Object.assign(rows.find(o => o.id === id)!, payload); return rows[0]! as any; });
+    await start(); await rename(1, 'Заказ: найден после записи');
+    await wrapper.get('input[aria-label="Поиск заказов"]').setValue('найден');
+    old.resolve(); await flushPromises();
+    expect(vi.mocked(orderBoardApi.page)).toHaveBeenLastCalledWith(expect.objectContaining({ search: 'найден', queue: 'all' }));
+    expect(card(1).props('order').title).toBe('Заказ: найден после записи'); expect(card(2)).toBeUndefined();
+    const reads = vi.mocked(orderBoardApi.page).mock.calls.length;
+    await vi.advanceTimersByTimeAsync(250); await flushPromises(); expect(vi.mocked(orderBoardApi.page).mock.calls.length).toBe(reads);
+    expect(wrapper.text()).not.toContain('Название заказа сохранено');
   });
   it('closes an old refusal on context change, and its late result cannot close a new dialog', async () => {
-    const old = deferred<any>(); vi.spyOn(api, 'patchManagerOrder').mockReturnValue(old.promise as any);
+    const old = deferred<void>(); const patch = vi.spyOn(api, 'patchManagerOrder').mockImplementation(async (id, payload) => { await old.promise; Object.assign(rows.find(o => o.id === id)!, payload); return structuredClone(rows.find(o => o.id === id)!) as any; });
     await start(); await action(1, 'Пометить отказом');
     await dialog().get('textarea').setValue('Старый контекст'); await button(dialog(), 'Пометить отказом').trigger('click'); await flushPromises();
     wrapper.getComponent({ name: 'OrdersToolbar' }).vm.$emit('update:segment', 'all'); await flushPromises();
     expect(uiDialogState.open).toBe(false);
     await vi.advanceTimersByTimeAsync(0); await action(2, 'Пометить отказом'); await dialog().get('textarea').setValue('Новая причина');
-    old.resolve(order(1, { status: 'closed' })); await flushPromises();
+    wrapper.getComponent(OrderQueueBoard).vm.$emit('renameOrder', { orderId: 1, title: 'Не отправлять второй PATCH' }); await flushPromises();
+    expect(patch).toHaveBeenCalledTimes(1);
+    old.resolve(); await flushPromises();
+    expect(card(1)).toBeUndefined();
     expect(uiDialogState.open).toBe(true); expect(dialog().get('textarea').element).toHaveProperty('value', 'Новая причина');
     expect(wrapper.text()).not.toContain('Заказ помечен отказом');
   });
@@ -199,6 +268,20 @@ describe('waiting shares command ownership', () => {
     rows[1]!.is_on_hold = false; b.resolve(structuredClone(rows[1]!)); await flushPromises();
     expect(card(2)).toBeUndefined(); rows[0]!.is_on_hold = false; a.resolve(structuredClone(rows[0]!)); await flushPromises();
     expect(card(1)).toBeUndefined(); expect(wrapper.get('nav').text()).toContain('Ожидание 0');
+  });
+  it('retains a sent waiting lock across filters and revalidates the current queue without a stale toast', async () => {
+    const old = deferred<void>();
+    const patch = vi.spyOn(api, 'patchManagerOrder');
+    vi.spyOn(orderWaitingApi, 'command').mockImplementation(async id => { await old.promise; rows.find(o => o.id === id)!.is_on_hold = true; return structuredClone(rows.find(o => o.id === id)!) as any; });
+    await start(); await button(card(1), 'В ожидание').trigger('click'); await flushPromises();
+    await waitingDialog().get('form').trigger('submit'); await flushPromises();
+    wrapper.getComponent({ name: 'OrdersToolbar' }).vm.$emit('update:segment', 'all'); await flushPromises();
+    wrapper.getComponent(OrderQueueBoard).vm.$emit('renameOrder', { orderId: 1, title: 'Запрещён параллельный PATCH' }); await flushPromises();
+    expect(patch).not.toHaveBeenCalled(); expect(card(1).get('[aria-label="Действия с заказом"]').attributes('disabled')).toBeDefined();
+    expect(card(2).get('[aria-label="Действия с заказом"]').attributes('disabled')).toBeUndefined();
+    old.resolve(); await flushPromises();
+    expect(card(1)).toBeUndefined(); expect(wrapper.get('nav').text()).toContain('Ожидание 1');
+    expect(wrapper.text()).not.toContain('Заказ в ожидании');
   });
   it('invalidates the waiting draft on a filter change and suppresses success after an obsolete updated callback', async () => {
     const heldRead = deferred<ManagerOrderBoardPage>(); vi.spyOn(orderWaitingApi, 'command').mockResolvedValue(order(1, { is_on_hold: true }) as any);

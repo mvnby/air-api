@@ -153,24 +153,39 @@ const board = ref<InstanceType<typeof OrderQueueBoard> | null>(null);
 const identityScope = computed(() => `${managerSession.auth.value?.staff_user_id || managerSession.auth.value?.username}:${managerSession.auth.value?.tenant_id}:${managerStorefrontSelection.selectedSlug.value}`);
 watch(identityScope, () => { loadRequestId++; queueData.reset(); clearIdentityScopedState(); }, { flush: 'sync' });
 
-const commandContext = computed(() => JSON.stringify([
+const queryContext = computed(() => JSON.stringify([
   identityScope.value, segment.value, queue.value, search.value, statusFilter.value,
   workFilter.value, sort.value, assignedToMe.value, groupByCustomer.value, view.value,
   customerIdFilter.value, historyResult.value, closedFrom.value, closedTo.value, unknownDate.value,
-  queuePhases.value,
 ]));
-const ownership = useOrderCommandOwnership(() => commandContext.value);
+const commandContext = computed(() => JSON.stringify([queryContext.value, queuePhases.value]));
+// Initial/filter reads and bounded revalidation have different lifetimes. A write
+// that outlives a filter change must read the current query, including its debounce.
+let loadedQueryContext = '';
+const refreshCurrentOrders = async () => {
+  if (recoveryRequired.value) return false;
+  if (loadedQueryContext !== queryContext.value || loading.value || !Object.keys(queuePages.value).length) {
+    if (searchTimer) window.clearTimeout(searchTimer);
+    searchTimer = undefined;
+    await loadOrders();
+    return !loadError.value && queueColumns.value.every(column => Boolean(queuePages.value[column]) && !queueErrors.value[column]);
+  }
+  return queueData.refreshLoaded();
+};
+const ownership = useOrderCommandOwnership(() => commandContext.value, {
+  identity: () => identityScope.value, revalidate: () => refreshCurrentOrders(),
+});
 const movingOrderIds = ownership.pendingIds;
 const actionable = () => !loading.value && !recoveryRequired.value && !queueData.stale.value
   && !loadError.value && !managerSession.auth.value?.demo_read_only;
 const commands = useOrderBoardCommands({ ownership, actionable,
   find: id => orders.value.find(order => order.id === id),
-  refresh: () => queueData.refreshLoaded(), notify: setToast,
+  refresh: refreshCurrentOrders, notify: setToast,
 });
 const renameOrderTitle = commands.rename, onMoveOrder = commands.move;
 const onCancelOrder = commands.refuse, onCloseDebt = commands.closeDebt;
 const waiting = useOrderWaiting({ ownership, context: () => commandContext.value, actionable,
-  updated: () => queueData.refreshLoaded(), notify: setToast,
+  updated: refreshCurrentOrders, notify: setToast,
 });
 const toggleOrderWaiting = (orderId: number) => {
   const order = orders.value.find(item => item.id === orderId);
@@ -187,6 +202,7 @@ const loadOrders = async () => {
     const saved = savedOrderListPosition();
     const shouldRestore = !restoredPosition && saved?.url === `${window.location.pathname}${window.location.search}`;
     if (shouldRestore && saved.board) queueData.phases.value = { ...saved.board.columnFilters };
+    loadedQueryContext = queryContext.value;
     await queueData.load({
       segment: segment.value,
       queue: normalizedSearch.value ? 'all' : queue.value,

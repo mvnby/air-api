@@ -34,7 +34,7 @@ export const useOrderBoardCommands = (options: Options) => {
   // Persistence and revalidation have separate outcomes. Never roll back a saved command.
   const save = async (token: OrderCommandToken, persist: () => Promise<unknown>, success: string) => {
     requireCurrent(token);
-    await persist();
+    await ownership.write(token, persist);
     if (!ownership.current(token)) return;
     let refreshed = false;
     try { refreshed = await options.refresh(); } catch { /* Board exposes the read failure independently. */ }

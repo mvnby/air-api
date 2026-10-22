@@ -19,8 +19,17 @@ type Options = {
 export const useOrderWaiting = (options: Options) => {
   const selected = ref<ManagerOrderListItemResponse | null>(null);
   const error = ref(''), stale = ref(false);
-  const scope = computed(() => `${managerSession.auth.value?.username}:${managerSession.auth.value?.tenant_id}:${managerStorefrontSelection.selectedSlug.value}:${options.current?.()?.id ?? ''}:${options.context?.() ?? ''}`);
-  const ownership = options.ownership || useOrderCommandOwnership(() => scope.value);
+  const identity = computed(() => `${managerSession.auth.value?.staff_user_id || managerSession.auth.value?.username}:${managerSession.auth.value?.tenant_id}:${managerStorefrontSelection.selectedSlug.value}`);
+  const scope = computed(() => `${identity.value}:${options.current?.()?.id ?? ''}:${options.context?.() ?? ''}`);
+  const ownership = options.ownership || useOrderCommandOwnership(() => scope.value, {
+    identity: () => identity.value,
+    revalidate: async token => {
+      if (!options.current || options.current()?.id !== token.orderId || options.actionable?.() === false) return;
+      const version = scope.value;
+      const result = await api.getManagerOrderDetail(token.orderId);
+      if (scope.value === version) await options.updated(result);
+    },
+  });
   let generation = 0;
   const busy = computed(() => ownership.pendingIds.value.includes(selected.value?.id ?? options.current?.()?.id ?? -1));
   const busyOrderId = computed(() => ownership.pendingIds.value[0] ?? null);
@@ -41,7 +50,7 @@ export const useOrderWaiting = (options: Options) => {
     error.value = '';
     try {
       let result: ManagerOrderDetailResponse;
-      try { result = await orderWaitingApi.command(token.orderId, payload); }
+      try { result = await ownership.write(token, () => orderWaitingApi.command(token.orderId, payload)); }
       catch (cause) {
         if (!current()) return;
         const message = getApiErrorMessage(cause);
