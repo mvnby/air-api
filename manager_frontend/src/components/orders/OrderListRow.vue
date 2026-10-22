@@ -15,6 +15,7 @@ const props = defineProps<{
   order: ManagerOrderListItemResponse & OrderResponsibilityFields;
   segment: Segment;
   nested?: boolean;
+  disabled?: boolean;
   showQueue?: boolean;
   selectable?: boolean;
   selected?: boolean;
@@ -57,7 +58,7 @@ const demoReadOnly = useDemoReadOnly();
         <span v-if="nested" class="mt-1 h-2 w-2 shrink-0 rounded-full bg-slate-300" />
         <div class="min-w-0">
           <a :href="orderLinkUrl(order.id)" :aria-label="`Открыть заказ №${order.id}`" class="block text-xs font-semibold text-slate-500 hover:underline dark:text-slate-400" @click="handleOrderLinkClick($event, () => emit('open', order.id))">#{{ order.id }}</a>
-          <OrderTitleEditor
+          <OrderTitleEditor :disabled="disabled"
             class="max-w-full"
             :order-id="order.id"
             :title="order.title"

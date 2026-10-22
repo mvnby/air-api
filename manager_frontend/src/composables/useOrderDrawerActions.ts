@@ -18,6 +18,7 @@ type UseOrderDrawerActionsOptions = {
   setToast: ToastHandler;
   beforeClose?: () => Promise<boolean>;
   beforeHold?: () => Promise<boolean>;
+  context?: () => string;
   onBeforeClose: () => void;
   onModelValue: (open: boolean) => void;
   onUpdated: (order: ManagerOrderDetailResponse) => void;
@@ -35,6 +36,7 @@ export const useOrderDrawerActions = ({
   setToast,
   beforeClose,
   beforeHold,
+  context,
   onBeforeClose,
   onModelValue,
   onUpdated,
@@ -65,7 +67,7 @@ export const useOrderDrawerActions = ({
     }
   };
 
-  const waiting = useOrderWaiting({ current: () => order.value, beforeAction: beforeHold,
+  const waiting = useOrderWaiting({ context, current: () => order.value, beforeAction: beforeHold,
     updated: onUpdated, notify: message => setToast(message) });
   const toggleHold = () => waiting.toggle();
 

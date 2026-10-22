@@ -388,6 +388,7 @@ const {
   deleteOrder,
   toggleHold, waiting,
 } = useOrderDrawerActions({
+  context: () => String(props.modelValue),
   order: computed(() => props.order),
   displayOrderTitle,
   hasUnsavedChanges,

@@ -4,9 +4,7 @@ import { managerStorefrontSelection } from '../../services/manager-storefront-se
 import { api } from '../../api';
 import {
   ManagerOrdersService,
-  type ManagerOrderListItemResponse,
   type ManagerOrderTransferPackage_Input,
-  type ManagerOrderUpdatePayload,
 } from '../../client';
 import { useOrderWaiting } from '../../composables/useOrderWaiting';
 import OrderWaitingDialog from './OrderWaitingDialog.vue';
@@ -16,19 +14,12 @@ import { useOrderQueueData } from './useOrderQueueData';
 import type { OrderQueue } from '../../services/order-board';
 
 import { openOrderPage, savedOrderListPosition } from '../../services/order-navigation';
-import {
-  formatMoney,
-} from './order-utils';
 import { getApiErrorMessage } from '../../utils/api-errors';
-import { confirmDialog, promptDialog } from '../../services/ui-feedback';
 import { managerSession, requireManagerSessionRecovery } from '../../services/manager-session';
 import OrdersImportPreviewModal from './OrdersImportPreviewModal.vue';
 import { useOrdersDashboardModel } from './useOrdersDashboardModel';
-import {
-  buildBoardTransitionPayload,
-  needsExecutionWithoutPaymentConfirmation,
-  runOptimisticOrderTransition,
-} from './order-transition';
+import { useOrderCommandOwnership } from '../../composables/useOrderCommandOwnership';
+import { useOrderBoardCommands } from './useOrderBoardCommands';
 
 const { recoveryRequired } = managerSession;
 const queue = ref<OrderQueue>('active');
@@ -56,7 +47,7 @@ const setToast = (message: string) => {
 };
 const {
   segment, view, assignedToMe, canFilterMine, statusFilter, workFilter, workFilterCounts, hiddenOnHoldCount, sort, search, loading, orders,
-  movingOrderIds, isHydrated, hideOnHold,
+  isHydrated, hideOnHold,
   groupByCustomer, filtersOpen, customerAliases, selectedOrderIds, transferLoading, importFileInput,
   importPackage, importPreview, importFileName, importModalOpen, normalizedSearch,
   hasActiveOrderFilters, setQueryParam,
@@ -65,11 +56,6 @@ const {
   clearSelection, clearIdentityScopedState,
 } = useOrdersDashboardModel(setToast);
 
-const waiting = useOrderWaiting({ updated: async () => { await loadOrders(); }, notify: setToast });
-const toggleOrderWaiting = (orderId: number) => {
-  const order = orders.value.find(item => item.id === orderId);
-  if (order) void waiting.toggle(order);
-};
 
 const downloadJson = (payload: unknown, filename: string) => {
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
@@ -167,30 +153,30 @@ const board = ref<InstanceType<typeof OrderQueueBoard> | null>(null);
 const identityScope = computed(() => `${managerSession.auth.value?.staff_user_id || managerSession.auth.value?.username}:${managerSession.auth.value?.tenant_id}:${managerStorefrontSelection.selectedSlug.value}`);
 watch(identityScope, () => { loadRequestId++; queueData.reset(); clearIdentityScopedState(); }, { flush: 'sync' });
 
-const restoreOrders = (snapshot: ManagerOrderListItemResponse[]) => {
-  const byId = new Map(snapshot.map(order => [order.id, order]));
-  for (const page of Object.values(queuePages.value)) page.items = page.items?.map(order => byId.get(order.id) || order);
-  orders.value = snapshot;
+const commandContext = computed(() => JSON.stringify([
+  identityScope.value, segment.value, queue.value, search.value, statusFilter.value,
+  workFilter.value, sort.value, assignedToMe.value, groupByCustomer.value, view.value,
+  customerIdFilter.value, historyResult.value, closedFrom.value, closedTo.value, unknownDate.value,
+  queuePhases.value,
+]));
+const ownership = useOrderCommandOwnership(() => commandContext.value);
+const movingOrderIds = ownership.pendingIds;
+const actionable = () => !loading.value && !recoveryRequired.value && !queueData.stale.value
+  && !loadError.value && !managerSession.auth.value?.demo_read_only;
+const commands = useOrderBoardCommands({ ownership, actionable,
+  find: id => orders.value.find(order => order.id === id),
+  refresh: () => queueData.refreshLoaded(), notify: setToast,
+});
+const renameOrderTitle = commands.rename, onMoveOrder = commands.move;
+const onCancelOrder = commands.refuse, onCloseDebt = commands.closeDebt;
+const waiting = useOrderWaiting({ ownership, context: () => commandContext.value, actionable,
+  updated: () => queueData.refreshLoaded(), notify: setToast,
+});
+const toggleOrderWaiting = (orderId: number) => {
+  const order = orders.value.find(item => item.id === orderId);
+  if (order) void waiting.toggle(order);
 };
-
 watch(queueData.accessError, error => { if (error) loadError.value = error.message; });
-
-const renameOrderTitle = async (payload: { orderId: number; title: string | null }) => {
-  const nextTitle = payload.title?.trim() || null;
-  const snapshot = orders.value.map((item) => ({ ...item }));
-  const item = orders.value.find((order) => order.id === payload.orderId);
-
-  if (item) item.title = nextTitle;
-
-  try {
-    await api.patchManagerOrder(payload.orderId, { title: nextTitle });
-    setToast(nextTitle ? 'Название заказа сохранено' : 'Название заказа сброшено');
-  } catch (error) {
-    console.error(error);
-    restoreOrders(snapshot);
-    setToast(`Не удалось сохранить название: ${getApiErrorMessage(error)}`);
-  }
-};
 
 const loadOrders = async () => {
   if (recoveryRequired.value) return;
@@ -201,7 +187,7 @@ const loadOrders = async () => {
     const saved = savedOrderListPosition();
     const shouldRestore = !restoredPosition && saved?.url === `${window.location.pathname}${window.location.search}`;
     if (shouldRestore && saved.board) queueData.phases.value = { ...saved.board.columnFilters };
-    const responses = await queueData.load({
+    await queueData.load({
       segment: segment.value,
       queue: normalizedSearch.value ? 'all' : queue.value,
       assigned_to_me: assignedToMe.value,
@@ -217,7 +203,6 @@ const loadOrders = async () => {
       sort: queue.value === 'history' ? 'closed_at_desc' : sort.value,
     }, queueColumns.value);
     if (requestId !== loadRequestId) return;
-    orders.value = responses.flatMap(page => page?.items || []);
     const loadedIds = new Set(orders.value.map((order) => order.id));
     selectedOrderIds.value = selectedOrderIds.value.filter((orderId) => loadedIds.has(orderId));
     // Render loaded filter counts before restoring scroll; their wrapping changes mobile height.
@@ -260,6 +245,7 @@ let searchTimer: number | undefined;
 const refreshOrders = () => {
   if (searchTimer) window.clearTimeout(searchTimer);
   searchTimer = undefined;
+  if (Object.keys(queuePages.value).length && !loadError.value) return queueData.refreshLoaded();
   return loadOrders();
 };
 watch(
@@ -282,11 +268,12 @@ watch(
     setQueryParam('sort', sort.value);
     if (searchTimer) window.clearTimeout(searchTimer);
     if (next.slice(0, -1).some((value, index) => value !== previous[index])) {
-      void refreshOrders();
+      void loadOrders();
     } else {
-      searchTimer = window.setTimeout(refreshOrders, 250);
+      searchTimer = window.setTimeout(loadOrders, 250);
     }
   },
+  { flush: 'sync' },
 );
 watch(view, persistSegmentAndView);
 watch(groupByCustomer, () => {
@@ -315,152 +302,9 @@ onUnmounted(() => {
   if (searchTimer) window.clearTimeout(searchTimer);
 });
 
-const applyStatusLocally = (orderId: number, payload: ManagerOrderUpdatePayload) => {
-  const item = orders.value.find((order) => order.id === orderId);
-  if (!item) return;
-  if (payload.status !== undefined && payload.status !== null) item.status = payload.status;
-  if (payload.negotiation_status !== undefined && payload.negotiation_status !== null) item.negotiation_status = payload.negotiation_status;
-  if (payload.execution_status !== undefined && payload.execution_status !== null) item.execution_status = payload.execution_status;
-  if (payload.closing_result !== undefined) item.closing_result = payload.closing_result;
-  if (payload.reject_reason !== undefined) item.reject_reason = payload.reject_reason;
-  if (payload.measurement_required !== undefined && payload.measurement_required !== null) item.measurement_required = payload.measurement_required;
-  if (payload.execution_without_payment !== undefined && payload.execution_without_payment !== null) item.execution_without_payment = payload.execution_without_payment;
-  if (payload.execution_without_payment_reason !== undefined) item.execution_without_payment_reason = payload.execution_without_payment_reason;
-  const now = new Date().toISOString();
-  item.status_changed_at = now;
-  if (payload.negotiation_status) item.negotiation_status_changed_at = now;
-  if (payload.execution_status) item.execution_status_changed_at = now;
-};
-
 watch(queuePages, () => {
   orders.value = Object.values(queuePages.value).flatMap(page => page.items || []).filter((item, index, all) => all.findIndex(other => other.id === item.id) === index);
-}, { deep: true });
-const replaceOrderLocally = (updatedOrder: ManagerOrderListItemResponse) => {
-  const index = orders.value.findIndex((order) => order.id === updatedOrder.id);
-  if (index >= 0) orders.value[index] = updatedOrder;
-};
-
-const commitOrderMove = async (orderId: number, updatePayload: ManagerOrderUpdatePayload) => {
-  const snapshot = orders.value.map((item) => ({ ...item }));
-  movingOrderIds.value.push(orderId);
-  try {
-    const updatedOrder = await runOptimisticOrderTransition({
-      snapshot,
-      apply: () => applyStatusLocally(orderId, updatePayload),
-      persist: () => api.patchManagerOrder(orderId, updatePayload),
-      rollback: restoreOrders,
-    });
-    replaceOrderLocally(updatedOrder);
-    await loadOrders();
-  } finally {
-    movingOrderIds.value = movingOrderIds.value.filter((id) => id !== orderId);
-  }
-};
-
-const onMoveOrder = async (payload: { orderId: number; oldStatus: string; newStatus: string }) => {
-  if (movingOrderIds.value.includes(payload.orderId)) return;
-  const item = orders.value.find((order) => order.id === payload.orderId);
-  if (!item) return;
-
-  if (needsExecutionWithoutPaymentConfirmation(item, payload.newStatus)) {
-    const reason = await promptDialog({
-      title: 'Назначить работы без оплаты?',
-      description: 'У заказа нет полной зарегистрированной оплаты. Укажите причину перевода в работы.',
-      inputLabel: 'Причина',
-      initialValue: 'Доверенный клиент',
-      inputKind: 'textarea',
-      required: true,
-      confirmText: 'Назначить работы',
-      variant: 'warning',
-      onConfirm: async (value) => {
-        const updatePayload = buildBoardTransitionPayload(item, payload.newStatus, value || 'Без предоплаты');
-        if (!updatePayload) throw new Error('Недоступный статус заказа');
-        await commitOrderMove(payload.orderId, updatePayload);
-      },
-      getErrorMessage: (error) => `Не удалось назначить работы: ${getApiErrorMessage(error)}`,
-    });
-    if (reason !== null) setToast('Статус обновлен');
-    return;
-  }
-
-  const updatePayload = buildBoardTransitionPayload(item, payload.newStatus);
-  if (!updatePayload) return;
-  try {
-    await commitOrderMove(payload.orderId, updatePayload);
-    setToast('Статус обновлен');
-  } catch (error) {
-    console.error(error);
-    setToast(`Ошибка обновления статуса: ${getApiErrorMessage(error)}`);
-  }
-};
-
-const onCancelOrder = async (payload: { orderId: number }) => {
-  const reason = await promptDialog({
-    title: 'Пометить заказ отказом',
-    inputLabel: 'Причина отказа или неуспешного завершения',
-    inputKind: 'textarea',
-    placeholder: 'Кратко опишите причину',
-    confirmText: 'Пометить отказом',
-    variant: 'danger',
-  });
-  if (reason === null) return;
-  const trimmedReason = reason.trim() || 'Без пояснения';
-  const snapshot = orders.value.map((item) => ({ ...item }));
-  const updatePayload: ManagerOrderUpdatePayload = {
-    status: 'closed',
-    closing_result: 'lost',
-    reject_reason: trimmedReason,
-  };
-  movingOrderIds.value.push(payload.orderId);
-  applyStatusLocally(payload.orderId, updatePayload);
-  try {
-    const updatedOrder = await api.patchManagerOrder(payload.orderId, updatePayload);
-    replaceOrderLocally(updatedOrder);
-    await loadOrders();
-    setToast('Заказ помечен отказом');
-  } catch (error) {
-    console.error(error);
-    restoreOrders(snapshot);
-    setToast(`Не удалось закрыть отказ: ${getApiErrorMessage(error)}`);
-  } finally {
-    movingOrderIds.value = movingOrderIds.value.filter((id) => id !== payload.orderId);
-  }
-};
-
-const onCloseDebt = async (payload: { orderId: number }) => {
-  if (movingOrderIds.value.includes(payload.orderId)) return;
-  const item = orders.value.find((order) => order.id === payload.orderId);
-  if (!item) return;
-  const amount = Number(item.balance_due || 0);
-  if (amount <= 0) {
-    setToast('Долг уже закрыт');
-    return;
-  }
-  const confirmed = await confirmDialog({
-    title: `Закрыть долг по заказу #${payload.orderId}?`,
-    description: `Будет добавлена оплата ${formatMoney(amount)}.`,
-    confirmText: 'Добавить оплату',
-    variant: 'warning',
-    onConfirm: async () => {
-      movingOrderIds.value.push(payload.orderId);
-      try {
-        await ManagerOrdersService.addManagerOrderPayment(payload.orderId, {
-          amount,
-          currency: 'BYN',
-          type: 'postpayment',
-          comment: 'Закрытие долга из канбан-карточки',
-        });
-        await loadOrders();
-      } finally {
-        movingOrderIds.value = movingOrderIds.value.filter((id) => id !== payload.orderId);
-      }
-    },
-    getErrorMessage: (error) => `Не удалось закрыть долг: ${getApiErrorMessage(error)}`,
-  });
-  if (confirmed) {
-    setToast('Долг закрыт');
-  }
-};
+}, { deep: true, flush: 'sync' });
 
 const onGenerateDoc = async (payload: { orderId: number; docType: string }) => {
   try {
@@ -477,7 +321,7 @@ const openOrder = (orderId: number) => openOrderPage(orderId, board.value?.captu
 const clearCustomerFilter = () => {
   customerIdFilter.value = undefined;
   setQueryParam('customerId', '');
-  void refreshOrders();
+  void loadOrders();
 };
 
 onMounted(async () => {
@@ -519,14 +363,14 @@ onMounted(async () => {
         v-model:filters-open="filtersOpen" :counts="serverWorkCounts as typeof workFilterCounts"
         :hidden-on-hold-count="hiddenOnHoldCount" :visible-count="filteredTotal"
         :selected-count="selectedOrderIds.length" :has-active-filters="hasActiveOrderFilters || Boolean(historyResult || closedFrom || closedTo) || Object.values(queuePhases).some(Boolean)"
-        :loading="loading" :load-failed="Boolean(loadError) || queueColumns.some(column => Boolean(queueErrors[column]))" :transfer-loading="transferLoading"
+        :loading="loading || queueData.refreshing.value" :load-failed="Boolean(loadError) || queueData.stale.value || queueColumns.some(column => Boolean(queueErrors[column]))" :transfer-loading="transferLoading"
         @reset="clearOrderFilters" @search-now="refreshOrders"
         @import="openImportPicker" @export="exportSelectedOrders"
         @select-all="selectAllVisible" @clear-selection="clearSelection"
       />
       <nav class="mb-3 grid grid-cols-3 gap-1 sm:flex sm:gap-2" aria-label="Очереди заказов">
         <button v-for="(label, key) in queueLabels" :key="key" type="button" class="rounded-lg border px-2 py-2 text-xs sm:px-3 sm:text-sm" :class="queue === key ? 'bg-brand-600 text-white' : 'bg-white dark:bg-slate-800'" :aria-pressed="queue === key" @click="queue = key; workFilter = 'all'">
-          {{ label }} <span v-if="!loading && !loadError">{{ queueCounts[key] || 0 }}</span>
+          {{ label }} <span v-if="!loading && !loadError && !queueData.stale.value && !queueData.refreshing.value">{{ queueCounts[key] || 0 }}</span>
         </button>
       </nav>
       <p v-if="normalizedSearch" class="mb-2 text-sm text-slate-500">Поиск во всех очередях. Очередь указана рядом с заказом.</p>
@@ -554,10 +398,15 @@ onMounted(async () => {
         <p>{{ loadError }}</p>
         <button type="button" class="mt-3 rounded-lg bg-white px-3 py-2 text-sm font-semibold dark:bg-slate-800" @click="refreshOrders">Повторить</button>
       </div>
-      <OrderQueueBoard ref="board" v-else
+      <div v-if="!loadError && queueData.stale.value" role="alert" class="mb-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+        Не удалось обновить доску. Показаны предыдущие данные; действия временно недоступны.
+        <button type="button" class="ml-2 underline" :disabled="queueData.refreshing.value" @click="refreshOrders">Повторить загрузку</button>
+      </div>
+      <p v-if="!loadError" role="status" class="mb-2 min-h-5 text-xs text-slate-500">{{ queueData.refreshing.value ? 'Обновление доски…' : '' }}</p>
+      <OrderQueueBoard ref="board" v-if="!loadError"
         :key="`${queue}:${segment}:${groupByCustomer}:${normalizedSearch}:${workFilter}`"
         :pages="queuePages" :phases="queuePhases" :columns="queueColumns" :busy="queueBusy" :errors="queueErrors"
-        :segment="segment" :moving-order-ids="waiting.busyOrderId.value ? [...movingOrderIds, waiting.busyOrderId.value] : movingOrderIds" :compact="queue === 'history' && !normalizedSearch && workFilter !== 'followup'"
+        :segment="segment" :moving-order-ids="movingOrderIds" :disabled="!actionable()" :stale="queueData.stale.value" :compact="queue === 'history' && !normalizedSearch && workFilter !== 'followup'"
         :show-queue="Boolean(normalizedSearch) || workFilter === 'followup'"
         :list-mode="view === 'list'" :sort="sort" :selected-order-ids="selectedOrderIds" :customer-aliases="customerAliases"
         @update:sort="sort = $event" @toggle-select="toggleOrderSelection" @toggle-select-many="toggleManySelection" @rename-customer="renameCustomerGroup"
