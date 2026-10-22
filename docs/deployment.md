@@ -404,6 +404,29 @@ storefront deployment, rollback and catalog revision verification live only in
 `WEB_REBUILD_GITHUB_OWNER`, `WEB_REBUILD_GITHUB_REPO`, and
 `WEB_REBUILD_GITHUB_REF`.
 
+### Cache an immutable API image without activation
+
+The manual [Cache Reviewed API Image](../.github/workflows/cache-api-image.yml)
+workflow can prepare an already published `ghcr.io/mvnby/air-api/backend@sha256:…`
+for an authorized operator data job when no persistent registry key is available.
+Run it from `main`, with `confirm_sha` equal to the exact reviewed main revision,
+after full application CI succeeds for that revision. Supply the exact reviewed
+image digest; a mutable tag is rejected.
+
+It uses the protected `production-api` environment, `production-release`
+concurrency, pinned two-node SSH inventory, current healthy Patroni primary and
+the verified canonical deployment lock. The workflow token has `packages: read`
+only and travels to registry login over stdin. The remote Docker configuration
+is private, temporary and removed on success or failure. The sanitized artifact
+records the image digest and confirms the active API was unchanged.
+
+Caching performs no container activation, migrations or database writes. It
+does not establish a successful deployment or authorize a data operation.
+Deployment capacity gates and the matching
+[production data procedure](production-data-operations.md) still apply to those
+separate operations. A failed cache attempt can leave downloaded image layers;
+it never prunes existing images or changes host registry credentials.
+
 ## Manager Frontend Env Model
 
 `manager_frontend` is built inside GitHub Actions and then embedded into the backend Docker image.
