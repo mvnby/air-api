@@ -1,7 +1,6 @@
 import hashlib
 import os
 import subprocess
-from pathlib import Path
 
 import pytest
 
@@ -81,6 +80,8 @@ def test_patroni_migration_always_cleans_candidate_without_promoting(
     old = (project / "compose.yml").read_text(encoding="utf-8")
     migration_log = tmp_path / "migration.log"
     migration = tmp_path / "migration.sh"
+    capacity = tmp_path / "capacity.sh"
+    capacity.write_text("require_deploy_capacity() { return 0; }\n", encoding="utf-8")
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
     _executable(fake_bin / "flock", "#!/usr/bin/env bash\nexit 0\n")
@@ -108,6 +109,7 @@ exit {migration_exit}
             "PATRONI_FINALIZED_RELEASE_MANIFEST": str(release_manifest),
             "COMPOSE_CANDIDATE_TRANSACTION_SCRIPT": str(TRANSACTION),
             "PATRONI_MIGRATION_SCRIPT": str(migration),
+            "API_DEPLOY_CAPACITY_HELPER": str(capacity),
             "MIGRATION_LOG": str(migration_log),
             "API_DEPLOY_LOCK_HELPER": str(DEPLOY_LOCK_HELPER),
             "API_DEPLOY_LOCK_HELPER_SHA256": hashlib.sha256(

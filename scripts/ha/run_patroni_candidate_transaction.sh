@@ -503,7 +503,7 @@ reconcile_failed_deploy() {
     fence_runtime_for_role_drift || restoration_failed=true
     restoration_failed=true
   elif [[ "${recovery_role}" == "primary" ]]; then
-    if [[ "${PREVIOUS_WORKER_RUNNING}" == "true" ]]; then
+    if [[ "${PREVIOUS_WORKER_RUNNING}" == "true" ]] && ! idle_worker_capacity_pending; then
       recovery_services+=" ${COMMUNICATIONS_WORKER_SERVICE}"
     fi
     if ! API_DEPLOY_SERVICES="${recovery_services}" \
@@ -516,7 +516,7 @@ reconcile_failed_deploy() {
     fi
   else
     recovery_services="app"
-    if [[ "${PREVIOUS_WORKER_RUNNING}" == "true" ]]; then
+    if [[ "${PREVIOUS_WORKER_RUNNING}" == "true" ]] && ! idle_worker_capacity_pending; then
       recovery_services+=" ${COMMUNICATIONS_WORKER_SERVICE}"
     fi
     if ! API_DEPLOY_SERVICES="${recovery_services}" \
@@ -531,6 +531,9 @@ reconcile_failed_deploy() {
   fi
   patroni_role_assets_cleanup_sources || restoration_failed=true
   shared_belzakupki_guard_restore || restoration_failed=true
+  if [[ "${restoration_failed}" == "false" ]]; then
+    idle_worker_capacity recover || restoration_failed=true
+  fi
   if [[ "${restoration_failed}" == "true" ]]; then
     communications_worker_set_release_fence || true
   elif ! patroni_communications_restore_release_fence; then
@@ -593,18 +596,11 @@ stage_candidate_compose
 require_pitr_attested_candidate
 CANDIDATE_CHECKSUM="$(cksum < "${CANDIDATE_FILE}")"
 trap shared_belzakupki_guard_cleanup_candidate_transaction EXIT
+idle_worker_capacity recover
 if [[ "${OPERATION}" == "migrate" ]]; then
-  shared_belzakupki_guard_prepare_with_signal_recovery
-  sync_bot_voice_env_locked
-  API_DEPLOY_LOCK_FD="${DEPLOY_LOCK_FD}" \
-    API_COMPOSE_FILE="$(basename "${CANDIDATE_FILE}")" bash "${MIGRATION_SCRIPT}"
-  shared_belzakupki_guard_restore
-  trap - EXIT
-  shared_belzakupki_guard_clear_signal_recovery
-  transaction cleanup
+  patroni_communications_migrate_candidate
   exit 0
 fi
-
 [[ -f "${DB_CONTRACT_HELPER}" && ! -L "${DB_CONTRACT_HELPER}" ]] || {
   echo "Patroni db contract helper is missing or unsafe: ${DB_CONTRACT_HELPER}" >&2
   exit 1
@@ -617,15 +613,17 @@ patroni_communications_capture_previous
 shared_belzakupki_guard_prepare_with_signal_recovery
 sync_bot_voice_env_locked
 patroni_role_assets_backup
+trap idle_worker_predeploy_cleanup EXIT
+trap 'exit 143' INT TERM
+idle_worker_capacity prepare deploy
 trap reconcile_failed_deploy EXIT
 transaction stage
 patroni_communications_detect_candidate_support
-
 patroni_role_assets_install
 capture_proxy_runtime_state
 stage_proxy_files
-
 API_COMPOSE_FILE="$(basename "${CANDIDATE_FILE}")" \
+  API_IDLE_WORKER_CAPACITY_GUARD="${IDLE_WORKER_CAPACITY_GUARD}" \
   API_DEPLOY_LOCK_FD="${DEPLOY_LOCK_FD}" \
   API_COMMUNICATIONS_WORKER_EXPECTED_PROFILE="${CANDIDATE_WORKER_GATE_PROFILE}" \
   API_COMMUNICATIONS_WORKER_ROLLBACK_PROFILE="${PREVIOUS_WORKER_GATE_PROFILE}" \
@@ -637,10 +635,12 @@ if [[ "${CANDIDATE_WORKER_SUPPORTED}" == "true" ]]; then
     "${CANDIDATE_FILE}" "${BACKEND_IMAGE}" "${CANDIDATE_WORKER_GATE_PROFILE}"
 fi
 transaction promote
+idle_worker_capacity promoted
 if [[ "${CANDIDATE_WORKER_SUPPORTED}" == "true" ]]; then
   patroni_communications_require_runtime \
     "${CANONICAL_FILE}" "${BACKEND_IMAGE}" "${CANDIDATE_WORKER_GATE_PROFILE}"
 fi
+idle_worker_capacity complete
 shared_belzakupki_guard_restore
 trap - EXIT
 shared_belzakupki_guard_clear_signal_recovery

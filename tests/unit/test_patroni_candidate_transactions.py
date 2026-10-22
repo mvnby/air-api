@@ -151,6 +151,8 @@ def _patroni_runner_env(
     discover_previous: bool = False,
 ) -> tuple[dict[str, str], Path]:
     project = _compose_pair(tmp_path)
+    capacity = tmp_path / "capacity.sh"
+    capacity.write_text("require_deploy_capacity() { return 0; }\n", encoding="utf-8")
     release_manifest = _write_release_manifest(tmp_path, project)
     if discover_previous:
         (project / ".active-api-slot").write_text("green\n", encoding="utf-8")
@@ -422,6 +424,7 @@ exit 0
         "BACKEND_IMAGE": CANDIDATE_IMAGE,
         "EXPECTED_CANDIDATE_IMAGE": CANDIDATE_IMAGE,
         "API_DEPLOY_LOCK_HELPER": str(DEPLOY_LOCK_HELPER),
+        "API_DEPLOY_CAPACITY_HELPER": str(capacity),
         "API_DEPLOY_LOCK_HELPER_SHA256": __import__("hashlib").sha256(
             DEPLOY_LOCK_HELPER.read_bytes()
         ).hexdigest(),

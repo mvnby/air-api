@@ -332,6 +332,49 @@ start, and latches it again on any failed start or verification. Rollback
 restores both the previous marker state and the previous worker running state;
 it never starts a worker that was already fenced.
 
+#### Idle worker capacity relief
+
+When the unchanged capacity preflight rejects a primary node, the ordinary
+candidate transaction may temporarily stop its idle communications worker before
+retrying that same gate. This is not a delivery drain or a profile change. It
+requires canonical and running canary gates `true/false`, API/worker immutable
+image parity, fresh primary proof, database mode `all`, a fresh `paused`
+heartbeat, and zero running deliveries across all channels. Active, stale, or
+inconclusive states abort the release. A healthy node with sufficient headroom
+does not enter this path; a previously fenced worker is never started by it.
+
+The host helper uses only Python's standard library and `psql` in the existing
+database container, without starting another application interpreter in the API
+cgroup. It locks only the Telegram control row while proving idle and stopping
+the worker, or checking the original revision immediately before a controlled
+start. Lock/statement timeouts are 2/5 seconds; the host lock window is bounded
+at 60 seconds with a 120-second server expiry if the host process dies. Runtime
+heartbeats and terminal status also update this row: the helper waits for the
+container to stop, never for a terminal heartbeat under its own row lock. The
+existing release fence can forcibly stop a worker, so this path deliberately
+rejects active delivery rather than promising graceful provider shutdown.
+
+Before changing the fence it atomically persists the original immutable image
+and control revision in the root-owned mode-`0600`
+`.ha-idle-worker-capacity.json`. Each migration/deployment owns its pause under
+the inherited deploy lock; no lock or pause is held across Actions jobs. Migration
+success/failure restores only the original worker. Deploy rollback restores the
+API first, then authorizes worker restoration separately; candidate startup also
+checks the original control revision under the row lock using candidate Compose.
+Changing the operator control prevents startup rather than enabling new delivery.
+
+Errors and `INT`/`TERM` run transaction recovery. A subsequent verified release
+recovers an interrupted journal before capturing new state, provided the primary,
+original image, and control revision still match. A promoted release, changed
+role/image/control, or timed-out worker start retains its journal and fence for
+inspection; it never automatically restores an old image after promotion. Command
+process groups are terminated before recovery on timeout/cancellation. Do not
+remove either recovery record or fence by hand, change gates, or lower capacity
+thresholds to bypass a refusal. Investigate the reported mismatch and use the
+reviewed recovery/release procedure.
+
+#### Node release verification
+
 After each node deploy, the verifier proves the canonical Compose file is a
 regular non-symlink, API/worker image parity, one reviewed gate profile with an
 exactly matching runtime profile, the expected runtime role, a stable active

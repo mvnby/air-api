@@ -137,13 +137,28 @@ fence_communications_worker() {
   "${COMPOSE[@]}" stop "${COMMUNICATIONS_WORKER_SERVICE}" >/dev/null
 }
 
+start_communications_worker() {
+  if [[ -e "${PROJECT_DIR}/.ha-idle-worker-capacity.json" \
+    || -L "${PROJECT_DIR}/.ha-idle-worker-capacity.json" ]]; then
+    [[ -n "${API_IDLE_WORKER_CAPACITY_GUARD:-}" \
+      && -f "${API_IDLE_WORKER_CAPACITY_GUARD}" \
+      && ! -L "${API_IDLE_WORKER_CAPACITY_GUARD}" ]] || {
+      log error "pending idle worker journal requires its verified startup guard"
+      return 1
+    }
+    python3 "${API_IDLE_WORKER_CAPACITY_GUARD}" start_candidate
+  else
+    communications_worker_start_controlled "${EXPECTED_ROLE}" "${worker_gate_profile}"
+  fi
+}
+
 deploy_communications_worker() {
   communications_worker_require_contract "${EXPECTED_COMMUNICATIONS_WORKER_PROFILE}"
   worker_gate_profile="${COMMUNICATIONS_WORKER_CONTRACT_PROFILE}"
   fence_communications_worker
   "${COMPOSE[@]}" pull "${COMMUNICATIONS_WORKER_SERVICE}"
   require_deploy_capacity
-  communications_worker_start_controlled "${EXPECTED_ROLE}" "${worker_gate_profile}"
+  start_communications_worker
 }
 
 wait_fenced_standby() {
@@ -215,7 +230,9 @@ rollback_standby() {
       refresh_standby_proxy_upstream
     fi
     if [[ "${worker_supported}" == "true" ]]; then
-      if require_expected_role; then
+      if require_expected_role \
+        && [[ ! -e "${PROJECT_DIR}/.ha-idle-worker-capacity.json" \
+          && ! -L "${PROJECT_DIR}/.ha-idle-worker-capacity.json" ]]; then
         communications_worker_start_controlled \
           "${EXPECTED_ROLE}" "${ROLLBACK_COMMUNICATIONS_WORKER_PROFILE}" || true
       fi
@@ -367,7 +384,7 @@ env_updated=true
 refresh_standby_proxy_upstream
 require_expected_role
 wait_fenced_standby
-communications_worker_start_controlled "${EXPECTED_ROLE}" "${worker_gate_profile}"
+start_communications_worker
 require_expected_role
 printf '%s\n' "${previous_image}" > "${PREVIOUS_IMAGE_FILE}"
 chmod 600 "${PREVIOUS_IMAGE_FILE}"
