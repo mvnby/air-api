@@ -75,5 +75,13 @@ async def test_editing_catalog_reuses_specs_without_excluding_components(db):
     assert compiled.count("CAST(product.specs AS JSONB)") == 1
     assert "AS MATERIALIZED" in compiled
     # A catalog request without technical filters does not need JSON parsing.
-    plain = CatalogManagementDAO.selection(db, CatalogManagementFilters())
-    assert "catalog_decision_specs" not in str(plain)
+    for search in (None, "Management", "Gree", "MSAG-24HRDN8"):
+        plain = CatalogManagementDAO.selection(db, CatalogManagementFilters(search=search))
+        assert "catalog_decision_specs" not in str(plain)
+    named = CatalogManagementDAO.selection(db, CatalogManagementFilters(search="Management"))
+    assert set((await db.execute(named)).scalars()) == {p.id for p in products}
+    # Bare BTU numbers and explicitly labelled kW still use technical matching.
+    for search in ("24", "7 кВт"):
+        technical = CatalogManagementDAO.selection(db, CatalogManagementFilters(search=search))
+        assert "catalog_decision_specs" in str(technical)
+        assert set((await db.execute(technical)).scalars()) == {p.id for p in products}
