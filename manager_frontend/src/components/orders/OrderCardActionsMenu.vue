@@ -14,6 +14,7 @@ import {
 const props = defineProps<{
   order: ManagerOrderListItemResponse;
   allowCloseDebt?: boolean;
+  disabled?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -51,6 +52,7 @@ const boardActions = computed(() => [
 ].filter(Boolean) as Array<{ value: string; label: string; icon: string }>);
 
 const selectStatus = (status: string) => {
+  if (props.disabled) return;
   menuOpen.value = false;
   emit('quickStatus', { orderId: props.order.id, status });
 };
@@ -64,11 +66,13 @@ const selectStageStatus = (status: string) => {
 };
 
 const cancelOrder = () => {
+  if (props.disabled) return;
   menuOpen.value = false;
   emit('cancelOrder', { orderId: props.order.id });
 };
 
 const closeDebt = () => {
+  if (props.disabled) return;
   menuOpen.value = false;
   emit('closeDebt', { orderId: props.order.id });
 };
@@ -99,6 +103,7 @@ onBeforeUnmount(() => {
   <div ref="menuRoot" class="relative">
     <button
       type="button"
+      :disabled="disabled"
       class="rounded-full p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-700 dark:hover:text-white"
       aria-label="Действия с заказом"
       @click.stop="menuOpen = !menuOpen"
@@ -117,6 +122,7 @@ onBeforeUnmount(() => {
           v-for="action in boardActions"
           :key="action.value"
           type="button"
+      :disabled="disabled"
           class="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left font-semibold text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700"
           @click="selectStatus(action.value)"
         >
@@ -132,6 +138,7 @@ onBeforeUnmount(() => {
         v-for="option in stageOptions"
         :key="option.value"
         type="button"
+      :disabled="disabled"
         class="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left font-semibold text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700"
         :class="(activeBoardColumn === 'execution' ? activeExecutionStatus : activeNegotiationStatus) === option.value ? 'bg-slate-50 dark:bg-slate-700' : ''"
         @click="selectStageStatus(option.value)"
@@ -147,6 +154,7 @@ onBeforeUnmount(() => {
         <div class="my-1 border-t border-slate-100 dark:border-slate-700" />
         <button
           type="button"
+      :disabled="disabled"
           class="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left font-semibold text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-500/10"
           @click="closeDebt"
         >
@@ -158,6 +166,7 @@ onBeforeUnmount(() => {
       <div class="my-1 border-t border-slate-100 dark:border-slate-700" />
       <button
         type="button"
+      :disabled="disabled"
         class="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left font-semibold text-rose-700 hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-500/10"
         @click="cancelOrder"
       >

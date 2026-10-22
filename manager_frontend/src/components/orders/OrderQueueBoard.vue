@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import type { ManagerOrderBoardPage } from '../../client';
 import type { Segment } from '../../api';
 import type { OrderBoardState } from '../../services/order-navigation';
@@ -14,6 +14,7 @@ import OrderCardB2C from './OrderCardB2C.vue';
 const props = defineProps<{
   phases: Record<string, string>; pages: Record<string, ManagerOrderBoardPage>; columns: string[];
   busy: Record<string, boolean>; errors: Record<string, string>;
+  disabled?: boolean; stale?: boolean;
   listMode?: boolean; sort?: string; selectedOrderIds?: number[]; customerAliases?: Record<number, string>;
   segment: Segment; movingOrderIds: number[]; compact: boolean; showQueue: boolean;
 }>();
@@ -44,8 +45,12 @@ const toggle = (column: string, key: string) => {
   if (expanded.value.includes(id)) expanded.value = expanded.value.filter(value => value !== id);
   else { expanded.value.push(id); if (!props.pages[id]) emit('more', column, key); }
 };
+watch(() => props.disabled, value => { if (value) drag.value = null; });
 const drop = (column: string) => {
-  if (drag.value) emit('move', { ...drag.value, newStatus: props.phases[column] ? column === 'execution' ? `execution:${props.phases[column]}` : props.phases[column]! : column });
+  if (drag.value && !props.disabled && !props.movingOrderIds.includes(drag.value.orderId)) {
+    const terminal = column === 'closed_lost' || column === 'closed_won';
+    emit('move', { ...drag.value, newStatus: !terminal && props.phases[column] ? column === 'execution' ? `execution:${props.phases[column]}` : props.phases[column]! : column });
+  }
   drag.value = null;
 };
 defineExpose({
@@ -74,11 +79,15 @@ defineExpose({
         <option v-for="column in columns" :key="column" :value="column">{{ labels[column] }}</option>
       </select>
     </label>
+    <div v-if="drag && !disabled" class="mb-2 flex shrink-0 gap-2" aria-label="Завершение заказа">
+      <div data-drop-status="closed_lost" class="flex-1 rounded-lg border-2 border-dashed border-rose-300 bg-rose-50 p-3 text-center text-sm font-semibold text-rose-800 dark:bg-rose-950 dark:text-rose-200" @dragover.prevent @drop.stop.prevent="drop('closed_lost')">Отказ</div>
+      <div data-drop-status="closed_won" class="flex-1 rounded-lg border-2 border-dashed border-emerald-300 bg-emerald-50 p-3 text-center text-sm font-semibold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200" @dragover.prevent @drop.stop.prevent="drop('closed_won')">Завершить успешно</div>
+    </div>
     <div class="queue-columns" :class="{ 'queue-columns-board': isBoard }">
       <section v-for="column in columns" :key="column" class="queue-column rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800"
         :class="{ 'mobile-inactive': isBoard && mobileColumn !== column }" @dragover.prevent @drop.prevent="drop(column)">
         <header class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b p-3 font-semibold dark:border-slate-700">
-          <h2>{{ labels[column] }} <span v-if="pages[column]" class="text-sm tabular-nums">{{ pages[column].total_orders }}</span></h2>
+          <h2>{{ labels[column] }} <span v-if="pages[column] && !stale" class="text-sm tabular-nums">{{ pages[column].total_orders }}</span></h2>
           <select v-if="column" :value="phases[column] || ''" :aria-label="`Подэтап: ${labels[column]}`" class="max-w-[180px] rounded border bg-white p-1 text-sm dark:bg-slate-800" @change="emit('phase', column, ($event.target as HTMLSelectElement).value)">
             <option value="">Все подэтапы</option>
             <option v-for="option in column === 'negotiation' ? NEGOTIATION_STATUS_OPTIONS : EXECUTION_STATUS_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
@@ -90,36 +99,36 @@ defineExpose({
           <template v-if="pages[column]">
             <template v-for="group in pages[column].groups" :key="`${column}/${group.key}`">
               <template v-if="group.count === 1 && pages[column].items?.some(order => order.id === group.order_id)">
-                <OrdersListTable v-if="listMode" :items="(pages[column].items || []).filter(order => order.id === group.order_id).map(order => ({ type: 'order' as const, order }))" :segment="segment" :sort="sort" :selected-order-ids="selectedOrderIds" :show-queue="showQueue" @open="emit('open', $event)" @generate="emit('generate', $event)" @rename-order="emit('renameOrder', $event)" @update:sort="emit('update:sort', $event)" @toggle-select="emit('toggleSelect', $event)" />
+                <OrdersListTable v-if="listMode" :items="(pages[column].items || []).filter(order => order.id === group.order_id).map(order => ({ type: 'order' as const, order }))" :segment="segment" :sort="sort" :selected-order-ids="selectedOrderIds" :show-queue="showQueue" :pending-order-ids="movingOrderIds" :disabled="disabled" @open="emit('open', $event)" @generate="emit('generate', $event)" @rename-order="emit('renameOrder', $event)" @update:sort="emit('update:sort', $event)" @toggle-select="emit('toggleSelect', $event)" />
                 <template v-for="order in listMode ? [] : (pages[column].items || []).filter(order => order.id === group.order_id)" :key="order.id">
-                  <component :is="getOrderSegment(order) === 'b2b' ? OrderCardB2B : OrderCardB2C" :order="order" :expanded="expandedOrder === order.id" :draggable-disabled="movingOrderIds.includes(order.id)"
-                    @open="emit('open', $event)" @toggle-expanded="expandedOrder = expandedOrder === $event ? null : $event" @generate="emit('generate', $event)" @quick-status="emit('move', { orderId: $event.orderId, oldStatus: order.status, newStatus: $event.status })" @cancel-order="emit('cancelOrder', $event)" @close-debt="emit('closeDebt', $event)" @rename-order="emit('renameOrder', $event)" @drag-start="drag = $event" @waiting="emit('waiting', $event)" />
+                  <component :is="getOrderSegment(order) === 'b2b' ? OrderCardB2B : OrderCardB2C" :order="order" :expanded="expandedOrder === order.id" :draggable-disabled="disabled || movingOrderIds.includes(order.id)" :pending="movingOrderIds.includes(order.id)"
+                    @open="emit('open', $event)" @toggle-expanded="expandedOrder = expandedOrder === $event ? null : $event" @generate="emit('generate', $event)" @quick-status="emit('move', { orderId: $event.orderId, oldStatus: order.status, newStatus: $event.status })" @cancel-order="emit('cancelOrder', $event)" @close-debt="emit('closeDebt', $event)" @rename-order="emit('renameOrder', $event)" @drag-start="drag = $event" @drag-end="drag = null" @waiting="emit('waiting', $event)" />
                   <p v-if="order.is_on_hold && order.status !== 'closed'" class="text-xs text-amber-800 dark:text-amber-300">Ожидание: {{ waitingDescription(order) }}<template v-if="order.installation_date"> · Выезд {{ formatDate(order.installation_date) }}</template></p>
                 </template>
               </template>
             <article v-else class="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-600 dark:bg-slate-900">
               <button type="button" class="w-full text-left" :aria-expanded="expanded.includes(`${column}/${group.key}`)" @click="toggle(column, group.key)">
                 <strong class="block break-words">{{ group.customer_id && customerAliases?.[group.customer_id] || group.customer_name }}</strong>
-                <span class="text-xs">{{ group.count }} заказов · Сумма {{ formatMoney(group.total_amount) }} · Остаток {{ formatMoney(group.balance_due) }}<template v-if="group.margin != null"> · Маржа {{ formatMoney(group.margin) }}</template></span>
+                <span v-if="!stale" class="text-xs">{{ group.count }} заказов · Сумма {{ formatMoney(group.total_amount) }} · Остаток {{ formatMoney(group.balance_due) }}<template v-if="group.margin != null"> · Маржа {{ formatMoney(group.margin) }}</template></span>
                 <span class="mt-1 block text-xs text-brand-700">{{ expanded.includes(`${column}/${group.key}`) ? 'Свернуть' : 'Показать заказы' }}</span>
               </button>
               <button v-if="group.customer_id" type="button" class="mt-1 text-xs text-slate-500 underline" @click="renameGroup(group.customer_id, group.customer_name)">Переименовать группу</button>
               <div v-if="expanded.includes(`${column}/${group.key}`)" class="mt-3 space-y-2">
-                <OrdersListTable v-if="listMode && pages[`${column}/${group.key}`]?.items?.length" :items="(pages[`${column}/${group.key}`]?.items || []).map(order => ({ type: 'order' as const, order }))" :segment="segment" :sort="sort" :selected-order-ids="selectedOrderIds" :show-queue="showQueue" @open="emit('open', $event)" @generate="emit('generate', $event)" @rename-order="emit('renameOrder', $event)" @update:sort="emit('update:sort', $event)" @toggle-select="emit('toggleSelect', $event)" @toggle-select-many="emit('toggleSelectMany', $event)" />
+                <OrdersListTable v-if="listMode && pages[`${column}/${group.key}`]?.items?.length" :items="(pages[`${column}/${group.key}`]?.items || []).map(order => ({ type: 'order' as const, order }))" :segment="segment" :sort="sort" :selected-order-ids="selectedOrderIds" :show-queue="showQueue" :pending-order-ids="movingOrderIds" :disabled="disabled" @open="emit('open', $event)" @generate="emit('generate', $event)" @rename-order="emit('renameOrder', $event)" @update:sort="emit('update:sort', $event)" @toggle-select="emit('toggleSelect', $event)" @toggle-select-many="emit('toggleSelectMany', $event)" />
                 <div v-for="order in listMode ? [] : pages[`${column}/${group.key}`]?.items || []" :key="order.id">
                   <label v-if="listMode" class="flex items-center gap-2 text-xs"><input type="checkbox" :aria-label="`Выбрать заказ ${order.id}`" :checked="selectedOrderIds?.includes(order.id)" @change="emit('toggleSelect', { orderId: order.id, selected: ($event.target as HTMLInputElement).checked })" /> #{{ order.id }}</label>
                   <p v-if="showQueue" class="text-xs text-slate-500">{{ orderQueueLabel(order) }}</p>
-                  <component :is="getOrderSegment(order) === 'b2b' ? OrderCardB2B : OrderCardB2C" :order="order" :expanded="expandedOrder === order.id" :draggable-disabled="movingOrderIds.includes(order.id)"
-                    @open="emit('open', $event)" @toggle-expanded="expandedOrder = expandedOrder === $event ? null : $event" @generate="emit('generate', $event)" @quick-status="emit('move', { orderId: $event.orderId, oldStatus: order.status, newStatus: $event.status })" @cancel-order="emit('cancelOrder', $event)" @close-debt="emit('closeDebt', $event)" @rename-order="emit('renameOrder', $event)" @drag-start="drag = $event" @waiting="emit('waiting', $event)" />
+                  <component :is="getOrderSegment(order) === 'b2b' ? OrderCardB2B : OrderCardB2C" :order="order" :expanded="expandedOrder === order.id" :draggable-disabled="disabled || movingOrderIds.includes(order.id)" :pending="movingOrderIds.includes(order.id)"
+                    @open="emit('open', $event)" @toggle-expanded="expandedOrder = expandedOrder === $event ? null : $event" @generate="emit('generate', $event)" @quick-status="emit('move', { orderId: $event.orderId, oldStatus: order.status, newStatus: $event.status })" @cancel-order="emit('cancelOrder', $event)" @close-debt="emit('closeDebt', $event)" @rename-order="emit('renameOrder', $event)" @drag-start="drag = $event" @drag-end="drag = null" @waiting="emit('waiting', $event)" />
                   <p v-if="order.is_on_hold && order.status !== 'closed'" class="mt-1 text-xs text-amber-800 dark:text-amber-300">Ожидание: {{ waitingDescription(order) }}<template v-if="order.installation_date"> · Выезд {{ formatDate(order.installation_date) }}</template></p>
                 </div>
                 <p v-if="errors[`${column}/${group.key}`]" role="alert" class="text-sm text-red-700">{{ errors[`${column}/${group.key}`] }}</p>
-                <p class="text-xs text-slate-500">Загружено {{ pages[`${column}/${group.key}`]?.items?.length || 0 }} из {{ group.count }}. Итоги выше — по всей группе.</p>
+                <p v-if="!stale" class="text-xs text-slate-500">Загружено {{ pages[`${column}/${group.key}`]?.items?.length || 0 }} из {{ group.count }}. Итоги выше — по всей группе.</p>
                 <button v-if="!pages[`${column}/${group.key}`] || pages[`${column}/${group.key}`]?.has_more" type="button" class="rounded border px-3 py-2 text-sm" :disabled="busy[`${column}/${group.key}`]" @click="emit('more', column, group.key)">{{ busy[`${column}/${group.key}`] ? 'Загрузка…' : errors[`${column}/${group.key}`] ? 'Повторить' : 'Ещё заказы' }}</button>
               </div>
             </article>
             </template>
-            <OrdersListTable v-if="listMode && !compact && !pages[column].groups?.length && pages[column].items?.length" :items="(pages[column].items || []).map(order => ({ type: 'order' as const, order }))" :segment="segment" :sort="sort" :selected-order-ids="selectedOrderIds" :show-queue="showQueue" @open="emit('open', $event)" @generate="emit('generate', $event)" @rename-order="emit('renameOrder', $event)" @update:sort="emit('update:sort', $event)" @toggle-select="emit('toggleSelect', $event)" @toggle-select-many="emit('toggleSelectMany', $event)" />
+            <OrdersListTable v-if="listMode && !compact && !pages[column].groups?.length && pages[column].items?.length" :items="(pages[column].items || []).map(order => ({ type: 'order' as const, order }))" :segment="segment" :sort="sort" :selected-order-ids="selectedOrderIds" :show-queue="showQueue" :pending-order-ids="movingOrderIds" :disabled="disabled" @open="emit('open', $event)" @generate="emit('generate', $event)" @rename-order="emit('renameOrder', $event)" @update:sort="emit('update:sort', $event)" @toggle-select="emit('toggleSelect', $event)" @toggle-select-many="emit('toggleSelectMany', $event)" />
             <div v-for="order in pages[column].groups?.length || listMode && !compact ? [] : pages[column].items" :key="order.id">
               <label v-if="listMode" class="flex items-center gap-2 text-xs"><input type="checkbox" :aria-label="`Выбрать заказ ${order.id}`" :checked="selectedOrderIds?.includes(order.id)" @change="emit('toggleSelect', { orderId: order.id, selected: ($event.target as HTMLInputElement).checked })" /> Выбрать</label>
               <p v-if="showQueue" class="mb-1 text-xs text-slate-500">{{ orderQueueLabel(order) }}</p>
@@ -130,8 +139,8 @@ defineExpose({
                 <span>{{ formatMoney(order.total_amount) }}</span>
               </button>
               <template v-else>
-                <component :is="getOrderSegment(order) === 'b2b' ? OrderCardB2B : OrderCardB2C" :order="order" :expanded="expandedOrder === order.id" :draggable-disabled="movingOrderIds.includes(order.id)"
-                  @open="emit('open', $event)" @toggle-expanded="expandedOrder = expandedOrder === $event ? null : $event" @generate="emit('generate', $event)" @quick-status="emit('move', { orderId: $event.orderId, oldStatus: order.status, newStatus: $event.status })" @cancel-order="emit('cancelOrder', $event)" @close-debt="emit('closeDebt', $event)" @rename-order="emit('renameOrder', $event)" @drag-start="drag = $event" @waiting="emit('waiting', $event)" />
+                <component :is="getOrderSegment(order) === 'b2b' ? OrderCardB2B : OrderCardB2C" :order="order" :expanded="expandedOrder === order.id" :draggable-disabled="disabled || movingOrderIds.includes(order.id)" :pending="movingOrderIds.includes(order.id)"
+                  @open="emit('open', $event)" @toggle-expanded="expandedOrder = expandedOrder === $event ? null : $event" @generate="emit('generate', $event)" @quick-status="emit('move', { orderId: $event.orderId, oldStatus: order.status, newStatus: $event.status })" @cancel-order="emit('cancelOrder', $event)" @close-debt="emit('closeDebt', $event)" @rename-order="emit('renameOrder', $event)" @drag-start="drag = $event" @drag-end="drag = null" @waiting="emit('waiting', $event)" />
                 <p v-if="order.is_on_hold && order.status !== 'closed'" class="mt-1 text-xs text-amber-800 dark:text-amber-300">Ожидание: {{ waitingDescription(order) }}<template v-if="order.installation_date"> · Выезд {{ formatDate(order.installation_date) }}</template></p>
               </template>
             </div>

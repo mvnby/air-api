@@ -9,6 +9,8 @@ import { useDemoReadOnly } from '../../services/manager-demo';
 
 const props = defineProps<{
   items: OrderRenderItem[];
+  pendingOrderIds?: number[];
+  disabled?: boolean;
   segment: Segment;
   sort?: string;
   showQueue?: boolean;
@@ -132,7 +134,7 @@ const isGroupSelected = (item: OrderRenderItem) => {
             <OrderListRow
               v-for="order in expandedGroupIds.includes(item.group.id) ? item.group.orders : []"
               :key="`group-${item.group.id}-order-${order.id}`"
-              :order="order" :show-queue="showQueue"
+              :order="order" :disabled="disabled || pendingOrderIds?.includes(order.id)" :show-queue="showQueue"
               :segment="segment"
               nested
               selectable
@@ -145,7 +147,7 @@ const isGroupSelected = (item: OrderRenderItem) => {
           </template>
           <OrderListRow
             v-else
-            :order="item.order" :show-queue="showQueue"
+            :order="item.order" :disabled="disabled || pendingOrderIds?.includes(item.order.id)" :show-queue="showQueue"
             :segment="segment"
             selectable
             :selected="selectedSet.has(item.order.id)"

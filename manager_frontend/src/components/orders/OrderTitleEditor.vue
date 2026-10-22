@@ -4,6 +4,7 @@ import { Check, X } from 'lucide-vue-next';
 
 const props = defineProps<{
   orderId: number;
+  disabled?: boolean;
   title?: string | null;
   fallbackTitle: string;
   textClass?: string;
@@ -29,11 +30,13 @@ watch(
 );
 
 const startEditing = () => {
+  if (props.disabled) return;
   editing.value = true;
   draft.value = savedTitle.value || props.fallbackTitle;
 };
 
 const saveTitle = () => {
+  if (!editing.value || props.disabled) return;
   const trimmed = draft.value.trim();
   emit('rename', { orderId: props.orderId, title: trimmed || null });
   editing.value = false;
@@ -50,6 +53,7 @@ const cancelEditing = () => {
     <div v-if="editing" class="flex min-w-0 items-center gap-1">
       <input
         v-model="draft"
+        :disabled="disabled"
         class="min-w-0 flex-1 rounded-lg border border-brand-200 bg-white px-2 py-1 text-sm font-semibold text-slate-900 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
         :class="inputClass"
         :placeholder="fallbackTitle"
@@ -58,10 +62,10 @@ const cancelEditing = () => {
         @keydown.enter.prevent="saveTitle"
         @keydown.esc.prevent="cancelEditing"
       />
-      <button type="button" class="rounded-full p-1 text-brand-700 hover:bg-brand-50 dark:text-brand-300 dark:hover:bg-brand-500/10" @mousedown.prevent @click.stop="saveTitle">
+      <button :disabled="disabled" type="button" class="rounded-full p-1 text-brand-700 hover:bg-brand-50 dark:text-brand-300 dark:hover:bg-brand-500/10" @mousedown.prevent @click.stop="saveTitle">
         <Check class="h-3.5 w-3.5" />
       </button>
-      <button type="button" class="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-white" @mousedown.prevent @click.stop="cancelEditing">
+      <button :disabled="disabled" type="button" class="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-white" @mousedown.prevent @click.stop="cancelEditing">
         <X class="h-3.5 w-3.5" />
       </button>
     </div>
@@ -69,7 +73,7 @@ const cancelEditing = () => {
       v-else
       class="font-semibold text-gray-900 dark:text-white"
       :class="[multiline ? 'line-clamp-2' : 'truncate', textClass]"
-      :title="`${displayTitle}. Двойной клик — переименовать заказ`"
+      :title="disabled ? displayTitle : `${displayTitle}. Двойной клик — переименовать заказ`"
       @dblclick.stop="startEditing"
     >
       {{ displayTitle }}

@@ -8,6 +8,7 @@ type AsyncDialogAction = (value?: string) => void | Promise<void>;
 
 export type ConfirmDialogOptions = {
   title: string;
+  signal?: AbortSignal;
   description?: string;
   confirmText?: string;
   cancelText?: string;
@@ -31,6 +32,7 @@ type DialogRequest = {
   kind: 'confirm' | 'prompt' | 'message';
   options: ConfirmDialogOptions | PromptDialogOptions;
   resolve: (value: boolean | string | null) => void;
+  cleanup?: () => void;
 };
 
 export type DialogState = {
@@ -104,7 +106,19 @@ const requestDialog = <T extends boolean | string | null>(
   kind: DialogRequest['kind'],
   options: ConfirmDialogOptions | PromptDialogOptions,
 ) => new Promise<T>((resolve) => {
-  queue.push({ kind, options, resolve: resolve as DialogRequest['resolve'] });
+  const request: DialogRequest = { kind, options, resolve: resolve as DialogRequest['resolve'] };
+  const cancel = () => {
+    if (activeRequest === request) finish(kind === 'prompt' ? null : false);
+    else {
+      const index = queue.indexOf(request);
+      if (index >= 0) queue.splice(index, 1);
+      request.cleanup?.(); request.resolve(kind === 'prompt' ? null : false);
+    }
+  };
+  if (options.signal?.aborted) { request.resolve(kind === 'prompt' ? null : false); return; }
+  options.signal?.addEventListener('abort', cancel, { once: true });
+  request.cleanup = () => options.signal?.removeEventListener('abort', cancel);
+  queue.push(request);
   presentNext();
 });
 
@@ -132,6 +146,7 @@ const finish = (value: boolean | string | null) => {
   if (!request) return;
   state.open = false;
   activeRequest = null;
+  request.cleanup?.();
   request.resolve(value);
   globalThis.setTimeout(presentNext, 0);
 };
@@ -148,7 +163,8 @@ export const setDialogInput = (value: string) => {
 
 export const submitActiveDialog = async () => {
   if (!activeRequest || state.loading) return;
-  const options = activeRequest.options as PromptDialogOptions;
+  const request = activeRequest;
+  const options = request.options as PromptDialogOptions;
   const value = state.inputValue.trim();
   if (activeRequest.kind === 'prompt') {
     const validationError = options.validate?.(value)
@@ -162,9 +178,10 @@ export const submitActiveDialog = async () => {
   state.loading = true;
   state.error = '';
   try {
-    await options.onConfirm?.(activeRequest.kind === 'prompt' ? value : undefined);
-    finish(activeRequest.kind === 'prompt' ? value : true);
+    await options.onConfirm?.(request.kind === 'prompt' ? value : undefined);
+    if (activeRequest === request) finish(request.kind === 'prompt' ? value : true);
   } catch (error) {
+    if (activeRequest !== request) return;
     state.error = options.getErrorMessage?.(error) || 'Не удалось выполнить действие. Попробуйте ещё раз.';
     state.loading = false;
   }
@@ -174,6 +191,8 @@ export const uiDialogState = readonly(state);
 export const uiNotifications = readonly(notifications);
 
 export const resetUiFeedbackForTests = () => {
+  activeRequest?.cleanup?.();
+  queue.forEach(request => request.cleanup?.());
   queue.splice(0);
   activeRequest = null;
   Object.assign(state, { open: false, loading: false, error: '', inputValue: '' });

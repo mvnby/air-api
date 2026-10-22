@@ -15,6 +15,7 @@ const props = defineProps<{
   order: ManagerOrderListItemResponse & OrderResponsibilityFields;
   expanded: boolean;
   draggableDisabled?: boolean;
+  pending?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -24,6 +25,7 @@ const emit = defineEmits<{
   cancelOrder: [payload: { orderId: number }];
   quickStatus: [payload: { orderId: number; status: string }];
   closeDebt: [payload: { orderId: number }];
+  dragEnd: [];
   dragStart: [payload: { orderId: number; oldStatus: string }];
   toggleExpanded: [orderId: number];
   renameOrder: [payload: { orderId: number; title: string | null }];
@@ -32,12 +34,15 @@ const emit = defineEmits<{
 const isDragging = ref(false);
 const demoReadOnly = useDemoReadOnly();
 
-const onDragStart = () => {
+const onDragStart = (event: DragEvent) => {
+  if (props.draggableDisabled) { event.preventDefault(); return; }
+  event.dataTransfer?.setData('text/plain', String(props.order.id));
   isDragging.value = true;
   emit('dragStart', { orderId: props.order.id, oldStatus: getOrderBoardColumn(props.order) });
 };
 
 const onDragEnd = () => {
+  emit('dragEnd');
   window.setTimeout(() => {
     isDragging.value = false;
   }, 0);
@@ -121,6 +126,7 @@ const paymentSummary = computed(() => {
       isOverdue(order) ? 'ring-2 ring-red-500/60' : '',
     ]"
     :draggable="!draggableDisabled"
+    :aria-busy="pending"
     @click="onCardClick"
     @dragstart="onDragStart"
     @dragend="onDragEnd"
@@ -132,7 +138,7 @@ const paymentSummary = computed(() => {
       </div>
       <div class="flex min-w-0 items-start gap-1">
         <div class="min-w-0 flex-1">
-          <OrderTitleEditor
+          <OrderTitleEditor :disabled="draggableDisabled"
             class="min-w-0"
             :order-id="order.id"
             :title="order.title"
@@ -144,7 +150,7 @@ const paymentSummary = computed(() => {
           <p v-if="objectLine" class="mt-1 line-clamp-2 text-xs leading-4 text-gray-500 dark:text-slate-400">{{ objectLine }}</p>
         </div>
         <div class="relative flex shrink-0 items-center gap-0.5">
-          <OrderCardActionsMenu
+          <OrderCardActionsMenu :disabled="draggableDisabled"
             :order="order"
             allow-close-debt
             @cancel-order="(payload) => emit('cancelOrder', payload)"
@@ -224,6 +230,6 @@ const paymentSummary = computed(() => {
         </footer>
       </section>
     </Transition>
-    <button v-if="order.status !== 'closed' && !demoReadOnly" type="button" class="mt-2 min-h-9 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-brand-700 disabled:opacity-50 dark:border-slate-600 dark:text-brand-300" :disabled="draggableDisabled" @click.stop="emit('waiting', order.id)">{{ order.is_on_hold ? 'Вернуть в работу' : 'В ожидание' }}</button>
+    <button v-if="order.status !== 'closed' && !demoReadOnly" type="button" class="mt-2 min-h-9 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-brand-700 disabled:opacity-50 dark:border-slate-600 dark:text-brand-300" :disabled="draggableDisabled" @click.stop="emit('waiting', order.id)"><span v-if="pending" class="mr-1 inline-block animate-spin" aria-hidden="true">◌</span>{{ order.is_on_hold ? 'Вернуть в работу' : 'В ожидание' }}<span v-if="pending" class="sr-only" role="status"> · Сохранение…</span></button>
   </article>
 </template>

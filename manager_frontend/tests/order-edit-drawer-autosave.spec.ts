@@ -1121,6 +1121,31 @@ describe('waiting save barrier', () => {
     expect(dialog.props('error')).toContain('Оплата изменена');
     expect(header().props('dirty')).toBe(true);
   });
+  it('invalidates an open waiting draft when the drawer switches order or closes', async () => {
+    await mountDrawer('page', false, false);
+    header().vm.$emit('hold'); await flushPromises();
+    expect(wrapper.getComponent(OrderWaitingDialog).props('order')).toMatchObject({ id: 395 });
+    await wrapper.setProps({ order: { ...stored, id: 396 } }); await flushPromises();
+    expect(wrapper.getComponent(OrderWaitingDialog).props('order')).toBeNull();
+    header().vm.$emit('hold'); await flushPromises();
+    expect(wrapper.getComponent(OrderWaitingDialog).props('order')).toMatchObject({ id: 396 });
+    await wrapper.setProps({ modelValue: false }); await flushPromises();
+    expect(wrapper.getComponent(OrderWaitingDialog).props('order')).toBeNull();
+  });
+  it('ignores an old waiting command result after switching the open order', async () => {
+    let resolve!: (order: ManagerOrderDetailResponse) => void;
+    const pending = new Promise<ManagerOrderDetailResponse>(done => { resolve = done; });
+    vi.spyOn(orderWaitingApi, 'command').mockReturnValue(pending);
+    await mountDrawer('page', false, false);
+    header().vm.$emit('hold'); await flushPromises();
+    wrapper.getComponent(OrderWaitingDialog).vm.$emit('submit', { reason_code: 'next_stage' }); await flushPromises();
+    await wrapper.setProps({ order: { ...stored, id: 396, title: 'Новый заказ' } }); await flushPromises();
+    resolve({ ...stored, is_on_hold: true }); await flushPromises();
+    expect(wrapper.props('order').id).toBe(396);
+    expect(header().props('title')).toBe('Новый заказ');
+    expect(wrapper.text()).not.toContain('Заказ в ожидании');
+    expect(wrapper.getComponent(OrderWaitingDialog).props('order')).toBeNull();
+  });
   it('never sends a hold command or opens its dialog after failed autosave', async () => {
     vi.mocked(ManagerOrdersService.patchManagerOrder).mockRejectedValue(new Error('Save offline'));
     const command = vi.spyOn(orderWaitingApi, 'command');
