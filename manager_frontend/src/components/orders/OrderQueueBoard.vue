@@ -3,9 +3,10 @@ import { computed, nextTick, ref, watch } from 'vue';
 import type { ManagerOrderBoardPage } from '../../client';
 import type { Segment } from '../../api';
 import type { OrderBoardState } from '../../services/order-navigation';
+import { useOrderColumnSwipe } from '../../composables/useOrderColumnSwipe';
 import { waitingDescription } from '../../services/order-waiting';
 import { orderQueueLabel } from '../../services/order-board';
-import { formatDate, formatMoney, NEGOTIATION_STATUS_OPTIONS, EXECUTION_STATUS_OPTIONS, getOrderSegment } from './order-utils';
+import { formatDate, formatMoney, getOrderSegment } from './order-utils';
 import OrdersListTable from './OrdersListTable.vue';
 import { promptDialog } from '../../services/ui-feedback';
 import OrderCardB2B from './OrderCardB2B.vue';
@@ -22,17 +23,18 @@ const emit = defineEmits<{
   'update:sort': [sort: string]; toggleSelect: [payload: { orderId: number; selected: boolean }];
   toggleSelectMany: [payload: { orderIds: number[]; selected: boolean }];
   renameCustomer: [payload: { customerId: number; alias: string | null }];
-  waiting: [orderId: number];
+  waiting: [orderId: number]; interact: [];
   open: [id: number]; generate: [payload: { orderId: number; docType: string }];
   move: [payload: { orderId: number; oldStatus: string; newStatus: string }];
   cancelOrder: [payload: { orderId: number }]; closeDebt: [payload: { orderId: number }];
   renameOrder: [payload: { orderId: number; title: string | null }];
-  more: [column: string, group?: string]; phase: [column: string, phase: string];
+  more: [column: string, group?: string];
 }>();
 const expanded = ref<string[]>([]);
 const expandedOrder = ref<number | null>(null);
 const mobileColumn = ref('negotiation');
-const scrollers = new Map<string, HTMLElement>();
+const workspace = ref<HTMLElement | null>(null);
+const mobileScrollTops = ref<Record<string, number>>({});
 const renameGroup = async (id: number, name: string) => {
   const alias = await promptDialog({ title: 'Название группы', inputLabel: 'Локальное название', initialValue: props.customerAliases?.[id] || name });
   if (alias !== null) emit('renameCustomer', { customerId: id, alias: alias.trim() || null });
@@ -40,6 +42,30 @@ const renameGroup = async (id: number, name: string) => {
 const labels: Record<string, string> = { negotiation: 'Переговоры', execution: 'Работы', '': 'Заказы' };
 const drag = ref<{ orderId: number; oldStatus: string } | null>(null);
 const isBoard = computed(() => props.columns.length > 1);
+const touchColumns = () => window.innerWidth < 768 && isBoard.value && !props.listMode && !props.compact;
+const selectColumn = async (column: string, focus = false) => {
+  if (column === mobileColumn.value || !props.columns.includes(column)) return;
+  const pageTop = window.scrollY;
+  mobileScrollTops.value[mobileColumn.value] = pageTop;
+  mobileColumn.value = column;
+  emit('interact');
+  await nextTick();
+  if (window.innerWidth < 768) {
+    const header = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--kitlane-header-height')) || 72;
+    const boardTop = Math.max(0, (workspace.value?.getBoundingClientRect().top || 0) + window.scrollY - header);
+    window.scrollTo(0, mobileScrollTops.value[column] ?? Math.min(pageTop, boardTop));
+  }
+  if (focus) workspace.value?.querySelector<HTMLButtonElement>(`#order-column-tab-${column}`)?.focus({ preventScroll: true });
+};
+const stepColumn = (direction: number, focus = false) => {
+  const index = Math.max(0, Math.min(props.columns.length - 1, props.columns.indexOf(mobileColumn.value) + direction));
+  void selectColumn(props.columns[index]!, focus);
+};
+const columnKey = (event: KeyboardEvent) => {
+  if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); stepColumn(event.key === 'ArrowRight' ? 1 : -1, true); }
+  else if (event.key === 'Home' || event.key === 'End') { event.preventDefault(); void selectColumn(props.columns[event.key === 'Home' ? 0 : props.columns.length - 1]!, true); }
+};
+const swipe = useOrderColumnSwipe(touchColumns, direction => stepColumn(direction));
 const toggle = (column: string, key: string) => {
   const id = `${column}/${key}`;
   if (expanded.value.includes(id)) expanded.value = expanded.value.filter(value => value !== id);
@@ -55,45 +81,40 @@ const drop = (column: string) => {
 };
 defineExpose({
   captureState: (): OrderBoardState => ({ expandedOrderId: expandedOrder.value, expandedGroupIds: [...expanded.value], columnFilters: { ...props.phases }, scrollLeft: 0,
-    columnScrollTops: Object.fromEntries([...scrollers].map(([key, element]) => [key, element.scrollTop])),
+    mobileScrollTops: { ...mobileScrollTops.value, ...(window.innerWidth < 768 ? { [mobileColumn.value]: window.scrollY } : {}) },
     loadedPages: Object.fromEntries(Object.entries(props.pages).map(([key, value]) => [key, value.page])), mobileColumn: mobileColumn.value }),
   restoreState: async (state: OrderBoardState) => {
     expandedOrder.value = state.expandedOrderId;
     expanded.value = [...state.expandedGroupIds];
     mobileColumn.value = state.mobileColumn || 'negotiation';
+    mobileScrollTops.value = { ...state.mobileScrollTops };
     await nextTick();
-    for (const [key, top] of Object.entries(state.columnScrollTops || {})) {
-      const element = scrollers.get(key); if (element) element.scrollTop = top;
-    }
   },
 });
 </script>
 
 <template>
-  <div class="queue-workspace">
+  <div ref="workspace" class="queue-workspace" :class="{ 'touch-columns': isBoard && !listMode && !compact }" @pointerdown="swipe.down" @pointermove="swipe.move" @pointerup="swipe.up" @pointercancel="swipe.cancel" @click.capture="swipe.click">
     <label v-if="listMode && Object.values(pages).some(page => page.groups?.length)" class="mb-2 text-sm">Сортировка
       <select :value="sort" aria-label="Сортировка заказов" class="rounded border bg-white p-2 dark:bg-slate-800" @change="emit('update:sort', ($event.target as HTMLSelectElement).value)"><option value="created_at_desc">Сначала новые</option><option value="created_at_asc">Сначала старые</option><option value="followup_asc">Ближайший контакт</option><option value="margin_desc">По марже</option></select>
     </label>
-    <label v-if="isBoard" class="mb-2 flex items-center gap-2 text-sm md:hidden">Колонка
-      <select v-model="mobileColumn" aria-label="Колонка доски" class="rounded border bg-white p-2 dark:bg-slate-800">
-        <option v-for="column in columns" :key="column" :value="column">{{ labels[column] }}</option>
-      </select>
-    </label>
+    <nav v-if="isBoard" data-column-swipe-zone class="mobile-column-tabs" role="tablist" aria-label="Колонки заказов">
+      <button v-for="column in columns" :id="`order-column-tab-${column}`" :key="column" type="button" role="tab" :aria-controls="`order-column-panel-${column}`" :aria-selected="mobileColumn === column" :tabindex="mobileColumn === column ? 0 : -1" class="min-h-8 shrink-0 rounded-lg px-3 text-sm font-semibold" :class="mobileColumn === column ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-300'" @click="selectColumn(column)" @keydown="columnKey">
+        {{ labels[column] }} <span v-if="pages[column] && !stale" class="tabular-nums">{{ pages[column].total_orders }}</span>
+      </button>
+      <span class="column-swipe-hint min-w-8 flex-1 self-stretch text-center text-lg text-slate-400" aria-hidden="true" title="Смахните по свободной части шапки">↔</span>
+    </nav>
     <div v-if="drag && !disabled" class="mb-2 flex shrink-0 gap-2" aria-label="Завершение заказа">
       <div data-drop-status="closed_lost" class="flex-1 rounded-lg border-2 border-dashed border-rose-300 bg-rose-50 p-3 text-center text-sm font-semibold text-rose-800 dark:bg-rose-950 dark:text-rose-200" @dragover.prevent @drop.stop.prevent="drop('closed_lost')">Отказ</div>
       <div data-drop-status="closed_won" class="flex-1 rounded-lg border-2 border-dashed border-emerald-300 bg-emerald-50 p-3 text-center text-sm font-semibold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200" @dragover.prevent @drop.stop.prevent="drop('closed_won')">Завершить успешно</div>
     </div>
     <div class="queue-columns" :class="{ 'queue-columns-board': isBoard }">
-      <section v-for="column in columns" :key="column" class="queue-column rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800"
+      <section v-for="column in columns" :key="column" :id="`order-column-panel-${column}`" :role="isBoard ? 'tabpanel' : undefined" :aria-labelledby="isBoard ? `order-column-tab-${column}` : undefined" class="queue-column rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800"
         :class="{ 'mobile-inactive': isBoard && mobileColumn !== column }" @dragover.prevent @drop.prevent="drop(column)">
-        <header class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b p-3 font-semibold dark:border-slate-700">
+        <header class="queue-column-heading flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2 font-semibold dark:border-slate-700">
           <h2>{{ labels[column] }} <span v-if="pages[column] && !stale" class="text-sm tabular-nums">{{ pages[column].total_orders }}</span></h2>
-          <select v-if="column" :value="phases[column] || ''" :aria-label="`Подэтап: ${labels[column]}`" class="max-w-[180px] rounded border bg-white p-1 text-sm dark:bg-slate-800" @change="emit('phase', column, ($event.target as HTMLSelectElement).value)">
-            <option value="">Все подэтапы</option>
-            <option v-for="option in column === 'negotiation' ? NEGOTIATION_STATUS_OPTIONS : EXECUTION_STATUS_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
-          </select>
         </header>
-        <div :ref="element => { if (element) scrollers.set(column, element as HTMLElement); else scrollers.delete(column); }" class="queue-scroll space-y-3 p-3">
+        <div class="queue-scroll space-y-3 p-2 md:p-3">
           <div v-if="errors[column]" role="alert" class="text-red-700">{{ errors[column] }} <button v-if="!pages[column]" type="button" class="rounded border px-3 py-2" @click="emit('more', column)">Повторить</button></div>
           <p v-if="!pages[column] && busy[column]" role="status">Загрузка…</p>
           <template v-if="pages[column]">
@@ -154,15 +175,18 @@ defineExpose({
 </template>
 
 <style scoped>
-.queue-workspace { display:flex; flex:1; min-height:0; flex-direction:column; }
-.queue-columns { display:flex; flex:1; min-height:0; gap:1rem; }
-.queue-column { display:flex; flex:1; min-width:0; min-height:0; flex-direction:column; }
-.queue-scroll { position:relative; overflow-y:auto; min-height:0; flex:1; overscroll-behavior:contain; }
+.queue-workspace { min-width:0; }
+.queue-columns { display:flex; align-items:flex-start; gap:0.75rem; }
+.queue-column { flex:1; min-width:0; }
+.queue-column-heading { position:sticky; top:var(--kitlane-header-height); z-index:10; background:var(--kitlane-surface); border-radius:0.75rem 0.75rem 0 0; }
+.queue-scroll { position:relative; }
+.mobile-column-tabs { display:none; }
 @media (max-width:767px) {
+  .touch-columns .mobile-column-tabs { touch-action:pan-y pinch-zoom; }
+  .mobile-column-tabs { position:sticky; top:var(--kitlane-header-height); z-index:15; display:flex; align-items:center; gap:0.25rem; margin-bottom:0.25rem; padding:0.125rem; border-radius:0.75rem; background:var(--kitlane-surface); box-shadow:0 1px 0 var(--kitlane-border); }
+  .column-swipe-hint { display:flex; align-items:center; justify-content:center; }
   .mobile-inactive { display:none; }
-  .queue-workspace, .queue-columns { flex:none; }
-  .queue-column { flex:none; width:100%; }
-  .queue-scroll { overflow:visible; flex:none; }
-  .queue-column > header { position:sticky; top:var(--kitlane-header-height); z-index:10; background:var(--kitlane-surface); }
+  .queue-column { width:100%; }
+  .queue-columns-board .queue-column-heading { display:none; }
 }
 </style>

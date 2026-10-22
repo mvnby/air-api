@@ -187,7 +187,7 @@ describe('server queues with the real board', () => {
     expect(wrapper.text()).not.toContain('Заказ 88');
     managerSession.auth.value = null; managerStorefrontSelection.selectedSlug.value = null;
   });
-  it('shows a retryable initial failure and saves real column scroll positions', async () => {
+  it('shows a retryable initial failure and retains the selected mobile column state', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(orderBoardApi, 'page').mockRejectedValueOnce(new Error('offline')).mockResolvedValue(response([order(1)]));
     wrapper = mountDashboard(); await flushPromises();
@@ -195,13 +195,12 @@ describe('server queues with the real board', () => {
     expect(wrapper.text()).toContain('Заказ 1');
     await wrapper.get('[role="alert"] button').trigger('click'); await flushPromises();
     const board = wrapper.getComponent(OrderQueueBoard);
-    const scroller = board.findAll('.queue-scroll')[0]!;
-    (scroller.element as HTMLElement).scrollTop = 234;
+    await board.get('#order-column-tab-execution').trigger('click'); await flushPromises();
     const state = (board.vm as any).$.exposed.captureState();
-    expect(state.columnScrollTops.negotiation).toBe(234);
-    (scroller.element as HTMLElement).scrollTop = 0;
-    await (board.vm as any).$.exposed.restoreState(state);
-    expect((scroller.element as HTMLElement).scrollTop).toBe(234);
+    expect(state.mobileColumn).toBe('execution');
+    await board.get('#order-column-tab-negotiation').trigger('click'); await flushPromises();
+    await (board.vm as any).$.exposed.restoreState(state); await nextTick();
+    expect(board.get('#order-column-tab-execution').attributes('aria-selected')).toBe('true');
   });
 });
 
@@ -221,9 +220,9 @@ it('retains list selection/export controls, server sorting and scoped group alia
 it('restores loaded group children and scroll positions from the return history entry', async () => {
   const url = '/manager/orders?segment=all&view=kanban&groupBy=customer';
   const group = { key: 'customer:1', customer_id: 1, customer_name: 'Group', count: 100, total_amount: 1000, balance_due: 500 };
-  window.history.replaceState({ orderListPosition: { url, top: 0, board: {
+  window.history.replaceState({ orderListPosition: { url, top: 345, board: {
     expandedOrderId: 1, expandedGroupIds: ['negotiation/customer:1'], columnFilters: { negotiation: 'follow_up' }, scrollLeft: 0,
-    columnScrollTops: { negotiation: 234 }, loadedPages: { negotiation: 1, execution: 1, 'negotiation/customer:1': 2 }, mobileColumn: 'execution',
+    mobileScrollTops: { negotiation: 234, execution: 345 }, loadedPages: { negotiation: 1, execution: 1, 'negotiation/customer:1': 2 }, mobileColumn: 'execution',
   } } }, '', url);
   const get = vi.spyOn(orderBoardApi, 'page').mockImplementation(async q => q.group_key
     ? response([order(q.page!)], { page: q.page!, total: 100, total_orders: 100, has_more: true })
@@ -232,8 +231,9 @@ it('restores loaded group children and scroll positions from the return history 
   expect(get.mock.calls.filter(([q]) => q.group_key).map(([q]) => q.page)).toEqual([1, 2]);
   expect(wrapper.text()).toContain('Загружено 2 из 100');
   const board = wrapper.getComponent(OrderQueueBoard);
-  expect((board.findAll('.queue-scroll')[0]!.element as HTMLElement).scrollTop).toBe(234);
-  expect(wrapper.get('select[aria-label="Колонка доски"]').element).toHaveProperty('value', 'execution');
+  expect(window.scrollTo).toHaveBeenLastCalledWith(0, 345);
+  expect((board.vm as any).$.exposed.captureState().mobileScrollTops.negotiation).toBe(234);
+  expect(wrapper.get('#order-column-tab-execution').attributes('aria-selected')).toBe('true');
   expect(wrapper.get('select[aria-label="Подэтап: Переговоры"]').element).toHaveProperty('value', 'follow_up');
 });
 
