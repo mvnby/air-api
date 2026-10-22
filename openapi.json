@@ -20943,6 +20943,64 @@
         }
       }
     },
+    "/api/manager/orders/{order_id}/waiting": {
+      "post": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "Command Manager Order Waiting",
+        "description": "Wait indefinitely or resume an accessible live order in the current company/site.\n\nRequires live Manager access; demo writes return403, inaccessible IDs404. The\ncommand locks the parent before any children and checks expected_revision against\nthe shared order/payment/stage revision; stale input returns409 without changes.\nWaiting requires a reason; other requires a note. next_followup_date=null is valid,\nomission preserves the contact, and a contact never resumes work. Legacy note text\nis preserved on resume, unknown legacy start times are not invented. Changes are\natomically audited. No payment, document, reservation, equipment or visit changes.\nRetry only after reading current state; a successful repeat with an old revision\nreturns409. Validation errors return400/422.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "operationId": "command_manager_order_waiting",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerOrderWaitingCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/order-responsibles": {
       "get": {
         "tags": [
@@ -75818,6 +75876,34 @@
             ],
             "title": "On Hold Reason"
           },
+          "on_hold_reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On Hold Reason Code"
+          },
+          "on_hold_started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On Hold Started At"
+          },
+          "workflow_revision": {
+            "type": "integer",
+            "title": "Workflow Revision",
+            "default": 0
+          },
           "measurement_required": {
             "type": "boolean",
             "title": "Measurement Required",
@@ -77089,6 +77175,34 @@
               }
             ],
             "title": "On Hold Reason"
+          },
+          "on_hold_reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On Hold Reason Code"
+          },
+          "on_hold_started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On Hold Started At"
+          },
+          "workflow_revision": {
+            "type": "integer",
+            "title": "Workflow Revision",
+            "default": 0
           },
           "measurement_required": {
             "type": "boolean",
@@ -80356,6 +80470,70 @@
         },
         "type": "object",
         "title": "ManagerOrderUpdatePayload"
+      },
+      "ManagerOrderWaitingCommand": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "wait",
+              "resume"
+            ],
+            "title": "Action"
+          },
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Revision"
+          },
+          "reason_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "next_stage",
+                  "site_readiness",
+                  "customer_decision",
+                  "other"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Code"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "next_followup_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Followup Date"
+          }
+        },
+        "type": "object",
+        "required": [
+          "action",
+          "expected_revision"
+        ],
+        "title": "ManagerOrderWaitingCommand"
       },
       "ManagerOwnAvatarDelete": {
         "properties": {

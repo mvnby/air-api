@@ -633,9 +633,11 @@ class OrderService:
 
     @staticmethod
     async def _refresh_order_financials(session: AsyncSession, order: Order) -> None:
-        await session.refresh(order, attribute_names=["payments", "proposals", "product_links", "service_links", "installers"])
+        await session.refresh(order, attribute_names=["payments", "proposals", "product_links", "service_links", "installers", "work_stages"])
         order.calculate_totals()
         OrderService._apply_payment_state(order)
+        from services.order_workflow_revision import bump_order_workflow_revision
+        await bump_order_workflow_revision(session, order)
 
     @staticmethod
     def _apply_payment_state(order: Order) -> None:
@@ -643,6 +645,9 @@ class OrderService:
             return
         is_fully_paid = float(order.balance_due or 0) <= OrderService.PAYMENT_COMPLETE_TOLERANCE
         order.is_paid = is_fully_paid
+        # Money may change while waiting; it does not complete an unfinished visit.
+        if bool(getattr(order, "is_on_hold", False)):
+            return
         status = OrderService._status_value(order.status)
         if (
             is_fully_paid
@@ -657,6 +662,8 @@ class OrderService:
         if (
             is_fully_paid
             and bool(getattr(order, "auto_close_on_payment", False))
+            and all(str(getattr(stage.status, "value", stage.status)) == "completed"
+                    for stage in getattr(order, "work_stages", []))
             and status == OrderStatus.EXECUTION.value
             and OrderService._normalize_execution_status(getattr(order, "execution_status", None)) == "awaiting_payment"
         ):

@@ -6,8 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 
-from models import Order, OrderAttachmentLink, OrderStageStatus, OrderStatus, OrderWorkStage
+from models import Order, OrderAttachmentLink, OrderStageStatus, OrderWorkStage
 from services.command_transaction import command_transaction
+from services.order_workflow_revision import bump_order_workflow_revision
 from services.worker_assignment_legacy_sync import WorkerAssignmentLegacySync
 from services.order_projection_service import OrderProjectionService
 from services.order_service import OrderService
@@ -90,6 +91,7 @@ class OrderWorkStageCommandService:
             )
             session.add(stage)
             await session.flush()
+            await bump_order_workflow_revision(session, int(stage.order_id))
             await WorkerAssignmentLegacySync.sync(session, tenant_scope, order_id, worker_profiles, previous_ids=set(), current_ids={stage.installer_id} - {None}, stage=stage)
             if stage.installer_id is not None:
                 await StaffTaskNotificationEventService.enqueue_assigned(
@@ -129,6 +131,7 @@ class OrderWorkStageCommandService:
             previous_status = stage.status
             stage.status = OrderStageStatus.CANCELED
             session.add(stage)
+            await bump_order_workflow_revision(session, int(stage.order_id))
             if previous_status != OrderStageStatus.CANCELED:
                 await StaffTaskNotificationEventService.enqueue_canceled(
                     session,
@@ -175,7 +178,9 @@ class OrderWorkStageCommandService:
                 OrderAttachmentLink.order_id == stage.order_id,
                 OrderAttachmentLink.work_stage_id == stage.id,
             ).values(work_stage_id=None))
+            stage_order_id = int(stage.order_id)
             await session.delete(stage)
+            await bump_order_workflow_revision(session, stage_order_id)
         return {"ok": True, "id": stage_id}
 
     @staticmethod
@@ -226,6 +231,7 @@ class OrderWorkStageCommandService:
 
             session.add(stage)
             await session.flush()
+            await bump_order_workflow_revision(session, int(stage.order_id))
             await WorkerAssignmentLegacySync.sync(session, tenant_scope, order_id, worker_profiles, previous_ids={previous_installer_id} - {None}, current_ids={stage.installer_id} - {None}, stage=stage)
 
             if (
@@ -266,30 +272,6 @@ class OrderWorkStageCommandService:
                         tenant_scope=tenant_scope,
                     )
 
-            order = await TenantEntityAccessService.get_order(
-                session,
-                order_id,
-                tenant_scope=tenant_scope,
-            )
-            if order:
-                await session.refresh(order, attribute_names=["work_stages"])
-                all_completed = all(
-                    item.status
-                    in (OrderStageStatus.COMPLETED, OrderStageStatus.CANCELED)
-                    for item in order.work_stages
-                )
-                if (
-                    all_completed
-                    and order.work_stages
-                    and order.balance_due > 0
-                    and order.status != OrderStatus.CLOSED
-                ):
-                    order.is_on_hold = True
-                    order.on_hold_reason = (
-                        "Все запланированные этапы завершены, ожидается оплата "
-                        "или следующий этап"
-                    )
-                    session.add(order)
 
         return await OrderWorkStageCommandService._project_committed_order(
             session,
@@ -324,7 +306,9 @@ class OrderWorkStageCommandService:
                 OrderAttachmentLink.order_id == stage.order_id,
                 OrderAttachmentLink.work_stage_id == stage.id,
             ).values(work_stage_id=None))
+            stage_order_id = int(stage.order_id)
             await session.delete(stage)
+            await bump_order_workflow_revision(session, stage_order_id)
 
         return await OrderWorkStageCommandService._project_committed_order(
             session,

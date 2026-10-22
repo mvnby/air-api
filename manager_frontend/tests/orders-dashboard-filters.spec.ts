@@ -1,9 +1,10 @@
 import { nextTick } from 'vue';
-import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
+import { DOMWrapper, flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { managerSession } from '../src/services/manager-session';
 import { managerStorefrontSelection } from '../src/services/manager-storefront-selection';
 import { api } from '../src/api';
+import { orderWaitingApi } from '../src/services/order-waiting';
 import { orderBoardApi } from '../src/services/order-board';
 import OrderQueueBoard from '../src/components/orders/OrderQueueBoard.vue';
 import type { ManagerOrderBoardPage } from '../src/client';
@@ -294,4 +295,57 @@ it('blocks all cards when a column returns an authorization failure', async () =
   wrapper = mountDashboard(); await flushPromises();
   expect(wrapper.text()).not.toContain('Заказ 99');
   expect(wrapper.find('[role="alert"]').exists()).toBe(true);
+});
+
+
+describe('explicit waiting on real cards', () => {
+  const open = async (held = false) => {
+    vi.spyOn(orderBoardApi, 'page').mockImplementation(async q => response(q.column === 'execution' ? [] : [order(1, { workflow_revision: 6, is_on_hold: held })]));
+    wrapper = mountDashboard(); await flushPromises();
+    const action = wrapper.findAll('button').find(button => button.text() === (held ? 'Вернуть в работу' : 'В ожидание'))!;
+    await action.trigger('click'); await flushPromises();
+  };
+  const dialog = () => new DOMWrapper(document.querySelector('[aria-labelledby="order-waiting-title"]')!);
+  it('waits indefinitely with a reason and resumes directly without another dialog', async () => {
+    const command = vi.spyOn(orderWaitingApi, 'command').mockResolvedValue(order(1, { is_on_hold: true, workflow_revision: 7 }) as any);
+    await open();
+    expect(command).not.toHaveBeenCalled();
+    expect(dialog().get('input[aria-label="Контрольный контакт"]').element).toHaveProperty('value', '');
+    await dialog().get('select[aria-label="Причина ожидания"]').setValue('next_stage');
+    await dialog().get('form').trigger('submit'); await flushPromises();
+    expect(command).toHaveBeenCalledExactlyOnceWith(1, { action: 'wait', expected_revision: 6, reason_code: 'next_stage', note: null, next_followup_date: null });
+    expect(document.querySelector('[aria-labelledby="order-waiting-title"]')).toBeNull();
+    wrapper!.unmount(); wrapper = undefined; command.mockClear();
+    await open(true);
+    expect(command).toHaveBeenCalledExactlyOnceWith(1, { action: 'resume', expected_revision: 6 });
+    expect(document.querySelector('[aria-labelledby="order-waiting-title"]')).toBeNull();
+  });
+  it('retains explanation and contact on 409 and refreshes the revision only on request', async () => {
+    const command = vi.spyOn(orderWaitingApi, 'command').mockRejectedValueOnce({ status: 409, body: { detail: { message: 'Этап изменился' } } })
+      .mockResolvedValue(order(1, { is_on_hold: true, workflow_revision: 9 }) as any);
+    const get = vi.spyOn(api, 'getManagerOrderDetail').mockResolvedValue(order(1, { workflow_revision: 8 }) as any);
+    await open();
+    await dialog().get('select').setValue('other');
+    await dialog().get('textarea').setValue('Сохранить мой текст');
+    await dialog().get('input').setValue('2027-03-01T10:30');
+    await dialog().get('form').trigger('submit'); await flushPromises();
+    expect(dialog().get('[role="alert"]').text()).toContain('Этап изменился');
+    expect(dialog().get('textarea').element).toHaveProperty('value', 'Сохранить мой текст');
+    expect(dialog().get('input').element).toHaveProperty('value', '2027-03-01T10:30');
+    expect(command).toHaveBeenCalledTimes(1); expect(get).not.toHaveBeenCalled();
+    await dialog().findAll('button').find(button => button.text() === 'Обновить сведения')!.trigger('click'); await flushPromises();
+    expect(command).toHaveBeenCalledTimes(1);
+    expect(dialog().get('textarea').element).toHaveProperty('value', 'Сохранить мой текст');
+    await dialog().get('form').trigger('submit'); await flushPromises();
+    expect(command).toHaveBeenLastCalledWith(1, expect.objectContaining({ expected_revision: 8, note: 'Сохранить мой текст', next_followup_date: '2027-03-01T10:30:00' }));
+  });
+  it('keeps input and a retryable error on network failure without moving the order', async () => {
+    const command = vi.spyOn(orderWaitingApi, 'command').mockRejectedValueOnce(new Error('offline'));
+    await open(); await dialog().get('textarea').setValue('Ожидание объекта');
+    await dialog().get('form').trigger('submit'); await flushPromises();
+    expect(dialog().get('[role="alert"]').text()).toContain('offline');
+    expect(dialog().get('textarea').element).toHaveProperty('value', 'Ожидание объекта');
+    expect(command).toHaveBeenCalledTimes(1);
+    expect(wrapper!.text()).toContain('Заказ 1');
+  });
 });

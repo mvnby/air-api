@@ -3,6 +3,8 @@ import { registerUnsavedNavigationGuard } from '../src/services/unsaved-navigati
 import { startManagerNavigation } from '../src/services/manager-navigation-history';
 import { shallowMount, flushPromises, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import OrderWaitingDialog from '../src/components/orders/OrderWaitingDialog.vue';
+import { orderWaitingApi } from '../src/services/order-waiting';
 import OrderWorkerAssignmentsPanel from '../src/components/orders/OrderWorkerAssignmentsPanel.vue';
 import { orderWorkerAssignmentsApi } from '../src/services/order-worker-assignments';
 import OrderResponsiblePanel from '../src/components/orders/OrderResponsiblePanel.vue';
@@ -1095,5 +1097,38 @@ describe('order page editor', () => {
     expect(await (wrapper.vm as any).prepareToLeave()).toBe(false);
     expect(customer().props('comment')).toBe('Не потерять при ошибке');
     expect(header().props('saveFailed')).toBe(true);
+  });
+});
+
+
+describe('waiting save barrier', () => {
+  it('saves the dirty drawer before opening waiting and preserves new input on conflict', async () => {
+    stored.workflow_revision = 3;
+    vi.mocked(ManagerOrdersService.patchManagerOrder).mockImplementation(async (_id, payload) => {
+      const result = commit(payload); result.workflow_revision = 4; stored.workflow_revision = 4; return result;
+    });
+    const command = vi.spyOn(orderWaitingApi, 'command').mockRejectedValue({ status: 409, body: { detail: { message: 'Оплата изменена' } } });
+    await mountDrawer('page', false, false);
+    header().vm.$emit('update:title', 'Мой сохранённый заголовок'); await nextTick();
+    header().vm.$emit('hold'); await flushPromises();
+    expect(ManagerOrdersService.patchManagerOrder).toHaveBeenCalledWith(395, expect.objectContaining({ title: 'Мой сохранённый заголовок' }));
+    const dialog = wrapper.getComponent(OrderWaitingDialog);
+    expect(dialog.props('order')).toMatchObject({ workflow_revision: 4, title: 'Мой сохранённый заголовок' });
+    header().vm.$emit('update:title', 'Новый ввод во время ожидания ответа'); await nextTick();
+    dialog.vm.$emit('submit', { reason_code: 'other', note: 'Моя причина', next_followup_date: null }); await flushPromises();
+    expect(command).toHaveBeenCalledExactlyOnceWith(395, expect.objectContaining({ expected_revision: 4, note: 'Моя причина' }));
+    expect(header().props('title')).toBe('Новый ввод во время ожидания ответа');
+    expect(dialog.props('error')).toContain('Оплата изменена');
+    expect(header().props('dirty')).toBe(true);
+  });
+  it('never sends a hold command or opens its dialog after failed autosave', async () => {
+    vi.mocked(ManagerOrdersService.patchManagerOrder).mockRejectedValue(new Error('Save offline'));
+    const command = vi.spyOn(orderWaitingApi, 'command');
+    await mountDrawer('page', false, false);
+    header().vm.$emit('update:title', 'Не терять заголовок'); await nextTick();
+    header().vm.$emit('hold'); await flushPromises();
+    expect(command).not.toHaveBeenCalled();
+    expect(wrapper.getComponent(OrderWaitingDialog).props('order')).toBeNull();
+    expect(header().props('title')).toBe('Не терять заголовок');
   });
 });

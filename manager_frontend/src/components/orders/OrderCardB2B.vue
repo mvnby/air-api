@@ -19,6 +19,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   open: [orderId: number];
+  waiting: [orderId: number];
   generate: [payload: { orderId: number; docType: string }];
   cancelOrder: [payload: { orderId: number }];
   quickStatus: [payload: { orderId: number; status: string }];
@@ -222,5 +223,6 @@ const paymentSummary = computed(() => {
         </footer>
       </section>
     </Transition>
+    <button v-if="order.status !== 'closed' && !demoReadOnly" type="button" class="mt-2 min-h-9 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-brand-700 disabled:opacity-50 dark:border-slate-600 dark:text-brand-300" :disabled="draggableDisabled" @click.stop="emit('waiting', order.id)">{{ order.is_on_hold ? 'Вернуть в работу' : 'В ожидание' }}</button>
   </article>
 </template>

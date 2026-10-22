@@ -14,6 +14,7 @@ from models import (
     ServiceAttachment,
 )
 from models.tenancy import TenantScope
+from services.order_workflow_revision import bump_order_workflow_revision
 from services.bot_worker_access import BotWorkerAccessDeniedError, bot_worker_auth
 from services.worker_assignment_access_service import WorkerAssignmentAccessService
 from services.worker_assignment_service import WorkerAssignmentError
@@ -118,6 +119,7 @@ class BotTaskMutationService:
 
         stage.status = status
         session.add(stage)
+        await bump_order_workflow_revision(session, int(stage.order_id))
         await session.commit()
         try:
             await NotificationService.notify_admins_work_stage_status_changed(
@@ -158,6 +160,7 @@ class BotTaskMutationService:
 
         stage.installer_report = normalized_report
         session.add(stage)
+        await bump_order_workflow_revision(session, int(stage.order_id))
         await session.commit()
         return BotTaskReportMutationResult(stage_id=stage_id, changed=True)
 

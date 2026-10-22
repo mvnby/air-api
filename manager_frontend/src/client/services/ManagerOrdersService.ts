@@ -29,6 +29,7 @@ import type { ManagerOrderSourceEquipmentPreview } from '../models/ManagerOrderS
 import type { ManagerOrderSourcePreview } from '../models/ManagerOrderSourcePreview';
 import type { ManagerOrderTransferPackage_Output } from '../models/ManagerOrderTransferPackage_Output';
 import type { ManagerOrderUpdatePayload } from '../models/ManagerOrderUpdatePayload';
+import type { ManagerOrderWaitingCommand } from '../models/ManagerOrderWaitingCommand';
 import type { ManagerStaleWorkStageItem } from '../models/ManagerStaleWorkStageItem';
 import type { ManagerStaleWorkStageListResponse } from '../models/ManagerStaleWorkStageListResponse';
 import type { OrderProposalCreatePayload } from '../models/OrderProposalCreatePayload';
@@ -860,6 +861,44 @@ export class ManagerOrdersService {
                 'order_id': orderId,
                 'stage_id': stageId,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Command Manager Order Waiting
+     * Wait indefinitely or resume an accessible live order in the current company/site.
+     *
+     * Requires live Manager access; demo writes return403, inaccessible IDs404. The
+     * command locks the parent before any children and checks expected_revision against
+     * the shared order/payment/stage revision; stale input returns409 without changes.
+     * Waiting requires a reason; other requires a note. next_followup_date=null is valid,
+     * omission preserves the contact, and a contact never resumes work. Legacy note text
+     * is preserved on resume, unknown legacy start times are not invented. Changes are
+     * atomically audited. No payment, document, reservation, equipment or visit changes.
+     * Retry only after reading current state; a successful repeat with an old revision
+     * returns409. Validation errors return400/422.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * @param orderId
+     * @param requestBody
+     * @returns ManagerOrderDetailResponse Successful Response
+     * @throws ApiError
+     */
+    public static commandManagerOrderWaiting(
+        orderId: number,
+        requestBody: ManagerOrderWaitingCommand,
+    ): CancelablePromise<ManagerOrderDetailResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/orders/{order_id}/waiting',
+            path: {
+                'order_id': orderId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

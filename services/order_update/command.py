@@ -30,6 +30,8 @@ class OrderUpdateCommandService:
             fields_set = getattr(payload, "model_fields_set", None)
             if fields_set is None:
                 fields_set = getattr(payload, "__fields_set__", set())
+            if {"is_on_hold", "on_hold_reason"} & set(fields_set):
+                raise ValueError("Изменяйте ожидание через команду /waiting с актуальной ревизией заказа")
             worker_profiles = {}
             if "installer_id" in fields_set:
                 worker_profiles = await WorkerAssignmentLegacySync.prepare(
@@ -76,6 +78,8 @@ class OrderUpdateCommandService:
             await apply_customer_fields(context)
             await apply_commercial_lines(context)
             await finalize_order_update(context)
+            from services.order_workflow_revision import bump_order_workflow_revision
+            await bump_order_workflow_revision(session, order)
 
         return await OrderProjectionService.get_order_detail_for_manager(
             session,

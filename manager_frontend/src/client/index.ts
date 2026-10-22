@@ -617,6 +617,7 @@ export type { ManagerOrderTransferServiceLine } from './models/ManagerOrderTrans
 export type { ManagerOrderTransferServiceRef } from './models/ManagerOrderTransferServiceRef';
 export type { ManagerOrderTransferWorkStage } from './models/ManagerOrderTransferWorkStage';
 export type { ManagerOrderUpdatePayload } from './models/ManagerOrderUpdatePayload';
+export type { ManagerOrderWaitingCommand } from './models/ManagerOrderWaitingCommand';
 export type { ManagerOwnAvatarDelete } from './models/ManagerOwnAvatarDelete';
 export type { ManagerOwnProfileResponse } from './models/ManagerOwnProfileResponse';
 export type { ManagerOwnProfileUpdate } from './models/ManagerOwnProfileUpdate';

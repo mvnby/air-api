@@ -9,6 +9,7 @@
     "reviewed_stage"
   ],
   "review_stages": {
+    "27": "Explicit audited waiting command, shared order/payment/stage revision, optional contact and read-only legacy metadata reviewed 2026-10-22",
     "26": "Manager order queues: bounded scalar cards, exact aggregates, visibility, legacy NULL history and read-only behavior reviewed 2026-10-22",
     "24": "Reusable series accessories with explicit model exceptions and storefront commercial visibility, public/internal inherited catalog documents with verified PDF/DOCX uploads, contextual feature presentation and official brand sources; reviewed 2026-10-19",
     "23": "Fixed scoped remuneration agreements and frozen BYN order expenses, explicit accrual, exact FIFO payouts and dual-authority cash offsets, shared account mutex/versions/durable UUID, independent pay delegation, safe own history, preserved payout/handover corrections and no duplicate legacy expenses; reviewed 2026-10-17",
@@ -773,6 +774,7 @@
       ["POST /api/manager/orders/export", "export_manager_orders", false, 2]
     ],
     "routers/manager_orders_write.py": [
+      ["POST /api/manager/orders/{order_id}/waiting", "command_manager_order_waiting", false, 27],
       ["DELETE /api/manager/orders/work-stages/{stage_id}", "delete_manager_order_stage_direct", false, 2],
       ["DELETE /api/manager/orders/{order_id}", "delete_manager_order", false, 2],
       ["DELETE /api/manager/orders/{order_id}/payments/{payment_id}", "delete_manager_order_payment", false, 2],

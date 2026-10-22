@@ -8,6 +8,8 @@ import {
   type ManagerOrderTransferPackage_Input,
   type ManagerOrderUpdatePayload,
 } from '../../client';
+import { useOrderWaiting } from '../../composables/useOrderWaiting';
+import OrderWaitingDialog from './OrderWaitingDialog.vue';
 import OrdersToolbar from './OrdersToolbar.vue';
 import OrderQueueBoard from './OrderQueueBoard.vue';
 import { useOrderQueueData } from './useOrderQueueData';
@@ -62,6 +64,12 @@ const {
   renameCustomerGroup, toggleOrderSelection, toggleManySelection, selectAllVisible,
   clearSelection, clearIdentityScopedState,
 } = useOrdersDashboardModel(setToast);
+
+const waiting = useOrderWaiting({ updated: async () => { await loadOrders(); }, notify: setToast });
+const toggleOrderWaiting = (orderId: number) => {
+  const order = orders.value.find(item => item.id === orderId);
+  if (order) void waiting.toggle(order);
+};
 
 const downloadJson = (payload: unknown, filename: string) => {
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
@@ -549,15 +557,16 @@ onMounted(async () => {
       <OrderQueueBoard ref="board" v-else
         :key="`${queue}:${segment}:${groupByCustomer}:${normalizedSearch}:${workFilter}`"
         :pages="queuePages" :phases="queuePhases" :columns="queueColumns" :busy="queueBusy" :errors="queueErrors"
-        :segment="segment" :moving-order-ids="movingOrderIds" :compact="queue === 'history' && !normalizedSearch && workFilter !== 'followup'"
+        :segment="segment" :moving-order-ids="waiting.busyOrderId.value ? [...movingOrderIds, waiting.busyOrderId.value] : movingOrderIds" :compact="queue === 'history' && !normalizedSearch && workFilter !== 'followup'"
         :show-queue="Boolean(normalizedSearch) || workFilter === 'followup'"
         :list-mode="view === 'list'" :sort="sort" :selected-order-ids="selectedOrderIds" :customer-aliases="customerAliases"
         @update:sort="sort = $event" @toggle-select="toggleOrderSelection" @toggle-select-many="toggleManySelection" @rename-customer="renameCustomerGroup"
         @more="queueData.more" @phase="queueData.setPhase" @open="openOrder" @generate="onGenerateDoc"
-        @move="onMoveOrder" @cancel-order="onCancelOrder" @close-debt="onCloseDebt" @rename-order="renameOrderTitle"
+        @waiting="toggleOrderWaiting" @move="onMoveOrder" @cancel-order="onCancelOrder" @close-debt="onCloseDebt" @rename-order="renameOrderTitle"
       />
     </div>
 
+    <OrderWaitingDialog :order="waiting.selected.value" :busy="waiting.busy.value" :error="waiting.error.value" :stale="waiting.stale.value" @submit="waiting.submit" @refresh="waiting.refresh" @close="waiting.close" />
     <OrdersImportPreviewModal
       v-if="importModalOpen && importPreview"
       :preview="importPreview"
