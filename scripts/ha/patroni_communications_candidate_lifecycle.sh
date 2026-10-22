@@ -14,6 +14,48 @@ CANDIDATE_WORKER_GATE_PROFILE=""
 CANONICAL_WORKER_PROJECT=""
 CANDIDATE_WORKER_PROJECT=""
 PREVIOUS_WORKER_FENCE_MARKER_PRESENT=false
+IDLE_WORKER_CAPACITY_GUARD="${SCRIPT_DIR}/patroni_idle_worker_capacity.py"
+
+idle_worker_capacity() {
+  API_PROJECT_DIR="${PROJECT_DIR}" \
+  PATRONI_CANONICAL_COMPOSE_FILE="${CANONICAL_FILE}" \
+  API_DEPLOY_LOCK_FD="${DEPLOY_LOCK_FD}" \
+  API_DEPLOY_LOCK_HELPER="${DEPLOY_LOCK_HELPER}" \
+  API_DEPLOY_CAPACITY_HELPER="${API_DEPLOY_CAPACITY_HELPER:-${SCRIPT_DIR}/require_deploy_capacity.sh}" \
+  COMMUNICATIONS_WORKER_RELEASE_HELPER="${COMMUNICATIONS_WORKER_RELEASE_HELPER}" \
+    python3 "${IDLE_WORKER_CAPACITY_GUARD}" "$@"
+}
+
+idle_worker_capacity_pending() {
+  [[ -e "${PROJECT_DIR}/.ha-idle-worker-capacity.json" \
+    || -L "${PROJECT_DIR}/.ha-idle-worker-capacity.json" ]]
+}
+
+idle_worker_predeploy_cleanup() {
+  local status=$?
+  trap - EXIT
+  set +e
+  idle_worker_capacity recover || status=90
+  patroni_role_assets_cleanup_backups || status=90
+  [[ "${CANDIDATE_OWNED}" == "true" ]] && transaction cleanup
+  shared_belzakupki_guard_restore || status=90
+  exit "${status}"
+}
+
+patroni_communications_migrate_candidate() {
+  shared_belzakupki_guard_prepare_with_signal_recovery
+  trap idle_worker_predeploy_cleanup EXIT
+  trap 'exit 143' INT TERM
+  idle_worker_capacity prepare migrate
+  sync_bot_voice_env_locked
+  API_DEPLOY_LOCK_FD="${DEPLOY_LOCK_FD}" \
+    API_COMPOSE_FILE="$(basename "${CANDIDATE_FILE}")" bash "${MIGRATION_SCRIPT}"
+  idle_worker_capacity recover
+  shared_belzakupki_guard_restore
+  trap - EXIT
+  shared_belzakupki_guard_clear_signal_recovery
+  transaction cleanup
+}
 
 patroni_communications_capture_release_fence() {
   if [[ -e "${COMMUNICATIONS_WORKER_FENCE_MARKER}" \
