@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from uuid import uuid4
 import logging
 from datetime import datetime, timezone
 from typing import Any, Callable
@@ -166,6 +167,8 @@ class AnalyticsConnectionService:
             separators=(",", ":"),
             default=str,
         )
+        if credential_replaced or before_config != public_config:
+            connection.snapshot_revision = uuid4().hex
         connection.status = "active"
         connection.public_config = dict(public_config)
         connection.encrypted_credentials = AnalyticsCredentialCipher.encrypt(
@@ -222,6 +225,7 @@ class AnalyticsConnectionService:
             for_update=True,
         )
         token = (oauth_token or "").strip()
+        supplied_token = bool(token)
         if token and (len(token) < 16 or len(token) > 4096):
             raise AnalyticsConnectionError(
                 "invalid_oauth_token_format",
@@ -256,7 +260,9 @@ class AnalyticsConnectionService:
             if isinstance(connection.public_config, dict)
             else ""
         )
-        credential_replaced = not existing or bool(oauth_token)
+        credential_replaced = not existing or supplied_token
+        if credential_replaced:
+            connection.snapshot_revision = uuid4().hex
         connection.status = "active"
         connection.public_config = {
             "counter_id": counter_id,

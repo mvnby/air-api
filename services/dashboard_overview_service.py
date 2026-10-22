@@ -161,8 +161,10 @@ class DashboardOverviewService:
         marketing_provider: IntegratedMarketingProvider | None = None,
         search_demand_provider: IntegratedSearchDemandProvider | None = None,
     ) -> None:
-        self._marketing_provider = marketing_provider or IntegratedMarketingProvider()
-        self._search_demand_provider = search_demand_provider or IntegratedSearchDemandProvider()
+        from services.dashboard_analytics_snapshots import SavedMarketingProvider, SavedSearchDemandProvider
+
+        self._marketing_provider = marketing_provider or SavedMarketingProvider()
+        self._search_demand_provider = search_demand_provider or SavedSearchDemandProvider()
 
     async def get_overview(
         self,
@@ -586,6 +588,11 @@ def _marketing_schema(
                 currency=item.currency,
                 message=item.message,
                 updated_at=item.updated_at,
+                last_attempt_at=item.last_attempt_at,
+                next_retry_at=item.next_retry_at,
+                error_code=item.error_code,
+                period_start=item.period_start,
+                period_end=item.period_end,
             )
             for item in snapshot.providers
         ],
@@ -614,6 +621,11 @@ def _search_demand_schema(snapshot: SearchDemandSnapshot) -> DashboardSearchDema
                 status=item.status,
                 message=item.message,
                 updated_at=item.updated_at,
+                last_attempt_at=item.last_attempt_at,
+                next_retry_at=item.next_retry_at,
+                error_code=item.error_code,
+                period_start=item.period_start,
+                period_end=item.period_end,
             )
             for item in snapshot.providers
         ],

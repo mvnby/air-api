@@ -3,8 +3,10 @@ import { computed } from 'vue';
 import { AlertCircle, ExternalLink, Megaphone } from 'lucide-vue-next';
 import type { DashboardMarketing, DashboardMarketingProvider } from '../../client';
 import MoneyAmount from '../money/MoneyAmount.vue';
+import DashboardSnapshotMeta from './DashboardSnapshotMeta.vue';
 import {
   dashboardMarketingStatus,
+  dashboardAggregateStatus,
   formatMarketingCurrency,
   formatMarketingProvider,
   formatMarketingValue,
@@ -23,14 +25,8 @@ const providers = computed(() => expectedProviders.map((name) => (
 )));
 const activeProviders = computed(() => providers.value.filter(provider => provider.status !== 'unconfigured'));
 const hasFreshProvider = computed(() => activeProviders.value.some(provider => provider.status === 'fresh'));
-const hasProblemProvider = computed(() => activeProviders.value.some(provider => provider.status === 'error' || provider.status === 'stale'));
-const panelStatus = computed(() => {
-  if (!activeProviders.value.length) return 'unconfigured' as const;
-  if (hasProblemProvider.value && hasFreshProvider.value) return 'stale' as const;
-  if (activeProviders.value.every(provider => provider.status === 'error')) return 'error' as const;
-  if (activeProviders.value.some(provider => provider.status === 'stale')) return 'stale' as const;
-  return 'fresh' as const;
-});
+const hasProblemProvider = computed(() => activeProviders.value.some(provider => provider.status === 'error' || provider.status === 'stale' || provider.status === 'pending'));
+const panelStatus = computed(() => dashboardAggregateStatus(providers.value, props.marketing.status));
 const status = computed(() => (
   hasProblemProvider.value && hasFreshProvider.value
     ? { label: 'Частично доступно', message: 'Часть рекламных источников требует внимания. Остальные данные получены.', tone: 'stale' as const }
@@ -49,10 +45,6 @@ const metrics = (provider: AdvertisingProviderState) => [
 const formatSpendAmount = (value: number | null | undefined) => (
   value == null ? '—' : new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)
 );
-const updatedAt = (provider: AdvertisingProviderState) => {
-  const value = provider.updated_at;
-  return value ? new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Minsk' }).format(new Date(value)) : null;
-};
 </script>
 
 <template>
@@ -64,10 +56,10 @@ const updatedAt = (provider: AdvertisingProviderState) => {
     <div v-if="panelStatus === 'error' || panelStatus === 'stale'" class="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100"><AlertCircle class="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" /><p>{{ status.message }}</p></div>
     <div class="grid gap-3 lg:grid-cols-2">
       <article v-for="provider in providers" :key="provider.provider" class="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
-        <div class="flex flex-wrap items-start justify-between gap-2"><div class="flex min-w-0 gap-2"><Megaphone class="mt-0.5 h-5 w-5 shrink-0 text-[var(--kitlane-accent-text)]" aria-hidden="true" /><div class="min-w-0"><h3 class="font-semibold text-slate-900 dark:text-white">{{ formatMarketingProvider(provider.provider) }}</h3><p class="mt-1 text-xs leading-5 text-[var(--kitlane-muted)] dark:text-slate-400">{{ providerMessage(provider) }}</p></div></div><span class="rounded-full px-2 py-1 text-xs font-semibold" :class="{ 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300': provider.status === 'fresh', 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300': provider.status === 'stale', 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300': provider.status === 'error', 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300': provider.status === 'unconfigured' }">{{ dashboardMarketingStatus(provider).label }}</span></div>
+        <div class="flex flex-wrap items-start justify-between gap-2"><div class="flex min-w-0 gap-2"><Megaphone class="mt-0.5 h-5 w-5 shrink-0 text-[var(--kitlane-accent-text)]" aria-hidden="true" /><div class="min-w-0"><h3 class="font-semibold text-slate-900 dark:text-white">{{ formatMarketingProvider(provider.provider) }}</h3><p class="mt-1 text-xs leading-5 text-[var(--kitlane-muted)] dark:text-slate-400">{{ providerMessage(provider) }}</p></div></div><span class="rounded-full px-2 py-1 text-xs font-semibold" :class="{ 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300': provider.status === 'fresh', 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300': provider.status === 'stale', 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300': provider.status === 'error', 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300': provider.status === 'unconfigured' || provider.status === 'pending' }">{{ dashboardMarketingStatus(provider).label }}</span></div>
         <dl v-if="metrics(provider).length" class="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm"><div v-for="([label, value]) in metrics(provider)" :key="label"><dt class="text-xs text-[var(--kitlane-muted)] dark:text-slate-400">{{ label }}</dt><dd class="mt-1 font-semibold text-slate-900 dark:text-white"><MoneyAmount v-if="label === 'Расход' && provider.currency === 'BYN'" :value="provider.ad_spend" :formatted-value="formatSpendAmount(provider.ad_spend)" /><template v-else>{{ value }}</template></dd></div></dl>
         <p v-else-if="provider.status === 'fresh'" class="mt-4 text-sm text-[var(--kitlane-muted)] dark:text-slate-400">За этот период рекламный кабинет не вернул показателей.</p>
-        <p v-if="updatedAt(provider)" class="mt-4 text-xs text-slate-400 dark:text-[var(--kitlane-muted)]">Последнее успешное обновление: {{ updatedAt(provider) }}</p>
+        <DashboardSnapshotMeta :snapshot="provider" />
       </article>
     </div>
   </section>

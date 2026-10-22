@@ -32,7 +32,10 @@ async def get_dashboard_overview(
     """
     Build the current storefront's Manager dashboard for the current month and comparable
     previous-month window. Includes canonical Lead counts, revenue, sales, installation stages,
-    funnel and configured external marketing/search indicators. Follow-ups and receivables are
+    funnel and durable external marketing/search snapshots. This GET never calls external
+    providers or starts refresh work. Missing configured snapshots are pending; stale successes
+    retain their actual source period and last-success timestamp while the scheduler retries.
+    Live CRM aggregates are recalculated on every request. Follow-ups and receivables are
     current-state snapshots without previous-period values. Tenant/storefront scope comes from
     authenticated Manager access; provider availability is represented in the dashboard result.
     This is an aggregate report, not a ledger export.

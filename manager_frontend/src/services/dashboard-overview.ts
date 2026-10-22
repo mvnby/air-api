@@ -73,15 +73,19 @@ export const getDashboardTrend = (key: DashboardKpiKey, kpi: DashboardKpi): Dash
   return { label, tone: kpi.trend === 'up' ? 'positive' : 'negative' };
 };
 
-export const dashboardMarketingStatus = (marketing: Pick<DashboardMarketing, 'status'>) => {
+export type DashboardSnapshotStatus = DashboardMarketing['status'] | 'pending';
+
+export const dashboardMarketingStatus = (marketing: { status: DashboardSnapshotStatus }) => {
   const messages = {
     fresh: 'Данные получены.',
+    pending: 'Первый снимок готовится в фоне. Показатели появятся после получения данных.',
     stale: 'Показан последний доступный снимок; он может быть неактуален.',
     error: 'Подключение сохранено, но получить данные сейчас не удалось.',
     unconfigured: 'Источник пока не подключён.',
   } as const;
   const labels = {
     fresh: 'Данные актуальны',
+    pending: 'Готовится',
     stale: 'Данные устарели',
     error: 'Ошибка интеграции',
     unconfigured: 'Не подключено',
@@ -138,3 +142,26 @@ export const formatDurationSeconds = (value: number | null | undefined) => {
   const seconds = totalSeconds % 60;
   return minutes ? `${minutes} мин ${seconds.toString().padStart(2, '0')} с` : `${seconds} с`;
 };
+
+export const dashboardAggregateStatus = (
+  providers: Array<{ status: DashboardSnapshotStatus }>,
+  fallback: DashboardSnapshotStatus = 'unconfigured',
+): DashboardSnapshotStatus => {
+  const active = providers.filter(provider => provider.status !== 'unconfigured');
+  if (!active.length) return providers.length ? 'unconfigured' : fallback;
+  if (active.every(provider => provider.status === 'pending')) return 'pending';
+  if (active.every(provider => provider.status === 'error')) return 'error';
+  if (active.some(provider => provider.status !== 'fresh') && active.some(provider => provider.status === 'fresh' || provider.status === 'stale')) return 'stale';
+  return active.some(provider => provider.status === 'error') ? 'error' : 'fresh';
+};
+
+export const formatDashboardUpdatedAt = (value: string) => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : new Intl.DateTimeFormat('ru-RU', {
+    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Minsk',
+  }).format(date);
+};
+
+export const formatDashboardSnapshotPeriod = (start: string, endExclusive: string) => (
+  formatPeriodRange(`${start}T00:00:00+03:00`, `${endExclusive}T00:00:00+03:00`)
+);

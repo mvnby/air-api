@@ -30,7 +30,7 @@ from services.analytics_yandex_providers import YandexDirectProvider
 logger = logging.getLogger(__name__)
 
 
-MarketingStatus = Literal["unconfigured", "fresh", "stale", "error"]
+MarketingStatus = Literal["unconfigured", "pending", "fresh", "stale", "error"]
 
 
 @dataclass(frozen=True)
@@ -76,6 +76,11 @@ class MarketingProviderSnapshot:
     currency: str | None = None
     message: str | None = None
     updated_at: datetime | None = None
+    last_attempt_at: datetime | None = None
+    next_retry_at: datetime | None = None
+    error_code: str | None = None
+    period_start: date | None = None
+    period_end: date | None = None
 
 
 @dataclass(frozen=True)

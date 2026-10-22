@@ -5,7 +5,7 @@
 import type { DashboardMarketingProvider } from './DashboardMarketingProvider';
 import type { DashboardMarketingSource } from './DashboardMarketingSource';
 export type DashboardMarketing = {
-    status: 'unconfigured' | 'fresh' | 'stale' | 'error';
+    status: 'unconfigured' | 'pending' | 'fresh' | 'stale' | 'error';
     provider?: 'integrated' | 'yandex_metrika';
     visits?: (number | null);
     sources?: Array<DashboardMarketingSource>;

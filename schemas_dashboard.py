@@ -91,14 +91,22 @@ class DashboardMarketingSource(BaseModel):
     share_pct: float
 
 
-class DashboardMarketingProvider(BaseModel):
+class DashboardSourceFreshness(BaseModel):
+    last_attempt_at: datetime | None = None
+    next_retry_at: datetime | None = None
+    error_code: str | None = None
+    period_start: date | None = None
+    period_end: date | None = Field(default=None, description="Exclusive end of the actual saved source period; may precede the live CRM window.")
+
+
+class DashboardMarketingProvider(DashboardSourceFreshness):
     provider: Literal[
         "yandex_metrika",
         "yandex_direct",
         "google_analytics",
         "google_ads",
     ]
-    status: Literal["unconfigured", "fresh", "stale", "error"]
+    status: Literal["unconfigured", "pending", "fresh", "stale", "error"]
     visits: int | None = None
     sessions: int | None = None
     active_users: int | None = None
@@ -116,7 +124,7 @@ class DashboardMarketingProvider(BaseModel):
 
 
 class DashboardMarketing(BaseModel):
-    status: Literal["unconfigured", "fresh", "stale", "error"]
+    status: Literal["unconfigured", "pending", "fresh", "stale", "error"]
     provider: Literal["integrated", "yandex_metrika"] = "integrated"
     visits: int | None = None
     sources: list[DashboardMarketingSource] = Field(default_factory=list)
@@ -143,15 +151,15 @@ class DashboardSearchQuery(BaseModel):
     avg_position: float | None = None
 
 
-class DashboardSearchDemandProvider(BaseModel):
+class DashboardSearchDemandProvider(DashboardSourceFreshness):
     provider: Literal["yandex_webmaster", "google_search_console"]
-    status: Literal["unconfigured", "fresh", "stale", "error"]
+    status: Literal["unconfigured", "pending", "fresh", "stale", "error"]
     message: str | None = None
     updated_at: datetime | None = None
 
 
 class DashboardSearchDemand(BaseModel):
-    status: Literal["unconfigured", "fresh", "stale", "error"]
+    status: Literal["unconfigured", "pending", "fresh", "stale", "error"]
     queries: list[DashboardSearchQuery] = Field(default_factory=list)
     providers: list[DashboardSearchDemandProvider] = Field(default_factory=list)
     updated_at: datetime | None = None
