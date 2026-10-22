@@ -7,6 +7,7 @@ import { managerSession } from '../services/manager-session';
 import { CUSTOMER_UPDATED_EVENT, type CustomerUpdatedEventPayload } from '../utils/customer-events';
 import CreateOrderModal from '../components/CreateOrderModal.vue';
 import CustomerIntakeDialog from '../components/customers/CustomerIntakeDialog.vue';
+import ManagerContextHeader from '../components/manager/ManagerContextHeader.vue';
 
 // --- State ---
 type CustomerListItem = ManagerCatalogCustomerItemResponse & {
@@ -290,16 +291,20 @@ onUnmounted(() => {
 
 <template>
   <div class="customers-view">
-    <header class="customers-header">
-      <h1>Клиенты</h1>
-      <button type="button" data-testid="create-customer" class="customers-create" @click="showCreateCustomer = true">Новый клиент</button>
-    </header>
+    <ManagerContextHeader compact>
+      <div class="customers-header-container">
+        <header class="customers-header">
+          <h1>Клиенты</h1>
+          <label class="search-box">
+            <Search :size="16" aria-hidden="true" />
+            <input v-model="searchQuery" aria-label="Поиск клиентов по имени, телефону, email или УНП" placeholder="Имя, телефон, email или УНП" @input="scheduleSearch" @keyup.enter="onSearch" />
+            <button v-if="searchQuery" type="button" class="search-clear" aria-label="Очистить поиск" @click="clearSearch"><X :size="15" /></button>
+          </label>
+          <button type="button" data-testid="create-customer" class="customers-create" @click="showCreateCustomer = true">Новый клиент</button>
+        </header>
+      </div>
+    </ManagerContextHeader>
     <div class="customers-toolbar">
-      <label class="search-box">
-        <Search :size="16" aria-hidden="true" />
-        <input v-model="searchQuery" aria-label="Поиск клиентов по имени, телефону, email или УНП" placeholder="Имя, телефон, email или УНП" @input="scheduleSearch" @keyup.enter="onSearch" />
-        <button v-if="searchQuery" type="button" class="search-clear" aria-label="Очистить поиск" @click="clearSearch"><X :size="15" /></button>
-      </label>
       <div class="customers-filter-line">
         <div class="customer-type-segments" role="group" aria-label="Тип клиента">
           <button v-for="option in [
@@ -454,3 +459,28 @@ onUnmounted(() => {
 </template>
 
 <style scoped src="../styles/customers.css"></style>
+
+<style scoped>
+.customers-header-container {
+  container-type: inline-size;
+  min-width: 0;
+  width: 100%;
+  --mv-text: var(--kitlane-text);
+  --mv-text-muted: var(--kitlane-muted);
+  --mv-border: var(--kitlane-border);
+  --mv-surface: var(--kitlane-surface);
+}
+.customers-header { flex-wrap: wrap; justify-content: flex-start; gap: 8px; margin-bottom: 0; }
+.customers-header h1 { flex: none; font-size: 18px; font-weight: 650; line-height: 1.2; }
+.customers-header .search-box { flex: 1 1 210px; min-width: min(210px, 100%); width: auto; max-width: 520px; min-height: 34px; padding: 5px 9px; }
+.customers-header .search-box > svg { flex: none; }
+.customers-header .search-box input { width: 100%; font-size: 13px; }
+.customers-header .customers-create { min-height: 34px; padding-inline: 11px; white-space: nowrap; }
+@container (max-width: 520px) {
+  .customers-header .search-box { order: 1; flex-basis: 100%; min-width: 0; max-width: none; }
+  .customers-header .customers-create { margin-left: auto; }
+}
+@media (max-width: 767px) {
+  .customers-header .search-box input { font-size: 16px; }
+}
+</style>

@@ -76,7 +76,7 @@ onBeforeUnmount(() => {
       </div>
     </aside>
     <main class="kitlane-main" :class="{ 'kitlane-main-workspace': workspace }" :inert="drawerOpen" :style="{ '--kitlane-sticky-header-height': `${topbarHeight}px` }">
-      <header ref="topbar" class="kitlane-topbar" :class="{ 'has-context-header': contextHeader.active.value }">
+      <header ref="topbar" class="kitlane-topbar" :class="{ 'has-context-header': contextHeader.active.value, 'has-compact-context': contextHeader.compact.value }">
         <div class="kitlane-mobile-company">
           <button ref="menuButton" class="kitlane-icon-button" type="button" aria-label="Открыть меню" aria-controls="manager-mobile-navigation" :aria-expanded="mobileOpen" @click="emit('update:mobileOpen', true)"><Menu :size="20" /></button>
           <button class="kitlane-home" type="button" :aria-label="`${name || 'Рабочее пространство'} — главная`" @click="emit('home')"><KitlanePartnerIdentity :name="name" :logo-url="logoUrl" :compact-logo-url="compactLogoUrl" :context-key="contextKey" compact /></button>
@@ -121,6 +121,7 @@ onBeforeUnmount(() => {
   .kitlane-topbar.has-context-header { grid-template-columns:minmax(0, 1fr) auto; gap:0.25rem; }
   .has-context-header .kitlane-context-header { grid-column:1 / -1; grid-row:2; }
   .has-context-header .kitlane-topbar-actions { grid-column:2; }
+  .has-compact-context .kitlane-context-header { grid-column:1; grid-row:1; }
 }
 @media (min-width: 768px) {
   .is-collapsed .kitlane-sidebar { width: var(--kitlane-sidebar-compact); }

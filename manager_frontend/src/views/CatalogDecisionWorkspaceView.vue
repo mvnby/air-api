@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import ManagerContextHeader from '../components/manager/ManagerContextHeader.vue';
 import BynSymbol from '../components/money/BynSymbol.vue';
 import CatalogDecisionFilters from '../components/catalog-decision/CatalogDecisionFilters.vue';
 import CatalogDecisionCollectionDialog from '../components/catalog-decision/CatalogDecisionCollectionDialog.vue';
@@ -195,21 +196,16 @@ onBeforeUnmount(() => { disposed = true; compareGeneration += 1; selectionCheckG
 <template>
   <section class="min-h-full bg-gray-50 p-3 pb-80 sm:pb-56 md:p-5 md:pb-52" data-testid="catalog-decision-workspace">
     <div class="mx-auto max-w-screen-2xl space-y-3">
-      <header class="flex flex-wrap items-end justify-between gap-2">
-        <div><h1 class="text-2xl font-bold text-gray-900">Подбор сплит-систем</h1><p class="mt-1 text-sm text-gray-500">Комплектные системы: мощность, форма блока и обогрев — под задачу клиента.</p></div>
-        <p class="text-sm text-gray-500" aria-live="polite">Найдено: {{ total }}</p>
-      </header>
-      <div v-if="target.requested" class="rounded-xl border border-brand-200 bg-brand-50 p-3">
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p class="font-semibold text-brand-950">{{ target.context.value ? `Подбор для заказа #${target.context.value.orderId}` : 'Подбор для заказа' }}</p>
-            <p v-if="target.loading.value" class="mt-1 text-sm text-brand-800">Загружаем заказ…</p>
-            <p v-else-if="target.order.value && target.proposal.value" class="mt-1 text-sm text-brand-800">{{ target.order.value.title || target.order.value.customer?.name || 'Без названия' }} · {{ target.proposal.value.name }}</p>
-            <p v-if="target.canAttach.value" class="mt-1 text-xs text-brand-800">Выбранные модели дополнят этот вариант предложения.</p>
-          </div>
-          <a v-if="target.context.value" :href="target.context.value.returnTo" class="text-sm font-semibold text-brand-800 underline underline-offset-2" @click.prevent="!target.saving.value && returnToManager(target.context.value!.returnTo)">Вернуться в заказ</a>
+      <ManagerContextHeader compact>
+        <div class="selection-context-header">
+          <div class="selection-heading"><h1>Подбор сплит-систем</h1><p aria-live="polite">Найдено: {{ total }}</p></div>
+          <a v-if="target.context.value" :href="target.context.value.returnTo" class="selection-order-return" @click.prevent="!target.saving.value && returnToManager(target.context.value!.returnTo)">К заказу #{{ target.context.value.orderId }}</a>
         </div>
-        <p v-if="target.error.value" role="alert" class="mt-2 text-sm text-red-700">{{ target.error.value }}</p>
+      </ManagerContextHeader>
+      <div v-if="target.requested" class="selection-order-context text-sm text-brand-900">
+        <p v-if="target.loading.value">Загружаем заказ…</p>
+        <p v-else-if="target.order.value && target.proposal.value"><strong>{{ target.order.value.title || target.order.value.customer?.name || 'Без названия' }}</strong> · {{ target.proposal.value.name }}<span v-if="target.canAttach.value"> · Выбранные модели дополнят этот вариант предложения.</span></p>
+        <p v-if="target.error.value" role="alert" class="text-red-700">{{ target.error.value }}</p>
       </div>
       <p v-if="success" class="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800"><span>{{ success.message }}</span><a class="font-semibold underline underline-offset-2" :href="success.href">{{ success.label }}</a></p>
       <CatalogDecisionFilters :reset-key="filterResetKey" :model-value="filters" :brands="brands" :series="series" @update:model-value="updateFilters" @reset="reset" />
@@ -247,3 +243,12 @@ onBeforeUnmount(() => { disposed = true; compareGeneration += 1; selectionCheckG
     </div>
   </section>
 </template>
+
+<style scoped>
+.selection-context-header { display:flex; flex-wrap:wrap; align-items:center; gap:0.5rem 1rem; min-width:0; color:var(--kitlane-text); }
+.selection-heading { display:flex; flex-wrap:wrap; align-items:baseline; gap:0.125rem 0.75rem; min-width:0; }
+.selection-heading h1 { margin:0; font-size:1rem; font-weight:700; line-height:1.4; overflow-wrap:anywhere; }
+.selection-heading p { margin:0; font-size:0.75rem; color:var(--kitlane-muted); white-space:nowrap; }
+.selection-order-return { display:inline-flex; align-items:center; min-height:2.25rem; font-size:0.8125rem; font-weight:600; color:var(--kitlane-accent-text); text-decoration:underline; text-underline-offset:3px; }
+.selection-order-context:empty { display:none; }
+</style>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useManagerContextHeader } from '../../composables/useManagerContextHeader';
-const context = useManagerContextHeader();
+const props = withDefaults(defineProps<{ compact?: boolean }>(), { compact: false });
+const context = useManagerContextHeader(() => props.compact);
 </script>
 
 <template>
