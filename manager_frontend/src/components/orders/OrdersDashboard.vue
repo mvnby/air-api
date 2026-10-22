@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, provide, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { managerStorefrontSelection } from '../../services/manager-storefront-selection';
 import { api } from '../../api';
 import {
@@ -21,6 +21,7 @@ import OrdersImportPreviewModal from './OrdersImportPreviewModal.vue';
 import { useOrdersDashboardModel } from './useOrdersDashboardModel';
 import { useOrderCommandOwnership } from '../../composables/useOrderCommandOwnership';
 import { useOrderBoardCommands } from './useOrderBoardCommands';
+import { orderBoardDragKey, useOrderBoardDrag } from '../../composables/useOrderBoardDrag';
 
 const { recoveryRequired } = managerSession;
 const queue = ref<OrderQueue>('active');
@@ -183,6 +184,10 @@ const commands = useOrderBoardCommands({ ownership, actionable,
   find: id => orders.value.find(order => order.id === id),
   refresh: refreshCurrentOrders, notify: setToast,
 });
+const boardDrag = useOrderBoardDrag({ context: () => commandContext.value, disabled: () => !actionable(),
+  pending: () => movingOrderIds.value, find: id => orders.value.find(order => order.id === id), phases: () => queuePhases.value,
+});
+provide(orderBoardDragKey, boardDrag);
 const renameOrderTitle = commands.rename, onMoveOrder = commands.move;
 const onCancelOrder = commands.refuse, onCloseDebt = commands.closeDebt;
 const waiting = useOrderWaiting({ ownership, context: () => commandContext.value, actionable,
@@ -391,7 +396,7 @@ onMounted(async () => {
         :hidden-on-hold-count="hiddenOnHoldCount" :visible-count="filteredTotal" :extra-summary="filterSummary"
         :selected-count="selectedOrderIds.length" :has-active-filters="hasActiveOrderFilters || Boolean(historyResult || closedFrom || closedTo) || Object.values(queuePhases).some(Boolean)"
         :loading="loading || queueData.refreshing.value" :load-failed="Boolean(loadError) || queueData.stale.value || queueColumns.some(column => Boolean(queueErrors[column]))" :transfer-loading="transferLoading"
-        @reset="clearOrderFilters" @search-now="refreshOrders"
+        @move="onMoveOrder" @reset="clearOrderFilters" @search-now="refreshOrders"
         @import="openImportPicker" @export="exportSelectedOrders"
         @select-all="selectAllVisible" @clear-selection="clearSelection"
       >

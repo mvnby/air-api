@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue';
+import { computed, nextTick, ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import { Download, Search, Upload, X } from 'lucide-vue-next';
 import type { DashboardView, Segment } from '../../api';
 import { STATUS_LABELS, STATUS_ORDER } from './order-utils';
 import { ORDER_WORK_FILTERS, type OrderWorkFilter } from './order-work-filters';
 import OrdersTabSwitcher from './OrdersTabSwitcher.vue';
 import OrdersViewToggle from './OrdersViewToggle.vue';
+import ManagerContextHeader from '../manager/ManagerContextHeader.vue';
+import OrderDropTargets from './OrderDropTargets.vue';
+import { useSharedOrderBoardDrag } from '../../composables/useOrderBoardDrag';
 
 const assignedToMe = defineModel<boolean>('assignedToMe', { default: false });
 const segment = defineModel<Segment>('segment', { required: true });
@@ -28,8 +31,12 @@ const props = defineProps<{
   transferLoading: boolean;
 }>();
 const emit = defineEmits<{
+  move: [payload: { orderId: number; oldStatus: string; newStatus: string }];
   reset: []; searchNow: []; import: []; export: []; selectAll: []; clearSelection: [];
 }>();
+const drag = useSharedOrderBoardDrag();
+watch(() => drag?.source.value, source => { if (source) filtersOpen.value = false; }, { flush: 'sync' });
+const toolbar = ref<HTMLElement | null>(null);
 const searchInput = ref<HTMLInputElement | null>(null);
 const toggleButton = ref<HTMLButtonElement | null>(null);
 const summary = computed(() => [
@@ -50,23 +57,31 @@ const closeFilters = async () => {
   filtersOpen.value = false;
   await nextTick(); toggleButton.value?.focus({ preventScroll: true });
 };
+const outside = (event: MouseEvent) => {
+  if (filtersOpen.value && event.target instanceof Node && !toolbar.value?.contains(event.target)) filtersOpen.value = false;
+};
+onMounted(() => document.addEventListener('click', outside, true));
+onBeforeUnmount(() => document.removeEventListener('click', outside, true));
 </script>
 
 <template>
-  <header class="orders-toolbar mb-2 min-w-0 rounded-xl border border-gray-200 bg-white p-1.5 dark:border-slate-700 dark:bg-slate-800 sm:p-2">
-    <div class="flex min-w-0 items-center gap-1.5 sm:gap-3">
-      <h1 class="sr-only text-lg font-bold md:not-sr-only dark:text-white">Заказы</h1>
-      <div class="min-w-0 flex-1"><slot name="queues" /></div>
+  <ManagerContextHeader>
+  <div ref="toolbar" class="orders-toolbar">
+    <h1 class="sr-only">Заказы</h1>
+    <div class="orders-primary-controls">
+      <OrderDropTargets v-if="drag?.source.value" :drag="drag" @move="emit('move', $event)" />
+      <div v-else class="min-w-0 flex-1"><slot name="queues" /></div>
       <button ref="toggleButton" type="button" class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 px-2 text-sm text-gray-700 dark:border-slate-600 dark:text-slate-200"
         aria-label="Поиск и фильтры" :aria-expanded="filtersOpen" aria-controls="orders-options" @click="filtersOpen ? closeFilters() : openFilters()">
-        <X v-if="filtersOpen" class="h-4 w-4" /><Search v-else class="h-4 w-4" /><span class="hidden lg:inline">{{ filtersOpen ? 'Закрыть' : 'Поиск и фильтры' }}</span>
+        <X v-if="filtersOpen" class="h-4 w-4" /><Search v-else class="h-4 w-4" /><span class="orders-search-label">{{ filtersOpen ? 'Закрыть' : 'Поиск и фильтры' }}</span>
       </button>
     </div>
-    <div class="mt-1 flex min-w-0 items-center gap-2 text-xs text-gray-600 dark:text-slate-300">
-      <button type="button" class="min-w-0 flex-1 truncate text-left hover:text-brand-700" :title="summary" :aria-label="`Условия: ${summary}. Открыть фильтры`" @click="openFilters">{{ summary }}</button>
-      <span role="status" class="shrink-0 text-[11px]">{{ loading ? 'Загрузка заказов…' : loadFailed ? 'Ошибка загрузки' : `По фильтрам: ${visibleCount}` }}</span>
+    <div class="orders-secondary-controls">
+      <OrdersTabSwitcher v-model="segment" />
+      <button type="button" class="orders-condition-summary min-w-0 flex-1 truncate text-left hover:text-brand-700" :title="summary" :aria-label="`Условия: ${summary}. Открыть фильтры`" @click="openFilters">{{ summary }}</button>
+      <span role="status" class="orders-result-count shrink-0 text-[11px]">{{ loading ? 'Загрузка заказов…' : loadFailed ? 'Ошибка загрузки' : `По фильтрам: ${visibleCount}` }}</span>
     </div>
-    <section v-show="filtersOpen" id="orders-options" aria-label="Поиск и настройки заказов" class="mt-2 space-y-3 border-t border-gray-200 pt-3 text-sm dark:border-slate-700" @keydown.esc.stop.prevent="closeFilters">
+    <section v-show="filtersOpen" id="orders-options" aria-label="Поиск и настройки заказов" class="orders-filter-panel space-y-3 text-sm" @keydown.esc.stop.prevent="closeFilters">
       <form class="relative" role="search" @submit.prevent="emit('searchNow')">
         <Search class="pointer-events-none absolute left-3 top-3 h-4 w-4 text-gray-500" />
         <input ref="searchInput" v-model="search" type="search" aria-label="Поиск заказов" placeholder="Клиент, телефон, УНП, название или номер заказа"
@@ -75,7 +90,6 @@ const closeFilters = async () => {
       </form>
       <p v-if="search.trim()" class="text-xs text-gray-500">Поиск во всех очередях. Очередь указана рядом с заказом.</p>
       <div class="flex flex-wrap items-center gap-2">
-        <OrdersTabSwitcher v-model="segment" />
         <button type="button" class="inline-flex min-h-9 items-center rounded-lg border px-3 py-1.5 text-sm font-semibold disabled:opacity-40" :class="assignedToMe ? 'border-brand-600 bg-brand-600 text-white' : 'border-gray-200 text-gray-700 dark:border-slate-600 dark:text-slate-200'" :aria-pressed="assignedToMe" :disabled="!canFilterMine" :title="canFilterMine ? 'Показать заказы, где вы назначены ответственным' : 'Нужна личная учётная запись'" @click="assignedToMe = !assignedToMe">Мои заказы</button>
         <OrdersViewToggle v-model="view" />
       </div>
@@ -104,5 +118,18 @@ const closeFilters = async () => {
       <p v-else-if="workFilter === 'planning'" class="text-xs text-gray-500">Согласованные предложения и заказы, для которых нужно назначить работы.</p>
       <p v-else-if="workFilter === 'followup'" class="text-xs text-gray-500">Контакты из активных и ожидающих заказов. Ожидание не снимается.</p>
     </section>
-  </header>
+  </div>
+  </ManagerContextHeader>
 </template>
+
+<style scoped>
+.orders-toolbar { position:relative; min-width:0; }
+.orders-primary-controls { display:flex; align-items:center; gap:0.5rem; min-width:0; }
+.orders-secondary-controls { display:flex; align-items:center; gap:0.5rem; min-width:0; margin-top:0.25rem; font-size:0.75rem; color:var(--kitlane-muted); }
+.orders-filter-panel { position:absolute; top:calc(100% + 0.5rem); left:0; z-index:45; width:min(640px, 100%); max-height:calc(100dvh - var(--kitlane-sticky-header-height, var(--kitlane-header-height)) - 24px); overflow-y:auto; padding:0.75rem; border:1px solid var(--kitlane-border); border-radius:0.75rem; background:var(--kitlane-surface); box-shadow:0 16px 40px rgb(15 23 42 / 0.2); color:var(--kitlane-text); }
+.orders-search-label { display:none; }
+@media (min-width:1440px) { .orders-search-label { display:inline; } }
+@media (max-width:767px) {
+  .orders-secondary-controls { gap:0.375rem; }
+}
+</style>
