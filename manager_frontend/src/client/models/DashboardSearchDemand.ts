@@ -5,7 +5,7 @@
 import type { DashboardSearchDemandProvider } from './DashboardSearchDemandProvider';
 import type { DashboardSearchQuery } from './DashboardSearchQuery';
 export type DashboardSearchDemand = {
-    status: 'unconfigured' | 'fresh' | 'stale' | 'error';
+    status: 'unconfigured' | 'pending' | 'fresh' | 'stale' | 'error';
     queries?: Array<DashboardSearchQuery>;
     providers?: Array<DashboardSearchDemandProvider>;
     updated_at?: (string | null);

@@ -23,7 +23,7 @@ from services.analytics_yandex_providers import YandexWebmasterProvider
 logger = logging.getLogger(__name__)
 
 
-SearchDemandStatus = Literal["unconfigured", "fresh", "stale", "error"]
+SearchDemandStatus = Literal["unconfigured", "pending", "fresh", "stale", "error"]
 
 
 @dataclass(frozen=True)
@@ -32,6 +32,11 @@ class SearchDemandProviderState:
     status: SearchDemandStatus
     message: str | None = None
     updated_at: datetime | None = None
+    last_attempt_at: datetime | None = None
+    next_retry_at: datetime | None = None
+    error_code: str | None = None
+    period_start: date | None = None
+    period_end: date | None = None
 
 
 @dataclass(frozen=True)

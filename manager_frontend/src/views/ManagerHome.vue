@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, type Component } from 'vue';
+import { computed, ref, type Component } from 'vue';
 import { BarChart3, CalendarClock, ChevronRight, CircleAlert, ExternalLink, FileWarning, Inbox, Megaphone, Search, ShoppingBag, WalletCards } from 'lucide-vue-next';
-import { api, type DashboardStatsResponse } from '../api';
-import type { DashboardOverviewResponse } from '../client';
+import { useManagerDashboard } from '../composables/useManagerDashboard';
 import { MANAGER_CAPABILITY, hasManagerCapability } from '../manager-capabilities';
 import { managerSession } from '../services/manager-session';
 import DashboardAdvertising from '../components/dashboard/DashboardAdvertising.vue';
@@ -11,7 +10,7 @@ import DashboardKpiGrid from '../components/dashboard/DashboardKpiGrid.vue';
 import DashboardLoadingState from '../components/dashboard/DashboardLoadingState.vue';
 import DashboardSalesChart from '../components/dashboard/DashboardSalesChart.vue';
 import DashboardSiteSeo from '../components/dashboard/DashboardSiteSeo.vue';
-import { formatDashboardComparisonPeriod, formatDashboardMoneyAmount } from '../services/dashboard-overview';
+import { formatDashboardComparisonPeriod, formatDashboardMoneyAmount, formatDashboardUpdatedAt } from '../services/dashboard-overview';
 import MoneyAmount from '../components/money/MoneyAmount.vue';
 
 type DashboardTab = 'sales' | 'site-seo' | 'advertising';
@@ -21,60 +20,16 @@ const tabs: Array<{ id: DashboardTab; label: string; icon: Component }> = [
   { id: 'advertising', label: 'Реклама', icon: Megaphone },
 ];
 const activeTab = ref<DashboardTab>('sales');
-const overview = ref<DashboardOverviewResponse | null>(null);
-const overviewLoading = ref(true);
-const overviewError = ref(false);
-const operationalLoading = ref(true);
-const operationalError = ref(false);
-const leadsLoading = ref(true);
-const leadsError = ref(false);
-const stats = ref<DashboardStatsResponse | null>(null);
-const leadsCount = ref(0);
+const dashboard = useManagerDashboard();
+const { data: overview, loading: overviewLoading, error: overviewError, updatedAt: overviewUpdatedAt } = dashboard.overview;
+const { data: stats, loading: operationalLoading, error: operationalError, updatedAt: operationalUpdatedAt } = dashboard.operations;
+const { data: leads, loading: leadsLoading, error: leadsError } = dashboard.leads;
+const leadsCount = computed(() => leads.value?.count || 0);
+const fetchOverview = () => dashboard.refresh();
 const canManageIntegrations = computed(() => hasManagerCapability(managerSession.auth.value, MANAGER_CAPABILITY.analyticsManage));
 const overdueTouchpoints = computed(() => stats.value?.upcoming_touchpoints?.filter(touch => isOverdue(touch.next_followup_date)) || []);
 const firstOverdueTouchpoint = computed(() => overdueTouchpoints.value[0] || null);
 
-const fetchOverview = async () => {
-  overviewLoading.value = true;
-  overviewError.value = false;
-  try {
-    overview.value = await api.getDashboardOverview();
-  } catch (error) {
-    console.error('Error fetching dashboard overview:', error);
-    overviewError.value = true;
-  } finally {
-    overviewLoading.value = false;
-  }
-};
-const fetchOperationalBlocks = async () => {
-  operationalLoading.value = true;
-  operationalError.value = false;
-  try {
-    stats.value = await api.getDashboardStats();
-  } catch (error) {
-    console.error('Error fetching operational dashboard blocks:', error);
-    operationalError.value = true;
-  } finally {
-    operationalLoading.value = false;
-  }
-};
-const fetchLeadsCounter = async () => {
-  leadsLoading.value = true;
-  leadsError.value = false;
-  try {
-    leadsCount.value = (await api.getLeadsCounter()).count;
-  } catch (error) {
-    console.error('Error fetching leads counter:', error);
-    leadsError.value = true;
-  } finally {
-    leadsLoading.value = false;
-  }
-};
-onMounted(() => {
-  void fetchOverview();
-  void fetchOperationalBlocks();
-  void fetchLeadsCounter();
-});
 const navigate = (path: string) => {
   if (window.location.pathname !== path) {
     window.history.pushState({}, '', path);
@@ -119,22 +74,25 @@ const shortText = (value?: string | null, limit = 120) => {
       <button v-for="tab in tabs" :id="`dashboard-tab-${tab.id}`" :key="tab.id" type="button" role="tab" :aria-selected="activeTab === tab.id" :aria-controls="`dashboard-panel-${tab.id}`" class="kitlane-dashboard-tab" :class="{ 'is-active': activeTab === tab.id }" :tabindex="activeTab === tab.id ? 0 : -1" @click="selectTab(tab.id)" @keydown="selectTabFromKey"><component :is="tab.icon" class="hidden h-4 w-4 shrink-0 min-[360px]:block" aria-hidden="true" /><span class="truncate">{{ tab.label }}</span></button>
     </nav>
 
+    <div v-if="overview" class="mb-4 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--kitlane-muted)]" role="status">
+      <span>{{ overviewUpdatedAt ? `Продажи и оплаты проверены: ${formatDashboardUpdatedAt(overviewUpdatedAt)}` : '' }}<span v-if="overviewLoading"> · Обновляем…</span></span>
+      <span v-if="overviewError" class="text-amber-700 dark:text-amber-300">Не удалось обновить сводку. Показаны последние данные. <button type="button" class="font-semibold underline" @click="fetchOverview">Повторить</button></span>
+    </div>
+
     <section v-if="activeTab === 'sales'" id="dashboard-panel-sales" role="tabpanel" aria-labelledby="dashboard-tab-sales" class="space-y-5">
       <section class="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
-        <div class="flex items-center justify-between gap-3"><h2 class="text-lg font-semibold text-slate-900 dark:text-white">Требует внимания</h2><span class="text-xs text-[var(--kitlane-muted)] dark:text-slate-400">На сейчас</span></div>
-        <div v-if="operationalLoading || leadsLoading" class="mt-3 text-sm text-[var(--kitlane-muted)] dark:text-slate-400">Проверяем срочные действия...</div>
-        <template v-else>
-        <p v-if="leadsError || operationalError" class="mt-3 text-sm text-[var(--kitlane-muted)] dark:text-slate-400">Часть проверок недоступна. Доступные действия показаны ниже.</p>
+        <div class="flex items-center justify-between gap-3"><h2 class="text-lg font-semibold text-slate-900 dark:text-white">Требует внимания</h2><span class="text-xs text-[var(--kitlane-muted)] dark:text-slate-400">{{ operationalUpdatedAt ? `Проверено: ${formatDashboardUpdatedAt(operationalUpdatedAt)}` : 'На сейчас' }}</span></div>
+        <div v-if="(operationalLoading && !stats) || (leadsLoading && !leads)" class="mt-3 text-sm text-[var(--kitlane-muted)] dark:text-slate-400">Проверяем срочные действия...</div>
+        <p v-if="leadsError || operationalError" class="mt-3 text-sm text-[var(--kitlane-muted)] dark:text-slate-400">Не удалось обновить часть проверок. Показаны последние доступные действия.</p>
         <div v-if="leadsCount || stats?.bank_receipts_review_count || firstOverdueTouchpoint" class="kitlane-attention-grid mt-4 grid gap-3">
           <button v-if="leadsCount" type="button" class="flex items-center gap-3 rounded-lg bg-slate-50 p-3 text-left hover:bg-[var(--kitlane-accent-soft)] dark:bg-slate-900/40" @click="navigate('/manager/leads')"><Inbox class="h-5 w-5 shrink-0 text-[var(--kitlane-accent-text)]" aria-hidden="true" /><span><strong class="block text-sm">{{ leadsCount }} входящих</strong><span class="text-xs text-[var(--kitlane-muted)] dark:text-slate-400">Разобрать заявки</span></span></button>
           <button v-if="stats?.bank_receipts_review_count" type="button" class="flex items-center gap-3 rounded-lg bg-slate-50 p-3 text-left hover:bg-[var(--kitlane-accent-soft)] dark:bg-slate-900/40" @click="navigate('/manager/payments')"><WalletCards class="h-5 w-5 shrink-0 text-[var(--kitlane-accent-text)]" aria-hidden="true" /><span><strong class="block text-sm">{{ stats.bank_receipts_review_count }} поступлений</strong><span class="text-xs text-[var(--kitlane-muted)] dark:text-slate-400">Связать с заказами</span></span></button>
           <button v-if="firstOverdueTouchpoint" type="button" class="flex items-center gap-3 rounded-lg bg-slate-50 p-3 text-left hover:bg-[var(--kitlane-accent-soft)] dark:bg-slate-900/40" @click="openOrder(firstOverdueTouchpoint.order_id)"><CalendarClock class="h-5 w-5 shrink-0 text-rose-600" aria-hidden="true" /><span><strong class="block text-sm">Просроченные касания</strong><span class="text-xs text-[var(--kitlane-muted)] dark:text-slate-400">Вернуться к клиентам</span></span></button>
         </div>
-        <p v-else-if="!leadsError && !operationalError" class="mt-3 text-sm text-[var(--kitlane-muted)] dark:text-slate-400">Срочных действий нет.</p>
-        </template>
+        <p v-else-if="!leadsError && !operationalError && !operationalLoading && !leadsLoading" class="mt-3 text-sm text-[var(--kitlane-muted)] dark:text-slate-400">Срочных действий нет.</p>
       </section>
-      <DashboardLoadingState v-if="overviewLoading" />
-      <section v-else-if="overviewError" class="rounded-xl border border-rose-200 bg-white p-6 text-center dark:border-rose-900/60 dark:bg-slate-800">
+      <DashboardLoadingState v-if="overviewLoading && !overview" />
+      <section v-else-if="overviewError && !overview" class="rounded-xl border border-rose-200 bg-white p-6 text-center dark:border-rose-900/60 dark:bg-slate-800">
         <CircleAlert class="mx-auto h-8 w-8 text-rose-500" aria-hidden="true" />
         <h2 class="mt-2 font-semibold text-slate-900 dark:text-white">Не удалось загрузить сводку</h2>
         <p class="mt-1 text-sm text-[var(--kitlane-muted)] dark:text-slate-400">Операционные списки ниже остаются доступны.</p>
@@ -156,14 +114,14 @@ const shortText = (value?: string | null, limit = 120) => {
       </section>
       <section class="pt-2">
         <h2 class="mb-3 text-lg font-semibold text-slate-800 dark:text-gray-300">{{ overdueTouchpoints.length ? 'Касания требуют внимания' : 'Ближайшие касания' }}</h2>
-        <div v-if="operationalLoading" class="rounded-xl border border-slate-200 bg-white p-5 text-sm text-[var(--kitlane-muted)]">Загрузка задач...</div>
-        <div v-else-if="operationalError" class="rounded-xl border border-slate-200 bg-white p-5 text-sm text-[var(--kitlane-muted)]">Операционные данные временно недоступны.</div>
+        <div v-if="operationalLoading && !stats" class="rounded-xl border border-slate-200 bg-white p-5 text-sm text-[var(--kitlane-muted)]">Загрузка задач...</div>
+        <div v-else-if="operationalError && !stats" class="rounded-xl border border-slate-200 bg-white p-5 text-sm text-[var(--kitlane-muted)]">Операционные данные временно недоступны.</div>
         <div v-else-if="stats && stats.upcoming_touchpoints.length" class="space-y-3"><button v-for="touch in stats.upcoming_touchpoints" :key="touch.order_id" type="button" class="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white p-4 text-left hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800" @click="openOrder(touch.order_id)"><span><strong>Заказ #{{ touch.order_id }} — {{ touch.customer_name }}</strong><span v-if="touch.title" class="ml-2 text-sm text-[var(--kitlane-muted)]">({{ touch.title }})</span><span class="mt-1 block text-sm" :class="isOverdue(touch.next_followup_date) ? 'font-semibold text-rose-600' : 'text-[var(--kitlane-muted)]'">{{ touch.phone ? `${touch.phone} · ` : '' }}{{ deadlineLabel(touch.next_followup_date) }}</span></span><ChevronRight class="h-5 w-5 text-slate-400" /></button></div>
         <div v-else class="rounded-xl border border-dashed border-slate-200 bg-slate-100 p-6 text-center text-sm text-[var(--kitlane-muted)]">Нет срочных касаний.</div>
       </section>
     </section>
-    <DashboardLoadingState v-else-if="overviewLoading" />
-    <section v-else-if="overviewError" class="rounded-xl border border-rose-200 bg-white p-6 text-center dark:border-rose-900/60 dark:bg-slate-800"><CircleAlert class="mx-auto h-8 w-8 text-rose-500" aria-hidden="true" /><h2 class="mt-2 font-semibold text-slate-900 dark:text-white">Не удалось загрузить сводку</h2><button type="button" class="mt-4 rounded-lg bg-[var(--kitlane-accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--kitlane-accent-hover)]" @click="fetchOverview">Повторить</button></section>
+    <DashboardLoadingState v-else-if="overviewLoading && !overview" />
+    <section v-else-if="overviewError && !overview" class="rounded-xl border border-rose-200 bg-white p-6 text-center dark:border-rose-900/60 dark:bg-slate-800"><CircleAlert class="mx-auto h-8 w-8 text-rose-500" aria-hidden="true" /><h2 class="mt-2 font-semibold text-slate-900 dark:text-white">Не удалось загрузить сводку</h2><button type="button" class="mt-4 rounded-lg bg-[var(--kitlane-accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--kitlane-accent-hover)]" @click="fetchOverview">Повторить</button></section>
     <section v-else-if="overview && activeTab === 'site-seo'" id="dashboard-panel-site-seo" role="tabpanel" aria-labelledby="dashboard-tab-site-seo"><DashboardSiteSeo :marketing="overview.marketing" :search-demand="overview.search_demand" :can-manage-integrations="canManageIntegrations" /></section>
     <section v-else-if="overview" id="dashboard-panel-advertising" role="tabpanel" aria-labelledby="dashboard-tab-advertising"><DashboardAdvertising :marketing="overview.marketing" :can-manage-integrations="canManageIntegrations" /></section>
   </div>

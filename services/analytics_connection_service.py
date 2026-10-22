@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from uuid import uuid4
 import logging
 from datetime import datetime, timezone
 from typing import Any, Callable
@@ -166,6 +167,8 @@ class AnalyticsConnectionService:
             separators=(",", ":"),
             default=str,
         )
+        if credential_replaced or before_config != public_config:
+            connection.snapshot_revision = uuid4().hex
         connection.status = "active"
         connection.public_config = dict(public_config)
         connection.encrypted_credentials = AnalyticsCredentialCipher.encrypt(

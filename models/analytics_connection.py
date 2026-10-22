@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from uuid import uuid4
 from datetime import datetime
 from typing import Any, Optional
 
@@ -63,6 +64,10 @@ class AnalyticsConnection(SQLModel, table=True):
     encrypted_credentials: str = Field(sa_column=Column(Text, nullable=False))
     credentials_fingerprint: str = Field(
         sa_column=Column(String(64), nullable=False),
+    )
+    snapshot_revision: str = Field(
+        default_factory=lambda: uuid4().hex,
+        sa_column=Column(String(64), nullable=False, server_default="initial"),
     )
     last_verified_at: Optional[datetime] = Field(
         default=None,

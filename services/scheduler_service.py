@@ -137,6 +137,9 @@ class SchedulerService:
 
         tasks = []
 
+        # Owned/cancelled by the same HA-fenced scheduler as other background work.
+        tasks.append(asyncio.create_task(self._dashboard_analytics_loop()))
+
         # Run price sync loop
         tasks.append(asyncio.create_task(self._price_sync_loop(interval_hours)))
 
@@ -207,6 +210,17 @@ class SchedulerService:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
             raise
+
+    async def _dashboard_analytics_loop(self):
+        from services.dashboard_analytics_worker import DashboardAnalyticsWorker
+
+        worker = DashboardAnalyticsWorker()
+        while True:
+            try:
+                await worker.run_once()
+            except Exception:
+                logger.exception("Dashboard analytics refresh failed")
+            await asyncio.sleep(60)
 
     async def _jev_shadow_loop(self):
         from services.jev_shadow_service import JevShadowService

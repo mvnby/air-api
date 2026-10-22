@@ -2,7 +2,8 @@
 import { computed, ref } from 'vue';
 import { ExternalLink } from 'lucide-vue-next';
 import type { DashboardSearchDemand, DashboardSearchQuery } from '../../client';
-import { formatMarketingValue, formatSearchDemandProvider } from '../../services/dashboard-overview';
+import DashboardSnapshotMeta from './DashboardSnapshotMeta.vue';
+import { dashboardMarketingStatus, dashboardAggregateStatus, formatMarketingValue, formatSearchDemandProvider } from '../../services/dashboard-overview';
 import { downloadSearchDemandCsv } from '../../services/search-demand-export';
 
 const props = defineProps<{ demand: DashboardSearchDemand; canManageIntegrations: boolean }>();
@@ -48,25 +49,14 @@ const sourceProviders = computed(() => expectedProviders.map(provider => (
 )));
 const activeProviders = computed(() => providers.value.filter(provider => provider.status !== 'unconfigured'));
 const hasFreshProvider = computed(() => activeProviders.value.some(provider => provider.status === 'fresh'));
-const hasProblemProvider = computed(() => activeProviders.value.some(provider => provider.status === 'error' || provider.status === 'stale'));
-const hasUnavailableProvider = computed(() => activeProviders.value.some(provider => provider.status === 'error'));
-const demandStatus = computed(() => {
-  if (!activeProviders.value.length) return props.demand.status === 'error' ? 'error' as const : 'unconfigured' as const;
-  if (hasProblemProvider.value && hasFreshProvider.value) return 'stale' as const;
-  if (activeProviders.value.every(provider => provider.status === 'error')) return 'error' as const;
-  if (activeProviders.value.some(provider => provider.status === 'stale')) return 'stale' as const;
-  return 'fresh' as const;
-});
+const hasProblemProvider = computed(() => activeProviders.value.some(provider => provider.status === 'error' || provider.status === 'stale' || provider.status === 'pending'));
+const demandStatus = computed(() => dashboardAggregateStatus(providers.value, props.demand.status));
 const statusLabel = computed(() => (
-  hasFreshProvider.value && hasUnavailableProvider.value
+  hasFreshProvider.value && hasProblemProvider.value
     ? 'Частично доступно'
-    : { fresh: 'Данные актуальны', stale: 'Часть данных устарела', error: 'Источники недоступны', unconfigured: 'Не подключено' }[demandStatus.value]
+    : { pending: 'Готовится', fresh: 'Данные актуальны', stale: 'Часть данных устарела', error: 'Источники недоступны', unconfigured: 'Не подключено' }[demandStatus.value]
 ));
 const providerMessage = computed(() => providers.value.find(provider => provider.status === 'error')?.message || providers.value.find(provider => provider.status === 'stale')?.message || null);
-const providerUpdatedAt = (provider: (typeof sourceProviders.value)[number]) => {
-  const value = provider.updated_at;
-  return value ? new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Minsk' }).format(new Date(value)) : null;
-};
 
 const sourceAvailable = (source: Source) => source === 'all' || props.demand.providers?.some(provider => provider.provider === source);
 const position = (value: number | null | undefined) => value == null ? '—' : new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(value);
@@ -97,8 +87,8 @@ const exportRows = () => downloadSearchDemandCsv(sortedQueries.value as Dashboar
     <p class="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600 dark:bg-slate-900/40 dark:text-slate-300">Поисковые системы передают агрегированные данные с задержкой, а редкие запросы могут скрываться для защиты приватности.</p>
     <div class="mt-3 grid gap-2 sm:grid-cols-2">
       <div v-for="provider in sourceProviders" :key="provider.provider" class="rounded-lg bg-slate-50 px-3 py-2 text-xs dark:bg-slate-900/40">
-        <div class="flex items-center justify-between gap-2"><span class="font-semibold text-slate-700 dark:text-slate-200">{{ formatSearchDemandProvider(provider.provider) }}</span><span class="text-[var(--kitlane-muted)] dark:text-slate-400">{{ { fresh: 'Данные получены', stale: 'Данные устарели', error: 'Ошибка загрузки', unconfigured: 'Не подключён' }[provider.status] }}</span></div>
-        <p v-if="providerUpdatedAt(provider)" class="mt-1 text-slate-400 dark:text-[var(--kitlane-muted)]">Последнее успешное обновление: {{ providerUpdatedAt(provider) }}</p>
+        <div class="flex items-center justify-between gap-2"><span class="font-semibold text-slate-700 dark:text-slate-200">{{ formatSearchDemandProvider(provider.provider) }}</span><span class="text-[var(--kitlane-muted)] dark:text-slate-400">{{ dashboardMarketingStatus(provider).label }}</span></div>
+        <p v-if="provider.status === 'pending'" class="mt-1 text-[var(--kitlane-muted)]">Первый снимок готовится в фоне.</p><DashboardSnapshotMeta :snapshot="provider" />
       </div>
     </div>
 
@@ -131,6 +121,6 @@ const exportRows = () => downloadSearchDemandCsv(sortedQueries.value as Dashboar
       <div class="space-y-3 md:hidden"><article v-for="query in visibleQueries" :key="`${query.provider}:${query.query}`" class="rounded-xl bg-slate-50 p-3 dark:bg-slate-900/40"><div class="flex items-start justify-between gap-3"><h3 class="min-w-0 font-semibold text-slate-900 dark:text-white">{{ query.query }}</h3><span class="shrink-0 text-xs text-[var(--kitlane-muted)] dark:text-slate-400">{{ formatSearchDemandProvider(query.provider) }}</span></div><dl class="mt-3 grid grid-cols-2 gap-3 text-sm"><div><dt class="text-xs text-[var(--kitlane-muted)] dark:text-slate-400">Клики</dt><dd class="mt-0.5 font-semibold text-slate-900 dark:text-white">{{ formatMarketingValue(query.clicks) }}</dd></div><div><dt class="text-xs text-[var(--kitlane-muted)] dark:text-slate-400">Показы</dt><dd class="mt-0.5 font-semibold text-slate-900 dark:text-white">{{ formatMarketingValue(query.impressions) }}</dd></div><div><dt class="text-xs text-[var(--kitlane-muted)] dark:text-slate-400">CTR</dt><dd class="mt-0.5 font-semibold text-slate-900 dark:text-white">{{ formatMarketingValue(query.ctr, 'percent') }}</dd></div><div><dt class="text-xs text-[var(--kitlane-muted)] dark:text-slate-400">Средняя позиция</dt><dd class="mt-0.5 font-semibold text-slate-900 dark:text-white">{{ position(query.avg_position) }}</dd></div></dl></article></div>
       <div v-if="sortedQueries.length > 10" class="mt-4 flex justify-center"><button type="button" class="rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600" @click="expanded = !expanded">{{ expanded ? 'Свернуть до 10' : `Показать все (${sortedQueries.length})` }}</button></div>
     </div>
-    <div v-else class="mt-4 rounded-xl border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-[var(--kitlane-muted)] dark:border-slate-700 dark:text-slate-400"><p>{{ demandStatus === 'fresh' ? 'За этот период поисковые системы не вернули запросов.' : demandStatus === 'error' ? 'Не удалось получить поисковые запросы. Проверьте состояние источников выше.' : demandStatus === 'stale' ? 'Доступен только устаревший или неполный отчёт.' : 'Подключите Яндекс Вебмастер или Google Search Console, чтобы увидеть запросы и позиции.' }}</p><a v-if="demandStatus === 'unconfigured' && canManageIntegrations" href="/manager/integrations" class="mt-3 inline-flex items-center gap-1 font-semibold text-[var(--kitlane-accent-text)] hover:underline">Настроить подключения <ExternalLink class="h-4 w-4" aria-hidden="true" /></a></div>
+    <div v-else class="mt-4 rounded-xl border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-[var(--kitlane-muted)] dark:border-slate-700 dark:text-slate-400"><p>{{ demandStatus === 'pending' ? 'Первый снимок поисковых запросов готовится в фоне.' : demandStatus === 'fresh' ? 'За этот период поисковые системы не вернули запросов.' : demandStatus === 'error' ? 'Не удалось получить поисковые запросы. Проверьте состояние источников выше.' : demandStatus === 'stale' ? 'Доступен только устаревший или неполный отчёт.' : 'Подключите Яндекс Вебмастер или Google Search Console, чтобы увидеть запросы и позиции.' }}</p><a v-if="demandStatus === 'unconfigured' && canManageIntegrations" href="/manager/integrations" class="mt-3 inline-flex items-center gap-1 font-semibold text-[var(--kitlane-accent-text)] hover:underline">Настроить подключения <ExternalLink class="h-4 w-4" aria-hidden="true" /></a></div>
   </section>
 </template>

@@ -45,6 +45,7 @@ from .storefront_settings import StorefrontSettings
 from .yandex_business import YandexBusinessFeedSettings
 from .auth_security import AuthLoginThrottle
 from .analytics_connection import AnalyticsConnection
+from .dashboard_analytics import DashboardAnalyticsSnapshot
 from .leads_inbox import InboxReadState, InboxTriageState, InboxEvent
 from .command_audit import CommandAuditEvent
 from .personal_task import PersonalTask
@@ -183,6 +184,7 @@ __all__ = [
     "InboxReadState", "InboxTriageState", "InboxEvent",
     "Article",
     "AnalyticsConnection",
+    "DashboardAnalyticsSnapshot",
     "OrderWorkspaceUsageDaily",
     "CatalogWorkspaceUsageDaily",
     "DocumentDriveConnection",

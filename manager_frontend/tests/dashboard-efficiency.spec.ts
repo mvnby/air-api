@@ -180,3 +180,17 @@ it('does not turn a whole-report failure into disconnected sources', () => {
   }
   expect(search.text()).toContain('Источники недоступны');
 });
+
+
+it('does not attribute a traffic failure to explicitly unconfigured advertising sources', () => {
+  const wrapper = mount(DashboardAdvertising, {
+    props: { marketing: { status: 'error', providers: [
+      { provider: 'yandex_metrika', status: 'error' },
+      { provider: 'yandex_direct', status: 'unconfigured' },
+      { provider: 'google_ads', status: 'unconfigured' },
+    ] }, canManageIntegrations: false },
+  });
+  expect(wrapper.text()).toContain('Источник пока не подключён');
+  expect(wrapper.text()).not.toContain('Подключение сохранено, но получить данные сейчас не удалось');
+  wrapper.unmount();
+});

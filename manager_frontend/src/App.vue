@@ -4,6 +4,7 @@ import { ManagerContextError } from './services/manager-storefront-selection';
 import ManagerStorefrontSwitcherHost from './components/manager/ManagerStorefrontSwitcherHost.vue';
 import { managerProfileApi, applyOwnProfile } from './services/manager-profile';
 import { inboxChangedEvent } from './services/lead-inbox';
+import { managerLeadsCounterState } from './services/manager-dashboard-state';
 import { computed, defineAsyncComponent, onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import { Zap, Loader2, AlertTriangle } from 'lucide-vue-next';
 import { api } from './api';
@@ -126,7 +127,7 @@ const webRebuildStatus = ref<WebRebuildStatus | null>(null);
 const isMobileNavOpen = ref(false);
 const isDesktopNavCollapsed = ref(false);
 const theme = ref<'light' | 'dark'>('light');
-const leadsCount = ref(0);
+const leadsCount = computed(() => managerLeadsCounterState.data.value?.count || 0);
 const toast = ref('');
 const toastType = ref<'success' | 'error'>('success');
 const currentLocation = ref(normalizeOrderLocation());
@@ -376,7 +377,6 @@ const handleTelegramLogin = async () => {
   }
 };
 const handleLogoutSuccess = () => {
-  leadsCount.value = 0;
   webRebuildStatus.value = null;
   rebuildLoading.value = false;
   isMobileNavOpen.value = false;
@@ -409,17 +409,9 @@ const handleRebuild = async () => {
     rebuildLoading.value = false;
   }
 };
-let counterRequestId = 0;
-const fetchLeadsCount = async () => {
-  const requestId = ++counterRequestId;
-  if (!hasManagerCapability(auth.value, MANAGER_CAPABILITY.crmManage)) return;
-  try {
-    const counter = await api.getLeadsCounter();
-    if (requestId === counterRequestId && isAuthenticated.value) leadsCount.value = counter.count;
-  } catch {
-    // Badge is non-critical — silence errors
-  }
-};
+let appMounted = false;
+const canRefreshCounter = () => appMounted && isAuthenticated.value && document.visibilityState !== 'hidden';
+const fetchLeadsCount = (event?: Event) => managerLeadsCounterState.refresh(event ? 0 : 5_000, event ? canRefreshCounter : undefined);
 const checkAuth = async () => {
   try {
     await restoreManagerSession();
@@ -434,6 +426,7 @@ const checkAuth = async () => {
   }
 };
 onMounted(() => {
+  appMounted = true;
   const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
   if (storedTheme === 'light' || storedTheme === 'dark') {
     applyTheme(storedTheme);
@@ -452,6 +445,7 @@ onMounted(() => {
   if (!isInvitationRoute) checkAuth();
 });
 onBeforeUnmount(() => {
+  appMounted = false;
   stopNavigation();
   window.removeEventListener(inboxChangedEvent, fetchLeadsCount);
   if (webRebuildStatusInterval) {
@@ -461,7 +455,6 @@ onBeforeUnmount(() => {
 });
 watch(recoveryRequired, (required) => {
   if (!required) return;
-  leadsCount.value = 0;
   webRebuildStatus.value = null;
   rebuildLoading.value = false;
   showLoginModal.value = false;

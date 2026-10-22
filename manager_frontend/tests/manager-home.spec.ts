@@ -1,5 +1,5 @@
-import { flushPromises, mount } from '@vue/test-utils';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   overview: vi.fn(),
@@ -14,6 +14,10 @@ vi.mock('../src/api', () => ({
     getLeadsCounter: mocks.leads,
   },
 }));
+
+import { managerSession, clearManagerSession } from '../src/services/manager-session';
+
+enableAutoUnmount(afterEach);
 
 import ManagerHome from '../src/views/ManagerHome.vue';
 import BynSymbol from '../src/components/money/BynSymbol.vue';
@@ -40,6 +44,9 @@ const operationalStats = {
 
 describe('ManagerHome operational resilience', () => {
   beforeEach(() => {
+    clearManagerSession();
+    managerSession.auth.value = { username: 'owner', status: 'ok', staff_user_id: 1, tenant_id: 1, storefront_id: 1, is_system_tenant: true, capabilities: ['crm.manage'] };
+    managerSession.isAuthenticated.value = true;
     vi.clearAllMocks();
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     mocks.overview.mockRejectedValue(new Error('overview unavailable'));
@@ -88,7 +95,7 @@ describe('ManagerHome operational resilience', () => {
     const wrapper = mount(ManagerHome);
     await flushPromises();
 
-    expect(wrapper.text()).toContain('Часть проверок недоступна');
+    expect(wrapper.text()).toContain('Не удалось обновить часть проверок');
     expect(wrapper.text()).not.toContain('Срочных действий нет.');
   });
 });

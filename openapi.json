@@ -29595,7 +29595,7 @@
           "manager_dashboard"
         ],
         "summary": "Get Dashboard Overview",
-        "description": "Build the current storefront's Manager dashboard for the current month and comparable\nprevious-month window. Includes canonical Lead counts, revenue, sales, installation stages,\nfunnel and configured external marketing/search indicators. Follow-ups and receivables are\ncurrent-state snapshots without previous-period values. Tenant/storefront scope comes from\nauthenticated Manager access; provider availability is represented in the dashboard result.\nThis is an aggregate report, not a ledger export.",
+        "description": "Build the current storefront's Manager dashboard for the current month and comparable\nprevious-month window. Includes canonical Lead counts, revenue, sales, installation stages,\nfunnel and durable external marketing/search snapshots. This GET never calls external\nproviders or starts refresh work. Missing configured snapshots are pending; stale successes\nretain their actual source period and last-success timestamp while the scheduler retries.\nLive CRM aggregates are recalculated on every request. Follow-ups and receivables are\ncurrent-state snapshots without previous-period values. Tenant/storefront scope comes from\nauthenticated Manager access; provider availability is represented in the dashboard result.\nThis is an aggregate report, not a ledger export.",
         "operationId": "get_manager_dashboard_overview",
         "responses": {
           "200": {
@@ -51094,6 +51094,7 @@
             "type": "string",
             "enum": [
               "unconfigured",
+              "pending",
               "fresh",
               "stale",
               "error"
@@ -51265,6 +51266,66 @@
       },
       "DashboardMarketingProvider": {
         "properties": {
+          "last_attempt_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Attempt At"
+          },
+          "next_retry_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Retry At"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "period_start": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Start"
+          },
+          "period_end": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period End",
+            "description": "Exclusive end of the actual saved source period; may precede the live CRM window."
+          },
           "provider": {
             "type": "string",
             "enum": [
@@ -51279,6 +51340,7 @@
             "type": "string",
             "enum": [
               "unconfigured",
+              "pending",
               "fresh",
               "stale",
               "error"
@@ -51595,6 +51657,7 @@
             "type": "string",
             "enum": [
               "unconfigured",
+              "pending",
               "fresh",
               "stale",
               "error"
@@ -51647,6 +51710,66 @@
       },
       "DashboardSearchDemandProvider": {
         "properties": {
+          "last_attempt_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Attempt At"
+          },
+          "next_retry_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Retry At"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "period_start": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Start"
+          },
+          "period_end": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period End",
+            "description": "Exclusive end of the actual saved source period; may precede the live CRM window."
+          },
           "provider": {
             "type": "string",
             "enum": [
@@ -51659,6 +51782,7 @@
             "type": "string",
             "enum": [
               "unconfigured",
+              "pending",
               "fresh",
               "stale",
               "error"

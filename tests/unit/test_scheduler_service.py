@@ -130,6 +130,7 @@ async def test_start_loop_cancels_child_tasks(monkeypatch):
             raise
 
     for method_name in (
+        "_dashboard_analytics_loop",
         "_price_sync_loop",
         "_stalled_deal_loop",
         "_lead_archive_loop",
@@ -148,8 +149,8 @@ async def test_start_loop_cancels_child_tasks(monkeypatch):
     with pytest.raises(asyncio.CancelledError):
         await task
 
-    assert started == 7
-    assert cancelled == 7
+    assert started == 8
+    assert cancelled == 8
 
 
 @pytest.mark.asyncio
