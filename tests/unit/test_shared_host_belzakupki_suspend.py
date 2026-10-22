@@ -9,6 +9,7 @@ SOURCE = REPO_ROOT / "scripts/shared_host_belzakupki_suspend.sh"
 PATRONI_RUNNER = REPO_ROOT / "scripts/ha/run_patroni_candidate_transaction.sh"
 PATRONI_REMOTE = REPO_ROOT / "scripts/ha/run_patroni_node_remote.sh"
 GUARD_LIFECYCLE = REPO_ROOT / "scripts/ha/shared_host_belzakupki_guard_lifecycle.sh"
+COMMUNICATIONS_LIFECYCLE = REPO_ROOT / "scripts/ha/patroni_communications_candidate_lifecycle.sh"
 SCHEDULER_ID = "a" * 64
 WORKER_ID = "b" * 64
 
@@ -189,6 +190,13 @@ def test_next_prepare_recovers_a_stale_record_before_suspending_again(tmp_path):
 def test_patroni_release_bundles_the_guard_and_suspends_before_migration_or_deploy():
     transaction = PATRONI_RUNNER.read_text(encoding="utf-8")
     remote = PATRONI_REMOTE.read_text(encoding="utf-8")
+    communications = COMMUNICATIONS_LIFECYCLE.read_text(encoding="utf-8")
+    migration = communications.split("patroni_communications_migrate_candidate() {\n", 1)[1].split(
+        "\n}\n", 1
+    )[0]
+    recovery = communications.split("idle_worker_predeploy_cleanup() {\n", 1)[1].split(
+        "\n}\n", 1
+    )[0]
 
     assert "shared_host_belzakupki_suspend.sh" in remote
     assert "shared_host_belzakupki_guard_lifecycle.sh" in remote
@@ -196,15 +204,24 @@ def test_patroni_release_bundles_the_guard_and_suspends_before_migration_or_depl
     assert "bash \"${SHARED_HOST_BELZAKUPKI_GUARD_SCRIPT}\" prepare" in GUARD_LIFECYCLE.read_text(
         encoding="utf-8"
     )
-    migration_prepare = transaction.index(
+    migration_call = transaction.index("  patroni_communications_migrate_candidate\n")
+    assert transaction.index('source "${PATRONI_COMMUNICATIONS_CANDIDATE_LIFECYCLE}"') < migration_call
+    assert transaction.index('if [[ "${OPERATION}" == "migrate" ]]; then') < migration_call
+    migration_prepare = migration.index(
         "shared_belzakupki_guard_prepare_with_signal_recovery"
     )
-    migration_start = transaction.index('bash "${MIGRATION_SCRIPT}"')
+    migration_start = migration.index('bash "${MIGRATION_SCRIPT}"')
+    migration_restore = migration.index("shared_belzakupki_guard_restore")
+    migration_cleanup = migration.index("transaction cleanup")
     deploy_start = transaction.index('bash "${DEPLOY_SCRIPT}"')
     deploy_prepare = transaction.rindex(
         "shared_belzakupki_guard_prepare_with_signal_recovery", 0, deploy_start
     )
-    assert migration_prepare < migration_start
+    assert migration_prepare < migration.index("trap idle_worker_predeploy_cleanup EXIT") < migration_start
+    assert migration_start < migration_restore < migration.index("trap - EXIT") < migration_cleanup
+    assert "transaction cleanup" in recovery
+    assert "shared_belzakupki_guard_restore" in recovery
+    assert migration_call < deploy_prepare
     assert deploy_prepare < deploy_start
 
 
