@@ -7,10 +7,11 @@ from models import Product
 from services.spec_registry import INDOOR_TYPE_LABELS
 
 
-def _spec_text(session, *path: str):
+def _spec_text(session, *path: str, specs=None):
+    specs = Product.specs if specs is None else specs
     if session.bind is not None and session.bind.dialect.name == "sqlite":
-        return cast(func.json_extract(Product.specs, "$." + ".".join(path)), String)
-    return func.jsonb_extract_path_text(cast(Product.specs, JSONB), *path)
+        return cast(func.json_extract(specs, "$." + ".".join(path)), String)
+    return func.jsonb_extract_path_text(cast(specs, JSONB), *path)
 
 
 def _canonical_form(raw):
@@ -21,10 +22,10 @@ def _canonical_form(raw):
     )
 
 
-def indoor_form_factor_expr(session):
+def indoor_form_factor_expr(session, *, specs=None):
     """Prefer the displayed value; retain derived keys for older sparse records."""
     return func.coalesce(
-        _canonical_form(_spec_text(session, "indoor_type")),
-        _canonical_form(_spec_text(session, "__typed_specs", "indoor_type", "value")),
-        _canonical_form(_spec_text(session, "__filter_indoor_type")),
+        _canonical_form(_spec_text(session, "indoor_type", specs=specs)),
+        _canonical_form(_spec_text(session, "__typed_specs", "indoor_type", "value", specs=specs)),
+        _canonical_form(_spec_text(session, "__filter_indoor_type", specs=specs)),
     )
