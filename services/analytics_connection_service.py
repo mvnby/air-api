@@ -225,6 +225,7 @@ class AnalyticsConnectionService:
             for_update=True,
         )
         token = (oauth_token or "").strip()
+        supplied_token = bool(token)
         if token and (len(token) < 16 or len(token) > 4096):
             raise AnalyticsConnectionError(
                 "invalid_oauth_token_format",
@@ -259,7 +260,9 @@ class AnalyticsConnectionService:
             if isinstance(connection.public_config, dict)
             else ""
         )
-        credential_replaced = not existing or bool(oauth_token)
+        credential_replaced = not existing or supplied_token
+        if credential_replaced:
+            connection.snapshot_revision = uuid4().hex
         connection.status = "active"
         connection.public_config = {
             "counter_id": counter_id,

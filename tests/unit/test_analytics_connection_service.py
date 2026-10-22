@@ -322,3 +322,43 @@ async def test_unreadable_connection_remains_configured_with_error(analytics_ses
     assert await integration_credential_health(analytics_session) == {
         "status": "failed", "checked": 1, "unreadable": 1,
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("unchanged_token", [None, "", "   "])
+async def test_metrika_manual_token_replacement_invalidates_snapshot_but_no_token_save_keeps_it(analytics_session, unchanged_token):
+    from datetime import date, datetime, timezone
+    from crud import dashboard_analytics as store
+    from services.dashboard_analytics_snapshots import configurations, key_values, read_sources
+
+    service = _service(lambda request: httpx.Response(200, json={
+        "counter": {"id": 123456, "name": "Same counter", "site": "mvn.by"},
+    }))
+    scope = TenantScope(tenant_id=21, storefront_id=71)
+    args = dict(tenant_scope=scope, counter_id="123456", actor_staff_user_id=None, actor_username="owner")
+    await service.upsert_yandex_metrika(analytics_session, oauth_token="original-token-abcdefghijkl", **args)
+    original = (await configurations(analytics_session, scope))[0]
+    now = datetime.now(timezone.utc)
+    start, end = date(2026, 10, 1), date(2026, 10, 24)
+    values = key_values(scope, original, start, end)
+    token = await store.claim(analytics_session, values=values, now=now)
+    await store.finish(analytics_session, key=values["key"], token=token, now=now, payload={
+        "marketing": {"status": "fresh", "visits": 42, "providers": [{"provider": "yandex_metrika", "status": "fresh", "visits": 42}]},
+    })
+
+    await service.upsert_yandex_metrika(analytics_session, oauth_token=unchanged_token, **args)
+    unchanged = (await configurations(analytics_session, scope))[0]
+    assert unchanged == original
+    [(state, payload)] = await read_sources(analytics_session, scope, ("yandex_metrika",), start, end, now)
+    assert state["status"] == "fresh" and payload["marketing"]["visits"] == 42
+
+    await service.upsert_yandex_metrika(analytics_session, oauth_token="replacement-token-abcdefghijk", **args)
+    replaced = (await configurations(analytics_session, scope))[0]
+    assert replaced != original
+    assert key_values(scope, replaced, start, end)["key"] != values["key"]
+    [(state, payload)] = await read_sources(analytics_session, scope, ("yandex_metrika",), start, end, now)
+    assert state["status"] == "pending" and payload is None
+    # Replacement does not destroy historical success; it becomes inaccessible
+    # through the new connection key, including for a late old refresh result.
+    saved = (await store.exact_rows(analytics_session, [values["key"]]))[values["key"]]
+    assert saved.payload["marketing"]["visits"] == 42
