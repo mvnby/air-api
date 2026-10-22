@@ -313,7 +313,7 @@ class GoogleAnalyticsProvider:
 
     async def fetch(self, access_token: str, public_config: Mapping[str, Any], period_start: date, period_end: date) -> GoogleAnalyticsSnapshot:
         property_id = str(public_config["property_id"])
-        summary, sources = await asyncio.gather(
+        tasks = [asyncio.create_task(request) for request in (
             self.fetch_summary(
                 access_token=access_token,
                 property_id=property_id,
@@ -326,7 +326,16 @@ class GoogleAnalyticsProvider:
                 period_start=period_start,
                 period_end=period_end,
             ),
-        )
+        )]
+        try:
+            summary, sources = await asyncio.gather(*tasks)
+        finally:
+            # A failed request must not outlive the worker's concurrency slot.
+            # Await HTTP/session finalizers on both errors and cancellation.
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
         return GoogleAnalyticsSnapshot(
             sessions=summary.sessions,
             active_users=summary.active_users,

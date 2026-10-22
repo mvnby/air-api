@@ -426,3 +426,50 @@ async def test_google_ads_uses_system_developer_token_and_target_customer():
     snapshot = await provider.fetch("google-access", config, date(2026, 8, 1), date(2026, 8, 2))
 
     assert snapshot.impressions == 25 and snapshot.clicks == 3 and snapshot.spend == 4.5
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["summary", "sources", "cancel"])
+async def test_google_analytics_fetch_owns_both_http_requests_until_failure_or_cancel_finishes(failure):
+    import asyncio
+    import json
+
+    started, finalized, children = set(), set(), {}
+    both_started = asyncio.Event()
+    async def handler(request):
+        body = json.loads(request.content)
+        name = "sources" if "dimensions" in body else "summary"
+        started.add(name)
+        children[name] = asyncio.current_task()
+        if len(started) == 2:
+            both_started.set()
+        try:
+            await both_started.wait()
+            if name == failure:
+                return httpx.Response(503, json={"error": {"message": "unavailable"}})
+            await asyncio.Event().wait()
+        finally:
+            # An asynchronous finalizer proves the sibling was awaited, not
+            # merely sent a cancellation request after its owner returned.
+            await asyncio.sleep(0)
+            finalized.add(name)
+
+    provider = GoogleAnalyticsProvider(client_factory=_client(handler))
+    task = asyncio.create_task(provider.fetch("test-token", {"property_id": "123"}, date(2026, 10, 1), date(2026, 10, 22)))
+    try:
+        await asyncio.wait_for(both_started.wait(), timeout=1)
+        if failure == "cancel":
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        else:
+            with pytest.raises(AnalyticsProviderError):
+                await asyncio.wait_for(task, timeout=1)
+        assert finalized == {"summary", "sources"}
+        assert all(child.done() for child in children.values())
+    finally:
+        # Keep the failing pre-fix regression hermetic too.
+        for child in [task, *children.values()]:
+            if not child.done():
+                child.cancel()
+        await asyncio.gather(task, *children.values(), return_exceptions=True)
