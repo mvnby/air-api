@@ -1,0 +1,89 @@
+name: Cache Reviewed API Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_sha:
+        description: Exact reviewed 40-character main SHA
+        type: string
+        required: true
+      image:
+        description: Exact ghcr.io/mvnby/air-api/backend@sha256 reference; cache only
+        type: string
+        required: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+concurrency:
+  group: production-release
+  cancel-in-progress: false
+
+jobs:
+  cache:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production-api
+    permissions:
+      actions: read
+      contents: read
+      packages: read
+    steps:
+      - name: Require Reviewed Main SHA
+        env:
+          CONFIRM_SHA: ${{ inputs.confirm_sha }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF}" != refs/heads/main ] || ! [[ "${CONFIRM_SHA}" =~ ^[0-9a-f]{40}$ ]] || [ "${CONFIRM_SHA}" != "${GITHUB_SHA}" ]; then
+            echo '::error::confirm_sha must equal this reviewed main SHA'
+            exit 64
+          fi
+
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Verify Exact Main CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ci_run_id="$(gh run list --repo "${GITHUB_REPOSITORY}" --workflow ci.yml --branch main --event push --commit "${GITHUB_SHA}" --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+          test -n "${ci_run_id}"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${ci_run_id}" > "${RUNNER_TEMP}/cache-image-ci-run.json"
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/actions/runs/${ci_run_id}/jobs?filter=latest&per_page=100" > "${RUNNER_TEMP}/cache-image-ci-jobs.json"
+          python3 scripts/ci/release_scope.py --manual \
+            --run-json "${RUNNER_TEMP}/cache-image-ci-run.json" \
+            --jobs-json "${RUNNER_TEMP}/cache-image-ci-jobs.json" \
+            --repository "${GITHUB_REPOSITORY}" --sha "${GITHUB_SHA}" \
+            --github-output "${GITHUB_OUTPUT}" --summary "${GITHUB_STEP_SUMMARY}"
+
+      - name: Cache Image With Ephemeral Registry Access
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          REGISTRY_TOKEN: ${{ github.token }}
+          REVIEWED_IMAGE: ${{ inputs.image }}
+        run: |
+          set -euo pipefail
+          set +x
+          umask 077
+          test -n "${SSH_KEY}"
+          printf '%s\n' "${SSH_KEY}" > "${RUNNER_TEMP}/cache-api-image-key"
+          unset SSH_KEY
+          printf '%s' "${REGISTRY_TOKEN}" | python3 -I scripts/ops/cache_api_image.py \
+            --image "${REVIEWED_IMAGE}" \
+            --identity-file "${RUNNER_TEMP}/cache-api-image-key" > cache-api-image-result.json
+          unset REGISTRY_TOKEN
+          cat cache-api-image-result.json
+
+      - name: Upload Cache Receipt
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: cache-api-image-${{ github.run_id }}
+          path: cache-api-image-result.json
+          retention-days: 3
+
+      - name: Remove Ephemeral Inputs
+        if: always()
+        run: rm -f "${RUNNER_TEMP}/cache-api-image-key" cache-api-image-result.json "${RUNNER_TEMP}/cache-image-ci-run.json" "${RUNNER_TEMP}/cache-image-ci-jobs.json"
