@@ -16,6 +16,7 @@ from models.tenancy import TenantScope
 from routers.manager_operation_ids import (
     EXPORT_MANAGER_ORDERS,
     GET_MANAGER_ORDER_DETAIL,
+    GET_MANAGER_ORDER_BOARD,
     GET_MANAGER_ORDERS,
     LIST_MANAGER_ORDER_SCENARIOS,
     LIST_MANAGER_STALE_ORDER_STAGES,
@@ -156,7 +157,7 @@ async def export_manager_orders(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.get("/board", response_model=ManagerOrderBoardPage, operation_id="get_manager_order_board")
+@router.get("/board", response_model=ManagerOrderBoardPage, operation_id=GET_MANAGER_ORDER_BOARD)
 async def get_manager_order_board(
     segment: str = Query("b2c", pattern="^(all|b2c|b2b)$"),
     queue: str = Query("active", pattern="^(active|waiting|history|all)$"),

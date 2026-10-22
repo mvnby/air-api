@@ -196,6 +196,7 @@ LINK_MANAGER_EMAIL_LEAD_TO_ORDER = "link_manager_email_lead_to_order"
 UNLINK_MANAGER_EMAIL_LEAD_FROM_ORDER = "unlink_manager_email_lead_from_order"
 
 GET_MANAGER_ORDERS = "get_manager_orders"
+GET_MANAGER_ORDER_BOARD = "get_manager_order_board"
 LIST_MANAGER_ORDER_SCENARIOS = "list_manager_order_scenarios"
 CREATE_MANAGER_ORDER = "create_manager_order"
 EXPORT_MANAGER_ORDERS = "export_manager_orders"
@@ -939,6 +940,7 @@ ALL_MANAGER_OPERATION_IDS = (
     LINK_MANAGER_EMAIL_LEAD_TO_ORDER,
     UNLINK_MANAGER_EMAIL_LEAD_FROM_ORDER,
     GET_MANAGER_ORDERS,
+    GET_MANAGER_ORDER_BOARD,
     LIST_MANAGER_ORDER_SCENARIOS,
     CREATE_MANAGER_ORDER,
     EXPORT_MANAGER_ORDERS,
