@@ -63,7 +63,7 @@ class IdleWorkerGuard:
         self.lock_helper = os.environ["API_DEPLOY_LOCK_HELPER"]
         self.env = os.environ.copy()
 
-    def run(self, args, *, check=True, env=None, **kwargs):
+    def run(self, args, *, check=True, env=None, operation=None, **kwargs):
         process = subprocess.Popen(
             args, cwd=self.project, env=env or self.env, text=True,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -81,7 +81,10 @@ class IdleWorkerGuard:
         result = subprocess.CompletedProcess(args, process.returncode, output, errors)
         if check and result.returncode:
             # Docker inspect/Compose output can contain secrets. Never relay it.
-            raise GuardError(f"idle worker command failed: {Path(args[0]).name}")
+            raise GuardError(
+                f"idle worker command failed: {operation or Path(args[0]).name} "
+                f"(exit={result.returncode})"
+            )
         return result
 
     def verify_lock(self):
@@ -159,19 +162,27 @@ class IdleWorkerGuard:
         ids = self.run([*self.compose, "ps", "--status", "running", "-q", service]).stdout.split()
         if len(ids) != 1:
             raise GuardError("active API runtime is ambiguous")
-        image = self.run(["docker", "inspect", "--format", "{{.Config.Image}}", ids[0]]).stdout.strip()
+        image = self.run(
+            ["docker", "inspect", "--format", "{{.Config.Image}}", ids[0]],
+            operation="inspect active API image",
+        ).stdout.strip()
         if not IMAGE.fullmatch(image):
             raise GuardError("active API image is not immutable")
         return image
 
     def running_ids(self):
-        return self.run([*self.compose, "ps", "--status", "running", "-q", self.service]).stdout.split()
+        return self.run(
+            [*self.compose, "ps", "--status", "running", "-q", self.service],
+            operation="query running communications worker",
+        ).stdout.split()
 
     def require_worker(self, image):
         ids = self.running_ids()
         if len(ids) != 1:
             raise GuardError("idle worker runtime is ambiguous")
-        payload = json.loads(self.run(["docker", "inspect", ids[0]]).stdout)
+        payload = json.loads(self.run(
+            ["docker", "inspect", ids[0]], operation="inspect communications worker",
+        ).stdout)
         config = payload[0]["Config"]
         environment = dict(item.split("=", 1) for item in config["Env"] if "=" in item)
         if (config["Image"] != image or not payload[0]["State"]["Running"]
@@ -195,7 +206,7 @@ COMPOSE=(docker compose -f "$IDLE_CANONICAL_FILE" --profile bluegreen)
         else:
             script += "communications_worker_require_contract canary\n"
         try:
-            self.run(["bash", "-c", script], env=env)
+            self.run(["bash", "-c", script], env=env, operation=f"{action} communications worker")
         except (subprocess.TimeoutExpired, GuardInterrupted):
             if action == "start":
                 # Docker may already have accepted a recreate. Never race that
@@ -277,13 +288,35 @@ COMPOSE=(docker compose -f "$IDLE_CANONICAL_FILE" --profile bluegreen)
                         "phase": "paused", "operation": operation})
             self.release("fence", image)
             try:
-                self.run([*self.compose, "stop", self.service])
+                stopped = self.run([*self.compose, "stop", self.service], check=False)
             except (subprocess.TimeoutExpired, GuardInterrupted):
                 if self.running_ids():
                     self.mark_uncertain(image)
                 raise
+            if stopped.returncode < 0:
+                raise GuardError(
+                    f"stop communications worker interrupted (exit={stopped.returncode}); "
+                    "recovery record retained"
+                )
+            # The role agent enforces this same fence with stop + rm and may
+            # remove the container while Compose stop is waiting. Accept a
+            # failed stop only when successful all-state inventory proves that
+            # this canonical project's worker no longer exists. Even exited
+            # containers remain a failure here; recovery owns all other cases.
+            if stopped.returncode and self.run(
+                [*self.compose, "ps", "--all", "-q", self.service],
+                operation="query all communications worker containers",
+            ).stdout.split():
+                raise GuardError(
+                    f"stop communications worker left a container (exit={stopped.returncode}); "
+                    "recovery record retained"
+                )
             if self.running_ids():
-                raise GuardError("idle worker did not stop; recovery record retained")
+                raise GuardError(
+                    f"stop communications worker did not prove stopped (exit={stopped.returncode}); "
+                    "recovery record retained"
+                )
+            self.safe_file(self.marker)
         print("idle communications worker suspended inside release transaction")
 
     def recover(self):

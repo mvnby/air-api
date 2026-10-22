@@ -58,6 +58,8 @@ if 'config' in args:
             'COMMUNICATIONS_WORKER_ALLOW_ALL_MODE': s.get('allow_all', 'false')}}}}))
 elif 'ps' in args:
     if args[-1].startswith('app'): print('api-id')
+    elif not s['running'] and s.get('fail_stopped_probe'): sys.exit(5)
+    elif '--all' in args and s.get('worker_exists', True): print('worker-id')
     elif s['running']: print('worker-id')
 elif 'exec' in args and 'db' in args:
     lock = (p / 'control.lock').open('w')
@@ -90,6 +92,18 @@ elif 'stop' in args:
         except BlockingIOError: (p / 'operator-switch-blocked').touch()
         else: raise AssertionError('stop escaped the SQL control lock')
     s['running'] = False; save(s)
+    if s.get('signal_stop_command'):
+        os.kill(os.getpid(), signal.SIGTERM)
+    if s.get('lose_fence_during_stop'):
+        (p / '.ha-communications-worker-release-fenced').unlink()
+    if s.get('failed_stop_state'):
+        s['container_status'] = s['failed_stop_state']; save(s)
+        sys.exit(3)
+    if s.get('removed_during_stop'):
+        s['worker_exists'] = False; save(s)
+        # The role agent enforces the same fence via stop + rm concurrently.
+        print('fake secret must never appear in guard diagnostics', file=sys.stderr)
+        sys.exit(3)
     if s.get('term_after_stop'):
         os.kill(os.getppid(), signal.SIGTERM)
 elif 'up' in args:
@@ -99,7 +113,9 @@ elif 'up' in args:
             "import time; from pathlib import Path; time.sleep(2); Path('late-start').touch()"])
         time.sleep(10)
     assert (p / 'sql-held').exists(), 'restore must authorize original control under lock'
-    s['running'] = True; s['worker_image'] = os.environ['BACKEND_IMAGE']; save(s)
+    s['running'] = True; s['worker_image'] = os.environ['BACKEND_IMAGE']
+    if 'worker_exists' in s: s['worker_exists'] = True
+    save(s)
 elif 'pull' in args:
     pass
 else:
@@ -226,6 +242,90 @@ def test_stop_failure_restores_and_cleans_own_fence(release_env):
     project, state = snapshot(release_env)
     assert state["running"]
     assert not (project / ".ha-idle-worker-capacity.json").exists()
+
+
+def test_concurrent_role_agent_removal_satisfies_stopped_postcondition(release_env):
+    change(release_env, removed_during_stop=True)
+    result = run(release_env, "", transactional=True)
+    assert result.returncode == 0, result.stderr
+    project, state = snapshot(release_env)
+    assert state["running"] and state["worker_image"] == OLD
+    assert "fake secret" not in result.stdout + result.stderr
+    inventories = [json.loads(line) for line in (project / "commands.log").read_text().splitlines()
+                   if '"--all"' in line]
+    assert len(inventories) == 1
+    assert inventories[0] == [
+        "compose", "-f", str(project / "compose.yml"), "--profile", "bluegreen",
+        "ps", "--all", "-q", "communications-worker",
+    ]
+    assert not (project / ".ha-idle-worker-capacity.json").exists()
+    assert not (project / ".ha-communications-worker-release-fenced").exists()
+
+
+def test_failed_stop_with_running_worker_is_not_accepted(release_env):
+    change(release_env, fail_stop=True)
+    result = run(release_env, "prepare deploy")
+    assert result.returncode != 0
+    project, state = snapshot(release_env)
+    assert state["running"]
+    assert "stop communications worker" in result.stderr and "exit=3" in result.stderr
+    assert (project / ".ha-idle-worker-capacity.json").exists()
+    assert (project / ".ha-communications-worker-release-fenced").exists()
+
+
+@pytest.mark.parametrize("status", ["exited", "restarting", "paused", "created", "removing"])
+def test_failed_stop_with_any_remaining_container_is_not_accepted(release_env, status):
+    change(release_env, failed_stop_state=status)
+    result = run(release_env, "prepare deploy")
+    assert result.returncode != 0
+    project, state = snapshot(release_env)
+    assert not state["running"] and state["container_status"] == status
+    assert "stop communications worker" in result.stderr and "exit=3" in result.stderr
+    assert (project / ".ha-idle-worker-capacity.json").exists()
+    assert (project / ".ha-communications-worker-release-fenced").exists()
+    assert "suspended inside release transaction" not in result.stdout
+
+
+@pytest.mark.parametrize("restore_fails", [False, True])
+def test_removed_worker_requires_successful_stopped_probe_and_safe_recovery(release_env, restore_fails):
+    change(release_env, removed_during_stop=True, fail_stopped_probe=True)
+    result = run(release_env, "prepare deploy")
+    assert result.returncode != 0
+    project, state = snapshot(release_env)
+    assert not state["running"]
+    assert "query all communications worker containers" in result.stderr and "exit=5" in result.stderr
+    assert "fake secret" not in result.stdout + result.stderr
+    assert (project / ".ha-idle-worker-capacity.json").exists()
+    assert (project / ".ha-communications-worker-release-fenced").exists()
+    assert not any("up" in json.loads(line) for line in (project / "commands.log").read_text().splitlines())
+    change(release_env, fail_stopped_probe=False, fail_start=restore_fails)
+    recovered = run(release_env, "recover")
+    assert (recovered.returncode != 0) == restore_fails
+    assert snapshot(release_env)[1]["running"] is not restore_fails
+    assert (project / ".ha-idle-worker-capacity.json").exists() is restore_fails
+    assert (project / ".ha-communications-worker-release-fenced").exists() is restore_fails
+
+
+def test_signaled_stop_command_is_not_accepted_even_after_container_stopped(release_env):
+    change(release_env, signal_stop_command=True)
+    result = run(release_env, "prepare deploy")
+    assert result.returncode != 0
+    project, state = snapshot(release_env)
+    assert not state["running"]
+    assert "stop communications worker interrupted" in result.stderr
+    assert (project / ".ha-idle-worker-capacity.json").exists()
+    assert (project / ".ha-communications-worker-release-fenced").exists()
+
+
+def test_stopped_worker_requires_retained_release_fence(release_env):
+    change(release_env, lose_fence_during_stop=True)
+    result = run(release_env, "prepare deploy")
+    assert result.returncode != 0
+    project, state = snapshot(release_env)
+    assert not state["running"]
+    assert (project / ".ha-idle-worker-capacity.json").exists()
+    assert (project / ".ha-communications-worker-release-fenced").exists()
+    assert "suspended inside release transaction" not in result.stdout
 
 
 def test_restore_failure_keeps_durable_journal_and_fence(release_env):
@@ -409,11 +509,12 @@ module.main()
     assert run(release_env, "recover").returncode != 0
 
 
-@pytest.mark.parametrize("switch_revision,direct_without_guard", [
-    (False, False), (True, False), (False, True),
+@pytest.mark.parametrize("switch_revision,direct_without_guard,removed_during_stop", [
+    (False, False, False), (True, False, False), (False, True, False),
+    (False, False, True),
 ])
 def test_actual_deploy_entrypoint_checks_control_before_candidate_start(
-    tmp_path, switch_revision, direct_without_guard,
+    tmp_path, switch_revision, direct_without_guard, removed_during_stop,
 ):
     from tests.unit.test_patroni_candidate_transactions import (
         PATRONI_RUNNER, _patroni_runner_env,
@@ -434,6 +535,7 @@ def test_actual_deploy_entrypoint_checks_control_before_candidate_start(
     (project / "runtime.json").write_text(json.dumps({
         "api_image": OLD, "worker_image": OLD, "running": True, "revision": 3,
     }))
+    change(env, removed_during_stop=removed_during_stop)
     Path(env["GOOGLE_OAUTH_TOKEN_PREPARE_SCRIPT"]).write_text("#!/bin/bash\nexit 0\n")
     docker = tmp_path / "bin/docker"
     docker.write_text(f"#!{sys.executable}\n" + FAKE_DOCKER)
