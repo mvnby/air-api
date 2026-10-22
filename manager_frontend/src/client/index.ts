@@ -567,6 +567,8 @@ export type { ManagerMediaUploadLocalImagesResponse } from './models/ManagerMedi
 export type { ManagerMultiSplitPreviewResponse } from './models/ManagerMultiSplitPreviewResponse';
 export type { ManagerMultiSplitSavePayload } from './models/ManagerMultiSplitSavePayload';
 export type { ManagerNormalizeLegacySpecsResponse } from './models/ManagerNormalizeLegacySpecsResponse';
+export type { ManagerOrderBoardGroup } from './models/ManagerOrderBoardGroup';
+export type { ManagerOrderBoardPage } from './models/ManagerOrderBoardPage';
 export type { ManagerOrderCreatePayload } from './models/ManagerOrderCreatePayload';
 export type { ManagerOrderDetailResponse } from './models/ManagerOrderDetailResponse';
 export type { ManagerOrderDocumentGeneratePayload } from './models/ManagerOrderDocumentGeneratePayload';

@@ -200,6 +200,7 @@ class ManagerOrderListItemResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
     status_changed_at: Optional[datetime] = None
+    closed_at: Optional[datetime] = None
     next_followup_date: Optional[datetime] = None
     measurement_date: Optional[datetime] = None
     installation_date: Optional[datetime] = None

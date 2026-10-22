@@ -9,8 +9,10 @@ import {
   type ManagerOrderUpdatePayload,
 } from '../../client';
 import OrdersToolbar from './OrdersToolbar.vue';
-import OrderKanbanBoard from './OrderKanbanBoard.vue';
-import OrdersListTable from './OrdersListTable.vue';
+import OrderQueueBoard from './OrderQueueBoard.vue';
+import { useOrderQueueData } from './useOrderQueueData';
+import type { OrderQueue } from '../../services/order-board';
+
 import { openOrderPage, savedOrderListPosition } from '../../services/order-navigation';
 import {
   formatMoney,
@@ -27,6 +29,19 @@ import {
 } from './order-transition';
 
 const { recoveryRequired } = managerSession;
+const queue = ref<OrderQueue>('active');
+const historyResult = ref('');
+const closedFrom = ref('');
+const closedTo = ref('');
+const unknownDate = ref(false);
+const queueData = useOrderQueueData();
+const { pages: queuePages, busy: queueBusy, errors: queueErrors, phases: queuePhases } = queueData;
+const queueColumns = computed(() => queue.value === 'history' || normalizedSearch.value || workFilter.value === 'followup' || view.value === 'list' ? [''] : ['negotiation', 'execution']);
+const queueLabels: Record<OrderQueue, string> = { active: 'Активные', waiting: 'Ожидание', history: 'История' };
+const queueCounts = computed(() => Object.values(queuePages.value)[0]?.queue_counts || {});
+const serverWorkCounts = computed(() => Object.values(queuePages.value)[0]?.work_counts || { all: 0, followup: 0, planning: 0, unpaid: 0 });
+const filteredTotal = computed(() => queueColumns.value.reduce((sum, key) => sum + (queuePages.value[key]?.total_orders || 0), 0));
+
 
 const toast = ref('');
 const loadError = ref('');
@@ -40,9 +55,9 @@ const setToast = (message: string) => {
 const {
   segment, view, assignedToMe, canFilterMine, statusFilter, workFilter, workFilterCounts, hiddenOnHoldCount, sort, search, loading, orders,
   movingOrderIds, isHydrated, hideOnHold,
-  groupByCustomer, filtersOpen, selectedOrderIds, transferLoading, importFileInput,
+  groupByCustomer, filtersOpen, customerAliases, selectedOrderIds, transferLoading, importFileInput,
   importPackage, importPreview, importFileName, importModalOpen, normalizedSearch,
-  hasActiveOrderFilters, groupedOrderItems, listItems, visibleOrderIds, setQueryParam,
+  hasActiveOrderFilters, setQueryParam,
   restorePreferences, persistSegmentAndView, persistGrouping, restoreCustomerAliases,
   renameCustomerGroup, toggleOrderSelection, toggleManySelection, selectAllVisible,
   clearSelection, clearIdentityScopedState,
@@ -140,9 +155,17 @@ const commitImport = async () => {
 
 let loadRequestId = 0;
 let restoredPosition = false;
-const board = ref<InstanceType<typeof OrderKanbanBoard> | null>(null);
+const board = ref<InstanceType<typeof OrderQueueBoard> | null>(null);
 const identityScope = computed(() => `${managerSession.auth.value?.staff_user_id || managerSession.auth.value?.username}:${managerSession.auth.value?.tenant_id}:${managerStorefrontSelection.selectedSlug.value}`);
-watch(identityScope, () => { loadRequestId++; clearIdentityScopedState(); }, { flush: 'sync' });
+watch(identityScope, () => { loadRequestId++; queueData.reset(); clearIdentityScopedState(); }, { flush: 'sync' });
+
+const restoreOrders = (snapshot: ManagerOrderListItemResponse[]) => {
+  const byId = new Map(snapshot.map(order => [order.id, order]));
+  for (const page of Object.values(queuePages.value)) page.items = page.items?.map(order => byId.get(order.id) || order);
+  orders.value = snapshot;
+};
+
+watch(queueData.accessError, error => { if (error) loadError.value = error.message; });
 
 const renameOrderTitle = async (payload: { orderId: number; title: string | null }) => {
   const nextTitle = payload.title?.trim() || null;
@@ -156,7 +179,7 @@ const renameOrderTitle = async (payload: { orderId: number; title: string | null
     setToast(nextTitle ? 'Название заказа сохранено' : 'Название заказа сброшено');
   } catch (error) {
     console.error(error);
-    orders.value = snapshot;
+    restoreOrders(snapshot);
     setToast(`Не удалось сохранить название: ${getApiErrorMessage(error)}`);
   }
 };
@@ -167,30 +190,26 @@ const loadOrders = async () => {
   loading.value = true;
   loadError.value = '';
   try {
-    const params = {
+    const saved = savedOrderListPosition();
+    const shouldRestore = !restoredPosition && saved?.url === `${window.location.pathname}${window.location.search}`;
+    if (shouldRestore && saved.board) queueData.phases.value = { ...saved.board.columnFilters };
+    const responses = await queueData.load({
       segment: segment.value,
-      assignedToMe: assignedToMe.value,
-      customerId: customerIdFilter.value,
+      queue: normalizedSearch.value ? 'all' : queue.value,
+      assigned_to_me: assignedToMe.value,
+      customer_id: customerIdFilter.value,
       status: statusFilter.value || undefined,
       search: normalizedSearch.value || undefined,
-      sort: sort.value,
-    };
-    const pageLimit = 100;
-    const firstPage = await api.getManagerOrders({ ...params, page: 1, limit: pageLimit });
+      work_filter: workFilter.value,
+      group_by_customer: queue.value !== 'history' && groupByCustomer.value && !normalizedSearch.value && workFilter.value !== 'followup',
+      result: queue.value === 'history' && !normalizedSearch.value && workFilter.value !== 'followup' ? historyResult.value || undefined : undefined,
+      closed_from: queue.value === 'history' && !normalizedSearch.value && workFilter.value !== 'followup' ? closedFrom.value || undefined : undefined,
+      closed_to: queue.value === 'history' && !normalizedSearch.value && workFilter.value !== 'followup' ? closedTo.value || undefined : undefined,
+      include_unknown_date: unknownDate.value,
+      sort: queue.value === 'history' ? 'closed_at_desc' : sort.value,
+    }, queueColumns.value);
     if (requestId !== loadRequestId) return;
-    const loadedOrders = [...firstPage.items];
-    const totalPages = Math.max(1, firstPage.meta?.pages || 1);
-    const pageBatchSize = 4;
-    const remainingPages = Array.from({ length: Math.max(0, totalPages - 1) }, (_, index) => index + 2);
-    for (let index = 0; index < remainingPages.length; index += pageBatchSize) {
-      const pageBatch = remainingPages.slice(index, index + pageBatchSize);
-      const nextPages = await Promise.all(
-        pageBatch.map((page) => api.getManagerOrders({ ...params, page, limit: pageLimit })),
-      );
-      if (requestId !== loadRequestId) return;
-      nextPages.forEach((page) => loadedOrders.push(...page.items));
-    }
-    orders.value = loadedOrders;
+    orders.value = responses.flatMap(page => page?.items || []);
     const loadedIds = new Set(orders.value.map((order) => order.id));
     selectedOrderIds.value = selectedOrderIds.value.filter((orderId) => loadedIds.has(orderId));
     // Render loaded filter counts before restoring scroll; their wrapping changes mobile height.
@@ -199,7 +218,15 @@ const loadOrders = async () => {
     const position = savedOrderListPosition();
     if (!restoredPosition && position?.url === `${window.location.pathname}${window.location.search}`) {
       restoredPosition = true;
-      if (position.board) board.value?.restoreState(position.board);
+      if (position.board) {
+        for (const [key, count] of Object.entries(position.board.loadedPages || {})) {
+          const slash = key.indexOf('/');
+          const column = slash < 0 ? key : key.slice(0, slash);
+          const group = slash < 0 ? undefined : key.slice(slash + 1);
+          for (let page = queuePages.value[key]?.page || 0; page < count; page++) await queueData.more(column, group);
+        }
+        await board.value?.restoreState(position.board);
+      }
       await nextTick();
       window.scrollTo(0, position.top);
     }
@@ -228,18 +255,25 @@ const refreshOrders = () => {
   return loadOrders();
 };
 watch(
-  () => [segment.value, statusFilter.value, sort.value, assignedToMe.value, search.value],
+  () => [segment.value, statusFilter.value, sort.value, assignedToMe.value, queue.value, workFilter.value, groupByCustomer.value, view.value, historyResult.value, closedFrom.value, closedTo.value, unknownDate.value, search.value],
   (next, previous) => {
     if (!isHydrated.value) return;
     // Invalidate the old response as soon as the inputs change, including the debounce window.
     loadRequestId += 1;
+    queueData.reset();
+    orders.value = [];
     persistSegmentAndView();
+    setQueryParam('queue', queue.value);
+    setQueryParam('result', historyResult.value);
+    setQueryParam('closedFrom', closedFrom.value);
+    setQueryParam('closedTo', closedTo.value);
+    setQueryParam('unknownDate', unknownDate.value ? 'true' : '');
     setQueryParam('search', normalizedSearch.value);
     setQueryParam('assigned_to_me', assignedToMe.value ? '1' : '');
     setQueryParam('status', statusFilter.value);
     setQueryParam('sort', sort.value);
     if (searchTimer) window.clearTimeout(searchTimer);
-    if (next.slice(0, 4).some((value, index) => value !== previous[index])) {
+    if (next.slice(0, -1).some((value, index) => value !== previous[index])) {
       void refreshOrders();
     } else {
       searchTimer = window.setTimeout(refreshOrders, 250);
@@ -256,14 +290,16 @@ watch([workFilter, hideOnHold, filtersOpen], () => {
   setQueryParam('hideOnHold', String(hideOnHold.value));
   setQueryParam('filtersOpen', String(filtersOpen.value));
 });
-const boardFilterReset = ref(0);
 const clearOrderFilters = () => {
   assignedToMe.value = false;
   search.value = '';
   statusFilter.value = '';
   workFilter.value = 'all';
+  historyResult.value = ''; closedFrom.value = ''; closedTo.value = ''; unknownDate.value = false;
   hideOnHold.value = false;
-  boardFilterReset.value += 1;
+  const hadPhases = Object.values(queuePhases.value).some(Boolean);
+  queuePhases.value = {};
+  if (hadPhases) void refreshOrders();
   setQueryParam('search', '');
 };
 onUnmounted(() => {
@@ -288,6 +324,9 @@ const applyStatusLocally = (orderId: number, payload: ManagerOrderUpdatePayload)
   if (payload.execution_status) item.execution_status_changed_at = now;
 };
 
+watch(queuePages, () => {
+  orders.value = Object.values(queuePages.value).flatMap(page => page.items || []).filter((item, index, all) => all.findIndex(other => other.id === item.id) === index);
+}, { deep: true });
 const replaceOrderLocally = (updatedOrder: ManagerOrderListItemResponse) => {
   const index = orders.value.findIndex((order) => order.id === updatedOrder.id);
   if (index >= 0) orders.value[index] = updatedOrder;
@@ -301,9 +340,10 @@ const commitOrderMove = async (orderId: number, updatePayload: ManagerOrderUpdat
       snapshot,
       apply: () => applyStatusLocally(orderId, updatePayload),
       persist: () => api.patchManagerOrder(orderId, updatePayload),
-      rollback: (previousOrders) => { orders.value = previousOrders; },
+      rollback: restoreOrders,
     });
     replaceOrderLocally(updatedOrder);
+    await loadOrders();
   } finally {
     movingOrderIds.value = movingOrderIds.value.filter((id) => id !== orderId);
   }
@@ -368,10 +408,11 @@ const onCancelOrder = async (payload: { orderId: number }) => {
   try {
     const updatedOrder = await api.patchManagerOrder(payload.orderId, updatePayload);
     replaceOrderLocally(updatedOrder);
+    await loadOrders();
     setToast('Заказ помечен отказом');
   } catch (error) {
     console.error(error);
-    orders.value = snapshot;
+    restoreOrders(snapshot);
     setToast(`Не удалось закрыть отказ: ${getApiErrorMessage(error)}`);
   } finally {
     movingOrderIds.value = movingOrderIds.value.filter((id) => id !== payload.orderId);
@@ -435,6 +476,13 @@ onMounted(async () => {
   restoreCustomerAliases();
   restorePreferences();
   const params = new URLSearchParams(window.location.search);
+  const requestedQueue = params.get('queue');
+  if (requestedQueue === 'active' || requestedQueue === 'waiting' || requestedQueue === 'history') queue.value = requestedQueue;
+  hideOnHold.value = false;
+  historyResult.value = params.get('result') || '';
+  closedFrom.value = params.get('closedFrom') || '';
+  closedTo.value = params.get('closedTo') || '';
+  unknownDate.value = params.get('unknownDate') === 'true';
   const customerId = Number(params.get('customerId'));
   if (Number.isSafeInteger(customerId) && customerId > 0) customerIdFilter.value = customerId;
   const searchParam = params.get('search');
@@ -453,21 +501,34 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 text-slate-900 dark:bg-slate-900 dark:text-slate-100">
-    <div class="mx-auto max-w-[1400px] px-4 py-6 md:px-8">
+  <div class="orders-queue-page bg-gray-50 text-slate-900 dark:bg-slate-900 dark:text-slate-100">
+    <div class="orders-queue-inner mx-auto w-full max-w-[1400px] px-4 py-4 md:px-8">
       <OrdersToolbar
         v-model:assigned-to-me="assignedToMe" :can-filter-mine="canFilterMine"
         v-model:segment="segment" v-model:view="view" v-model:search="search"
         v-model:status-filter="statusFilter" v-model:work-filter="workFilter"
-        v-model:group-by-customer="groupByCustomer" v-model:hide-on-hold="hideOnHold"
-        v-model:filters-open="filtersOpen" :counts="workFilterCounts"
-        :hidden-on-hold-count="hiddenOnHoldCount" :visible-count="visibleOrderIds.length"
-        :selected-count="selectedOrderIds.length" :has-active-filters="hasActiveOrderFilters"
-        :loading="loading" :load-failed="Boolean(loadError)" :transfer-loading="transferLoading"
+        v-model:group-by-customer="groupByCustomer"
+        v-model:filters-open="filtersOpen" :counts="serverWorkCounts as typeof workFilterCounts"
+        :hidden-on-hold-count="hiddenOnHoldCount" :visible-count="filteredTotal"
+        :selected-count="selectedOrderIds.length" :has-active-filters="hasActiveOrderFilters || Boolean(historyResult || closedFrom || closedTo) || Object.values(queuePhases).some(Boolean)"
+        :loading="loading" :load-failed="Boolean(loadError) || queueColumns.some(column => Boolean(queueErrors[column]))" :transfer-loading="transferLoading"
         @reset="clearOrderFilters" @search-now="refreshOrders"
         @import="openImportPicker" @export="exportSelectedOrders"
         @select-all="selectAllVisible" @clear-selection="clearSelection"
       />
+      <nav class="mb-3 grid grid-cols-3 gap-1 sm:flex sm:gap-2" aria-label="Очереди заказов">
+        <button v-for="(label, key) in queueLabels" :key="key" type="button" class="rounded-lg border px-2 py-2 text-xs sm:px-3 sm:text-sm" :class="queue === key ? 'bg-brand-600 text-white' : 'bg-white dark:bg-slate-800'" :aria-pressed="queue === key" @click="queue = key; workFilter = 'all'">
+          {{ label }} <span v-if="!loading && !loadError">{{ queueCounts[key] || 0 }}</span>
+        </button>
+      </nav>
+      <p v-if="normalizedSearch" class="mb-2 text-sm text-slate-500">Поиск во всех очередях. Очередь указана рядом с заказом.</p>
+      <p v-else-if="workFilter === 'followup'" class="mb-2 text-sm text-slate-500">Контакты из активных и ожидающих заказов. Ожидание не снимается.</p>
+      <div v-if="queue === 'history' && !normalizedSearch && workFilter !== 'followup'" class="mb-3 flex flex-wrap items-center gap-2 text-sm">
+        <label>Результат <select v-model="historyResult" aria-label="Результат истории" class="rounded border bg-white p-2 dark:bg-slate-800"><option value="">Все</option><option value="won">Успех</option><option value="lost">Отказ</option><option value="unknown">Результат не указан</option></select></label>
+        <label>Закрыт с <input v-model="closedFrom" aria-label="Дата закрытия с" type="date" class="rounded border bg-white p-2 dark:bg-slate-800" /></label>
+        <label>по <input v-model="closedTo" aria-label="Дата закрытия по" type="date" class="rounded border bg-white p-2 dark:bg-slate-800" /></label>
+        <label v-if="closedFrom || closedTo"><input v-model="unknownDate" type="checkbox" /> Включить без даты закрытия</label>
+      </div>
       <div v-if="customerIdFilter" class="flex items-center gap-3 mb-3 text-sm">
         <a :href="`/manager/customers/profile?customerId=${customerIdFilter}`" class="text-brand-600">Заказы клиента #{{ customerIdFilter }}</a>
         <button type="button" class="text-slate-500 underline" @click="clearCustomerFilter">Все клиенты</button>
@@ -485,33 +546,15 @@ onMounted(async () => {
         <p>{{ loadError }}</p>
         <button type="button" class="mt-3 rounded-lg bg-white px-3 py-2 text-sm font-semibold dark:bg-slate-800" @click="refreshOrders">Повторить</button>
       </div>
-      <OrderKanbanBoard ref="board"
-        v-else-if="view === 'kanban'"
-        :grouped-items="groupedOrderItems"
-        :filter-reset="boardFilterReset"
-        :segment="segment"
-        :moving-order-ids="movingOrderIds"
-        @open="openOrder"
-        @generate="onGenerateDoc"
-        @move="onMoveOrder"
-        @cancel-order="onCancelOrder"
-        @close-debt="onCloseDebt"
-        @rename-customer="renameCustomerGroup"
-        @rename-order="renameOrderTitle"
-      />
-
-      <OrdersListTable
-        v-else
-        :items="listItems"
-        :segment="segment"
-        :sort="sort"
-        :selected-order-ids="selectedOrderIds"
-        @update:sort="sort = $event"
-        @open="openOrder"
-        @generate="onGenerateDoc"
-        @rename-order="renameOrderTitle"
-        @toggle-select="toggleOrderSelection"
-        @toggle-select-many="toggleManySelection"
+      <OrderQueueBoard ref="board" v-else
+        :key="`${queue}:${segment}:${groupByCustomer}:${normalizedSearch}:${workFilter}`"
+        :pages="queuePages" :phases="queuePhases" :columns="queueColumns" :busy="queueBusy" :errors="queueErrors"
+        :segment="segment" :moving-order-ids="movingOrderIds" :compact="queue === 'history' && !normalizedSearch && workFilter !== 'followup'"
+        :show-queue="Boolean(normalizedSearch) || workFilter === 'followup'"
+        :list-mode="view === 'list'" :sort="sort" :selected-order-ids="selectedOrderIds" :customer-aliases="customerAliases"
+        @update:sort="sort = $event" @toggle-select="toggleOrderSelection" @toggle-select-many="toggleManySelection" @rename-customer="renameCustomerGroup"
+        @more="queueData.more" @phase="queueData.setPhase" @open="openOrder" @generate="onGenerateDoc"
+        @move="onMoveOrder" @cancel-order="onCancelOrder" @close-debt="onCloseDebt" @rename-order="renameOrderTitle"
       />
     </div>
 
@@ -525,3 +568,13 @@ onMounted(async () => {
     />
   </div>
 </template>
+
+<style scoped>
+.orders-queue-page { flex:1; min-height:0; overflow:hidden; }
+.orders-queue-inner { display:flex; height:100%; min-height:0; flex-direction:column; }
+.orders-queue-inner > header, .orders-queue-inner > nav { flex-shrink:0; }
+@media (max-width:767px) {
+  .orders-queue-page { flex:none; overflow:visible; }
+  .orders-queue-inner { height:auto; }
+}
+</style>

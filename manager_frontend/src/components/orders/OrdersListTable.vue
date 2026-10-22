@@ -11,6 +11,7 @@ const props = defineProps<{
   items: OrderRenderItem[];
   segment: Segment;
   sort?: string;
+  showQueue?: boolean;
   selectedOrderIds?: number[];
 }>();
 
@@ -131,7 +132,7 @@ const isGroupSelected = (item: OrderRenderItem) => {
             <OrderListRow
               v-for="order in expandedGroupIds.includes(item.group.id) ? item.group.orders : []"
               :key="`group-${item.group.id}-order-${order.id}`"
-              :order="order"
+              :order="order" :show-queue="showQueue"
               :segment="segment"
               nested
               selectable
@@ -144,7 +145,7 @@ const isGroupSelected = (item: OrderRenderItem) => {
           </template>
           <OrderListRow
             v-else
-            :order="item.order"
+            :order="item.order" :show-queue="showQueue"
             :segment="segment"
             selectable
             :selected="selectedSet.has(item.order.id)"

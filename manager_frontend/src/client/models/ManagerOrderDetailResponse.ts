@@ -29,6 +29,7 @@ export type ManagerOrderDetailResponse = {
     created_at: string;
     updated_at?: (string | null);
     status_changed_at?: (string | null);
+    closed_at?: (string | null);
     next_followup_date?: (string | null);
     measurement_date?: (string | null);
     installation_date?: (string | null);

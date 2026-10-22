@@ -9,6 +9,7 @@
     "reviewed_stage"
   ],
   "review_stages": {
+    "26": "Manager order queues: bounded scalar cards, exact aggregates, visibility, legacy NULL history and read-only behavior reviewed 2026-10-22",
     "24": "Reusable series accessories with explicit model exceptions and storefront commercial visibility, public/internal inherited catalog documents with verified PDF/DOCX uploads, contextual feature presentation and official brand sources; reviewed 2026-10-19",
     "23": "Fixed scoped remuneration agreements and frozen BYN order expenses, explicit accrual, exact FIFO payouts and dual-authority cash offsets, shared account mutex/versions/durable UUID, independent pay delegation, safe own history, preserved payout/handover corrections and no duplicate legacy expenses; reviewed 2026-10-17",
     "22": "Client cash receipt against a reviewed live collection instruction, atomic Payment/custody/instruction/audit, exact money, durable command replay, company/site/worker cash history, reserved source allocations, selected-recipient handover acknowledgement, explicit finance delegation and non-destructive correction; reviewed 2026-10-17",
@@ -764,6 +765,7 @@
       ["POST /api/manager/order-workspace-usage/batch", "record_manager_order_usage", false, 2]
     ],
     "routers/manager_orders_read.py": [
+      ["GET /api/manager/orders/board", "get_manager_order_board", false, 26],
       ["GET /api/manager/orders", "get_manager_orders", false, 20],
       ["GET /api/manager/orders/scenarios", "list_manager_order_scenarios", false, 2],
       ["GET /api/manager/orders/work-stages/stale", "list_manager_stale_order_stages", false, 2],

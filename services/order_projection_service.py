@@ -102,6 +102,7 @@ class OrderProjectionService:
             "created_at": order.created_at,
             "updated_at": order.updated_at,
             "status_changed_at": getattr(order, "status_changed_at", None),
+            "closed_at": order.closed_at,
             "next_followup_date": order.next_followup_date,
             "measurement_date": order.measurement_date,
             "installation_date": order.installation_date,

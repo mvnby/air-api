@@ -6,6 +6,11 @@ const mocks = vi.hoisted(() => ({
   getOrders: vi.fn(),
 }));
 
+vi.mock('../src/services/order-board', async importOriginal => ({
+  ...await importOriginal<typeof import('../src/services/order-board')>(),
+  orderBoardApi: { page: mocks.getOrders },
+}));
+
 vi.mock('../src/api', () => ({
   api: {
     getManagerOrderDetail: mocks.getOrderDetail,
@@ -113,6 +118,8 @@ describe('OrdersDashboard local session cleanup', () => {
   it('clears loaded and selected order state immediately after list 401', async () => {
     mocks.getOrders
       .mockResolvedValueOnce({
+        groups: [], total: 1, total_orders: 1, page: 1, limit: 25, has_more: false,
+        queue_counts: { active: 1 }, work_counts: { all: 1, followup: 0, planning: 0, unpaid: 1 },
         items: [oldOrder],
         meta: { page: 1, limit: 100, total: 1, pages: 1 },
       })
@@ -134,8 +141,8 @@ describe('OrdersDashboard local session cleanup', () => {
     await flushPromises();
 
     expect(mocks.getOrders).toHaveBeenCalledTimes(2);
-    expect(list.props('items')).toEqual([]);
-    expect(list.props('selectedOrderIds')).toEqual([]);
+    expect(wrapper.findComponent({ name: 'OrdersListTable' }).exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Экспорт 1');
     expect(managerSession.isAuthenticated.value).toBe(false);
     expect(managerSession.auth.value).toBeNull();
     expect(managerSession.recoveryRequired.value).toBe(true);

@@ -6,6 +6,7 @@ import type { ManagerCommercialDocumentDefaults } from '../models/ManagerCommerc
 import type { ManagerCommercialTermsExtract } from '../models/ManagerCommercialTermsExtract';
 import type { ManagerCommercialTermsResponse } from '../models/ManagerCommercialTermsResponse';
 import type { ManagerCommercialTermsUpdate } from '../models/ManagerCommercialTermsUpdate';
+import type { ManagerOrderBoardPage } from '../models/ManagerOrderBoardPage';
 import type { ManagerOrderCreatePayload } from '../models/ManagerOrderCreatePayload';
 import type { ManagerOrderDetailResponse } from '../models/ManagerOrderDetailResponse';
 import type { ManagerOrderDocumentGeneratePayload } from '../models/ManagerOrderDocumentGeneratePayload';
@@ -189,6 +190,91 @@ export class ManagerOrdersService {
             url: '/api/manager/orders/export',
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Manager Order Board
+     * Read bounded scalar cards or exact customer aggregates in the current Manager
+     * tenant/storefront/customer and assignment scope. Active excludes paused and closed;
+     * waiting contains paused live orders; history includes every closed order, including
+     * legacy NULL results/dates and old hold flags. Date bounds use closed_at only; without
+     * bounds unknown dates are included. include_unknown_date includes them with a range.
+     * Due contacts span both live queues without resuming an order. Search callers can use
+     * queue=all. Groups have stable keys and no eager children; group_key pages at most 100
+     * children through the identical filters. Counts precede pagination, with deterministic
+     * ID ties. Money is computed from proposal lines and currency payments, including complete group aggregates.
+     * This read never loads proposal/product/service graphs or modifies orders. Existing
+     * GET /orders keeps its contract. Invalid filters return 400, invalid bounds 422.
+     *
+     * Access requires an authenticated Manager session/JWT and live membership; see [Manager
+     * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
+     * @param segment
+     * @param queue
+     * @param status
+     * @param search
+     * @param assignedToMe
+     * @param customerId
+     * @param workFilter
+     * @param result
+     * @param closedFrom
+     * @param closedTo
+     * @param includeUnknownDate
+     * @param groupByCustomer
+     * @param groupKey
+     * @param phase
+     * @param column
+     * @param page
+     * @param limit
+     * @param sort
+     * @returns ManagerOrderBoardPage Successful Response
+     * @throws ApiError
+     */
+    public static getManagerOrderBoard(
+        segment: string = 'b2c',
+        queue: string = 'active',
+        status?: (string | null),
+        search?: (string | null),
+        assignedToMe: boolean = false,
+        customerId?: (number | null),
+        workFilter: string = 'all',
+        result?: (string | null),
+        closedFrom?: (string | null),
+        closedTo?: (string | null),
+        includeUnknownDate: boolean = false,
+        groupByCustomer: boolean = false,
+        groupKey?: (string | null),
+        phase?: (string | null),
+        column?: (string | null),
+        page: number = 1,
+        limit: number = 25,
+        sort: string = 'created_at_desc',
+    ): CancelablePromise<ManagerOrderBoardPage> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/orders/board',
+            query: {
+                'segment': segment,
+                'queue': queue,
+                'status': status,
+                'search': search,
+                'assigned_to_me': assignedToMe,
+                'customer_id': customerId,
+                'work_filter': workFilter,
+                'result': result,
+                'closed_from': closedFrom,
+                'closed_to': closedTo,
+                'include_unknown_date': includeUnknownDate,
+                'group_by_customer': groupByCustomer,
+                'group_key': groupKey,
+                'phase': phase,
+                'column': column,
+                'page': page,
+                'limit': limit,
+                'sort': sort,
+            },
             errors: {
                 422: `Validation Error`,
             },
