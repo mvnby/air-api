@@ -121,9 +121,11 @@ onBeforeUnmount(() => {
   .kitlane-topbar.has-context-header { grid-template-columns:minmax(0, 1fr) auto; gap:0.25rem; }
   .has-context-header .kitlane-context-header { grid-column:1 / -1; grid-row:2; }
   .has-context-header .kitlane-topbar-actions { grid-column:2; }
-  .has-compact-context .kitlane-context-header { grid-column:1; grid-row:1; }
 }
 @media (min-width: 768px) {
+  .kitlane-topbar.has-compact-context { display:flex; flex-wrap:wrap-reverse; justify-content:space-between; gap:0.25rem 0.75rem; }
+  .has-compact-context .kitlane-context-header { flex:1 1 15rem; }
+  .has-compact-context .kitlane-topbar-actions { margin-left:auto; }
   .is-collapsed .kitlane-sidebar { width: var(--kitlane-sidebar-compact); }
 }
 @media (max-width: 767px) {
