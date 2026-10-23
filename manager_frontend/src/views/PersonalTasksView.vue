@@ -27,7 +27,12 @@ const filters: Array<{ value: PersonalTaskFilter; label: string }> = [
   { value: 'cancelled', label: 'Отменённые' },
 ];
 
-const selectedFilter = ref<PersonalTaskFilter>('active');
+const initialFilter = new URLSearchParams(window.location.search).get('filter');
+const selectedFilter = ref<PersonalTaskFilter>(filters.find(filter => filter.value === initialFilter)?.value || 'active');
+const pageSize = 100;
+const offset = ref(0);
+const total = ref(0);
+let loadVersion = 0;
 const tasks = ref<PersonalTask[]>([]);
 const focusedTaskId = ref(Number(new URLSearchParams(window.location.search).get('taskId')) || null);
 const focusedTask = ref<PersonalTask | null>(null);
@@ -57,18 +62,31 @@ const emptyMessage = computed(() => selectedFilter.value === 'active'
   ? 'Активных поручений нет.'
   : 'В этом списке поручений нет.');
 
-const load = async () => {
+const load = async (requestedOffset = offset.value) => {
+  const version = ++loadVersion;
+  const filter = selectedFilter.value;
   loading.value = true;
   error.value = '';
   try {
-    const result = await listPersonalTasks(selectedFilter.value);
+    const result = await listPersonalTasks(filter, pageSize, requestedOffset);
+    if (version !== loadVersion) return;
+    // Finishing the last task on a page returns to the preceding non-empty page.
+    if (requestedOffset > 0 && requestedOffset >= result.total) {
+      await load(Math.max(0, Math.ceil(result.total / pageSize) - 1) * pageSize);
+      return;
+    }
     tasks.value = result.items;
+    total.value = result.total;
+    offset.value = requestedOffset;
     dueReminderCount.value = result.due_reminder_count;
-    if (focusedTaskId.value) focusedTask.value = await getPersonalTask(focusedTaskId.value);
+    if (focusedTaskId.value) {
+      const task = await getPersonalTask(focusedTaskId.value);
+      if (version === loadVersion) focusedTask.value = task;
+    }
   } catch (caught) {
-    error.value = getApiErrorMessage(caught);
+    if (version === loadVersion) error.value = getApiErrorMessage(caught);
   } finally {
-    loading.value = false;
+    if (version === loadVersion) loading.value = false;
   }
 };
 
@@ -80,11 +98,20 @@ const loadStaff = async () => {
   }
 };
 
-const chooseFilter = async (filter: PersonalTaskFilter) => {
-  if (selectedFilter.value === filter && !focusedTaskId.value) return;
+const setFilter = (filter: PersonalTaskFilter) => {
   selectedFilter.value = filter;
+  offset.value = 0;
+  const url = new URL(window.location.href);
+  url.searchParams.set('filter', filter);
+  url.searchParams.delete('taskId');
+  window.history.replaceState(window.history.state, '', url);
   focusedTaskId.value = null;
   focusedTask.value = null;
+};
+
+const chooseFilter = async (filter: PersonalTaskFilter) => {
+  if (selectedFilter.value === filter && !focusedTaskId.value) return;
+  setFilter(filter);
   await load();
 };
 
@@ -100,8 +127,8 @@ const create = async () => {
     if (pendingCreate === command) pendingCreate = null;
     if (text.value.trim() === value) text.value = '';
     notice.value = 'Поручение сохранено';
-    selectedFilter.value = 'active';
-    await load();
+    setFilter('active');
+    await load(0);
   } catch (caught) {
     if (!uncertainResult(caught) && pendingCreate === command) pendingCreate = null;
     error.value = getApiErrorMessage(caught);
@@ -180,6 +207,13 @@ onMounted(() => {
       <button v-for="filter in filters" :key="filter.value" type="button" class="whitespace-nowrap rounded-full px-3 py-2 text-sm font-medium" :class="selectedFilter === filter.value ? 'bg-[var(--kitlane-accent)] text-white' : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200'" @click="chooseFilter(filter.value)">{{ filter.label }}</button>
     </div>
 
+    <nav v-if="!focusedTaskId && total" class="mb-4 flex flex-wrap items-center justify-between gap-3" aria-label="Страницы поручений">
+      <p class="text-sm text-slate-600 dark:text-slate-300" role="status">{{ offset + 1 }}–{{ offset + tasks.length }} из {{ total }}</p>
+      <div v-if="total > pageSize || offset" class="flex gap-2">
+        <button type="button" data-testid="tasks-previous" :disabled="loading || offset === 0" class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium disabled:opacity-40 dark:border-slate-600" @click="load(Math.max(0, offset - pageSize))">Назад</button>
+        <button type="button" data-testid="tasks-next" :disabled="loading || offset + pageSize >= total" class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium disabled:opacity-40 dark:border-slate-600" @click="load(offset + pageSize)">Далее</button>
+      </div>
+    </nav>
     <div v-if="loading" class="flex justify-center py-12 text-slate-500"><Loader2 class="h-6 w-6 animate-spin" /></div>
     <section v-else-if="focusedTask" data-testid="linked-personal-task"><h2 class="mb-2 font-semibold">Связанное поручение #{{ focusedTask.id }}</h2><PersonalTaskCard :task="focusedTask" :staff="staff" :busy="busyId === focusedTask.id" @toggle="toggle" @cancel="cancel" @save="save" /></section>
     <p v-else-if="!tasks.length" class="rounded-xl border border-dashed border-slate-300 px-4 py-10 text-center text-slate-500 dark:border-slate-700">{{ emptyMessage }}</p>
