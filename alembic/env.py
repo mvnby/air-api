@@ -29,12 +29,16 @@ target_metadata = SQLModel.metadata
 
 
 def include_object(object_, name, type_, reflected, compare_to):
-    """Skip PostgreSQL's unstable rendering of the area expression index."""
+    """Skip expression indexes with unstable PostgreSQL/Alembic rendering."""
     table_name = getattr(getattr(object_, "table", None), "name", None)
     if (
         type_ == "index"
-        and table_name == "product"
-        and name == "ix_product_specs_area_m2"
+        and (table_name, name) in {
+            ("product", "ix_product_specs_area_m2"),
+            # PostgreSQL rewrites CASE/LIKE to multiline CASE/~~. The dedicated
+            # duplicate migration roundtrip test compares actual index definitions.
+            ("customer", "ix_customer_duplicate_phone"),
+        }
     ):
         return False
     return True
