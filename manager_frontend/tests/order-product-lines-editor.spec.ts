@@ -231,3 +231,17 @@ describe('proposal product draft lifecycle', () => {
     wrapper.unmount();
   });
 });
+
+it.each([
+  { kind: 'catalog snapshot', productId: 501, editorFields: 0 },
+  { kind: 'manual name', productId: 0, editorFields: 2 },
+])('bounds only manual names while preserving a long $kind', async ({ productId, editorFields }) => {
+  const saved = line({ product_id: productId, product_query: 'Очень длинное название модели '.repeat(50) });
+  const wrapper = mount(OrderProductLinesEditor, { props: props([saved]) });
+  await wrapper.get('[aria-label="Редактировать товар #1"]').trigger('click');
+  await wrapper.get('input[type="number"]').setValue(1800);
+  await wrapper.get('[aria-label="Готово: товар #1"]').trigger('click');
+  expect(wrapper.findAll('textarea')).toHaveLength(editorFields);
+  expect(wrapper.find('[role="alert"]').exists()).toBe(productId === 0);
+  wrapper.unmount();
+});

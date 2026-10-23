@@ -62,10 +62,10 @@ export async function focusLineEditor(row: HTMLElement | null | undefined) {
   }
 }
 
-export const lineErrors = (line: { quantity: number; price: number; cost: number }, title: string, product = false) => {
+export const lineErrors = (line: { product_id?: number; quantity: number; price: number; cost: number }, title: string, product = false) => {
   const errors: Record<string, string> = {};
   if (!title.trim()) errors.title = 'Укажите название';
-  else if (product && title.trim().length > 1000) errors.title = 'Не более 1000 символов';
+  else if (product && !line.product_id && title.trim().length > 1000) errors.title = 'Не более 1000 символов';
   if (!Number.isInteger(line.quantity) || line.quantity <= 0) errors.quantity = 'Целое число больше 0';
   const money = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value >= 0
     && (product ? Number.isSafeInteger(value) : Number.isSafeInteger(Math.round(value * 100)) && Math.abs(value * 100 - Math.round(value * 100)) < 1e-7);
