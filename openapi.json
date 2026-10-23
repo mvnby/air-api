@@ -56218,6 +56218,16 @@
             "type": "integer",
             "title": "Skipped",
             "default": 0
+          },
+          "existing": {
+            "type": "integer",
+            "title": "Existing",
+            "default": 0
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More",
+            "default": false
           }
         },
         "type": "object",
@@ -61499,6 +61509,26 @@
       },
       "MailDraftCreatePayload": {
         "properties": {
+          "in_reply_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 998
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In Reply To"
+          },
+          "references": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "References"
+          },
           "account_id": {
             "type": "string",
             "maxLength": 64,
@@ -61572,6 +61602,26 @@
       },
       "MailDraftUpdatePayload": {
         "properties": {
+          "in_reply_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 998
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In Reply To"
+          },
+          "references": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "References"
+          },
           "expected_version": {
             "type": "integer",
             "minimum": 1.0,
@@ -61697,7 +61747,8 @@
               "$ref": "#/components/schemas/MailMessageResponse"
             },
             "type": "array",
-            "title": "Items"
+            "title": "Items",
+            "description": "Saved mail summaries; body_text contains at most 300 characters. Read message detail/preview for full content and approval hash."
           },
           "total": {
             "type": "integer",
@@ -61918,6 +61969,36 @@
               }
             ],
             "title": "Message Id"
+          },
+          "reply_to": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reply To"
+          },
+          "in_reply_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In Reply To"
+          },
+          "references": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "References"
+          },
+          "delivery_projection_pending": {
+            "type": "boolean",
+            "title": "Delivery Projection Pending",
+            "default": false
           }
         },
         "type": "object",

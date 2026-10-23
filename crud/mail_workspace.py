@@ -35,6 +35,18 @@ class MailWorkspaceDAO:
             statement = statement.options(defer(MailAttachmentSnapshot.content))
         return list((await session.execute(statement)).scalars().all())
 
+    @staticmethod
+    async def attachments_by_email(session, email_ids, tenant_id):
+        if not email_ids:
+            return {}
+        rows = (await session.execute(select(MailAttachmentSnapshot).where(
+            MailAttachmentSnapshot.email_id.in_(email_ids), MailAttachmentSnapshot.tenant_id == tenant_id
+        ).options(defer(MailAttachmentSnapshot.content)).order_by(MailAttachmentSnapshot.id))).scalars().all()
+        grouped = {email_id: [] for email_id in email_ids}
+        for row in rows:
+            grouped[row.email_id].append(row)
+        return grouped
+
     @classmethod
     async def list(cls, session: AsyncSession, scope: TenantScope, *, folder: str, status: str | None,
                    q: str | None, order_id: int | None, customer_id: int | None, page: int, limit: int):
@@ -57,7 +69,9 @@ class MailWorkspaceDAO:
             select(Customer.id).where(Customer.tenant_id == scope.tenant_id)
         )))
         total = int((await session.execute(select(func.count()).select_from(OutgoingEmail).where(*filters))).scalar_one())
-        rows = list((await session.execute(select(OutgoingEmail).where(*filters).order_by(
+        rows = list((await session.execute(select(OutgoingEmail, func.substr(OutgoingEmail.body_text, 1, 300)).options(
+            defer(OutgoingEmail.body_text), defer(OutgoingEmail.body_html)
+        ).where(*filters).order_by(
             OutgoingEmail.created_at.desc(), OutgoingEmail.id.desc()
-        ).offset((page - 1) * limit).limit(limit))).scalars().all())
+        ).offset((page - 1) * limit).limit(limit))).all())
         return rows, total

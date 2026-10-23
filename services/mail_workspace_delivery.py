@@ -36,6 +36,9 @@ class MailWorkspaceDelivery:
         addresses += row.bcc_emails or []
         if not addresses or len(addresses) > 50 or any(not ADDRESS.fullmatch(value) or len(value) > 254 for value in addresses):
             raise ValueError("Укажите корректные адреса получателей (не больше 50)")
+        from services.mail_headers import valid_message_id
+        if (row.in_reply_to and not valid_message_id(row.in_reply_to)) or len(row.references or []) > 50 or any(not valid_message_id(value) for value in row.references or []):
+            raise ValueError("Некорректные заголовки цепочки писем")
         if not row.subject.strip() or any(char in row.subject for char in "\r\n"):
             raise ValueError("Укажите тему письма без переноса строки")
         if not (row.body_text or "").strip() and not (row.body_html or "").strip():
@@ -83,6 +86,10 @@ class MailWorkspaceDelivery:
         # Send only the immutable saved sender, even if config changes after claiming.
         message.replace_header("From", formataddr((row.from_name or "", row.from_email)))
         message["Message-ID"] = f"<kitlane-{row.id}-{row.send_token}@{row.from_email.split('@')[-1]}>"
+        if row.in_reply_to:
+            message["In-Reply-To"] = row.in_reply_to
+        if row.references:
+            message["References"] = " ".join(row.references)
         if row.cc_emails:
             message["Cc"] = ", ".join(row.cc_emails)
         if row.bcc_emails:
@@ -173,21 +180,47 @@ class MailWorkspaceDelivery:
                 row.status, row.error, row.updated_at = result, error, datetime.now()
                 if result == "sent":
                     row.sent_at = datetime.now()
+                    row.delivery_projection_pending = row.order_id is not None
                 await session.flush()
             return await Workspace._result(session, actor, row)
-        completed = await AuthenticatedCommandService.execute(
+        await AuthenticatedCommandService.execute(
             session, actor=actor, command_name="mail.delivery.finish", idempotency_key=f"mail-result-{send_token}",
             payload={"draft_id": draft_id, "send_token": send_token, "status": result},
             response_model=MailMessageResponse, operation=finish,
         )
-        row = await MailWorkspaceDAO.get(session, draft_id, actor.tenant_scope)
-        if result == "sent" and row.order_id is not None:
-            try:
-                from services.order_mail_delivery_service import OrderMailDeliveryService
-                await OrderMailDeliveryService.after_sent(session, actor=actor, email=row)
-            except Exception as exc:
-                logger.warning("MAIL_ORDER_DELIVERY_PROJECTION_FAILED email=%s exception=%s", draft_id, type(exc).__name__)
         await MailWorkspaceAccess.require_actor(session, actor)
         if authorization_error is not None:
             raise authorization_error
-        return PublicWriteCommandOutcome(value=completed.value, status_code=200, replayed=False)
+        current = await Workspace.get_message(session, actor=actor, message_id=draft_id)
+        return PublicWriteCommandOutcome(value=current, status_code=200, replayed=False)
+
+    @classmethod
+    async def recover_projection(cls, session, *, actor, email_id):
+        """Complete a committed mail obligation; retries never call the transport.
+
+        Another currently authorized company member may finish it after the
+        sender leaves. Revocation leaves the obligation pending for that member.
+        The row lock serializes different actors/keys; clearing pending and the
+        lifecycle writes share the command transaction.
+        """
+        from services.order_mail_delivery_service import OrderMailDeliveryService
+        from services.command_transaction import command_transaction
+        try:
+            async with command_transaction(session):
+                await MailWorkspaceAccess.require_actor(session, actor, write=True)
+                row = await MailWorkspaceDAO.get(session, email_id, actor.tenant_scope, lock=True)
+                if row is None or row.status != "sent" or not row.delivery_projection_pending:
+                    return
+                await MailWorkspaceAccess.validate_links(session, actor, order_id=row.order_id, customer_id=row.customer_id)
+                await OrderMailDeliveryService.after_sent(session, actor=actor, email=row, commit=False)
+                row.delivery_projection_pending = False
+                from models.command_audit import CommandAuditEvent
+                session.add(CommandAuditEvent(tenant_id=actor.tenant_scope.tenant_id,
+                    storefront_id=actor.tenant_scope.storefront_id, staff_user_id=actor.staff_user_id,
+                    channel=actor.channel, operation="mail.delivery.project", request_id=row.send_token or str(row.id),
+                    resource_type="outgoing_email", resource_id=row.id, result="completed"))
+                await session.flush()
+        except Exception as exc:
+            # The saved SMTP result remains durable; the failed projection and
+            # pending flag rollback together. A later authorized read retries it.
+            logger.warning("MAIL_ORDER_DELIVERY_PROJECTION_PENDING email=%s exception=%s", email_id, type(exc).__name__)

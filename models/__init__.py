@@ -108,7 +108,7 @@ from .service_asset import (
 from .staff import StaffUser
 from .staff_avatar import StaffAvatar
 from .staff_telegram import StaffTelegramChallenge, StaffTelegramRetiredIdentity, StaffTelegramWidgetReceipt
-from .incoming_mail import IncomingMail, IncomingMailAttachment
+from .incoming_mail import IncomingMail, IncomingMailAttachment, MailSyncCursor
 from .mail_workspace import MailAttachmentSnapshot
 from .storage_maintenance import StorageReconciliationCursor
 from .belzakupki import BelzakupkiImportCheckpoint
@@ -289,6 +289,7 @@ __all__ = [
     "OutgoingEmail",
     "IncomingMail",
     "IncomingMailAttachment",
+    "MailSyncCursor",
     "MailAttachmentSnapshot",
     "PaymentCurrency",
     "Product",

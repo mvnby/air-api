@@ -39,15 +39,17 @@ class MailWorkspaceService:
             "sender_email": row.from_email, "sender_name": row.from_name,
             "to": row.recipient_email, "cc": row.cc_emails, "bcc": row.bcc_emails,
             "subject": row.subject, "body_text": row.body_text, "body_html": row.body_html,
-            "reply_to": row.reply_to, "order_id": row.order_id, "customer_id": row.customer_id,
+            "reply_to": row.reply_to, "in_reply_to": row.in_reply_to, "references": row.references,
+            "order_id": row.order_id, "customer_id": row.customer_id,
             "files": [{"id": item.id, "filename": item.filename, "mime_type": item.mime_type,
                        "size": item.size, "sha256": item.sha256} for item in snapshots],
         }
         return hashlib.sha256(json.dumps(content, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
     @classmethod
-    async def _project(cls, session: AsyncSession, row: OutgoingEmail, actor: CommandActor) -> MailMessageResponse:
-        snapshots = await MailWorkspaceDAO.attachments(session, int(row.id), actor.tenant_scope.tenant_id, include_content=False)
+    async def _project(cls, session: AsyncSession, row: OutgoingEmail, actor: CommandActor, *, snapshots=None, summary=False, body_preview="") -> MailMessageResponse:
+        if snapshots is None:
+            snapshots = await MailWorkspaceDAO.attachments(session, int(row.id), actor.tenant_scope.tenant_id, include_content=False)
         attachments = [{
             "id": item.id, "filename": item.filename, "mime_type": item.mime_type,
             "size": item.size, "sha256": item.sha256, "available": True,
@@ -66,11 +68,12 @@ class MailWorkspaceService:
             sender_email=row.from_email, sender_name=row.from_name,
             to=[item.strip() for item in row.recipient_email.split(",") if item.strip()],
             cc=row.cc_emails or [], bcc=row.bcc_emails or [], subject=row.subject,
-            body_text=row.body_text or cls._html_to_text(row.body_html), attachments=attachments,
+            body_text=(body_preview or "") if summary else row.body_text or cls._html_to_text(row.body_html), attachments=attachments,
+            in_reply_to=row.in_reply_to, references=row.references, delivery_projection_pending=row.delivery_projection_pending,
             order_id=row.order_id, customer_id=row.customer_id,
             manager_url=cls.manager_url(int(row.id)), error=row.error,
             created_at=row.created_at, updated_at=row.updated_at, sent_at=row.sent_at,
-            confirmed_version=row.confirmed_version, content_hash=cls._hash(row, snapshots),
+            confirmed_version=row.confirmed_version, content_hash=None if summary else cls._hash(row, snapshots),
             message_id=(f"<kitlane-{row.id}-{row.send_token}@{row.from_email.split('@')[-1]}>"
                 if row.send_token and row.from_email else None),
         )
@@ -135,6 +138,9 @@ class MailWorkspaceService:
         from services.mail_workspace_delivery import MailWorkspaceDelivery
         if await MailWorkspaceDelivery.recover_stale_claim(session, row, actor=actor):
             await session.commit()
+        if row.status == "sent" and row.delivery_projection_pending:
+            await MailWorkspaceDelivery.recover_projection(session, actor=actor, email_id=message_id)
+            row = await cls._get(session, actor, message_id)
         return await cls._project(session, row, actor)
 
     @classmethod
@@ -152,7 +158,8 @@ class MailWorkspaceService:
         else:
             rows, total = await MailWorkspaceDAO.list(session, actor.tenant_scope, folder=folder, status=status,
                 q=q, order_id=order_id, customer_id=customer_id, page=page, limit=limit)
-            items = [await cls._project(session, row, actor) for row in rows]
+            snapshots = await MailWorkspaceDAO.attachments_by_email(session, [int(row.id) for row, _ in rows], actor.tenant_scope.tenant_id)
+            items = [await cls._project(session, row, actor, snapshots=snapshots[int(row.id)], summary=True, body_preview=preview) for row, preview in rows]
         return MailMessageListResponse(items=items, total=total, page=page, limit=limit)
 
     @classmethod
@@ -165,7 +172,7 @@ class MailWorkspaceService:
                 account_id=account.id, version=1, status="draft", from_email=account.email,
                 from_name=account.name, created_by_staff_user_id=actor.staff_user_id,
                 recipient_email=", ".join(payload.to), cc_emails=payload.cc, bcc_emails=payload.bcc,
-                subject=payload.subject, body_text=payload.body_text, order_id=payload.order_id,
+                subject=payload.subject, body_text=payload.body_text, in_reply_to=payload.in_reply_to, references=payload.references, order_id=payload.order_id,
                 customer_id=payload.customer_id,
             )
             session.add(row)
@@ -329,7 +336,7 @@ class MailWorkspaceService:
                 from_name=account.name, recipient_email=source.recipient_email,
                 cc_emails=source.cc_emails, bcc_emails=source.bcc_emails,
                 subject=source.subject, body_text=source.body_text or cls._html_to_text(source.body_html), body_html=None,
-                reply_to=source.reply_to, order_id=source.order_id, customer_id=source.customer_id,
+                reply_to=source.reply_to, in_reply_to=source.in_reply_to, references=source.references, order_id=source.order_id, customer_id=source.customer_id,
                 retry_of_email_id=(source.retry_of_email_id or int(source.id)) if source.status != "draft" else None,
                 created_by_staff_user_id=actor.staff_user_id,
             )

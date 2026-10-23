@@ -12,3 +12,5 @@ class IncomingMailSyncResponse(BaseModel):
     processed: int = 0
     captured: int = 0
     skipped: int = 0
+    existing: int = 0
+    has_more: bool = False

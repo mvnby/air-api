@@ -41,6 +41,7 @@ const download = async (attachment: MailAttachment) => {
       <p v-else class="mt-1 text-sm text-slate-500">Вложений нет.</p>
     </section>
     <p v-if="message.order_id || message.customer_id" class="text-sm text-slate-500">{{ message.order_id ? `Заказ #${message.order_id}` : '' }} {{ message.customer_id ? `Клиент #${message.customer_id}` : '' }}</p>
+    <p v-if="message.delivery_projection_pending" role="status" class="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Письмо отправлено. Статусы заказа ещё обновляются; откройте письмо повторно для проверки.</p>
     <p v-if="message.status === 'unknown'" class="rounded-xl bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">Почтовый сервер мог принять письмо. Проверьте папку отправленных у провайдера и обратитесь к администратору для проверки журнала отправки. Не отправляйте письмо повторно до проверки.</p>
     <p v-if="message.error || error" role="alert" class="rounded-xl bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-200">{{ error || message.error }}</p>
   </article>

@@ -6,5 +6,7 @@ export type IncomingMailSyncResponse = {
     processed?: number;
     captured?: number;
     skipped?: number;
+    existing?: number;
+    has_more?: boolean;
 };
 

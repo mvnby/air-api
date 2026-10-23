@@ -378,7 +378,7 @@ class MailSmtpService:
         return email_row
 
     @staticmethod
-    async def apply_order_delivery(session, *, tenant_scope, order, attachments, email_row):
+    async def apply_order_delivery(session, *, tenant_scope, order, attachments, email_row, commit=True):
         """Project accepted mail onto the existing order/document lifecycle."""
         order_id = order.id
         document_metadata = [item.metadata or {} for item in attachments]
@@ -389,6 +389,8 @@ class MailSmtpService:
         native_document_ids = [item["document_id"] for item in document_metadata
                                if item.get("document_id") and item.get("native")]
         sent_at = email_row.sent_at or datetime.now()
+        changed_at = order.negotiation_status_changed_at
+        update_order_step = changed_at is None or changed_at.replace(tzinfo=None) <= sent_at.replace(tzinfo=None)
         if has_offer_document:
             if offer_proposal_ids:
                 proposals = list(
@@ -418,17 +420,20 @@ class MailSmtpService:
                     .all()
                 )
             for proposal in proposals:
+                if proposal.status in {"approved", "rejected", "accepted"}:
+                    continue
                 proposal.status = PROPOSAL_STATUS_SENT
-                sync_selected_proposal_status(order, proposal, now=sent_at)
+                if update_order_step:
+                    sync_selected_proposal_status(order, proposal, now=sent_at)
                 session.add(proposal)
-            if not proposals:
+            if not proposals and update_order_step:
                 order.proposal_status = PROPOSAL_STATUS_SENT
                 order.proposal_sent_at = sent_at
                 order.negotiation_status = "proposal_sent"
                 order.negotiation_status_changed_at = sent_at
 
         order_status = getattr(order.status, "value", order.status)
-        if order_status == "negotiation":
+        if order_status == "negotiation" and update_order_step:
             if "invoice" in sent_document_types:
                 order.negotiation_status = "awaiting_payment"
                 order.negotiation_status_changed_at = sent_at
@@ -444,8 +449,12 @@ class MailSmtpService:
                 tenant_scope=tenant_scope,
                 document_ids=native_document_ids,
                 sent_at=sent_at,
+                commit=commit,
             )
             await session.refresh(email_row)
         elif sent_document_types:
-            await session.commit()
+            if commit:
+                await session.commit()
+            else:
+                await session.flush()
             await session.refresh(email_row)
