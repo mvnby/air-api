@@ -9,6 +9,7 @@
     "reviewed_stage"
   ],
   "review_stages": {
+    "28": "Read-only Manager KPI detail: shared overview predicates, exact authenticated tenant/storefront, timezone-aware bounded periods and pagination, current receivables/touchpoint semantics; private due-reminder task filter reviewed 2026-10-23",
     "27": "Explicit audited waiting command, shared order/payment/stage revision, optional contact and read-only legacy metadata reviewed 2026-10-22",
     "26": "Manager order queues: bounded scalar cards, exact aggregates, visibility, legacy NULL history and read-only behavior reviewed 2026-10-22",
     "24": "Reusable series accessories with explicit model exceptions and storefront commercial visibility, public/internal inherited catalog documents with verified PDF/DOCX uploads, contextual feature presentation and official brand sources; reviewed 2026-10-19",
@@ -520,7 +521,8 @@
       ["POST /api/manager/customers/{customer_id}/reconciliation/legacy-documents/{document_id}/review", "review_manager_customer_reconciliation_legacy_document", false, 2]
     ],
     "routers/manager_dashboard.py": [
-      ["GET /api/manager/dashboard/overview", "get_manager_dashboard_overview", false, 3],
+      ["GET /api/manager/dashboard/details/{metric}", "get_manager_dashboard_details", false, 28],
+      ["GET /api/manager/dashboard/overview", "get_manager_dashboard_overview", false, 28],
       ["GET /api/manager/dashboard/stats", "get_dashboard_stats", false, 3]
     ],
     "routers/manager_docs.py": [
@@ -795,7 +797,7 @@
       ["POST /api/manager/orders/{order_id}/stages", "create_manager_order_stage", false, 2]
     ],
     "routers/manager_personal_tasks.py": [
-      ["GET /api/manager/personal-tasks", "list_manager_personal_tasks", false, 3],
+      ["GET /api/manager/personal-tasks", "list_manager_personal_tasks", false, 28],
       ["GET /api/manager/personal-tasks/assignees", "list_manager_personal_task_assignees", false, 3],
       ["GET /api/manager/personal-tasks/{task_id}", "get_manager_personal_task", false, 3],
       ["PATCH /api/manager/personal-tasks/{task_id}", "patch_manager_personal_task", false, 3],

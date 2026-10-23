@@ -9,12 +9,13 @@ import {
   type DashboardKpiKey,
 } from '../../services/dashboard-overview';
 
-const props = defineProps<{ metric: DashboardKpiKey; kpi: DashboardKpi; emphasized?: boolean }>();
+const props = defineProps<{ metric: DashboardKpiKey; kpi: DashboardKpi; emphasized?: boolean; actionable?: boolean }>();
+const emit = defineEmits<{ select: [metric: DashboardKpiKey] }>();
 const trend = () => getDashboardTrend(props.metric, props.kpi);
 </script>
 
 <template>
-  <article class="kitlane-kpi" :class="{ 'is-emphasized': emphasized }">
+  <component :is="actionable ? 'button' : 'article'" :type="actionable ? 'button' : undefined" class="kitlane-kpi text-left" :class="{ 'is-emphasized': emphasized, 'is-actionable': actionable }" @click="actionable && emit('select', metric)">
     <p class="text-sm font-medium text-[var(--kitlane-muted)] dark:text-slate-400">{{ dashboardKpiLabels[metric] }}</p>
     <p class="kitlane-kpi-value mt-2">
       <MoneyAmount v-if="kpi.unit === 'byn' || metric === 'revenue' || metric === 'receivables'" class="kitlane-kpi-money" :value="kpi.current" :formatted-value="formatDashboardMoneyAmount(kpi.current)" />
@@ -25,11 +26,13 @@ const trend = () => getDashboardTrend(props.metric, props.kpi);
       'text-rose-700 dark:text-rose-400': trend().tone === 'negative',
       'text-[var(--kitlane-muted)] dark:text-slate-400': trend().tone === 'neutral',
     }">{{ trend().label }}</p>
-  </article>
+    <span v-if="actionable" class="mt-3 block text-xs font-semibold text-[var(--kitlane-accent-text)]">Показать записи →</span>
+  </component>
 </template>
 
 <style scoped>
 .kitlane-kpi { min-width: 0; border: 1px solid var(--kitlane-border); border-radius: var(--kitlane-card-radius); background: var(--kitlane-surface); padding: 20px; }
+.kitlane-kpi.is-actionable:hover { border-color: var(--kitlane-accent-text); }
 .kitlane-kpi.is-emphasized { border-color: var(--kitlane-accent-text); background: var(--kitlane-accent-soft); }
 .kitlane-kpi-value { font-size: clamp(24px, 2.2vw, 32px); line-height: 1.25; font-weight: 700; letter-spacing: -.6px; color: var(--kitlane-text); overflow-wrap: anywhere; }
 .kitlane-kpi-value :deep(.kitlane-kpi-money) { display: inline; white-space: normal; }

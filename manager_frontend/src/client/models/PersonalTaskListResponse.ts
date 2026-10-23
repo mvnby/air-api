@@ -8,7 +8,7 @@ export type PersonalTaskListResponse = {
     total: number;
     limit: number;
     offset: number;
-    filter: 'active' | 'today' | 'overdue' | 'undated' | 'completed' | 'cancelled';
+    filter: 'active' | 'today' | 'reminders' | 'overdue' | 'undated' | 'completed' | 'cancelled';
     due_reminder_count: number;
 };
 

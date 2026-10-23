@@ -4,10 +4,10 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models.common import ClosingResult, LeadStatus, OrderStageStatus, OrderStatus, PaymentCurrency
+from models.common import ClosingResult, OrderStatus
 from models.customer import Lead
 from models.order import Order, OrderWorkStage, Payment
 from models.tenancy import TenantScope
@@ -31,9 +31,10 @@ from services.dashboard_search_demand import (
     IntegratedSearchDemandProvider,
     SearchDemandSnapshot,
 )
-from services.order_financial_eligibility import (
-    collectible_order_clause,
-    financially_committed_order_clause,
+from services.dashboard_kpi_queries import (
+    revenue_conditions, lead_conditions, sales_conditions,
+    installation_completed_at, installation_conditions,
+    order_touchpoint_conditions, lead_touchpoint_conditions, receivable_conditions,
 )
 from services.tenant_scope_service import storefront_scope_clause
 
@@ -299,13 +300,7 @@ class DashboardOverviewService:
         )
 
     async def _revenue(self, session, *, tenant_scope, bounds, by_day):
-        conditions = (
-            storefront_scope_clause(Order, tenant_scope),
-            financially_committed_order_clause(),
-            Payment.currency == PaymentCurrency.BYN,
-            Payment.date >= bounds[0],
-            Payment.date < bounds[1],
-        )
+        conditions = revenue_conditions(tenant_scope, bounds)
         total = await _scalar(
             session,
             select(func.coalesce(func.sum(Payment.amount), 0.0))
@@ -328,22 +323,13 @@ class DashboardOverviewService:
         return await _scalar(
             session,
             select(func.count(Lead.id)).where(
-                storefront_scope_clause(Lead, tenant_scope),
-                Lead.created_at >= bounds[0],
-                Lead.created_at < bounds[1],
+                *lead_conditions(tenant_scope, bounds),
             ),
             int,
         )
 
     async def _sales(self, session, tenant_scope, bounds, *, by_day):
-        conditions = (
-            storefront_scope_clause(Order, tenant_scope),
-            Order.status == OrderStatus.CLOSED,
-            Order.closing_result == ClosingResult.WON.value,
-            Order.closed_at.is_not(None),
-            Order.closed_at >= bounds[0],
-            Order.closed_at < bounds[1],
-        )
+        conditions = sales_conditions(tenant_scope, bounds)
         count = await _scalar(session, select(func.count(Order.id)).where(*conditions), int)
         cycle = await _average_cycle(session, Order.closed_at, conditions)
         daily: dict[date, int] = {}
@@ -372,15 +358,8 @@ class DashboardOverviewService:
         )
 
     async def _installations(self, session, tenant_scope, bounds):
-        completed_at = func.coalesce(OrderWorkStage.end_time, Order.updated_at)
-        conditions = (
-            storefront_scope_clause(Order, tenant_scope),
-            Order.workflow_type == "sales_installation",
-            OrderWorkStage.status == OrderStageStatus.COMPLETED,
-            func.lower(func.trim(OrderWorkStage.name)) == "монтаж",
-            completed_at >= bounds[0],
-            completed_at < bounds[1],
-        )
+        completed_at = installation_completed_at()
+        conditions = installation_conditions(tenant_scope, bounds)
         count = await _scalar(
             session,
             select(func.count(OrderWorkStage.id))
@@ -400,18 +379,14 @@ class DashboardOverviewService:
         order_count = await _scalar(
             session,
             select(func.count(Order.id)).where(
-                storefront_scope_clause(Order, tenant_scope),
-                Order.status != OrderStatus.CLOSED,
-                Order.next_followup_date.is_not(None),
+                *order_touchpoint_conditions(tenant_scope),
             ),
             int,
         )
         lead_count = await _scalar(
             session,
             select(func.count(Lead.id)).where(
-                storefront_scope_clause(Lead, tenant_scope),
-                Lead.status.in_([LeadStatus.new, LeadStatus.contacted]),
-                Lead.next_followup_date.is_not(None),
+                *lead_touchpoint_conditions(tenant_scope),
             ),
             int,
         )
@@ -421,10 +396,7 @@ class DashboardOverviewService:
         return await _scalar(
             session,
             select(func.coalesce(func.sum(Order.balance_due), 0.0)).where(
-                storefront_scope_clause(Order, tenant_scope),
-                collectible_order_clause(),
-                Order.balance_due > 0,
-                or_(Order.target_currency.is_(None), Order.target_currency == PaymentCurrency.BYN),
+                *receivable_conditions(tenant_scope),
             ),
             float,
         )

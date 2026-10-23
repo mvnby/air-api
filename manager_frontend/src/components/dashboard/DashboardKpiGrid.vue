@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import type { DashboardKpis } from '../../client';
-import { dashboardKpiOrder } from '../../services/dashboard-overview';
+import { dashboardKpiOrder, type DashboardKpiKey } from '../../services/dashboard-overview';
 import DashboardKpiCard from './DashboardKpiCard.vue';
 
-const props = defineProps<{ kpis: DashboardKpis }>();
+const props = defineProps<{ kpis: DashboardKpis; actionable?: boolean }>();
+const emit = defineEmits<{ select: [metric: DashboardKpiKey] }>();
 </script>
 
 <template>
@@ -14,6 +15,8 @@ const props = defineProps<{ kpis: DashboardKpis }>();
       :metric="metric"
       :kpi="props.kpis[metric]"
       :emphasized="index === 0"
+      :actionable="actionable"
+      @select="emit('select', $event)"
     />
   </section>
 </template>

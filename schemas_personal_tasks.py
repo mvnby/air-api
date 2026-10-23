@@ -10,6 +10,7 @@ PersonalTaskStatus = Literal["active", "completed", "cancelled"]
 PersonalTaskListFilter = Literal[
     "active",
     "today",
+    "reminders",
     "overdue",
     "undated",
     "completed",

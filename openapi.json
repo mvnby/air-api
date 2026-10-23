@@ -29643,6 +29643,105 @@
         ]
       }
     },
+    "/api/manager/dashboard/details/{metric}": {
+      "get": {
+        "tags": [
+          "manager_dashboard"
+        ],
+        "summary": "Get Dashboard Details",
+        "description": "Read the records contributing to one KPI in the displayed, timezone-aware period.\n\nRequires Manager access and derives exact tenant/storefront scope from authentication.\nPeriod is start-inclusive/end-exclusive, at most 32 days; receivables and touchpoints\nare live snapshots. Uses the same membership rules as overview. Returns bounded\npagination (maximum 100), current total and value, and source entity references.\nNo writes or external requests. Invalid metric/period/pagination returns 422.",
+        "operationId": "get_manager_dashboard_details",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "metric",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "revenue",
+                "new_leads",
+                "sales",
+                "installations",
+                "active_tasks",
+                "receivables"
+              ],
+              "type": "string",
+              "title": "Metric"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "title": "Start"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "title": "End"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/installers": {
       "get": {
         "tags": [
@@ -38984,6 +39083,7 @@
               "enum": [
                 "active",
                 "today",
+                "reminders",
                 "overdue",
                 "undated",
                 "completed",
@@ -50904,6 +51004,136 @@
           "valid_until"
         ],
         "title": "DashboardContractExpiry"
+      },
+      "DashboardDetailItem": {
+        "properties": {
+          "record_id": {
+            "type": "integer",
+            "title": "Record Id"
+          },
+          "entity_type": {
+            "type": "string",
+            "enum": [
+              "order",
+              "lead"
+            ],
+            "title": "Entity Type"
+          },
+          "entity_id": {
+            "type": "integer",
+            "title": "Entity Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "occurred_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred At"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          }
+        },
+        "type": "object",
+        "required": [
+          "record_id",
+          "entity_type",
+          "entity_id",
+          "title"
+        ],
+        "title": "DashboardDetailItem"
+      },
+      "DashboardDetailResponse": {
+        "properties": {
+          "metric": {
+            "type": "string",
+            "enum": [
+              "revenue",
+              "new_leads",
+              "sales",
+              "installations",
+              "active_tasks",
+              "receivables"
+            ],
+            "title": "Metric"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardDetailItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "value": {
+            "type": "number",
+            "title": "Value"
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "byn",
+              "count"
+            ],
+            "title": "Unit"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "period": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DashboardPeriodRange"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Exact requested period; null for current-state metrics."
+          }
+        },
+        "type": "object",
+        "required": [
+          "metric",
+          "items",
+          "total",
+          "value",
+          "unit",
+          "limit",
+          "offset",
+          "generated_at"
+        ],
+        "title": "DashboardDetailResponse"
       },
       "DashboardFunnelStage": {
         "properties": {
@@ -91353,6 +91583,7 @@
             "enum": [
               "active",
               "today",
+              "reminders",
               "overdue",
               "undated",
               "completed",

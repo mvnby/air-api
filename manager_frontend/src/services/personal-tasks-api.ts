@@ -2,7 +2,7 @@ import { OpenAPI } from '../client/core/OpenAPI';
 import { request } from '../client/core/request';
 
 export type PersonalTaskStatus = 'active' | 'completed' | 'cancelled';
-export type PersonalTaskFilter = PersonalTaskStatus | 'today' | 'overdue' | 'undated';
+export type PersonalTaskFilter = PersonalTaskStatus | 'today' | 'overdue' | 'undated' | 'reminders';
 
 export type PersonalTask = {
   id: number;

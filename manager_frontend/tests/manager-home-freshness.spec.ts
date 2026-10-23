@@ -1,8 +1,9 @@
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
-const mocks = vi.hoisted(() => ({ overview: vi.fn(), stats: vi.fn(), leads: vi.fn() }));
+const mocks = vi.hoisted(() => ({ overview: vi.fn(), stats: vi.fn(), leads: vi.fn(), reminders: vi.fn() }));
 vi.mock('../src/api', () => ({ api: { getDashboardOverview: mocks.overview, getDashboardStats: mocks.stats, getLeadsCounter: mocks.leads } }));
+vi.mock('../src/services/personal-tasks-api', () => ({ listPersonalTasks: mocks.reminders }));
 import ManagerHome from '../src/views/ManagerHome.vue';
 import DashboardLoadingState from '../src/components/dashboard/DashboardLoadingState.vue';
 import DashboardKpiGrid from '../src/components/dashboard/DashboardKpiGrid.vue';
@@ -10,7 +11,7 @@ import DashboardAdvertising from '../src/components/dashboard/DashboardAdvertisi
 import DashboardSiteSeo from '../src/components/dashboard/DashboardSiteSeo.vue';
 import { clearManagerSession, managerSession } from '../src/services/manager-session';
 import { managerStorefrontSelection } from '../src/services/manager-storefront-selection';
-import { dashboardOperationsState, dashboardOverviewState, managerLeadsCounterState } from '../src/services/manager-dashboard-state';
+import { dashboardOperationsState, dashboardOverviewState, managerLeadsCounterState, managerTaskRemindersState } from '../src/services/manager-dashboard-state';
 import { inboxChangedEvent } from '../src/services/lead-inbox';
 import type { DashboardOverviewResponse, ManagerAuthStatusResponse } from '../src/client';
 enableAutoUnmount(afterEach);
@@ -31,11 +32,23 @@ beforeEach(() => {
   hidden = false;
   vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => hidden ? 'hidden' : 'visible');
   managerSession.auth.value = auth(); managerSession.isAuthenticated.value = true;
-  mocks.overview.mockResolvedValue(overview()); mocks.stats.mockResolvedValue(emptyStats); mocks.leads.mockResolvedValue({ count: 3 });
+  mocks.overview.mockResolvedValue(overview()); mocks.stats.mockResolvedValue(emptyStats); mocks.leads.mockResolvedValue({ count: 3 }); mocks.reminders.mockResolvedValue({ items: [], due_reminder_count: 0 });
 });
 afterEach(() => { clearManagerSession(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('Manager home freshness and retained content', () => {
+  it('discards personal reminder responses after account scope changes', async () => {
+    const old = deferred<{ items: []; due_reminder_count: number }>();
+    mocks.reminders.mockReturnValueOnce(old.promise).mockResolvedValue({ items: [], due_reminder_count: 0 });
+    const wrapper = mount(ManagerHome); await flushPromises();
+    managerSession.auth.value = auth({ staff_user_id: 2, username: 'another' });
+    await flushPromises();
+    old.resolve({ items: [], due_reminder_count: 9 });
+    await flushPromises();
+    expect(managerTaskRemindersState.data.value?.due_reminder_count).toBe(0);
+    expect(wrapper.find('[data-testid="attention-reminders"]').exists()).toBe(false);
+  });
+
   it('shows cold analytics as preparing while canonical CRM and actions are already available', async () => {
     const result = overview();
     result.marketing = { status: 'pending', providers: [{ provider: 'yandex_metrika', status: 'pending' }, { provider: 'yandex_direct', status: 'pending' }] };

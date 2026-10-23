@@ -218,6 +218,8 @@ export type { CustomerRequisitesRecognitionResponse } from './models/CustomerReq
 export type { CustomerRequisitesTextPayload } from './models/CustomerRequisitesTextPayload';
 export type { DashboardBankReceiptReviewItem } from './models/DashboardBankReceiptReviewItem';
 export type { DashboardContractExpiry } from './models/DashboardContractExpiry';
+export type { DashboardDetailItem } from './models/DashboardDetailItem';
+export type { DashboardDetailResponse } from './models/DashboardDetailResponse';
 export type { DashboardFunnelStage } from './models/DashboardFunnelStage';
 export type { DashboardKpi } from './models/DashboardKpi';
 export type { DashboardKpis } from './models/DashboardKpis';

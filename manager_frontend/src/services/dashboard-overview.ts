@@ -35,7 +35,7 @@ const dashboardDateParts = (value: Date) => Object.fromEntries(
     day: 'numeric', month: 'numeric', year: 'numeric', timeZone: 'Europe/Minsk',
   }).formatToParts(value).map(part => [part.type, part.value]),
 );
-const formatPeriodRange = (start: string, endExclusive: string) => {
+export const formatPeriodRange = (start: string, endExclusive: string) => {
   const startDate = new Date(start);
   const endDate = inclusivePeriodEnd(endExclusive);
   const startParts = dashboardDateParts(startDate);

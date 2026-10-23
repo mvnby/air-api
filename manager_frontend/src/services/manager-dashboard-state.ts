@@ -2,6 +2,7 @@ import { computed, ref, shallowRef, watch } from 'vue';
 import { api, type DashboardStatsResponse } from '../api';
 import type { DashboardOverviewResponse } from '../client';
 import { hasManagerCapability, MANAGER_CAPABILITY } from '../manager-capabilities';
+import { listPersonalTasks, type PersonalTaskList } from './personal-tasks-api';
 import { managerSession } from './manager-session';
 import { managerStorefrontSelection } from './manager-storefront-selection';
 
@@ -82,3 +83,10 @@ export const dashboardOperationsState = scopedResource<DashboardStatsResponse>((
 export const managerLeadsCounterState = scopedResource<{ count: number }>(() => api.getLeadsCounter(), () => (
   hasManagerCapability(managerSession.auth.value, MANAGER_CAPABILITY.crmManage)
 ));
+
+export const managerTaskRemindersState = scopedResource<PersonalTaskList>(
+  () => listPersonalTasks('reminders', 1),
+  () => Boolean(managerSession.auth.value?.staff_user_id
+    && !managerSession.auth.value?.must_change_password
+    && hasManagerCapability(managerSession.auth.value, MANAGER_CAPABILITY.crmManage)),
+);

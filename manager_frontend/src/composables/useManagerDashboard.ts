@@ -1,6 +1,6 @@
 import { onBeforeUnmount, onMounted, watch } from 'vue';
 import { inboxChangedEvent } from '../services/lead-inbox';
-import { dashboardContextKey, dashboardOperationsState, dashboardOverviewState, managerLeadsCounterState } from '../services/manager-dashboard-state';
+import { dashboardContextKey, dashboardOperationsState, dashboardOverviewState, managerLeadsCounterState, managerTaskRemindersState } from '../services/manager-dashboard-state';
 
 export const useManagerDashboard = () => {
   let mounted = false;
@@ -12,6 +12,7 @@ export const useManagerDashboard = () => {
     void dashboardOverviewState.refresh(0, followUp);
     void dashboardOperationsState.refresh(0, followUp);
     void managerLeadsCounterState.refresh(counterFreshWithinMs, followUp);
+    void managerTaskRemindersState.refresh(counterFreshWithinMs, followUp);
   };
   const resume = () => refresh(5_000);
   const changed = () => refresh(0, true);
@@ -37,5 +38,5 @@ export const useManagerDashboard = () => {
     window.removeEventListener(inboxChangedEvent, changed);
     document.removeEventListener('visibilitychange', visibilityChanged);
   });
-  return { overview: dashboardOverviewState, operations: dashboardOperationsState, leads: managerLeadsCounterState, refresh };
+  return { overview: dashboardOverviewState, operations: dashboardOperationsState, leads: managerLeadsCounterState, reminders: managerTaskRemindersState, refresh };
 };

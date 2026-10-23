@@ -174,3 +174,29 @@ class DashboardOverviewResponse(BaseModel):
     funnel: list[DashboardFunnelStage]
     marketing: DashboardMarketing
     search_demand: DashboardSearchDemand
+
+
+DashboardMetric = Literal["revenue", "new_leads", "sales", "installations", "active_tasks", "receivables"]
+
+
+class DashboardDetailItem(BaseModel):
+    record_id: int
+    entity_type: Literal["order", "lead"]
+    entity_id: int
+    title: str
+    occurred_at: datetime | None = None
+    amount: float | None = None
+
+
+class DashboardDetailResponse(BaseModel):
+    metric: DashboardMetric
+    items: list[DashboardDetailItem]
+    total: int
+    value: float
+    unit: Literal["byn", "count"]
+    limit: int
+    offset: int
+    generated_at: datetime
+    period: DashboardPeriodRange | None = Field(
+        default=None, description="Exact requested period; null for current-state metrics.",
+    )

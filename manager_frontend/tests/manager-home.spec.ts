@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   overview: vi.fn(),
   stats: vi.fn(),
-  leads: vi.fn(),
+  leads: vi.fn(), reminders: vi.fn(),
 }));
 
 vi.mock('../src/api', () => ({
@@ -15,10 +15,12 @@ vi.mock('../src/api', () => ({
   },
 }));
 
+import { inboxChangedEvent } from '../src/services/lead-inbox';
 import { managerSession, clearManagerSession } from '../src/services/manager-session';
 
 enableAutoUnmount(afterEach);
 
+vi.mock('../src/services/personal-tasks-api', () => ({ listPersonalTasks: mocks.reminders }));
 import ManagerHome from '../src/views/ManagerHome.vue';
 import BynSymbol from '../src/components/money/BynSymbol.vue';
 import MoneyAmount from '../src/components/money/MoneyAmount.vue';
@@ -52,6 +54,31 @@ describe('ManagerHome operational resilience', () => {
     mocks.overview.mockRejectedValue(new Error('overview unavailable'));
     mocks.stats.mockResolvedValue(operationalStats);
     mocks.leads.mockResolvedValue({ count: 0 });
+    mocks.reminders.mockResolvedValue({ items: [], due_reminder_count: 0 });
+  });
+
+  it('includes expiring contracts in the urgent summary when all other checks are empty', async () => {
+    mocks.stats.mockResolvedValue({ ...operationalStats, bank_receipts_review_count: 0, bank_receipts_review: [], upcoming_touchpoints: [] });
+    const wrapper = mount(ManagerHome);
+    await flushPromises();
+    expect(wrapper.get('[data-testid="attention-contracts"]').text()).toContain('Договоры требуют внимания');
+    expect(wrapper.text()).not.toContain('Срочных действий нет.');
+  });
+
+  it('opens the exact personal reminder filter and does not claim an empty day on reminder failure', async () => {
+    mocks.stats.mockResolvedValue({ ...operationalStats, bank_receipts_review_count: 0, bank_receipts_review: [], upcoming_touchpoints: [], expiring_contracts: [] });
+    mocks.reminders.mockResolvedValue({ items: [], due_reminder_count: 2 });
+    const wrapper = mount(ManagerHome);
+    await flushPromises();
+    expect(mocks.reminders).toHaveBeenCalledWith('reminders', 1);
+    await wrapper.get('[data-testid="attention-reminders"]').trigger('click');
+    expect(window.location.pathname + window.location.search).toBe('/manager/tasks?filter=reminders');
+    mocks.reminders.mockRejectedValue(new Error('unavailable'));
+    window.dispatchEvent(new Event(inboxChangedEvent));
+    await flushPromises();
+    expect(mocks.reminders).toHaveBeenCalledTimes(2);
+    expect(wrapper.text()).toContain('Не удалось обновить часть проверок');
+    expect(wrapper.text()).not.toContain('Срочных действий нет.');
   });
 
   it('keeps verified operational lists when the overview request fails', async () => {
