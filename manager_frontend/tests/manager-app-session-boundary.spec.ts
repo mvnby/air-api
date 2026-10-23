@@ -233,6 +233,14 @@ const rejectedManagerRequest = async (url: string, method = 'GET') => {
   return response;
 };
 
+// Route views load through defineAsyncComponent; flushPromises alone does not
+// wait for their module imports on a cold or busy test worker.
+const settleRouteView = async () => {
+  await flushPromises();
+  await vi.dynamicImportSettled();
+  await flushPromises();
+};
+
 const mountApp = async (path = '/manager/leads') => {
   window.history.replaceState({}, '', path);
   const reloadPage = vi.fn();
@@ -240,13 +248,7 @@ const mountApp = async (path = '/manager/leads') => {
     props: { reloadPage },
     global: { stubs: { UiFeedbackHost: true, ProfileSecurityView: true } },
   });
-  await flushPromises();
-  await flushPromises();
-  if (managerSession.isAuthenticated.value) {
-    await vi.waitFor(() => {
-      expect(wrapper!.get('main').html()).not.toContain('<!---->');
-    });
-  }
+  await settleRouteView();
   return reloadPage;
 };
 
@@ -409,7 +411,7 @@ describe('App Manager session boundary', () => {
       () => rejectedManagerRequest('/api/manager/orders/77'),
     );
     list.vm.$emit('open', oldOrder.id);
-    await flushPromises();
+    await settleRouteView();
 
     await vi.waitFor(() => expect(managerSession.recoveryRequired.value).toBe(true));
     expect(wrapper!.find('[data-testid="manager-root"]').exists()).toBe(false);
@@ -421,7 +423,7 @@ describe('App Manager session boundary', () => {
     await mountApp('/manager/orders');
     const list = wrapper!.getComponent({ name: 'OrdersListTable' });
     list.vm.$emit('open', oldOrder.id);
-    await flushPromises();
+    await settleRouteView();
     const drawer = wrapper!.getComponent({ name: 'OrderEditDrawer' });
     expect(drawer.props('order')).toMatchObject({ id: oldOrder.id });
 
