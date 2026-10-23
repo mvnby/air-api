@@ -3,10 +3,17 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text
+from sqlalchemy import or_, text
+from sqlalchemy.orm import lazyload
 from sqlmodel import select
 
 from core.input_validation import normalize_phone_digits
+from core.customer_duplicate_keys import (
+    email_candidate_key,
+    non_ascii_contact,
+    phone_candidate_key,
+    stripped_key,
+)
 from models import Customer, CustomerType
 from models.tenancy import TenantScope
 from services.customer_party import (
@@ -170,17 +177,27 @@ class CustomerCreationService:
         if not normalized_phone and not normalized_email and not normalized_inn:
             return None
 
-        customers = (
-            (
-                await session.execute(
-                    select(Customer).where(
-                        tenant_scope_clause(Customer, tenant_scope)
-                    )
+        statement = select(Customer).where(tenant_scope_clause(Customer, tenant_scope))
+        if session.get_bind().dialect.name == "postgresql":
+            candidates = []
+            if normalized_phone:
+                candidates.append(
+                    phone_candidate_key(Customer.phone) == normalized_phone
+                    if normalized_phone.isascii()
+                    else non_ascii_contact(Customer.phone)
                 )
-            )
-            .scalars()
-            .all()
-        )
+            if normalized_email:
+                candidates.append(
+                    email_candidate_key(Customer.email) == normalized_email
+                    if normalized_email.isascii()
+                    else non_ascii_contact(Customer.email)
+                )
+            if normalized_inn:
+                candidates.append(stripped_key(Customer.inn) == normalized_inn)
+            statement = statement.where(or_(*candidates))
+        # Duplicate selection needs only the customer, never contracts or branches.
+        statement = statement.options(lazyload("*"))
+        customers = (await session.execute(statement)).scalars().all()
         matches: list[tuple[int, Customer, tuple[str, ...]]] = []
         for customer in customers:
             matched_fields: list[str] = []

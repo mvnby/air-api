@@ -167,7 +167,9 @@ trap 'sleep 3; exit 143' TERM
   printf 'orphaned\n' > "${FAKE_DOCKER_MARKER}"
 ) &
 child_pid="$!"
-printf '%s' "${child_pid}" > "${FAKE_DOCKER_PID_FILE}"
+# A final probe can be killed between opening and writing a shared PID file.
+# Record each PID atomically in the filename, without truncating earlier probes.
+: > "${FAKE_DOCKER_PID_FILE}.${child_pid}"
 wait "${child_pid}"
 printf '2026-07-13 20:04:00+00\n'
 """,
@@ -180,12 +182,18 @@ printf '2026-07-13 20:04:00+00\n'
     assert elapsed < 1.75
     assert "within 1s" in result.stderr
 
-    child_pid = int((tmp_path / "docker-child-pid").read_text(encoding="utf-8"))
+    child_pids = {
+        int(path.suffix[1:]) for path in tmp_path.glob("docker-child-pid.*")
+    }
+    assert child_pids, "the hung probe must start a child to test process-group cleanup"
     cleanup_deadline = time.monotonic() + 0.5
-    while _process_is_live(child_pid) and time.monotonic() < cleanup_deadline:
+    while (
+        any(_process_is_live(pid) for pid in child_pids)
+        and time.monotonic() < cleanup_deadline
+    ):
         time.sleep(0.02)
-    if _process_is_live(child_pid):
-        raise AssertionError(f"timed-out probe child {child_pid} is still running")
+    live_pids = {pid for pid in child_pids if _process_is_live(pid)}
+    assert not live_pids, f"timed-out probe children {live_pids} are still running"
 
     assert not (tmp_path / "docker-marker").exists()
 

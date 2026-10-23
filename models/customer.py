@@ -14,6 +14,13 @@ from sqlalchemy import (
 )
 from sqlmodel import Field, Relationship, SQLModel
 
+from core.customer_duplicate_keys import (
+    email_candidate_key,
+    non_ascii_contact,
+    phone_candidate_key,
+    stripped_key,
+)
+
 from .common import CustomerType, DocumentRoleType, LeadIntakeSource, LeadLossReason, LeadSegmentHint, LeadStatus
 
 
@@ -79,6 +86,22 @@ class Customer(SQLModel, table=True):
 
     def __str__(self):
         return self.name
+
+
+for _field, _expression in (
+    ("phone", phone_candidate_key(Customer.__table__.c.phone)),
+    ("email", email_candidate_key(Customer.__table__.c.email)),
+    ("inn", stripped_key(Customer.__table__.c.inn)),
+):
+    Index(
+        f"ix_customer_duplicate_{_field}", Customer.__table__.c.tenant_id, _expression
+    ).ddl_if(dialect="postgresql")
+for _field in ("phone", "email"):
+    Index(
+        f"ix_customer_duplicate_{_field}_unicode",
+        Customer.__table__.c.tenant_id,
+        postgresql_where=non_ascii_contact(Customer.__table__.c[_field]),
+    ).ddl_if(dialect="postgresql")
 
 
 class CustomerContract(SQLModel, table=True):
