@@ -157,6 +157,22 @@ describe('PersonalTasksView', () => {
     expect((wrapper.get('[data-testid="personal-task-create-text"]').element as HTMLInputElement).value).toBe('');
   });
 
+  it('keeps the URL and navigation state consistent when creating from a filtered linked task', async () => {
+    window.history.replaceState({ position: 8 }, '', '/manager/tasks?filter=completed&taskId=91');
+    mocks.get.mockResolvedValue({ ...task('completed'), id: 91 });
+    const wrapper = await mountView();
+    await wrapper.get('[data-testid="personal-task-create-text"]').setValue('Новое поручение');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+    expect(window.location.search).toBe('?filter=active');
+    expect(window.history.state).toEqual({ position: 8 });
+    expect(wrapper.find('[data-testid="linked-personal-task"]').exists()).toBe(false);
+    expect(mocks.list).toHaveBeenLastCalledWith('active', 100, 0);
+    await wrapper.findAll('button').find(button => button.text() === 'Завершённые')!.trigger('click');
+    await flushPromises();
+    expect(window.history.state).toEqual({ position: 8 });
+  });
+
   it.each([
     ['active', 'complete'],
     ['completed', 'reopen'],

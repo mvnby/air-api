@@ -98,16 +98,20 @@ const loadStaff = async () => {
   }
 };
 
-const chooseFilter = async (filter: PersonalTaskFilter) => {
-  if (selectedFilter.value === filter && !focusedTaskId.value) return;
+const setFilter = (filter: PersonalTaskFilter) => {
   selectedFilter.value = filter;
   offset.value = 0;
   const url = new URL(window.location.href);
   url.searchParams.set('filter', filter);
   url.searchParams.delete('taskId');
-  window.history.replaceState({}, '', url);
+  window.history.replaceState(window.history.state, '', url);
   focusedTaskId.value = null;
   focusedTask.value = null;
+};
+
+const chooseFilter = async (filter: PersonalTaskFilter) => {
+  if (selectedFilter.value === filter && !focusedTaskId.value) return;
+  setFilter(filter);
   await load();
 };
 
@@ -123,9 +127,7 @@ const create = async () => {
     if (pendingCreate === command) pendingCreate = null;
     if (text.value.trim() === value) text.value = '';
     notice.value = 'Поручение сохранено';
-    selectedFilter.value = 'active';
-    focusedTaskId.value = null;
-    focusedTask.value = null;
+    setFilter('active');
     await load(0);
   } catch (caught) {
     if (!uncertainResult(caught) && pendingCreate === command) pendingCreate = null;
