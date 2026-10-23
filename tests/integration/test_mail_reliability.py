@@ -42,7 +42,7 @@ async def test_concurrent_syncs_serialize_one_folder_cursor(db_engine, monkeypat
             return await Inbox.sync(session, actor=actor, payload=IncomingMailSyncPayload(limit=2), idempotency_key=key)
     outcomes = await asyncio.gather(sync("concurrent-sync-first-001"), sync("concurrent-sync-other-001"))
     assert sum(item.value.captured for item in outcomes) == 4
-    assert fetched == [("INBOX", 1), ("INBOX", 2), ("INBOX", 3), ("INBOX", 4)]
+    assert fetched == [("INBOX", 3), ("INBOX", 4), ("INBOX", 1), ("INBOX", 2)]
     async with AsyncSession(db_engine) as session:
         assert (await session.execute(select(MailSyncCursor.last_uid))).scalar_one() == 4
         assert len((await session.execute(select(IncomingMail))).scalars().all()) == 4

@@ -20,6 +20,7 @@ def upgrade():
         sa.Column("folder", sa.String(512), nullable=False),
         sa.Column("uidvalidity", sa.String(64), nullable=False),
         sa.Column("last_uid", sa.BigInteger(), nullable=False),
+        sa.Column("history_before_uid", sa.BigInteger(), nullable=True),
         sa.UniqueConstraint("tenant_id", "account_id", "folder", name="uq_mail_sync_cursor_scope"))
     op.add_column("incoming_mail", sa.Column("reply_to", sa.JSON(), nullable=False, server_default=sa.text("'[]'")))
     for table in ("incoming_mail", "outgoing_email"):

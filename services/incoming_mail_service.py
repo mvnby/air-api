@@ -74,19 +74,26 @@ class IncomingMailService:
             IncomingMail.tenant_id == tenant_scope.tenant_id,
             IncomingMail.account_id == "system", IncomingMail.source_key == source_key,
         ))).scalar_one_or_none()
+        from services.mail_headers import message_ids, reply_addresses
+        parent = message_ids(str(message.get("In-Reply-To") or ""))
+        headers = dict(reply_to=reply_addresses(str(message.get("Reply-To") or "")),
+                       in_reply_to=parent[-1] if parent else None,
+                       references=message_ids(str(message.get("References") or "")))
         if existing:
+            # Explicit refresh of the identical raw message can safely hydrate
+            # newly introduced headers in legacy rows. Keep saved body, links and
+            # attachment history intact, and count this as existing, not captured.
+            for field, value in headers.items():
+                setattr(existing, field, value)
             return existing, False
         sender_name, sender_email = parseaddr(MailImapService._decode_header_value(message.get("From")))
         text = MailImapService._extract_body(message)
         has_plain = any(part.get_content_type() == "text/plain" and not part.get_filename()
                         for part in message.walk())
         body_html = None if has_plain else text
-        from services.mail_headers import message_ids, reply_addresses
-        parent = message_ids(str(message.get("In-Reply-To") or ""))
         row = IncomingMail(
             tenant_id=tenant_scope.tenant_id, account_id="system", source_key=source_key,
-            reply_to=reply_addresses(str(message.get("Reply-To") or "")),
-            in_reply_to=parent[-1] if parent else None, references=message_ids(str(message.get("References") or "")),
+            **headers,
             message_id=(message_ids(message_id) or [None])[0], sender_email=sender_email.lower().replace("\x00", ""), sender_name=sender_name.replace("\x00", ""),
             recipient_email=", ".join(address.replace("\x00", "") for _, address in getaddresses(message.get_all("To", []))),
             cc_emails=[address.replace("\x00", "") for _, address in getaddresses(message.get_all("Cc", []))],
@@ -131,6 +138,12 @@ class IncomingMailService:
     async def _projection(cls, session: AsyncSession, actor: CommandActor, row: IncomingMail):
         from schemas_mail import MailMessageResponse
 
+        from services.mail_headers import message_ids
+        # Pre-migration inbox rows stored raw Message-ID. Expose only safe parents
+        # so an old malformed header cannot make an otherwise valid reply fail.
+        parent = message_ids(row.message_id)
+        reply_parent = message_ids(row.in_reply_to)
+        references = message_ids(" ".join(row.references or []))
         order_id, customer_id = row.order_id, row.customer_id
         if order_id and not await TenantEntityAccessService.get_order(session, order_id, tenant_scope=actor.tenant_scope):
             order_id = None
@@ -142,7 +155,8 @@ class IncomingMailService:
         return MailMessageResponse(
             id=-row.id, version=1, status="received", folder="inbox", account_id=row.account_id,
             sender_email=row.sender_email, sender_name=row.sender_name,
-            reply_to=row.reply_to, message_id=row.message_id, in_reply_to=row.in_reply_to, references=row.references,
+            reply_to=row.reply_to, message_id=parent[0] if parent else None,
+            in_reply_to=reply_parent[-1] if reply_parent else None, references=references,
             to=[address.strip() for address in row.recipient_email.split(",") if address.strip()],
             cc=row.cc_emails, bcc=[], subject=row.subject, body_text=row.body_text,
             attachments=attachments, order_id=order_id, customer_id=customer_id,

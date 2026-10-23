@@ -58,3 +58,5 @@ class MailSyncCursor(SQLModel, table=True):
     folder: str = Field(sa_column=Column(String(512), nullable=False))
     uidvalidity: str = Field(sa_column=Column(String(64), nullable=False))
     last_uid: int = Field(default=0, sa_column=Column(BigInteger, nullable=False))
+    # None means bootstrap; zero means history exhausted. Otherwise exclusive upper bound.
+    history_before_uid: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
