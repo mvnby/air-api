@@ -3,6 +3,8 @@
 /* tslint:disable */
 /* eslint-disable */
 export type MailDraftUpdatePayload = {
+    in_reply_to?: (string | null);
+    references?: Array<string>;
     expected_version: number;
     account_id?: (string | null);
     to?: (Array<string> | null);

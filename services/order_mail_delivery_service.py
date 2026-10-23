@@ -63,17 +63,17 @@ class OrderMailDeliveryService:
                     raise PermissionError("Реквизиты во вложении недоступны")
 
     @classmethod
-    async def after_sent(cls, session, *, actor: CommandActor, email):
+    async def after_sent(cls, session, *, actor: CommandActor, email, commit=True):
         if email.status != "sent" or email.order_id is None:
             return
         from services.mail_workspace_access import MailWorkspaceAccess
 
         await MailWorkspaceAccess.require_actor(session, actor)
         order = await TenantEntityAccessService.get_order(
-            session, email.order_id, tenant_scope=actor.tenant_scope,
+            session, email.order_id, tenant_scope=actor.tenant_scope, for_update=True, populate_existing=True,
         )
         if order is None:
-            return
+            raise PermissionError("Заказ отправленного письма недоступен")
         files = await MailWorkspaceDAO.attachments(session, int(email.id), actor.tenant_scope.tenant_id)
         attachments = []
         for file in files:
@@ -90,4 +90,4 @@ class OrderMailDeliveryService:
             attachments.append(MailAttachment(filename=file.filename, content=file.content,
                                                mime_type=file.mime_type, metadata=metadata))
         await MailSmtpService.apply_order_delivery(session, tenant_scope=actor.tenant_scope,
-                                                   order=order, attachments=attachments, email_row=email)
+                                                   order=order, attachments=attachments, email_row=email, commit=commit)

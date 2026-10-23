@@ -55,20 +55,37 @@ class IncomingMailService:
     async def capture(
         session: AsyncSession, *, tenant_scope: TenantScope, message: Message, raw_email: bytes,
     ) -> IncomingMail | None:
+        row, _ = await IncomingMailService.capture_result(session, tenant_scope=tenant_scope, message=message, raw_email=raw_email)
+        return row
+
+    @staticmethod
+    async def capture_result(
+        session: AsyncSession, *, tenant_scope: TenantScope, message: Message, raw_email: bytes,
+    ) -> tuple[IncomingMail | None, bool]:
         from services.mail_imap_service import MailImapService
 
         if not tenant_scope.is_system:
             raise PermissionError("Системная почта недоступна другой компании")
         if len(raw_email) > MAX_INCOMING_BYTES:
-            return None
+            return None, False
         message_id = str(message.get("Message-ID") or "").strip()
         source_key = hashlib.sha256(message_id.encode() + b"\0" + raw_email).hexdigest()
         existing = (await session.execute(select(IncomingMail).where(
             IncomingMail.tenant_id == tenant_scope.tenant_id,
             IncomingMail.account_id == "system", IncomingMail.source_key == source_key,
         ))).scalar_one_or_none()
+        from services.mail_headers import message_ids, reply_addresses
+        parent = message_ids(str(message.get("In-Reply-To") or ""))
+        headers = dict(reply_to=reply_addresses(str(message.get("Reply-To") or "")),
+                       in_reply_to=parent[-1] if parent else None,
+                       references=message_ids(str(message.get("References") or "")))
         if existing:
-            return existing
+            # Explicit refresh of the identical raw message can safely hydrate
+            # newly introduced headers in legacy rows. Keep saved body, links and
+            # attachment history intact, and count this as existing, not captured.
+            for field, value in headers.items():
+                setattr(existing, field, value)
+            return existing, False
         sender_name, sender_email = parseaddr(MailImapService._decode_header_value(message.get("From")))
         text = MailImapService._extract_body(message)
         has_plain = any(part.get_content_type() == "text/plain" and not part.get_filename()
@@ -76,9 +93,10 @@ class IncomingMailService:
         body_html = None if has_plain else text
         row = IncomingMail(
             tenant_id=tenant_scope.tenant_id, account_id="system", source_key=source_key,
-            message_id=message_id or None, sender_email=sender_email.lower(), sender_name=sender_name,
-            recipient_email=", ".join(address for _, address in getaddresses(message.get_all("To", []))),
-            cc_emails=[address for _, address in getaddresses(message.get_all("Cc", []))],
+            **headers,
+            message_id=(message_ids(message_id) or [None])[0], sender_email=sender_email.lower().replace("\x00", ""), sender_name=sender_name.replace("\x00", ""),
+            recipient_email=", ".join(address.replace("\x00", "") for _, address in getaddresses(message.get_all("To", []))),
+            cc_emails=[address.replace("\x00", "") for _, address in getaddresses(message.get_all("Cc", []))],
             subject=MailImapService._decode_header_value(message.get("Subject")),
             body_text=MailImapService._strip_html(text) if body_html else text,
             body_html=body_html,
@@ -91,7 +109,7 @@ class IncomingMailService:
                 await session.flush()
                 metadata = []
                 for position, attachment in enumerate(MailImapService._extract_original_attachments(message)):
-                    filename = attachment.filename.replace("\r", "").replace("\n", "")[:255] or "attachment"
+                    filename = attachment.filename.replace("\r", "").replace("\n", "").replace("\x00", "")[:255] or "attachment"
                     file = IncomingMailAttachment(
                         email_id=row.id, tenant_id=row.tenant_id, filename=filename,
                         mime_type=attachment.content_type, size=len(attachment.content),
@@ -113,12 +131,19 @@ class IncomingMailService:
                 IncomingMail.tenant_id == tenant_scope.tenant_id,
                 IncomingMail.account_id == "system", IncomingMail.source_key == source_key,
             ))).scalar_one()
-        return row
+            return row, False
+        return row, True
 
     @classmethod
     async def _projection(cls, session: AsyncSession, actor: CommandActor, row: IncomingMail):
         from schemas_mail import MailMessageResponse
 
+        from services.mail_headers import message_ids
+        # Pre-migration inbox rows stored raw Message-ID. Expose only safe parents
+        # so an old malformed header cannot make an otherwise valid reply fail.
+        parent = message_ids(row.message_id)
+        reply_parent = message_ids(row.in_reply_to)
+        references = message_ids(" ".join(row.references or []))
         order_id, customer_id = row.order_id, row.customer_id
         if order_id and not await TenantEntityAccessService.get_order(session, order_id, tenant_scope=actor.tenant_scope):
             order_id = None
@@ -130,6 +155,8 @@ class IncomingMailService:
         return MailMessageResponse(
             id=-row.id, version=1, status="received", folder="inbox", account_id=row.account_id,
             sender_email=row.sender_email, sender_name=row.sender_name,
+            reply_to=row.reply_to, message_id=parent[0] if parent else None,
+            in_reply_to=reply_parent[-1] if reply_parent else None, references=references,
             to=[address.strip() for address in row.recipient_email.split(",") if address.strip()],
             cc=row.cc_emails, bcc=[], subject=row.subject, body_text=row.body_text,
             attachments=attachments, order_id=order_id, customer_id=customer_id,
@@ -163,7 +190,8 @@ class IncomingMailService:
         rows = (await session.execute(select(IncomingMail).where(*filters).order_by(
             IncomingMail.received_at.desc(), IncomingMail.id.desc(),
         ).offset((page - 1) * limit).limit(min(limit, 100)))).scalars().all()
-        return [await cls._projection(session, actor, row) for row in rows], int(total)
+        items = [await cls._projection(session, actor, row) for row in rows]
+        return [item.model_copy(update={"body_text": item.body_text[:300]}) for item in items], int(total)
 
     @classmethod
     async def get_message(cls, session: AsyncSession, *, actor: CommandActor, email_id: int):

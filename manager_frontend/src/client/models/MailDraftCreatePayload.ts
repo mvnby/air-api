@@ -3,6 +3,8 @@
 /* tslint:disable */
 /* eslint-disable */
 export type MailDraftCreatePayload = {
+    in_reply_to?: (string | null);
+    references?: Array<string>;
     account_id?: string;
     to?: Array<string>;
     cc?: Array<string>;

@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     Column,
     Date,
@@ -955,6 +956,9 @@ class OutgoingEmail(SQLModel, table=True):
     send_started_at: Optional[datetime] = None
     send_token: Optional[str] = None
     status: str = Field(default="pending", sa_column=Column(String, index=True))
+    delivery_projection_pending: bool = Field(default=False, sa_column=Column(Boolean, nullable=False, server_default=text("false")))
+    in_reply_to: Optional[str] = None
+    references: List[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False, server_default=text("'[]'")))
     retry_of_email_id: Optional[int] = Field(
         default=None, foreign_key="outgoing_email.id", index=True
     )

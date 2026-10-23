@@ -28,5 +28,9 @@ export type MailMessageResponse = {
     content_hash?: (string | null);
     csrf_token?: (string | null);
     message_id?: (string | null);
+    reply_to?: Array<string>;
+    in_reply_to?: (string | null);
+    references?: Array<string>;
+    delivery_projection_pending?: boolean;
 };
 

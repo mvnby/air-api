@@ -171,6 +171,23 @@ describe('server-backed mail drafts', () => {
 });
 
 describe('standalone mailbox', () => {
+  it('replies to Reply-To and keeps threading and the complete detail body', async () => {
+    window.history.replaceState({}, '', '/manager/mail?emailId=-7');
+    vi.mocked(mailApi.get).mockResolvedValue(draft({ id: -7, folder: 'inbox', status: 'received',
+      sender_email: 'no-reply@example.test', reply_to: ['sales@example.test'], message_id: '<parent@example.test>',
+      references: ['<root@example.test>'], body_text: 'Long full body\nFinal detail line' }));
+    wrapper = mount(MailView);
+    await flushPromises();
+    await button('Ответить').trigger('click');
+    await flushPromises();
+    expect(mailApi.get).toHaveBeenCalledWith(-7);
+    expect(mailApi.create).toHaveBeenCalledWith(expect.objectContaining({
+      to: ['sales@example.test'], in_reply_to: '<parent@example.test>',
+      references: ['<root@example.test>', '<parent@example.test>'],
+      body_text: expect.stringContaining('> Final detail line'),
+    }));
+  });
+
   it('shows active and uncertain send results in order history without offering a blind retry', async () => {
     vi.spyOn(ManagerMailService, 'listManagerOrderOutgoingEmails').mockResolvedValue({ items: [
       { id: 80, status: 'sending', created_at: '2026-10-13T10:00:00Z', subject: 'Документы', recipient_email: 'client@example.com' },
@@ -197,7 +214,7 @@ describe('standalone mailbox', () => {
     await button('Обновить почту').trigger('click');
     await flushPromises();
     expect(mailApi.sync).toHaveBeenCalledOnce();
-    expect(wrapper.text()).toContain('Почта обновлена из настроенного почтового аккаунта');
+    expect(wrapper.text()).toContain('Загружено новых писем: 1.');
     expect(mailApi.create).not.toHaveBeenCalled();
   });
   it('opens an MCP draft deep link and edits it through the same server draft', async () => {

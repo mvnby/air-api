@@ -49,7 +49,7 @@ const sync = async () => {
   actionBusy.value = true;
   error.value = '';
   notice.value = '';
-  try { await mailApi.sync(); await load(); notice.value = 'Почта обновлена из настроенного почтового аккаунта.'; }
+  try { const result = await mailApi.sync(); await load(); notice.value = `Загружено новых писем: ${result.captured || 0}.` + (result.has_more ? ' Остались письма — нажмите «Обновить почту» ещё раз.' : ' Почта обновлена.'); }
   catch (cause) { error.value = getApiErrorMessage(cause); }
   finally { actionBusy.value = false; }
 };
@@ -90,7 +90,9 @@ const reply = () => {
   if (!original) return;
   const quoted = original.body_text.split('\n').map(line => `> ${line}`).join('\n');
   void create({
-    to: original.folder === 'inbox' ? (original.sender_email ? [original.sender_email] : []) : original.to,
+    to: original.folder === 'inbox' ? (original.reply_to?.length ? original.reply_to : original.sender_email ? [original.sender_email] : []) : original.to,
+    in_reply_to: original.message_id || undefined,
+    references: [...(original.references || []), ...(original.message_id ? [original.message_id] : [])].slice(-50),
     subject: /^re:/i.test(original.subject) ? original.subject : `Re: ${original.subject}`,
     body_text: `\n\n${original.sender_email || ''} писал(а):\n${quoted}`,
     order_id: original.order_id,

@@ -42,15 +42,23 @@ class MailImapService:
     LEGACY_DOC_TIMEOUT_SECONDS = 8
 
     @staticmethod
+    def _decode_bytes(value: bytes, charset: str | None = None) -> str:
+        try:
+            return value.decode(charset or "utf-8", errors="replace").replace("\x00", "\ufffd")
+        except LookupError:
+            # Broken sender-declared charset must not block the mailbox cursor.
+            return value.decode("utf-8", errors="replace").replace("\x00", "\ufffd")
+
+    @staticmethod
     def _decode_header_value(raw: Optional[str]) -> str:
         parts = decode_header(raw or "")
         decoded = []
         for value, charset in parts:
             if isinstance(value, bytes):
-                decoded.append(value.decode(charset or "utf-8", errors="replace"))
+                decoded.append(MailImapService._decode_bytes(value, charset))
             else:
                 decoded.append(value)
-        return "".join(decoded).strip()
+        return "".join(decoded).replace("\x00", "\ufffd").strip()
 
     @staticmethod
     def _extract_body(msg: Message) -> str:
@@ -66,7 +74,7 @@ class MailImapService:
                 if payload is None:
                     continue
                 charset = part.get_content_charset() or "utf-8"
-                text = payload.decode(charset, errors="replace")
+                text = MailImapService._decode_bytes(payload, charset)
                 if part.get_content_type() == "text/plain":
                     return text
                 if part.get_content_type() == "text/html" and not html_fallback:
@@ -76,7 +84,7 @@ class MailImapService:
         payload = msg.get_payload(decode=True)
         if payload is None:
             return str(msg.get_payload() or "")
-        return payload.decode(msg.get_content_charset() or "utf-8", errors="replace")
+        return MailImapService._decode_bytes(payload, msg.get_content_charset())
 
     @staticmethod
     def _decode_filename(raw: Optional[str]) -> str:
@@ -588,48 +596,5 @@ class MailImapService:
 
     @staticmethod
     async def sync_mailbox(session: AsyncSession, *, tenant_scope: TenantScope, limit: int = 50) -> dict:
-        """Reuse the configured IMAP connection/parser for ordinary correspondence.
-
-        This capture path is deliberately independent of lead classification:
-        supplier/support mail remains mail. It never marks a message read/moves it.
-        """
-        from services.incoming_mail_service import IncomingMailService, MAX_INCOMING_BYTES
-
-        if not tenant_scope.is_system:
-            raise PermissionError("Почтовый аккаунт компании не настроен")
-        if not 1 <= limit <= 100:
-            raise ValueError("Размер страницы должен быть от 1 до 100")
-        result = {"processed": 0, "captured": 0, "skipped": 0}
-        client = await MailImapService._connect_async()
-        try:
-            folders = dict.fromkeys(filter(None, (
-                settings.MAIL_IMAP_LEAD_FOLDER or "INBOX", settings.MAIL_IMAP_LEAD_PROCESSED_FOLDER,
-            )))
-            for folder in folders:
-                status, _ = await MailImapService._imap_call(client.select, folder, readonly=True)
-                if status != "OK":
-                    continue
-                status, payload = await MailImapService._imap_call(client.uid, "SEARCH", None, "ALL")
-                if status != "OK":
-                    raise RuntimeError("IMAP search failed")
-                for uid in (payload[0] or b"").split()[-limit:]:
-                    status, sizes = await MailImapService._imap_call(client.uid, "FETCH", uid, "(RFC822.SIZE)")
-                    size_raw = b" ".join(item if isinstance(item, bytes) else item[0]
-                                         for item in sizes or [] if isinstance(item, (bytes, tuple)))
-                    found = re.search(rb"RFC822.SIZE\s+(\d+)", size_raw)
-                    if status != "OK" or found is None or int(found.group(1)) > MAX_INCOMING_BYTES:
-                        result["skipped"] += 1
-                        continue
-                    status, data = await MailImapService._imap_call(client.uid, "FETCH", uid, "(BODY.PEEK[])")
-                    raw = next((item[1] for item in data or [] if isinstance(item, tuple)), None)
-                    if status != "OK" or not raw:
-                        result["skipped"] += 1
-                        continue
-                    result["processed"] += 1
-                    message = await asyncio.to_thread(email.message_from_bytes, raw)
-                    captured = await IncomingMailService.capture(session, tenant_scope=tenant_scope,
-                                                                  message=message, raw_email=raw)
-                    result["captured"] += int(captured is not None)
-            return result
-        finally:
-            await MailImapService._close_async(client)
+        from services.mailbox_sync_service import MailboxSyncService
+        return await MailboxSyncService.sync(session, tenant_scope=tenant_scope, limit=limit)

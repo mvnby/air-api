@@ -28,6 +28,7 @@ class ManagedDocumentDeliveryService:
         tenant_scope: TenantScope,
         document_ids: list[int],
         sent_at: datetime,
+        commit: bool = True,
     ) -> list[OrderDocument]:
         normalized_ids = list(dict.fromkeys(int(value) for value in document_ids))
         documents: list[OrderDocument] = []
@@ -60,9 +61,13 @@ class ManagedDocumentDeliveryService:
             documents.append(document)
 
         try:
-            await session.commit()
+            if commit:
+                await session.commit()
+            else:
+                await session.flush()
         except IntegrityError as exc:
-            await session.rollback()
+            if commit:
+                await session.rollback()
             raise ManagedDocumentConflictError(
                 "Не удалось сохранить отправку документов"
             ) from exc

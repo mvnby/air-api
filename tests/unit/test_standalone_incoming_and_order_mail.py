@@ -79,6 +79,8 @@ async def test_mailbox_sync_reuses_imap_readonly_and_does_not_classify(mail_db, 
         def select(self, folder, readonly=False):
             calls.append(("select", readonly))
             return "OK", []
+        def response(self, name):
+            return "UIDVALIDITY", [b"123"]
         def uid(self, operation, *args):
             calls.append((operation, args))
             if operation == "SEARCH":
@@ -98,7 +100,7 @@ async def test_mailbox_sync_reuses_imap_readonly_and_does_not_classify(mail_db, 
     monkeypatch.setattr("services.email_lead_intake_service.EmailLeadIntakeService.process_email", classify)
     result = await MailImapService.sync_mailbox(mail_db, tenant_scope=actor.tenant_scope, limit=50)
     await mail_db.commit()
-    assert result == {"processed": 1, "captured": 1, "skipped": 0}
+    assert result == {"processed": 1, "captured": 1, "skipped": 0, "existing": 0, "has_more": False}
     assert calls[0] == ("select", True)
     assert calls[-1][1][-1] == "(BODY.PEEK[])"
 
