@@ -1,13 +1,13 @@
 """Persist bounded mailbox progress, reply headers and delivery obligations.
 
 Revision ID: mail20261023rel01
-Revises: dash20261023snap01
+Revises: cust20261023dedup01
 """
 from alembic import op
 import sqlalchemy as sa
 
 revision = "mail20261023rel01"
-down_revision = "dash20261023snap01"
+down_revision = "cust20261023dedup01"
 branch_labels = None
 depends_on = None
 
