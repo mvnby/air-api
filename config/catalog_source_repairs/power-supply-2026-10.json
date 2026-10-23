@@ -1,0 +1,3950 @@
+{
+  "schema_version": 1,
+  "repair_id": "catalog-power-supply-2026-10",
+  "reviewed_date": "2026-10-23",
+  "sources": [
+    {
+      "source_url": "https://breez.ru/products/heavy-2-0-classic-casset/",
+      "sha256": "ed4dd698c261626423c97db1fa2af1322e313322d0edc0a54585d42eb84627fb"
+    },
+    {
+      "source_url": "https://breez.ru/products/vnutrennie-blocki-casset-free-match-dc-inverter-r32-2024/",
+      "sha256": "b1d4d804185af6326d6b1f32f2c91b5cc181f74d570372ab5857304efd686215"
+    },
+    {
+      "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+      "sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054"
+    },
+    {
+      "source_url": "https://docs.breez.ru/catalog/hisense/hi-split-sistemi-kassetnogo-tipa/hi-split-sistemi-kassetnogo-tipa-instruction.pdf",
+      "sha256": "377d4d78b52227e67233fc71bbff7928089f46b43a3383cba642b6eeadf55e17"
+    },
+    {
+      "source_url": "https://energolux.ru.com/catalog/kolonnye-split-sistemy-konditsionery/kolonnaya-split-sistema-energolux-sap24p6-a-sau24p6-a-ws30/",
+      "sha256": "4c2856b30e83ae10f51cfff92a209e92dfd28b9086c61b4f438e42ba86efefe1"
+    },
+    {
+      "source_url": "https://energolux.ru.com/upload/iblock/aed/3trvly2g5efqmb89pht9eve32oaeh6ks/manual_Manual-Smart-Multi-preview.pdf",
+      "sha256": "b0e2d1924c400c11aba187edcef571d757acb4533d2457bde95a023ab3c03931"
+    },
+    {
+      "source_url": "https://energolux.ru.com/upload/iblock/d03/6oh28xv24nbqjo9axjjp4vsrqe350ate/Manual_ESAC_C1_WF_AR2_DC-_-ESAU_U1_AR2_DC-_web.pdf",
+      "sha256": "edb44637e26fe1bd2e76180f38f09651fdeaf5e1d592919822a2c1c5e2b76a48"
+    },
+    {
+      "source_url": "https://hisense-air.ru/product/split-sistem-kasset-heavy-eu-dc-inverter-wi-fi/",
+      "sha256": "81a2df7164a1c2f3038945f7126542a019277b1a8f6039fda1fe0a326a8a44af"
+    },
+    {
+      "source_url": "https://kinghome.by/floor",
+      "sha256": "12eb9b20483ff70e37732f613233c43df2471155071ced855e48085049663ea7"
+    },
+    {
+      "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+      "sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32"
+    },
+    {
+      "source_url": "https://www.severcon.ru/catalog/kolonnaya-split-sistema-energolux-sap24p6-a-sau24p6-a-ws40.html",
+      "sha256": "919a5b613a7737f9db1cc9f53e0f190a81573b050f0285ab105cc70d10326e67"
+    },
+    {
+      "source_url": "https://www.severcon.ru/catalog/kolonnaya-split-sistema-energolux-sap24p6-a-sau24p6-a.html",
+      "sha256": "c87fdb1348da76f81f57792e5d4f7d9341c1dafbe2bb6e3cccb71f8b43bfa258"
+    },
+    {
+      "source_url": "https://www.severcon.ru/catalog/kolonnaya-split-sistema-energolux-sap24p6-a-sau24p6-a2400.html",
+      "sha256": "5d4e8ff26227e92ea3ceb33296dd778e9d8c584a29cdaafbd09dc093417ee4e4"
+    },
+    {
+      "source_url": "https://www.severcon.ru/upload/iblock/0a8/2g2px8huvd1sxhc12skc0ywf0o1hl1mu/Kolonniki_on_off_Energolux_web.pdf",
+      "sha256": "5e59e6d4ada1edb0ec0e208e12d460372d2e456dd6b7d7b88309ec71fe0e8874"
+    },
+    {
+      "source_url": "https://www.severcon.ru/upload/iblock/702/8r8yd9827q7riweqbxq6evxxhq000xbn/Manual_ESAD_D7_AR1-_-ESAU_U7_AR1-web.pdf",
+      "sha256": "a8a72751e39201c0b56436833c1223517030de1a1047502660f658b56816362d"
+    },
+    {
+      "source_url": "https://www.severcon.ru/upload/iblock/ca7/bmnyhodxb9w6qc99r0voaifqpbjdejiw/Manual_ESAD_D1_WF_AR2_DC-_-ESAU_U1_AR2_DC_Web.pdf",
+      "sha256": "27b7acb64510981ba37b695faf9cf81378c5693d5a66bfae14eade93c5ab272d"
+    },
+    {
+      "source_url": "https://www.severcon.ru/upload/iblock/e12/szf5tthjz4kjuls19aw16889kmgm7m7r/Instruktsiya_po_ekspluatatsii_-ENERGOLUX_SAP_P6.pdf",
+      "sha256": "eea5442c4cd0d154452d0d5c561fae3a466c5d1cfc468bbf63a3d2ad6d4fcd29"
+    },
+    {
+      "source_url": "https://www.severcon.ru/upload/uf/48b/54dpx4jjso1xxk5ulwmd2g8avrypca87/Katalog_ENERGOLUX_split_2025_WEB.pdf",
+      "sha256": "81415a7be60539c5063bdc160708418b5ffa3e04231928f299d9a881e1ebd6a1"
+    }
+  ],
+  "brands": [
+    {
+      "id": 3,
+      "title": "TCL",
+      "slug": "tcl"
+    },
+    {
+      "id": 4,
+      "title": "KINGHOME",
+      "slug": "kinghome"
+    },
+    {
+      "id": 12,
+      "title": "Energolux",
+      "slug": "energolux"
+    },
+    {
+      "id": 16,
+      "title": "Hisense",
+      "slug": "hisense"
+    }
+  ],
+  "products": [
+    {
+      "identity": {
+        "id": 94,
+        "title": "KINGHOME KUD160ZD1/A-S+ KUD160W1/NhA-X",
+        "slug": "kud160zd1askud16",
+        "brand_id": 4,
+        "series_id": 231,
+        "product_kind": "complete_split_system",
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud160zd1askud16"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply_voltage": "380-415",
+        "power_supply_outdoor": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply_location": "Наружный блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 94,
+          "exact_model": "KUD160ZD1/A-S+ KUD160W1/NhA-X",
+          "status": "supported",
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_page": 81,
+            "printed_page": 80,
+            "column_exact_model": "KUD160ZD1/A-S+ KUD160W1/NhA-X"
+          },
+          "short_row_evidence": {
+            "Электропитание, ф/В/Гц": "3/380-415/50",
+            "Кабель питания (Наружный блок), Н×мм²": "5x2,5"
+          },
+          "interpretation": "System power row; explicit mains power cable row is labelled Наружный блок, supporting outdoor supply and connection location. No separate indoor voltage row; do not fill power_supply_indoor.",
+          "blockers": []
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 95,
+        "title": "KINGHOME KUD50ZD/A-S+ KUD50W1/NhA-S",
+        "slug": "kud50zdaskud50w1",
+        "brand_id": 4,
+        "series_id": 231,
+        "product_kind": "complete_split_system",
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud50zdaskud50w1"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240",
+        "power_supply_outdoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_location": "Наружный блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 95,
+          "exact_model": "KUD50ZD/A-S+ KUD50W1/NhA-S",
+          "status": "supported",
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_page": 79,
+            "printed_page": 78,
+            "column_exact_model": "KUD50ZD/A-S+ KUD50W1/NhA-S"
+          },
+          "short_row_evidence": {
+            "Электропитание, ф/В/Гц": "1/220-240/50",
+            "Кабель питания (Наружный блок), Н×мм²": "3x2,5"
+          },
+          "interpretation": "System power row; explicit mains power cable row is labelled Наружный блок, supporting outdoor supply and connection location. No separate indoor voltage row; do not fill power_supply_indoor.",
+          "blockers": []
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 96,
+        "title": "KINGHOME KUD71ZD1/A-S+ KUD71W1/NhA-S",
+        "slug": "kud71zd1askud71w",
+        "brand_id": 4,
+        "series_id": 231,
+        "product_kind": "complete_split_system",
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud71zd1askud71w"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240",
+        "power_supply_outdoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_location": "Наружный блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 96,
+          "exact_model": "KUD71ZD1/A-S+ KUD71W1/NhA-S",
+          "status": "supported",
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_page": 79,
+            "printed_page": 78,
+            "column_exact_model": "KUD71ZD1/A-S+ KUD71W1/NhA-S"
+          },
+          "short_row_evidence": {
+            "Электропитание, ф/В/Гц": "1/220-240/50",
+            "Кабель питания (Наружный блок), Н×мм²": "3x2,5"
+          },
+          "interpretation": "System power row; explicit mains power cable row is labelled Наружный блок, supporting outdoor supply and connection location. No separate indoor voltage row; do not fill power_supply_indoor.",
+          "blockers": []
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 97,
+        "title": "KINGHOME KUD100ZD1/A-S+ KUD100W1/NhA-S",
+        "slug": "kinghome-kud100zd1-a-s-kud100w1-nha-s",
+        "brand_id": 4,
+        "series_id": 231,
+        "product_kind": "complete_split_system",
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud100zd1askud10"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240",
+        "power_supply_outdoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_location": "Наружный блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 97,
+          "exact_model": "KUD100ZD1/A-S+ KUD100W1/NhA-S",
+          "status": "supported_with_documented_source_conflict",
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_page": 79,
+            "printed_page": 78,
+            "column_exact_model": "KUD100ZD1/A-S+ KUD100W1/NhA-S"
+          },
+          "short_row_evidence": {
+            "Электропитание, ф/В/Гц": "3/220-415/50 (catalogue typo; not used)",
+            "Кабель питания (Наружный блок), Н×мм²": "3x2,5"
+          },
+          "interpretation": "System power row; explicit mains power cable row is labelled Наружный блок, supporting outdoor supply and connection location. No separate indoor voltage row; do not fill power_supply_indoor.",
+          "blockers": [],
+          "conflict_resolution": {
+            "chosen_value": "1/220-240/50",
+            "reason": "Exact floor indoor+outdoor pair on official brand page specifies 1/220-240/50. Two independent tables in the same official catalogue, both pairing exact outdoor KUD100W1/NhA-S, specify 1/220-240/50. Floor catalogue anomalous 3/220-415/50 conflicts with all three corroborations and its own 3-core mains cable.",
+            "official_exact_model_page": {
+              "source_url": "https://kinghome.by/floor",
+              "sha256": "12eb9b20483ff70e37732f613233c43df2471155071ced855e48085049663ea7",
+              "locator": "Technical characteristics, third model tab KUD100ZD1/A-S + KUD100W1/NhA-S, first Общие table, Электропитание row; HTML byte offset around 612566",
+              "row": "Электропитание | Ф/В/Гц | 1/220-240/50"
+            },
+            "matching_outdoor_corroborations": [
+              {
+                "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+                "sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+                "pdf_page": 69,
+                "printed_page": 68,
+                "exact_pair": "KUD100T1/A-S + KUD100W1/NhA-S",
+                "row": "Электропитание ф/В/Гц 1/220-240/50"
+              },
+              {
+                "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+                "sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+                "pdf_page": 73,
+                "printed_page": 72,
+                "exact_pair": "KUD100PHS1/A-S + KUD100W1/NhA-S",
+                "row": "Электропитание ф/В/Гц 1/220-240/50"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 98,
+        "title": "KINGHOME KUD125ZD1/A-S+ KUD125W1/NhA-X",
+        "slug": "kud125zd1askud12",
+        "brand_id": 4,
+        "series_id": 231,
+        "product_kind": "complete_split_system",
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud125zd1askud12"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply_voltage": "380-415",
+        "power_supply_outdoor": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply_location": "Наружный блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 98,
+          "exact_model": "KUD125ZD1/A-S+ KUD125W1/NhA-X",
+          "status": "supported",
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_page": 81,
+            "printed_page": 80,
+            "column_exact_model": "KUD125ZD1/A-S+ KUD125W1/NhA-X"
+          },
+          "short_row_evidence": {
+            "Электропитание, ф/В/Гц": "3/380-415/50",
+            "Кабель питания (Наружный блок), Н×мм²": "5x2,5"
+          },
+          "interpretation": "System power row; explicit mains power cable row is labelled Наружный блок, supporting outdoor supply and connection location. No separate indoor voltage row; do not fill power_supply_indoor.",
+          "blockers": []
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 99,
+        "title": "KINGHOME KUD140ZD1/A-S+ KUD140W1/NhA-X",
+        "slug": "kud140zd1askud14",
+        "brand_id": 4,
+        "series_id": 231,
+        "product_kind": "complete_split_system",
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud140zd1askud14"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply_voltage": "380-415",
+        "power_supply_outdoor": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply_location": "Наружный блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 99,
+          "exact_model": "KUD140ZD1/A-S+ KUD140W1/NhA-X",
+          "status": "supported",
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_page": 81,
+            "printed_page": 80,
+            "column_exact_model": "KUD140ZD1/A-S+ KUD140W1/NhA-X"
+          },
+          "short_row_evidence": {
+            "Электропитание, ф/В/Гц": "3/380-415/50",
+            "Кабель питания (Наружный блок), Н×мм²": "5x2,5"
+          },
+          "interpretation": "System power row; explicit mains power cable row is labelled Наружный блок, supporting outdoor supply and connection location. No separate indoor voltage row; do not fill power_supply_indoor.",
+          "blockers": []
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 179,
+        "title": "Кассетный кондиционер TCL TCC-48CHRA/U3-L",
+        "slug": "kassetnyy-konditsioner-tcl-tcc-48chra-u3-l",
+        "brand_id": 3,
+        "series_id": 311,
+        "product_kind": "complete_split_system",
+        "source_url": "https://tcl-shop.by/doc/poluprom.pdf"
+      },
+      "before": {
+        "specs": {
+          "Напряжение, В": "220-240"
+        },
+        "typed": {
+          "power_supply_voltage": {
+            "raw": "220-240",
+            "type": "text",
+            "value": "220-240"
+          }
+        }
+      },
+      "before_sha256": "cbc60cbd08c5b6defc2d07f4aad6fe3e3032154253550bcfdfd15395a6c88cee",
+      "specs_set": {
+        "power_supply_indoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_outdoor": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply": "Внутренний блок: 1 фаза, 220-240 В, 50 Гц; наружный блок: 3 фазы, 380-415 В, 50 Гц",
+        "power_supply_voltage": "220-240 / 380-415"
+      },
+      "specs_delete": [
+        "Напряжение, В"
+      ],
+      "evidence": [
+        {
+          "product_id": 179,
+          "exact_model": "TCC-48CHRA/U3-L",
+          "status": "supported",
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 20,
+            "printed_page": 20,
+            "column_model": "TCC-48CHRA/U3-L"
+          },
+          "short_row_evidence": {
+            "Источник питания, внутренний блок, ф/В/Гц": "1/220-240/50",
+            "Источник питания, наружный блок, ф/В/Гц": "3/380-415/50"
+          },
+          "interpretation": "The table specifies electrical characteristics of both units. It does not prove which unit receives the site mains connection or whether separate feeds are required. Do not set power_supply_location. Generic voltage summary preserves both rows for mixed-voltage sets.",
+          "blockers": [],
+          "audit_result": "incomplete_mixed_voltage_supply",
+          "mismatch": "Existing generic 220-240 describes indoor row only and hides required three-phase380-415 outdoor specification."
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 180,
+        "title": "Кассетный кондиционер TCL TCC-60CHRA/U3-L",
+        "slug": "kassetnyy-konditsioner-tcl-tcc-60chra-u3-l",
+        "brand_id": 3,
+        "series_id": 311,
+        "product_kind": "complete_split_system",
+        "source_url": "https://tcl-shop.by/doc/poluprom.pdf"
+      },
+      "before": {
+        "specs": {
+          "Напряжение, В": "220-240"
+        },
+        "typed": {
+          "power_supply_voltage": {
+            "raw": "220-240",
+            "type": "text",
+            "value": "220-240"
+          }
+        }
+      },
+      "before_sha256": "cbc60cbd08c5b6defc2d07f4aad6fe3e3032154253550bcfdfd15395a6c88cee",
+      "specs_set": {
+        "power_supply_indoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_outdoor": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply": "Внутренний блок: 1 фаза, 220-240 В, 50 Гц; наружный блок: 3 фазы, 380-415 В, 50 Гц",
+        "power_supply_voltage": "220-240 / 380-415"
+      },
+      "specs_delete": [
+        "Напряжение, В"
+      ],
+      "evidence": [
+        {
+          "product_id": 180,
+          "exact_model": "TCC-60CHRA/U3-L",
+          "status": "supported",
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 20,
+            "printed_page": 20,
+            "column_model": "TCC-60CHRA/U3-L"
+          },
+          "short_row_evidence": {
+            "Источник питания, внутренний блок, ф/В/Гц": "1/220-240/50",
+            "Источник питания, наружный блок, ф/В/Гц": "3/380-415/50"
+          },
+          "interpretation": "The table specifies electrical characteristics of both units. It does not prove which unit receives the site mains connection or whether separate feeds are required. Do not set power_supply_location. Generic voltage summary preserves both rows for mixed-voltage sets.",
+          "blockers": [],
+          "audit_result": "incomplete_mixed_voltage_supply",
+          "mismatch": "Existing generic 220-240 describes indoor row only and hides required three-phase380-415 outdoor specification."
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 181,
+        "title": "Кассетный кондиционер TCL TCC-36CHRA/U3-L",
+        "slug": "kassetnyy-konditsioner-tcl-tcc-36chra-u3-l",
+        "brand_id": 3,
+        "series_id": 311,
+        "product_kind": "complete_split_system",
+        "source_url": "https://tcl-shop.by/doc/poluprom.pdf"
+      },
+      "before": {
+        "specs": {
+          "Напряжение, В": "220-240"
+        },
+        "typed": {
+          "power_supply_voltage": {
+            "raw": "220-240",
+            "type": "text",
+            "value": "220-240"
+          }
+        }
+      },
+      "before_sha256": "cbc60cbd08c5b6defc2d07f4aad6fe3e3032154253550bcfdfd15395a6c88cee",
+      "specs_set": {
+        "power_supply_indoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_outdoor": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply": "Внутренний блок: 1 фаза, 220-240 В, 50 Гц; наружный блок: 3 фазы, 380-415 В, 50 Гц",
+        "power_supply_voltage": "220-240 / 380-415"
+      },
+      "specs_delete": [
+        "Напряжение, В"
+      ],
+      "evidence": [
+        {
+          "product_id": 181,
+          "exact_model": "TCC-36CHRA/U3-L",
+          "status": "supported",
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 20,
+            "printed_page": 20,
+            "column_model": "TCC-36CHRA/U3-L"
+          },
+          "short_row_evidence": {
+            "Источник питания, внутренний блок, ф/В/Гц": "1/220-240/50",
+            "Источник питания, наружный блок, ф/В/Гц": "3/380-415/50"
+          },
+          "interpretation": "The table specifies electrical characteristics of both units. It does not prove which unit receives the site mains connection or whether separate feeds are required. Do not set power_supply_location. Generic voltage summary preserves both rows for mixed-voltage sets.",
+          "blockers": [],
+          "audit_result": "incomplete_mixed_voltage_supply",
+          "mismatch": "Existing generic 220-240 describes indoor row only and hides required three-phase380-415 outdoor specification."
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 182,
+        "title": "Кассетный кондиционер TCL TCC-24CHRA/U-L",
+        "slug": "kassetnyy-konditsioner-tcl-tcc-24chra-u-l",
+        "brand_id": 3,
+        "series_id": 311,
+        "product_kind": "complete_split_system",
+        "source_url": "https://tcl-shop.by/doc/poluprom.pdf"
+      },
+      "before": {
+        "specs": {
+          "Напряжение, В": "220-240"
+        },
+        "typed": {
+          "power_supply_voltage": {
+            "raw": "220-240",
+            "type": "text",
+            "value": "220-240"
+          }
+        }
+      },
+      "before_sha256": "cbc60cbd08c5b6defc2d07f4aad6fe3e3032154253550bcfdfd15395a6c88cee",
+      "specs_set": {
+        "power_supply_indoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_outdoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240"
+      },
+      "specs_delete": [
+        "Напряжение, В"
+      ],
+      "evidence": [
+        {
+          "product_id": 182,
+          "exact_model": "TCC-24CHRA/U-L",
+          "status": "supported",
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 20,
+            "printed_page": 20,
+            "column_model": "TCC-24CHRA/U-L"
+          },
+          "short_row_evidence": {
+            "Источник питания, внутренний блок, ф/В/Гц": "1/220-240/50",
+            "Источник питания, наружный блок, ф/В/Гц": "1/220-240/50"
+          },
+          "interpretation": "The table specifies electrical characteristics of both units. It does not prove which unit receives the site mains connection or whether separate feeds are required. Do not set power_supply_location. Generic voltage summary preserves both rows for mixed-voltage sets.",
+          "blockers": [],
+          "audit_result": "existing_voltage_matches_both_unit_rows"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 183,
+        "title": "Кассетный кондиционер TCL TCC-18CHRA/U-L",
+        "slug": "kassetnyy-konditsioner-tcl-tcc-18chra-u-l",
+        "brand_id": 3,
+        "series_id": 311,
+        "product_kind": "complete_split_system",
+        "source_url": "https://tcl-shop.by/doc/poluprom.pdf"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply_indoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_outdoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 183,
+          "exact_model": "TCC-18CHRA/U-L",
+          "status": "supported",
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 20,
+            "printed_page": 20,
+            "column_model": "TCC-18CHRA/U-L"
+          },
+          "short_row_evidence": {
+            "Источник питания, внутренний блок, ф/В/Гц": "1/220-240/50",
+            "Источник питания, наружный блок, ф/В/Гц": "1/220-240/50"
+          },
+          "interpretation": "The table specifies electrical characteristics of both units. It does not prove which unit receives the site mains connection or whether separate feeds are required. Do not set power_supply_location. Generic voltage summary preserves both rows for mixed-voltage sets.",
+          "blockers": [],
+          "audit_result": "existing_voltage_matches_both_unit_rows"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 185,
+        "title": "Напольно-потолочный кондиционер TCL TCC-18ZHRA/U-L",
+        "slug": "napolno-potolochnyy-konditsioner-tcl-tcc-18zhra-u-l",
+        "brand_id": 3,
+        "series_id": 312,
+        "product_kind": "complete_split_system",
+        "source_url": "https://tcl-shop.by/doc/poluprom.pdf"
+      },
+      "before": {
+        "specs": {
+          "Напряжение, В": "220-240"
+        },
+        "typed": {
+          "power_supply_voltage": {
+            "raw": "220-240",
+            "type": "text",
+            "value": "220-240"
+          }
+        }
+      },
+      "before_sha256": "cbc60cbd08c5b6defc2d07f4aad6fe3e3032154253550bcfdfd15395a6c88cee",
+      "specs_set": {
+        "power_supply_indoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_outdoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240"
+      },
+      "specs_delete": [
+        "Напряжение, В"
+      ],
+      "evidence": [
+        {
+          "product_id": 185,
+          "exact_model": "TCC-18ZHRA/U-L",
+          "status": "supported",
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 26,
+            "printed_page": 26,
+            "column_model": "TCC-18ZHRA/U-L"
+          },
+          "short_row_evidence": {
+            "Источник питания, внутренний блок, ф/В/Гц": "1/220-240/50",
+            "Источник питания, наружный блок, ф/В/Гц": "1/220-240/50"
+          },
+          "interpretation": "The table specifies electrical characteristics of both units. It does not prove which unit receives the site mains connection or whether separate feeds are required. Do not set power_supply_location. Generic voltage summary preserves both rows for mixed-voltage sets.",
+          "blockers": [],
+          "audit_result": "existing_voltage_matches_both_unit_rows"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 186,
+        "title": "Напольно-потолочный кондиционер  TCL TCC-24ZHRA/U-L",
+        "slug": "napolno-potolochnyy-konditsioner-tcl-tcc-24zhra-u-l",
+        "brand_id": 3,
+        "series_id": 312,
+        "product_kind": "complete_split_system",
+        "source_url": "https://tcl-shop.by/doc/poluprom.pdf"
+      },
+      "before": {
+        "specs": {
+          "Напряжение, В": "220-240"
+        },
+        "typed": {
+          "power_supply_voltage": {
+            "raw": "220-240",
+            "type": "text",
+            "value": "220-240"
+          }
+        }
+      },
+      "before_sha256": "cbc60cbd08c5b6defc2d07f4aad6fe3e3032154253550bcfdfd15395a6c88cee",
+      "specs_set": {
+        "power_supply_indoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_outdoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240"
+      },
+      "specs_delete": [
+        "Напряжение, В"
+      ],
+      "evidence": [
+        {
+          "product_id": 186,
+          "exact_model": "TCC-24ZHRA/U-L",
+          "status": "supported",
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 26,
+            "printed_page": 26,
+            "column_model": "TCC-24ZHRA/U-L"
+          },
+          "short_row_evidence": {
+            "Источник питания, внутренний блок, ф/В/Гц": "1/220-240/50",
+            "Источник питания, наружный блок, ф/В/Гц": "1/220-240/50"
+          },
+          "interpretation": "The table specifies electrical characteristics of both units. It does not prove which unit receives the site mains connection or whether separate feeds are required. Do not set power_supply_location. Generic voltage summary preserves both rows for mixed-voltage sets.",
+          "blockers": [],
+          "audit_result": "existing_voltage_matches_both_unit_rows"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 187,
+        "title": "Напольно-потолочный кондиционер  TCL TCC-36ZHRA/U3-L",
+        "slug": "napolno-potolochnyy-konditsioner-tcl-tcc-36zhra-u3-l",
+        "brand_id": 3,
+        "series_id": 312,
+        "product_kind": "complete_split_system",
+        "source_url": "https://tcl-shop.by/doc/poluprom.pdf"
+      },
+      "before": {
+        "specs": {
+          "Напряжение, В": "220-240"
+        },
+        "typed": {
+          "power_supply_voltage": {
+            "raw": "220-240",
+            "type": "text",
+            "value": "220-240"
+          }
+        }
+      },
+      "before_sha256": "cbc60cbd08c5b6defc2d07f4aad6fe3e3032154253550bcfdfd15395a6c88cee",
+      "specs_set": {
+        "power_supply_indoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_outdoor": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply": "Внутренний блок: 1 фаза, 220-240 В, 50 Гц; наружный блок: 3 фазы, 380-415 В, 50 Гц",
+        "power_supply_voltage": "220-240 / 380-415"
+      },
+      "specs_delete": [
+        "Напряжение, В"
+      ],
+      "evidence": [
+        {
+          "product_id": 187,
+          "exact_model": "TCC-36ZHRA/U3-L",
+          "status": "supported",
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 26,
+            "printed_page": 26,
+            "column_model": "TCC-36ZHRA/U3-L"
+          },
+          "short_row_evidence": {
+            "Источник питания, внутренний блок, ф/В/Гц": "1/220-240/50",
+            "Источник питания, наружный блок, ф/В/Гц": "3/380-415/50"
+          },
+          "interpretation": "The table specifies electrical characteristics of both units. It does not prove which unit receives the site mains connection or whether separate feeds are required. Do not set power_supply_location. Generic voltage summary preserves both rows for mixed-voltage sets.",
+          "blockers": [],
+          "audit_result": "incomplete_mixed_voltage_supply",
+          "mismatch": "Existing generic 220-240 describes indoor row only and hides required three-phase380-415 outdoor specification."
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 188,
+        "title": "Напольно-потолочный кондиционер  TCL TCC-48ZHRA/U3-L",
+        "slug": "napolno-potolochnyy-konditsioner-tcl-tcc-48zhra-u3-l",
+        "brand_id": 3,
+        "series_id": 312,
+        "product_kind": "other",
+        "source_url": "https://tcl-shop.by/doc/poluprom.pdf"
+      },
+      "before": {
+        "specs": {
+          "Напряжение, В": "220-240"
+        },
+        "typed": {
+          "power_supply_voltage": {
+            "raw": "220-240",
+            "type": "text",
+            "value": "220-240"
+          }
+        }
+      },
+      "before_sha256": "cbc60cbd08c5b6defc2d07f4aad6fe3e3032154253550bcfdfd15395a6c88cee",
+      "specs_set": {
+        "power_supply_indoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_outdoor": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply": "Внутренний блок: 1 фаза, 220-240 В, 50 Гц; наружный блок: 3 фазы, 380-415 В, 50 Гц",
+        "power_supply_voltage": "220-240 / 380-415"
+      },
+      "specs_delete": [
+        "Напряжение, В"
+      ],
+      "evidence": [
+        {
+          "product_id": 188,
+          "exact_model": "TCC-48ZHRA/U3-L",
+          "status": "supported",
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 26,
+            "printed_page": 26,
+            "column_model": "TCC-48ZHRA/U3-L"
+          },
+          "short_row_evidence": {
+            "Источник питания, внутренний блок, ф/В/Гц": "1/220-240/50",
+            "Источник питания, наружный блок, ф/В/Гц": "3/380-415/50"
+          },
+          "interpretation": "The table specifies electrical characteristics of both units. It does not prove which unit receives the site mains connection or whether separate feeds are required. Do not set power_supply_location. Generic voltage summary preserves both rows for mixed-voltage sets.",
+          "blockers": [],
+          "audit_result": "incomplete_mixed_voltage_supply",
+          "mismatch": "Existing generic 220-240 describes indoor row only and hides required three-phase380-415 outdoor specification."
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 189,
+        "title": "Напольно-потолочный кондиционер  TCL TCC-60ZHRA/U3-L",
+        "slug": "napolno-potolochnyy-konditsioner-tcl-tcc-60zhra-u3-l",
+        "brand_id": 3,
+        "series_id": 312,
+        "product_kind": "other",
+        "source_url": "https://tcl-shop.by/doc/poluprom.pdf"
+      },
+      "before": {
+        "specs": {
+          "Напряжение, В": "220-240"
+        },
+        "typed": {
+          "power_supply_voltage": {
+            "raw": "220-240",
+            "type": "text",
+            "value": "220-240"
+          }
+        }
+      },
+      "before_sha256": "cbc60cbd08c5b6defc2d07f4aad6fe3e3032154253550bcfdfd15395a6c88cee",
+      "specs_set": {
+        "power_supply_indoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_outdoor": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply": "Внутренний блок: 1 фаза, 220-240 В, 50 Гц; наружный блок: 3 фазы, 380-415 В, 50 Гц",
+        "power_supply_voltage": "220-240 / 380-415"
+      },
+      "specs_delete": [
+        "Напряжение, В"
+      ],
+      "evidence": [
+        {
+          "product_id": 189,
+          "exact_model": "TCC-60ZHRA/U3-L",
+          "status": "supported",
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 26,
+            "printed_page": 26,
+            "column_model": "TCC-60ZHRA/U3-L"
+          },
+          "short_row_evidence": {
+            "Источник питания, внутренний блок, ф/В/Гц": "1/220-240/50",
+            "Источник питания, наружный блок, ф/В/Гц": "3/380-415/50"
+          },
+          "interpretation": "The table specifies electrical characteristics of both units. It does not prove which unit receives the site mains connection or whether separate feeds are required. Do not set power_supply_location. Generic voltage summary preserves both rows for mixed-voltage sets.",
+          "blockers": [],
+          "audit_result": "incomplete_mixed_voltage_supply",
+          "mismatch": "Existing generic 220-240 describes indoor row only and hides required three-phase380-415 outdoor specification."
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 190,
+        "title": "Канальный кондиционер TCL TCC-24D2HRA/U-L",
+        "slug": "kanalnyy-konditsioner-tcl-tcc-24d2hra-u-l",
+        "brand_id": 3,
+        "series_id": 313,
+        "product_kind": "complete_split_system",
+        "source_url": "https://tcl-shop.by/doc/poluprom.pdf"
+      },
+      "before": {
+        "specs": {
+          "Напряжение, В": "220-240"
+        },
+        "typed": {
+          "power_supply_voltage": {
+            "raw": "220-240",
+            "type": "text",
+            "value": "220-240"
+          }
+        }
+      },
+      "before_sha256": "cbc60cbd08c5b6defc2d07f4aad6fe3e3032154253550bcfdfd15395a6c88cee",
+      "specs_set": {
+        "power_supply_indoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_outdoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240"
+      },
+      "specs_delete": [
+        "Напряжение, В"
+      ],
+      "evidence": [
+        {
+          "product_id": 190,
+          "exact_model": "TCC-24D2HRA/U-L",
+          "status": "supported",
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 23,
+            "printed_page": 23,
+            "column_model": "TCC-24D2HRA/U-L"
+          },
+          "short_row_evidence": {
+            "Источник питания, внутренний блок, ф/В/Гц": "1/220-240/50",
+            "Источник питания, наружный блок, ф/В/Гц": "1/220-240/50"
+          },
+          "interpretation": "The table specifies electrical characteristics of both units. It does not prove which unit receives the site mains connection or whether separate feeds are required. Do not set power_supply_location. Generic voltage summary preserves both rows for mixed-voltage sets.",
+          "blockers": [],
+          "audit_result": "existing_voltage_matches_both_unit_rows"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 191,
+        "title": "Канальный кондиционер TCL TCA-36D2HRA/DV3I",
+        "slug": "kanalnyy-konditsioner-tcl-tca-36d2hra-dv3i",
+        "brand_id": 3,
+        "series_id": 314,
+        "product_kind": "other",
+        "source_url": "https://docs.google.com/spreadsheets/d/1oQIe3HonJQbTek7NTINg0x1eslNrJ6m_YaiOxRTD7-8/edit"
+      },
+      "before": {
+        "specs": {
+          "Напряжение, В": "220-240"
+        },
+        "typed": {
+          "power_supply_voltage": {
+            "raw": "220-240",
+            "type": "text",
+            "value": "220-240"
+          }
+        }
+      },
+      "before_sha256": "cbc60cbd08c5b6defc2d07f4aad6fe3e3032154253550bcfdfd15395a6c88cee",
+      "specs_set": {
+        "power_supply_indoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_outdoor": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply": "Внутренний блок: 1 фаза, 220-240 В, 50 Гц; наружный блок: 3 фазы, 380-415 В, 50 Гц",
+        "power_supply_voltage": "220-240 / 380-415"
+      },
+      "specs_delete": [
+        "Напряжение, В"
+      ],
+      "evidence": [
+        {
+          "product_id": 191,
+          "exact_model": "TCA-36D2HRA/DV3I",
+          "status": "supported",
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 22,
+            "printed_page": 22,
+            "column_model": "TCA-36D2HRA/DV3I"
+          },
+          "short_row_evidence": {
+            "Источник питания, внутренний блок, ф/В/Гц": "1/220-240/50",
+            "Источник питания, наружный блок, ф/В/Гц": "3/380-415/50"
+          },
+          "interpretation": "The table specifies electrical characteristics of both units. It does not prove which unit receives the site mains connection or whether separate feeds are required. Do not set power_supply_location. Generic voltage summary preserves both rows for mixed-voltage sets.",
+          "blockers": [],
+          "designation_note": "Product title names indoor TCA-36D2HRA/DV3I; paired outdoor in same column is TCA-36D2HRA/DV3O; indoor220-240/outdoor380-415.",
+          "audit_result": "incomplete_mixed_voltage_supply",
+          "mismatch": "Existing generic 220-240 describes indoor row only and hides required three-phase380-415 outdoor specification."
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 192,
+        "title": "Канальный кондиционер TCL TCB-24D2HRA/DV",
+        "slug": "kanalnyy-konditsioner-tcl-tcb-24d2hra-dv",
+        "brand_id": 3,
+        "series_id": 314,
+        "product_kind": "complete_split_system",
+        "source_url": "https://tcl-shop.by/doc/poluprom.pdf"
+      },
+      "before": {
+        "specs": {
+          "Напряжение, В": "220-240"
+        },
+        "typed": {
+          "power_supply_voltage": {
+            "raw": "220-240",
+            "type": "text",
+            "value": "220-240"
+          }
+        }
+      },
+      "before_sha256": "cbc60cbd08c5b6defc2d07f4aad6fe3e3032154253550bcfdfd15395a6c88cee",
+      "specs_set": {
+        "power_supply_indoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_outdoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240"
+      },
+      "specs_delete": [
+        "Напряжение, В"
+      ],
+      "evidence": [
+        {
+          "product_id": 192,
+          "exact_model": "TCB-24D2HRA/DV",
+          "status": "supported",
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 22,
+            "printed_page": 22,
+            "column_model": "TCB-24D2HRA/DV"
+          },
+          "short_row_evidence": {
+            "Источник питания, внутренний блок, ф/В/Гц": "1/220-240/50",
+            "Источник питания, наружный блок, ф/В/Гц": "1/220-240/50"
+          },
+          "interpretation": "The table specifies electrical characteristics of both units. It does not prove which unit receives the site mains connection or whether separate feeds are required. Do not set power_supply_location. Generic voltage summary preserves both rows for mixed-voltage sets.",
+          "blockers": [],
+          "audit_result": "existing_voltage_matches_both_unit_rows"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 193,
+        "title": "Канальный кондиционер TCL TCB-18D2HRA/DV",
+        "slug": "kanalnyy-konditsioner-tcl-tcb-18d2hra-dv",
+        "brand_id": 3,
+        "series_id": 314,
+        "product_kind": "complete_split_system",
+        "source_url": "https://tcl-shop.by/doc/poluprom.pdf"
+      },
+      "before": {
+        "specs": {
+          "Напряжение, В": "220-240"
+        },
+        "typed": {
+          "power_supply_voltage": {
+            "raw": "220-240",
+            "type": "text",
+            "value": "220-240"
+          }
+        }
+      },
+      "before_sha256": "cbc60cbd08c5b6defc2d07f4aad6fe3e3032154253550bcfdfd15395a6c88cee",
+      "specs_set": {
+        "power_supply_indoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_outdoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240"
+      },
+      "specs_delete": [
+        "Напряжение, В"
+      ],
+      "evidence": [
+        {
+          "product_id": 193,
+          "exact_model": "TCB-18D2HRA/DV",
+          "status": "supported",
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 22,
+            "printed_page": 22,
+            "column_model": "TCB-18D2HRA/DV"
+          },
+          "short_row_evidence": {
+            "Источник питания, внутренний блок, ф/В/Гц": "1/220-240/50",
+            "Источник питания, наружный блок, ф/В/Гц": "1/220-240/50"
+          },
+          "interpretation": "The table specifies electrical characteristics of both units. It does not prove which unit receives the site mains connection or whether separate feeds are required. Do not set power_supply_location. Generic voltage summary preserves both rows for mixed-voltage sets.",
+          "blockers": [],
+          "audit_result": "existing_voltage_matches_both_unit_rows"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 194,
+        "title": "Напольно-потолочный кондиционер TCL TCA-36ZHRA/DV",
+        "slug": "napolno-potolochnyy-konditsioner-tcl-tca-36zhra-dv",
+        "brand_id": 3,
+        "series_id": 315,
+        "product_kind": "complete_split_system",
+        "source_url": "https://docs.google.com/spreadsheets/d/1oQIe3HonJQbTek7NTINg0x1eslNrJ6m_YaiOxRTD7-8/edit"
+      },
+      "before": {
+        "specs": {
+          "Напряжение, В": "220-240"
+        },
+        "typed": {
+          "power_supply_voltage": {
+            "raw": "220-240",
+            "type": "text",
+            "value": "220-240"
+          }
+        }
+      },
+      "before_sha256": "cbc60cbd08c5b6defc2d07f4aad6fe3e3032154253550bcfdfd15395a6c88cee",
+      "specs_set": {
+        "power_supply_indoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_outdoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240"
+      },
+      "specs_delete": [
+        "Напряжение, В"
+      ],
+      "evidence": [
+        {
+          "product_id": 194,
+          "exact_model": "TCA-36ZHRA/DV",
+          "status": "supported",
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 25,
+            "printed_page": 25,
+            "column_model": "TCA-36ZHRA/DV"
+          },
+          "short_row_evidence": {
+            "Источник питания, внутренний блок, ф/В/Гц": "1/220-240/50",
+            "Источник питания, наружный блок, ф/В/Гц": "1/220-240/50"
+          },
+          "interpretation": "The table specifies electrical characteristics of both units. It does not prove which unit receives the site mains connection or whether separate feeds are required. Do not set power_supply_location. Generic voltage summary preserves both rows for mixed-voltage sets.",
+          "blockers": [],
+          "designation_note": "Product complete-set title uses TCA-36ZHRA/DV; PDF splits same base into indoor TCA-36ZHRA/DVI and outdoor TCA-36ZHRA/DVO. Both rows are single phase220-240.",
+          "audit_result": "existing_voltage_matches_both_unit_rows"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 195,
+        "title": "Напольно-потолочный кондиционер TCL TCB-36ZHRA/DV3",
+        "slug": "napolno-potolochnyy-konditsioner-tcl-tcb-36zhra-dv3",
+        "brand_id": 3,
+        "series_id": 315,
+        "product_kind": "complete_split_system",
+        "source_url": "https://docs.google.com/spreadsheets/d/1oQIe3HonJQbTek7NTINg0x1eslNrJ6m_YaiOxRTD7-8/edit"
+      },
+      "before": {
+        "specs": {
+          "Напряжение, В": "220-240"
+        },
+        "typed": {
+          "power_supply_voltage": {
+            "raw": "220-240",
+            "type": "text",
+            "value": "220-240"
+          }
+        }
+      },
+      "before_sha256": "cbc60cbd08c5b6defc2d07f4aad6fe3e3032154253550bcfdfd15395a6c88cee",
+      "specs_set": {
+        "power_supply_indoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_outdoor": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply": "Внутренний блок: 1 фаза, 220-240 В, 50 Гц; наружный блок: 3 фазы, 380-415 В, 50 Гц",
+        "power_supply_voltage": "220-240 / 380-415"
+      },
+      "specs_delete": [
+        "Напряжение, В"
+      ],
+      "evidence": [
+        {
+          "product_id": 195,
+          "exact_model": "TCB-36ZHRA/DV3",
+          "status": "supported",
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 25,
+            "printed_page": 25,
+            "column_model": "TCB-36ZHRA/DV3"
+          },
+          "short_row_evidence": {
+            "Источник питания, внутренний блок, ф/В/Гц": "1/220-240/50",
+            "Источник питания, наружный блок, ф/В/Гц": "3/380-415/50"
+          },
+          "interpretation": "The table specifies electrical characteristics of both units. It does not prove which unit receives the site mains connection or whether separate feeds are required. Do not set power_supply_location. Generic voltage summary preserves both rows for mixed-voltage sets.",
+          "blockers": [],
+          "designation_note": "Product complete-set title uses TCB-36ZHRA/DV3; PDF splits same base into indoor TCB-36ZHRA/DV3I and outdoor TCB-36ZHRA/DV3O. This is an explicit indoor/outdoor pair, not a substitution of DV and DV3.",
+          "audit_result": "incomplete_mixed_voltage_supply",
+          "mismatch": "Existing generic 220-240 describes indoor row only and hides required three-phase380-415 outdoor specification."
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 196,
+        "title": "Напольно-потолочный кондиционер TCL TCB-18ZHRA/DV",
+        "slug": "napolno-potolochnyy-konditsioner-tcl-tcb-18zhra-dv",
+        "brand_id": 3,
+        "series_id": 315,
+        "product_kind": "complete_split_system",
+        "source_url": "https://docs.google.com/spreadsheets/d/1oQIe3HonJQbTek7NTINg0x1eslNrJ6m_YaiOxRTD7-8/edit"
+      },
+      "before": {
+        "specs": {
+          "power_supply_voltage": "220-240"
+        },
+        "typed": {
+          "power_supply_voltage": {
+            "raw": "220-240",
+            "type": "text",
+            "value": "220-240"
+          }
+        }
+      },
+      "before_sha256": "df26721a5d9b61bbf2cce6dd731277001d43c6b94ba3804d7071a73528fcc95e",
+      "specs_set": {
+        "power_supply_indoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_outdoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 196,
+          "exact_model": "TCB-18ZHRA/DV",
+          "status": "supported",
+          "source_url": "https://tcl-shop.by/doc/poluprom.pdf",
+          "sha256": "282cd48a2bf0f34fa531a7dc9619c8c9ebe7a3555ba02dedeff6d12dd6ad5f32",
+          "locator": {
+            "pdf_page": 25,
+            "printed_page": 25,
+            "column_model": "TCB-18ZHRA/DV"
+          },
+          "short_row_evidence": {
+            "Источник питания, внутренний блок, ф/В/Гц": "1/220-240/50",
+            "Источник питания, наружный блок, ф/В/Гц": "1/220-240/50"
+          },
+          "interpretation": "The table specifies electrical characteristics of both units. It does not prove which unit receives the site mains connection or whether separate feeds are required. Do not set power_supply_location. Generic voltage summary preserves both rows for mixed-voltage sets.",
+          "blockers": [],
+          "designation_note": "Product complete-set title uses TCB-18ZHRA/DV; PDF splits same base into indoor TCB-18ZHRA/DVI and outdoor TCB-18ZHRA/DVO. Both rows single phase220-240.",
+          "audit_result": "existing_voltage_matches_both_unit_rows"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 520,
+        "title": "Колонный кондиционер Energolux CABINET 6 SAP24P6-A/SAU24P6-A",
+        "slug": "kolonnaya-split-sistema-energolux-sap24p6-a-sau24p6-a",
+        "brand_id": 12,
+        "series_id": 52,
+        "product_kind": "complete_split_system",
+        "source_url": "https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php#offer=12031"
+      },
+      "before": {
+        "specs": {
+          "power_supply": "1 фаза, 220-240 В, 50 Гц",
+          "power_supply_voltage": "380-415",
+          "power_supply_location": "Наружный блок + Внутренний блок"
+        },
+        "typed": {
+          "power_supply": {
+            "raw": "1 фаза, 220-240 В, 50 Гц",
+            "type": "text",
+            "value": "1 фаза, 220-240 В, 50 Гц"
+          },
+          "power_supply_voltage": {
+            "raw": "380-415",
+            "type": "text",
+            "value": "380-415"
+          },
+          "power_supply_location": {
+            "raw": "Наружный блок + Внутренний блок",
+            "type": "enum",
+            "value": "Наружный блок + Внутренний блок"
+          }
+        }
+      },
+      "before_sha256": "8e947719dce0c9c0c6d30515a8f2c05c1cacb26fab26b26ae0bdff04ebe7aeaf",
+      "specs_set": {
+        "power_supply_voltage": "220-240"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 520,
+          "exact_model": "SAP24P6-A/SAU24P6-A",
+          "status": "supported",
+          "preserve_specs": {
+            "power_supply": "1 фаза, 220-240 В, 50 Гц",
+            "power_supply_location": "Наружный блок + Внутренний блок"
+          },
+          "source_url": "https://www.severcon.ru/upload/iblock/e12/szf5tthjz4kjuls19aw16889kmgm7m7r/Instruktsiya_po_ekspluatatsii_-ENERGOLUX_SAP_P6.pdf",
+          "source_sha256": "eea5442c4cd0d154452d0d5c561fae3a466c5d1cfc468bbf63a3d2ad6d4fcd29",
+          "locator": {
+            "pdf_page_1based": 17,
+            "printed_page": 17,
+            "table": "Технические характеристики",
+            "exact_base_model_column": "SAP24P6-A / SAU24P6-A",
+            "rows": [
+              "Электропитание, В~Гц, ф",
+              "Сторона подключения"
+            ]
+          },
+          "short_row_evidence": {
+            "Электропитание, В~Гц, ф": "220-240~/50/1",
+            "Сторона подключения": "Наружный + Внутренний блок"
+          },
+          "visual_verified": true,
+          "manual_applicability": {
+            "type": "explicit exact-product official documentation link",
+            "exact_product_page": {
+              "source_url": "https://www.severcon.ru/catalog/kolonnaya-split-sistema-energolux-sap24p6-a-sau24p6-a.html",
+              "source_sha256": "c87fdb1348da76f81f57792e5d4f7d9341c1dafbe2bb6e3cccb71f8b43bfa258"
+            },
+            "exact_product_model": "SAP24P6-A/SAU24P6-A",
+            "exact_page_electrical_row": "1 фаза, 220-240 В, 50 Гц",
+            "exact_page_connection_row": "Наружный блок + Внутренний блок",
+            "linked_manual_url": "https://www.severcon.ru/upload/iblock/e12/szf5tthjz4kjuls19aw16889kmgm7m7r/Instruktsiya_po_ekspluatatsii_-ENERGOLUX_SAP_P6.pdf",
+            "shared_manual_link_verified_from_downloaded_html": true,
+            "interpretation": "Applicability to WS30/WS40 is established by exact variant product pages directly linking the same manual, not by inferred model capacity or suffix equivalence."
+          },
+          "corroborating_catalog": {
+            "source_url": "https://www.severcon.ru/upload/uf/48b/54dpx4jjso1xxk5ulwmd2g8avrypca87/Katalog_ENERGOLUX_split_2025_WEB.pdf",
+            "source_sha256": "81415a7be60539c5063bdc160708418b5ffa3e04231928f299d9a881e1ebd6a1",
+            "pdf_page_1based": 45,
+            "printed_pages": [
+              86,
+              87
+            ],
+            "technical_table_electrical_row": "SAP24P6-A / SAU24P6-A: 1 фаза, 220-240 В, 50 Гц",
+            "wiring_table_electrical_row": "SAP24P6-A / SAU24P6-A: 1 фаза, 220-230 В, 50 Гц",
+            "winter_variant_note": "Низкотемпературный комплект до WS -30°C/-40°C (опция)",
+            "visual_verified": true
+          },
+          "source_conflict_resolution": "Official brand HTML field Параметры питающей сети=380-415 conflicts with its own Электропитание=1 фаза,220-240 and with exact-product distributor pages and the directly linked manual page17. Use manual technical row220-240; catalog technical row independently agrees. Catalog wiring row220-230 is a narrower printed range; do not expand/change source rows. Assignment220-240 follows manual technical row, not an inferred union.",
+          "blocker": null
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 555,
+        "title": "Колонный кондиционер Energolux CABINET-WS30 6 SAP24P6-A/SAU24P6-A-WS30",
+        "slug": "kolonnaya-split-sistema-energolux-sap24p6-a-sau24p6-a2400",
+        "brand_id": 12,
+        "series_id": 59,
+        "product_kind": "complete_split_system",
+        "source_url": "https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php#offer=12207"
+      },
+      "before": {
+        "specs": {
+          "power_supply": "1 фаза, 220-240 В, 50 Гц",
+          "power_supply_voltage": "380-415",
+          "power_supply_location": "Наружный блок + Внутренний блок"
+        },
+        "typed": {
+          "power_supply": {
+            "raw": "1 фаза, 220-240 В, 50 Гц",
+            "type": "text",
+            "value": "1 фаза, 220-240 В, 50 Гц"
+          },
+          "power_supply_voltage": {
+            "raw": "380-415",
+            "type": "text",
+            "value": "380-415"
+          },
+          "power_supply_location": {
+            "raw": "Наружный блок + Внутренний блок",
+            "type": "enum",
+            "value": "Наружный блок + Внутренний блок"
+          }
+        }
+      },
+      "before_sha256": "8e947719dce0c9c0c6d30515a8f2c05c1cacb26fab26b26ae0bdff04ebe7aeaf",
+      "specs_set": {
+        "power_supply_voltage": "220-240"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 555,
+          "exact_model": "SAP24P6-A/SAU24P6-A-WS30",
+          "status": "supported",
+          "preserve_specs": {
+            "power_supply": "1 фаза, 220-240 В, 50 Гц",
+            "power_supply_location": "Наружный блок + Внутренний блок"
+          },
+          "source_url": "https://www.severcon.ru/upload/iblock/e12/szf5tthjz4kjuls19aw16889kmgm7m7r/Instruktsiya_po_ekspluatatsii_-ENERGOLUX_SAP_P6.pdf",
+          "source_sha256": "eea5442c4cd0d154452d0d5c561fae3a466c5d1cfc468bbf63a3d2ad6d4fcd29",
+          "locator": {
+            "pdf_page_1based": 17,
+            "printed_page": 17,
+            "table": "Технические характеристики",
+            "exact_base_model_column": "SAP24P6-A / SAU24P6-A",
+            "rows": [
+              "Электропитание, В~Гц, ф",
+              "Сторона подключения"
+            ]
+          },
+          "short_row_evidence": {
+            "Электропитание, В~Гц, ф": "220-240~/50/1",
+            "Сторона подключения": "Наружный + Внутренний блок"
+          },
+          "visual_verified": true,
+          "manual_applicability": {
+            "type": "explicit exact-product official documentation link",
+            "exact_product_page": {
+              "source_url": "https://www.severcon.ru/catalog/kolonnaya-split-sistema-energolux-sap24p6-a-sau24p6-a2400.html",
+              "source_sha256": "5d4e8ff26227e92ea3ceb33296dd778e9d8c584a29cdaafbd09dc093417ee4e4"
+            },
+            "exact_product_model": "SAP24P6-A/SAU24P6-A-WS30",
+            "exact_page_electrical_row": "1 фаза, 220-240 В, 50 Гц",
+            "exact_page_connection_row": "Наружный блок + Внутренний блок",
+            "linked_manual_url": "https://www.severcon.ru/upload/iblock/e12/szf5tthjz4kjuls19aw16889kmgm7m7r/Instruktsiya_po_ekspluatatsii_-ENERGOLUX_SAP_P6.pdf",
+            "shared_manual_link_verified_from_downloaded_html": true,
+            "interpretation": "Applicability to WS30/WS40 is established by exact variant product pages directly linking the same manual, not by inferred model capacity or suffix equivalence."
+          },
+          "corroborating_catalog": {
+            "source_url": "https://www.severcon.ru/upload/uf/48b/54dpx4jjso1xxk5ulwmd2g8avrypca87/Katalog_ENERGOLUX_split_2025_WEB.pdf",
+            "source_sha256": "81415a7be60539c5063bdc160708418b5ffa3e04231928f299d9a881e1ebd6a1",
+            "pdf_page_1based": 45,
+            "printed_pages": [
+              86,
+              87
+            ],
+            "technical_table_electrical_row": "SAP24P6-A / SAU24P6-A: 1 фаза, 220-240 В, 50 Гц",
+            "wiring_table_electrical_row": "SAP24P6-A / SAU24P6-A: 1 фаза, 220-230 В, 50 Гц",
+            "winter_variant_note": "Низкотемпературный комплект до WS -30°C/-40°C (опция)",
+            "visual_verified": true
+          },
+          "source_conflict_resolution": "Official brand HTML field Параметры питающей сети=380-415 conflicts with its own Электропитание=1 фаза,220-240 and with exact-product distributor pages and the directly linked manual page17. Use manual technical row220-240; catalog technical row independently agrees. Catalog wiring row220-230 is a narrower printed range; do not expand/change source rows. Assignment220-240 follows manual technical row, not an inferred union.",
+          "blocker": null
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 558,
+        "title": "Колонный кондиционер Energolux CABINET-WS40 6 SAP24P6-A/SAU24P6-A-WS40",
+        "slug": "kolonnaya-split-sistema-energolux-sap24p6-a-sau24p6-a-ws40",
+        "brand_id": 12,
+        "series_id": 60,
+        "product_kind": "complete_split_system",
+        "source_url": "https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php#offer=12210"
+      },
+      "before": {
+        "specs": {
+          "power_supply": "1 фаза, 220-240 В, 50 Гц",
+          "power_supply_voltage": "380-415",
+          "power_supply_location": "Наружный блок + Внутренний блок"
+        },
+        "typed": {
+          "power_supply": {
+            "raw": "1 фаза, 220-240 В, 50 Гц",
+            "type": "text",
+            "value": "1 фаза, 220-240 В, 50 Гц"
+          },
+          "power_supply_voltage": {
+            "raw": "380-415",
+            "type": "text",
+            "value": "380-415"
+          },
+          "power_supply_location": {
+            "raw": "Наружный блок + Внутренний блок",
+            "type": "enum",
+            "value": "Наружный блок + Внутренний блок"
+          }
+        }
+      },
+      "before_sha256": "8e947719dce0c9c0c6d30515a8f2c05c1cacb26fab26b26ae0bdff04ebe7aeaf",
+      "specs_set": {
+        "power_supply_voltage": "220-240"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 558,
+          "exact_model": "SAP24P6-A/SAU24P6-A-WS40",
+          "status": "supported",
+          "preserve_specs": {
+            "power_supply": "1 фаза, 220-240 В, 50 Гц",
+            "power_supply_location": "Наружный блок + Внутренний блок"
+          },
+          "source_url": "https://www.severcon.ru/upload/iblock/e12/szf5tthjz4kjuls19aw16889kmgm7m7r/Instruktsiya_po_ekspluatatsii_-ENERGOLUX_SAP_P6.pdf",
+          "source_sha256": "eea5442c4cd0d154452d0d5c561fae3a466c5d1cfc468bbf63a3d2ad6d4fcd29",
+          "locator": {
+            "pdf_page_1based": 17,
+            "printed_page": 17,
+            "table": "Технические характеристики",
+            "exact_base_model_column": "SAP24P6-A / SAU24P6-A",
+            "rows": [
+              "Электропитание, В~Гц, ф",
+              "Сторона подключения"
+            ]
+          },
+          "short_row_evidence": {
+            "Электропитание, В~Гц, ф": "220-240~/50/1",
+            "Сторона подключения": "Наружный + Внутренний блок"
+          },
+          "visual_verified": true,
+          "manual_applicability": {
+            "type": "explicit exact-product official documentation link",
+            "exact_product_page": {
+              "source_url": "https://www.severcon.ru/catalog/kolonnaya-split-sistema-energolux-sap24p6-a-sau24p6-a-ws40.html",
+              "source_sha256": "919a5b613a7737f9db1cc9f53e0f190a81573b050f0285ab105cc70d10326e67"
+            },
+            "exact_product_model": "SAP24P6-A/SAU24P6-A-WS40",
+            "exact_page_electrical_row": "1 фаза, 220-240 В, 50 Гц",
+            "exact_page_connection_row": "Наружный блок + Внутренний блок",
+            "linked_manual_url": "https://www.severcon.ru/upload/iblock/e12/szf5tthjz4kjuls19aw16889kmgm7m7r/Instruktsiya_po_ekspluatatsii_-ENERGOLUX_SAP_P6.pdf",
+            "shared_manual_link_verified_from_downloaded_html": true,
+            "interpretation": "Applicability to WS30/WS40 is established by exact variant product pages directly linking the same manual, not by inferred model capacity or suffix equivalence."
+          },
+          "corroborating_catalog": {
+            "source_url": "https://www.severcon.ru/upload/uf/48b/54dpx4jjso1xxk5ulwmd2g8avrypca87/Katalog_ENERGOLUX_split_2025_WEB.pdf",
+            "source_sha256": "81415a7be60539c5063bdc160708418b5ffa3e04231928f299d9a881e1ebd6a1",
+            "pdf_page_1based": 45,
+            "printed_pages": [
+              86,
+              87
+            ],
+            "technical_table_electrical_row": "SAP24P6-A / SAU24P6-A: 1 фаза, 220-240 В, 50 Гц",
+            "wiring_table_electrical_row": "SAP24P6-A / SAU24P6-A: 1 фаза, 220-230 В, 50 Гц",
+            "winter_variant_note": "Низкотемпературный комплект до WS -30°C/-40°C (опция)",
+            "visual_verified": true
+          },
+          "source_conflict_resolution": "Official brand HTML field Параметры питающей сети=380-415 conflicts with its own Электропитание=1 фаза,220-240 and with exact-product distributor pages and the directly linked manual page17. Use manual technical row220-240; catalog technical row independently agrees. Catalog wiring row220-230 is a narrower printed range; do not expand/change source rows. Assignment220-240 follows manual technical row, not an inferred union.",
+          "blocker": null
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 643,
+        "title": "Внутренний канальный блок Energolux ESAD07M1_WF_AR2_DC",
+        "slug": "kanalnye-bloki-smart-multi-energolux-esad07m1-wfar2-dc",
+        "brand_id": 12,
+        "series_id": null,
+        "product_kind": "indoor_unit",
+        "source_url": "https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php#offer=15705"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240",
+        "power_supply_indoor": "1 фаза, 220-240 В, 50 Гц"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 643,
+          "exact_model": "ESAD07M1_WF_AR2_DC",
+          "inventory_title": "Внутренний канальный блок Energolux ESAD07M1_WF_AR2_DC",
+          "product_kind": "indoor_unit",
+          "source_url": "https://energolux.ru.com/upload/iblock/aed/3trvly2g5efqmb89pht9eve32oaeh6ks/manual_Manual-Smart-Multi-preview.pdf",
+          "source_sha256": "b0e2d1924c400c11aba187edcef571d757acb4533d2457bde95a023ab3c03931",
+          "pdf_page_1based": 13,
+          "printed_page": "25",
+          "locator": "Технические характеристики; exact indoor/outdoor model column; Электропитание / Сторона подключения rows and footnote",
+          "evidence": "Электропитание: 1 фаза, 220-240 В, 50 Гц",
+          "visual_verified": true,
+          "ambiguity": null,
+          "blocker": null,
+          "distributor_product_url": "https://www.severcon.ru/catalog/kanalnye-bloki-smart-multi-energolux-esad07m1-wfar2-dc.html"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 644,
+        "title": "Внутренний канальный блок Energolux ESAD09M1_WF_AR2_DC",
+        "slug": "kanalnye-bloki-smart-multi-energolux-esad09m1-wf-ar2-dc",
+        "brand_id": 12,
+        "series_id": null,
+        "product_kind": "indoor_unit",
+        "source_url": "https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php#offer=15706"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240",
+        "power_supply_indoor": "1 фаза, 220-240 В, 50 Гц"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 644,
+          "exact_model": "ESAD09M1_WF_AR2_DC",
+          "inventory_title": "Внутренний канальный блок Energolux ESAD09M1_WF_AR2_DC",
+          "product_kind": "indoor_unit",
+          "source_url": "https://energolux.ru.com/upload/iblock/aed/3trvly2g5efqmb89pht9eve32oaeh6ks/manual_Manual-Smart-Multi-preview.pdf",
+          "source_sha256": "b0e2d1924c400c11aba187edcef571d757acb4533d2457bde95a023ab3c03931",
+          "pdf_page_1based": 13,
+          "printed_page": "25",
+          "locator": "Технические характеристики; exact indoor/outdoor model column; Электропитание / Сторона подключения rows and footnote",
+          "evidence": "Электропитание: 1 фаза, 220-240 В, 50 Гц",
+          "visual_verified": true,
+          "ambiguity": null,
+          "blocker": null,
+          "distributor_product_url": "https://www.severcon.ru/catalog/kanalnye-bloki-smart-multi-energolux-esad09m1-wf-ar2-dc.html"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 645,
+        "title": "Внутренний канальный блок Energolux ESAD12M5_WF_AR2_DC",
+        "slug": "kanalnye-bloki-smart-multi-energolux-esad12m5-wf-ar2-dc",
+        "brand_id": 12,
+        "series_id": null,
+        "product_kind": "indoor_unit",
+        "source_url": "https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php#offer=15707"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240",
+        "power_supply_indoor": "1 фаза, 220-240 В, 50 Гц"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 645,
+          "exact_model": "ESAD12M5_WF_AR2_DC",
+          "inventory_title": "Внутренний канальный блок Energolux ESAD12M5_WF_AR2_DC",
+          "product_kind": "indoor_unit",
+          "source_url": "https://energolux.ru.com/upload/iblock/aed/3trvly2g5efqmb89pht9eve32oaeh6ks/manual_Manual-Smart-Multi-preview.pdf",
+          "source_sha256": "b0e2d1924c400c11aba187edcef571d757acb4533d2457bde95a023ab3c03931",
+          "pdf_page_1based": 13,
+          "printed_page": "25",
+          "locator": "Технические характеристики; exact indoor/outdoor model column; Электропитание / Сторона подключения rows and footnote",
+          "evidence": "Электропитание: 1 фаза, 220-240 В, 50 Гц",
+          "visual_verified": true,
+          "ambiguity": null,
+          "blocker": null,
+          "distributor_product_url": "https://www.severcon.ru/catalog/kanalnye-bloki-smart-multi-energolux-esad12m5-wf-ar2-dc.html"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 646,
+        "title": "Внутренний канальный блок Energolux ESAD18M5_WF_AR2_DC",
+        "slug": "kanalnye-bloki-smart-multi-energolux-esad18m5-wf-ar2-dc",
+        "brand_id": 12,
+        "series_id": null,
+        "product_kind": "indoor_unit",
+        "source_url": "https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php#offer=15708"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240",
+        "power_supply_indoor": "1 фаза, 220-240 В, 50 Гц"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 646,
+          "exact_model": "ESAD18M5_WF_AR2_DC",
+          "inventory_title": "Внутренний канальный блок Energolux ESAD18M5_WF_AR2_DC",
+          "product_kind": "indoor_unit",
+          "source_url": "https://energolux.ru.com/upload/iblock/aed/3trvly2g5efqmb89pht9eve32oaeh6ks/manual_Manual-Smart-Multi-preview.pdf",
+          "source_sha256": "b0e2d1924c400c11aba187edcef571d757acb4533d2457bde95a023ab3c03931",
+          "pdf_page_1based": 13,
+          "printed_page": "25",
+          "locator": "Технические характеристики; exact indoor/outdoor model column; Электропитание / Сторона подключения rows and footnote",
+          "evidence": "Электропитание: 1 фаза, 220-240 В, 50 Гц",
+          "visual_verified": true,
+          "ambiguity": null,
+          "blocker": null,
+          "distributor_product_url": "https://www.severcon.ru/catalog/kanalnye-bloki-smart-multi-energolux-esad18m5-wf-ar2-dc.html"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 647,
+        "title": "Внутренний кассетный блок Energolux ESAC09M2_WF_AR2_DC",
+        "slug": "kassetnye-bloki-smart-multi-energolux-esac09m2-wf-ar2-dc",
+        "brand_id": 12,
+        "series_id": null,
+        "product_kind": "indoor_unit",
+        "source_url": "https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php#offer=15709"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240",
+        "power_supply_indoor": "1 фаза, 220-240 В, 50 Гц"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 647,
+          "exact_model": "ESAC09M2_WF_AR2_DC",
+          "inventory_title": "Внутренний кассетный блок Energolux ESAC09M2_WF_AR2_DC",
+          "product_kind": "indoor_unit",
+          "source_url": "https://energolux.ru.com/upload/iblock/aed/3trvly2g5efqmb89pht9eve32oaeh6ks/manual_Manual-Smart-Multi-preview.pdf",
+          "source_sha256": "b0e2d1924c400c11aba187edcef571d757acb4533d2457bde95a023ab3c03931",
+          "pdf_page_1based": 13,
+          "printed_page": "24",
+          "locator": "Технические характеристики; exact indoor/outdoor model column; Электропитание / Сторона подключения rows and footnote",
+          "evidence": "Электропитание: 1 фаза, 220-240 В, 50 Гц",
+          "visual_verified": true,
+          "ambiguity": null,
+          "blocker": null,
+          "distributor_product_url": "https://www.severcon.ru/catalog/kassetnye-bloki-smart-multi-energolux-esac09m2-wf-ar2-dc.html"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 648,
+        "title": "Внутренний кассетный блок Energolux ESAC12M2_WF_AR2_DC",
+        "slug": "kassetnye-bloki-smart-multi-energolux-esac12m2-wf-ar2-dc",
+        "brand_id": 12,
+        "series_id": null,
+        "product_kind": "indoor_unit",
+        "source_url": "https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php#offer=15710"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240",
+        "power_supply_indoor": "1 фаза, 220-240 В, 50 Гц"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 648,
+          "exact_model": "ESAC12M2_WF_AR2_DC",
+          "inventory_title": "Внутренний кассетный блок Energolux ESAC12M2_WF_AR2_DC",
+          "product_kind": "indoor_unit",
+          "source_url": "https://energolux.ru.com/upload/iblock/aed/3trvly2g5efqmb89pht9eve32oaeh6ks/manual_Manual-Smart-Multi-preview.pdf",
+          "source_sha256": "b0e2d1924c400c11aba187edcef571d757acb4533d2457bde95a023ab3c03931",
+          "pdf_page_1based": 13,
+          "printed_page": "24",
+          "locator": "Технические характеристики; exact indoor/outdoor model column; Электропитание / Сторона подключения rows and footnote",
+          "evidence": "Электропитание: 1 фаза, 220-240 В, 50 Гц",
+          "visual_verified": true,
+          "ambiguity": null,
+          "blocker": null,
+          "distributor_product_url": "https://www.severcon.ru/catalog/kassetnye-bloki-smart-multi-energolux-esac12m2-wf-ar2-dc.html"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 649,
+        "title": "Внутренний кассетный блок Energolux ESAC18M2_WF_AR2_DC",
+        "slug": "kassetnye-bloki-smart-multi-energolux-esac18m2-wf-ar2-dc",
+        "brand_id": 12,
+        "series_id": null,
+        "product_kind": "indoor_unit",
+        "source_url": "https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php#offer=15711"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240",
+        "power_supply_indoor": "1 фаза, 220-240 В, 50 Гц"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 649,
+          "exact_model": "ESAC18M2_WF_AR2_DC",
+          "inventory_title": "Внутренний кассетный блок Energolux ESAC18M2_WF_AR2_DC",
+          "product_kind": "indoor_unit",
+          "source_url": "https://energolux.ru.com/upload/iblock/aed/3trvly2g5efqmb89pht9eve32oaeh6ks/manual_Manual-Smart-Multi-preview.pdf",
+          "source_sha256": "b0e2d1924c400c11aba187edcef571d757acb4533d2457bde95a023ab3c03931",
+          "pdf_page_1based": 13,
+          "printed_page": "24",
+          "locator": "Технические характеристики; exact indoor/outdoor model column; Электропитание / Сторона подключения rows and footnote",
+          "evidence": "Электропитание: 1 фаза, 220-240 В, 50 Гц",
+          "visual_verified": true,
+          "ambiguity": null,
+          "blocker": null,
+          "distributor_product_url": "https://www.severcon.ru/catalog/kassetnye-bloki-smart-multi-energolux-esac18m2-wf-ar2-dc.html"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 659,
+        "title": "Канальный кондиционер Energolux DUCT 7 ESAD12D1_WF_AR2_DC/ESAU12U1_AR2_DC",
+        "slug": "energolux-duct-7-esad12d1",
+        "brand_id": 12,
+        "series_id": 74,
+        "product_kind": "complete_split_system",
+        "source_url": "https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php#offer=15739"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240",
+        "power_supply_location": "Наружный блок",
+        "power_supply_outdoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_indoor": "1 фаза и нейтраль, 220-240 В, 50 Гц"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 659,
+          "exact_model": "ESAD12D1_WF_AR2_DC/ESAU12U1_AR2_DC",
+          "inventory_title": "Канальный кондиционер Energolux DUCT 7 ESAD12D1_WF_AR2_DC/ESAU12U1_AR2_DC",
+          "product_kind": "complete_split_system",
+          "source_url": "https://www.severcon.ru/upload/iblock/ca7/bmnyhodxb9w6qc99r0voaifqpbjdejiw/Manual_ESAD_D1_WF_AR2_DC-_-ESAU_U1_AR2_DC_Web.pdf",
+          "source_sha256": "27b7acb64510981ba37b695faf9cf81378c5693d5a66bfae14eade93c5ab272d",
+          "pdf_page_1based": 6,
+          "printed_page": "11",
+          "locator": "Технические характеристики; exact indoor/outdoor model column; Электропитание / Сторона подключения rows and footnote",
+          "evidence": "Электропитание: 1 фаза, 220-240 В, 50 Гц; Сторона подключения: Наружный блок; сноска: «Рекомендовано отдельное подключение внутреннего блока - 1 фаза и нейтраль, 220-240 В, 50 Гц»",
+          "visual_verified": true,
+          "ambiguity": null,
+          "blocker": null,
+          "distributor_product_url": "https://www.severcon.ru/catalog/energolux-duct-7-esad12d1.html"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 660,
+        "title": "Канальный кондиционер Energolux DUCT 7 ESAD18D1_WF_AR2_DC/ESAU18U1_AR2_DC",
+        "slug": "energolux-duct-7-esad18d1",
+        "brand_id": 12,
+        "series_id": 74,
+        "product_kind": "complete_split_system",
+        "source_url": "https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php#offer=15740"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240",
+        "power_supply_location": "Наружный блок",
+        "power_supply_outdoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_indoor": "1 фаза и нейтраль, 220-240 В, 50 Гц"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 660,
+          "exact_model": "ESAD18D1_WF_AR2_DC/ESAU18U1_AR2_DC",
+          "inventory_title": "Канальный кондиционер Energolux DUCT 7 ESAD18D1_WF_AR2_DC/ESAU18U1_AR2_DC",
+          "product_kind": "complete_split_system",
+          "source_url": "https://www.severcon.ru/upload/iblock/ca7/bmnyhodxb9w6qc99r0voaifqpbjdejiw/Manual_ESAD_D1_WF_AR2_DC-_-ESAU_U1_AR2_DC_Web.pdf",
+          "source_sha256": "27b7acb64510981ba37b695faf9cf81378c5693d5a66bfae14eade93c5ab272d",
+          "pdf_page_1based": 6,
+          "printed_page": "11",
+          "locator": "Технические характеристики; exact indoor/outdoor model column; Электропитание / Сторона подключения rows and footnote",
+          "evidence": "Электропитание: 1 фаза, 220-240 В, 50 Гц; Сторона подключения: Наружный блок; сноска: «Рекомендовано отдельное подключение внутреннего блока - 1 фаза и нейтраль, 220-240 В, 50 Гц»",
+          "visual_verified": true,
+          "ambiguity": null,
+          "blocker": null,
+          "distributor_product_url": "https://www.severcon.ru/catalog/energolux-duct-7-esad18d1.html"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 661,
+        "title": "Канальный кондиционер Energolux DUCT 7 ESAD24D1_WF_AR2_DC/ESAU24U1_AR2_DC",
+        "slug": "energolux-duct-7-esad24d1",
+        "brand_id": 12,
+        "series_id": 74,
+        "product_kind": "complete_split_system",
+        "source_url": "https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php#offer=15741"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240",
+        "power_supply_location": "Наружный блок",
+        "power_supply_outdoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_indoor": "1 фаза и нейтраль, 220-240 В, 50 Гц"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 661,
+          "exact_model": "ESAD24D1_WF_AR2_DC/ESAU24U1_AR2_DC",
+          "inventory_title": "Канальный кондиционер Energolux DUCT 7 ESAD24D1_WF_AR2_DC/ESAU24U1_AR2_DC",
+          "product_kind": "complete_split_system",
+          "source_url": "https://www.severcon.ru/upload/iblock/ca7/bmnyhodxb9w6qc99r0voaifqpbjdejiw/Manual_ESAD_D1_WF_AR2_DC-_-ESAU_U1_AR2_DC_Web.pdf",
+          "source_sha256": "27b7acb64510981ba37b695faf9cf81378c5693d5a66bfae14eade93c5ab272d",
+          "pdf_page_1based": 6,
+          "printed_page": "11",
+          "locator": "Технические характеристики; exact indoor/outdoor model column; Электропитание / Сторона подключения rows and footnote",
+          "evidence": "Электропитание: 1 фаза, 220-240 В, 50 Гц; Сторона подключения: Наружный блок; сноска: «Рекомендовано отдельное подключение внутреннего блока - 1 фаза и нейтраль, 220-240 В, 50 Гц»",
+          "visual_verified": true,
+          "ambiguity": null,
+          "blocker": null,
+          "distributor_product_url": "https://www.severcon.ru/catalog/energolux-duct-7-esad24d1.html"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 662,
+        "title": "Канальный кондиционер Energolux DUCT 7 ESAD36D1_WF_AR2_DC/ESAU36U1_AR2_DC",
+        "slug": "energolux-duct-7-esad36d1",
+        "brand_id": 12,
+        "series_id": 74,
+        "product_kind": "complete_split_system",
+        "source_url": "https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php#offer=15742"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240",
+        "power_supply_location": "Наружный блок",
+        "power_supply_outdoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_indoor": "1 фаза и нейтраль, 220-240 В, 50 Гц"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 662,
+          "exact_model": "ESAD36D1_WF_AR2_DC/ESAU36U1_AR2_DC",
+          "inventory_title": "Канальный кондиционер Energolux DUCT 7 ESAD36D1_WF_AR2_DC/ESAU36U1_AR2_DC",
+          "product_kind": "complete_split_system",
+          "source_url": "https://www.severcon.ru/upload/iblock/ca7/bmnyhodxb9w6qc99r0voaifqpbjdejiw/Manual_ESAD_D1_WF_AR2_DC-_-ESAU_U1_AR2_DC_Web.pdf",
+          "source_sha256": "27b7acb64510981ba37b695faf9cf81378c5693d5a66bfae14eade93c5ab272d",
+          "pdf_page_1based": 6,
+          "printed_page": "11",
+          "locator": "Технические характеристики; exact indoor/outdoor model column; Электропитание / Сторона подключения rows and footnote",
+          "evidence": "Электропитание: 1 фаза, 220-240 В, 50 Гц; Сторона подключения: Наружный блок; сноска: «Рекомендовано отдельное подключение внутреннего блока - 1 фаза и нейтраль, 220-240 В, 50 Гц»",
+          "visual_verified": true,
+          "ambiguity": null,
+          "blocker": null,
+          "distributor_product_url": "https://www.severcon.ru/catalog/energolux-duct-7-esad36d1.html"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 663,
+        "title": "Канальный кондиционер Energolux DUCT 7 ESAD48D1_WF_AR2_DC/ESAU48U1_AR2_DC",
+        "slug": "energolux-duct-7-esad48d1",
+        "brand_id": 12,
+        "series_id": 74,
+        "product_kind": "complete_split_system",
+        "source_url": "https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php#offer=15743"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply_voltage": "380-415",
+        "power_supply_location": "Наружный блок",
+        "power_supply_outdoor": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply_indoor": "1 фаза и нейтраль, 220-240 В, 50 Гц"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 663,
+          "exact_model": "ESAD48D1_WF_AR2_DC/ESAU48U1_AR2_DC",
+          "inventory_title": "Канальный кондиционер Energolux DUCT 7 ESAD48D1_WF_AR2_DC/ESAU48U1_AR2_DC",
+          "product_kind": "complete_split_system",
+          "source_url": "https://www.severcon.ru/upload/iblock/ca7/bmnyhodxb9w6qc99r0voaifqpbjdejiw/Manual_ESAD_D1_WF_AR2_DC-_-ESAU_U1_AR2_DC_Web.pdf",
+          "source_sha256": "27b7acb64510981ba37b695faf9cf81378c5693d5a66bfae14eade93c5ab272d",
+          "pdf_page_1based": 6,
+          "printed_page": "11",
+          "locator": "Технические характеристики; exact indoor/outdoor model column; Электропитание / Сторона подключения rows and footnote",
+          "evidence": "Электропитание: 3 фазы, 380-415 В, 50 Гц; Сторона подключения: Наружный блок; сноска: «Рекомендовано отдельное подключение внутреннего блока - 1 фаза и нейтраль, 220-240 В, 50 Гц»",
+          "visual_verified": true,
+          "ambiguity": null,
+          "blocker": null,
+          "distributor_product_url": "https://www.severcon.ru/catalog/energolux-duct-7-esad48d1.html"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 664,
+        "title": "Канальный кондиционер Energolux DUCT 7 ESAD60D1_WF_AR2_DC/ESAU60U1_AR2_DC",
+        "slug": "energolux-duct-7-esad60d1",
+        "brand_id": 12,
+        "series_id": 74,
+        "product_kind": "complete_split_system",
+        "source_url": "https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php#offer=15744"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply_voltage": "380-415",
+        "power_supply_location": "Наружный блок",
+        "power_supply_outdoor": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply_indoor": "1 фаза и нейтраль, 220-240 В, 50 Гц"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 664,
+          "exact_model": "ESAD60D1_WF_AR2_DC/ESAU60U1_AR2_DC",
+          "inventory_title": "Канальный кондиционер Energolux DUCT 7 ESAD60D1_WF_AR2_DC/ESAU60U1_AR2_DC",
+          "product_kind": "complete_split_system",
+          "source_url": "https://www.severcon.ru/upload/iblock/ca7/bmnyhodxb9w6qc99r0voaifqpbjdejiw/Manual_ESAD_D1_WF_AR2_DC-_-ESAU_U1_AR2_DC_Web.pdf",
+          "source_sha256": "27b7acb64510981ba37b695faf9cf81378c5693d5a66bfae14eade93c5ab272d",
+          "pdf_page_1based": 6,
+          "printed_page": "11",
+          "locator": "Технические характеристики; exact indoor/outdoor model column; Электропитание / Сторона подключения rows and footnote",
+          "evidence": "Электропитание: 3 фазы, 380-415 В, 50 Гц; Сторона подключения: Наружный блок; сноска: «Рекомендовано отдельное подключение внутреннего блока - 1 фаза и нейтраль, 220-240 В, 50 Гц»",
+          "visual_verified": true,
+          "ambiguity": null,
+          "blocker": null,
+          "distributor_product_url": "https://www.severcon.ru/catalog/energolux-duct-7-esad60d1.html"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 665,
+        "title": "Кассетный кондиционер Energolux CASSETE 7 ESAC12C1_WF_AR2_DC/ESAU12U1_AR2_DC",
+        "slug": "energolux-cassete-7-12",
+        "brand_id": 12,
+        "series_id": 75,
+        "product_kind": "complete_split_system",
+        "source_url": "https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php#offer=15747"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240",
+        "power_supply_location": "Наружный блок",
+        "power_supply_outdoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_indoor": "1 фаза и нейтраль, 220-240 В, 50 Гц"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 665,
+          "exact_model": "ESAC12C1_WF_AR2_DC/ESAU12U1_AR2_DC",
+          "inventory_title": "Кассетный кондиционер Energolux CASSETE 7 ESAC12C1_WF_AR2_DC/ESAU12U1_AR2_DC",
+          "product_kind": "complete_split_system",
+          "source_url": "https://energolux.ru.com/upload/iblock/d03/6oh28xv24nbqjo9axjjp4vsrqe350ate/Manual_ESAC_C1_WF_AR2_DC-_-ESAU_U1_AR2_DC-_web.pdf",
+          "source_sha256": "edb44637e26fe1bd2e76180f38f09651fdeaf5e1d592919822a2c1c5e2b76a48",
+          "pdf_page_1based": 8,
+          "printed_page": "15",
+          "locator": "Технические характеристики; exact indoor/outdoor model column; Электропитание / Сторона подключения rows and footnote",
+          "evidence": "Электропитание: 1 фаза, 220-240 В, 50 Гц; Сторона подключения: Наружный блок; сноска: «Рекомендовано отдельное подключение внутреннего блока - 1 фаза и нейтраль, 220-240 В, 50 Гц»",
+          "visual_verified": true,
+          "ambiguity": null,
+          "blocker": null,
+          "distributor_product_url": "https://www.severcon.ru/catalog/energolux-cassete-7-12.html"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 666,
+        "title": "Кассетный кондиционер Energolux CASSETE 7 ESAC18C1_WF_AR2_DC/ESAU18U1_AR2_DC",
+        "slug": "energolux-cassete-7-18",
+        "brand_id": 12,
+        "series_id": 75,
+        "product_kind": "complete_split_system",
+        "source_url": "https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php#offer=15748"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240",
+        "power_supply_location": "Наружный блок",
+        "power_supply_outdoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_indoor": "1 фаза и нейтраль, 220-240 В, 50 Гц"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 666,
+          "exact_model": "ESAC18C1_WF_AR2_DC/ESAU18U1_AR2_DC",
+          "inventory_title": "Кассетный кондиционер Energolux CASSETE 7 ESAC18C1_WF_AR2_DC/ESAU18U1_AR2_DC",
+          "product_kind": "complete_split_system",
+          "source_url": "https://energolux.ru.com/upload/iblock/d03/6oh28xv24nbqjo9axjjp4vsrqe350ate/Manual_ESAC_C1_WF_AR2_DC-_-ESAU_U1_AR2_DC-_web.pdf",
+          "source_sha256": "edb44637e26fe1bd2e76180f38f09651fdeaf5e1d592919822a2c1c5e2b76a48",
+          "pdf_page_1based": 8,
+          "printed_page": "15",
+          "locator": "Технические характеристики; exact indoor/outdoor model column; Электропитание / Сторона подключения rows and footnote",
+          "evidence": "Электропитание: 1 фаза, 220-240 В, 50 Гц; Сторона подключения: Наружный блок; сноска: «Рекомендовано отдельное подключение внутреннего блока - 1 фаза и нейтраль, 220-240 В, 50 Гц»",
+          "visual_verified": true,
+          "ambiguity": null,
+          "blocker": null,
+          "distributor_product_url": "https://www.severcon.ru/catalog/energolux-cassete-7-18.html"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 667,
+        "title": "Кассетный кондиционер Energolux CASSETE 7 ESAC24C1_WF_AR2_DC/ESAU24U1_AR2_DC",
+        "slug": "energolux-cassete-7-24",
+        "brand_id": 12,
+        "series_id": 75,
+        "product_kind": "complete_split_system",
+        "source_url": "https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php#offer=15749"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240",
+        "power_supply_location": "Наружный блок",
+        "power_supply_outdoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_indoor": "1 фаза и нейтраль, 220-240 В, 50 Гц"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 667,
+          "exact_model": "ESAC24C1_WF_AR2_DC/ESAU24U1_AR2_DC",
+          "inventory_title": "Кассетный кондиционер Energolux CASSETE 7 ESAC24C1_WF_AR2_DC/ESAU24U1_AR2_DC",
+          "product_kind": "complete_split_system",
+          "source_url": "https://energolux.ru.com/upload/iblock/d03/6oh28xv24nbqjo9axjjp4vsrqe350ate/Manual_ESAC_C1_WF_AR2_DC-_-ESAU_U1_AR2_DC-_web.pdf",
+          "source_sha256": "edb44637e26fe1bd2e76180f38f09651fdeaf5e1d592919822a2c1c5e2b76a48",
+          "pdf_page_1based": 8,
+          "printed_page": "15",
+          "locator": "Технические характеристики; exact indoor/outdoor model column; Электропитание / Сторона подключения rows and footnote",
+          "evidence": "Электропитание: 1 фаза, 220-240 В, 50 Гц; Сторона подключения: Наружный блок; сноска: «Рекомендовано отдельное подключение внутреннего блока - 1 фаза и нейтраль, 220-240 В, 50 Гц»",
+          "visual_verified": true,
+          "ambiguity": null,
+          "blocker": null,
+          "distributor_product_url": "https://www.severcon.ru/catalog/energolux-cassete-7-24.html"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 668,
+        "title": "Кассетный кондиционер Energolux CASSETE 7 ESAC36C1_WF_AR2_DC/ESAU36U1_AR2_DC",
+        "slug": "energolux-cassete-7-36",
+        "brand_id": 12,
+        "series_id": 75,
+        "product_kind": "complete_split_system",
+        "source_url": "https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php#offer=15750"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240",
+        "power_supply_location": "Наружный блок",
+        "power_supply_outdoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_indoor": "1 фаза и нейтраль, 220-240 В, 50 Гц"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 668,
+          "exact_model": "ESAC36C1_WF_AR2_DC/ESAU36U1_AR2_DC",
+          "inventory_title": "Кассетный кондиционер Energolux CASSETE 7 ESAC36C1_WF_AR2_DC/ESAU36U1_AR2_DC",
+          "product_kind": "complete_split_system",
+          "source_url": "https://energolux.ru.com/upload/iblock/d03/6oh28xv24nbqjo9axjjp4vsrqe350ate/Manual_ESAC_C1_WF_AR2_DC-_-ESAU_U1_AR2_DC-_web.pdf",
+          "source_sha256": "edb44637e26fe1bd2e76180f38f09651fdeaf5e1d592919822a2c1c5e2b76a48",
+          "pdf_page_1based": 8,
+          "printed_page": "15",
+          "locator": "Технические характеристики; exact indoor/outdoor model column; Электропитание / Сторона подключения rows and footnote",
+          "evidence": "Электропитание: 1 фаза, 220-240 В, 50 Гц; Сторона подключения: Наружный блок; сноска: «Рекомендовано отдельное подключение внутреннего блока - 1 фаза и нейтраль, 220-240 В, 50 Гц»",
+          "visual_verified": true,
+          "ambiguity": null,
+          "blocker": null,
+          "distributor_product_url": "https://www.severcon.ru/catalog/energolux-cassete-7-36.html"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 669,
+        "title": "Кассетный кондиционер Energolux CASSETE 7 ESAC48C1_WF_AR2_DC/ESAU48U1_AR2_DC",
+        "slug": "energolux-cassete-7-48",
+        "brand_id": 12,
+        "series_id": 75,
+        "product_kind": "complete_split_system",
+        "source_url": "https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php#offer=15751"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply_voltage": "380-415",
+        "power_supply_location": "Наружный блок",
+        "power_supply_outdoor": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply_indoor": "1 фаза и нейтраль, 220-240 В, 50 Гц"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 669,
+          "exact_model": "ESAC48C1_WF_AR2_DC/ESAU48U1_AR2_DC",
+          "inventory_title": "Кассетный кондиционер Energolux CASSETE 7 ESAC48C1_WF_AR2_DC/ESAU48U1_AR2_DC",
+          "product_kind": "complete_split_system",
+          "source_url": "https://energolux.ru.com/upload/iblock/d03/6oh28xv24nbqjo9axjjp4vsrqe350ate/Manual_ESAC_C1_WF_AR2_DC-_-ESAU_U1_AR2_DC-_web.pdf",
+          "source_sha256": "edb44637e26fe1bd2e76180f38f09651fdeaf5e1d592919822a2c1c5e2b76a48",
+          "pdf_page_1based": 8,
+          "printed_page": "15",
+          "locator": "Технические характеристики; exact indoor/outdoor model column; Электропитание / Сторона подключения rows and footnote",
+          "evidence": "Электропитание: 3 фазы, 380-415 В, 50 Гц; Сторона подключения: Наружный блок; сноска: «Рекомендовано отдельное подключение внутреннего блока - 1 фаза и нейтраль, 220-240 В, 50 Гц»",
+          "visual_verified": true,
+          "ambiguity": null,
+          "blocker": null,
+          "distributor_product_url": "https://www.severcon.ru/catalog/energolux-cassete-7-48.html"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 670,
+        "title": "Кассетный кондиционер Energolux CASSETE 7 ESAC60C1_WF_AR2_DC/ESAU60U1_AR2_DC",
+        "slug": "energolux-cassete-7-60",
+        "brand_id": 12,
+        "series_id": 75,
+        "product_kind": "complete_split_system",
+        "source_url": "https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php#offer=15752"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply_voltage": "380-415",
+        "power_supply_location": "Наружный блок",
+        "power_supply_outdoor": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply_indoor": "1 фаза и нейтраль, 220-240 В, 50 Гц"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 670,
+          "exact_model": "ESAC60C1_WF_AR2_DC/ESAU60U1_AR2_DC",
+          "inventory_title": "Кассетный кондиционер Energolux CASSETE 7 ESAC60C1_WF_AR2_DC/ESAU60U1_AR2_DC",
+          "product_kind": "complete_split_system",
+          "source_url": "https://energolux.ru.com/upload/iblock/d03/6oh28xv24nbqjo9axjjp4vsrqe350ate/Manual_ESAC_C1_WF_AR2_DC-_-ESAU_U1_AR2_DC-_web.pdf",
+          "source_sha256": "edb44637e26fe1bd2e76180f38f09651fdeaf5e1d592919822a2c1c5e2b76a48",
+          "pdf_page_1based": 8,
+          "printed_page": "15",
+          "locator": "Технические характеристики; exact indoor/outdoor model column; Электропитание / Сторона подключения rows and footnote",
+          "evidence": "Электропитание: 3 фазы, 380-415 В, 50 Гц; Сторона подключения: Наружный блок; сноска: «Рекомендовано отдельное подключение внутреннего блока - 1 фаза и нейтраль, 220-240 В, 50 Гц»",
+          "visual_verified": true,
+          "ambiguity": null,
+          "blocker": null,
+          "distributor_product_url": "https://www.severcon.ru/catalog/energolux-cassete-7-60.html"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 671,
+        "title": "Канальный кондиционер Energolux DUCT 7 on/off ESAD18D7_AR1/ESAU18U7_AR1",
+        "slug": "energolux-duct-7-on-off-18",
+        "brand_id": 12,
+        "series_id": 76,
+        "product_kind": "complete_split_system",
+        "source_url": "https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php#offer=15777"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240",
+        "power_supply_location": "Внутренний блок",
+        "power_supply_outdoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_indoor": "1 фаза и нейтраль, 220-240 В, 50 Гц"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 671,
+          "exact_model": "ESAD18D7_AR1/ESAU18U7_AR1",
+          "inventory_title": "Канальный кондиционер Energolux DUCT 7 on/off ESAD18D7_AR1/ESAU18U7_AR1",
+          "product_kind": "complete_split_system",
+          "source_url": "https://www.severcon.ru/upload/iblock/702/8r8yd9827q7riweqbxq6evxxhq000xbn/Manual_ESAD_D7_AR1-_-ESAU_U7_AR1-web.pdf",
+          "source_sha256": "a8a72751e39201c0b56436833c1223517030de1a1047502660f658b56816362d",
+          "pdf_page_1based": 6,
+          "printed_page": "11",
+          "locator": "Технические характеристики; exact indoor/outdoor model column; Электропитание / Сторона подключения rows and footnote",
+          "evidence": "Электропитание: 1 фаза, 220-240 В, 50 Гц; Сторона подключения: Внутренний блок; сноска: «Рекомендовано отдельное подключение внутреннего блока - 1 фаза и нейтраль, 220-240 В, 50 Гц»",
+          "visual_verified": true,
+          "ambiguity": [
+            "Table row is labeled outdoor power but connection-side row explicitly places 12/18 supply at indoor block; preserve both facts and do not infer separate outdoor feed."
+          ],
+          "blocker": null,
+          "distributor_product_url": "https://www.severcon.ru/catalog/energolux-duct-7-on-off-18.html"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 672,
+        "title": "Канальный кондиционер Energolux DUCT 7 on/off ESAD24D7_AR1/ESAU24U7_AR1",
+        "slug": "energolux-duct-7-on-off-24",
+        "brand_id": 12,
+        "series_id": 76,
+        "product_kind": "complete_split_system",
+        "source_url": "https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php#offer=15778"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240",
+        "power_supply_location": "Наружный блок",
+        "power_supply_outdoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_indoor": "1 фаза и нейтраль, 220-240 В, 50 Гц"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 672,
+          "exact_model": "ESAD24D7_AR1/ESAU24U7_AR1",
+          "inventory_title": "Канальный кондиционер Energolux DUCT 7 on/off ESAD24D7_AR1/ESAU24U7_AR1",
+          "product_kind": "complete_split_system",
+          "source_url": "https://www.severcon.ru/upload/iblock/702/8r8yd9827q7riweqbxq6evxxhq000xbn/Manual_ESAD_D7_AR1-_-ESAU_U7_AR1-web.pdf",
+          "source_sha256": "a8a72751e39201c0b56436833c1223517030de1a1047502660f658b56816362d",
+          "pdf_page_1based": 6,
+          "printed_page": "11",
+          "locator": "Технические характеристики; exact indoor/outdoor model column; Электропитание / Сторона подключения rows and footnote",
+          "evidence": "Электропитание: 1 фаза, 220-240 В, 50 Гц; Сторона подключения: Наружный блок; сноска: «Рекомендовано отдельное подключение внутреннего блока - 1 фаза и нейтраль, 220-240 В, 50 Гц»",
+          "visual_verified": true,
+          "ambiguity": null,
+          "blocker": null,
+          "distributor_product_url": "https://www.severcon.ru/catalog/energolux-duct-7-on-off-24.html"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 673,
+        "title": "Канальный кондиционер Energolux DUCT 7 on/off ESAD36D7_AR1/ESAU36U7_AR1",
+        "slug": "energolux-duct-7-on-off-36",
+        "brand_id": 12,
+        "series_id": 76,
+        "product_kind": "complete_split_system",
+        "source_url": "https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php#offer=15779"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "3 фазы и нейтраль, 380-415 В, 50 Гц",
+        "power_supply_voltage": "380-415",
+        "power_supply_location": "Внутренний блок + Наружный блок",
+        "power_supply_outdoor": "3 фазы и нейтраль, 380-415 В, 50 Гц",
+        "power_supply_indoor": "1 фаза и нейтраль, 220-240 В, 50 Гц"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 673,
+          "exact_model": "ESAD36D7_AR1/ESAU36U7_AR1",
+          "inventory_title": "Канальный кондиционер Energolux DUCT 7 on/off ESAD36D7_AR1/ESAU36U7_AR1",
+          "product_kind": "complete_split_system",
+          "source_url": "https://www.severcon.ru/upload/iblock/702/8r8yd9827q7riweqbxq6evxxhq000xbn/Manual_ESAD_D7_AR1-_-ESAU_U7_AR1-web.pdf",
+          "source_sha256": "a8a72751e39201c0b56436833c1223517030de1a1047502660f658b56816362d",
+          "pdf_page_1based": 7,
+          "printed_page": "12",
+          "locator": "Технические характеристики; exact indoor/outdoor model column; Электропитание / Сторона подключения rows and footnote",
+          "evidence": "Электропитание: 3 фазы и нейтраль, 380-415 В, 50 Гц; Сторона подключения: Внутренний блок + Наружный блок; сноска: «Рекомендовано отдельное подключение внутреннего блока - 1 фаза и нейтраль, 220-240 В, 50 Гц»",
+          "visual_verified": true,
+          "ambiguity": null,
+          "blocker": null,
+          "distributor_product_url": "https://www.severcon.ru/catalog/energolux-duct-7-on-off-36.html"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 674,
+        "title": "Канальный кондиционер Energolux DUCT 7 on/off ESAD48D7_AR1/ESAU48U7_AR1",
+        "slug": "energolux-duct-7-on-off-48",
+        "brand_id": 12,
+        "series_id": 76,
+        "product_kind": "complete_split_system",
+        "source_url": "https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php#offer=15780"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "3 фазы и нейтраль, 380-415 В, 50 Гц",
+        "power_supply_voltage": "380-415",
+        "power_supply_location": "Внутренний блок + Наружный блок",
+        "power_supply_outdoor": "3 фазы и нейтраль, 380-415 В, 50 Гц",
+        "power_supply_indoor": "1 фаза и нейтраль, 220-240 В, 50 Гц"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 674,
+          "exact_model": "ESAD48D7_AR1/ESAU48U7_AR1",
+          "inventory_title": "Канальный кондиционер Energolux DUCT 7 on/off ESAD48D7_AR1/ESAU48U7_AR1",
+          "product_kind": "complete_split_system",
+          "source_url": "https://www.severcon.ru/upload/iblock/702/8r8yd9827q7riweqbxq6evxxhq000xbn/Manual_ESAD_D7_AR1-_-ESAU_U7_AR1-web.pdf",
+          "source_sha256": "a8a72751e39201c0b56436833c1223517030de1a1047502660f658b56816362d",
+          "pdf_page_1based": 7,
+          "printed_page": "12",
+          "locator": "Технические характеристики; exact indoor/outdoor model column; Электропитание / Сторона подключения rows and footnote",
+          "evidence": "Электропитание: 3 фазы и нейтраль, 380-415 В, 50 Гц; Сторона подключения: Внутренний блок + Наружный блок; сноска: «Рекомендовано отдельное подключение внутреннего блока - 1 фаза и нейтраль, 220-240 В, 50 Гц»",
+          "visual_verified": true,
+          "ambiguity": null,
+          "blocker": null,
+          "distributor_product_url": "https://www.severcon.ru/catalog/energolux-duct-7-on-off-48.html"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 675,
+        "title": "Канальный кондиционер Energolux DUCT 7 on/off ESAD60D7_AR1/ESAU60U7_AR1",
+        "slug": "energolux-duct-7-on-off-60",
+        "brand_id": 12,
+        "series_id": 76,
+        "product_kind": "complete_split_system",
+        "source_url": "https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php#offer=15781"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "3 фазы и нейтраль, 380-415 В, 50 Гц",
+        "power_supply_voltage": "380-415",
+        "power_supply_location": "Внутренний блок + Наружный блок",
+        "power_supply_outdoor": "3 фазы и нейтраль, 380-415 В, 50 Гц",
+        "power_supply_indoor": "1 фаза и нейтраль, 220-240 В, 50 Гц"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 675,
+          "exact_model": "ESAD60D7_AR1/ESAU60U7_AR1",
+          "inventory_title": "Канальный кондиционер Energolux DUCT 7 on/off ESAD60D7_AR1/ESAU60U7_AR1",
+          "product_kind": "complete_split_system",
+          "source_url": "https://www.severcon.ru/upload/iblock/702/8r8yd9827q7riweqbxq6evxxhq000xbn/Manual_ESAD_D7_AR1-_-ESAU_U7_AR1-web.pdf",
+          "source_sha256": "a8a72751e39201c0b56436833c1223517030de1a1047502660f658b56816362d",
+          "pdf_page_1based": 7,
+          "printed_page": "12",
+          "locator": "Технические характеристики; exact indoor/outdoor model column; Электропитание / Сторона подключения rows and footnote",
+          "evidence": "Электропитание: 3 фазы и нейтраль, 380-415 В, 50 Гц; Сторона подключения: Внутренний блок + Наружный блок; сноска: «Рекомендовано отдельное подключение внутреннего блока - 1 фаза и нейтраль, 220-240 В, 50 Гц»",
+          "visual_verified": true,
+          "ambiguity": null,
+          "blocker": null,
+          "distributor_product_url": "https://www.severcon.ru/catalog/energolux-duct-7-on-off-60.html"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 676,
+        "title": "Колонный кондиционер Energolux CABINET 7 ESAP24P7_HR2/ESAU24P7_HR2",
+        "slug": "kolonnaya-sistem-d0-b0-energolux-7-24",
+        "brand_id": 12,
+        "series_id": 77,
+        "product_kind": "complete_split_system",
+        "source_url": "https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php#offer=15782"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240",
+        "power_supply_location": "Наружный блок",
+        "power_supply_outdoor": "1 фаза, 220-240 В, 50 Гц"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 676,
+          "exact_model": "ESAP24P7_HR2/ESAU24P7_HR2",
+          "inventory_title": "Колонный кондиционер Energolux CABINET 7 ESAP24P7_HR2/ESAU24P7_HR2",
+          "product_kind": "complete_split_system",
+          "source_url": "https://www.severcon.ru/upload/iblock/0a8/2g2px8huvd1sxhc12skc0ywf0o1hl1mu/Kolonniki_on_off_Energolux_web.pdf",
+          "source_sha256": "5e59e6d4ada1edb0ec0e208e12d460372d2e456dd6b7d7b88309ec71fe0e8874",
+          "pdf_page_1based": 14,
+          "printed_page": "14",
+          "locator": "Технические характеристики; exact indoor/outdoor model column; Электропитание / Сторона подключения rows and footnote",
+          "evidence": "Электропитание: 1 фаза, 220-240 В, 50 Гц; Сторона подключения: Наружный блок",
+          "visual_verified": true,
+          "ambiguity": [
+            "PDF metadata title mentions HISENSE; exact Energolux ESAP/ESAU model table and link from exclusive distributor establish applicability.",
+            "Footnote marker is attached only to merged 48/60 three-phase cells; do not copy the indoor separate-feed recommendation to 24 model."
+          ],
+          "blocker": null,
+          "distributor_product_url": "https://www.severcon.ru/catalog/kolonnaya-sistem%D0%B0-energolux-7-24.html"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 677,
+        "title": "Колонный кондиционер Energolux CABINET 7 ESAP48P7_HR2/ESAU48P7_HR2",
+        "slug": "kolonnaya-sistem-d0-b0-energolux-7-48",
+        "brand_id": 12,
+        "series_id": 77,
+        "product_kind": "complete_split_system",
+        "source_url": "https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php#offer=15783"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply_voltage": "380-415",
+        "power_supply_location": "Наружный блок",
+        "power_supply_outdoor": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply_indoor": "1 фаза и нейтраль, 220-240 В, 50 Гц"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 677,
+          "exact_model": "ESAP48P7_HR2/ESAU48P7_HR2",
+          "inventory_title": "Колонный кондиционер Energolux CABINET 7 ESAP48P7_HR2/ESAU48P7_HR2",
+          "product_kind": "complete_split_system",
+          "source_url": "https://www.severcon.ru/upload/iblock/0a8/2g2px8huvd1sxhc12skc0ywf0o1hl1mu/Kolonniki_on_off_Energolux_web.pdf",
+          "source_sha256": "5e59e6d4ada1edb0ec0e208e12d460372d2e456dd6b7d7b88309ec71fe0e8874",
+          "pdf_page_1based": 14,
+          "printed_page": "14",
+          "locator": "Технические характеристики; exact indoor/outdoor model column; Электропитание / Сторона подключения rows and footnote",
+          "evidence": "Электропитание: 3 фазы, 380-415 В, 50 Гц; Сторона подключения: Наружный блок; сноска: «Рекомендовано отдельное подключение внутреннего блока - 1 фаза и нейтраль, 220-240 В, 50 Гц»",
+          "visual_verified": true,
+          "ambiguity": [
+            "PDF metadata title mentions HISENSE; exact Energolux ESAP/ESAU model table and link from exclusive distributor establish applicability."
+          ],
+          "blocker": null,
+          "distributor_product_url": "https://www.severcon.ru/catalog/kolonnaya-sistem%D0%B0-energolux-7-48.html"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 678,
+        "title": "Колонный кондиционер Energolux CABINET 7 ESAP60P7_HR2/ESAU60P7_HR2",
+        "slug": "kolonnaya-sistem-d0-b0-energolux-7-60",
+        "brand_id": 12,
+        "series_id": 77,
+        "product_kind": "complete_split_system",
+        "source_url": "https://www.severcon.ru/bitrix/catalog_export/yandex_187449.php#offer=15784"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply_voltage": "380-415",
+        "power_supply_location": "Наружный блок",
+        "power_supply_outdoor": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply_indoor": "1 фаза и нейтраль, 220-240 В, 50 Гц"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 678,
+          "exact_model": "ESAP60P7_HR2/ESAU60P7_HR2",
+          "inventory_title": "Колонный кондиционер Energolux CABINET 7 ESAP60P7_HR2/ESAU60P7_HR2",
+          "product_kind": "complete_split_system",
+          "source_url": "https://www.severcon.ru/upload/iblock/0a8/2g2px8huvd1sxhc12skc0ywf0o1hl1mu/Kolonniki_on_off_Energolux_web.pdf",
+          "source_sha256": "5e59e6d4ada1edb0ec0e208e12d460372d2e456dd6b7d7b88309ec71fe0e8874",
+          "pdf_page_1based": 14,
+          "printed_page": "14",
+          "locator": "Технические характеристики; exact indoor/outdoor model column; Электропитание / Сторона подключения rows and footnote",
+          "evidence": "Электропитание: 3 фазы, 380-415 В, 50 Гц; Сторона подключения: Наружный блок; сноска: «Рекомендовано отдельное подключение внутреннего блока - 1 фаза и нейтраль, 220-240 В, 50 Гц»",
+          "visual_verified": true,
+          "ambiguity": [
+            "PDF metadata title mentions HISENSE; exact Energolux ESAP/ESAU model table and link from exclusive distributor establish applicability."
+          ],
+          "blocker": null,
+          "distributor_product_url": "https://www.severcon.ru/catalog/kolonnaya-sistem%D0%B0-energolux-7-60.html"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1075,
+        "title": "Hisense ACT-12UR4RCC8/PE-QEA/LD WI-FI",
+        "slug": "hisense-act-12ur4rcc8-pe-qea-ld-wi-fi",
+        "brand_id": 16,
+        "series_id": 156,
+        "product_kind": "other",
+        "source_url": "https://breez.ru/products/vnutrennie-blocki-casset-free-match-dc-inverter-r32-2024/?2058=Hisense&2063=%D0%9A%D0%B0%D1%81%D1%81%D0%B5%D1%82%D0%BD%D1%8B%D0%B9&#model=ACT-12UR4RCC8%2FPE-QEA%2FLD%20WI-FI"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply_indoor": "220-240/50/1"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 1075,
+          "model": "Hisense ACT-12UR4RCC8/PE-QEA/LD WI-FI",
+          "sources": [
+            {
+              "source_url": "https://breez.ru/products/vnutrennie-blocki-casset-free-match-dc-inverter-r32-2024/",
+              "source_sha256": "b1d4d804185af6326d6b1f32f2c91b5cc181f74d570372ab5857304efd686215",
+              "locator": "HTML exact ACT indoor model columns; electrical supply row"
+            }
+          ],
+          "evidence": {
+            "power_supply_indoor": "220-240/50/1"
+          },
+          "status": "confirmed",
+          "notes": "Only indoor unit supply for ACT models; no inference of complete-system kind or external supply. Existing product kind/title preserved."
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1077,
+        "title": "Hisense ACT-18UR4RCC8/PE-QEA/LD WI-FI",
+        "slug": "hisense-act-18ur4rcc8-pe-qea-ld-wi-fi",
+        "brand_id": 16,
+        "series_id": 156,
+        "product_kind": "other",
+        "source_url": "https://breez.ru/products/vnutrennie-blocki-casset-free-match-dc-inverter-r32-2024/?2058=Hisense&2063=%D0%9A%D0%B0%D1%81%D1%81%D0%B5%D1%82%D0%BD%D1%8B%D0%B9&#model=ACT-18UR4RCC8%2FPE-QEA%2FLD%20WI-FI"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply_indoor": "220-240/50/1"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 1077,
+          "model": "Hisense ACT-18UR4RCC8/PE-QEA/LD WI-FI",
+          "sources": [
+            {
+              "source_url": "https://breez.ru/products/vnutrennie-blocki-casset-free-match-dc-inverter-r32-2024/",
+              "source_sha256": "b1d4d804185af6326d6b1f32f2c91b5cc181f74d570372ab5857304efd686215",
+              "locator": "HTML exact ACT indoor model columns; electrical supply row"
+            }
+          ],
+          "evidence": {
+            "power_supply_indoor": "220-240/50/1"
+          },
+          "status": "confirmed",
+          "notes": "Only indoor unit supply for ACT models; no inference of complete-system kind or external supply. Existing product kind/title preserved."
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1079,
+        "title": "Hisense ACT-24UR4RJC8/PE-QFA/CD WI-FI",
+        "slug": "hisense-act-24ur4rjc8-pe-qfa-cd-wi-fi",
+        "brand_id": 16,
+        "series_id": 156,
+        "product_kind": "other",
+        "source_url": "https://breez.ru/products/vnutrennie-blocki-casset-free-match-dc-inverter-r32-2024/?2058=Hisense&2063=%D0%9A%D0%B0%D1%81%D1%81%D0%B5%D1%82%D0%BD%D1%8B%D0%B9&#model=ACT-24UR4RJC8%2FPE-QFA%2FCD%20WI-FI"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply_indoor": "220-240/50/1"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 1079,
+          "model": "Hisense ACT-24UR4RJC8/PE-QFA/CD WI-FI",
+          "sources": [
+            {
+              "source_url": "https://breez.ru/products/vnutrennie-blocki-casset-free-match-dc-inverter-r32-2024/",
+              "source_sha256": "b1d4d804185af6326d6b1f32f2c91b5cc181f74d570372ab5857304efd686215",
+              "locator": "HTML exact ACT indoor model columns; electrical supply row"
+            }
+          ],
+          "evidence": {
+            "power_supply_indoor": "220-240/50/1"
+          },
+          "status": "confirmed",
+          "notes": "Only indoor unit supply for ACT models; no inference of complete-system kind or external supply. Existing product kind/title preserved."
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1182,
+        "title": "Hisense AUC-12HR4SAA | AUC-650 | AUW-12H4SV",
+        "slug": "hisense-auc-12hr4saa-auc-650-auw-12h4sv",
+        "brand_id": 16,
+        "series_id": 183,
+        "product_kind": "other",
+        "source_url": "https://breez.ru/products/heavy-2-0-classic-kolon/?1795=Hisense&1799=%D0%BD%D0%B5%D1%82&#model=AUC-12HR4SAA%20%7C%20AUC-650%20%7C%20AUW-12H4SV"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply_indoor": "220-240/50/1",
+        "power_supply_outdoor": "220-240/50/1",
+        "power_supply_location": "Внутренний блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 1182,
+          "model": "Hisense AUC-12HR4SAA | AUC-650 | AUW-12H4SV",
+          "sources": [
+            {
+              "source_url": "https://docs.breez.ru/catalog/hisense/hi-split-sistemi-kassetnogo-tipa/hi-split-sistemi-kassetnogo-tipa-instruction.pdf",
+              "source_sha256": "377d4d78b52227e67233fc71bbff7928089f46b43a3383cba642b6eeadf55e17",
+              "locator": "PDF page 38 / printed page 72; left cassette table; exact model columns, indoor/outdoor supply and connection row"
+            }
+          ],
+          "evidence": {
+            "power_supply_indoor": "220-240/50/1",
+            "power_supply_outdoor": "220-240/50/1",
+            "power_supply_location": "Внутренний блок"
+          },
+          "status": "confirmed",
+          "notes": "Exact indoor and outdoor model identities matched in technical table."
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1183,
+        "title": "Hisense AUC-18HR4RCC2 | PE-QEA/LD | AUW-18H4RS2",
+        "slug": "hisense-auc-18hr4rcc2-pe-qea-ld-auw-18h4rs2",
+        "brand_id": 16,
+        "series_id": 184,
+        "product_kind": "other",
+        "source_url": "https://breez.ru/products/heavy-2-0-classic-casset/?1795=Hisense&1799=%D0%BD%D0%B5%D1%82&#model=AUC-18HR4RCC2%20%7C%20PE-QEA%2FLD%20%7C%20AUW-18H4RS2"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply_indoor": "220-240/50/1",
+        "power_supply_outdoor": "220-240/50/1",
+        "power_supply_location": "Наружный блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 1183,
+          "model": "Hisense AUC-18HR4RCC2 | PE-QEA/LD | AUW-18H4RS2",
+          "sources": [
+            {
+              "source_url": "https://breez.ru/products/heavy-2-0-classic-casset/",
+              "source_sha256": "ed4dd698c261626423c97db1fa2af1322e313322d0edc0a54585d42eb84627fb",
+              "locator": "HTML model columns and electrical supply/connection rows"
+            }
+          ],
+          "evidence": {
+            "power_supply_indoor": "220-240/50/1",
+            "power_supply_outdoor": "220-240/50/1",
+            "power_supply_location": "Наружный блок"
+          },
+          "status": "confirmed",
+          "notes": "Exact indoor and outdoor model identities matched in technical table."
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1184,
+        "title": "Hisense AUC-18HR4SAA1 | AUC-650 | AUW-18H4SS",
+        "slug": "hisense-auc-18hr4saa1-auc-650-auw-18h4ss",
+        "brand_id": 16,
+        "series_id": 183,
+        "product_kind": "other",
+        "source_url": "https://breez.ru/products/heavy-2-0-classic-kolon/?1795=Hisense&1799=%D0%BD%D0%B5%D1%82&#model=AUC-18HR4SAA1%20%7C%20AUC-650%20%7C%20AUW-18H4SS"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply_indoor": "220-240/50/1",
+        "power_supply_outdoor": "220-240/50/1",
+        "power_supply_location": "Внутренний блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 1184,
+          "model": "Hisense AUC-18HR4SAA1 | AUC-650 | AUW-18H4SS",
+          "sources": [
+            {
+              "source_url": "https://docs.breez.ru/catalog/hisense/hi-split-sistemi-kassetnogo-tipa/hi-split-sistemi-kassetnogo-tipa-instruction.pdf",
+              "source_sha256": "377d4d78b52227e67233fc71bbff7928089f46b43a3383cba642b6eeadf55e17",
+              "locator": "PDF page 38 / printed page 72; left cassette table; exact model columns, indoor/outdoor supply and connection row"
+            }
+          ],
+          "evidence": {
+            "power_supply_indoor": "220-240/50/1",
+            "power_supply_outdoor": "220-240/50/1",
+            "power_supply_location": "Внутренний блок"
+          },
+          "status": "confirmed",
+          "notes": "Exact indoor and outdoor model identities matched in technical table."
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1185,
+        "title": "Hisense AUC-24HR4RJC2 | PE-QFA/CD | AUW-24H4RF2",
+        "slug": "hisense-auc-24hr4rjc2-pe-qfa-cd-auw-24h4rf2",
+        "brand_id": 16,
+        "series_id": 184,
+        "product_kind": "other",
+        "source_url": "https://breez.ru/products/heavy-2-0-classic-casset/?1795=Hisense&1799=%D0%BD%D0%B5%D1%82&#model=AUC-24HR4RJC2%20%7C%20PE-QFA%2FCD%20%7C%20AUW-24H4RF2"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply_indoor": "220-240/50/1",
+        "power_supply_outdoor": "220-240/50/1",
+        "power_supply_location": "Наружный блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 1185,
+          "model": "Hisense AUC-24HR4RJC2 | PE-QFA/CD | AUW-24H4RF2",
+          "sources": [
+            {
+              "source_url": "https://breez.ru/products/heavy-2-0-classic-casset/",
+              "source_sha256": "ed4dd698c261626423c97db1fa2af1322e313322d0edc0a54585d42eb84627fb",
+              "locator": "HTML model columns and electrical supply/connection rows"
+            }
+          ],
+          "evidence": {
+            "power_supply_indoor": "220-240/50/1",
+            "power_supply_outdoor": "220-240/50/1",
+            "power_supply_location": "Наружный блок"
+          },
+          "status": "confirmed",
+          "notes": "Exact indoor and outdoor model identities matched in technical table."
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1186,
+        "title": "Hisense AUC-24HR4SJA | AUC-950R | AUW-24H4SF",
+        "slug": "hisense-auc-24hr4sja-auc-950r-auw-24h4sf",
+        "brand_id": 16,
+        "series_id": 183,
+        "product_kind": "other",
+        "source_url": "https://breez.ru/products/heavy-2-0-classic-kolon/?1795=Hisense&1799=%D0%BD%D0%B5%D1%82&#model=AUC-24HR4SJA%20%7C%20AUC-950R%20%7C%20AUW-24H4SF"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply_indoor": "220-240/50/1",
+        "power_supply_outdoor": "220-240/50/1",
+        "power_supply_location": "Наружный блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 1186,
+          "model": "Hisense AUC-24HR4SJA | AUC-950R | AUW-24H4SF",
+          "sources": [
+            {
+              "source_url": "https://docs.breez.ru/catalog/hisense/hi-split-sistemi-kassetnogo-tipa/hi-split-sistemi-kassetnogo-tipa-instruction.pdf",
+              "source_sha256": "377d4d78b52227e67233fc71bbff7928089f46b43a3383cba642b6eeadf55e17",
+              "locator": "PDF page 38 / printed page 72; left cassette table; exact model columns, indoor/outdoor supply and connection row"
+            }
+          ],
+          "evidence": {
+            "power_supply_indoor": "220-240/50/1",
+            "power_supply_outdoor": "220-240/50/1",
+            "power_supply_location": "Наружный блок"
+          },
+          "status": "confirmed",
+          "notes": "Exact indoor and outdoor model identities matched in technical table."
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1187,
+        "title": "Hisense AUC-36HR4RKC2 | PE-QFA/CD | AUW-36H6RK2",
+        "slug": "hisense-auc-36hr4rkc2-pe-qfa-cd-auw-36h6rk2",
+        "brand_id": 16,
+        "series_id": 184,
+        "product_kind": "other",
+        "source_url": "https://breez.ru/products/heavy-2-0-classic-casset/?1795=Hisense&1799=%D0%BD%D0%B5%D1%82&#model=AUC-36HR4RKC2%20%7C%20PE-QFA%2FCD%20%7C%20AUW-36H6RK2"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply_indoor": "220-240/50/1",
+        "power_supply_outdoor": "380-415/50/3",
+        "power_supply_location": "Наружный блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 1187,
+          "model": "Hisense AUC-36HR4RKC2 | PE-QFA/CD | AUW-36H6RK2",
+          "sources": [
+            {
+              "source_url": "https://breez.ru/products/heavy-2-0-classic-casset/",
+              "source_sha256": "ed4dd698c261626423c97db1fa2af1322e313322d0edc0a54585d42eb84627fb",
+              "locator": "HTML model columns and electrical supply/connection rows"
+            }
+          ],
+          "evidence": {
+            "power_supply_indoor": "220-240/50/1",
+            "power_supply_outdoor": "380-415/50/3",
+            "power_supply_location": "Наружный блок"
+          },
+          "status": "confirmed",
+          "notes": "Exact indoor and outdoor model identities matched in technical table."
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1188,
+        "title": "Hisense AUC-36HR4SKA | AUC-950R | AUW-36H6SD",
+        "slug": "hisense-auc-36hr4ska-auc-950r-auw-36h6sd",
+        "brand_id": 16,
+        "series_id": 183,
+        "product_kind": "other",
+        "source_url": "https://breez.ru/products/heavy-2-0-classic-kolon/?1795=Hisense&1799=%D0%BD%D0%B5%D1%82&#model=AUC-36HR4SKA%20%7C%20AUC-950R%20%7C%20AUW-36H6SD"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply_indoor": "220-240/50/1",
+        "power_supply_outdoor": "380-415/50/3",
+        "power_supply_location": "Наружный блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 1188,
+          "model": "Hisense AUC-36HR4SKA | AUC-950R | AUW-36H6SD",
+          "sources": [
+            {
+              "source_url": "https://docs.breez.ru/catalog/hisense/hi-split-sistemi-kassetnogo-tipa/hi-split-sistemi-kassetnogo-tipa-instruction.pdf",
+              "source_sha256": "377d4d78b52227e67233fc71bbff7928089f46b43a3383cba642b6eeadf55e17",
+              "locator": "PDF page 38 / printed page 72; left cassette table; exact model columns, indoor/outdoor supply and connection row"
+            }
+          ],
+          "evidence": {
+            "power_supply_indoor": "220-240/50/1",
+            "power_supply_outdoor": "380-415/50/3",
+            "power_supply_location": "Наружный блок"
+          },
+          "status": "confirmed",
+          "notes": "Exact indoor and outdoor model identities matched in technical table."
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1189,
+        "title": "Hisense AUC-36UR4RKC8/AUW-36U4RK7/PE-QFA/CD",
+        "slug": "hisense-auc-36ur4rkc8-auw-36u4rk7-pe-qfa-cd",
+        "brand_id": 16,
+        "series_id": 155,
+        "product_kind": "other",
+        "source_url": "https://hisense-air.ru/product/split-sistem-kasset-heavy-eu-dc-inverter-wi-fi#model=AUC-36UR4RKC8%2FAUW-36U4RK7%2FPE-QFA%2FCD"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply_indoor": "220-240/50/1",
+        "power_supply_outdoor": "220-240/50/1",
+        "power_supply_location": "Наружный блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 1189,
+          "model": "Hisense AUC-36UR4RKC8/AUW-36U4RK7/PE-QFA/CD",
+          "sources": [
+            {
+              "source_url": "https://hisense-air.ru/product/split-sistem-kasset-heavy-eu-dc-inverter-wi-fi/",
+              "source_sha256": "81a2df7164a1c2f3038945f7126542a019277b1a8f6039fda1fe0a326a8a44af",
+              "locator": "HTML exact indoor+outdoor model columns; installation specifications"
+            }
+          ],
+          "evidence": {
+            "power_supply_indoor": "220-240/50/1",
+            "power_supply_outdoor": "220-240/50/1",
+            "power_supply_location": "Наружный блок"
+          },
+          "status": "confirmed",
+          "notes": "Exact indoor and outdoor model identities matched in technical table."
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1190,
+        "title": "Hisense AUC-48HR4RKC2 | PE-QFA/CD | AUW-48H6RQ2",
+        "slug": "hisense-auc-48hr4rkc2-pe-qfa-cd-auw-48h6rq2",
+        "brand_id": 16,
+        "series_id": 184,
+        "product_kind": "other",
+        "source_url": "https://breez.ru/products/heavy-2-0-classic-casset/?1795=Hisense&1799=%D0%BD%D0%B5%D1%82&#model=AUC-48HR4RKC2%20%7C%20PE-QFA%2FCD%20%7C%20AUW-48H6RQ2"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply_indoor": "220-240/50/1",
+        "power_supply_outdoor": "380-415/50/3",
+        "power_supply_location": "Наружный блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 1190,
+          "model": "Hisense AUC-48HR4RKC2 | PE-QFA/CD | AUW-48H6RQ2",
+          "sources": [
+            {
+              "source_url": "https://breez.ru/products/heavy-2-0-classic-casset/",
+              "source_sha256": "ed4dd698c261626423c97db1fa2af1322e313322d0edc0a54585d42eb84627fb",
+              "locator": "HTML model columns and electrical supply/connection rows"
+            }
+          ],
+          "evidence": {
+            "power_supply_indoor": "220-240/50/1",
+            "power_supply_outdoor": "380-415/50/3",
+            "power_supply_location": "Наружный блок"
+          },
+          "status": "confirmed",
+          "notes": "Exact indoor and outdoor model identities matched in technical table."
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1191,
+        "title": "Hisense AUC-48HR4SKA | AUC-950R | AUW-48H6SE1",
+        "slug": "hisense-auc-48hr4ska-auc-950r-auw-48h6se1",
+        "brand_id": 16,
+        "series_id": 183,
+        "product_kind": "other",
+        "source_url": "https://breez.ru/products/heavy-2-0-classic-kolon/?1795=Hisense&1799=%D0%BD%D0%B5%D1%82&#model=AUC-48HR4SKA%20%7C%20AUC-950R%20%7C%20AUW-48H6SE1"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply_indoor": "220-240/50/1",
+        "power_supply_outdoor": "380-415/50/3",
+        "power_supply_location": "Наружный блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 1191,
+          "model": "Hisense AUC-48HR4SKA | AUC-950R | AUW-48H6SE1",
+          "sources": [
+            {
+              "source_url": "https://docs.breez.ru/catalog/hisense/hi-split-sistemi-kassetnogo-tipa/hi-split-sistemi-kassetnogo-tipa-instruction.pdf",
+              "source_sha256": "377d4d78b52227e67233fc71bbff7928089f46b43a3383cba642b6eeadf55e17",
+              "locator": "PDF page 38 / printed page 72; left cassette table; exact model columns, indoor/outdoor supply and connection row"
+            }
+          ],
+          "evidence": {
+            "power_supply_indoor": "220-240/50/1",
+            "power_supply_outdoor": "380-415/50/3",
+            "power_supply_location": "Наружный блок"
+          },
+          "status": "confirmed",
+          "notes": "Exact indoor and outdoor model identities matched in technical table."
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1192,
+        "title": "Hisense AUC-48UR4RKC8/AUW-48U6RN8/PE-QFA/CD",
+        "slug": "hisense-auc-48ur4rkc8-auw-48u6rn8-pe-qfa-cd",
+        "brand_id": 16,
+        "series_id": 155,
+        "product_kind": "other",
+        "source_url": "https://hisense-air.ru/product/split-sistem-kasset-heavy-eu-dc-inverter-wi-fi#model=AUC-48UR4RKC8%2FAUW-48U6RN8%2FPE-QFA%2FCD"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply_indoor": "220-240/50/1",
+        "power_supply_outdoor": "380-415/50/3",
+        "power_supply_location": "Наружный блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 1192,
+          "model": "Hisense AUC-48UR4RKC8/AUW-48U6RN8/PE-QFA/CD",
+          "sources": [
+            {
+              "source_url": "https://hisense-air.ru/product/split-sistem-kasset-heavy-eu-dc-inverter-wi-fi/",
+              "source_sha256": "81a2df7164a1c2f3038945f7126542a019277b1a8f6039fda1fe0a326a8a44af",
+              "locator": "HTML exact indoor+outdoor model columns; installation specifications"
+            }
+          ],
+          "evidence": {
+            "power_supply_indoor": "220-240/50/1",
+            "power_supply_outdoor": "380-415/50/3",
+            "power_supply_location": "Наружный блок"
+          },
+          "status": "confirmed",
+          "notes": "Exact indoor and outdoor model identities matched in technical table."
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1193,
+        "title": "Hisense AUC-60HR4RKC2 | PE-QFA/CD | AUW-60H6RN2",
+        "slug": "hisense-auc-60hr4rkc2-pe-qfa-cd-auw-60h6rn2",
+        "brand_id": 16,
+        "series_id": 184,
+        "product_kind": "other",
+        "source_url": "https://breez.ru/products/heavy-2-0-classic-casset/?1795=Hisense&1799=%D0%BD%D0%B5%D1%82&#model=AUC-60HR4RKC2%20%7C%20PE-QFA%2FCD%20%7C%20AUW-60H6RN2"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply_indoor": "220-240/50/1",
+        "power_supply_outdoor": "380-415/50/3",
+        "power_supply_location": "Наружный блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 1193,
+          "model": "Hisense AUC-60HR4RKC2 | PE-QFA/CD | AUW-60H6RN2",
+          "sources": [
+            {
+              "source_url": "https://breez.ru/products/heavy-2-0-classic-casset/",
+              "source_sha256": "ed4dd698c261626423c97db1fa2af1322e313322d0edc0a54585d42eb84627fb",
+              "locator": "HTML model columns and electrical supply/connection rows"
+            }
+          ],
+          "evidence": {
+            "power_supply_indoor": "220-240/50/1",
+            "power_supply_outdoor": "380-415/50/3",
+            "power_supply_location": "Наружный блок"
+          },
+          "status": "confirmed",
+          "notes": "Exact indoor and outdoor model identities matched in technical table."
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1194,
+        "title": "Hisense AUC-60HR4SKA | AUC-950R | AUW-60H6SP1",
+        "slug": "hisense-auc-60hr4ska-auc-950r-auw-60h6sp1",
+        "brand_id": 16,
+        "series_id": 183,
+        "product_kind": "other",
+        "source_url": "https://breez.ru/products/heavy-2-0-classic-kolon/?1795=Hisense&1799=%D0%BD%D0%B5%D1%82&#model=AUC-60HR4SKA%20%7C%20AUC-950R%20%7C%20AUW-60H6SP1"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply_indoor": "220-240/50/1",
+        "power_supply_outdoor": "380-415/50/3",
+        "power_supply_location": "Наружный блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 1194,
+          "model": "Hisense AUC-60HR4SKA | AUC-950R | AUW-60H6SP1",
+          "sources": [
+            {
+              "source_url": "https://docs.breez.ru/catalog/hisense/hi-split-sistemi-kassetnogo-tipa/hi-split-sistemi-kassetnogo-tipa-instruction.pdf",
+              "source_sha256": "377d4d78b52227e67233fc71bbff7928089f46b43a3383cba642b6eeadf55e17",
+              "locator": "PDF page 38 / printed page 72; left cassette table; exact model columns, indoor/outdoor supply and connection row"
+            }
+          ],
+          "evidence": {
+            "power_supply_indoor": "220-240/50/1",
+            "power_supply_outdoor": "380-415/50/3",
+            "power_supply_location": "Наружный блок"
+          },
+          "status": "confirmed",
+          "notes": "Exact indoor and outdoor model identities matched in technical table."
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1297,
+        "title": "KINGHOME KUD160T1/A-S+ KUD160W1/NhA-X",
+        "slug": "kud160t1askud160",
+        "brand_id": 4,
+        "series_id": 233,
+        "product_kind": "complete_split_system",
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud160t1askud160"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply_voltage": "380-415",
+        "power_supply_outdoor": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply_location": "Наружный блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 1297,
+          "exact_model": "KUD160T1/A-S+ KUD160W1/NhA-X",
+          "status": "supported",
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_page": 69,
+            "printed_page": 68,
+            "column_exact_model": "KUD160T1/A-S+ KUD160W1/NhA-X"
+          },
+          "short_row_evidence": {
+            "Электропитание, ф/В/Гц": "3/380-415/50",
+            "Кабель питания (Наружный блок), Н×мм²": "5x2,5"
+          },
+          "interpretation": "System power row; explicit mains power cable row is labelled Наружный блок, supporting outdoor supply and connection location. No separate indoor voltage row; do not fill power_supply_indoor.",
+          "blockers": []
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1298,
+        "title": "KINGHOME KUD50PS1/A-S+ KUD50W1/NhA-S",
+        "slug": "kud50ps1askud50",
+        "brand_id": 4,
+        "series_id": 232,
+        "product_kind": "complete_split_system",
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud50ps1askud50"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240",
+        "power_supply_outdoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_location": "Наружный блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 1298,
+          "exact_model": "KUD50PS1/A-S+ KUD50W1/NhA-S",
+          "status": "supported",
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_page": 73,
+            "printed_page": 72,
+            "column_exact_model": "KUD50PS1/A-S+ KUD50W1/NhA-S"
+          },
+          "short_row_evidence": {
+            "Электропитание, ф/В/Гц": "1/220-240/50",
+            "Кабель питания (Наружный блок), Н×мм²": "3x2,5"
+          },
+          "interpretation": "System power row; explicit mains power cable row is labelled Наружный блок, supporting outdoor supply and connection location. No separate indoor voltage row; do not fill power_supply_indoor.",
+          "blockers": []
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1299,
+        "title": "KINGHOME KUD35T1/A-S+ KUD35W1/NhA-S",
+        "slug": "kud35t1askud35w1",
+        "brand_id": 4,
+        "series_id": 233,
+        "product_kind": "complete_split_system",
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud35t1askud35w1"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240",
+        "power_supply_outdoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_location": "Наружный блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 1299,
+          "exact_model": "KUD35T1/A-S+ KUD35W1/NhA-S",
+          "status": "supported",
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_page": 67,
+            "printed_page": 66,
+            "column_exact_model": "KUD35T1/A-S+ KUD35W1/NhA-S"
+          },
+          "short_row_evidence": {
+            "Электропитание, ф/В/Гц": "1/220-240/50",
+            "Кабель питания (Наружный блок), Н×мм²": "3x1,5"
+          },
+          "interpretation": "System power row; explicit mains power cable row is labelled Наружный блок, supporting outdoor supply and connection location. No separate indoor voltage row; do not fill power_supply_indoor.",
+          "blockers": []
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1300,
+        "title": "KINGHOME KUD50T1/A1-S+ KUD50W1/NhA-S",
+        "slug": "kud50t1a1skud50w",
+        "brand_id": 4,
+        "series_id": 233,
+        "product_kind": "complete_split_system",
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud50t1a1skud50w"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240",
+        "power_supply_outdoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_location": "Наружный блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 1300,
+          "exact_model": "KUD50T1/A1-S+ KUD50W1/NhA-S",
+          "status": "supported",
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_page": 67,
+            "printed_page": 66,
+            "column_exact_model": "KUD50T1/A1-S+ KUD50W1/NhA-S"
+          },
+          "short_row_evidence": {
+            "Электропитание, ф/В/Гц": "1/220-240/50",
+            "Кабель питания (Наружный блок), Н×мм²": "3x2,5"
+          },
+          "interpretation": "System power row; explicit mains power cable row is labelled Наружный блок, supporting outdoor supply and connection location. No separate indoor voltage row; do not fill power_supply_indoor.",
+          "blockers": []
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1301,
+        "title": "KINGHOME KUD71T1/A-S+ KUD71W1/NhA-S",
+        "slug": "kud71t1askud71w1",
+        "brand_id": 4,
+        "series_id": 233,
+        "product_kind": "complete_split_system",
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud71t1askud71w1"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240",
+        "power_supply_outdoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_location": "Наружный блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 1301,
+          "exact_model": "KUD71T1/A-S+ KUD71W1/NhA-S",
+          "status": "supported",
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_page": 67,
+            "printed_page": 66,
+            "column_exact_model": "KUD71T1/A-S+ KUD71W1/NhA-S"
+          },
+          "short_row_evidence": {
+            "Электропитание, ф/В/Гц": "1/220-240/50",
+            "Кабель питания (Наружный блок), Н×мм²": "3x2,5"
+          },
+          "interpretation": "System power row; explicit mains power cable row is labelled Наружный блок, supporting outdoor supply and connection location. No separate indoor voltage row; do not fill power_supply_indoor.",
+          "blockers": []
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1302,
+        "title": "KINGHOME KUD100T1/A-S+ KUD100W1/NhA-S",
+        "slug": "kud100t1askud100",
+        "brand_id": 4,
+        "series_id": 233,
+        "product_kind": "complete_split_system",
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud100t1askud100"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240",
+        "power_supply_outdoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_location": "Наружный блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 1302,
+          "exact_model": "KUD100T1/A-S+ KUD100W1/NhA-S",
+          "status": "supported",
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_page": 69,
+            "printed_page": 68,
+            "column_exact_model": "KUD100T1/A-S+ KUD100W1/NhA-S"
+          },
+          "short_row_evidence": {
+            "Электропитание, ф/В/Гц": "1/220-240/50",
+            "Кабель питания (Наружный блок), Н×мм²": "3x2,5"
+          },
+          "interpretation": "System power row; explicit mains power cable row is labelled Наружный блок, supporting outdoor supply and connection location. No separate indoor voltage row; do not fill power_supply_indoor.",
+          "blockers": []
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1303,
+        "title": "KINGHOME KUD125T1/A-S+ KUD125W1/NhA-X",
+        "slug": "kud125t1askud125",
+        "brand_id": 4,
+        "series_id": 233,
+        "product_kind": "complete_split_system",
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud125t1askud125"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply_voltage": "380-415",
+        "power_supply_outdoor": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply_location": "Наружный блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 1303,
+          "exact_model": "KUD125T1/A-S+ KUD125W1/NhA-X",
+          "status": "supported",
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_page": 69,
+            "printed_page": 68,
+            "column_exact_model": "KUD125T1/A-S+ KUD125W1/NhA-X"
+          },
+          "short_row_evidence": {
+            "Электропитание, ф/В/Гц": "3/380-415/50",
+            "Кабель питания (Наружный блок), Н×мм²": "5x2,5"
+          },
+          "interpretation": "System power row; explicit mains power cable row is labelled Наружный блок, supporting outdoor supply and connection location. No separate indoor voltage row; do not fill power_supply_indoor.",
+          "blockers": []
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1304,
+        "title": "KINGHOME KUD140T1/A-S+ KUD140W1/NhA-X",
+        "slug": "kud140t1askud140",
+        "brand_id": 4,
+        "series_id": 233,
+        "product_kind": "complete_split_system",
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud140t1askud140"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply_voltage": "380-415",
+        "power_supply_outdoor": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply_location": "Наружный блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 1304,
+          "exact_model": "KUD140T1/A-S+ KUD140W1/NhA-X",
+          "status": "supported",
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_page": 69,
+            "printed_page": 68,
+            "column_exact_model": "KUD140T1/A-S+ KUD140W1/NhA-X"
+          },
+          "short_row_evidence": {
+            "Электропитание, ф/В/Гц": "3/380-415/50",
+            "Кабель питания (Наружный блок), Н×мм²": "5x2,5"
+          },
+          "interpretation": "System power row; explicit mains power cable row is labelled Наружный блок, supporting outdoor supply and connection location. No separate indoor voltage row; do not fill power_supply_indoor.",
+          "blockers": []
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1305,
+        "title": "KINGHOME KUD71PHS1/A-S+ KUD71W1/NhA-S",
+        "slug": "kud71phs1askud71",
+        "brand_id": 4,
+        "series_id": 232,
+        "product_kind": "complete_split_system",
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud71phs1askud71"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240",
+        "power_supply_outdoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_location": "Наружный блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 1305,
+          "exact_model": "KUD71PHS1/A-S+ KUD71W1/NhA-S",
+          "status": "supported",
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_page": 73,
+            "printed_page": 72,
+            "column_exact_model": "KUD71PHS1/A-S+ KUD71W1/NhA-S"
+          },
+          "short_row_evidence": {
+            "Электропитание, ф/В/Гц": "1/220-240/50",
+            "Кабель питания (Наружный блок), Н×мм²": "3x2,5"
+          },
+          "interpretation": "System power row; explicit mains power cable row is labelled Наружный блок, supporting outdoor supply and connection location. No separate indoor voltage row; do not fill power_supply_indoor.",
+          "blockers": []
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1306,
+        "title": "KINGHOME KUD100PHS1/A-S+ KUD100W1/NhA-S",
+        "slug": "kud100phs1askud1",
+        "brand_id": 4,
+        "series_id": 232,
+        "product_kind": "complete_split_system",
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud100phs1askud1"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_voltage": "220-240",
+        "power_supply_outdoor": "1 фаза, 220-240 В, 50 Гц",
+        "power_supply_location": "Наружный блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 1306,
+          "exact_model": "KUD100PHS1/A-S+ KUD100W1/NhA-S",
+          "status": "supported",
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_page": 73,
+            "printed_page": 72,
+            "column_exact_model": "KUD100PHS1/A-S+ KUD100W1/NhA-S"
+          },
+          "short_row_evidence": {
+            "Электропитание, ф/В/Гц": "1/220-240/50",
+            "Кабель питания (Наружный блок), Н×мм²": "3x2,5"
+          },
+          "interpretation": "System power row; explicit mains power cable row is labelled Наружный блок, supporting outdoor supply and connection location. No separate indoor voltage row; do not fill power_supply_indoor.",
+          "blockers": []
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1307,
+        "title": "KINGHOME KUD125PHS1/A-S+ KUD125W1/NhA-X",
+        "slug": "kud125phs1askud1",
+        "brand_id": 4,
+        "series_id": 232,
+        "product_kind": "complete_split_system",
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud125phs1askud1"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply_voltage": "380-415",
+        "power_supply_outdoor": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply_location": "Наружный блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 1307,
+          "exact_model": "KUD125PHS1/A-S+ KUD125W1/NhA-X",
+          "status": "supported",
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_page": 75,
+            "printed_page": 74,
+            "column_exact_model": "KUD125PHS1/A-S+ KUD125W1/NhA-X"
+          },
+          "short_row_evidence": {
+            "Электропитание, ф/В/Гц": "3/380-415/50",
+            "Кабель питания (Наружный блок), Н×мм²": "5x2,5"
+          },
+          "interpretation": "System power row; explicit mains power cable row is labelled Наружный блок, supporting outdoor supply and connection location. No separate indoor voltage row; do not fill power_supply_indoor.",
+          "blockers": []
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1308,
+        "title": "KINGHOME KUD140PHS1/A-S+ KUD140W1/NhA-X",
+        "slug": "kud140phs1askud1",
+        "brand_id": 4,
+        "series_id": 232,
+        "product_kind": "complete_split_system",
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud140phs1askud1"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply_voltage": "380-415",
+        "power_supply_outdoor": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply_location": "Наружный блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 1308,
+          "exact_model": "KUD140PHS1/A-S+ KUD140W1/NhA-X",
+          "status": "supported",
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_page": 75,
+            "printed_page": 74,
+            "column_exact_model": "KUD140PHS1/A-S+ KUD140W1/NhA-X"
+          },
+          "short_row_evidence": {
+            "Электропитание, ф/В/Гц": "3/380-415/50",
+            "Кабель питания (Наружный блок), Н×мм²": "5x2,5"
+          },
+          "interpretation": "System power row; explicit mains power cable row is labelled Наружный блок, supporting outdoor supply and connection location. No separate indoor voltage row; do not fill power_supply_indoor.",
+          "blockers": []
+        }
+      ]
+    },
+    {
+      "identity": {
+        "id": 1309,
+        "title": "KINGHOME KUD160PHS1/A-S+ KUD160W1/NhA-X",
+        "slug": "kud160phs1askud1",
+        "brand_id": 4,
+        "series_id": 232,
+        "product_kind": "complete_split_system",
+        "source_url": "https://catalog.onliner.by/conditioners/kinghome/kud160phs1askud1"
+      },
+      "before": {
+        "specs": {},
+        "typed": {}
+      },
+      "before_sha256": "6c57af03cafac355b16c7dce083c0b37603d3f019057741480caf027a0d90453",
+      "specs_set": {
+        "power_supply": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply_voltage": "380-415",
+        "power_supply_outdoor": "3 фазы, 380-415 В, 50 Гц",
+        "power_supply_location": "Наружный блок"
+      },
+      "specs_delete": [],
+      "evidence": [
+        {
+          "product_id": 1309,
+          "exact_model": "KUD160PHS1/A-S+ KUD160W1/NhA-X",
+          "status": "supported",
+          "source_url": "https://cdn.mvn.by/catalog-documents/original/d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054.pdf",
+          "sha256": "d5bc15c528624cfcc6ad3660abcb7d4ac7b1c3b4d54a0c4a250b1bf6b5c41054",
+          "locator": {
+            "pdf_page": 75,
+            "printed_page": 74,
+            "column_exact_model": "KUD160PHS1/A-S+ KUD160W1/NhA-X"
+          },
+          "short_row_evidence": {
+            "Электропитание, ф/В/Гц": "3/380-415/50",
+            "Кабель питания (Наружный блок), Н×мм²": "5x2,5"
+          },
+          "interpretation": "System power row; explicit mains power cable row is labelled Наружный блок, supporting outdoor supply and connection location. No separate indoor voltage row; do not fill power_supply_indoor.",
+          "blockers": []
+        }
+      ]
+    }
+  ],
+  "scope_notes": [
+    "63 products previously lack electrical supply; 16 existing TCL rows are canonicalized and enriched with exact indoor/outdoor supply.",
+    "Only source-supported power supply values are assigned. No document, price, product kind, title, media or tenant data is changed.",
+    "KINGHOME id97 catalogue typo is resolved by exact official floor model page and two same-outdoor catalogue tables; full evidence is retained in its row.",
+    "TCL id184 TUB-18HRA/TOU-18HNA existing220-240 is confirmed by exact official distributor model page: 220-240 V / 50 Hz / 1 phase, indoor mains connection. No mutation is needed and the product remains outside this repair. Source: https://tcl-russia.ru/product/polupromyshlennye-konditsionery/neinvertornye-on-off/napolno-potolochnye-split-sistemy/napolno-potolochnyy-konditsioner-5-30-kvt/",
+    "KINGHOME indoor feed voltage and TCL connection location remain unknown when not specified by the source.",
+    "Three source-conflicting Energolux CABINET 6 products520/555/558 correct only power_supply_voltage from380-415 to220-240 using exact variant distributor pages and their directly linked manual. Existing supported general power supply and connection location are preserved."
+  ]
+}

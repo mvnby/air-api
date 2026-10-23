@@ -72,6 +72,8 @@ Production server intentionally runs from Docker images only (no git checkout in
      digest after inspecting the [MDV price audit](catalog-mdv-price-audit.md).
    - Source-reviewed MDV/TCL/MHI specifications, series and features: use the
      exact expiring plan from the [Biocond source repair](catalog-biocond-source-repair.md).
+   - Source-reviewed electrical supply for semicommercial models: use the exact
+     82-product expiring plan from the [power supply repair](catalog-power-supply-repair.md).
    - User-confirmed MDV Wi-Fi statuses and legacy tag retirement: run the two
      separate exact plans in order; see [Wi-Fi source of truth](catalog-wifi-source-of-truth.md).
    - Product media URL execution is primary-only and manual-only. Resolve every

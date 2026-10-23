@@ -28,7 +28,10 @@ async def setup(db, tmp_path, document_type="offer", scopes="kitlane:read kitlan
     scope, order, issuer, storage, _ = await _seed(db, tmp_path, document_type=document_type)
     product = (await db.execute(select(Product))).scalars().one()
     product.product_kind = "complete_split_system"
-    product.specs = {"area_m2": 35, "capacity_cooling_kw": 3.5, "indoor_type": "настенный"}
+    product.specs = {"area_m2": 35, "capacity_cooling_kw": 3.5, "indoor_type": "настенный",
+        "Электропитание наружного блока В/Гц/Ф": "380-415/50/3",
+        "Электропитание внутреннего блока В/Гц/Ф": "220-240/50/1",
+        "power_supply_location": "Наружный блок"}
     db.add(product)
     await db.commit()
     token, user, _, _ = await grant(db, scopes=scopes)
@@ -63,6 +66,13 @@ async def test_catalog_document_native_snapshot_quantities_original_proposal_and
     assert len(snapshot["table_rows"]["lines"]) == 1
     assert snapshot["table_rows"]["lines"][0]["line.quantity"] == "2"
     assert snapshot["table_rows"]["lines"][0]["line.amount"] == "3000.00"
+    description = lines[0].client_description
+    assert description == (
+        "параметры питания внутреннего блока: 220-240 В, 1 ф.; "
+        "параметры питания наружного блока: 380-415 В, 3 ф.; "
+        "подключение питания: к наружному блоку"
+    )
+    assert snapshot["table_rows"]["lines"][0]["line.title"] == f"{product.title}\n{description}"
     product.price = 1600
     db.add(product)
     await db.commit()
