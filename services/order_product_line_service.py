@@ -43,8 +43,8 @@ class OrderProductLineService:
                     raise ValueError("Product line does not belong to the selected proposal")
                 if int(link.id) in claimed_ids:
                     raise ValueError("Product line is duplicated in the request")
-            else:
-                candidates = existing_by_product.get(int(line["product_id"]), [])
+            elif line.get("product_id") is not None:
+                candidates = existing_by_product.get(int(line["product_id"] or 0), [])
                 link = next(
                     (candidate for candidate in candidates if int(candidate.id) not in claimed_ids),
                     None,
@@ -78,7 +78,7 @@ class OrderProductLineService:
             if link is None:
                 link = OrderProductLink(order_id=order_id, proposal_id=proposal_id)
             elif link.id is not None and int(link.id) in referenced_ids:
-                if int(link.product_id or 0) != int(line["product_id"]):
+                if int(link.product_id or 0) != int(line["product_id"] or 0):
                     raise ValueError(
                         "Нельзя заменить товар в строке, уже включенной в поставку."
                     )
@@ -87,12 +87,17 @@ class OrderProductLineService:
                         "Нельзя изменить количество товара, уже включенного в поставку."
                     )
 
-            if link.product_id is not None and int(link.product_id) != int(line["product_id"]):
+            if link.product_id != line["product_id"]:
                 # A replacement product must not inherit the previous model's
                 # checkout title or manager description.
                 link.title_snapshot = None
                 link.client_description = None
-            link.product_id = int(line["product_id"])
+            link.product_id = int(line["product_id"]) if line["product_id"] is not None else None
+            if link.product_id is None:
+                title = str(line.get("title") or "").strip()
+                if not title:
+                    raise ValueError("Для ручного товара укажите название")
+                link.title_snapshot = title
             link.quantity = int(line["quantity"])
             link.price = int(line["price"])
             link.cost = int(line["cost"])

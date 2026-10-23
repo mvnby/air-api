@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ManagerOrderDetailResponse } from '../src/client';
 import type { ProductLine } from '../src/components/orders/order-editor-types';
 import { useOrderDrawerSaving } from '../src/composables/useOrderDrawerSaving';
+import { beginLineEdit, cancelLineEdit, committedLines } from '../src/components/orders/order-line-drafts';
 import { managerSession } from '../src/services/manager-session';
 
 const ordersMock = vi.hoisted(() => ({ patchManagerOrder: vi.fn() }));
@@ -60,8 +61,8 @@ const createSaving = () => {
   const serviceLines = ref<any[]>([]);
   const currentFormSnapshot = () => form.value;
   const currentLinesSnapshot = () => JSON.stringify({
-    products: productLines.value,
-    services: serviceLines.value,
+    products: committedLines(productLines.value),
+    services: committedLines(serviceLines.value),
   });
   const savedFormSnapshot = ref(currentFormSnapshot());
   const savedLinesSnapshot = ref(currentLinesSnapshot());
@@ -71,14 +72,14 @@ const createSaving = () => {
   ));
   const buildSavePayload = vi.fn(() => ({
     title: form.value,
-    products: productLines.value.map((line) => ({
+    products: committedLines(productLines.value).map((line) => ({
       link_id: line.link_id ?? null,
       product_id: line.product_id,
       quantity: line.quantity,
       price: line.price,
       cost: line.cost,
     })),
-    services: serviceLines.value.map((line) => ({ ...line })),
+    services: committedLines(serviceLines.value).map((line) => ({ ...line })),
   }));
   const hydrateOrder = vi.fn((updated: ManagerOrderDetailResponse) => {
     form.value = updated.title || '';
@@ -297,5 +298,35 @@ describe('useOrderDrawerSaving', () => {
     expect(state.serviceLines.value[0].link_id).toBe(502);
     expect(state.productLines.value[0].link_id).toBe(501);
     expect(JSON.parse(state.savedLinesSnapshot.value).products[0].link_id).toBe(501);
+  });
+});
+
+describe('draft reconciliation during autosave', () => {
+  it('ignores an earlier pending draft and reconciles a manual line edited during the request', async () => {
+    const state = createSaving();
+    state.productLines.value = [
+      { product_id: 0, product_query: '', price: 0, cost: 0, quantity: 1, editor: { original: null } },
+      { product_id: 0, product_query: 'Экран A', price: 350, cost: 200, quantity: 1 },
+      { product_id: 0, product_query: 'Экран B', price: 350, cost: 200, quantity: 1 },
+    ];
+    const saved = state.productLines.value[1]!;
+    const pending = deferred<ManagerOrderDetailResponse>();
+    ordersMock.patchManagerOrder.mockReturnValueOnce(pending.promise);
+    const saving = state.saving.flush();
+    await Promise.resolve(); await Promise.resolve();
+    expect(ordersMock.patchManagerOrder.mock.calls[0]![1].products).toHaveLength(2);
+    beginLineEdit(saved); saved.price = 450;
+    pending.resolve({ ...orderResponse(), proposals: [{ ...proposal(), product_lines: [
+      { id: 502, product_id: null, product_title: 'Экран B', quantity: 1, price: 350, cost: 200 },
+      { id: 501, product_id: null, product_title: 'Экран A', quantity: 1, price: 350, cost: 200 },
+    ] }] } as any);
+    await expect(saving).resolves.toBe(true);
+    expect(saved.link_id).toBe(501);
+    expect(saved.editor!.original!.link_id).toBe(501);
+    expect(state.productLines.value[2]!.link_id).toBe(502);
+    expect(state.productLines.value[0]!.link_id).toBeUndefined();
+    cancelLineEdit(state.productLines.value, saved);
+    expect(saved).toMatchObject({ link_id: 501, price: 350 });
+    expect(state.hasUnsavedChanges.value).toBe(false);
   });
 });

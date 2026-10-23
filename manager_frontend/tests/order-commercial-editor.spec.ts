@@ -2,6 +2,7 @@ import { effectScope, ref, type EffectScope } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ManagerOrderDetailResponse } from '../src/client';
 import { useOrderCommercialEditor } from '../src/composables/useOrderCommercialEditor';
+import { beginLineEdit, cancelLineEdit, committedLines, commitLineEdit } from '../src/components/orders/order-line-drafts';
 import { buildKnownProductClientDescription } from '../src/components/orders/product-client-description';
 
 const apiMock = vi.hoisted(() => ({
@@ -44,6 +45,7 @@ describe('useOrderCommercialEditor', () => {
     try {
       order.value = { id: 42, installer_cost_byn: 125.25 } as ManagerOrderDetailResponse;
       const editor = createEditor(); editor.addServiceLine(); Object.assign(editor.serviceLines.value[0]!, { title: 'Монтаж', price: 500, cost: 50 });
+      commitLineEdit(editor.serviceLines.value[0]!);
       expect(editor.margin.value).toBe(324.75);
       order.value = { ...order.value, installer_cost_byn: 175.75 };
       expect(editor.margin.value).toBe(274.25);
@@ -63,6 +65,7 @@ describe('useOrderCommercialEditor', () => {
     expect(editor.editingServiceLineIndex.value).toBe(0);
     Object.assign(editor.serviceLines.value[0]!, { title: 'Монтаж лесов', price: 600, description: 'Трасса до 5 м' });
     expect(editor.validateLines()).toBe('');
+    commitLineEdit(editor.serviceLines.value[0]!);
     expect(editor.buildLinesPayload(17).services[0]).toMatchObject({ title: 'Монтаж лесов', quantity: 1, price: 600, description: 'Трасса до 5 м' });
   });
 
@@ -79,6 +82,7 @@ describe('useOrderCommercialEditor', () => {
     const line = editor.serviceLines.value[0]!;
     expect(line.installation_estimate_revision_id).toBeUndefined();
     Object.assign(line, { title: 'Согласованный монтаж', price: 550.50, description: 'До 5 метров; монтаж лесов' });
+    commitLineEdit(line);
     expect(editor.buildLinesPayload(17).services[0]).toMatchObject({ title: 'Согласованный монтаж', price: 550.5, quantity: 27, description: 'До 5 метров; монтаж лесов' });
     expect(editor.validateLines()).toBe('');
     editor.selectServiceTariffForLine(0, { tariff_id: 91, service_kind: 'maintenance',
@@ -150,6 +154,7 @@ describe('useOrderCommercialEditor', () => {
     editor.serviceLines.value[0]!.description = '';
     expect(editor.buildLinesPayload(17).services[0]!.description).toBeNull();
     editor.loadLines([], [{ id: 10, service_title: 'Монтаж лесов', description: 'До 5 метров', quantity: 5, price: 550, line_total: 2750 }]);
+    commitLineEdit(editor.serviceLines.value[0]!);
     expect(editor.buildLinesPayload(17).services[0]).toMatchObject({ title: 'Монтаж лесов', description: 'До 5 метров', price: 550 });
   });
 
@@ -418,4 +423,60 @@ describe('useOrderCommercialEditor', () => {
     expect(editor.productOptions.value.map((item) => item.id)).toEqual([1]);
     expect(editor.productLookupById.value[1]?.title).toBe('Есть на складе');
   });
+});
+
+describe('local proposal line transactions', () => {
+  it('does not validate or submit a new draft until completion', () => {
+    const editor = createEditor();
+    const baseline = editor.currentLinesSnapshot(17);
+    editor.addProductLine();
+    editor.addServiceLine();
+    expect(editor.validateLines()).toBe('');
+    expect(editor.currentLinesSnapshot(17)).toBe(baseline);
+    expect(editor.buildLinesPayload(17)).toEqual({ products: [], services: [] });
+    Object.assign(editor.productLines.value[0]!, { product_query: 'Ручной экран', price: 350, cost: 200 });
+    expect(editor.currentLinesSnapshot(17)).toBe(baseline);
+    commitLineEdit(editor.productLines.value[0]!);
+    expect(editor.buildLinesPayload(17).products[0]).toMatchObject({ product_id: null, title: 'Ручной экран', price: 350, cost: 200, proposal_id: 17 });
+    expect(editor.total.value).toBe(350);
+  });
+  it('removes catalog facts when the manager changes the name, and cancellation restores them', () => {
+    const editor = createEditor();
+    editor.productLines.value = [{ product_id: 9, product_query: 'Каталожный', quantity: 1, price: 500, cost: 200, catalog_price: 700, product_country: 'Япония', product_logistics_components: [{ title: 'Блок' }] }];
+    const row = editor.productLines.value[0]!;
+    beginLineEdit(row);
+    row.product_query = 'Ручной';
+    editor.onProductQueryInput(0);
+    expect(row).toMatchObject({ product_id: 0, catalog_price: null, product_country: null, product_logistics_components: [], logistics_components: null });
+    expect(editor.buildLinesPayload(17).products[0]!.product_id).toBe(9);
+    cancelLineEdit(editor.productLines.value, row);
+    expect(row).toMatchObject({ product_id: 9, product_query: 'Каталожный', product_country: 'Япония' });
+  });
+  it('rolls back the full conversion of a frozen service group without changing neighbouring services', () => {
+    const editor = createEditor();
+    editor.loadLines([], [{ id: 10, service_title: 'Группа монтажа', quantity: 1, price: 3300, line_total: 3300, installation_estimate_revision_id: 5, installation_display_lines: [{ title: 'Монтаж', quantity: 5, price: 600 }, { title: 'Леса', quantity: 2, price: 150 }] }, { id: 44, service_title: 'Соседняя услуга', quantity: 1, price: 100, line_total: 100 }]);
+    const baseline = editor.currentLinesSnapshot(17);
+    editor.editInstallationLine(0, 1, true);
+    const draft = editor.serviceLines.value[1]!;
+    draft.price = 999;
+    expect(editor.currentLinesSnapshot(17)).toBe(baseline);
+    cancelLineEdit(editor.serviceLines.value, draft);
+    expect(editor.currentLinesSnapshot(17)).toBe(baseline);
+    expect(editor.serviceLines.value).toHaveLength(2);
+    expect(committedLines(editor.serviceLines.value)[0]!.installation_estimate_revision_id).toBe(5);
+  });
+});
+
+it('ignores a catalog description response after the line edit was cancelled', async () => {
+  const editor = createEditor();
+  editor.productLines.value = [{ link_id: 1, product_id: 9, product_query: 'Каталожный', client_description: null, quantity: 1, price: 500, cost: 200 }];
+  const row = editor.productLines.value[0]!;
+  beginLineEdit(row);
+  let respond!: (value: any[]) => void;
+  apiMock.smartSearchProducts.mockReturnValueOnce(new Promise(resolve => { respond = resolve; }));
+  const filling = editor.fillProductClientDescription(0);
+  cancelLineEdit(editor.productLines.value, row);
+  respond([{ id: 9, title: 'Каталожный', specs: { area_m2: 35 } }]);
+  await filling;
+  expect(row.client_description).toBeNull();
 });

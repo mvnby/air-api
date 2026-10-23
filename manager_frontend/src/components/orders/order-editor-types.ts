@@ -36,6 +36,7 @@ export type OrderLogisticsComponent = {
 };
 
 export type ProductLine = {
+  editor?: { original: Omit<ProductLine, 'editor'> | null };
   link_id?: number | null;
   product_id: number;
   product_query: string;

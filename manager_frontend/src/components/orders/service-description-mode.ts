@@ -4,6 +4,7 @@ import type { ManagerQuickTariffResponse, ManagerInstallationStandardTariff } fr
 export type ServiceDescriptionMode = 'short' | 'full';
 
 export type ServiceDescriptionLine = {
+  editor?: { original: Omit<ServiceDescriptionLine, 'editor'> | null; group?: number };
   link_id?: number | null;
   installation_estimate_revision_id?: number | null;
   installation_projection_mode?: string | null;

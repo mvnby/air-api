@@ -74,8 +74,8 @@ export const useOrderDrawerSaving = (options: Options) => {
     const proposalId = options.activeProposalId.value;
     const requestScope = scope.value;
     const requestEpoch = epoch;
-    const originalProducts = [...options.productLines.value];
-    const originalServices = [...(options.serviceLines?.value || [])];
+    const originalProducts = options.productLines.value.filter(line => !line.editor || line.editor.original);
+    const originalServices = (options.serviceLines?.value || []).filter(line => !line.editor || line.editor.original);
     const changedForm = Object.fromEntries(Object.entries(formPayload(sent)).filter(([key, value]) => (
       JSON.stringify(value) !== JSON.stringify(baseline[key as keyof ManagerOrderUpdatePayload])
     )));
@@ -119,7 +119,7 @@ export const useOrderDrawerSaving = (options: Options) => {
             if (!submitted) continue;
             let match = remaining.findIndex(item => line.link_id && item.id === line.link_id);
             if (match < 0 && !line.link_id) match = remaining.findIndex(item => (
-              (kind === 'product' ? item.product_id === submitted.product_id : (item.service_id ?? null) === (submitted.service_id ?? null) && String(item.service_title ?? item.title ?? '').trim() === submitted.title)
+              (kind === 'product' ? Number(item.product_id || 0) === Number(submitted.product_id || 0) && (submitted.product_id || String(item.product_title || '').trim() === submitted.product_query) : (item.service_id ?? null) === (submitted.service_id ?? null) && String(item.service_title ?? item.title ?? '').trim() === submitted.title)
               && Number(item.quantity) === submitted.quantity && Number(item.price) === submitted.price
               && Number(item.cost || 0) === Number(submitted.cost || 0)
               && String(kind === 'product' ? item.client_description || '' : item.description || '').trim() === String(kind === 'product' ? submitted.client_description || '' : submitted.description || '').trim()
@@ -127,7 +127,10 @@ export const useOrderDrawerSaving = (options: Options) => {
             if (match < 0) continue;
             const [serverLine] = remaining.splice(match, 1);
             if (!serverLine || !Number.isSafeInteger(serverLine.id) || serverLine.id <= 0) continue;
-            if (current.includes(line)) line.link_id = serverLine.id;
+            if (current.includes(line)) {
+              line.link_id = serverLine.id;
+              if (line.editor?.original) line.editor.original.link_id = serverLine.id;
+            }
             submitted.link_id = serverLine.id;
           }
         };

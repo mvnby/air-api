@@ -2,7 +2,7 @@ import type { ServiceLine } from './order-editor-types';
 
 /** Keep the accepted calculation separate from manager-owned commercial lines. */
 export const manualInstallationLines = (
-  lines: ServiceLine[], index: number, displayIndex = 0,
+  lines: ServiceLine[], index: number, displayIndex = 0, draft = false,
 ): { lines: ServiceLine[]; index: number } => {
   const selected = lines[index];
   const revision = selected?.installation_estimate_revision_id;
@@ -16,7 +16,8 @@ export const manualInstallationLines = (
       ? line.installation_display_lines : [line];
     if (sourceIndex < index) target += groups.length - 1;
     if (sourceIndex === index) target += Math.min(displayIndex, groups.length - 1);
-    return groups.map((group): ServiceLine => ({
+    return groups.map((group, groupIndex): ServiceLine => ({
+      ...(draft ? { editor: { group: revision, original: groupIndex === 0 ? JSON.parse(JSON.stringify(line)) : null } } : {}),
       service_id: line.service_id ?? null,
       title: group.title,
       description: group.description ?? null,

@@ -147,3 +147,17 @@ describe('OrderServiceLinesEditor compact rows', () => {
     expect(wrapper.find('[data-testid="service-catalog-picker"]').exists()).toBe(false);
   });
 });
+
+it('cancels an existing service edit without publishing it or touching its neighbour', async () => {
+  const saved: ServiceLine = { link_id: 31, title: 'Монтаж', description: 'До 3 м', quantity: 1, price: 500, cost: 100 };
+  const neighbour: ServiceLine = { link_id: 32, title: 'Диагностика', quantity: 1, price: 100, cost: 0 };
+  const wrapper = mountEditor([saved, neighbour], { compact: true, editingIndex: 0 });
+  await flushPromises();
+  await wrapper.get('input[type="number"]').setValue(999);
+  expect(saved.editor!.original!.price).toBe(500);
+  await wrapper.findAll('button').find(button => button.text() === 'Отмена')!.trigger('click');
+  expect(saved.price).toBe(500);
+  expect(saved.description).toBe('До 3 м');
+  expect(neighbour.price).toBe(100);
+  expect(wrapper.emitted('remove')).toBeUndefined();
+});

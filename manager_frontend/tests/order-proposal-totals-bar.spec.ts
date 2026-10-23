@@ -90,3 +90,13 @@ describe('OrderProposalTotalsBar', () => {
     expect(normalizedText(wrapper.get('[data-testid="proposal-grand-total"]').text())).toBe('5115BYN');
   });
 });
+
+it('keeps addition alongside the total and hides editing controls in client preview', async () => {
+  const wrapper = mount(OrderProposalTotalsBar, { props: { products, services: [], editable: true, showProductLines: true, actionLabel: 'Далее' } });
+  await wrapper.get('[data-testid="add-product-line"]').trigger('click');
+  await wrapper.get('[data-testid="add-service-line"]').trigger('click');
+  expect(wrapper.emitted('addProduct')).toEqual([[]]);
+  expect(wrapper.emitted('addService')).toEqual([[]]);
+  await wrapper.setProps({ preview: true });
+  expect(wrapper.findAll('button')).toHaveLength(0);
+});

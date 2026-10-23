@@ -196,7 +196,7 @@ describe('OrderProposalWorkspace', () => {
 
     expect(wrapper.text()).toContain('принята клиентом');
     expect(wrapper.get('fieldset').element.disabled).toBe(true);
-    expect((wrapper.get('[data-testid="add-product-line"]').element as HTMLButtonElement).matches(':disabled')).toBe(true);
+    expect(wrapper.find('[data-testid="add-product-line"]').exists()).toBe(false); // Persistent actions belong to the totals bar.
     await wrapper.get('[data-testid="proposal-to-documents"]').trigger('click');
     expect(wrapper.emitted('documents')).toEqual([[]]);
     await wrapper.findAll('button').find((button) => button.text().includes('Создать копию'))?.trigger('click');
@@ -252,15 +252,16 @@ describe('OrderProposalWorkspace', () => {
     const preview = wrapper.get('[data-testid="proposal-client-preview"]');
     const previewText = preview.text().replace(/\s/g, '');
     expect(preview.text()).toContain('Кондиционер Nova');
-    expect(preview.text()).toContain('Комплект и параметры согласованы с клиентом.');
+    expect(preview.text()).toContain('Исходное описание для клиента');
+    expect(preview.text()).not.toContain('Комплект и параметры согласованы с клиентом.');
     expect(preview.text()).toContain('Монтаж по согласованному составу');
-    expect(previewText).toContain('1850BYN');
+    expect(previewText).toContain('1200BYN');
     expect(previewText).not.toContain('777');
     expect(previewText).not.toContain('250');
     expect(preview.text()).not.toContain('Себест.');
     expect(preview.findAll('button, input, textarea')).toHaveLength(0);
     expect(wrapper.get('[data-testid="source-equipment-only"]').isVisible()).toBe(false);
-    expect(wrapper.get('[data-testid="add-product-line"]').isVisible()).toBe(false);
+    expect(wrapper.find('[data-testid="add-product-line"]').exists()).toBe(false);
     expect(document.activeElement).toBe(wrapper.get('button[aria-pressed="true"]').element);
 
     await wrapper.get('button[aria-pressed="true"]').trigger('click');
@@ -284,9 +285,9 @@ describe('OrderProposalWorkspace', () => {
       props: fixture.props,
       global: { stubs: sharedStubs(addStandard) },
     });
-    await wrapper.get('[data-testid="add-product-line"]').trigger('click');
+    (wrapper.vm as any).$.exposed.addProduct();
     expect(fixture.commercial.addProductLine).toHaveBeenCalledOnce();
-    await wrapper.get('[data-testid="add-service-line"]').trigger('click');
+    (wrapper.vm as any).$.exposed.addService();
     expect(fixture.commercial.addServiceLine).toHaveBeenCalledOnce();
     expect(wrapper.find('[data-testid="service-catalog-picker-stub"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="installation-standard-add"]').exists()).toBe(false);

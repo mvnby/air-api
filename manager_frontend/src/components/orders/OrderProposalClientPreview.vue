@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { committedLines } from './order-line-drafts';
 import OrderMoney from './OrderMoney.vue';
 import LineFormattedText from './LineFormattedText.vue';
 import { computed } from 'vue';
@@ -12,11 +13,11 @@ const props = defineProps<{
   address?: string;
 }>();
 const rows = computed(() => [
-  ...props.productLines.filter(line => line.product_id || line.product_query.trim()).map(line => ({
+  ...committedLines(props.productLines).filter(line => line.product_id || line.product_query.trim()).map(line => ({
     title: line.product_query, description: line.client_description,
     quantity: line.quantity, price: line.price, unit: 'шт.',
   })),
-  ...props.serviceLines.flatMap(line => (line.installation_display_lines?.length
+  ...committedLines(props.serviceLines).flatMap(line => (line.installation_display_lines?.length
     ? line.installation_display_lines : [line]).map(display => ({
     title: display.title, description: display.description,
     quantity: display.quantity, price: display.price, unit: 'усл.',

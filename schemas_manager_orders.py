@@ -602,7 +602,8 @@ class ManagerOrderListResponse(BaseModel):
 class ManagerOrderProductLinePayload(BaseModel):
     link_id: Optional[int] = None
     proposal_id: Optional[int] = None
-    product_id: int
+    product_id: Optional[int] = Field(default=None, gt=0, description="Catalog identity; null for a proposal-only manual product.")
+    title: Optional[str] = Field(default=None, max_length=1000, description="Required snapshot name for a manual product; never creates a catalog product.")
     client_description: Optional[str] = Field(default=None, max_length=2000)
     quantity: int
     price: int

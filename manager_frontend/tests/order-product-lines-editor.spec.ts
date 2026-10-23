@@ -3,6 +3,7 @@ import { nextTick } from 'vue';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import OrderProductLinesEditor from '../src/components/orders/OrderProductLinesEditor.vue';
 import type { ProductLine, ProductOption } from '../src/components/orders/order-editor-types';
+import { committedLines } from '../src/components/orders/order-line-drafts';
 import { managerSession } from '../src/services/manager-session';
 
 const line = (overrides: Partial<ProductLine> = {}): ProductLine => ({
@@ -154,8 +155,8 @@ describe('OrderProductLinesEditor compact mode', () => {
 
     const emptyLine = line({ link_id: null, product_id: 0, product_query: '', client_description: null });
     await wrapper.setProps({ lines: [original, emptyLine] });
-    expect(wrapper.findAll('textarea')).toHaveLength(2);
-    expect(wrapper.get('[aria-label="Готово: товар #2"]').exists()).toBe(true);
+    expect(wrapper.findAll('textarea')).toHaveLength(4);
+    expect(wrapper.get('[aria-label="Готово: товар #2"]').text()).toBe('Добавить');
 
     await wrapper.setProps({ lines: [line({ link_id: 99, product_query: 'Другой товар' })] });
     await nextTick();
@@ -177,5 +178,56 @@ describe('OrderProductLinesEditor compact mode', () => {
     expect(wrapper.findAll('input[type="number"]')).toHaveLength(2);
     expect(wrapper.text()).not.toContain('В поставку');
     expect(wrapper.text()).not.toContain('Забронировать');
+  });
+});
+
+describe('proposal product draft lifecycle', () => {
+  it('focuses an appended blank draft without errors and cancels only that row', async () => {
+    const saved = line();
+    const wrapper = mount(OrderProductLinesEditor, { attachTo: document.body, props: props([saved]) });
+    const blank = line({ link_id: null, product_id: 0, product_query: '', editor: { original: null } });
+    await wrapper.setProps({ lines: [saved, blank] });
+    await nextTick(); await nextTick();
+    const draft = wrapper.findAll('[data-testid="product-line-row"]')[1]!;
+    expect(document.activeElement).toBe(draft.find('textarea').element);
+    expect(draft.text()).toContain('Отмена');
+    expect(draft.find('[role="alert"]').exists()).toBe(false);
+    expect(draft.find('[data-order-usage="order_product_remove"]').exists()).toBe(false);
+    expect(committedLines(wrapper.props('lines'))).toEqual([saved]);
+    await draft.get('[aria-label="Отмена: товар #2"]').trigger('click');
+    expect(wrapper.props('lines')).toEqual([saved]);
+    expect(wrapper.emitted('remove')).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it('commits a manual good with a neutral warning and no catalog operations', async () => {
+    const wrapper = mount(OrderProductLinesEditor, { props: props([]) });
+    const blank = line({ link_id: null, product_id: 0, product_query: '', editor: { original: null } });
+    await wrapper.setProps({ lines: [blank] });
+    await wrapper.get('[aria-label="Готово: товар #1"]').trigger('click');
+    expect(wrapper.get('[role="alert"]').text()).toBe('Укажите название');
+    expect(committedLines(wrapper.props('lines'))).toHaveLength(0);
+    await wrapper.find('textarea').setValue('Декоративный экран для кондиционера');
+    await wrapper.find('input[type="number"]').setValue(350);
+    await wrapper.get('[data-order-usage="order_product_description"]').setValue('Белый, по размеру клиента');
+    await wrapper.get('[aria-label="Готово: товар #1"]').trigger('click');
+    expect(wrapper.findAll('textarea')).toHaveLength(0);
+    expect(committedLines(wrapper.props('lines'))[0]).toMatchObject({ product_id: 0, product_query: 'Декоративный экран для кондиционера', price: 350, client_description: 'Белый, по размеру клиента' });
+    expect(wrapper.get('[role="note"]').text()).toBe('Товар не связан с каталогом; наличие и цена не подтверждены');
+    expect(wrapper.find('[data-order-usage="order_product_supply"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('keeps committed values during editing and restores them on cancel', async () => {
+    const saved = line();
+    const wrapper = mount(OrderProductLinesEditor, { props: props([saved, line({ link_id: 42, product_query: 'Соседний товар' })]) });
+    await wrapper.get('[aria-label="Редактировать товар #1"]').trigger('click');
+    await wrapper.find('input[type="number"]').setValue(9999);
+    expect(committedLines(wrapper.props('lines'))[0]!.price).toBe(1500);
+    await wrapper.get('[aria-label="Отмена: товар #1"]').trigger('click');
+    expect(saved.price).toBe(1500);
+    expect(wrapper.props('lines')[1]!.product_query).toBe('Соседний товар');
+    expect(wrapper.findAll('textarea')).toHaveLength(0);
+    wrapper.unmount();
   });
 });
