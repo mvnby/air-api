@@ -105,6 +105,26 @@ describe('context header owned by the current page', () => {
   });
 });
 
+describe('compact context presentation', () => {
+  it('tracks the current owner mode and cleans it on route/context replacement', async () => {
+    const compact = ref(true), visible = ref(true), contextKey = ref('company-1');
+    const Page = defineComponent({ setup: () => () => h(ManagerContextHeader, { compact: compact.value }, () => h('h1', 'Клиенты')) });
+    const CompactHost = defineComponent({ setup: () => () => h(KitlaneShell, { key: contextKey.value, name: 'Компания', contextKey: contextKey.value, collapsed: false, mobileOpen: false, theme: 'light' }, { default: () => visible.value ? h(Page) : h('p', 'Главная') }) });
+    wrapper = mount(CompactHost, { attachTo: document.body }); await flushPromises();
+    expect(wrapper.get('.kitlane-topbar').classes()).toContain('has-compact-context');
+    expect(wrapper.get('.kitlane-context-header h1').text()).toBe('Клиенты');
+    compact.value = false; await flushPromises();
+    expect(wrapper.get('.kitlane-topbar').classes()).toContain('has-context-header');
+    expect(wrapper.get('.kitlane-topbar').classes()).not.toContain('has-compact-context');
+    contextKey.value = 'company-2'; compact.value = true; await flushPromises();
+    expect(wrapper.findAll('h1')).toHaveLength(1);
+    visible.value = false; await flushPromises();
+    expect(wrapper.get('.kitlane-topbar').classes()).not.toContain('has-context-header');
+    expect(wrapper.get('.kitlane-topbar').classes()).not.toContain('has-compact-context');
+    expect(wrapper.find('h1').exists()).toBe(false);
+  });
+});
+
 describe('shared, non-mutating drag hover', () => {
   it('highlights an allowed column and keeps it through nested child boundaries before clearing outside', async () => {
     await start(); await begin(); const column = target('execution');

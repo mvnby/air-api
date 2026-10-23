@@ -55,8 +55,8 @@ const sortOptions: Array<{ key: CatalogDecisionSort; label: string }> = [
 <template>
   <div class="space-y-2">
     <section class="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white p-3" aria-label="Сортировка каталога">
-      <label class="flex min-w-0 flex-1 items-center gap-2 text-xs text-gray-500">Сортировка
-        <select :value="sort" class="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm font-medium text-gray-700 sm:max-w-xs sm:flex-none" aria-label="Сортировать модели" @change="emit('sort', ($event.target as HTMLSelectElement).value as CatalogDecisionSort)">
+      <label class="flex min-w-0 flex-1 basis-full items-center gap-2 text-xs text-gray-500 sm:basis-80">Сортировка
+        <select :value="sort" class="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm font-medium text-gray-700 sm:max-w-xs sm:flex-initial" aria-label="Сортировать модели" @change="emit('sort', ($event.target as HTMLSelectElement).value as CatalogDecisionSort)">
           <option v-for="item in sortOptions" :key="item.key" :value="item.key">{{ item.label }}</option>
         </select>
       </label>

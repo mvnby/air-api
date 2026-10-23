@@ -1,3 +1,5 @@
+import { defineComponent, h } from 'vue';
+import KitlaneShell from '../src/components/kitlane/KitlaneShell.vue';
 import { CancelablePromise } from '../src/client/core/CancelablePromise';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
@@ -28,13 +30,14 @@ const targetOrder = { id: 42, title: 'Офис', status: 'negotiation', proposal
   { id: 51, name: 'Для кабинета', status: 'draft', is_selected: false },
 ] } as any;
 let workspace: ReturnType<typeof mount> | undefined;
-const startWorkspace = async (search = '', options: { empty?: boolean; capabilities?: string[]; renderTable?: boolean } = {}) => {
+const startWorkspace = async (search = '', options: { empty?: boolean; capabilities?: string[]; renderTable?: boolean; inShell?: boolean } = {}) => {
   history.replaceState({}, '', `/manager/catalog-decision${search}`);
   managerSession.auth.value = options.capabilities ? { ...identity, capabilities: options.capabilities } : identity;
   vi.spyOn(catalogDecisionApi, 'list').mockResolvedValue({ items: options.empty ? [] : [selectedModel], meta: { page: 1, pages: 1, total: options.empty ? 0 : 1, limit: 40 } });
   vi.spyOn(catalogDecisionApi, 'filterOptions').mockResolvedValue({ brands: [], series: [] });
   vi.spyOn(ManagerOrdersService, 'getManagerOrderDetail').mockResolvedValue(targetOrder);
-  workspace = mount(CatalogDecisionWorkspaceView, { global: { stubs: {
+  const component = options.inShell ? defineComponent({ setup: () => () => h(KitlaneShell, { name: 'Компания', contextKey: 'test', collapsed: false, mobileOpen: false, theme: 'light' }, { default: () => h(CatalogDecisionWorkspaceView) }) }) : CatalogDecisionWorkspaceView;
+  workspace = mount(component, { attachTo: document.body, global: { stubs: {
     CatalogDecisionFilters: true, CatalogDecisionTable: !options.renderTable, CatalogDecisionSelectionTray: true,
     CatalogDecisionCollectionDialog: true, CatalogDecisionOrderDialog: true, CatalogDecisionQuickOrderDialog: true,
     CatalogDecisionCompareDialog: true, CatalogDecisionProductDetailsDialog: true,
@@ -50,6 +53,20 @@ afterEach(() => {
 });
 
 describe('order-bound equipment selection', () => {
+  it('owns one compact shell title and returns to the exact order without clearing the basket', async () => {
+    const key = `${catalogDecisionSelectionStorageKey(identity)}:order-42:proposal-51`;
+    saveCatalogDecisionSelection([{ id: 11, title: 'Console 12' }], key);
+    const wrapper = await startWorkspace('?orderId=42&proposalId=51', { inShell: true });
+    expect(wrapper.get('.kitlane-topbar').classes()).toContain('has-compact-context');
+    expect(wrapper.get('.kitlane-topbar h1').text()).toBe('Подбор сплит-систем');
+    expect(wrapper.findAll('h1')).toHaveLength(1);
+    expect(wrapper.get('.kitlane-topbar').text()).toContain('Найдено: 1');
+    expect(wrapper.get('[data-testid="catalog-decision-workspace"]').find('h1').exists()).toBe(false);
+    await wrapper.get('.selection-order-return').trigger('click'); await flushPromises();
+    expect(location.pathname + location.search).toBe('/manager/orders/kanban?orderId=42&proposalId=51');
+    expect(loadCatalogDecisionSelection(key)).toEqual([{ id: 11, title: 'Console 12' }]);
+  });
+
   it('round trips the exact order and proposal, retaining order list filters', () => {
     const url = catalogDecisionUrl(42, 51, '/manager/orders/kanban?view=list&status=negotiation');
     const context = readCatalogDecisionContext(new URL(url, 'https://manager.local').search);
