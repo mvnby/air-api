@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { DashboardDetailResponse } from '../models/DashboardDetailResponse';
 import type { DashboardOverviewResponse } from '../models/DashboardOverviewResponse';
 import type { DashboardStatsResponse } from '../models/DashboardStatsResponse';
 import type { CancelablePromise } from '../core/CancelablePromise';
@@ -43,6 +44,47 @@ export class ManagerDashboardService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/manager/dashboard/stats',
+        });
+    }
+    /**
+     * Get Dashboard Details
+     * Read the records contributing to one KPI in the displayed, timezone-aware period.
+     *
+     * Requires Manager access and derives exact tenant/storefront scope from authentication.
+     * Period is start-inclusive/end-exclusive, at most 32 days; receivables and touchpoints
+     * are live snapshots. Uses the same membership rules as overview. Returns bounded
+     * pagination (maximum 100), current total and value, and source entity references.
+     * No writes or external requests. Invalid metric/period/pagination returns 422.
+     * @param metric
+     * @param start
+     * @param end
+     * @param limit
+     * @param offset
+     * @returns DashboardDetailResponse Successful Response
+     * @throws ApiError
+     */
+    public static getManagerDashboardDetails(
+        metric: 'revenue' | 'new_leads' | 'sales' | 'installations' | 'active_tasks' | 'receivables',
+        start: string,
+        end: string,
+        limit: number = 50,
+        offset?: number,
+    ): CancelablePromise<DashboardDetailResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/dashboard/details/{metric}',
+            path: {
+                'metric': metric,
+            },
+            query: {
+                'start': start,
+                'end': end,
+                'limit': limit,
+                'offset': offset,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
         });
     }
 }

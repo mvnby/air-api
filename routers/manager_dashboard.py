@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
@@ -7,9 +9,11 @@ from models.tenancy import TenantScope
 from routers.manager_operation_ids import (
     GET_DASHBOARD_STATS,
     GET_MANAGER_DASHBOARD_OVERVIEW,
+    GET_MANAGER_DASHBOARD_DETAILS,
 )
 from schemas import DashboardStatsResponse
-from schemas_dashboard import DashboardOverviewResponse
+from schemas_dashboard import DashboardOverviewResponse, DashboardDetailResponse, DashboardMetric
+from services.dashboard_detail_service import DashboardDetailService
 from services.dashboard_overview_service import DashboardOverviewService
 from services.stats_service import StatsService
 
@@ -69,3 +73,31 @@ async def get_dashboard_stats(
         session,
         tenant_scope=tenant_scope,
     )
+
+
+@router.get("/details/{metric}", response_model=DashboardDetailResponse, operation_id=GET_MANAGER_DASHBOARD_DETAILS)
+async def get_dashboard_details(
+    metric: DashboardMetric,
+    start: datetime,
+    end: datetime,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    session: AsyncSession = Depends(get_session),
+    _: str = Depends(get_current_username),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
+):
+    """Read the records contributing to one KPI in the displayed, timezone-aware period.
+
+    Requires Manager access and derives exact tenant/storefront scope from authentication.
+    Period is start-inclusive/end-exclusive, at most 32 days; receivables and touchpoints
+    are live snapshots. Uses the same membership rules as overview. Returns bounded
+    pagination (maximum 100), current total and value, and source entity references.
+    No writes or external requests. Invalid metric/period/pagination returns 422.
+    """
+    try:
+        return await DashboardDetailService.list(
+            session, tenant_scope=tenant_scope, metric=metric,
+            start=start, end=end, limit=limit, offset=offset,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc

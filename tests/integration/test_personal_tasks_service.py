@@ -182,6 +182,12 @@ async def test_personal_task_versions_filters_and_query_time_reminders(db):
     assert [item.id for item in active.items] == [task.id]
     assert active.items[0].reminder_due is True
     assert active.due_reminder_count == 1
+    reminders = await PersonalTaskService.list(db, actor=actor, task_filter="reminders", reference_time=now)
+    assert [item.id for item in reminders.items] == [task.id]
+    assert reminders.total == reminders.due_reminder_count == 1
+    outsider = await _actor(db, username="task-reminder-outsider")
+    private = await PersonalTaskService.list(db, actor=outsider, task_filter="reminders", reference_time=now)
+    assert private.total == private.due_reminder_count == 0
 
     rescheduled = await PersonalTaskService.update(
         db,
@@ -214,6 +220,8 @@ async def test_personal_task_versions_filters_and_query_time_reminders(db):
         reference_time=now,
     )
     assert after_reschedule.due_reminder_count == 0
+    reminders = await PersonalTaskService.list(db, actor=actor, task_filter="reminders", reference_time=now)
+    assert reminders.items == []
 
     with pytest.raises(PersonalTaskVersionConflictError):
         await PersonalTaskService.update(

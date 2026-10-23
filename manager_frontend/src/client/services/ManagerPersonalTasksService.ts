@@ -27,7 +27,7 @@ export class ManagerPersonalTasksService {
      * @throws ApiError
      */
     public static listManagerPersonalTasks(
-        filter: 'active' | 'today' | 'overdue' | 'undated' | 'completed' | 'cancelled' = 'active',
+        filter: 'active' | 'today' | 'reminders' | 'overdue' | 'undated' | 'completed' | 'cancelled' = 'active',
         limit: number = 50,
         offset?: number,
     ): CancelablePromise<PersonalTaskListResponse> {

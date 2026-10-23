@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { computed, ref, type Component } from 'vue';
-import { BarChart3, CalendarClock, ChevronRight, CircleAlert, ExternalLink, FileWarning, Inbox, Megaphone, Search, ShoppingBag, WalletCards } from 'lucide-vue-next';
+import { computed, ref, watch, type Component } from 'vue';
+import { BarChart3, Bell, CalendarClock, ChevronRight, CircleAlert, ExternalLink, FileWarning, Inbox, Megaphone, Search, ShoppingBag, WalletCards } from 'lucide-vue-next';
 import { useManagerDashboard } from '../composables/useManagerDashboard';
 import { MANAGER_CAPABILITY, hasManagerCapability } from '../manager-capabilities';
 import { managerSession } from '../services/manager-session';
 import DashboardAdvertising from '../components/dashboard/DashboardAdvertising.vue';
 import DashboardFunnel from '../components/dashboard/DashboardFunnel.vue';
+import { dashboardContextKey } from '../services/manager-dashboard-state';
+import DashboardKpiDetailsDialog from '../components/dashboard/DashboardKpiDetailsDialog.vue';
+import type { DashboardKpiKey } from '../services/dashboard-overview';
+import type { DashboardPeriodRange } from '../client';
 import DashboardKpiGrid from '../components/dashboard/DashboardKpiGrid.vue';
 import DashboardLoadingState from '../components/dashboard/DashboardLoadingState.vue';
 import DashboardSalesChart from '../components/dashboard/DashboardSalesChart.vue';
@@ -24,6 +28,15 @@ const dashboard = useManagerDashboard();
 const { data: overview, loading: overviewLoading, error: overviewError, updatedAt: overviewUpdatedAt } = dashboard.overview;
 const { data: stats, loading: operationalLoading, error: operationalError, updatedAt: operationalUpdatedAt } = dashboard.operations;
 const { data: leads, loading: leadsLoading, error: leadsError } = dashboard.leads;
+const { data: reminders, loading: remindersLoading, error: remindersError } = dashboard.reminders;
+const dueReminders = computed(() => reminders.value?.due_reminder_count || 0);
+const canManageCrm = computed(() => hasManagerCapability(managerSession.auth.value, MANAGER_CAPABILITY.crmManage));
+const detail = ref<{ metric: DashboardKpiKey; period: DashboardPeriodRange } | null>(null);
+watch(dashboardContextKey, () => { detail.value = null; }, { flush: 'sync' });
+const openDetail = (metric: DashboardKpiKey) => {
+  if (overview.value && canManageCrm.value) detail.value = { metric, period: { ...overview.value.period.current } };
+};
+const scrollToContracts = () => document.getElementById('dashboard-contracts')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 const leadsCount = computed(() => leads.value?.count || 0);
 const fetchOverview = () => dashboard.refresh();
 const canManageIntegrations = computed(() => hasManagerCapability(managerSession.auth.value, MANAGER_CAPABILITY.analyticsManage));
@@ -82,14 +95,16 @@ const shortText = (value?: string | null, limit = 120) => {
     <section v-if="activeTab === 'sales'" id="dashboard-panel-sales" role="tabpanel" aria-labelledby="dashboard-tab-sales" class="space-y-5">
       <section class="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
         <div class="flex items-center justify-between gap-3"><h2 class="text-lg font-semibold text-slate-900 dark:text-white">Требует внимания</h2><span class="text-xs text-[var(--kitlane-muted)] dark:text-slate-400">{{ operationalUpdatedAt ? `Проверено: ${formatDashboardUpdatedAt(operationalUpdatedAt)}` : 'На сейчас' }}</span></div>
-        <div v-if="(operationalLoading && !stats) || (leadsLoading && !leads)" class="mt-3 text-sm text-[var(--kitlane-muted)] dark:text-slate-400">Проверяем срочные действия...</div>
-        <p v-if="leadsError || operationalError" class="mt-3 text-sm text-[var(--kitlane-muted)] dark:text-slate-400">Не удалось обновить часть проверок. Показаны последние доступные действия.</p>
-        <div v-if="leadsCount || stats?.bank_receipts_review_count || firstOverdueTouchpoint" class="kitlane-attention-grid mt-4 grid gap-3">
+        <div v-if="(operationalLoading && !stats) || (leadsLoading && !leads) || (remindersLoading && !reminders)" class="mt-3 text-sm text-[var(--kitlane-muted)] dark:text-slate-400">Проверяем срочные действия...</div>
+        <p v-if="leadsError || operationalError || remindersError" class="mt-3 text-sm text-[var(--kitlane-muted)] dark:text-slate-400">Не удалось обновить часть проверок. Показаны последние доступные действия.</p>
+        <div v-if="leadsCount || stats?.bank_receipts_review_count || firstOverdueTouchpoint || stats?.expiring_contracts?.length || dueReminders" class="kitlane-attention-grid mt-4 grid gap-3">
           <button v-if="leadsCount" type="button" class="flex items-center gap-3 rounded-lg bg-slate-50 p-3 text-left hover:bg-[var(--kitlane-accent-soft)] dark:bg-slate-900/40" @click="navigate('/manager/leads')"><Inbox class="h-5 w-5 shrink-0 text-[var(--kitlane-accent-text)]" aria-hidden="true" /><span><strong class="block text-sm">{{ leadsCount }} входящих</strong><span class="text-xs text-[var(--kitlane-muted)] dark:text-slate-400">Разобрать заявки</span></span></button>
           <button v-if="stats?.bank_receipts_review_count" type="button" class="flex items-center gap-3 rounded-lg bg-slate-50 p-3 text-left hover:bg-[var(--kitlane-accent-soft)] dark:bg-slate-900/40" @click="navigate('/manager/payments')"><WalletCards class="h-5 w-5 shrink-0 text-[var(--kitlane-accent-text)]" aria-hidden="true" /><span><strong class="block text-sm">{{ stats.bank_receipts_review_count }} поступлений</strong><span class="text-xs text-[var(--kitlane-muted)] dark:text-slate-400">Связать с заказами</span></span></button>
           <button v-if="firstOverdueTouchpoint" type="button" class="flex items-center gap-3 rounded-lg bg-slate-50 p-3 text-left hover:bg-[var(--kitlane-accent-soft)] dark:bg-slate-900/40" @click="openOrder(firstOverdueTouchpoint.order_id)"><CalendarClock class="h-5 w-5 shrink-0 text-rose-600" aria-hidden="true" /><span><strong class="block text-sm">Просроченные касания</strong><span class="text-xs text-[var(--kitlane-muted)] dark:text-slate-400">Вернуться к клиентам</span></span></button>
+          <button v-if="stats?.expiring_contracts?.length" type="button" data-testid="attention-contracts" class="flex items-center gap-3 rounded-lg bg-slate-50 p-3 text-left hover:bg-[var(--kitlane-accent-soft)] dark:bg-slate-900/40" @click="scrollToContracts"><FileWarning class="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-300" aria-hidden="true" /><span><strong class="block text-sm">{{ hasOverdueContracts ? 'Договоры требуют внимания' : 'Договоры к продлению' }}</strong><span class="text-xs text-[var(--kitlane-muted)]">Проверить сроки договоров</span></span></button>
+          <button v-if="dueReminders" type="button" data-testid="attention-reminders" class="flex items-center gap-3 rounded-lg bg-slate-50 p-3 text-left hover:bg-[var(--kitlane-accent-soft)] dark:bg-slate-900/40" @click="navigate('/manager/tasks?filter=reminders')"><Bell class="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-300" aria-hidden="true" /><span><strong class="block text-sm">Напоминаний: {{ dueReminders }}</strong><span class="text-xs text-[var(--kitlane-muted)]">Мои поручения к этому моменту</span></span></button>
         </div>
-        <p v-else-if="!leadsError && !operationalError && !operationalLoading && !leadsLoading" class="mt-3 text-sm text-[var(--kitlane-muted)] dark:text-slate-400">Срочных действий нет.</p>
+        <p v-else-if="!leadsError && !operationalError && !operationalLoading && !leadsLoading && !remindersError && !remindersLoading" class="mt-3 text-sm text-[var(--kitlane-muted)] dark:text-slate-400">Срочных действий нет.</p>
       </section>
       <DashboardLoadingState v-if="overviewLoading && !overview" />
       <section v-else-if="overviewError && !overview" class="rounded-xl border border-rose-200 bg-white p-6 text-center dark:border-rose-900/60 dark:bg-slate-800">
@@ -99,7 +114,7 @@ const shortText = (value?: string | null, limit = 120) => {
         <button type="button" class="mt-4 rounded-lg bg-[var(--kitlane-accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--kitlane-accent-hover)]" @click="fetchOverview">Повторить</button>
       </section>
       <template v-else-if="overview">
-      <DashboardKpiGrid :kpis="overview.kpis" />
+      <DashboardKpiGrid :kpis="overview.kpis" :actionable="canManageCrm" @select="openDetail" />
       <div class="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)]"><DashboardSalesChart :series="overview.sales_series" /><DashboardFunnel :stages="overview.funnel" /></div>
       </template>
       <section v-if="stats && (stats.bank_receipts_review_count || 0) > 0" class="pt-2">
@@ -108,7 +123,7 @@ const shortText = (value?: string | null, limit = 120) => {
           <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p class="font-semibold text-slate-900 dark:text-white"><MoneyAmount :value="receipt.amount" :formatted-value="formatDashboardMoneyAmount(receipt.amount)" /> <span class="ml-2 text-sm font-normal text-[var(--kitlane-muted)]">{{ receipt.payer_name || 'Плательщик не указан' }}</span></p><p class="mt-1 text-xs text-[var(--kitlane-muted)] dark:text-slate-400">УНП {{ receipt.payer_unp || 'не указан' }} · документ {{ receipt.payment_document_number || 'не указан' }}</p><p class="mt-2 text-sm text-slate-600 dark:text-slate-300">{{ shortText(receipt.payment_purpose) }}</p></div><button v-if="receipt.candidate_order_ids?.length" type="button" class="inline-flex items-center gap-1 self-start rounded-lg bg-[var(--kitlane-accent)] px-3 py-2 text-sm font-semibold text-white" @click="openOrder(receipt.candidate_order_ids[0]!)">Заказ #{{ receipt.candidate_order_ids[0] }}<ExternalLink class="h-4 w-4" /></button><button v-else type="button" class="inline-flex items-center gap-1 self-start rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold" @click="navigate('/manager/orders/kanban')"><Search class="h-4 w-4" />Найти заказ</button></div>
         </article>
       </section>
-      <section v-if="stats && stats.expiring_contracts?.length" class="pt-2">
+      <section v-if="stats && stats.expiring_contracts?.length" id="dashboard-contracts" class="scroll-mt-24 pt-2">
         <h2 class="mb-3 text-lg font-semibold text-slate-800 dark:text-gray-300">{{ hasOverdueContracts ? 'Договоры требуют внимания' : 'Договоры к продлению' }}</h2>
         <article v-for="contract in stats.expiring_contracts" :key="contract.contract_id" class="mb-3 flex items-center justify-between rounded-xl border border-amber-200 bg-white p-4 dark:border-amber-500/30 dark:bg-[#1e293b]"><button class="text-left" type="button" @click="openCustomer(contract.customer_id)"><strong>{{ contract.customer_name }} · {{ contract.number }}</strong><span class="mt-1 flex items-center gap-1 text-sm" :class="isOverdue(contract.valid_until) ? 'font-semibold text-rose-600' : 'text-amber-600'"><FileWarning class="h-4 w-4" />{{ deadlineLabel(contract.valid_until) }}</span></button><a v-if="contract.edit_url" :href="contract.edit_url" target="_blank" class="text-slate-400 hover:text-[var(--kitlane-accent-text)]" title="Открыть договор"><ExternalLink class="h-5 w-5" /></a></article>
       </section>
@@ -124,6 +139,7 @@ const shortText = (value?: string | null, limit = 120) => {
     <section v-else-if="overviewError && !overview" class="rounded-xl border border-rose-200 bg-white p-6 text-center dark:border-rose-900/60 dark:bg-slate-800"><CircleAlert class="mx-auto h-8 w-8 text-rose-500" aria-hidden="true" /><h2 class="mt-2 font-semibold text-slate-900 dark:text-white">Не удалось загрузить сводку</h2><button type="button" class="mt-4 rounded-lg bg-[var(--kitlane-accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--kitlane-accent-hover)]" @click="fetchOverview">Повторить</button></section>
     <section v-else-if="overview && activeTab === 'site-seo'" id="dashboard-panel-site-seo" role="tabpanel" aria-labelledby="dashboard-tab-site-seo"><DashboardSiteSeo :marketing="overview.marketing" :search-demand="overview.search_demand" :can-manage-integrations="canManageIntegrations" /></section>
     <section v-else-if="overview" id="dashboard-panel-advertising" role="tabpanel" aria-labelledby="dashboard-tab-advertising"><DashboardAdvertising :marketing="overview.marketing" :can-manage-integrations="canManageIntegrations" /></section>
+    <DashboardKpiDetailsDialog v-if="detail && canManageCrm" :metric="detail.metric" :period="detail.period" @close="detail = null" />
   </div>
 </template>
 

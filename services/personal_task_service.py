@@ -63,7 +63,7 @@ class PersonalTaskService:
         }
     )
     LIST_FILTERS = frozenset(
-        {"active", "today", "overdue", "undated", "completed", "cancelled"}
+        {"active", "today", "overdue", "undated", "completed", "cancelled", "reminders"}
     )
 
     @staticmethod
@@ -593,6 +593,12 @@ class PersonalTaskService:
         filters = list(visible)
         if task_filter == "active":
             filters.append(PersonalTask.status == "active")
+        elif task_filter == "reminders":
+            filters.extend((
+                PersonalTask.status == "active",
+                PersonalTask.reminder_at.is_not(None),
+                PersonalTask.reminder_at <= now,
+            ))
         elif task_filter == "today":
             local_now = now.astimezone(TASK_TIMEZONE)
             local_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)

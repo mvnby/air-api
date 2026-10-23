@@ -352,6 +352,60 @@ async def test_dashboard_overview_requires_auth_and_isolates_exact_storefront_sc
     assert today_a == {"date": now.date().isoformat(), "revenue": 150, "sales": 1}
 
 
+    # Every detail page uses the same membership and period as its KPI, including
+    # financial eligibility, completed stage semantics and mixed lead/order tasks.
+    period = data_a["period"]["current"]
+    for metric in ("revenue", "new_leads", "sales", "installations", "active_tasks", "receivables"):
+        params = {**period, "limit": 1, "tenant_id": tenant_b.id, "storefront_id": storefront_b.id}
+        response = await async_client.get(
+            f"/api/manager/dashboard/details/{metric}", params=params, headers=_headers(owner_a),
+        )
+        assert response.status_code == 200, response.text
+        detail = response.json()
+        assert detail["value"] == data_a["kpis"][metric]["current"]
+        assert detail["total"] == (2 if metric == "revenue" else 1)
+        assert len(detail["items"]) == 1
+        if metric in {"new_leads", "active_tasks"}:
+            assert detail["items"][0]["entity_id"] == lead_a.id
+        else:
+            assert detail["items"][0]["entity_id"] not in {sale_b.id, receivable_b.id}
+        if metric in {"active_tasks", "receivables"}:
+            assert detail["period"] is None
+        else:
+            assert detail["period"] == period
+        following = await async_client.get(
+            f"/api/manager/dashboard/details/{metric}", params={**params, "offset": 1}, headers=_headers(owner_a),
+        )
+        assert following.status_code == 200
+        assert len(following.json()["items"]) == (1 if metric == "revenue" else 0)
+        if following.json()["items"]:
+            assert following.json()["items"][0]["record_id"] != detail["items"][0]["record_id"]
+
+    # All event metrics retain the displayed start-inclusive/end-exclusive bounds.
+    boundary = now.isoformat() + "+03:00"
+    for metric in ("revenue", "new_leads", "sales", "installations"):
+        before_event = await async_client.get(
+            f"/api/manager/dashboard/details/{metric}", params={**period, "end": boundary}, headers=_headers(owner_a),
+        )
+        assert before_event.json()["total"] == 0
+        from_event = await async_client.get(
+            f"/api/manager/dashboard/details/{metric}", params={**period, "start": boundary}, headers=_headers(owner_a),
+        )
+        assert from_event.json()["value"] == data_a["kpis"][metric]["current"]
+
+    editor = await _create_staff(db, tenant_id=1, username="dashboard-catalog-editor", membership_role="catalog_editor", global_role="catalog_editor")
+    await db.commit()
+    denied = await async_client.get("/api/manager/dashboard/details/sales", params=period, headers=_headers(editor))
+    assert denied.status_code == 403
+    unauthorized_details = await async_client.get("/api/manager/dashboard/details/sales", params=period)
+    assert unauthorized_details.status_code == 401
+    for invalid in ({"limit": 101}, {"offset": -1}, {"end": period["start"]}, {"start": "2026-01-01T00:00:00"}):
+        response = await async_client.get(
+            "/api/manager/dashboard/details/sales", params={**period, **invalid}, headers=_headers(owner_a),
+        )
+        assert response.status_code == 422
+
+
 @pytest.mark.asyncio
 async def test_customer_api_isolates_tenants(
     async_client: AsyncClient,

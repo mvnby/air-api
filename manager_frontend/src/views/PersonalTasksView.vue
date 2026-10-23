@@ -21,6 +21,7 @@ import { getApiErrorMessage } from '../utils/api-errors';
 const filters: Array<{ value: PersonalTaskFilter; label: string }> = [
   { value: 'active', label: 'Активные' },
   { value: 'today', label: 'Сегодня' },
+  { value: 'reminders', label: 'Напоминания' },
   { value: 'overdue', label: 'Просроченные' },
   { value: 'undated', label: 'Без срока' },
   { value: 'completed', label: 'Завершённые' },
