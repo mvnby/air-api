@@ -1,4 +1,5 @@
 import type { ProductOption } from './order-editor-types';
+import { buildProductPowerSupplyDescription } from '../../utils/product-power-supply';
 
 const scalarText = (value: unknown): string => {
   if (typeof value === 'number') {
@@ -61,6 +62,9 @@ export const buildKnownProductClientDescription = (product: ProductOption): stri
 
   const heating = withUnit(specs.capacity_heating_kw, 'кВт');
   if (heating) parts.push(`обогрев: ${heating}`);
+
+  const powerSupply = buildProductPowerSupplyDescription(specs, product.product_kind);
+  if (powerSupply) parts.push(powerSupply);
 
   const noise = withUnit(specs.noise_indoor, 'дБ');
   if (noise) parts.push(`шум внутреннего блока: ${noise}`);

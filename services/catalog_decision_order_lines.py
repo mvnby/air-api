@@ -4,6 +4,7 @@ from sqlmodel import select
 from models import OrderProductLink
 from services.catalog_decision_projection import CatalogDecisionProductSnapshot
 from services.order_product_line_service import OrderProductLineService
+from services.product_power_supply import build_product_power_supply_description
 
 
 class CatalogDecisionOrderLineService:
@@ -30,6 +31,9 @@ class CatalogDecisionOrderLineService:
                     price=snapshot.retail_price_byn,
                     cost=snapshot.purchase_cost_byn,
                     title_snapshot=snapshot.product.title,
+                    client_description=build_product_power_supply_description(
+                        snapshot.product.specs, snapshot.product.product_kind,
+                    ) or None,
                     currency_snapshot="BYN",
                 )
             )
@@ -74,4 +78,8 @@ class CatalogDecisionOrderLineService:
             snapshot = snapshots[int(link.product_id)]
             link.title_snapshot = snapshot.product.title
             link.currency_snapshot = "BYN"
+            if not link.client_description:
+                link.client_description = build_product_power_supply_description(
+                    snapshot.product.specs, snapshot.product.product_kind,
+                ) or None
             session.add(link)

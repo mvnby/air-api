@@ -280,11 +280,12 @@ describe('useOrderCommercialEditor', () => {
       specs: {
         area_m2: '35',
         capacity_cooling_kw: '3.2',
+        power_supply: '380-415/50/3',
         color: 'Серебристый',
       },
     };
     expect(buildKnownProductClientDescription(catalogProduct)).toBe(
-      'Инвертор; площадь: 35 м²; охлаждение: 3,2 кВт; цвет: Серебристый',
+      'Инвертор; площадь: 35 м²; охлаждение: 3,2 кВт; питание: 380-415 В, 3 ф.; цвет: Серебристый',
     );
     expect(buildKnownProductClientDescription({
       ...catalogProduct,
@@ -322,6 +323,9 @@ describe('useOrderCommercialEditor', () => {
     expect(editor.productLines.value[0]?.client_description).toBe('Ручное уточнение');
     expect(editor.productLines.value[0]?.product_id).toBe(9);
     expect(editor.productLines.value[0]?.product_query).toBe('Gree Pular');
+    feedbackMock.confirmDialog.mockResolvedValueOnce(true);
+    await editor.fillProductClientDescription(0);
+    expect(editor.productLines.value[0]?.client_description).toContain('питание: 380-415 В, 3 ф.');
   });
 
   it('autofills a newly selected catalog product but keeps hydration exact', () => {
@@ -352,10 +356,10 @@ describe('useOrderCommercialEditor', () => {
       availability_status: 'in_stock',
       vitebsk_qty: 1,
       minsk_qty: 0,
-      specs: { color: 'Белый' },
+      specs: { color: 'Белый', power_supply_voltage: '220-240' },
     });
     expect(editor.productLines.value[0]?.client_description).toBe(
-      'Инвертор; охлаждение: 2,6 кВт; цвет: Белый',
+      'Инвертор; охлаждение: 2,6 кВт; питание: 220-240 В; цвет: Белый',
     );
   });
 

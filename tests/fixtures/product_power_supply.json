@@ -1,0 +1,322 @@
+[
+  {
+    "name": "single phase source triplet",
+    "specs": {
+      "power_supply": "1 / 230 / 50"
+    },
+    "expected": "питание: 230 В, 1 ф."
+  },
+  {
+    "name": "voltage-first triplet",
+    "specs": {
+      "power_supply": "220-240/50/1"
+    },
+    "expected": "питание: 220-240 В, 1 ф."
+  },
+  {
+    "name": "three phases range",
+    "specs": {
+      "power_supply": "380-415/50/3"
+    },
+    "expected": "питание: 380-415 В, 3 ф."
+  },
+  {
+    "name": "range in prose",
+    "specs": {
+      "power_supply": "1 фаза, 220 ~ 240 В, 50 Гц"
+    },
+    "expected": "питание: 220-240 В, 1 ф."
+  },
+  {
+    "name": "neutral in prose",
+    "specs": {
+      "power_supply": "3 фазы и нейтраль, 380-415В, 50 Гц"
+    },
+    "expected": "питание: 380-415 В, 3 ф., нейтраль"
+  },
+  {
+    "name": "electrical phase notation",
+    "specs": {
+      "power_supply": "3N~/380–415/50"
+    },
+    "expected": "питание: 380-415 В, 3 ф., нейтраль"
+  },
+  {
+    "name": "numeric voltage",
+    "specs": {
+      "power_supply_voltage": 380
+    },
+    "expected": "питание: 380 В"
+  },
+  {
+    "name": "no phase inference",
+    "specs": {
+      "power_supply_voltage": "220-240"
+    },
+    "expected": "питание: 220-240 В"
+  },
+  {
+    "name": "different blocks",
+    "specs": {
+      "power_supply_indoor": "220-240/50/1",
+      "power_supply_outdoor": "380-415/50/3",
+      "power_supply": "220-240/50/1",
+      "power_supply_location": "Наружный блок + Внутренний блок"
+    },
+    "expected": "параметры питания внутреннего блока: 220-240 В, 1 ф.; параметры питания наружного блока: 380-415 В, 3 ф.; подключение питания: к внутреннему и наружному блокам"
+  },
+  {
+    "name": "indoor alone is scoped",
+    "specs": {
+      "power_supply_indoor": "1/220/50"
+    },
+    "expected": "параметры питания внутреннего блока: 220 В, 1 ф."
+  },
+  {
+    "name": "unscoped extra voltage",
+    "specs": {
+      "power_supply_indoor": "220/50/1",
+      "power_supply": "380/50/3"
+    },
+    "expected": "параметры питания внутреннего блока: 220 В, 1 ф.; питание по общим данным: 380 В, 3 ф. (требует уточнения)"
+  },
+  {
+    "name": "conflicting general voltage",
+    "specs": {
+      "power_supply": "1/220/50",
+      "power_supply_voltage": "380"
+    },
+    "expected": "питание по общим данным: 220 В, 1 ф. / 380 В (требует уточнения)"
+  },
+  {
+    "name": "conflicting general phase",
+    "specs": {
+      "power_supply": "220/50/1",
+      "power_supply_voltage": "220/50/3"
+    },
+    "expected": "питание по общим данным: 220 В, 1 ф. / 220 В, 3 ф. (требует уточнения)"
+  },
+  {
+    "name": "duplicate voltage within range",
+    "specs": {
+      "power_supply": "220-240/50/1",
+      "power_supply_voltage": "230"
+    },
+    "expected": "питание: 220-240 В, 1 ф."
+  },
+  {
+    "name": "raw source aliases",
+    "specs": {
+      "Электропитание внутреннего блока В/Гц/Ф": "220-240/50/1",
+      "Электропитание наружного блока, В/Гц/Ф": "380-415/50/3"
+    },
+    "expected": "параметры питания внутреннего блока: 220-240 В, 1 ф.; параметры питания наружного блока: 380-415 В, 3 ф."
+  },
+  {
+    "name": "raw general alias with connection",
+    "specs": {
+      "Электропитание, В/Гц/Ф": "380-415/50/3",
+      "Подача питания": "К наружному блоку"
+    },
+    "expected": "питание: 380-415 В, 3 ф.; подключение питания: к наружному блоку"
+  },
+  {
+    "name": "known placeholders",
+    "specs": {
+      "power_supply": "не указано",
+      "power_supply_voltage": "-",
+      "power_supply_indoor": null,
+      "power_supply_outdoor": "по запросу"
+    },
+    "expected": ""
+  },
+  {
+    "name": "unconfirmed voltage",
+    "specs": {
+      "power_supply": "220 В? уточнить"
+    },
+    "expected": ""
+  },
+  {
+    "name": "no inference from capacity",
+    "specs": {
+      "capacity_cooling_kw": 14,
+      "inverter": true,
+      "model": "MDV-60-380",
+      "power_supply_location": "наружный блок"
+    },
+    "expected": ""
+  },
+  {
+    "name": "invalid value types",
+    "specs": {
+      "power_supply": true,
+      "power_supply_voltage": {
+        "value": 220
+      },
+      "power_supply_outdoor": [
+        380
+      ]
+    },
+    "expected": ""
+  },
+  {
+    "name": "frequency and phase are not voltage",
+    "specs": {
+      "power_supply": "3 фазы, 50 Гц"
+    },
+    "expected": ""
+  },
+  {
+    "name": "unknown HVAC is visible",
+    "specs": {},
+    "product_kind": "complete_split_system",
+    "expected": "питание: уточняется"
+  },
+  {
+    "name": "unknown legacy HVAC",
+    "specs": {
+      "type": "сплит-система"
+    },
+    "expected": "питание: уточняется"
+  },
+  {
+    "name": "unknown indoor unit",
+    "specs": {},
+    "product_kind": "indoor_unit",
+    "expected": "питание: уточняется"
+  },
+  {
+    "name": "accessory is not HVAC",
+    "specs": {
+      "type": "сплит-система"
+    },
+    "product_kind": "accessory",
+    "expected": ""
+  },
+  {
+    "name": "other products do not get a warning",
+    "specs": {
+      "type": "аксессуар"
+    },
+    "product_kind": "other",
+    "expected": ""
+  },
+  {
+    "name": "general retains known phases",
+    "specs": {
+      "power_supply_outdoor": "380-415",
+      "power_supply": "380-415/50/3"
+    },
+    "expected": "параметры питания наружного блока: 380-415 В; питание по общим данным: 380-415 В, 3 ф."
+  },
+  {
+    "name": "general retains known range",
+    "specs": {
+      "power_supply_outdoor": "230/50/1",
+      "power_supply": "220-240/50/1"
+    },
+    "expected": "параметры питания наружного блока: 230 В, 1 ф.; питание по общим данным: 220-240 В, 1 ф."
+  },
+  {
+    "name": "semi industrial unknown type",
+    "specs": {
+      "type": "полупромышленный кондиционер"
+    },
+    "expected": "питание: уточняется"
+  },
+  {
+    "name": "multi split unknown type",
+    "specs": {
+      "type": "мульти-сплит-система"
+    },
+    "expected": "питание: уточняется"
+  },
+  {
+    "name": "canonical and alias conflict",
+    "specs": {
+      "power_supply": "380/50/3",
+      "Электропитание": "220/50/1"
+    },
+    "expected": "питание: 380 В, 3 ф. / 220 В, 1 ф. (требует уточнения)"
+  },
+  {
+    "name": "two aliases conflict",
+    "specs": {
+      "Электропитание": "380/50/3",
+      "Электропитание, В/Гц/Ф": "220/50/1"
+    },
+    "expected": "питание: 380 В, 3 ф. / 220 В, 1 ф. (требует уточнения)"
+  },
+  {
+    "name": "outdoor aliases conflict",
+    "specs": {
+      "power_supply_outdoor": "380/50/3",
+      "Электропитание наружного блока В/Гц/Ф": "220/50/1"
+    },
+    "expected": "параметры питания наружного блока: 380 В, 3 ф. / 220 В, 1 ф. (требует уточнения)"
+  },
+  {
+    "name": "bare multiple voltages are ambiguous",
+    "specs": {
+      "power_supply": "220/380"
+    },
+    "expected": "питание: 220/380 В (требует уточнения)"
+  },
+  {
+    "name": "other kind but explicit HVAC type",
+    "specs": {
+      "type": "полупромышленный кондиционер"
+    },
+    "product_kind": "other",
+    "expected": "питание: уточняется"
+  },
+  {
+    "name": "reviewed TCL195 block aggregate",
+    "specs": {
+      "power_supply_indoor": "1 фаза, 220-240 В, 50 Гц",
+      "power_supply_outdoor": "3 фазы, 380-415 В, 50 Гц",
+      "power_supply": "Внутренний блок: 1 фаза, 220-240 В, 50 Гц; наружный блок: 3 фазы, 380-415 В, 50 Гц",
+      "power_supply_voltage": "220-240 / 380-415"
+    },
+    "product_kind": "complete_split_system",
+    "expected": "параметры питания внутреннего блока: 220-240 В, 1 ф.; параметры питания наружного блока: 380-415 В, 3 ф."
+  },
+  {
+    "name": "aggregate voltage resolved by explicit blocks",
+    "specs": {
+      "power_supply_voltage": "220/380",
+      "power_supply_indoor": "220/50/1",
+      "power_supply_outdoor": "380/50/3"
+    },
+    "expected": "параметры питания внутреннего блока: 220 В, 1 ф.; параметры питания наружного блока: 380 В, 3 ф."
+  },
+  {
+    "name": "matching block voltage does not resolve alias conflict",
+    "specs": {
+      "power_supply": "380/50/3",
+      "Электропитание": "220/50/1",
+      "power_supply_indoor": "220/50/1",
+      "power_supply_outdoor": "380/50/3"
+    },
+    "expected": "параметры питания внутреннего блока: 220 В, 1 ф.; параметры питания наружного блока: 380 В, 3 ф.; питание по общим данным: 380 В, 3 ф. / 220 В, 1 ф. (требует уточнения)"
+  },
+  {
+    "name": "mismatched aggregate phase remains visible",
+    "specs": {
+      "power_supply": "Внутренний блок: 1 фаза, 220-240 В, 50 Гц; наружный блок: 1 фаза, 380-415 В, 50 Гц",
+      "power_supply_indoor": "220-240/50/1",
+      "power_supply_outdoor": "380-415/50/3"
+    },
+    "expected": "параметры питания внутреннего блока: 220-240 В, 1 ф.; параметры питания наружного блока: 380-415 В, 3 ф.; питание по общим данным: Внутренний блок: 1 фаза, 220-240 В, 50 Гц; наружный блок: 1 фаза, 380-415 В, 50 Гц (требует уточнения)"
+  },
+  {
+    "name": "unmatched aggregate voltage remains visible",
+    "specs": {
+      "power_supply_voltage": "220-240 / 400-450",
+      "power_supply_indoor": "220-240/50/1",
+      "power_supply_outdoor": "380-415/50/3"
+    },
+    "expected": "параметры питания внутреннего блока: 220-240 В, 1 ф.; параметры питания наружного блока: 380-415 В, 3 ф.; питание по общим данным: 220-240/400-450 В (требует уточнения)"
+  }
+]
