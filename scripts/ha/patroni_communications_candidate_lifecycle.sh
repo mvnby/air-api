@@ -49,6 +49,8 @@ patroni_communications_migrate_candidate() {
   idle_worker_capacity prepare migrate
   sync_bot_voice_env_locked
   API_DEPLOY_LOCK_FD="${DEPLOY_LOCK_FD}" \
+    API_IDLE_WORKER_CAPACITY_GUARD="${IDLE_WORKER_CAPACITY_GUARD}" \
+    API_IDLE_WORKER_CAPACITY_RELIEF_ALLOWED=true \
     API_COMPOSE_FILE="$(basename "${CANDIDATE_FILE}")" bash "${MIGRATION_SCRIPT}"
   idle_worker_capacity recover
   shared_belzakupki_guard_restore

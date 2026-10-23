@@ -112,6 +112,9 @@ fi
 if [[ "$*" == *" up -d --no-deps --force-recreate bot" ]]; then
   printf 'bot_image %s\n' "${BACKEND_IMAGE:-}" >> "$COMMAND_LOG"
 fi
+if [[ "$*" == *" up -d --no-deps --force-recreate app"* ]]; then
+  printf 'candidate_relief %s\n' "${API_IDLE_WORKER_CAPACITY_RELIEF_ALLOWED:-false}" >> "$COMMAND_LOG"
+fi
 previous=""
 for argument in "$@"; do
   if [[ "$previous" == "-f" && "$argument" == *"rollback-api-buffer.compose.yml" && -f "$argument" ]]; then

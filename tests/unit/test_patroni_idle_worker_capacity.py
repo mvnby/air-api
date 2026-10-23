@@ -32,6 +32,14 @@ p = Path(os.environ['API_PROJECT_DIR'])
 state_path = p / 'runtime.json'
 def state(): return json.loads(state_path.read_text())
 def save(value): state_path.write_text(json.dumps(value))
+def capacity_after(event):
+    meminfo = os.environ.get('TEST_CAPACITY_MEMINFO')
+    if not meminfo: return
+    current = state()
+    if event in current.get('capacity_drop_after', []): available = 1550000
+    elif event == 'idle-stop': available = 1550000 if current.get('still_low') else 2097152
+    else: return
+    Path(meminfo).write_text(f'MemAvailable: {available} kB\nSwapTotal: 524288 kB\nSwapFree: 524288 kB\n')
 args = sys.argv[1:]
 with (p / 'commands.log').open('a') as log: log.write(json.dumps(args) + '\n')
 s = state()
@@ -85,6 +93,10 @@ elif 'stop' in args:
     if s.get('fail_stop'): sys.exit(3)
     if not s['running']: sys.exit(0)
     journal = p / '.ha-idle-worker-capacity.json'
+    if s.get('release_stop_without_idle') and not journal.exists():
+        assert (p / '.ha-communications-worker-release-fenced').exists()
+        s['running'] = False; save(s)
+        sys.exit(0)
     assert journal.exists() and journal.stat().st_mode & 0o777 == 0o600
     # A concurrent operator cannot change the row between proof and stop.
     with (p / 'control.lock').open('w') as probe:
@@ -92,6 +104,7 @@ elif 'stop' in args:
         except BlockingIOError: (p / 'operator-switch-blocked').touch()
         else: raise AssertionError('stop escaped the SQL control lock')
     s['running'] = False; save(s)
+    capacity_after('idle-stop')
     if s.get('signal_stop_command'):
         os.kill(os.getpid(), signal.SIGTERM)
     if s.get('lose_fence_during_stop'):
@@ -117,7 +130,11 @@ elif 'up' in args:
     if 'worker_exists' in s: s['worker_exists'] = True
     save(s)
 elif 'pull' in args:
-    pass
+    capacity_after('worker-pull' if args[-1] == 'communications-worker' else 'pull')
+elif 'run' in args:
+    event = 'alembic' if 'alembic' in args else 'defaults'
+    capacity_after(event)
+    if s.get('fail_run') == event: sys.exit(42)
 else:
     raise AssertionError(args)
 '''

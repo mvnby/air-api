@@ -685,7 +685,9 @@ if [[ "${RUN_DEFAULTS}" == "true" ]]; then
 fi
 
 log start "starting ${candidate_service} on 127.0.0.1:${candidate_port}"
+# A new pause journal must always describe the original API generation.
 require_deploy_capacity
+export API_IDLE_WORKER_CAPACITY_RELIEF_ALLOWED=false
 candidate_started=true
 "${COMPOSE[@]}" up -d --no-deps --force-recreate "${candidate_service}"
 smoke_candidate "http://127.0.0.1:${candidate_port}"

@@ -24,6 +24,24 @@ deploy_capacity_meminfo_value() {
   ' "${DEPLOY_CAPACITY_MEMINFO_FILE}"
 }
 
+# Only the verified Patroni candidate transaction supplies this guard. Its
+# inherited lock and existing journal/recovery lifecycle own any worker pause.
+deploy_capacity_try_idle_worker_relief() {
+  local guard="${API_IDLE_WORKER_CAPACITY_GUARD:-}"
+  local operation="${PATRONI_CANDIDATE_OPERATION:-}"
+  local journal="${API_PROJECT_DIR:-/opt/air-api}/.ha-idle-worker-capacity.json"
+  [[ "${API_IDLE_WORKER_CAPACITY_RELIEF_ALLOWED:-false}" == "true" \
+    && -n "${guard}" && -f "${guard}" && ! -L "${guard}" \
+    && "${API_DEPLOY_LOCK_FD:-}" == "9" \
+    && ( "${operation}" == "migrate" || "${operation}" == "deploy" ) ]] || return 1
+  [[ ! -e "${journal}" && ! -L "${journal}" ]] || return 1
+
+  # prepare checks the same gate before proving idle. Disable only this callback
+  # in that child and in the final check, so neither can recursively prepare.
+  API_IDLE_WORKER_CAPACITY_GUARD="" python3 "${guard}" prepare "${operation}" || return 1
+  API_IDLE_WORKER_CAPACITY_GUARD="" require_deploy_capacity
+}
+
 require_deploy_capacity() {
   local available_kib=""
   local swap_total_kib=""
@@ -60,7 +78,8 @@ require_deploy_capacity() {
   }
   (( available_kib >= DEPLOY_MIN_AVAILABLE_MEMORY_KIB )) || {
     deploy_capacity_error "insufficient memory headroom: available=${available_kib}KiB required=${DEPLOY_MIN_AVAILABLE_MEMORY_KIB}KiB"
-    return 1
+    deploy_capacity_try_idle_worker_relief
+    return $?
   }
   if (( swap_total_kib > 0 && swap_free_kib < DEPLOY_MIN_FREE_SWAP_KIB )); then
     deploy_capacity_error "insufficient free swap reserve: free=${swap_free_kib}KiB required=${DEPLOY_MIN_FREE_SWAP_KIB}KiB"
