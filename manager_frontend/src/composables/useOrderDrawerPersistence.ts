@@ -1,3 +1,4 @@
+import { committedLines } from '../components/orders/order-line-drafts';
 import { computed, ref, watch, type Ref } from 'vue';
 import type { ManagerOrderDetailResponse } from '../client';
 import type {
@@ -108,8 +109,8 @@ export const useOrderDrawerPersistence = ({
         baseForm: readSnapshot(savedFormSnapshot.value),
         baseLines: readSnapshot(savedLinesSnapshot.value) as OrderDrawerDraft['baseLines'],
         linesDraft: readSnapshot(currentLinesSnapshot()) as OrderDrawerDraft['linesDraft'],
-        productLines: productLines.value.map((line) => ({ ...line })),
-        serviceLines: serviceLines.value.map((line) => ({ ...line })),
+        productLines: committedLines(productLines.value).map((line) => ({ ...line })),
+        serviceLines: committedLines(serviceLines.value).map((line) => ({ ...line })),
       };
       if (draftScope.value) {
         payload.scope = draftScope.value;

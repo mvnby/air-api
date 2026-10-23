@@ -22,10 +22,12 @@ export const createOrderProductDescriptionFiller = ({
     const row = productLines.value[index];
     if (!row?.product_id) return;
     const productId = row.product_id;
+    const editor = row.editor;
     const orderId = order.value?.id;
     const isCurrentLine = () => order.value?.id === orderId
       && productLines.value.includes(row)
-      && row.product_id === productId;
+      && row.product_id === productId
+      && row.editor === editor;
     let product = productLookupById.value[productId];
     if (!product?.specs || !Object.keys(product.specs).length) {
       try {

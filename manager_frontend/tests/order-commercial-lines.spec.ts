@@ -106,7 +106,8 @@ describe('OrderProductLinesEditor', () => {
     const reserveButtons = wrapper.findAll('button').filter((button) => (
       button.text().includes('Забронировать')
     ));
-    await reserveButtons[1]?.trigger('click');
+    expect(reserveButtons).toHaveLength(1); // Manual goods have no reservation controls.
+    await reserveButtons[0]!.trigger('click');
     await wrapper.get('[data-testid="add-product-line"]').trigger('click');
 
     expect(wrapper.emitted('select')).toEqual([[{ index: 0, option: productOption }]]);

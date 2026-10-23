@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import OrderMoney from './OrderMoney.vue';
 import LineFormattedText from './LineFormattedText.vue';
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
+import { beginLineEdit, cancelLineEdit, commitLineEdit, focusLineEditor, lineErrors, lineKey } from './order-line-drafts';
 import type { ProductLine, ProductOption } from './order-editor-types';
 import { formatMoney } from './order-utils';
 import { MANAGER_CAPABILITY, hasManagerCapability } from '../../manager-capabilities';
@@ -47,6 +48,16 @@ const canManagePlatform = computed(() => hasManagerCapability(
 ));
 const demoReadOnly = useDemoReadOnly();
 const editingLine = ref<ProductLine | null>(null);
+const rows = new Map<number, HTMLElement>();
+const touched = ref<Record<number, string[]>>({});
+const errorsFor = (line: ProductLine): Record<string, string> => ({ ...lineErrors(line, line.product_query, true),
+  ...((line.client_description?.length || 0) > 2000 ? { description: 'Не более 2000 символов' } : {}) });
+const touch = (line: ProductLine, field: string) => {
+  const key = lineKey(line);
+  touched.value[key] = [...(touched.value[key] || []), field];
+};
+const fieldError = (line: ProductLine, field: string) => touched.value[lineKey(line)]?.includes(field) ? errorsFor(line)[field] : '';
+const focusEditor = async (line: ProductLine) => { await nextTick(); await focusLineEditor(rows.get(lineKey(line))); };
 const visibleCosts = computed(() => Boolean(props.showCosts && !demoReadOnly.value));
 
 watch(
@@ -61,15 +72,32 @@ watch(
       && nextLines.length === previousLines.length + 1
     ) {
       const appended = nextLines[nextLines.length - 1];
-      if (appended && !appended.product_id && !appended.product_query.trim()) editingLine.value = appended;
+      if (appended && !appended.product_id && !appended.product_query.trim()) {
+        appended.editor ||= { original: null };
+        editingLine.value = appended;
+        void focusEditor(appended);
+      }
     }
   },
   { flush: 'sync' },
 );
 
-const editLine = (line: ProductLine) => { editingLine.value = line; };
-const finishEditing = () => { editingLine.value = null; };
-const isEditing = (line: ProductLine) => editingLine.value === line;
+const editLine = (line: ProductLine) => {
+  beginLineEdit(line);
+  editingLine.value = line;
+  void focusEditor(line);
+};
+const finishEditing = (line: ProductLine) => {
+  touched.value[lineKey(line)] = ['title', 'quantity', 'price', 'cost', 'description'];
+  if (Object.keys(errorsFor(line)).length) return;
+  commitLineEdit(line);
+  editingLine.value = null;
+};
+const cancelEditing = (line: ProductLine) => {
+  cancelLineEdit(lines.value, line);
+  editingLine.value = null;
+};
+const isEditing = (line: ProductLine) => Boolean(line.editor) || editingLine.value === line;
 
 const suggestionsFor = (index: number) => (
   props.activeSuggestionIndex === index ? props.productOptions.slice(0, 10) : []
@@ -118,15 +146,12 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
     <slot v-if="!hideActions" name="source-equipment" />
     <p v-if="productsError" class="mb-2 text-xs text-red-300">{{ productsError }}</p>
     <div :class="compact ? 'divide-y divide-slate-100 dark:divide-slate-800' : 'space-y-2'">
-      <div v-for="(line, index) in lines" :key="`product-${index}`" data-testid="product-line-row" class="relative" :class="compact ? 'bg-white dark:bg-slate-950' : 'rounded-xl border border-gray-200 bg-white p-3 shadow-sm'">
+      <div v-for="(line, index) in lines" :key="lineKey(line)" :ref="element => { if (element) rows.set(lineKey(line), element as HTMLElement); else rows.delete(lineKey(line)); }" data-testid="product-line-row" class="relative" :class="compact ? 'bg-white dark:bg-slate-950' : 'rounded-xl border border-gray-200 bg-white p-3 shadow-sm'">
         <template v-if="!compact || isEditing(line)">
-        <button v-if="!compact" type="button" data-order-usage="order_product_remove" class="absolute -right-2 -top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border border-red-200 bg-red-50 text-lg font-bold text-red-600 shadow-sm transition-colors hover:bg-red-100" :aria-label="`Удалить товар #${index + 1}`" title="Удалить товар" @click="emit('remove', index)">
-          ×
-        </button>
-        <div v-if="compact" class="mb-2 flex items-center justify-between gap-2 px-3 pt-3">
-          <span class="text-xs font-semibold text-gray-500">Редактирование товара</span>
-          <label v-if="hideActions && canManagePlatform" class="ml-auto flex items-center gap-1 text-xs text-slate-500"><input v-model="searchInStock" type="checkbox" />Искать в наличии</label>
-          <button type="button" class="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700" :aria-label="`Готово: товар #${index + 1}`" @click="finishEditing">Готово</button>
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-3 py-2.5 dark:border-slate-800">
+          <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">{{ line.editor?.original === null ? 'Новый товар' : 'Редактирование товара' }}</span>
+          <button type="button" class="btn-mini-outline min-h-9 px-3 text-xs" :aria-label="`Отмена: товар #${index + 1}`" @click="cancelEditing(line)">Отмена</button>
+          <label v-if="hideActions && canManagePlatform" class="flex items-center gap-1 text-xs text-slate-500"><input v-model="searchInStock" type="checkbox" />Искать в наличии</label>
         </div>
         <div class="grid grid-cols-6 gap-2 md:grid-cols-12 md:items-start" :class="compact ? 'px-3 pb-3' : ''">
           <label class="relative col-span-6 min-w-0 space-y-1 md:col-span-5">
@@ -140,11 +165,14 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
               v-model="line.product_query"
               class="field-input min-h-[56px] w-full min-w-0 resize-y overflow-y-auto text-sm leading-snug sm:text-base"
               :rows="productQueryRows(line.product_query)"
-              placeholder="Поиск и выбор товара"
+              placeholder="Найти в каталоге или ввести название"
+              :aria-invalid="Boolean(fieldError(line, 'title'))"
+              :aria-describedby="fieldError(line, 'title') ? `product-title-error-${lineKey(line)}` : undefined"
               @focus="emit('focus', index)"
               @input="emit('input', index)"
-              @blur="emit('blur', index)"
+              @blur="touch(line, 'title'); emit('blur', index)"
             />
+            <p v-if="fieldError(line, 'title')" :id="`product-title-error-${lineKey(line)}`" class="text-xs text-red-600" role="alert">{{ fieldError(line, 'title') }}</p>
             <div v-if="!line.product_id && line.product_query.trim().length >= 2 && (productLookupLoading || suggestionsFor(index).length)" class="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-auto rounded-[12px] border border-gray-200 bg-white p-1 shadow-xl">
               <div v-if="productLookupLoading" class="px-3 py-2 text-xs text-gray-500">Поиск товаров...</div>
               <button
@@ -174,15 +202,18 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
           </label>
           <label class="col-span-4 min-w-0 space-y-1 md:col-span-2">
             <span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Цена</span>
-            <input v-model.number="line.price" type="number" min="0" class="field-input w-full min-w-0 px-2 text-sm" placeholder="0" />
+            <input v-model.number="line.price" type="number" min="0" class="field-input w-full min-w-0 px-2 text-sm" placeholder="0" :aria-invalid="Boolean(fieldError(line, 'price'))" @blur="touch(line, 'price')" />
+            <p v-if="fieldError(line, 'price')" class="text-xs text-red-600" role="alert">{{ fieldError(line, 'price') }}</p>
           </label>
           <label class="col-span-2 min-w-0 space-y-1 md:col-span-1">
             <span class="flex h-auto items-center whitespace-nowrap px-1 text-xs font-medium text-gray-500 md:h-6 md:text-[11px]">Кол-во</span>
-            <input v-model.number="line.quantity" type="number" min="1" class="field-input w-full min-w-0 px-2 text-sm" placeholder="1" />
+            <input v-model.number="line.quantity" type="number" min="1" class="field-input w-full min-w-0 px-2 text-sm" placeholder="1" :aria-invalid="Boolean(fieldError(line, 'quantity'))" @blur="touch(line, 'quantity')" />
+            <p v-if="fieldError(line, 'quantity')" class="text-xs text-red-600" role="alert">{{ fieldError(line, 'quantity') }}</p>
           </label>
           <label v-if="compact ? visibleCosts : !demoReadOnly" class="col-span-3 min-w-0 space-y-1 md:col-span-2">
             <span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Себест.</span>
-            <input v-model.number="line.cost" type="number" min="0" class="field-input w-full min-w-0 px-2 text-sm" placeholder="0" />
+            <input v-model.number="line.cost" type="number" min="0" class="field-input w-full min-w-0 px-2 text-sm" placeholder="0" :aria-invalid="Boolean(fieldError(line, 'cost'))" @blur="touch(line, 'cost')" />
+            <p v-if="fieldError(line, 'cost')" class="text-xs text-red-600" role="alert">{{ fieldError(line, 'cost') }}</p>
           </label>
           <div class="col-span-3 space-y-1 md:col-span-2">
             <span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Итого</span>
@@ -203,6 +234,7 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
             </span>
             <textarea
               v-model="line.client_description"
+              :aria-invalid="Boolean(fieldError(line, 'description'))" @blur="touch(line, 'description')"
               data-order-usage="order_product_description"
               class="field-input min-h-[64px] w-full min-w-0 resize-y text-sm leading-snug"
               rows="2"
@@ -210,10 +242,12 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
               placeholder="Ключевые характеристики и уточнения для клиента"
             />
           </label>
+          <p v-if="fieldError(line, 'description')" class="col-span-6 text-xs text-red-600 md:col-span-12" role="alert">{{ fieldError(line, 'description') }}</p>
+          <p v-if="!line.product_id && line.product_query.trim()" role="note" class="col-span-6 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800 md:col-span-12">Товар не связан с каталогом; наличие и цена не подтверждены</p>
           <p v-if="isPriceDifferent(line)" class="col-span-6 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-700 md:col-span-12">
             Цена строки отличается от каталожной (<OrderMoney :value="catalogPrice(line.product_id) || 0" />).
           </p>
-          <div v-if="canManagePlatform" class="col-span-6 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-2 md:col-span-12">
+          <div v-if="canManagePlatform && line.product_id" class="col-span-6 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-2 md:col-span-12">
             <span v-if="supplyBadgeForLine(line)" class="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-1 text-xs font-semibold text-brand-700">
               Поставка: {{ supplyBadgeForLine(line)?.label }}
             </span>
@@ -222,10 +256,15 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
             <button type="button" data-order-usage="order_product_reserve" class="rounded-lg border border-indigo-200 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50" :disabled="!line.product_id || supplyActionLoadingLineId === line.link_id" @click="emit('supply', { line, intent: 'reserve' })">Забронировать</button>
           </div>
         </div>
+        <div class="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 px-3 py-3 dark:border-slate-800">
+          <button v-if="line.editor?.original !== null" type="button" class="mr-auto min-h-9 px-2 text-xs text-red-600" data-order-usage="order_product_remove" :aria-label="`Удалить товар #${index + 1}`" @click="emit('remove', index)">Удалить товар</button>
+          <button type="button" class="btn-mini min-h-9 px-4 text-xs" :aria-label="`Готово: товар #${index + 1}`" @click="finishEditing(line)">{{ line.editor?.original === null ? 'Добавить' : 'Готово' }}</button>
+        </div>
         </template>
-        <div v-else class="grid grid-cols-3 gap-3 px-3 py-2.5 text-sm md:items-center md:gap-2" :class="visibleCosts ? 'md:grid-cols-[minmax(0,1fr)_3.5rem_6rem_6.5rem_6rem_4.5rem]' : 'md:grid-cols-[minmax(0,1fr)_3.5rem_6rem_6.5rem_4.5rem]'">
+        <div v-else class="grid grid-cols-3 gap-3 px-3 py-2.5 text-sm md:items-center md:gap-2" :class="visibleCosts ? 'md:grid-cols-[minmax(0,1fr)_3.5rem_6rem_6.5rem_6rem_6.5rem]' : 'md:grid-cols-[minmax(0,1fr)_3.5rem_6rem_6.5rem_6.5rem]'">
           <div class="col-span-3 min-w-0 md:col-auto">
             <p class="break-words text-sm font-semibold text-gray-900 dark:text-slate-100"><LineFormattedText :text="line.product_query || 'Новый товар'" /></p>
+            <p v-if="!line.product_id" role="note" class="mt-1 text-xs leading-relaxed text-amber-700 dark:text-amber-300">Товар не связан с каталогом; наличие и цена не подтверждены</p>
             <p v-if="line.client_description" class="mt-0.5 whitespace-pre-wrap break-words text-xs font-normal leading-relaxed text-gray-500 dark:text-slate-400"><LineFormattedText :text="line.client_description" /></p>
           </div>
           <p class="flex flex-col gap-1 md:block md:text-center"><span class="text-xs text-gray-500 md:hidden">Кол-во</span><span class="font-medium text-gray-700 dark:text-slate-300">{{ line.quantity }}</span></p>
@@ -244,7 +283,7 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
           <p v-if="visibleCosts" class="col-span-2 flex flex-col gap-1 md:col-auto md:block md:text-right"><span class="text-xs text-gray-500 md:hidden">Себест.</span><span class="font-medium text-gray-700 dark:text-slate-300"><OrderMoney :value="line.cost" /></span></p>
           <div class="flex justify-end gap-1 md:justify-center" :class="visibleCosts ? 'md:col-auto' : 'col-span-3 md:col-auto'">
             <button type="button" data-order-usage="order_product_edit" class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-brand-700 hover:bg-brand-50" :aria-label="`Редактировать товар #${index + 1}`" title="Редактировать" @click="editLine(line)">✎</button>
-            <button type="button" data-order-usage="order_product_remove" class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-red-600 hover:bg-red-50" :aria-label="`Удалить товар #${index + 1}`" title="Удалить" @click="emit('remove', index)">×</button>
+            <button type="button" data-order-usage="order_product_remove" class="inline-flex min-h-8 items-center justify-center rounded-lg px-2 text-xs text-red-600 hover:bg-red-50" :aria-label="`Удалить товар #${index + 1}`" title="Удалить" @click="emit('remove', index)">Удалить</button>
           </div>
         </div>
       </div>

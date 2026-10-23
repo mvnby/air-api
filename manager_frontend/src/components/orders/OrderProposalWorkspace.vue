@@ -82,16 +82,20 @@ const addSuggested = (index: number) => {
   if (!blank || blank.title.trim() || blank.price) return;
   const groups = suggestedInstallations.value;
   if (!groups.length) return;
+  const completed: number[] = [];
   groups.forEach((group, groupIndex) => {
     if (groupIndex > 0) commercial.addServiceLine();
     const target = groupIndex === 0 ? index : commercial.serviceLines.length - 1;
     commercial.selectServiceTariffForLine(target, standardServiceChoice(group.tariff), group.quantity);
+    completed.push(target);
   });
+  for (const target of completed) delete commercial.serviceLines[target]!.editor;
   commercial.editingServiceLineIndex = null;
 };
 
 defineExpose({
   addProduct: () => commercial.addProductLine(),
+  addService: () => commercial.addServiceLine(),
   openResponse: () => toolbarRef.value?.openResponse(),
 });
 </script>
@@ -146,14 +150,11 @@ defineExpose({
 
       <fieldset :disabled="proposal.activeProposalLocked" :class="proposal.activeProposalLocked ? 'opacity-60' : ''">
         <div class="mb-2 flex flex-wrap items-center gap-2" aria-label="Добавить в предложение">
-          <button v-if="showProductLines" type="button" class="btn-mini-outline h-8 text-xs" data-testid="add-product-line" data-order-usage="order_product_add" @click="commercial.addProductLine">+ Товар</button>
-          <button type="button" class="btn-mini-outline h-8 text-xs" data-testid="add-service-line" data-order-usage="order_service_add" @click="commercial.addServiceLine">+ Услуга</button>
-
           <button v-if="catalogAvailable && showProductLines" type="button" class="btn-mini-outline h-8 text-xs" :disabled="catalogOpening" @click="emit('catalog')">{{ catalogOpening ? 'Открываем подбор…' : catalogNeedsSave ? 'Сохранить и подобрать' : 'Подобрать по параметрам' }}</button>
           <slot name="source-equipment" />
           <button type="button" class="h-8 px-1 text-xs text-slate-500 hover:text-brand-700" :aria-expanded="commercial.showEstimateImport" @click="commercial.toggleEstimateImport">Из сметы</button>
         </div>
-        <div class="hidden gap-2 rounded-t-lg border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500 dark:border-slate-700 dark:bg-slate-900 md:grid" :class="showCosts && !demoReadOnly ? 'grid-cols-[minmax(0,1fr)_3.5rem_6rem_6.5rem_6rem_4.5rem]' : 'grid-cols-[minmax(0,1fr)_3.5rem_6rem_6.5rem_4.5rem]'" aria-hidden="true">
+        <div class="hidden gap-2 rounded-t-lg border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500 dark:border-slate-700 dark:bg-slate-900 md:grid" :class="showCosts && !demoReadOnly ? 'grid-cols-[minmax(0,1fr)_3.5rem_6rem_6.5rem_6rem_6.5rem]' : 'grid-cols-[minmax(0,1fr)_3.5rem_6rem_6.5rem_6.5rem]'" aria-hidden="true">
           <span>Наименование и состав</span><span class="text-center">Кол-во</span><span class="text-right">Цена</span><span class="text-right">Сумма</span><span v-if="showCosts && !demoReadOnly" class="text-right">Себест.</span><span class="text-center">Действия</span>
         </div>
         <OrderProductLinesEditor
@@ -182,7 +183,7 @@ defineExpose({
           @remove="commercial.removeProductLine"
           @add="commercial.addProductLine"
           @fill-description="commercial.fillProductClientDescription"
-          @supply="commercial.createSupplyFromProductLine($event.line, $event.intent)"
+          @supply="async ({ line, intent }) => { if (await beforeInstallationAction()) await commercial.createSupplyFromProductLine(line, intent); }"
         />
 
         <OrderServiceLinesEditor
@@ -214,7 +215,7 @@ defineExpose({
           @select="commercial.selectServiceTariffForLine($event.index, $event.option, $event.quantity)"
           @description-mode="commercial.setServiceLineDescriptionMode($event.index, $event.mode)"
           @remove="commercial.removeServiceLine"
-          @edit-installation="commercial.editInstallationLine"
+          @edit-installation="(index, displayIndex) => commercial.editInstallationLine(index, displayIndex, true)"
           @add="commercial.addServiceLine"
           @add-suggested="addSuggested"
           @add-tariff="commercial.addServiceTariff"

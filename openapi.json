@@ -77833,8 +77833,30 @@
             "title": "Proposal Id"
           },
           "product_id": {
-            "type": "integer",
-            "title": "Product Id"
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id",
+            "description": "Catalog identity; null for a proposal-only manual product."
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "Required snapshot name for a manual product; never creates a catalog product."
           },
           "client_description": {
             "anyOf": [
@@ -77884,7 +77906,6 @@
         },
         "type": "object",
         "required": [
-          "product_id",
           "quantity",
           "price"
         ],

@@ -1,3 +1,4 @@
+import { commitLineEdit } from '../src/components/orders/order-line-drafts';
 import { nextTick } from 'vue';
 import { registerUnsavedNavigationGuard } from '../src/services/unsaved-navigation-guard';
 import { startManagerNavigation } from '../src/services/manager-navigation-history';
@@ -479,6 +480,7 @@ describe('order drawer autosave integration', () => {
     commercial.addServiceLine();
     commercial.serviceLines.value[0].title = 'Монтаж по согласованию';
     commercial.serviceLines.value[0].price = 600;
+    commitLineEdit(commercial.serviceLines.value[0]);
     await nextTick();
     expect(await customer().props('persistObject')!({ address: 'Минск, Новая, 1', branchId: null, comment: 'Вход со двора' })).toBe(true);
     expect(stored.delivery_address).toBe('Минск, Новая, 1');
@@ -893,6 +895,7 @@ describe('lazy order section integration', () => {
     commercial.addServiceLine();
     commercial.serviceLines.value[0].title = 'Несохранённая услуга';
     commercial.serviceLines.value[0].price = 740;
+    commitLineEdit(commercial.serviceLines.value[0]);
     await nextTick();
     for (const section of ['work', 'documents', 'payments', 'proposal'] as const) {
       await openSection(section);
@@ -985,7 +988,7 @@ describe('order responsibility with the actual drawer save queue', () => {
     expect(assign).toHaveBeenCalledWith(395, 8, 3); expect(stored.comment).toBe('Правка в очереди');
     customer().vm.$emit('update:comment', 'Новая правка во время назначения'); await nextTick();
     const commercial = wrapper.findComponent(OrderProposalWorkspace).props('commercial') as any;
-    commercial.addServiceLine(); commercial.serviceLines.value[0].title = 'Новая смета'; commercial.serviceLines.value[0].price = 700; await nextTick();
+    commercial.addServiceLine(); commercial.serviceLines.value[0].title = 'Новая смета'; commercial.serviceLines.value[0].price = 700; commitLineEdit(commercial.serviceLines.value[0]); await nextTick();
     stored = { ...stored, responsible_person: { ...person, staff_user_id: 8, display_name: 'Андрей' }, responsible_version: 4 } as any;
     const updated = structuredClone(stored);
     finishAssignment(updated); expect(await pending).toBe(true); await flushPromises();

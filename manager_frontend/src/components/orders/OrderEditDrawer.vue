@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { hasLineEdits } from './order-line-drafts';
+import { useOrderKeyboardViewport } from '../../composables/useOrderKeyboardViewport';
 import { readOrderProposalContext } from '../../services/order-navigation';
 import { replaceManagerLocation } from '../../services/manager-navigation-history';
 import { computed, defineAsyncComponent, nextTick, onScopeDispose, ref, toRaw, watch } from 'vue';
@@ -68,6 +70,7 @@ const emit = defineEmits<{
 }>();
 
 const drawerScrollContainer = ref<HTMLElement | null>(null);
+const { keyboardOpen, keyboardStyle } = useOrderKeyboardViewport(drawerScrollContainer);
 const workspaceScrollContainer = ref<HTMLElement | null>(null);
 const proposalClientPreview = ref(false);
 const proposalPanelRef = ref<InstanceType<typeof OrderAsyncPanel> | null>(null);
@@ -140,6 +143,7 @@ const {
   total: totalPreview,
   validateLines: validateProposalLines,
 } = commercialEditor;
+const unfinishedLineEdits = computed(() => hasLineEdits(productLines.value) || hasLineEdits(serviceLines.value));
 const drawerForm = useOrderDrawerForm({
   total: totalPreview, productLines, serviceLines, serviceTariffOptions, activeServiceSuggestionIndex,
   applyTariffTemplateToLine, buildLinesPayload: () => buildLinesPayload(activeProposalId.value),
@@ -191,6 +195,7 @@ const proposalLifecycle = useOrderProposalLifecycle({
   onUpdated: (updatedOrder) => emit('updated', updatedOrder),
   onReload: (orderId) => emit('reload', orderId),
   saveOrder: async () => {
+    if (unfinishedLineEdits.value) throw new Error('Завершите редактирование строки кнопкой «Готово» или «Отмена».');
     if (!await orderSaving.flush()) throw new Error(localFormError.value || 'Заказ не сохранён');
     return props.order;
   },
@@ -392,7 +397,7 @@ const {
   waitingActive: () => props.modelValue,
   order: computed(() => props.order),
   displayOrderTitle,
-  hasUnsavedChanges,
+  hasUnsavedChanges: computed(() => hasUnsavedChanges.value || unfinishedLineEdits.value),
   localFormError,
   persistDraft,
   clearDraft,
@@ -431,7 +436,13 @@ const orderWorkspace = computed(() => buildOrderWorkspaceViewModel({
   paid: totalPaymentsPreview.value,
   balance: balanceDuePreview.value,
 }));
-const beforeDocumentGenerate = orderSaving.beforeDocumentGenerate;
+const beforeDocumentGenerate = async () => {
+  if (unfinishedLineEdits.value) {
+    localFormError.value = 'Завершите редактирование строки кнопкой «Готово» или «Отмена» перед созданием документа.';
+    return false;
+  }
+  return orderSaving.beforeDocumentGenerate();
+};
 
 let documentRefreshGeneration = 0;
 const documentRefreshTimers = new Set<number>();
@@ -532,7 +543,7 @@ watch(
         resetWorkspaceHeader();
         focusContainer();
       });
-    } else if (!orderSaving.isOwnResponse(order) && !saving.value && (!hasUnsavedChanges.value || draftBlocked.value)) {
+    } else if (!orderSaving.isOwnResponse(order) && !saving.value && ((!hasUnsavedChanges.value && !unfinishedLineEdits.value) || draftBlocked.value)) {
       await initForm(order);
     } else {
       payments.value = [...(order.payments || [])];
@@ -632,7 +643,7 @@ defineExpose({ prepareToLeave });
       </div>
     </Transition>
     <div v-if="!isPage" class="flex-1 bg-black/60" aria-hidden="true" @click="closeDrawer" />
-    <aside ref="drawerScrollContainer" tabindex="-1" :role="isPage ? 'region' : 'dialog'" :aria-modal="isPage ? undefined : true" aria-label="Рабочая область заказа" :inert="discardingDraft || installationAttaching || sourceApplying || responsibilityBusy || workerAssignmentBusy || workerPayBusy ? true : undefined" :aria-busy="discardingDraft || installationAttaching || sourceApplying || responsibilityBusy || workerAssignmentBusy || workerPayBusy" class="relative flex h-full w-full min-w-0 flex-col overflow-hidden bg-white text-gray-900 outline-none dark:bg-slate-950 dark:text-slate-100" :class="isPage ? '' : 'shadow-2xl md:my-4 md:h-[calc(100%-2rem)] md:w-[calc(100%-2rem)] md:rounded-2xl xl:max-w-[1680px] xl:border xl:border-gray-200 dark:xl:border-slate-700'" @keydown="!isPage && trapFocus($event)" @keydown.esc="!isPage && closeDrawer()" @click="trackUsageControl" @change="trackUsageControl">
+    <aside ref="drawerScrollContainer" :style="keyboardStyle" tabindex="-1" :role="isPage ? 'region' : 'dialog'" :aria-modal="isPage ? undefined : true" aria-label="Рабочая область заказа" :inert="discardingDraft || installationAttaching || sourceApplying || responsibilityBusy || workerAssignmentBusy || workerPayBusy ? true : undefined" :aria-busy="discardingDraft || installationAttaching || sourceApplying || responsibilityBusy || workerAssignmentBusy || workerPayBusy" class="relative flex h-full w-full min-w-0 flex-col overflow-hidden bg-white text-gray-900 outline-none dark:bg-slate-950 dark:text-slate-100" :class="isPage ? '' : 'shadow-2xl md:my-4 md:h-[calc(100%-2rem)] md:w-[calc(100%-2rem)] md:rounded-2xl xl:max-w-[1680px] xl:border xl:border-gray-200 dark:xl:border-slate-700'" @keydown="!isPage && trapFocus($event)" @keydown.esc="!isPage && closeDrawer()" @click="trackUsageControl" @change="trackUsageControl">
       <OrderWorkspaceHeader
         v-show="!proposalClientPreview"
         class="shrink-0"
@@ -688,7 +699,7 @@ defineExpose({ prepareToLeave });
       <OrderWorkspaceUsageReport :open="usageReportOpen" @close="usageReportOpen = false" />
       <EnvelopePrintDialog v-if="showEnvelope && customer?.id" :key="customer.id" :customer-id="customer.id" :order-address="compactObjectAddress" @close="showEnvelope = false" />
 
-      <div ref="workspaceScrollContainer" class="grid min-h-0 min-w-0 flex-1 grid-cols-1 content-start gap-3 overflow-y-auto p-3" :class="!proposalClientPreview && mobileContextOpen ? 'lg:grid-cols-[minmax(0,1fr)_18rem]' : ''">
+      <div ref="workspaceScrollContainer" data-order-scroll class="grid min-h-0 min-w-0 flex-1 grid-cols-1 content-start gap-3 overflow-y-auto p-3" :class="!proposalClientPreview && mobileContextOpen ? 'lg:grid-cols-[minmax(0,1fr)_18rem]' : ''">
         <div class="min-w-0">
 
           <p v-if="displayFormError && !proposalClientPreview" class="mt-4 rounded-xl border border-red-500/40 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -830,6 +841,9 @@ defineExpose({ prepareToLeave });
       </div>
       <OrderProposalTotalsBar
         v-if="activeWorkspaceSection === 'proposal'"
+        :keyboard-open="keyboardOpen"
+        :editable="!activeProposalLocked && !demoReadOnly"
+        :show-product-lines="true"
         :products="productLines"
         :services="serviceLines"
         :show-costs="showProposalCosts && !demoReadOnly"
@@ -837,6 +851,8 @@ defineExpose({ prepareToLeave });
         :busy="draftBlocked || discardingDraft || saving || proposalActionLoading || installationAttaching || sourceApplying"
         :action-label="orderWorkspace.nextAction.command === 'finish_proposal' ? 'Подготовить КП' : orderWorkspace.nextAction.label"
         @next="handleWorkspaceNextAction"
+        @add-product="proposalWorkspaceRef?.addProduct()"
+        @add-service="proposalWorkspaceRef?.addService()"
       />
       <LeadSourceReviewModal
         v-if="order"

@@ -6,7 +6,14 @@ import type { OrderProductLogisticsComponent } from './OrderProductLogisticsComp
 export type ManagerOrderProductLinePayload = {
     link_id?: (number | null);
     proposal_id?: (number | null);
-    product_id: number;
+    /**
+     * Catalog identity; null for a proposal-only manual product.
+     */
+    product_id?: (number | null);
+    /**
+     * Required snapshot name for a manual product; never creates a catalog product.
+     */
+    title?: (string | null);
     client_description?: (string | null);
     quantity: number;
     price: number;

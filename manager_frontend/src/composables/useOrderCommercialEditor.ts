@@ -1,4 +1,5 @@
 import { computed, ref, watch, type Ref } from 'vue';
+import { committedLines } from '../components/orders/order-line-drafts';
 import { useDebounceFn } from '@vueuse/core';
 import { api } from '../api';
 import type {
@@ -176,14 +177,14 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
   } = useServiceDescriptionMode();
 
   const total = computed(() => {
-    const products = productLines.value.reduce((sum, line) => sum + Math.round(line.price * 100) * line.quantity, 0);
-    const services = serviceLines.value.reduce((sum, line) => sum + Math.round(line.price * 100) * line.quantity, 0);
+    const products = committedLines(productLines.value).reduce((sum, line) => sum + Math.round(line.price * 100) * line.quantity, 0);
+    const services = committedLines(serviceLines.value).reduce((sum, line) => sum + Math.round(line.price * 100) * line.quantity, 0);
     return (products + services) / 100;
   });
 
   const margin = computed(() => {
-    const productCost = productLines.value.reduce((sum, line) => sum + Math.round(line.cost * 100) * line.quantity, 0);
-    const serviceCost = serviceLines.value.reduce((sum, line) => sum + Math.round(Number(line.cost || 0) * 100) * line.quantity, 0);
+    const productCost = committedLines(productLines.value).reduce((sum, line) => sum + Math.round(line.cost * 100) * line.quantity, 0);
+    const serviceCost = committedLines(serviceLines.value).reduce((sum, line) => sum + Math.round(Number(line.cost || 0) * 100) * line.quantity, 0);
     const installerCost = Math.round(Number(order.value?.installer_cost_byn || 0) * 100);
     return (Math.round(total.value * 100) - productCost - serviceCost - installerCost) / 100;
   });
@@ -258,6 +259,12 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
 
   const createSupplyFromProductLine = async (line: ProductLine, intent: 'order' | 'reserve') => {
     if (!order.value?.id) return;
+    if (!line.product_id || !productLines.value.includes(line)) return;
+    const original = line.editor?.original;
+    if (original && (line.product_id !== original.product_id || line.quantity !== original.quantity)) {
+      setToast('Сначала завершите изменение товара кнопкой «Готово».', 'error');
+      return;
+    }
     if (!line.link_id) {
       setToast('Сначала сохраните заказ, чтобы создать поставку по строке.', 'error');
       return;
@@ -277,11 +284,11 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
     }
   };
 
-  const debouncedLoadProductOptions = useDebounceFn(async (index: number, query: string, requestId: number) => {
+  const debouncedLoadProductOptions = useDebounceFn(async (index: number, query: string, requestId: number, row: ProductLine) => {
     try {
       productLookupLoading.value = true;
       const response = await api.smartSearchProducts(query, 20);
-      if (requestId !== productSearchRequestId || activeSuggestionIndex.value !== index) return;
+      if (requestId !== productSearchRequestId || activeSuggestionIndex.value !== index || productLines.value[index] !== row || row.product_query.trim() !== query) return;
       let options = Array.isArray(response) ? response.map(mapSmartSearchItemToOption) : [];
       if (searchInStock.value) {
         options = options.filter((option) => (
@@ -314,17 +321,22 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
     activeSuggestionIndex.value = index;
     const query = row.product_query.trim();
     row.product_id = 0;
+    row.catalog_price = null;
+    row.product_country = null;
+    row.product_logistics_components = [];
+    row.logistics_components = null;
     productSearchRequestId += 1;
     if (query.length < 2) {
       productOptions.value = [];
       productLookupLoading.value = false;
       return;
     }
-    debouncedLoadProductOptions(index, query, productSearchRequestId);
+    debouncedLoadProductOptions(index, query, productSearchRequestId, row);
   };
 
   watch(searchInStock, () => {
-    if (activeSuggestionIndex.value !== null) onProductQueryInput(activeSuggestionIndex.value);
+    const index = activeSuggestionIndex.value;
+    if (index !== null && !productLines.value[index]?.product_id) onProductQueryInput(index);
   });
 
   const onProductInputBlur = (index: number) => {
@@ -374,6 +386,7 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
 
   const addProductLine = () => {
     productLines.value.push({
+      editor: { original: null },
       link_id: null,
       product_id: 0,
       product_query: '',
@@ -388,13 +401,14 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
   };
 
   const addServiceLine = () => {
-    serviceLines.value.push({ title: '', quantity: 1, price: 0, cost: 0, service_id: null });
+    serviceLines.value.push({ editor: { original: null }, title: '', quantity: 1, price: 0, cost: 0, service_id: null });
     editingServiceLineIndex.value = serviceLines.value.length - 1;
   };
 
   const addServiceTariff = (option: ManagerQuickTariffResponse) => {
     addServiceLine();
     selectServiceTariffForLine(serviceLines.value.length - 1, option);
+    delete serviceLines.value[serviceLines.value.length - 1]!.editor;
     editingServiceLineIndex.value = null;
   };
 
@@ -507,16 +521,20 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
   };
 
   const removeProductLine = async (index: number) => {
-    if (!await confirmDialog({ title: 'Удалить товар из заказа?', confirmText: 'Удалить', variant: 'danger' })) return;
-    productLines.value.splice(index, 1);
+    const line = productLines.value[index];
+    if (!line) return;
+    if (line.editor?.original !== null && !await confirmDialog({ title: 'Удалить товар из предложения?', description: line.product_query, confirmText: 'Удалить', variant: 'danger' })) return;
+    const currentIndex = productLines.value.indexOf(line);
+    if (currentIndex < 0) return;
+    productLines.value.splice(currentIndex, 1);
     if (activeSuggestionIndex.value === index) {
       activeSuggestionIndex.value = null;
       productOptions.value = [];
     }
   };
 
-  const editInstallationLine = (index: number, displayIndex = 0) => {
-    const manual = manualInstallationLines(serviceLines.value, index, displayIndex);
+  const editInstallationLine = (index: number, displayIndex = 0, draft = false) => {
+    const manual = manualInstallationLines(serviceLines.value, index, displayIndex, draft);
     serviceLines.value = manual.lines;
     editingServiceLineIndex.value = manual.index;
   };
@@ -524,7 +542,7 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
   const removeServiceLine = async (index: number, displayIndex = 0) => {
     const selectedLine = serviceLines.value[index];
     if (!selectedLine) return;
-    if (!await confirmDialog({ title: 'Удалить услугу из заказа?', confirmText: 'Удалить', variant: 'danger' })) return;
+    if ((selectedLine.editor?.original !== null || selectedLine.editor?.group) && !await confirmDialog({ title: 'Удалить услугу из предложения?', confirmText: 'Удалить', variant: 'danger' })) return;
     const currentIndex = serviceLines.value.indexOf(selectedLine);
     if (currentIndex < 0) return;
     const manual = manualInstallationLines(serviceLines.value, currentIndex, displayIndex);
@@ -538,8 +556,9 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
   };
 
   const buildLinesPayload = (proposalId: number | null) => ({
-    products: productLines.value.map((line) => ({
-      product_id: line.product_id || 0,
+    products: committedLines(productLines.value).map((line) => ({
+      product_id: line.product_id || null,
+      ...(!line.product_id ? { title: line.product_query.trim() } : {}),
       client_description: line.client_description?.trim() || null,
       quantity: Math.trunc(Number(line.quantity) || 0),
       price: Math.round(Number(line.price) || 0),
@@ -548,7 +567,7 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
       link_id: line.link_id ?? null,
       proposal_id: proposalId,
     })),
-    services: serviceLines.value.map((line) => ({
+    services: committedLines(serviceLines.value).map((line) => ({
       link_id: line.link_id ?? null,
       service_id: line.service_id ?? null,
       title: line.title,
@@ -571,21 +590,21 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
     || (typeof value === 'number' && validServiceMoney(value));
 
   const validateLines = () => {
-    if (productLines.value.some((line) => line.quantity <= 0)) return 'Количество товара должно быть больше 0';
-    if (productLines.value.some((line) => line.price < 0)) return 'Цена товара не может быть отрицательной';
-    if (productLines.value.some((line) => !line.product_id)) return 'Выберите товар из выпадающего списка';
-    if (productLines.value.some((line) => (line.client_description?.length || 0) > 2_000)) return 'Описание товара для клиента не может быть длиннее 2000 символов';
-    if (serviceLines.value.some((line) => line.quantity <= 0)) return 'Количество услуги должно быть больше 0';
-    if (serviceLines.value.some((line) => !validServiceMoney(line.price))) return 'Цена услуги должна быть указана с точностью до копейки';
-    if (serviceLines.value.some((line) => !validOptionalServiceMoney(line.cost))) return 'Себестоимость услуги должна быть указана с точностью до копейки';
-    if (serviceLines.value.some((line) => !line.title?.trim())) return 'Для услуги укажите название';
-    if (serviceLines.value.some((line) => (line.description?.length || 0) > 10_000)) return 'Описание услуги не может быть длиннее 10000 символов';
+    if (committedLines(productLines.value).some((line) => line.quantity <= 0)) return 'Количество товара должно быть больше 0';
+    if (committedLines(productLines.value).some((line) => line.price < 0)) return 'Цена товара не может быть отрицательной';
+    if (committedLines(productLines.value).some((line) => !line.product_query.trim())) return 'Для товара укажите название';
+    if (committedLines(productLines.value).some((line) => (line.client_description?.length || 0) > 2_000)) return 'Описание товара для клиента не может быть длиннее 2000 символов';
+    if (committedLines(serviceLines.value).some((line) => line.quantity <= 0)) return 'Количество услуги должно быть больше 0';
+    if (committedLines(serviceLines.value).some((line) => !validServiceMoney(line.price))) return 'Цена услуги должна быть указана с точностью до копейки';
+    if (committedLines(serviceLines.value).some((line) => !validOptionalServiceMoney(line.cost))) return 'Себестоимость услуги должна быть указана с точностью до копейки';
+    if (committedLines(serviceLines.value).some((line) => !line.title?.trim())) return 'Для услуги укажите название';
+    if (committedLines(serviceLines.value).some((line) => (line.description?.length || 0) > 10_000)) return 'Описание услуги не может быть длиннее 10000 символов';
     return '';
   };
 
   const currentLinesSnapshot = (activeProposalId: number | null) => JSON.stringify({
     activeProposalId,
-    products: productLines.value.map((line) => ({
+    products: committedLines(productLines.value).map((line) => ({
       link_id: line.link_id ?? null,
       product_id: Number(line.product_id || 0),
       product_query: String(line.product_query || '').trim(),
@@ -597,7 +616,7 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
       product_logistics_components: line.product_logistics_components || [],
       logistics_components: line.logistics_components || null,
     })),
-    services: serviceLines.value.map((line) => ({
+    services: committedLines(serviceLines.value).map((line) => ({
       link_id: line.link_id ?? null,
       service_id: line.service_id ?? null,
       title: String(line.title || '').trim(),

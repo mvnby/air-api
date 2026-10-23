@@ -82,7 +82,7 @@ async def apply_commercial_lines(context: OrderUpdateContext) -> None:
             })
             submitted_components = Counter()
             for line in context.payload.products:
-                submitted_components[int(line.product_id)] += int(line.quantity)
+                submitted_components[int(line.product_id or 0)] += int(line.quantity)
             if submitted_components != saved_components:
                 raise ValueError("Состав мультисплита сохранён как единое решение. Создайте новый вариант конфигурации.")
         await _replace_product_lines(context, target_proposal_id)
@@ -135,7 +135,10 @@ async def _replace_product_lines(
         if line.cost is not None and line.cost < 0:
             raise ValueError("Product cost cannot be negative")
 
-    product_ids = {int(line.product_id) for line in product_lines}
+    for line in product_lines:
+        if line.product_id is None and not str(line.title or "").strip():
+            raise ValueError("Для ручного товара укажите название")
+    product_ids = {int(line.product_id) for line in product_lines if line.product_id is not None}
     if product_ids:
         result = await context.session.execute(
             select(Product.id).where(Product.id.in_(product_ids))
@@ -162,12 +165,13 @@ async def _replace_product_lines(
         value = {
             "link_id": line.link_id,
             "product_id": line.product_id,
+            "title": str(line.title or "").strip() if line.product_id is None else None,
             "quantity": line.quantity,
             "price": line.price,
             "cost": (
                 line.cost
                 if line.cost is not None
-                else cost_defaults.get(int(line.product_id), 0)
+                else cost_defaults.get(int(line.product_id or 0), 0)
             ),
             "logistics_components": logistics_components,
         }
