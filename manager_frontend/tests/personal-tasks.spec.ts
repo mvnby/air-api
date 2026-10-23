@@ -83,6 +83,60 @@ afterEach(() => {
 });
 
 describe('PersonalTasksView', () => {
+  it('reaches the 101st task and resets pagination when filtering', async () => {
+    const firstPage = Array.from({ length: 100 }, (_, index) => ({ ...task(), id: index + 1 }));
+    mocks.list.mockResolvedValueOnce({ ...listResult(firstPage), total: 101 });
+    const wrapper = mount(PersonalTasksView);
+    wrappers.push(wrapper);
+    await flushPromises();
+    expect(wrapper.text()).toContain('1–100 из 101');
+    mocks.list.mockResolvedValueOnce({ ...listResult([{ ...task(), id: 101, text: 'Последнее поручение' }]), total: 101, offset: 100 });
+    await wrapper.get('[data-testid="tasks-next"]').trigger('click');
+    await flushPromises();
+    expect(mocks.list).toHaveBeenLastCalledWith('active', 100, 100);
+    expect(wrapper.text()).toContain('Последнее поручение');
+    expect(wrapper.text()).toContain('101–101 из 101');
+    expect(wrapper.get('[data-testid="tasks-next"]').attributes('disabled')).toBeDefined();
+    mocks.list.mockResolvedValueOnce(listResult([task('completed')]));
+    await wrapper.findAll('button').find(button => button.text() === 'Завершённые')!.trigger('click');
+    await flushPromises();
+    expect(mocks.list).toHaveBeenLastCalledWith('completed', 100, 0);
+    expect(wrapper.text()).toContain('1–1 из 1');
+  });
+
+  it('returns to a populated page after completing the final item on the last page', async () => {
+    mocks.list.mockResolvedValueOnce({ ...listResult([task()]), total: 101 });
+    const wrapper = mount(PersonalTasksView);
+    wrappers.push(wrapper);
+    await flushPromises();
+    mocks.list.mockResolvedValueOnce({ ...listResult([task()]), total: 101, offset: 100 });
+    await wrapper.get('[data-testid="tasks-next"]').trigger('click');
+    await flushPromises();
+    mocks.list.mockResolvedValueOnce({ ...listResult([]), total: 100, offset: 100 });
+    mocks.list.mockResolvedValueOnce({ ...listResult([task()]), total: 100 });
+    await wrapper.get('[data-testid="personal-task-toggle-7"]').trigger('click');
+    await flushPromises();
+    expect(mocks.list).toHaveBeenLastCalledWith('active', 100, 0);
+    expect(wrapper.findComponent(PersonalTaskCard).exists()).toBe(true);
+  });
+
+  it('ignores an older response after switching filters and accepts filter links', async () => {
+    window.history.replaceState({}, '', '/manager/tasks?filter=overdue');
+    let resolveOld!: (value: ReturnType<typeof listResult>) => void;
+    mocks.list.mockReturnValueOnce(new Promise(resolve => { resolveOld = resolve; }));
+    const wrapper = mount(PersonalTasksView);
+    wrappers.push(wrapper);
+    expect(mocks.list).toHaveBeenLastCalledWith('overdue', 100, 0);
+    mocks.list.mockResolvedValueOnce(listResult([{ ...task('completed'), text: 'Завершено' }]));
+    await wrapper.findAll('button').find(button => button.text() === 'Завершённые')!.trigger('click');
+    await flushPromises();
+    resolveOld(listResult([{ ...task(), text: 'Старый результат' }]));
+    await flushPromises();
+    expect(wrapper.text()).toContain('Завершено');
+    expect(wrapper.text()).not.toContain('Старый результат');
+    expect(window.location.search).toBe('?filter=completed');
+  });
+
   it('opens a linked completed task directly even outside the active first page', async () => {
     window.history.replaceState({}, '', '/manager/tasks?taskId=91');
     mocks.get.mockResolvedValue({ ...task('completed'), id: 91, text: 'Уточнить адрес / созвониться перед выездом', lead_id: 8 });
