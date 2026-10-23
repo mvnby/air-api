@@ -344,6 +344,8 @@ if [[ "${EXPECTED_ROLE}" == "primary" ]]; then
     API_RUN_MIGRATIONS=false \
     API_RUN_DEFAULTS=false \
     bash "${BLUE_GREEN_SCRIPT}"
+  # The API generation is now active; retain the guard only for owned recovery.
+  export API_IDLE_WORKER_CAPACITY_RELIEF_ALLOWED=false
   require_expected_role
   COMPOSE=(docker compose -f "${COMPOSE_FILE}" --profile bluegreen)
   worker_supported=true
@@ -377,6 +379,7 @@ ensure_document_pdf_runtime
 "${COMPOSE[@]}" pull "${COMMUNICATIONS_WORKER_SERVICE}"
 require_deploy_capacity
 fence_communications_worker
+export API_IDLE_WORKER_CAPACITY_RELIEF_ALLOWED=false
 write_backend_image "${BACKEND_IMAGE}"
 env_updated=true
 "${COMPOSE[@]}" stop bot >/dev/null 2>&1 || true

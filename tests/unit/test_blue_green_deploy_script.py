@@ -459,3 +459,12 @@ def test_active_runtime_image_must_be_unique_and_immutable(tmp_path, runtime_ima
     assert " pull " not in commands
     assert " up " not in commands
     assert "systemctl reload nginx" not in commands
+
+
+def test_new_idle_pause_is_disabled_before_candidate_start(tmp_path):
+    env, _, _, command_log = _environment(tmp_path)
+    env["API_IDLE_WORKER_CAPACITY_RELIEF_ALLOWED"] = "true"
+    result = _run(env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    events = [line for line in command_log.read_text().splitlines() if line.startswith("candidate_relief ")]
+    assert events and all(line == "candidate_relief false" for line in events)

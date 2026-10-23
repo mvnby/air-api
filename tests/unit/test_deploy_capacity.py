@@ -93,3 +93,31 @@ def test_capacity_rejects_ambiguous_or_invalid_meminfo(tmp_path, meminfo):
     result = _run(tmp_path, meminfo)
 
     assert result.returncode != 0
+
+
+@pytest.mark.parametrize("case", [
+    "disabled", "missing-lock", "unsupported-operation", "owned-journal",
+    "invalid-meminfo", "invalid-swap", "swap-only",
+])
+def test_idle_relief_is_not_invoked_outside_eligible_memory_failure(tmp_path, case):
+    guard = tmp_path / "guard.py"
+    called = tmp_path / "called"
+    guard.write_text(f"from pathlib import Path\nPath({str(called)!r}).touch()\n")
+    overrides = {
+        "API_IDLE_WORKER_CAPACITY_RELIEF_ALLOWED": "true",
+        "API_IDLE_WORKER_CAPACITY_GUARD": str(guard),
+        "API_DEPLOY_LOCK_FD": "9",
+        "PATRONI_CANDIDATE_OPERATION": "deploy",
+        "API_PROJECT_DIR": str(tmp_path),
+    }
+    memory = "MemAvailable: 1550000 kB\nSwapTotal: 524288 kB\nSwapFree: 524288 kB\n"
+    if case == "disabled": overrides["API_IDLE_WORKER_CAPACITY_RELIEF_ALLOWED"] = "false"
+    if case == "missing-lock": overrides["API_DEPLOY_LOCK_FD"] = ""
+    if case == "unsupported-operation": overrides["PATRONI_CANDIDATE_OPERATION"] = "scrub"
+    if case == "owned-journal": (tmp_path / ".ha-idle-worker-capacity.json").write_text("{}")
+    if case == "invalid-meminfo": memory = memory.replace("1550000 kB", "invalid kB")
+    if case == "invalid-swap": memory = memory.replace("SwapFree: 524288", "SwapFree: 524289")
+    if case == "swap-only": memory = memory.replace("1550000", "2097152").replace("SwapFree: 524288", "SwapFree: 1000")
+    result = _run(tmp_path, memory, **overrides)
+    assert result.returncode != 0
+    assert not called.exists()

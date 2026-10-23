@@ -343,6 +343,16 @@ heartbeat, and zero running deliveries across all channels. Active, stale, or
 inconclusive states abort the release. A healthy node with sufficient headroom
 does not enter this path; a previously fenced worker is never started by it.
 
+If memory falls below the same threshold later (after an image pull, migration,
+or before candidate startup), the capacity check may run this same idle proof
+under the inherited transaction lock. It does so only before candidate activation
+and before the transaction owns a pause journal, and then repeats the unchanged
+memory and swap checks. Worker startup after API activation cannot create a new
+pause journal for the new API generation.
+The helper's own preflight and final retry cannot recursively request relief.
+An already paused worker, active/stale delivery state or insufficient remaining
+capacity still fails closed through the existing recovery lifecycle.
+
 The host helper uses only Python's standard library and `psql` in the existing
 database container, without starting another application interpreter in the API
 cgroup. It locks only the Telegram control row while proving idle and stopping
