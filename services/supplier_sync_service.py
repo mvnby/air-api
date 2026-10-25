@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 import re
@@ -105,6 +106,16 @@ def _extract_range_start_col_idx(range_a1: Optional[str]) -> int:
     return max(0, _col_to_idx(m.group(1)))
 
 
+def _read_source_values(
+    spreadsheet_id: str, sheet_name: str | None, range_a1: str | None
+) -> list[list[str]]:
+    return get_google_service().read_sheet_values(
+        spreadsheet_id=spreadsheet_id,
+        sheet_name=sheet_name,
+        range_a1=range_a1,
+    )
+
+
 class SupplierSyncService:
     @staticmethod
     async def sync_source(
@@ -133,10 +144,8 @@ class SupplierSyncService:
             range_a1 = source.range_a1
             await session.commit()
 
-            values = get_google_service().read_sheet_values(
-                spreadsheet_id=spreadsheet_id,
-                sheet_name=sheet_name,
-                range_a1=range_a1,
+            values = await asyncio.to_thread(
+                _read_source_values, spreadsheet_id, sheet_name, range_a1
             )
 
             # Do not hard-skip first row; rely on logical row validation instead.
