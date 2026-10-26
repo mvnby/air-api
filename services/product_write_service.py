@@ -354,6 +354,7 @@ class ProductWriteService:
                 payload.get("main_image")
             )
         original_brand_id = existing_product.brand_id
+        original_slug = existing_product.slug
         original_category_inputs = (
             category_detection_inputs(existing_product.specs, existing_product.title),
             existing_product.product_kind,
@@ -473,7 +474,7 @@ class ProductWriteService:
             session,
             reason="product_update",
             product_ids=[product.id],
-            slugs=[product.slug],
+            slugs=[original_slug, product.slug],
             brand_slugs=previous_brand_slugs,
         )
         if commit:

@@ -294,7 +294,7 @@ class CatalogRevisionService:
             cache_key=cache_key,
             reason=reason,
         )
-        await CatalogInvalidationEventService.enqueue_requested(
+        event = await CatalogInvalidationEventService.enqueue_requested(
             session,
             idempotency_key=(
                 f"catalog:{target.tenant_id}:{target.storefront_id}:"
@@ -304,6 +304,12 @@ class CatalogRevisionService:
             priority=40,
             max_attempts=12,
         )
+        if settings.INDEXNOW_ENABLED and target.is_system and target.is_default:
+            from services.indexnow_event_service import IndexNowEventService
+
+            await IndexNowEventService.stage_catalog_notification(
+                session, catalog_event=event, payload=payload,
+            )
 
     @staticmethod
     def _origins_for_target(

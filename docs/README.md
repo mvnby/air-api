@@ -28,6 +28,7 @@
 | Материалы брендов/серий, совместимые аксессуары, форматы фич | [Наследование и источники каталога](catalog/series-knowledge-and-accessories.md) |
 | Парсеры и импорт | [Добавление парсера](adding-parser.md), разделы импорта/нормализации в [рабочих процедурах](development-workflow.md) |
 | Товарные подборки, инвалидация кэша | [Подборки](product-collections.md), [ревизии каталога](catalog-cache-invalidation.md) |
+| Уведомления Яндекса об изменениях каталога | [IndexNow](indexnow.md) |
 | Гарантия оборудования и её публичное представление | [Политики гарантии](warranty-policies.md), [публичный контракт](public-product-warranty.md) |
 | Оборудование и обслуживание | [Обслуживание](equipment-maintenance.md), [продажа с монтажом в два этапа](b2c-two-stage-installation.md) |
 | Монтаж и новая сетка цен | [Памятка для менеджера](installation-grid-manager-guide.md), [статус выпуска 25 сентября](installation-grid-release-2026-09-25.md), [технический контракт #955](installation-estimate-contract.md), [процедура применения](installation-grid-rollout.md) |

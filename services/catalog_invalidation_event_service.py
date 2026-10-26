@@ -47,6 +47,7 @@ class CatalogInvalidationTransition:
 
 
 class CatalogInvalidationEventService:
+    DAO = CatalogInvalidationEventDAO
     RETRY_BASE_SECONDS = 30
     RETRY_MAX_SECONDS = 3600
     MAX_RECOVERY_LIMIT = 1000
@@ -68,7 +69,7 @@ class CatalogInvalidationEventService:
         independent from application-host clock drift.
         """
 
-        authoritative_now = await CatalogInvalidationEventDAO.database_now(
+        authoritative_now = await cls.DAO.database_now(
             session
         )
         result = await IntegrationOutboxService.enqueue_with_result(
@@ -102,8 +103,8 @@ class CatalogInvalidationEventService:
     ) -> CatalogInvalidationClaim | None:
         normalized_worker_id = cls._normalize_worker_id(worker_id)
         normalized_lease_seconds = cls._normalize_lease_seconds(lease_seconds)
-        now = await CatalogInvalidationEventDAO.database_now(session)
-        event = await CatalogInvalidationEventDAO.claimable_event(
+        now = await cls.DAO.database_now(session)
+        event = await cls.DAO.claimable_event(
             session,
             now=now,
         )
@@ -140,7 +141,7 @@ class CatalogInvalidationEventService:
         claim: CatalogInvalidationClaim,
         lease_seconds: int,
     ) -> datetime:
-        now = await CatalogInvalidationEventDAO.database_now(session)
+        now = await cls.DAO.database_now(session)
         event = await cls._owned_event(session, claim=claim, now=now)
         event.lease_expires_at = now + timedelta(
             seconds=cls._normalize_lease_seconds(lease_seconds)
@@ -157,7 +158,7 @@ class CatalogInvalidationEventService:
         *,
         claim: CatalogInvalidationClaim,
     ) -> CatalogInvalidationTransition:
-        now = await CatalogInvalidationEventDAO.database_now(session)
+        now = await cls.DAO.database_now(session)
         event = await cls._owned_event(session, claim=claim, now=now)
         event.status = "published"
         event.published_at = now
@@ -181,7 +182,7 @@ class CatalogInvalidationEventService:
         error: BaseException,
         permanent: bool = False,
     ) -> CatalogInvalidationTransition:
-        now = await CatalogInvalidationEventDAO.database_now(session)
+        now = await cls.DAO.database_now(session)
         event = await cls._owned_event(session, claim=claim, now=now)
         is_dead = permanent or event.attempts >= event.max_attempts
         next_attempt_at = None
@@ -213,9 +214,9 @@ class CatalogInvalidationEventService:
         *,
         limit: int,
     ) -> CatalogInvalidationRecovery:
-        now = await CatalogInvalidationEventDAO.database_now(session)
+        now = await cls.DAO.database_now(session)
         safe_limit = max(1, min(cls.MAX_RECOVERY_LIMIT, int(limit)))
-        events = await CatalogInvalidationEventDAO.expired_events(
+        events = await cls.DAO.expired_events(
             session,
             now=now,
             limit=safe_limit,
@@ -252,7 +253,7 @@ class CatalogInvalidationEventService:
         claim: CatalogInvalidationClaim,
         now: datetime,
     ):
-        event = await CatalogInvalidationEventDAO.owned_event(
+        event = await cls.DAO.owned_event(
             session,
             event_id=claim.event_id,
             worker_id=claim.worker_id,

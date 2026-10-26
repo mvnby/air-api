@@ -13,6 +13,9 @@ from services.catalog_invalidation_contracts import (
 
 
 class CatalogInvalidationEventDAO:
+    # Subclasses may consume another event type using the same fenced lease.
+    EVENT_TYPE = CATALOG_CACHE_INVALIDATION_REQUESTED_EVENT
+
     @staticmethod
     async def database_now(session: AsyncSession) -> datetime:
         if session.get_bind().dialect.name == "postgresql":
@@ -27,8 +30,9 @@ class CatalogInvalidationEventDAO:
             return value.astimezone(timezone.utc)
         return datetime.now(timezone.utc)
 
-    @staticmethod
+    @classmethod
     async def claimable_event(
+        cls,
         session: AsyncSession,
         *,
         now: datetime,
@@ -37,7 +41,7 @@ class CatalogInvalidationEventDAO:
             select(IntegrationOutboxEvent)
             .where(
                 IntegrationOutboxEvent.event_type
-                == CATALOG_CACHE_INVALIDATION_REQUESTED_EVENT,
+                == cls.EVENT_TYPE,
                 IntegrationOutboxEvent.status == "pending",
                 IntegrationOutboxEvent.available_at <= now,
                 IntegrationOutboxEvent.attempts
@@ -55,8 +59,9 @@ class CatalogInvalidationEventDAO:
             statement = statement.with_for_update(skip_locked=True)
         return (await session.execute(statement)).scalar_one_or_none()
 
-    @staticmethod
+    @classmethod
     async def expired_events(
+        cls,
         session: AsyncSession,
         *,
         now: datetime,
@@ -66,7 +71,7 @@ class CatalogInvalidationEventDAO:
             select(IntegrationOutboxEvent)
             .where(
                 IntegrationOutboxEvent.event_type
-                == CATALOG_CACHE_INVALIDATION_REQUESTED_EVENT,
+                == cls.EVENT_TYPE,
                 IntegrationOutboxEvent.status == "processing",
                 IntegrationOutboxEvent.lease_expires_at.is_not(None),
                 IntegrationOutboxEvent.lease_expires_at <= now,
@@ -81,8 +86,9 @@ class CatalogInvalidationEventDAO:
             statement = statement.with_for_update(skip_locked=True)
         return list((await session.execute(statement)).scalars().all())
 
-    @staticmethod
+    @classmethod
     async def owned_event(
+        cls,
         session: AsyncSession,
         *,
         event_id: str,
@@ -93,7 +99,7 @@ class CatalogInvalidationEventDAO:
         statement = select(IntegrationOutboxEvent).where(
             IntegrationOutboxEvent.event_id == event_id,
             IntegrationOutboxEvent.event_type
-            == CATALOG_CACHE_INVALIDATION_REQUESTED_EVENT,
+            == cls.EVENT_TYPE,
             IntegrationOutboxEvent.status == "processing",
             IntegrationOutboxEvent.worker_id == worker_id,
             IntegrationOutboxEvent.lease_token == lease_token,
