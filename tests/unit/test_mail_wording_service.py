@@ -17,6 +17,12 @@ def test_rejects_new_facts_and_unsupported_work(text):
     assert not Wording.valid_introduction(text, "Направляем коммерческое предложение на диагностику оборудования.")
 
 
+def test_dismantling_does_not_authorize_installation_wording():
+    assert not Wording.valid_introduction(
+        "Во вложении предложение на монтаж оборудования.",
+        "Направляем коммерческое предложение на демонтаж оборудования.")
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("response", [
     '{"introduction":"Во вложении предложение с составом монтажных работ. Посмотрите, подходит ли вам этот вариант."}',

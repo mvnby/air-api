@@ -21,7 +21,8 @@ class MailWordingService:
         if cls.CLAIMS.search(text) or re.search(r"https?://|@|уважением|директор|телефон", text, re.I):
             return False
         lowered, evidence = text.lower(), source.lower()
-        return not any(re.search(topic, lowered) and not re.search(topic, evidence) for topic in cls.TOPICS)
+        return not any(re.search(rf"\b(?:{topic})", lowered) and not re.search(rf"\b(?:{topic})", evidence)
+                       for topic in cls.TOPICS)
 
     @classmethod
     async def suggest(cls, session, *, actor, draft_id, expected_version):
