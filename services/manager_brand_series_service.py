@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import Brand, FeatureSeriesLink, Product, ProductSeries
 from services.catalog_invalidation_commit_service import CatalogInvalidationCommitService
+from services.indexnow_event_service import IndexNowEventService
 from services.catalog_media_policy import CatalogMediaKind, CatalogMediaPolicy
 from services.catalog_mutation_contracts import CatalogMutationBatch
 from services.manager_brand_mutation_state import snapshot_brand_series
@@ -118,11 +119,13 @@ class ManagerBrandSeriesOperations(ManagerBrandSeriesFeatureOperations):
                 feature_ids=payload.get("brand_feature_ids"),
             )
 
+        current_public_paths = await IndexNowEventService.capture_public_paths(session, series_ids=[series.id])
         await CatalogInvalidationCommitService.commit_registered_global_mutation(
             session,
             producer="manager_brand.create_brand_series",
             changed=True,
             brand_slugs=[brand.slug],
+            **({"additional_paths": current_public_paths} if current_public_paths else {}),
         )
         await session.refresh(series)
         feature_map = await cls._load_series_brand_features(session, [int(series.id or 0)])
@@ -145,6 +148,7 @@ class ManagerBrandSeriesOperations(ManagerBrandSeriesFeatureOperations):
             raise HTTPException(status_code=404, detail="Бренд не найден.")
 
         series = await cls._get_brand_series(session, brand_id, series_id)
+        previous_public_paths = await IndexNowEventService.capture_public_paths(session, series_ids=[series_id])
         before_state = snapshot_brand_series(series)
 
         if "title" in payload and payload["title"] is not None:
@@ -256,11 +260,17 @@ class ManagerBrandSeriesOperations(ManagerBrandSeriesFeatureOperations):
             products_count=int(products_count or 0),
             brand_features=feature_map.get(int(series.id or 0), []),
         )
+        current_public_paths = (
+            await IndexNowEventService.capture_public_paths(session, series_ids=[series.id])
+            if entity_changed or relation_changed else ()
+        )
         await CatalogInvalidationCommitService.commit_registered_global_mutation(
             session,
             producer="manager_brand.update_brand_series",
             changed=entity_changed or relation_changed,
             brand_slugs=[brand.slug],
+            **({"previous_public_paths": previous_public_paths} if previous_public_paths else {}),
+            **({"additional_paths": current_public_paths} if current_public_paths else {}),
         )
         return response
 
@@ -359,12 +369,14 @@ class ManagerBrandSeriesOperations(ManagerBrandSeriesFeatureOperations):
         ).scalars().all()
         for link in link_rows:
             await session.delete(link)
+        previous_public_paths = await IndexNowEventService.capture_public_paths(session, series_ids=[series_id])
         await session.delete(series)
         await CatalogInvalidationCommitService.commit_registered_global_mutation(
             session,
             producer="manager_brand.delete_brand_series",
             changed=True,
             brand_slugs=[brand.slug],
+            **({"previous_public_paths": previous_public_paths} if previous_public_paths else {}),
         )
 
     @classmethod

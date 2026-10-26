@@ -502,6 +502,8 @@ class Settings(BaseSettings):
     # from the communications dispatcher and remains inert until enabled on
     # the single-active scheduler runtime.
     CATALOG_INVALIDATION_WORKER_ENABLED: bool = False
+    # Explicit activation: only future canonical MVN mutations are enqueued.
+    INDEXNOW_ENABLED: bool = False
     CATALOG_INVALIDATION_WORKER_POLL_SECONDS: float = 2.0
     CATALOG_INVALIDATION_WORKER_LEASE_SECONDS: int = 120
     CATALOG_INVALIDATION_WORKER_RECOVERY_LIMIT: int = 100

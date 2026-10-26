@@ -176,6 +176,7 @@ class SchedulerService:
 
         # Consume catalog cache invalidations outside producer transactions.
         tasks.append(asyncio.create_task(self._catalog_invalidation_loop()))
+        tasks.append(asyncio.create_task(self._indexnow_loop()))
 
         # Recover durable repair AI jobs after request/process failures.
         tasks.append(asyncio.create_task(self._repair_diagnostic_ai_job_loop()))
@@ -485,6 +486,20 @@ class SchedulerService:
             except Exception:
                 logger.exception("Catalog invalidation worker loop error")
                 await asyncio.sleep(max(5.0, poll_seconds))
+
+    async def _indexnow_loop(self):
+        from services.indexnow_worker import IndexNowWorker
+
+        worker = IndexNowWorker()
+        while True:
+            try:
+                outcome = await worker.run_once()
+                # A bounded provider cadence also prevents import bursts from
+                # flooding the search engine. Retries have their own DB backoff.
+                await asyncio.sleep(5 if outcome == "published" else 30)
+            except Exception:
+                logger.exception("IndexNow worker loop error")
+                await asyncio.sleep(60)
 
     async def _repair_diagnostic_ai_job_loop(self):
         from services.repair_diagnostic_ai_job_service import (

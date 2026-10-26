@@ -160,9 +160,11 @@ class CatalogRevisionService:
         brand_slugs: Optional[Iterable[str]] = None,
         tenant_scope: TenantScope | None = None,
         additional_paths: Optional[Iterable[str]] = None,
+        previous_public_paths: Iterable[str] = (),
     ) -> dict[str, Any]:
         """Stage revision changes and outbox events in the caller transaction."""
 
+        previous_public_paths = tuple(previous_public_paths)
         product_id_values = CatalogRevisionService._normalize_ints(product_ids)
         product_slug_values = CatalogRevisionService._normalize_strings(slugs)
         explicit_brand_slug_values = CatalogRevisionService._normalize_strings(brand_slugs)
@@ -184,6 +186,7 @@ class CatalogRevisionService:
         paths = CatalogRevisionService._dedupe_strings(
             [
                 *paths,
+                *previous_public_paths,
                 *(
                     str(path).strip()
                     for path in (additional_paths or ())
@@ -225,6 +228,7 @@ class CatalogRevisionService:
                     paths=paths,
                     global_snapshot=global_snapshot,
                     storefront_snapshot=storefront_snapshot,
+                    previous_public_paths=previous_public_paths,
                 )
             if not targets:
                 logger.warning(
@@ -254,6 +258,7 @@ class CatalogRevisionService:
             paths=paths,
             global_snapshot=global_snapshot,
             storefront_snapshot=storefront_snapshot,
+            previous_public_paths=previous_public_paths,
         )
         return {
             "revision": global_snapshot.revision,
@@ -278,6 +283,7 @@ class CatalogRevisionService:
         paths: tuple[str, ...],
         global_snapshot: CatalogRevisionSnapshot,
         storefront_snapshot: CatalogRevisionSnapshot,
+        previous_public_paths: Iterable[str] = (),
     ) -> None:
         cache_key = catalog_cache_key(
             global_revision=global_snapshot.revision,
@@ -294,7 +300,7 @@ class CatalogRevisionService:
             cache_key=cache_key,
             reason=reason,
         )
-        await CatalogInvalidationEventService.enqueue_requested(
+        event = await CatalogInvalidationEventService.enqueue_requested(
             session,
             idempotency_key=(
                 f"catalog:{target.tenant_id}:{target.storefront_id}:"
@@ -304,6 +310,13 @@ class CatalogRevisionService:
             priority=40,
             max_attempts=12,
         )
+        if settings.INDEXNOW_ENABLED and target.is_system and target.is_default:
+            from services.indexnow_event_service import IndexNowEventService
+
+            await IndexNowEventService.stage_catalog_notification(
+                session, catalog_event=event, payload=payload,
+                previous_public_paths=previous_public_paths,
+            )
 
     @staticmethod
     def _origins_for_target(

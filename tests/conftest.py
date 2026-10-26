@@ -30,6 +30,7 @@ os.environ.update(
         "COMMUNICATIONS_WORKER_ENABLED": "false",
         "COMMUNICATIONS_WORKER_ALLOW_ALL_MODE": "false",
         "CATALOG_INVALIDATION_WORKER_ENABLED": "false",
+        "INDEXNOW_ENABLED": "false",
         "HA_ALERT_TELEGRAM_BOT_TOKEN": "",
         "HA_ALERT_TELEGRAM_CHAT_ID": "",
         "MAIL_IMAP_USERNAME": "",
