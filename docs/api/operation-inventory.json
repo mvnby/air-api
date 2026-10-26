@@ -9,6 +9,7 @@
     "reviewed_stage"
   ],
   "review_stages": {
+    "29": "Optional bounded DeepSeek introduction wording from immutable draft attachment context, live company/staff/link access and expected version, no draft mutation/approval/send, preserved facts/signature/next steps and deterministic fallback; reviewed 2026-10-26",
     "28": "Read-only Manager KPI detail: shared overview predicates, exact authenticated tenant/storefront, timezone-aware bounded periods and pagination, current receivables/touchpoint semantics; private due-reminder task filter reviewed 2026-10-23",
     "27": "Explicit audited waiting command, shared order/payment/stage revision, optional contact and read-only legacy metadata reviewed 2026-10-22",
     "26": "Manager order queues: bounded scalar cards, exact aggregates, visibility, legacy NULL history and read-only behavior reviewed 2026-10-22",
@@ -159,6 +160,7 @@
       ["POST /api/manager/mail/drafts/{draft_id}/attachments", "upload_manager_mail_draft_attachment", false, 14],
       ["POST /api/manager/mail/drafts/{draft_id}/confirm", "confirm_manager_mail_draft", false, 14],
       ["POST /api/manager/mail/drafts/{draft_id}/send", "send_manager_mail_draft", false, 14],
+      ["POST /api/manager/mail/drafts/{draft_id}/suggest", "suggest_manager_mail_draft_text", false, 29],
       ["POST /api/manager/mail/messages/{message_id}/copy", "copy_manager_mail_message", false, 14]
     ],
     "routers/manager_tender_workflow.py": [
