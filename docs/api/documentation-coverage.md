@@ -21,8 +21,8 @@
 [подпись/повторы витрины](../storefront-context-contract.md),
 [бот](../bot-service-boundary.md), [OAuth/MCP](../chatgpt-connector.md).
 
-[Точная инвентаризация](operation-inventory.json) содержит **703 операции**:
-700 с путями `/api/*` и 3 well-known OAuth discovery. Строка включает метод и
+[Точная инвентаризация](operation-inventory.json) содержит **704 операции**:
+701 с путями `/api/*` и 3 well-known OAuth discovery. Строка включает метод и
 полный путь, operation ID, наличие description в исходном baseline и номер
 этапа проверки; записи сгруппированы по фактическому исходному файлу endpoint.
 В формате `schema=2` поле `description_before` сохраняет исторический факт,
@@ -35,6 +35,12 @@ MCP ASGI `/api/connector/mcp` и `tools/list` не входят в HTTP OpenAPI 
 [границы интеграции](supplier-integration-boundary.md).
 
 ## Выполненные этапы
+
+Этап 30 добавляет read-only `GET /api/manager/orders/{order_id}/request-context`:
+исходный текст и метаданные оригиналов рядом с КП, границы компании/витрины
+и текущего доступа к почте, объединение одинаковых байтов и явные недоступные
+файлы без импорта или изменения данных. Контракт:
+[источники заявки](../service-attachments.md#order-request-evidence).
 
 Этап 29 добавляет `POST /api/manager/mail/drafts/{draft_id}/suggest`:
 необязательная краткая редактура вводного абзаца через DeepSeek по зафиксированному

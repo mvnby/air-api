@@ -10,11 +10,13 @@ import {
   isImageAttachment,
   isPdfAttachment,
   type ServiceAttachmentItem,
+  type ServiceAttachmentAccessResponse,
 } from './types';
 
 const props = defineProps<{
   items: ServiceAttachmentItem[];
   modelValue: number | null;
+  resolveAccess?: (item: ServiceAttachmentItem, download: boolean) => Promise<ServiceAttachmentAccessResponse>;
 }>();
 
 const emit = defineEmits<{
@@ -101,7 +103,7 @@ const loadAccess = async () => {
 
   accessLoading.value = true;
   try {
-    const response = await serviceAttachmentsApi.getAccess(item.id, 'original');
+    const response = props.resolveAccess ? await props.resolveAccess(item, false) : await serviceAttachmentsApi.getAccess(item.id, 'original');
     if (requestId !== accessRequestId) return;
     accessUrl.value = response.url;
   } catch (error) {
@@ -119,7 +121,7 @@ const downloadOriginal = async () => {
   const requestId = ++downloadRequestId;
   downloadLoading.value = true;
   try {
-    const response = await serviceAttachmentsApi.getAccess(attachmentId, 'original', true);
+    const response = props.resolveAccess ? await props.resolveAccess(item, true) : await serviceAttachmentsApi.getAccess(attachmentId, 'original', true);
     if (requestId !== downloadRequestId || activeItem.value?.id !== attachmentId) return;
     const anchor = document.createElement('a');
     anchor.href = response.url;
@@ -206,7 +208,7 @@ onBeforeUnmount(() => {
     >
       <header class="flex min-h-14 items-center gap-2 border-b border-white/10 px-3 py-2 sm:px-5">
         <div class="min-w-0 flex-1">
-          <p class="truncate text-sm font-semibold sm:text-base">{{ activeItem.filename }}</p>
+          <p class="break-words text-sm font-semibold [overflow-wrap:anywhere] sm:text-base">{{ activeItem.filename }}</p>
           <p class="truncate text-xs text-slate-300">
             {{ getAttachmentCategoryLabel(activeItem.category) }}<span v-if="itemPosition"> · {{ itemPosition }}</span>
           </p>

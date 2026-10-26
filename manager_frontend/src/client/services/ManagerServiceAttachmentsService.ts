@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { Body_upload_manager_order_attachment } from '../models/Body_upload_manager_order_attachment';
+import type { ManagerOrderRequestContext } from '../models/ManagerOrderRequestContext';
 import type { ManagerServiceAttachmentAccessResponse } from '../models/ManagerServiceAttachmentAccessResponse';
 import type { ManagerServiceAttachmentItemResponse } from '../models/ManagerServiceAttachmentItemResponse';
 import type { ManagerServiceAttachmentListResponse } from '../models/ManagerServiceAttachmentListResponse';
@@ -11,6 +12,36 @@ import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class ManagerServiceAttachmentsService {
+    /**
+     * Get Manager Order Request Context
+     * Read saved source text and unique original-file metadata for a Manager order.
+     *
+     * Requires live staff/company membership and the selected storefront's order access.
+     * Missing or inaccessible order returns 404; unavailable system-mail membership returns
+     * 403. Saved inbox files additionally require existing system mailbox access. Identical
+     * bytes across private order and inbox links appear once; unavailable legacy records
+     * remain visible. No pagination parameters. Repeat GET safely: it does not mark mail read,
+     * download bytes, contact IMAP/AI, import files, grant access or change business data.
+     * Originals use the existing authenticated mail or private service-attachment endpoints.
+     * See [request evidence](https://github.com/mvnby/air-api/blob/main/docs/service-attachments.md#order-request-evidence).
+     * @param orderId
+     * @returns ManagerOrderRequestContext Successful Response
+     * @throws ApiError
+     */
+    public static getManagerOrderRequestContext(
+        orderId: number,
+    ): CancelablePromise<ManagerOrderRequestContext> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/orders/{order_id}/request-context',
+            path: {
+                'order_id': orderId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
     /**
      * List Manager Order Attachments
      * Read active attachment links for a scoped order with their category, caption and

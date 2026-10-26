@@ -24,9 +24,39 @@ from schemas import (
     ManagerServiceAttachmentUpdatePayload,
 )
 from services.service_attachment_service import ServiceAttachmentService
+from core.command_actor import CommandActor
+from core.security import AuthenticatedUser, require_manager_access
+from schemas_order_request_context import ManagerOrderRequestContext
+from services.order_request_context_service import OrderRequestContextService
+from routers.manager_operation_ids import GET_MANAGER_ORDER_REQUEST_CONTEXT
 
 
 router = APIRouter(prefix="/api/manager", tags=["manager-service-attachments"])
+
+
+@router.get("/orders/{order_id}/request-context", response_model=ManagerOrderRequestContext,
+            operation_id=GET_MANAGER_ORDER_REQUEST_CONTEXT)
+async def get_manager_order_request_context(order_id: int,
+        auth: AuthenticatedUser = Depends(require_manager_access),
+        session: AsyncSession = Depends(get_session)):
+    """Read saved source text and unique original-file metadata for a Manager order.
+
+    Requires live staff/company membership and the selected storefront's order access.
+    Missing or inaccessible order returns 404; unavailable system-mail membership returns
+    403. Saved inbox files additionally require existing system mailbox access. Identical
+    bytes across private order and inbox links appear once; unavailable legacy records
+    remain visible. No pagination parameters. Repeat GET safely: it does not mark mail read,
+    download bytes, contact IMAP/AI, import files, grant access or change business data.
+    Originals use the existing authenticated mail or private service-attachment endpoints.
+    See [request evidence](https://github.com/mvnby/air-api/blob/main/docs/service-attachments.md#order-request-evidence).
+    """
+    try:
+        result = await OrderRequestContextService.read(session, order_id=order_id, actor=CommandActor.from_auth(auth))
+    except PermissionError as exc:
+        raise HTTPException(403, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(404, detail="Order not found")
+    return result
 
 
 async def _read_upload_limited(file: UploadFile) -> bytes:

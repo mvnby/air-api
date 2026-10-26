@@ -72,3 +72,28 @@ By default any missing file or conflicting equipment link rolls the execute run
 back. `--allow-partial` is an explicit recovery option only after a reviewed dry
 run. Public legacy copies are not removed by this migration; cleanup remains a
 separate, signed-off operation after the private-copy report is complete.
+
+## Order request evidence
+
+`GET /api/manager/orders/{order_id}/request-context` projects saved source text
+and unique files into Manager's “Заявка и файлы” panel beside proposal preparation.
+The order must be accessible in the current tenant/storefront. System email orders
+also require the same live staff membership as the existing saved-mail reader.
+It reads local metadata only: no IMAP request, AI, file download, copy, grant or
+business-data mutation. Repeated GET is safe. Missing/inaccessible orders return
+404; missing live mailbox permission returns 403.
+
+Private order links and saved incoming-mail attachment metadata are merged by
+SHA-256; an available saved original takes precedence over an unavailable copy.
+Unknown hashes are never guessed from filenames. Unavailable legacy and unsaved
+mail files remain visible and counted. The count describes the returned unique
+records; import omissions are separately disclosed as warnings. Originals retain
+the existing authenticated service-attachment/mail download routes and byte
+integrity checks. No permanent public URL is exposed. Generated outgoing offers
+and invoices remain in Documents.
+
+The editable order comment is labelled “Рабочее описание заказа”; it is never
+presented as verbatim source wording. Email source text comes from saved incoming
+messages or explicitly saved source metadata, while tender enrichment is labelled
+as a reviewed tender request. Missing/truncated source text is explicit. Opening
+the panel does not save or replace proposal/comment drafts.

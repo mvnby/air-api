@@ -38,8 +38,11 @@ const extractErrorMessage = (payload: unknown, fallback: string) => {
 const request = async <T>(path: string, options: RequestOptions = {}): Promise<T> => {
   const method = options.method || 'GET';
   const token = await resolveToken(method, path);
+  const configuredHeaders = typeof OpenAPI.HEADERS === 'function'
+    ? await OpenAPI.HEADERS({ method, url: path }) : OpenAPI.HEADERS;
   const headers: Record<string, string> = {
     Accept: 'application/json',
+    ...configuredHeaders,
     ...options.headers,
   };
   if (token) headers.Authorization = `Bearer ${token}`;

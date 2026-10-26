@@ -9,6 +9,7 @@
     "reviewed_stage"
   ],
   "review_stages": {
+    "30": "Read-only order request evidence: tenant/storefront order boundary, live system mailbox access, immutable original metadata, SHA-256 deduplication and explicit unavailable files; reviewed 2026-10-26",
     "29": "Optional bounded DeepSeek introduction wording from immutable draft attachment context, live company/staff/link access and expected version, no draft mutation/approval/send, preserved facts/signature/next steps and deterministic fallback; reviewed 2026-10-26",
     "28": "Read-only Manager KPI detail: shared overview predicates, exact authenticated tenant/storefront, timezone-aware bounded periods and pagination, current receivables/touchpoint semantics; private due-reminder task filter reviewed 2026-10-23",
     "27": "Explicit audited waiting command, shared order/payment/stage revision, optional contact and read-only legacy metadata reviewed 2026-10-22",
@@ -844,6 +845,7 @@
     "routers/manager_service_attachments.py": [
       ["DELETE /api/manager/service-attachments/{attachment_id}", "delete_manager_service_attachment", false, 3],
       ["GET /api/manager/equipment/{equipment_id}/attachments", "list_manager_equipment_attachments", false, 3],
+      ["GET /api/manager/orders/{order_id}/request-context", "get_manager_order_request_context", false, 30],
       ["GET /api/manager/orders/{order_id}/attachments", "list_manager_order_attachments", false, 3],
       ["GET /api/manager/service-attachments/{attachment_id}/access", "get_manager_service_attachment_access", false, 3],
       ["PATCH /api/manager/service-attachments/{attachment_id}", "patch_manager_service_attachment", false, 3],

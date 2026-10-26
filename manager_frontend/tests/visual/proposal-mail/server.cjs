@@ -18,7 +18,7 @@ function makeOrder(kind='service') {
       {id:587,name:'Альтернатива — диагностика',status:'draft',is_selected:false,is_archived:false,product_lines:[],service_lines:[{...line('Диагностика',2),proposal_id:587}],total_amount:1620}] };
 }
 function doc(id=862,proposal=586,status='issued') {return {id,order_id:590,legal_entity_id:5,proposal_id:proposal,doc_type:'offer',status,provider:'native',official_full_number:status==='draft'?null:'КП-2026-024',display_number:status==='draft'?'Черновик КП':'КП-2026-024',date:now,created_at:now,document_template_id:100,template_version_id:101,artifacts:[{id:1,kind:'source_docx',mime_type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',filename:'KP.docx'}]};}
-function createFixtureServer(port=5198) {
+function createFixtureServer(port=5198, handleRequest) {
  const dist=path.resolve(__dirname,'../../../dist');
  let state;
  const reset=(kind='service', options={})=>{state={kind,order:makeOrder(kind),documents:options.documents===false?[]:[doc()],draft:null,patches:[],creates:[],sends:0,approvals:0,mailCreates:[],createKeys:new Map(),flags:{...options}};if(options.alternative){state.order.proposals[0].status='sent';state.order.negotiation_status='proposal_sent';state.documents=[doc(),doc(861),doc(860)];}return state;};
@@ -28,6 +28,7 @@ function createFixtureServer(port=5198) {
  const compose=ids=>{const chosen=state.documents.find(item=>ids.includes(item.id));const scenario=chosen?.proposal_id===587?'диагностику оборудования':scopes[state.kind];return {template_key:'offer',template_options:[{key:'auto',label:'Автоматически',requires_documents:true},{key:'request_requisites',label:'Запросить реквизиты',requires_documents:false}],subject:`Коммерческое предложение на ${scenario}`,body_text:`Добрый день!\n\nНаправляем коммерческое предложение на ${scenario}.\nДокумент приложен к письму.\n\nПосмотрите, подходит ли вам состав предложения. Напишите, если нужно что-то изменить; после согласования обсудим следующий шаг.\n\nС уважением,\nВадим\nМастер Воздуха\n+375 29 000-00-00\noffice@example.test`,document_ids:ids,document_labels:['КП-2026-024'],missing_requisites:[]};};
  const server=http.createServer(async(req,res)=>{try {
    const url=new URL(req.url,`http://127.0.0.1:${port}`),p=url.pathname;
+   if(handleRequest && await handleRequest(req,res,{url,state,json,body}))return;
    if(p==='/__fixture/reset'){reset(url.searchParams.get('kind')||'service',Object.fromEntries([...url.searchParams].filter(([key])=>key!=='kind').map(([key,value])=>[key,value==='true'?true:value==='false'?false:value])));return json(res,{ok:true});}
    if(p==='/__fixture/state')return json(res,{...state,createKeys:undefined});
    if(p==='/__fixture/flags'){Object.assign(state.flags,await body(req));return json(res,{ok:true});}
