@@ -11,6 +11,7 @@ from sqlmodel import select
 from crud.product import ProductDAO
 from models.product import Product, Tag
 from services.catalog_revision_service import CatalogRevisionService
+from services.indexnow_event_service import IndexNowEventService
 from services.product_serialization import sanitize_specs
 from services.product_supply_metrics_service import ProductSupplyMetricsService
 from services.product_catalog_category_service import catalog_category_from_tags
@@ -37,6 +38,7 @@ class StagedProductDeletion:
     product_id: int
     slug: str | None
     brand_slugs: tuple[str, ...]
+    previous_public_paths: tuple[str, ...] = ()
 
 
 class ProductManagerService:
@@ -358,6 +360,7 @@ class ProductManagerService:
         product = await session.get(Product, product_id, with_for_update=True)
         if not product:
             return None
+        previous_public_paths = await IndexNowEventService.capture_public_paths(session, product_ids=[product_id])
         product_slug = product.slug
         brand_slugs = await CatalogRevisionService.get_product_brand_slugs(
             session,
@@ -407,6 +410,7 @@ class ProductManagerService:
             product_id=product_id,
             slug=product_slug,
             brand_slugs=brand_slugs,
+            previous_public_paths=previous_public_paths,
         )
 
     @staticmethod
@@ -423,6 +427,7 @@ class ProductManagerService:
             product_ids=[deletion.product_id],
             slugs=[deletion.slug] if deletion.slug else None,
             brand_slugs=deletion.brand_slugs,
+            **({"previous_public_paths": deletion.previous_public_paths} if deletion.previous_public_paths else {}),
         )
         await session.commit()
         return True

@@ -14,7 +14,20 @@ catalog mutation and cache invalidation. Only the system default storefront
 with the exact `https://mvn.by` origin qualifies. Partner domains, preview
 hosts, query URLs, checkout and arbitrary additional purge paths are excluded.
 Only explicit affected catalog paths are sent; there is no historical dump.
-A renamed product retains both its old and new URL in the invalidation.
+A shared producer-side DAO checks current publication before staging product,
+brand or series URLs. Products require publication; brands also require at least
+one published product; series require a published series and brand, matching the
+canonical series endpoint (which also serves empty published series). Public
+catalog and brand listing URLs remain eligible. New or repeatedly edited drafts
+are excluded.
+
+Rename, unpublish and delete producers explicitly snapshot public paths before
+the mutation and pass this evidence in the same transaction. This retains old
+public product, brand and series URLs without treating a missing database row or
+current 404 as evidence of prior publication. Product bulk publication reuses
+the same product writer; MDV replacement preserves snapshots for both archive
+and staged deletion. A renamed product retains both its old and new URL in the
+invalidation.
 
 The independent HA-fenced scheduler worker cannot claim the notification until
 its exact parent cache invalidation is `published`. A failed or disabled purge
@@ -25,7 +38,8 @@ does not consume these events.
 The worker fetches the public ownership key from
 `https://mvn.by/indexnow-key.txt`, validates its format without following
 redirects, and posts canonical URLs to `https://yandex.com/indexnow`. No OAuth,
-provider credential, migration or additional database is needed. The key is
+provider credential, migration or additional database is needed. Provider requests
+identify themselves as `MVN-IndexNow/1.0 (+https://mvn.by/)`. The key is
 public by design. Notifications are split at the 10,000 URL protocol limit.
 
 Claims reuse the catalog worker's DB-clock lease and token-fenced transitions

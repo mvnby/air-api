@@ -51,6 +51,7 @@ async def test_provider_checks_public_key_and_classifies_receipt(monkeypatch, st
 
     def handler(request):
         calls.append(request)
+        assert request.headers["user-agent"] == "MVN-IndexNow/1.0 (+https://mvn.by/)"
         if request.method == "GET":
             assert str(request.url) == INDEXNOW_KEY_LOCATION
             return httpx.Response(200, text="a" * 32 + "\n")

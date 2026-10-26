@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from core.config import settings
+from crud.indexnow_visibility import IndexNowVisibilityDAO
 
 from crud.indexnow import IndexNowEventDAO
 from models import IntegrationOutboxEvent
@@ -18,6 +22,17 @@ class IndexNowEventService(CatalogInvalidationEventService):
     DAO = IndexNowEventDAO
     RETRY_BASE_SECONDS = 60
 
+    @staticmethod
+    async def capture_public_paths(
+        session: AsyncSession, *, product_ids: Iterable[int] = (),
+        brand_ids: Iterable[int] = (), series_ids: Iterable[int] = (),
+    ) -> tuple[str, ...]:
+        if not settings.INDEXNOW_ENABLED:
+            return ()
+        return await IndexNowVisibilityDAO.capture_paths(
+            session, product_ids=product_ids, brand_ids=brand_ids, series_ids=series_ids,
+        )
+
     @classmethod
     async def stage_catalog_notification(
         cls,
@@ -25,8 +40,12 @@ class IndexNowEventService(CatalogInvalidationEventService):
         *,
         catalog_event: IntegrationOutboxEvent,
         payload: CatalogCacheInvalidationRequestedV1,
+        previous_public_paths: Iterable[str] = (),
     ) -> None:
-        urls = catalog_indexnow_urls(payload.origins, payload.paths)
+        current_paths = await IndexNowVisibilityDAO.published_paths(session, payload.paths)
+        # Only explicit snapshots made before mutation can retain renamed,
+        # unpublished or deleted URLs. A missing row/current 404 is not evidence.
+        urls = catalog_indexnow_urls(payload.origins, [*current_paths, *previous_public_paths])
         # Chunk by protocol limit; old/new slugs stay in the same durable stream.
         for offset in range(0, len(urls), 10000):
             now = await cls.DAO.database_now(session)

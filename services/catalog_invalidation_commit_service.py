@@ -22,6 +22,8 @@ class CatalogInvalidationCommitService:
         product_ids: Iterable[int] | None = None,
         slugs: Iterable[str] | None = None,
         brand_slugs: Iterable[str] | None = None,
+        previous_public_paths: Iterable[str] = (),
+        additional_paths: Iterable[str] | None = None,
     ) -> dict[str, Any] | None:
         """Commit one registered producer, invalidating only real mutations."""
 
@@ -35,6 +37,8 @@ class CatalogInvalidationCommitService:
             product_ids=product_ids,
             slugs=slugs,
             brand_slugs=brand_slugs,
+            **({"previous_public_paths": previous_public_paths} if previous_public_paths else {}),
+            **({"additional_paths": additional_paths} if additional_paths is not None else {}),
         )
 
     @staticmethod
@@ -45,6 +49,7 @@ class CatalogInvalidationCommitService:
         product_ids: Iterable[int] | None = None,
         slugs: Iterable[str] | None = None,
         brand_slugs: Iterable[str] | None = None,
+        previous_public_paths: Iterable[str] = (),
         additional_paths: Iterable[str] | None = None,
     ) -> dict[str, Any]:
         """Commit business changes and their revision/outbox event together."""
@@ -55,6 +60,7 @@ class CatalogInvalidationCommitService:
             product_ids=product_ids,
             slugs=slugs,
             brand_slugs=brand_slugs,
+            **({"previous_public_paths": previous_public_paths} if previous_public_paths else {}),
             **({"additional_paths": additional_paths} if additional_paths is not None else {}),
         )
         await session.commit()

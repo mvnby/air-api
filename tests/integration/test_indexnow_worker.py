@@ -22,6 +22,11 @@ async def stage(factory, monkeypatch):
     monkeypatch.setattr(settings, "INDEXNOW_ENABLED", True)
     monkeypatch.setattr(settings, "PUBLIC_SITE_URL", "https://mvn.by")
     async with factory() as session:
+        session.add_all([
+            Product(title="Old", slug="old-model", price=1000, is_published=True),
+            Product(title="New", slug="new-model", price=1000, is_published=True),
+        ])
+        await session.flush()
         await CatalogRevisionService.stage_invalidation(session, "indexnow_test", slugs=["old-model", "new-model"])
         await session.commit()
         events = (await session.execute(select(IntegrationOutboxEvent))).scalars().all()

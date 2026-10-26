@@ -20,6 +20,7 @@ from models import (
     TagGroup,
 )
 from services.catalog_invalidation_commit_service import CatalogInvalidationCommitService
+from services.indexnow_event_service import IndexNowEventService
 from services.catalog_media_policy import CatalogMediaKind, CatalogMediaPolicy
 from services.manager_brand_mutation_state import (
     snapshot_brand,
@@ -280,6 +281,7 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
         if brand is None:
             raise HTTPException(status_code=404, detail="Бренд не найден.")
 
+        previous_public_paths = await IndexNowEventService.capture_public_paths(session, brand_ids=[brand_id])
         previous_title = brand.title
         previous_slug = brand.slug
         before_state = snapshot_brand(brand)
@@ -348,11 +350,17 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
         changed_slugs = [previous_slug]
         if brand.slug != previous_slug:
             changed_slugs.append(brand.slug)
+        current_public_paths = (
+            await IndexNowEventService.capture_public_paths(session, brand_ids=[brand_id])
+            if changed else ()
+        )
         await CatalogInvalidationCommitService.commit_registered_global_mutation(
             session,
             producer="manager_brand.update_brand",
             changed=changed,
             brand_slugs=changed_slugs,
+            **({"previous_public_paths": previous_public_paths} if previous_public_paths else {}),
+            **({"additional_paths": current_public_paths} if current_public_paths else {}),
         )
         await session.refresh(brand)
 
@@ -417,6 +425,7 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
             await session.delete(brand_tag)
 
         brand_slug = brand.slug
+        previous_public_paths = await IndexNowEventService.capture_public_paths(session, brand_ids=[brand_id])
 
         await session.delete(brand)
         await CatalogInvalidationCommitService.commit_registered_global_mutation(
@@ -424,6 +433,7 @@ class ManagerBrandService(ManagerBrandSeriesOperations):
             producer="manager_brand.delete_brand",
             changed=True,
             brand_slugs=[brand_slug],
+            **({"previous_public_paths": previous_public_paths} if previous_public_paths else {}),
         )
 
     _serialize_brand = staticmethod(serialize_manager_brand)

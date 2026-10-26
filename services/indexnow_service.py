@@ -80,7 +80,10 @@ class IndexNowService:
         expected = catalog_indexnow_urls([INDEXNOW_ORIGIN], [urlsplit(url).path for url in urls])
         if not urls or sorted(set(urls)) != expected or len(expected) > 10000:
             raise IndexNowRejected("Invalid canonical IndexNow URL set")
-        async with httpx.AsyncClient(timeout=15.0, follow_redirects=False) as client:
+        async with httpx.AsyncClient(
+            timeout=15.0, follow_redirects=False,
+            headers={"User-Agent": "MVN-IndexNow/1.0 (+https://mvn.by/)"},
+        ) as client:
             key_response = await client.get(INDEXNOW_KEY_LOCATION)
             if key_response.status_code != 200 or len(key_response.content) > 256:
                 raise IndexNowProviderError("Public IndexNow key is unavailable")

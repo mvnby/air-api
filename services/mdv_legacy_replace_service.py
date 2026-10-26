@@ -10,6 +10,7 @@ from sqlmodel import select
 
 from models import Brand, OrderProductLink, Product
 from services.catalog_revision_service import CatalogRevisionService
+from services.indexnow_event_service import IndexNowEventService
 from services.product_manager_service import ProductManagerService
 
 
@@ -86,6 +87,9 @@ class MdvLegacyReplaceService:
             [product.id for product, _catalog in candidates if product.id],
         )
 
+        previous_public_paths = await IndexNowEventService.capture_public_paths(
+            session, product_ids=[product.id for product, _ in candidates if product.id],
+        )
         deleted = 0
         archived = 0
         deleted_ids: list[int] = []
@@ -135,6 +139,7 @@ class MdvLegacyReplaceService:
                 product_ids=affected_ids,
                 slugs=deleted_slugs,
                 brand_slugs=deleted_brand_slugs,
+                **({"previous_public_paths": previous_public_paths} if previous_public_paths else {}),
             )
             await session.commit()
 

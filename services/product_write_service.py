@@ -12,6 +12,7 @@ from crud.product import ProductDAO
 from models import Product, ProductImage, Tag
 from services.brand_series_service import sync_product_brand_series
 from services.catalog_revision_service import CatalogRevisionService
+from services.indexnow_event_service import IndexNowEventService
 from services.catalog_media_policy import CatalogMediaKind, CatalogMediaPolicy
 from services.product_attachment_service import replace_manuals
 from services.product_kind_service import ProductKindService
@@ -353,6 +354,7 @@ class ProductWriteService:
             payload["main_image"] = ProductWriteService._validated_main_image(
                 payload.get("main_image")
             )
+        previous_public_paths = await IndexNowEventService.capture_public_paths(session, product_ids=[product_id])
         original_brand_id = existing_product.brand_id
         original_slug = existing_product.slug
         original_category_inputs = (
@@ -475,6 +477,7 @@ class ProductWriteService:
             reason="product_update",
             product_ids=[product.id],
             slugs=[original_slug, product.slug],
+            **({"previous_public_paths": previous_public_paths} if previous_public_paths else {}),
             brand_slugs=previous_brand_slugs,
         )
         if commit:
