@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class MailOrderDraftPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    template_key: str | None = Field(default=None, max_length=40)
     to_email: str = Field(default="", max_length=4096)
     subject: str = Field(default="", max_length=998)
     body_text: str | None = Field(default=None, max_length=100_000)

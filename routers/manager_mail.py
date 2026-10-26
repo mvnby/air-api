@@ -751,6 +751,7 @@ async def compose_manager_order_email(
     payload: OrderEmailComposePayload,
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
+    auth: AuthenticatedUser = Depends(require_manager_access),
 ):
     """
     Preview suggested recipient/subject/body/attachments for an order accessible in the
@@ -770,6 +771,7 @@ async def compose_manager_order_email(
             registration_certificate_id=payload.registration_certificate_id,
             legal_entity_id=payload.legal_entity_id,
             template_key=payload.template_key,
+            staff_user_id=auth.staff_user_id,
         )
     except Exception as exc:
         raise manager_http_error(

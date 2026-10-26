@@ -73,7 +73,12 @@ const selectProvider = (provider: 'native' | 'google') => {
 
 const openNative = () => { activeProvider.value = 'native'; };
 
-defineExpose({ openSend, openCreate, openNative });
+const openOffer = async () => {
+  activeProvider.value = 'native';
+  await nextTick();
+  await nativeRef.value?.openOffer();
+};
+defineExpose({ openSend, openCreate, openNative, openOffer });
 </script>
 
 <template>

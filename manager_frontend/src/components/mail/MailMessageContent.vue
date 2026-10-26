@@ -3,7 +3,7 @@ import { ref } from 'vue';
 import { downloadMailAttachment, mailStatusLabel, type MailAttachment, type MailMessage } from '../../services/mail-workspace-api';
 import { getApiErrorMessage } from '../../utils/api-errors';
 
-defineProps<{ message: MailMessage; preview?: boolean }>();
+defineProps<{ message: MailMessage; preview?: boolean; hideOutcome?: boolean }>();
 const downloading = ref<string | null>(null);
 const error = ref('');
 const download = async (attachment: MailAttachment) => {
@@ -42,7 +42,7 @@ const download = async (attachment: MailAttachment) => {
     </section>
     <p v-if="message.order_id || message.customer_id" class="text-sm text-slate-500">{{ message.order_id ? `Заказ #${message.order_id}` : '' }} {{ message.customer_id ? `Клиент #${message.customer_id}` : '' }}</p>
     <p v-if="message.delivery_projection_pending" role="status" class="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Письмо отправлено. Статусы заказа ещё обновляются; откройте письмо повторно для проверки.</p>
-    <p v-if="message.status === 'unknown'" class="rounded-xl bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">Почтовый сервер мог принять письмо. Проверьте папку отправленных у провайдера и обратитесь к администратору для проверки журнала отправки. Не отправляйте письмо повторно до проверки.</p>
-    <p v-if="message.error || error" role="alert" class="rounded-xl bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-200">{{ error || message.error }}</p>
+    <p v-if="message.status === 'unknown' && !hideOutcome" class="rounded-xl bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">Почтовый сервер мог принять письмо. Проверьте папку отправленных у провайдера и обратитесь к администратору для проверки журнала отправки. Не отправляйте письмо повторно до проверки.</p>
+    <p v-if="(!hideOutcome && message.error) || error" role="alert" class="rounded-xl bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-200">{{ error || (!hideOutcome ? message.error : '') }}</p>
   </article>
 </template>

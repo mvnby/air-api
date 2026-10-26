@@ -264,6 +264,7 @@ class MailSmtpService:
                 session,
                 doc_id,
                 tenant_scope=tenant_scope,
+                for_update=True,
             )
             if not doc or doc.order_id != order_id:
                 raise ValueError(f"Document {doc_id} not found on order")
@@ -284,6 +285,8 @@ class MailSmtpService:
             total_attachment_bytes += len(encoded)
             if total_attachment_bytes > MAX_ORDER_EMAIL_TOTAL_ATTACHMENT_BYTES:
                 raise ValueError("Общий размер PDF слишком велик для одного письма")
+            from services.order_email_template_service import OrderEmailTemplateService
+
             attachments.append(
                 MailAttachment(
                     filename=filename or f"document-{doc_id}.pdf",
@@ -296,6 +299,13 @@ class MailSmtpService:
                         "proposal_id": doc.proposal_id,
                         "snapshot_version": doc.snapshot_version,
                         "native": DocumentService._is_native_managed_document(doc),
+                        "mail_scenario": OrderEmailTemplateService._scenario_label(order, [doc]),
+                        "mail_context": [
+                            {"kind": row.get("line.kind", ""),
+                             "title": str(row.get("line.title", "")).split("\n", 1)[0][:300],
+                             "constraints": str(row.get("line.title", "")).partition("\n")[2][:500]}
+                            for row in ((doc.render_snapshot or {}).get("table_rows") or {}).get("lines", [])[:50]
+                        ],
                     },
                 )
             )

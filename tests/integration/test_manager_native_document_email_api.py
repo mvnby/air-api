@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 import pytest
+from sqlalchemy import select
 
 from core.config import settings
 from core.security import create_access_token
@@ -90,6 +91,7 @@ async def test_partner_manager_can_compose_only_in_resolved_tenant(
     monkeypatch,
 ):
     headers, tenant_id, storefront_id = await _partner_headers(db)
+    staff_id = await db.scalar(select(StaffUser.id).where(StaffUser.username == "native-email-partner-manager"))
 
     async def fake_compose(_session, **kwargs):
         scope = kwargs.pop("tenant_scope")
@@ -100,6 +102,7 @@ async def test_partner_manager_can_compose_only_in_resolved_tenant(
         )
         assert kwargs == {
             "order_id": 42,
+            "staff_user_id": staff_id,
             "document_ids": [7],
             "template_key": "auto",
             "registration_certificate_id": None,

@@ -10,6 +10,7 @@ const item = { id: 'a'.repeat(32), legal_entity_id: 7, filename: 'scan.png', mim
 const wrappers: ReturnType<typeof mount>[] = [];
 beforeEach(() => {
   managerSession.currentUserRole.value = 'owner';
+  vi.spyOn(mailApi, 'suggest').mockRejectedValue(new Error('AI unavailable'));
   vi.spyOn(certificates, 'listCertificates').mockResolvedValue([item]);
   vi.spyOn(certificates, 'certificateRequest').mockResolvedValue(new Response('{}'));
   vi.spyOn(certificates, 'downloadCertificate').mockResolvedValue(undefined);
@@ -50,7 +51,8 @@ describe('registration certificates', () => {
       id: 80, version: 1, status: 'draft', folder: 'drafts', account_id: 'system',
       sender_email: 'office@example.com', sender_name: 'ИП Климат',
       to: payload.to_email ? [payload.to_email] : [], cc: [], bcc: [],
-      subject: payload.subject || '', body_text: payload.body_text || '',
+      subject: payload.template_key === 'auto' ? 'Свидетельство о регистрации' : 'Запрос реквизитов',
+      body_text: payload.template_key === 'auto' ? 'Направляем свидетельство во вложении.' : 'Просим сообщить реквизиты.',
       attachments: payload.registration_certificate_id ? [{ id: 900, filename: item.filename, mime_type: item.mime_type, size: item.size_bytes, sha256: item.checksum_sha256, available: true, download_url: '/api/manager/mail/drafts/80/attachments/900' }] : [],
       order_id: 42, customer_id: null, manager_url: '/manager/mail?emailId=80',
       created_at: item.created_at, updated_at: item.created_at, sent_at: null, error: null,
@@ -74,10 +76,10 @@ describe('registration certificates', () => {
     expect(templateSelect.value).toBe('auto');
     expect(compose).toHaveBeenCalledTimes(2);
     expect(compose).toHaveBeenLastCalledWith(42, expect.objectContaining({ document_ids: [], registration_certificate_id: item.id, legal_entity_id: 7, template_key: 'auto' }));
-    expect(document.body.querySelector('textarea')?.value).toBe('Направляем свидетельство во вложении.');
-    const button = Array.from(document.body.querySelectorAll('button')).find((button) => button.textContent?.includes('Сохранить и проверить письмо'));
+    expect(document.body.querySelector('textarea')).toBeNull();
+    const button = Array.from(document.body.querySelectorAll('button')).find((button) => button.textContent?.includes('Подготовить письмо'));
     expect(button).toBeDefined(); expect(button!.disabled).toBe(false); button!.click(); await flushPromises();
-    expect(createDraft).toHaveBeenCalledWith(42, expect.objectContaining({ to_email: 'client@example.com', document_ids: [], registration_certificate_id: item.id, legal_entity_id: 7, subject: 'Свидетельство о регистрации', body_text: 'Направляем свидетельство во вложении.' }), 'native');
+    expect(createDraft).toHaveBeenCalledWith(42, expect.objectContaining({ to_email: 'client@example.com', document_ids: [], registration_certificate_id: item.id, legal_entity_id: 7, template_key: 'auto', subject: '', body_text: null }), 'native', expect.any(String));
     const editor = document.body.querySelector('[aria-label="Редактор черновика"]');
     expect(editor?.textContent).toContain('Черновик #80');
     expect(editor?.textContent).toContain('scan.png');
@@ -86,20 +88,20 @@ describe('registration certificates', () => {
     expect(send).not.toHaveBeenCalled();
     expect(mailSend).not.toHaveBeenCalled();
   });
-  it('returns to the initial automatic template when removing the certificate and preserves typed text', async () => {
+  it('returns to the requisites template when removing the certificate before the single editor opens', async () => {
     const { compose, templateSelect, chooseCertificate } = await certificateOnlyModal();
     await chooseCertificate(item.id);
     await chooseCertificate('');
     expect(templateSelect.value).toBe('request_requisites'); expect(compose).toHaveBeenCalledTimes(3);
-    expect(document.body.querySelector('textarea')?.value).toBe('Просим сообщить реквизиты.');
-    const subject = document.body.querySelector('input[type=text]') as HTMLInputElement;
-    const body = document.body.querySelector('textarea') as HTMLTextAreaElement;
-    subject.value = 'Моя тема'; subject.dispatchEvent(new Event('input', { bubbles: true }));
-    body.value = 'Мой текст'; body.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(document.body.querySelector('textarea')).toBeNull();
     await chooseCertificate(item.id);
-    expect(templateSelect.value).toBe('auto'); expect(subject.value).toBe('Моя тема'); expect(body.value).toBe('Мой текст');
+    expect(templateSelect.value).toBe('auto');
     await chooseCertificate('');
-    expect(templateSelect.value).toBe('request_requisites'); expect(subject.value).toBe('Моя тема'); expect(body.value).toBe('Мой текст');
+    expect(templateSelect.value).toBe('request_requisites');
+    const button = Array.from(document.body.querySelectorAll('button')).find(button => button.textContent?.includes('Подготовить письмо'))!;
+    button.click(); await flushPromises();
+    expect(document.body.querySelectorAll('textarea')).toHaveLength(1);
+    expect(document.body.querySelector('textarea')?.value).toBe('Просим сообщить реквизиты.');
   });
   it('preserves an explicitly chosen requisites template when adding or removing the certificate', async () => {
     const { compose, templateSelect, chooseCertificate } = await certificateOnlyModal();
@@ -108,7 +110,7 @@ describe('registration certificates', () => {
     await chooseCertificate(item.id);
     expect(templateSelect.value).toBe('request_requisites'); expect(compose).toHaveBeenCalledTimes(3);
     expect(compose).toHaveBeenLastCalledWith(42, expect.objectContaining({ registration_certificate_id: item.id, template_key: 'request_requisites' }));
-    expect(document.body.querySelector('textarea')?.value).toBe('Просим сообщить реквизиты.');
+    expect(document.body.querySelector('textarea')).toBeNull();
     await chooseCertificate('');
     expect(templateSelect.value).toBe('request_requisites'); expect(compose).toHaveBeenCalledTimes(4);
   });

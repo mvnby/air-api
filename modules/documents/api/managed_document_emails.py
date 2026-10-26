@@ -90,6 +90,7 @@ async def compose_native_order_email(
             registration_certificate_id=payload.registration_certificate_id,
             legal_entity_id=payload.legal_entity_id,
             template_key=payload.template_key,
+            staff_user_id=auth.staff_user_id,
         )
     except ValueError as exc:
         raise _email_error(

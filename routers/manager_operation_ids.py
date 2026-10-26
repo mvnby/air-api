@@ -631,6 +631,7 @@ LIST_MANAGER_MAIL_MESSAGES = "list_manager_mail_messages"
 GET_MANAGER_MAIL_MESSAGE = "get_manager_mail_message"
 CREATE_MANAGER_MAIL_DRAFT = "create_manager_mail_draft"
 GET_MANAGER_MAIL_DRAFT = "get_manager_mail_draft"
+SUGGEST_MANAGER_MAIL_DRAFT_TEXT = "suggest_manager_mail_draft_text"
 PATCH_MANAGER_MAIL_DRAFT = "patch_manager_mail_draft"
 DELETE_MANAGER_MAIL_DRAFT = "delete_manager_mail_draft"
 COPY_MANAGER_MAIL_MESSAGE = "copy_manager_mail_message"
@@ -692,6 +693,7 @@ ALL_MANAGER_OPERATION_IDS = (
     GET_MANAGER_MAIL_MESSAGE,
     CREATE_MANAGER_MAIL_DRAFT,
     GET_MANAGER_MAIL_DRAFT,
+    SUGGEST_MANAGER_MAIL_DRAFT_TEXT,
     PATCH_MANAGER_MAIL_DRAFT,
     DELETE_MANAGER_MAIL_DRAFT,
     COPY_MANAGER_MAIL_MESSAGE,

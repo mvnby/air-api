@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type MailOrderDraftPayload = {
+    template_key?: (string | null);
     to_email?: string;
     subject?: string;
     body_text?: (string | null);

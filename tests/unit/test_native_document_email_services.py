@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
 
 from core.config import settings
-from models import Customer, DocumentLegalEntity, Order, OrderDocument
+from models import Customer, DocumentLegalEntity, Order, OrderDocument, Storefront
 from models.tenancy import TenantScope
 from modules.documents.application.artifact_helpers import artifact_row
 from modules.documents.infrastructure.artifact_storage import (
@@ -293,6 +293,8 @@ async def test_compose_is_tenant_scoped_and_uses_partner_sender_name(
     native_email_session: AsyncSession,
 ):
     document = await _issued_document(native_email_session)
+    native_email_session.add(Storefront(id=1, tenant_id=1, slug="partner", display_name="Партнёр"))
+    await native_email_session.commit()
     partner_scope = TenantScope(tenant_id=1, storefront_id=1, is_system=False)
 
     result = await OrderEmailTemplateService.compose(

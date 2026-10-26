@@ -117,3 +117,9 @@ class MailAccountResponse(BaseModel):
 
 class MailAccountListResponse(BaseModel):
     items: list[MailAccountResponse]
+
+
+class MailTextSuggestionResponse(BaseModel):
+    version: int
+    subject: str
+    body_text: str

@@ -5,13 +5,14 @@ import { ManagerDocumentSystemService, ManagerMailService } from '../client';
 type UseOrderDocumentStatusOptions = {
   order: Readonly<Ref<ManagerOrderDetailResponse | null>>;
   payments: Readonly<Ref<PaymentResponse[]>>;
+  proposalId?: Readonly<Ref<number | null>>;
 };
 
 const normalizeDocumentIdentity = (value: unknown) => (
   String(value || '').toUpperCase().replace(/[^A-ZА-ЯЁ0-9]/g, '')
 );
 
-export const useOrderDocumentStatus = ({ order, payments }: UseOrderDocumentStatusOptions) => {
+export const useOrderDocumentStatus = ({ order, payments, proposalId }: UseOrderDocumentStatusOptions) => {
   const orderEmails = ref<OutgoingEmailResponse[]>([]);
   const managedDocuments = ref<ManagedDocumentItem[]>([]);
   const orderEmailsLoaded = ref(false);
@@ -19,10 +20,22 @@ export const useOrderDocumentStatus = ({ order, payments }: UseOrderDocumentStat
   let managedDocumentsRequestId = 0;
   const orderDocuments = computed(() => order.value?.documents || []);
 
+  const belongsToProposal = (document: { proposal_id?: number | null }) => !proposalId?.value || !document.proposal_id || document.proposal_id === proposalId.value;
+  const contextDocuments = computed(() => [...orderDocuments.value, ...managedDocuments.value].filter(belongsToProposal));
+  const attachmentBelongsToProposal = (attachment: NonNullable<OutgoingEmailResponse['attachments']>[number]) => {
+    if (!proposalId?.value) return true;
+    if (attachment.document_id) return contextDocuments.value.some(document => document.id === attachment.document_id);
+    const identity = normalizeDocumentIdentity(attachment.document_number || attachment.filename);
+    return contextDocuments.value.some(document => {
+      const number = normalizeDocumentIdentity('number' in document ? document.number : document.official_full_number || document.official_number || document.display_number);
+      return number && identity.includes(number);
+    });
+  };
+
   const documentEmailStatus = computed<'unknown' | 'none' | 'pending' | 'sending' | 'uncertain' | 'sent' | 'failed'>(() => {
     if (!orderEmailsLoaded.value) return 'unknown';
     const latest = [...orderEmails.value]
-      .filter((email) => email.status !== 'draft' && Boolean(email.attachments?.length))
+      .filter((email) => email.status !== 'draft' && email.attachments?.some(attachmentBelongsToProposal))
       .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at))[0];
     if (!latest) return 'none';
     if (latest.status === 'sent') return 'sent';
@@ -35,17 +48,17 @@ export const useOrderDocumentStatus = ({ order, payments }: UseOrderDocumentStat
 
   const sentDocumentTypes = computed(() => {
     const types = new Set<string>();
-    for (const document of managedDocuments.value) {
+    for (const document of managedDocuments.value.filter(belongsToProposal)) {
       if (document.status === 'sent' || document.status === 'signed') types.add(document.doc_type);
     }
     const documentsByNumber = new Map(
-      orderDocuments.value
+      orderDocuments.value.filter(belongsToProposal)
         .filter((document) => document.number)
         .map((document) => [normalizeDocumentIdentity(document.number), document.doc_type]),
     );
     for (const email of orderEmails.value) {
       if (email.status !== 'sent') continue;
-      for (const attachment of email.attachments || []) {
+      for (const attachment of (email.attachments || []).filter(attachmentBelongsToProposal)) {
         const metadata = attachment as typeof attachment & {
           document_type?: string | null;
           document_number?: string | null;

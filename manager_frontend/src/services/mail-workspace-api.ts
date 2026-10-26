@@ -26,8 +26,11 @@ export const mailApi = {
   create(fields: MailDraftFields, key = mailCommandKey()): Promise<MailMessage> {
     return request(OpenAPI, { method: 'POST', url: '/api/manager/mail/drafts', body: fields, mediaType: 'application/json', headers: { 'Idempotency-Key': key } });
   },
-  createOrderDraft(orderId: number, fields: MailOrderDraftPayload, transport: 'legacy' | 'native'): Promise<MailMessage> {
-    return request(OpenAPI, { method: 'POST', url: transport === 'native' ? '/api/manager/document-system/orders/{order_id}/email/draft' : '/api/manager/mail/orders/{order_id}/draft', path: { order_id: orderId }, body: fields, mediaType: 'application/json', headers: { 'Idempotency-Key': mailCommandKey() } });
+  createOrderDraft(orderId: number, fields: MailOrderDraftPayload, transport: 'legacy' | 'native', key = mailCommandKey()): Promise<MailMessage> {
+    return request(OpenAPI, { method: 'POST', url: transport === 'native' ? '/api/manager/document-system/orders/{order_id}/email/draft' : '/api/manager/mail/orders/{order_id}/draft', path: { order_id: orderId }, body: fields, mediaType: 'application/json', headers: { 'Idempotency-Key': key } });
+  },
+  suggest(id: number, version: number): Promise<{ version: number; subject: string; body_text: string }> {
+    return request(OpenAPI, { method: 'POST', url: '/api/manager/mail/drafts/{id}/suggest', path: { id }, body: { expected_version: version }, mediaType: 'application/json' });
   },
   copy(id: number, expectedVersion: number): Promise<MailMessage> {
     return request(OpenAPI, { method: 'POST', url: '/api/manager/mail/messages/{id}/copy', path: { id }, body: { expected_version: expectedVersion }, mediaType: 'application/json', headers: { 'Idempotency-Key': mailCommandKey() } });

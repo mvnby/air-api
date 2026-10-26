@@ -9,6 +9,7 @@ import type { MailDraftCreatePayload } from '../models/MailDraftCreatePayload';
 import type { MailDraftUpdatePayload } from '../models/MailDraftUpdatePayload';
 import type { MailMessageListResponse } from '../models/MailMessageListResponse';
 import type { MailMessageResponse } from '../models/MailMessageResponse';
+import type { MailTextSuggestionResponse } from '../models/MailTextSuggestionResponse';
 import type { MailVersionPayload } from '../models/MailVersionPayload';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
@@ -184,6 +185,33 @@ export class ManagerMailWorkspaceService {
             },
             headers: {
                 'Idempotency-Key': idempotencyKey,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Suggest Mail Draft Text
+     * Suggest safe wording for the accessible saved draft version using DeepSeek.
+     * Does not modify or approve mail. Provider failure returns the saved text immediately
+     * after a bounded attempt. Facts, signature and next steps stay server-owned.
+     * @param draftId
+     * @param requestBody
+     * @returns MailTextSuggestionResponse Successful Response
+     * @throws ApiError
+     */
+    public static suggestManagerMailDraftText(
+        draftId: number,
+        requestBody: MailVersionPayload,
+    ): CancelablePromise<MailTextSuggestionResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/mail/drafts/{draft_id}/suggest',
+            path: {
+                'draft_id': draftId,
             },
             body: requestBody,
             mediaType: 'application/json',

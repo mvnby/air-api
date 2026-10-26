@@ -28,6 +28,7 @@ import OrderWorkspaceUsageReport from './OrderWorkspaceUsageReport.vue';
 import type {
   ManagerOrderDetailResponse,
 } from '../../client';
+import { getApiErrorMessage } from '../../utils/api-errors';
 import { ManagerOrdersService } from '../../client';
 import {
   buildOrderWorkspaceViewModel,
@@ -211,13 +212,12 @@ const proposalLifecycle = useOrderProposalLifecycle({
 const {
   activeProposalId,
   activeProposalLocked,
-  changeActiveProposalStatus,
   createProposal,
   duplicateProposal,
   loadProposalLines,
   proposalActionLoading,
   proposalStatus,
-  selectedProposal: selectedOrderProposal,
+  activeProposal: viewedOrderProposal,
 } = proposalLifecycle;
 
 const {
@@ -318,6 +318,7 @@ const {
 } = useOrderDocumentStatus({
   order: computed(() => props.order),
   payments,
+  proposalId: activeProposalId,
 });
 
 const workspaceNavigation = useOrderWorkspaceNavigation({
@@ -411,24 +412,27 @@ const {
   onUpdated: (updatedOrder) => emit('updated', updatedOrder),
   onDeleted: (orderId) => emit('deleted', orderId),
 });
+const viewedDocuments = computed(() => orderDocuments.value.filter(doc => !doc.proposal_id || doc.proposal_id === activeProposalId.value));
+const viewedManagedDocuments = computed(() => managedDocuments.value.filter(doc => !doc.proposal_id || doc.proposal_id === activeProposalId.value));
+const viewingAlternative = computed(() => !!viewedOrderProposal.value && !viewedOrderProposal.value.is_selected);
 const orderWorkspace = computed(() => buildOrderWorkspaceViewModel({
   status: status.value,
-  negotiationStatus: negotiationStatus.value,
+  negotiationStatus: viewingAlternative.value && ['draft', 'ready_to_send', 'rejected'].includes(viewedOrderProposal.value?.status || '') ? 'awaiting_offer' : negotiationStatus.value,
   executionStatus: executionStatus.value,
   statusChangedAt: props.order?.status_changed_at,
   negotiationStatusChangedAt: props.order?.negotiation_status_changed_at,
   executionStatusChangedAt: props.order?.execution_status_changed_at,
   installationDate: installationDate.value,
-  activeProposalId: selectedOrderProposal.value?.id || null,
-  activeProposalStatus: selectedOrderProposal.value?.status || proposalStatus.value,
-  activeProposalLineCount: (selectedOrderProposal.value?.product_lines?.length || 0) + (selectedOrderProposal.value?.service_lines?.length || 0),
-  activeProposalTotal: Number(selectedOrderProposal.value?.total_amount || 0),
+  activeProposalId: viewedOrderProposal.value?.id || null,
+  activeProposalStatus: viewedOrderProposal.value?.status || proposalStatus.value,
+  activeProposalLineCount: productLines.value.length + serviceLines.value.length,
+  activeProposalTotal: totalPreview.value,
   autoExecutionOnPayment: autoExecutionOnPayment.value,
   productCount: productLines.value.length,
   serviceCount: serviceLines.value.length,
   linkedEquipmentCount: props.order?.linked_equipment_count || 0,
-  documents: orderDocuments.value,
-  managedDocuments: managedDocuments.value,
+  documents: viewedDocuments.value,
+  managedDocuments: viewedManagedDocuments.value,
   documentEmailStatus: documentEmailStatus.value,
   sentDocumentTypes: sentDocumentTypes.value,
   missingReferencedInvoice: missingReferencedInvoice.value,
@@ -561,7 +565,20 @@ const openProposalForProduct = async () => {
 const handleWorkspaceNextAction = async () => {
   const action = orderWorkspace.value.nextAction;
   if (action.command === 'create_proposal') return createProposal();
-  if (action.command === 'finish_proposal') return changeActiveProposalStatus('ready_to_send');
+  if (action.command === 'finish_proposal') {
+    if (proposalActionLoading.value || draftBlocked.value) return;
+    proposalActionLoading.value = true;
+    const proposalId = activeProposalId.value;
+    try {
+      if (unfinishedLineEdits.value) throw new Error('Завершите редактирование строки кнопкой «Готово» или «Отмена».');
+      if (!await orderSaving.flush() || activeProposalId.value !== proposalId) return;
+      await openWorkspaceTarget('documents');
+      await documentsWorkspaceRef.value?.openOffer();
+    } catch (error) {
+      localFormError.value = `Не удалось открыть подготовку КП: ${getApiErrorMessage(error)}`;
+    } finally { proposalActionLoading.value = false; }
+    return;
+  }
   if (action.command === 'record_proposal_response') {
     await openWorkspaceTarget('proposal');
     proposalWorkspaceRef.value?.openResponse();

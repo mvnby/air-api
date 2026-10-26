@@ -40014,6 +40014,64 @@
         }
       }
     },
+    "/api/manager/mail/drafts/{draft_id}/suggest": {
+      "post": {
+        "tags": [
+          "manager-mail-workspace"
+        ],
+        "summary": "Suggest Mail Draft Text",
+        "description": "Suggest safe wording for the accessible saved draft version using DeepSeek.\nDoes not modify or approve mail. Provider failure returns the saved text immediately\nafter a bounded attempt. Facts, signature and next steps stay server-owned.",
+        "operationId": "suggest_manager_mail_draft_text",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Draft Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MailVersionPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailTextSuggestionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/mail/messages/{message_id}/copy": {
       "post": {
         "tags": [
@@ -62014,6 +62072,18 @@
       },
       "MailOrderDraftPayload": {
         "properties": {
+          "template_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 40
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Key"
+          },
           "to_email": {
             "type": "string",
             "maxLength": 4096,
@@ -62099,6 +62169,29 @@
         "additionalProperties": false,
         "type": "object",
         "title": "MailOrderDraftPayload"
+      },
+      "MailTextSuggestionResponse": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "subject": {
+            "type": "string",
+            "title": "Subject"
+          },
+          "body_text": {
+            "type": "string",
+            "title": "Body Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "subject",
+          "body_text"
+        ],
+        "title": "MailTextSuggestionResponse"
       },
       "MailVersionPayload": {
         "properties": {

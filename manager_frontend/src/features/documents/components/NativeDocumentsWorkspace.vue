@@ -378,11 +378,24 @@ const createDraft = async (allowIncomplete = false) => {
     preparingDraft.value = false;
   }
 };
-const openCreateForm = () => {
-  formRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  formRef.value?.querySelector<HTMLButtonElement>('[data-testid="native-document-type"] button')?.focus({ preventScroll: true });
-};
+const createFormRequested = ref(false);
+watch([formRef, workspace.loading, workspace.templatesLoading, createFormRequested], async () => {
+  if (!createFormRequested.value || workspace.loading.value || workspace.templatesLoading.value || !formRef.value) return;
+  await nextTick();
+  if (!createFormRequested.value || !formRef.value) return;
+  // The list and selected template must finish layout before locating the form.
+  formRef.value.scrollIntoView({ behavior: 'instant', block: 'start' });
+  formRef.value.querySelector<HTMLButtonElement>('[data-testid="native-document-type"] button')?.focus({ preventScroll: true });
+  createFormRequested.value = false;
+}, { flush: 'post' });
+const openCreateForm = () => { createFormRequested.value = true; };
 defineExpose({
+  openOffer: async () => {
+    documentAudience.value = 'business';
+    workspace.documentType.value = 'offer';
+    await nextTick();
+    openCreateForm();
+  },
   openCreate: openCreateForm,
   openSend: () => { if (access.value.canSend && canSendNativeEmail.value) sendOpen.value = true; },
 });
@@ -400,7 +413,7 @@ defineExpose({
     <div class="flex flex-col gap-3 border-b border-slate-100 pb-4 dark:border-slate-800 sm:flex-row sm:items-start sm:justify-between">
       <div>
         <div class="flex flex-wrap items-center gap-2">
-          <h3 class="font-['Space_Grotesk'] text-lg font-bold text-slate-900 dark:text-white">Документы CRM</h3>
+          <h3 class="font-['Space_Grotesk'] text-lg font-bold text-slate-900 dark:text-white">Документы CRM</h3><p v-if="activeProposal" class="text-sm text-slate-500" data-testid="document-proposal-context">Вариант: {{ activeProposal.name }}</p>
           <span class="rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-brand-800 dark:bg-brand-950/60 dark:text-brand-300">DOCX + PDF</span>
         </div>
         <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Выберите тип → создайте черновик → проверьте PDF → выпустите документ → отправьте клиенту.</p>
@@ -520,7 +533,7 @@ defineExpose({
         <span v-else class="ml-1">Обратитесь к владельцу аккаунта.</span>
       </div>
 
-      <div v-if="access.canCreate" ref="formRef" class="mt-4 rounded-xl bg-slate-50 p-4 dark:bg-slate-800/60">
+      <div v-if="access.canCreate" ref="formRef" data-testid="native-document-create-form" class="mt-4 rounded-xl bg-slate-50 p-4 dark:bg-slate-800/60">
         <div v-if="workspace.replacesDocumentId.value" class="mb-4 flex items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
           <span>Готовим замену для документа CRM #{{ workspace.replacesDocumentId.value }}</span>
           <button class="font-bold" type="button" @click="workspace.replacesDocumentId.value = null">Отменить</button>
