@@ -34019,6 +34019,54 @@
         }
       }
     },
+    "/api/manager/orders/{order_id}/request-context": {
+      "get": {
+        "tags": [
+          "manager-service-attachments"
+        ],
+        "summary": "Get Manager Order Request Context",
+        "description": "Read saved source text and unique original-file metadata for a Manager order.\n\nRequires live staff/company membership and the selected storefront's order access.\nMissing or inaccessible order returns 404; unavailable system-mail membership returns\n403. Saved inbox files additionally require existing system mailbox access. Identical\nbytes across private order and inbox links appear once; unavailable legacy records\nremain visible. No pagination parameters. Repeat GET safely: it does not mark mail read,\ndownload bytes, contact IMAP/AI, import files, grant access or change business data.\nOriginals use the existing authenticated mail or private service-attachment endpoints.\nSee [request evidence](https://github.com/mvnby/air-api/blob/main/docs/service-attachments.md#order-request-evidence).",
+        "operationId": "get_manager_order_request_context",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderRequestContext"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/orders/{order_id}/attachments": {
       "get": {
         "tags": [
@@ -78004,6 +78052,33 @@
         ],
         "title": "ManagerOrderProductLinePayload"
       },
+      "ManagerOrderRequestContext": {
+        "properties": {
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/OrderRequestSourceText"
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/OrderRequestFile"
+            },
+            "type": "array",
+            "title": "Files"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "title": "ManagerOrderRequestContext"
+      },
       "ManagerOrderResponsiblePerson": {
         "properties": {
           "staff_user_id": {
@@ -89953,6 +90028,231 @@
         },
         "type": "object",
         "title": "OrderProposalUpdatePayload"
+      },
+      "OrderRequestFile": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "legacy_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legacy Key"
+          },
+          "legacy": {
+            "type": "boolean",
+            "title": "Legacy",
+            "default": false
+          },
+          "file_kind": {
+            "type": "string",
+            "title": "File Kind",
+            "default": "other"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category",
+            "default": "other"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "mime_type": {
+            "type": "string",
+            "title": "Mime Type",
+            "default": "application/octet-stream"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes",
+            "default": 0
+          },
+          "caption": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caption"
+          },
+          "transcript": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "default": "manager"
+          },
+          "processing_status": {
+            "type": "string",
+            "title": "Processing Status",
+            "default": "ready"
+          },
+          "processing_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Error"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "preview_available": {
+            "type": "boolean",
+            "title": "Preview Available",
+            "default": false
+          },
+          "equipment_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Id"
+          },
+          "component_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Component Id"
+          },
+          "service_history_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service History Id"
+          },
+          "mail_message_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mail Message Id"
+          },
+          "mail_attachment_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mail Attachment Id"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available",
+            "default": true
+          },
+          "origin_label": {
+            "type": "string",
+            "title": "Origin Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "filename",
+          "created_at",
+          "origin_label"
+        ],
+        "title": "OrderRequestFile"
+      },
+      "OrderRequestSourceText": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "default": false
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "text"
+        ],
+        "title": "OrderRequestSourceText"
       },
       "OrderResponse": {
         "properties": {

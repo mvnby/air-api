@@ -591,6 +591,7 @@ export type { ManagerOrderImportProductMatch } from './models/ManagerOrderImport
 export type { ManagerOrderListItemResponse } from './models/ManagerOrderListItemResponse';
 export type { ManagerOrderListResponse } from './models/ManagerOrderListResponse';
 export type { ManagerOrderProductLinePayload } from './models/ManagerOrderProductLinePayload';
+export type { ManagerOrderRequestContext } from './models/ManagerOrderRequestContext';
 export type { ManagerOrderResponsiblePerson } from './models/ManagerOrderResponsiblePerson';
 export type { ManagerOrderResponsiblesResponse } from './models/ManagerOrderResponsiblesResponse';
 export type { ManagerOrderResponsibleUpdate } from './models/ManagerOrderResponsibleUpdate';
@@ -768,6 +769,8 @@ export type { OrderProductLogisticsComponent } from './models/OrderProductLogist
 export type { OrderProposalCreatePayload } from './models/OrderProposalCreatePayload';
 export type { OrderProposalResponse } from './models/OrderProposalResponse';
 export type { OrderProposalUpdatePayload } from './models/OrderProposalUpdatePayload';
+export type { OrderRequestFile } from './models/OrderRequestFile';
+export type { OrderRequestSourceText } from './models/OrderRequestSourceText';
 export type { OrderResponse } from './models/OrderResponse';
 export type { OrderServiceLineResponse } from './models/OrderServiceLineResponse';
 export type { OrderUsageAccepted } from './models/OrderUsageAccepted';

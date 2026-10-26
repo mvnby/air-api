@@ -11,6 +11,8 @@ import type OrderEquipmentPanel from '../equipment/OrderEquipmentPanel.vue';
 import OrderWorkspaceHeader from './OrderWorkspaceHeader.vue';
 import TenderWorkflowPanel from './TenderWorkflowPanel.vue';
 import OrderCustomerContext from './OrderCustomerContext.vue';
+import OrderRequestPanel from './OrderRequestPanel.vue';
+import { useOrderRequestContext } from '../../composables/useOrderRequestContext';
 import LeadSourceReviewModal from '../leads/LeadSourceReviewModal.vue';
 import OrderRequestSourceCard from './OrderRequestSourceCard.vue';
 import OrderSourceEquipmentAction from './OrderSourceEquipmentAction.vue';
@@ -84,6 +86,18 @@ const ensureSection = async (section: OrderWorkspaceSection) => {
 };
 const showProposalCosts = ref(false);
 const mobileContextOpen = ref(false);
+const requestOpen = ref(false);
+const requestTrigger = ref<HTMLButtonElement | null>(null);
+const requestPanel = ref<InstanceType<typeof OrderRequestPanel> | null>(null);
+const requestEvidence = useOrderRequestContext(computed(() => props.order?.id), computed(() => props.modelValue));
+const closeRequest = () => { requestOpen.value = false; requestTrigger.value?.focus({ preventScroll: true }); };
+const toggleRequest = async () => {
+  if (requestOpen.value) return closeRequest();
+  requestOpen.value = true;
+  await nextTick();
+  requestPanel.value?.focus?.();
+  if (window.matchMedia('(max-width: 1023px)').matches) document.getElementById('order-request-details')?.scrollIntoView({ block: 'start' });
+};
 const demoReadOnly = useDemoReadOnly();
 const isPage = computed(() => props.presentation === 'page');
 useDocumentScrollLock(() => props.modelValue && !isPage.value);
@@ -93,6 +107,7 @@ watch(() => [props.order?.id, props.modelValue], () => {
   proposalClientPreview.value = false;
   showProposalCosts.value = false;
   mobileContextOpen.value = false;
+  requestOpen.value = false;
 });
 
 const serviceKindLabels: Record<string, string> = {
@@ -710,14 +725,21 @@ defineExpose({ prepareToLeave });
             @select="selectWorkspaceSection"
             @add-product="openProposalForProduct"
           />
-        <button type="button" class="mt-1 flex min-h-9 w-full items-center justify-between rounded-lg px-1 text-left text-xs font-semibold text-slate-600 focus-visible:ring-2 focus-visible:ring-brand-500 dark:text-slate-300" :aria-expanded="mobileContextOpen" aria-controls="order-context-details" @click="mobileContextOpen = !mobileContextOpen"><span>Ответственный, клиент и объект</span><span aria-hidden="true">{{ mobileContextOpen ? '−' : '+' }}</span></button>
+        <div class="mt-2 flex flex-col gap-1 lg:flex-row-reverse lg:items-center lg:gap-3">
+          <button ref="requestTrigger" type="button" data-testid="order-request-trigger" class="flex min-h-12 w-full items-center gap-3 rounded-xl border border-brand-300 bg-brand-50 px-3 py-2 text-left text-brand-900 focus-visible:ring-2 focus-visible:ring-brand-500 dark:border-brand-600 dark:bg-brand-950 dark:text-brand-100 lg:w-auto lg:min-w-64" :aria-expanded="requestOpen" aria-controls="order-request-details" @click="toggleRequest">
+            <span class="material-icons-round text-[23px]" aria-hidden="true">description</span>
+            <span class="min-w-0 flex-1"><span class="block text-sm font-bold">Заявка и файлы</span><span class="block text-xs">{{ comment.trim() || requestEvidence.context.value?.sources.some(source => source.text.trim()) ? 'Есть текст' : requestEvidence.loading.value ? 'Проверяем текст…' : requestEvidence.error.value ? 'Текст не загружен' : 'Текст не указан' }} · {{ requestEvidence.summary.value }}</span></span>
+            <span aria-hidden="true">{{ requestOpen ? '−' : '+' }}</span>
+          </button>
+          <button type="button" class="flex min-h-9 w-full items-center justify-between rounded-lg px-1 text-left text-xs font-semibold text-slate-600 focus-visible:ring-2 focus-visible:ring-brand-500 dark:text-slate-300 lg:flex-1" :aria-expanded="mobileContextOpen && !requestOpen" aria-controls="order-context-details" @click="requestOpen = false; mobileContextOpen = !mobileContextOpen"><span>Ответственный, клиент и объект</span><span aria-hidden="true">{{ mobileContextOpen && !requestOpen ? '−' : '+' }}</span></button>
+        </div>
       </div>
 
       <OrderWorkspaceUsageReport :open="usageReportOpen" @close="usageReportOpen = false" />
       <EnvelopePrintDialog v-if="showEnvelope && customer?.id" :key="customer.id" :customer-id="customer.id" :order-address="compactObjectAddress" @close="showEnvelope = false" />
 
-      <div ref="workspaceScrollContainer" data-order-scroll class="grid min-h-0 min-w-0 flex-1 grid-cols-1 content-start gap-3 overflow-y-auto p-3" :class="!proposalClientPreview && mobileContextOpen ? 'lg:grid-cols-[minmax(0,1fr)_18rem]' : ''">
-        <div class="min-w-0">
+      <div ref="workspaceScrollContainer" data-order-scroll class="flex min-h-0 min-w-0 flex-1 flex-col content-start gap-3 overflow-y-auto p-3 lg:grid lg:grid-cols-1" :class="!proposalClientPreview && requestOpen ? 'lg:grid-cols-[minmax(0,1fr)_30rem]' : !proposalClientPreview && mobileContextOpen ? 'lg:grid-cols-[minmax(0,1fr)_18rem]' : ''">
+        <div class="min-w-0 shrink-0">
 
           <p v-if="displayFormError && !proposalClientPreview" class="mt-4 rounded-xl border border-red-500/40 bg-red-50 px-3 py-2 text-sm text-red-700">
             {{ displayFormError }}
@@ -818,7 +840,8 @@ defineExpose({ prepareToLeave });
             </section>
           </fieldset>
         </div>
-        <div v-if="contextMounted" v-show="!proposalClientPreview && mobileContextOpen" id="order-context-details" class="order-first min-w-0 lg:order-none lg:self-start">
+        <OrderRequestPanel v-if="requestOpen && !proposalClientPreview && order" :key="`request-${order.id}`" ref="requestPanel" class="order-first lg:sticky lg:top-0 lg:order-none lg:self-start" :context="requestEvidence.context.value" :description="comment" :loading="requestEvidence.loading.value" :error="requestEvidence.error.value" :resolve-access="requestEvidence.resolveAccess" @retry="requestEvidence.load" @close="closeRequest" />
+        <div v-if="contextMounted" v-show="!proposalClientPreview && mobileContextOpen && !requestOpen" id="order-context-details" class="order-first min-w-0 lg:order-none lg:self-start">
           <div class="space-y-3">
           <OrderResponsiblePanel v-if="order" :order="order" :can-assign="canAssignResponsible" :busy="responsibilityBusy" :disabled="initializing || installationAttaching || sourceApplying || proposalActionLoading || workerAssignmentBusy || workerPayBusy" :error="responsibilityError" :assign="assignResponsible" />
           <OrderCustomerContext

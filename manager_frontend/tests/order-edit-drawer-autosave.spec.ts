@@ -89,7 +89,7 @@ beforeEach(() => {
   vi.spyOn(ManagerOrdersService, 'getManagerOrderDetail').mockImplementation(async () => structuredClone(stored));
   vi.spyOn(ManagerOrdersService, 'patchManagerOrder').mockImplementation(async (_id, payload) => commit(payload));
 });
-afterEach(() => { wrapper?.unmount(); vi.restoreAllMocks(); vi.useRealTimers(); managerSession.auth.value = null; managerStorefrontSelection.selectedSlug.value = null; });
+afterEach(() => { wrapper?.unmount(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); managerSession.auth.value = null; managerStorefrontSelection.selectedSlug.value = null; });
 
 
 // This fixture enforces the backend's proposal-line ownership boundary.
@@ -147,7 +147,7 @@ describe('initial focus before background loading', () => {
     await header().get('[aria-label^="Изменить название:"]').trigger('click');
     const input=header().get<HTMLInputElement>('[aria-label="Название заказа"]');
     await input.setValue('Продолжаю ввод');input.element.focus();input.element.setSelectionRange(3,8);
-    const scroller=wrapper.get('aside > .grid').element;scroller.scrollTop=123;
+    const scroller=wrapper.get('[data-order-scroll]').element;scroller.scrollTop=123;
     vi.spyOn(console,'error').mockImplementation(()=>{});
     if(failure) fail(new Error('background offline'));else finish({items:[]});
     await flushPromises();
@@ -472,6 +472,21 @@ describe('order drawer autosave integration', () => {
     await nextTick();
 
         expect(customer().props('editTarget')).toBe('customer');
+  });
+
+  it('preserves an unfinished object comment and proposal when request evidence is opened and closed', async () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    await mountDrawer('page', true);
+    customer().vm.$emit('update:editTarget', 'object'); await nextTick();
+    await customer().get('[data-testid="object-comment"]').setValue('Моё несохранённое уточнение');
+    const commercial = wrapper.findComponent(OrderProposalWorkspace).props('commercial') as any;
+    commercial.addServiceLine(); commercial.serviceLines.value[0].title = 'Ручной состав КП';
+    await wrapper.get('[data-testid="order-request-trigger"]').trigger('click');
+    await wrapper.get('[data-testid="order-request-trigger"]').trigger('click');
+    expect((customer().get('[data-testid="object-comment"]').element as HTMLTextAreaElement).value).toBe('Моё несохранённое уточнение');
+    expect(commercial.serviceLines.value[0].title).toBe('Ручной состав КП');
+    expect(ManagerOrdersService.patchManagerOrder).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 
   it('saves the object through the shared save queue while preserving proposal edits', async () => {
