@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List
 
@@ -78,36 +79,62 @@ class OrderEmailTemplateService:
             return f"{values[0]} и {values[1]}"
         return ", ".join(values[:-1]) + f" и {values[-1]}"
 
-    @staticmethod
-    def _scenario_label(order: Order) -> str:
-        workflow = str(getattr(order, "workflow_type", "") or "").strip()
-        has_products = bool(getattr(order, "product_links", []))
-        has_services = bool(getattr(order, "service_links", []))
-        service_titles = " ".join(
-            str(getattr(item, "title", "") or "").lower()
-            for item in getattr(order, "service_links", [])
-        )
-        if "диагност" in service_titles:
-            return "диагностику оборудования"
-        if "обслуж" in service_titles:
-            return "техническое обслуживание кондиционеров"
-        if "ремонт" in service_titles:
-            return "ремонт кондиционеров"
-        if "монтаж" in service_titles and not has_products:
-            return "монтаж кондиционеров"
-        if workflow == "maintenance":
-            return "техническое обслуживание кондиционеров"
-        if workflow == "repair":
-            return "ремонт кондиционеров"
-        if workflow == "service_work":
-            return "выполнение работ"
-        if has_products and has_services:
-            return "поставку и монтаж кондиционеров"
-        if has_products:
-            return "поставку кондиционеров"
-        if has_services:
-            return "выполнение работ"
-        return "заказ"
+    @classmethod
+    def _scenario_label(cls, order: Order, documents: List[OrderDocument] | None = None) -> str:
+        # Only the edition being attached is evidence of its contents. Never infer
+        # work from the noisy order title or another proposal's live lines.
+        rows = []
+        for document in documents or []:
+            snapshot = document.render_snapshot or {}
+            document_rows = (snapshot.get("table_rows") or {}).get("lines") or []
+            if not document_rows:
+                return ""
+            rows.extend(document_rows)
+        labels = []
+        if any(row.get("line.kind") == "product" for row in rows):
+            labels.append("поставку товаров")
+        service_titles = [str(row.get("line.title", "")).split("\n", 1)[0].lower() for row in rows
+                          if row.get("line.kind") == "service"]
+        rules = [(r"\bдиагност", "диагностику оборудования"),
+                 (r"\bобслуж|\bтехническ.*обслуж", "техническое обслуживание оборудования"),
+                 (r"\bремонт", "ремонт оборудования"),
+                 (r"\bдемонтаж", "демонтаж оборудования"),
+                 (r"\bмонтаж|\bустанов", "монтаж оборудования"),
+                 (r"\bдостав", "доставку")]
+        unmatched = False
+        for title in service_titles:
+            matched = []
+            for pattern, label in rules:
+                for match in re.finditer(pattern, title):
+                    before, after = title[:match.start()], title[match.end():]
+                    if re.search(r"\bбез\b[^,;.!]*$", before):
+                        continue
+                    if re.match(r"\w*\s+(?:не\s+(?:вход|включ|треб|предусмотр)|оплачивается отдельно)", after):
+                        continue
+                    matched.append(label)
+                    break
+            labels.extend(matched)
+            unmatched |= not bool(matched)
+        if unmatched:
+            labels.append("другие работы и услуги" if labels else "выполнение работ")
+        return cls._join_labels(labels) if labels else ""
+
+    @classmethod
+    async def _signature(cls, session, *, tenant_scope, order, staff_user_id, company_name):
+        from crud.order_responsibility import OrderResponsibilityDAO
+        from services.storefront_settings_service import StorefrontSettingsService
+
+        ids = [order.responsible_staff_user_id, staff_user_id]
+        people = {row.id: row for row in await OrderResponsibilityDAO.people(
+            session, {(tenant_scope.tenant_id, person_id) for person_id in ids if person_id})}
+        name = next((cls._clean(people[person_id].display_name) for person_id in ids
+                     if person_id in people and people[person_id].staff_status == "active"
+                     and people[person_id].membership_status == "active"
+                     and people[person_id].merged_into_staff_user_id is None
+                     and people[person_id].role in {"owner", "admin", "manager"}), "")
+        site = (await StorefrontSettingsService.get_settings(session, tenant_scope=tenant_scope)).site
+        # Staff phone/email are authentication/recovery contacts, not public work contacts.
+        return "\n".join(value for value in (name, company_name, cls._clean(site.phone), cls._clean(site.email)) if value)
 
     @classmethod
     def _missing_requisites(cls, order: Order) -> List[Dict[str, str]]:
@@ -183,7 +210,7 @@ class OrderEmailTemplateService:
         elif signer_only:
             details = ["- подтвердить актуальность данных подписанта."]
         else:
-            details = ["- актуальные реквизиты организации."]
+            details = ["- актуальные реквизиты для подготовки документов."]
         return "\n".join(
             [
                 "Добрый день!",
@@ -261,6 +288,24 @@ class OrderEmailTemplateService:
         return "documents"
 
     @classmethod
+    def _next_step(cls, document_types):
+        actions = []
+        kinds = set(document_types)
+        if "offer" in kinds:
+            actions.append("Посмотрите, подходит ли вам состав предложения. Напишите, если нужно что-то изменить; после согласования обсудим следующий шаг.")
+        if "invoice" in kinds:
+            actions.append("Пожалуйста, проверьте реквизиты и оплатите счёт по указанным в нём условиям.")
+        if "contract" in kinds:
+            actions.append("Пожалуйста, проверьте договор и данные сторон. Если всё верно, подпишите и пришлите подписанный экземпляр; замечания можно отправить ответным письмом.")
+        if kinds & {"act", "service_act", "maintenance_service_act", "b2c_supply_installation_act", "b2c_customer_equipment_installation_act", "b2c_maintenance_repair_act", "b2c_route_laying_act"}:
+            actions.append("Пожалуйста, проверьте состав выполненных работ и подпишите акт либо сообщите замечания.")
+        if "defect_act" in kinds:
+            actions.append("Пожалуйста, ознакомьтесь с результатами диагностики и сообщите, можно ли обсудить дальнейшие работы.")
+        if not actions:
+            actions.append("Пожалуйста, проверьте приложенные документы и сообщите, если нужны уточнения.")
+        return "\n".join(actions)
+
+    @classmethod
     async def compose(
         cls,
         session: AsyncSession,
@@ -271,6 +316,7 @@ class OrderEmailTemplateService:
         template_key: str = "auto",
         registration_certificate_id: str | None = None,
         legal_entity_id: int | None = None,
+        staff_user_id: int | None = None,
     ) -> Dict[str, Any]:
         if template_key not in cls.TEMPLATE_KEYS:
             raise ValueError("Unknown email template")
@@ -329,7 +375,7 @@ class OrderEmailTemplateService:
         missing = cls._missing_requisites(order)
         signer_keys = {"signer_name", "signer_position", "acting_basis"}
         signer_missing = [item for item in missing if item["key"] in signer_keys]
-        scenario = cls._scenario_label(order)
+        scenario = cls._scenario_label(order, documents)
         sender_name = await cls._sender_name(
             session,
             tenant_scope=tenant_scope,
@@ -338,6 +384,9 @@ class OrderEmailTemplateService:
             if certificate is not None
             else None,
         )
+
+        sender_name = await cls._signature(session, tenant_scope=tenant_scope, order=order,
+                                           staff_user_id=staff_user_id, company_name=sender_name)
 
         if selected_template == "request_requisites":
             labels = [item["label"] for item in missing]
@@ -377,21 +426,18 @@ class OrderEmailTemplateService:
                 subject_document_label = (
                     "Документы" if documents else "Свидетельство о регистрации"
                 )
-            subject = (
-                f"{subject_document_label} по заказу #{order.id}"
-                if certificate is not None
-                else f"{subject_document_label} на {scenario}"
-            )
+            context_label = f"на {scenario}" if scenario and certificate is None else f"по заказу #{order.id}"
+            subject = f"{subject_document_label} {context_label}"
             body_text = "\n".join(
                 [
                     "Добрый день!",
                     "",
-                    f"Направляем {body_document_label} по заказу #{order.id}."
-                    if certificate is not None
-                    else f"Направляем {body_document_label} на {scenario}.",
+                    f"Направляем {body_document_label} {context_label}.",
                     "Документ приложен к письму."
                     if len(documents) + int(certificate is not None) == 1
                     else "Документы приложены к письму.",
+                    "",
+                    cls._next_step([item.doc_type for item in documents]),
                     "",
                     "С уважением,",
                     sender_name,

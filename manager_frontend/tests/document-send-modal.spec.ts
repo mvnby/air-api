@@ -18,6 +18,7 @@ const order = {
 } as ManagerOrderDetailResponse;
 
 beforeEach(() => {
+  vi.spyOn(mailApi, 'suggest').mockRejectedValue(new Error('AI unavailable'));
   vi.spyOn(ManagerDocumentSystemService, 'listManagerDocumentLegalEntities').mockResolvedValue({ items: [] });
 });
 
@@ -33,10 +34,10 @@ describe('DocumentSendModal', () => {
     const send = vi.spyOn(mailApi, 'send');
     const wrapper = mount(DocumentSendModal, { props: { modelValue: true, order: { ...order, customer: { ...order.customer!, email: '' } }, documents: [] }, attachTo: document.body });
     await flushPromises();
-    const saveButton = Array.from(document.body.querySelectorAll('button')).find(item => item.textContent?.includes('Сохранить и проверить письмо'))!;
+    const saveButton = Array.from(document.body.querySelectorAll('button')).find(item => item.textContent?.includes('Подготовить письмо'))!;
     saveButton.click();
     await flushPromises();
-    expect(createDraft).toHaveBeenCalledWith(42, expect.objectContaining({ to_email: '', subject: '', body_text: '', document_ids: [] }), 'legacy');
+    expect(createDraft).toHaveBeenCalledWith(42, expect.objectContaining({ to_email: '', subject: '', body_text: null, template_key: 'request_requisites', document_ids: [] }), 'legacy', expect.any(String));
     expect(document.body.textContent).toContain('Черновик #81');
     expect(send).not.toHaveBeenCalled();
     wrapper.unmount();
@@ -82,7 +83,7 @@ describe('DocumentSendModal', () => {
     expect(ManagerDocumentSystemService.composeManagerNativeOrderEmail).toHaveBeenCalledTimes(1);
     expect(document.body.textContent).toContain('Договор D-2026-12');
     const sendButton = Array.from(document.body.querySelectorAll('button'))
-      .find((button) => button.textContent?.includes('Сохранить и проверить письмо'));
+      .find((button) => button.textContent?.includes('Подготовить письмо'));
     expect(sendButton).toBeDefined();
     sendButton!.click();
     await flushPromises();
@@ -91,10 +92,13 @@ describe('DocumentSendModal', () => {
       42,
       expect.objectContaining({
         to_email: 'client@example.com',
-        subject: 'Договор D-2026-12',
+        subject: '',
+        body_text: null,
+        template_key: 'auto',
         document_ids: [77],
       }),
       'native',
+      expect.any(String),
     );
     expect(document.body.textContent).toContain('Черновик #80');
     expect(nativeSend).not.toHaveBeenCalled();
@@ -103,4 +107,39 @@ describe('DocumentSendModal', () => {
     expect(legacySend).not.toHaveBeenCalled();
     wrapper.unmount();
   });
+  it('retries a lost create with the same key and blocks duplicate clicks', async () => {
+    vi.spyOn(ManagerMailService, 'composeManagerOrderEmail').mockResolvedValue({ template_key: 'offer', template_options: [{ key: 'auto', label: 'Автоматически' }], subject: 'КП', body_text: 'КП', document_ids: [77], document_labels: [], missing_requisites: [] });
+    vi.spyOn(mailApi, 'accounts').mockResolvedValue({ items: [] });
+    const create = vi.spyOn(mailApi, 'createOrderDraft').mockRejectedValue(new TypeError('Connection lost'));
+    const wrapper = mount(DocumentSendModal, { props: { modelValue: true, order, documents: [{ id: 77, doc_type: 'offer', date: '2026-10-26' }] }, attachTo: document.body });
+    await flushPromises();
+    const action = Array.from(document.body.querySelectorAll('button')).find(item => item.textContent?.includes('Подготовить письмо'))!;
+    action.click(); action.click(); await flushPromises();
+    expect(create).toHaveBeenCalledOnce();
+    expect(document.body.querySelector<HTMLInputElement>('input[type=checkbox]')!.disabled).toBe(true);
+    expect(document.body.textContent).toContain('Выбор зафиксирован');
+    action.click(); await flushPromises();
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(create.mock.calls[0]).toEqual(create.mock.calls[1]);
+    wrapper.unmount();
+  });
+
+  it('uses edited selection with a new key after a definitive create rejection', async () => {
+    vi.spyOn(ManagerMailService, 'composeManagerOrderEmail').mockResolvedValue({ template_key: 'offer', template_options: [{ key: 'auto', label: 'Автоматически' }], subject: 'КП', body_text: 'КП', document_ids: [77], document_labels: [], missing_requisites: [] });
+    vi.spyOn(mailApi, 'accounts').mockResolvedValue({ items: [] });
+    const create = vi.spyOn(mailApi, 'createOrderDraft').mockRejectedValue({ status: 400, message: 'Документ недоступен' });
+    const wrapper = mount(DocumentSendModal, { props: { modelValue: true, order, documents: [{ id: 77, doc_type: 'offer', date: '2026-10-26' }, { id: 78, doc_type: 'offer', date: '2026-10-26' }] }, attachTo: document.body });
+    await flushPromises();
+    const action = () => Array.from(document.body.querySelectorAll('button')).find(item => item.textContent?.includes('Подготовить письмо'))!;
+    action().click(); await flushPromises();
+    const boxes = document.body.querySelectorAll<HTMLInputElement>('input[type=checkbox]');
+    expect(boxes[0]!.disabled).toBe(false);
+    boxes[1]!.click(); await flushPromises(); boxes[0]!.click(); await flushPromises();
+    action().click(); await flushPromises();
+    expect(create.mock.calls[0]![1].document_ids).toEqual([77]);
+    expect(create.mock.calls[1]![1].document_ids).toEqual([78]);
+    expect(create.mock.calls[0]![3]).not.toBe(create.mock.calls[1]![3]);
+    wrapper.unmount();
+  });
+
 });

@@ -370,6 +370,7 @@ export type { MailDraftUpdatePayload } from './models/MailDraftUpdatePayload';
 export type { MailMessageListResponse } from './models/MailMessageListResponse';
 export type { MailMessageResponse } from './models/MailMessageResponse';
 export type { MailOrderDraftPayload } from './models/MailOrderDraftPayload';
+export type { MailTextSuggestionResponse } from './models/MailTextSuggestionResponse';
 export type { MailVersionPayload } from './models/MailVersionPayload';
 export type { MaintenanceActSelectedObservation } from './models/MaintenanceActSelectedObservation';
 export type { MaintenanceDefectActItem } from './models/MaintenanceDefectActItem';

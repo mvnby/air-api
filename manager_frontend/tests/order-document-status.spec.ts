@@ -80,4 +80,24 @@ describe('useOrderDocumentStatus', () => {
     expect(status.sentDocumentTypes.value).toContain('offer');
     expect(status.managedDocuments.value).toHaveLength(2);
   });
+  it('tracks sent and unknown mail only for the viewed proposal, including alternatives', async () => {
+    const proposalId = ref<number | null>(25);
+    const order = ref({ id: 42, documents: [
+      { id: 1, proposal_id: 24, doc_type: 'invoice', number: 'INV-A' },
+      { id: 2, proposal_id: 25, doc_type: 'offer', number: 'KP-B' },
+    ] } as ManagerOrderDetailResponse);
+    mailMock.listManagerOrderOutgoingEmails.mockResolvedValue({ items: [
+      { id: 9, status: 'sent', created_at: '2026-10-26T11:00:00Z', attachments: [{ document_id: 1, document_type: 'invoice' }] },
+      { id: 8, status: 'unknown', created_at: '2026-10-26T10:00:00Z', attachments: [{ document_id: 2, document_type: 'offer' }] },
+    ] });
+    scope = effectScope();
+    const status = scope.run(() => useOrderDocumentStatus({ order, payments: ref([]), proposalId }))!;
+    await status.loadOrderEmails(42);
+    expect(status.documentEmailStatus.value).toBe('uncertain');
+    expect(status.sentDocumentTypes.value).toEqual([]);
+    proposalId.value = 24;
+    expect(status.documentEmailStatus.value).toBe('sent');
+    expect(status.sentDocumentTypes.value).toEqual(['invoice']);
+  });
+
 });

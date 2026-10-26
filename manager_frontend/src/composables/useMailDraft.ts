@@ -115,6 +115,9 @@ export function useMailDraft(initial: MailMessage, onSaved: (draft: MailMessage)
       fail(cause);
       preview.value = null;
       if (sendStarted) {
+        // After a send attempt, even a 409 can describe the transport fence.
+        // Treat it as an outcome to inspect, not an editing conflict.
+        hasConflict.value = false;
         sendUncertain.value = true;
         try {
           const result = await mailApi.get(approved.id);
@@ -124,6 +127,33 @@ export function useMailDraft(initial: MailMessage, onSaved: (draft: MailMessage)
         error.value = 'Ответ на отправку не получен. Проверьте статус письма и папку отправленных у почтового провайдера. Повторная отправка может создать дубликат.';
       }
     } finally { busy.value = false; }
+  };
+
+  // The editor itself is the visible review. A click authorizes exactly its saved contents.
+  const sendVisible = async (sender?: { email: string; name: string }) => {
+    if (busy.value || sendUncertain.value || hasConflict.value) return;
+    busy.value = true;
+    try {
+      if (!await save()) return;
+      const visible = fields();
+      const files = (message: MailMessage) => message.attachments.map(file => [file.id, file.filename, file.size, file.sha256, file.available]);
+      const visibleFiles = JSON.stringify(files(draft.value));
+      const result = await mailApi.preview(draft.value.id);
+      const sameFields = (!sender || (result.sender_email === sender.email && result.sender_name === sender.name))
+        && result.account_id === visible.account_id
+        && JSON.stringify(result.to) === JSON.stringify(visible.to)
+        && JSON.stringify(result.cc) === JSON.stringify(visible.cc)
+        && JSON.stringify(result.bcc) === JSON.stringify(visible.bcc)
+        && result.subject === visible.subject && result.body_text === visible.body_text;
+      if (result.version !== draft.value.version || !sameFields || JSON.stringify(files(result)) !== visibleFiles) {
+        fail({ status: 409 });
+        return;
+      }
+      if (!result.content_hash || !result.csrf_token) throw new Error('Не удалось проверить сохранённую версию письма');
+      preview.value = result;
+    } catch (cause) { fail(cause); return; }
+    finally { busy.value = false; }
+    if (preview.value) await confirmAndSend();
   };
 
   const confirmOnly = async () => {
@@ -153,5 +183,5 @@ export function useMailDraft(initial: MailMessage, onSaved: (draft: MailMessage)
   const unregister = registerUnsavedNavigationGuard(async () => !busy.value && await save());
   onBeforeUnmount(() => { disposed = true; stopTimer(); unregister(); window.removeEventListener('beforeunload', beforeUnload); });
 
-  return { draft, model, dirty, saving, busy, error, hasConflict, preview, sendUncertain, editable, saveLabel, save, reload, showPreview, confirmAndSend, confirmOnly, changeAttachment };
+  return { draft, model, dirty, saving, busy, error, hasConflict, preview, sendUncertain, editable, saveLabel, save, reload, showPreview, sendVisible, confirmAndSend, confirmOnly, changeAttachment };
 }

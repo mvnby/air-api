@@ -20,7 +20,7 @@ beforeEach(() => {
   vi.spyOn(mailApi, 'update').mockImplementation(async (_id, version, fields) => draft({ ...fields, version: version + 1 }));
   vi.spyOn(mailApi, 'get').mockResolvedValue(draft());
   vi.spyOn(mailApi, 'create').mockResolvedValue(draft());
-  vi.spyOn(mailApi, 'preview').mockResolvedValue(draft({ to: ['supplier@example.com'], subject: 'A2E200-AI38-01', body_text: 'Полный текст запроса' }));
+  vi.spyOn(mailApi, 'preview').mockResolvedValue(draft());
   vi.spyOn(mailApi, 'approve').mockResolvedValue(draft({ confirmed_version: 1 }));
   vi.spyOn(mailApi, 'send').mockResolvedValue(draft({ status: 'sent', folder: 'outbox' }));
 });
@@ -67,7 +67,7 @@ describe('server-backed mail drafts', () => {
     expect(await canNavigateAway()).toBe(false);
     expect(wrapper.text()).toContain('Черновик изменён в другом окне или ChatGPT');
     expect(wrapper.get('textarea').element.value).toBe('Моя правка');
-    expect(button('Проверить и отправить').attributes('disabled')).toBeDefined();
+    expect(button('Отправить письмо').attributes('disabled')).toBeDefined();
     expect(mailApi.approve).not.toHaveBeenCalled();
     expect(mailApi.send).not.toHaveBeenCalled();
   });
@@ -76,14 +76,11 @@ describe('server-backed mail drafts', () => {
     const ready = draft({ to: ['supplier@example.com'], cc: ['copy@example.com'], bcc: ['private@example.com'], subject: 'A2E200-AI38-01', body_text: 'Полный текст\nПоследняя строка', attachments: [{ id: 9, filename: 'specification.pdf', mime_type: 'application/pdf', size: 123, sha256: 'file-hash', available: true, download_url: '/api/manager/mail/drafts/80/attachments/9' }] });
     vi.mocked(mailApi.preview).mockResolvedValue(ready);
     wrapper = mount(MailDraftEditor, { props: { initial: ready, accounts: [account] } });
-    await button('Проверить и отправить').trigger('click');
-    await flushPromises();
-    expect(mailApi.send).not.toHaveBeenCalled();
-    expect(wrapper.text()).toContain('copy@example.com');
-    expect(wrapper.text()).toContain('private@example.com');
-    expect(wrapper.text()).toContain('Последняя строка');
+    expect(wrapper.get('input[aria-label="Копия"]').element.value).toBe('copy@example.com');
+    expect(wrapper.get('input[aria-label="Скрытая копия"]').element.value).toBe('private@example.com');
+    expect(wrapper.get('textarea').element.value).toContain('Последняя строка');
     expect(wrapper.text()).toContain('specification.pdf');
-    await button('Подтверждаю, отправить письмо').trigger('click');
+    await button('Отправить письмо').trigger('click');
     await flushPromises();
     expect(mailApi.approve).toHaveBeenCalledWith(80, 1, 'sha256-approved', 'csrf-preview');
     expect(mailApi.send).toHaveBeenCalledOnce();
@@ -94,7 +91,7 @@ describe('server-backed mail drafts', () => {
   it('rejects a changed preview and a stale approval without sending', async () => {
     vi.mocked(mailApi.preview).mockResolvedValue(draft({ version: 2 }));
     wrapper = mount(MailDraftEditor, { props: { initial: draft(), accounts: [account] } });
-    await button('Проверить и отправить').trigger('click');
+    await button('Отправить письмо').trigger('click');
     await flushPromises();
     expect(wrapper.text()).toContain('Конфликт изменений');
     expect(mailApi.approve).not.toHaveBeenCalled();
@@ -103,7 +100,7 @@ describe('server-backed mail drafts', () => {
 
   it('stores exact-version Manager approval for MCP without sending', async () => {
     wrapper = mount(MailDraftEditor, { props: { initial: draft(), accounts: [account] } });
-    await button('Проверить и отправить').trigger('click');
+    await button('Проверить для ChatGPT').trigger('click');
     await flushPromises();
     await button('Подтвердить для ChatGPT').trigger('click');
     await flushPromises();
@@ -117,9 +114,7 @@ describe('server-backed mail drafts', () => {
   it('does not send if the exact preview approval becomes stale', async () => {
     vi.mocked(mailApi.approve).mockRejectedValue({ status: 409 });
     wrapper = mount(MailDraftEditor, { props: { initial: draft(), accounts: [account] } });
-    await button('Проверить и отправить').trigger('click');
-    await flushPromises();
-    await button('Подтверждаю, отправить письмо').trigger('click');
+    await button('Отправить письмо').trigger('click');
     await flushPromises();
     expect(mailApi.send).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('Конфликт изменений');
@@ -129,11 +124,10 @@ describe('server-backed mail drafts', () => {
     let finish!: (result: MailMessage) => void;
     vi.mocked(mailApi.approve).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     wrapper = mount(MailDraftEditor, { props: { initial: draft(), accounts: [account] } });
-    await button('Проверить и отправить').trigger('click');
+    const sendButton = button('Отправить письмо');
+    await sendButton.trigger('click');
+    await sendButton.trigger('click');
     await flushPromises();
-    const sendButton = button('Подтверждаю, отправить письмо');
-    await sendButton.trigger('click');
-    await sendButton.trigger('click');
     expect(mailApi.approve).toHaveBeenCalledOnce();
     finish(draft({ confirmed_version: 1 }));
     await flushPromises();
@@ -144,15 +138,63 @@ describe('server-backed mail drafts', () => {
     vi.mocked(mailApi.send).mockRejectedValue(new TypeError('Connection lost'));
     vi.mocked(mailApi.get).mockRejectedValue(new TypeError('Connection lost'));
     wrapper = mount(MailDraftEditor, { props: { initial: draft(), accounts: [account] } });
-    await button('Проверить и отправить').trigger('click');
-    await flushPromises();
-    await button('Подтверждаю, отправить письмо').trigger('click');
+    await button('Отправить письмо').trigger('click');
     await flushPromises();
     expect(wrapper.text()).toContain('Повторная отправка может создать дубликат');
-    expect(button('Проверить и отправить').attributes('disabled')).toBeDefined();
+    expect(button('Отправить письмо').attributes('disabled')).toBeDefined();
     await button('Проверить статус').trigger('click');
     await flushPromises();
     expect(mailApi.send).toHaveBeenCalledOnce();
+  });
+
+  it('shows status inspection when a send fence returns a conflict after an unknown attempt', async () => {
+    vi.mocked(mailApi.send).mockRejectedValue({ status: 409 });
+    vi.mocked(mailApi.get).mockResolvedValue(draft({ status: 'unknown', folder: 'outbox' }));
+    wrapper = mount(MailDraftEditor, { props: { initial: draft(), accounts: [account] } });
+    await button('Отправить письмо').trigger('click'); await flushPromises();
+    expect(button('Проверить статус')).toBeDefined();
+    expect(wrapper.text()).not.toContain('заменит текст в форме');
+    expect(mailApi.send).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a same-version preview with different visible content or sender', async () => {
+    for (const changed of [{ body_text: 'Невидимая подмена' }, { sender_email: 'other@example.test' }, { attachments: [{ id: 90, filename: 'other.pdf', size: 4, sha256: 'new', available: true, mime_type: 'application/pdf', download_url: null }] }]) {
+      vi.mocked(mailApi.preview).mockResolvedValue(draft(changed));
+      wrapper = mount(MailDraftEditor, { props: { initial: draft(), accounts: [account] } });
+      await button('Отправить письмо').trigger('click'); await flushPromises();
+      expect(wrapper.text()).toContain('Конфликт изменений');
+      expect(mailApi.approve).not.toHaveBeenCalled(); expect(mailApi.send).not.toHaveBeenCalled();
+      wrapper.unmount(); wrapper = undefined;
+    }
+  });
+
+  it('saves the final visible edit before exact-version approval and send', async () => {
+    vi.mocked(mailApi.preview).mockResolvedValue(draft({ version: 2, subject: 'Последняя видимая тема' }));
+    wrapper = mount(MailDraftEditor, { props: { initial: draft(), accounts: [account] } });
+    await wrapper.get('input[aria-label="Тема"]').setValue('Последняя видимая тема');
+    await button('Отправить письмо').trigger('click'); await flushPromises();
+    expect(mailApi.update).toHaveBeenCalledOnce();
+    expect(mailApi.approve).toHaveBeenCalledWith(80, 2, 'sha256-approved', 'csrf-preview');
+    expect(mailApi.send).toHaveBeenCalledWith(80, 2, expect.any(String), 'csrf-preview');
+  });
+
+  it('applies background wording only before any manual text edit and on the same version', async () => {
+    wrapper = mount(MailDraftEditor, { props: { initial: draft({ body_text: 'Исходный текст' }), accounts: [account] } });
+    (wrapper.vm as any).applySuggestion({ version: 2, subject: 'Чужая версия', body_text: 'Не подставлять' });
+    expect(wrapper.get('textarea').element.value).toBe('Исходный текст');
+    await wrapper.get('textarea').setValue('Мой текст');
+    await wrapper.get('textarea').setValue('Исходный текст');
+    (wrapper.vm as any).applySuggestion({ version: 1, subject: 'Тема ИИ', body_text: 'Новый текст ИИ' });
+    expect(wrapper.get('textarea').element.value).toBe('Исходный текст');
+  });
+
+  it('autosaves accepted background wording without blocking opening or sending', async () => {
+    vi.useFakeTimers();
+    wrapper = mount(MailDraftEditor, { props: { initial: draft({ body_text: 'Исходный текст' }), accounts: [account] } });
+    expect(button('Отправить письмо').attributes('disabled')).toBeUndefined();
+    (wrapper.vm as any).applySuggestion({ version: 1, subject: 'Тема', body_text: 'Живой вводный абзац' });
+    await vi.advanceTimersByTimeAsync(650);
+    expect(mailApi.update).toHaveBeenCalledWith(80, 1, expect.objectContaining({ body_text: 'Живой вводный абзац' }));
   });
 
   it('persists the current edit before uploading attachment bytes with the new version', async () => {

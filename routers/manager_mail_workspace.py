@@ -12,7 +12,7 @@ from core.database import get_session
 from core.security import AuthenticatedUser, get_current_auth_context
 from schemas_mail import (
     MailAccountListResponse, MailConfirmPayload, MailDraftCreatePayload,
-    MailDraftUpdatePayload, MailMessageListResponse, MailMessageResponse, MailVersionPayload,
+    MailDraftUpdatePayload, MailMessageListResponse, MailMessageResponse, MailVersionPayload, MailTextSuggestionResponse,
 )
 from services.connector_auth_policy import ConnectorAuthError, csrf_token, validate_csrf
 from services.mail_smtp_service import MAX_ORDER_EMAIL_ATTACHMENT_BYTES
@@ -108,6 +108,19 @@ async def create_mail_draft(payload: MailDraftCreatePayload, response: Response,
 async def get_mail_draft(draft_id: int, response: Response, auth: AuthenticatedUser = Depends(get_current_auth_context), session: AsyncSession = Depends(get_session)):
     """Read the current server-saved outgoing message version. Access requires live staff membership and available linked objects."""
     return await _read(MailWorkspaceService.get_message(session, actor=CommandActor.from_auth(auth), message_id=draft_id), response)
+
+
+@router.post("/drafts/{draft_id}/suggest", response_model=MailTextSuggestionResponse, operation_id=mail_operation_ids.SUGGEST_MANAGER_MAIL_DRAFT_TEXT)
+async def suggest_mail_draft_text(draft_id: int, payload: MailVersionPayload, response: Response,
+    auth: AuthenticatedUser = Depends(get_current_auth_context), session: AsyncSession = Depends(get_session)):
+    """Suggest safe wording for the accessible saved draft version using DeepSeek.
+    Does not modify or approve mail. Provider failure returns the saved text immediately
+    after a bounded attempt. Facts, signature and next steps stay server-owned.
+    """
+    from services.mail_wording_service import MailWordingService
+
+    return await _read(MailWordingService.suggest(session, actor=CommandActor.from_auth(auth),
+        draft_id=draft_id, expected_version=payload.expected_version), response)
 
 
 @router.patch("/drafts/{draft_id}", response_model=MailMessageResponse, operation_id=mail_operation_ids.PATCH_MANAGER_MAIL_DRAFT)

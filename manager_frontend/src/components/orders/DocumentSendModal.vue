@@ -4,7 +4,7 @@ import { ManagerDocumentSystemService, ManagerMailService } from '../../client';
 import type { ManagerOrderDetailResponse } from '../../client';
 import { getApiErrorMessage } from '../../utils/api-errors';
 import { listCertificates, type RegistrationCertificate } from '../../features/documents/registration-certificates';
-import { mailApi, type MailAccount, type MailMessage } from '../../services/mail-workspace-api';
+import { mailApi, mailCommandKey, type MailAccount, type MailMessage } from '../../services/mail-workspace-api';
 import MailDraftEditor from '../mail/MailDraftEditor.vue';
 
 type SendableOrderDocument = {
@@ -54,8 +54,6 @@ async function loadCertificateOptions() {
 const certificateIssuerId = computed(() => certificateOptions.value.find((item) => item.id === registrationCertificateId.value)?.legal_entity_id);
 
 const toEmail = ref('');
-const subject = ref('');
-const bodyText = ref('');
 const templateKey = ref('auto');
 const templateOptions = ref<Array<{ key: string; label: string; requires_documents?: boolean }>>([
   { key: 'auto', label: 'Автоматически', requires_documents: true },
@@ -71,22 +69,18 @@ const templateOptions = ref<Array<{ key: string; label: string; requires_documen
 const missingRequisites = ref<Array<{ key: string; label: string }>>([]);
 const error = ref('');
 const sending = ref(false);
+const creationUncertain = ref(false);
+let createOrderId = props.order.id;
 const mailDraft = ref<MailMessage | null>(null);
 const mailAccounts = ref<MailAccount[]>([]);
-const draftEditor = ref<{ save: () => Promise<boolean> } | null>(null);
+const draftEditor = ref<{ save: () => Promise<boolean>; applySuggestion: (value: { version: number; subject: string; body_text: string }) => void } | null>(null);
+let createKey = mailCommandKey();
+let createPayload: Parameters<typeof mailApi.createOrderDraft>[1] | null = null;
 const composing = ref(false);
-const subjectTouched = ref(false);
-const bodyTouched = ref(false);
 let composeRequestId = 0;
 let resettingSelection = false;
 let templateExplicitlyChosen = false;
 
-const selectedDocuments = computed(() => {
-  const selected = new Set(selectedDocumentIds.value);
-  return props.documents.filter((doc) => selected.has(doc.id));
-});
-
-const hasOfferSelected = computed(() => selectedDocuments.value.some((doc) => doc.doc_type === 'offer'));
 const activeTemplate = computed(() => (
   templateOptions.value.find((item) => item.key === templateKey.value) || templateOptions.value[0]
 ));
@@ -118,25 +112,12 @@ const latestDefaultDocumentIds = () => {
   return offer ? [offer.id] : props.documents.slice(0, 1).map((doc) => doc.id);
 };
 
-const buildSubject = () => (
-  hasOfferSelected.value
-    ? `Коммерческое предложение по заказу #${props.order.id}`
-    : `Документы по заказу #${props.order.id}`
-);
-
-const buildBody = () => {
-  const customerName = props.order.customer?.name || 'клиент';
-  const lines = selectedDocuments.value.map((doc) => `- ${documentLabel(doc)}`);
-  return [
-    `Здравствуйте, ${customerName}!`,
-    '',
-    'Направляем документы по вашему заказу во вложении:',
-    ...(lines.length ? lines : ['- документы по заказу']),
-  ].join('\n');
-};
-
 const refreshDefaults = () => {
+  if (creationUncertain.value && createPayload && createOrderId === props.order.id) return;
+  creationUncertain.value = false;
   mailDraft.value = null;
+  createKey = mailCommandKey();
+  createPayload = null;
   resettingSelection = true;
   selectedDocumentIds.value = latestDefaultDocumentIds();
   registrationCertificateId.value = '';
@@ -145,25 +126,21 @@ const refreshDefaults = () => {
   toEmail.value = props.order.customer?.email || '';
   templateExplicitlyChosen = false;
   templateKey.value = props.documents.length ? 'auto' : 'request_requisites';
-  subject.value = buildSubject();
-  bodyText.value = buildBody();
   missingRequisites.value = [];
   error.value = '';
-  subjectTouched.value = false;
-  bodyTouched.value = false;
   void nextTick(() => {
     resettingSelection = false;
-    return applyTemplate(true);
+    return applyTemplate();
   });
 };
 
-const applyTemplate = async (force = false) => {
+const applyTemplate = async () => {
   if (!props.modelValue || templateKey.value === 'custom') return;
   const requestId = ++composeRequestId;
   composing.value = true;
   try {
     const payload = {
-      document_ids: selectedDocumentIds.value,
+      document_ids: [...selectedDocumentIds.value],
       registration_certificate_id: registrationCertificateId.value || null,
       legal_entity_id: certificateIssuerId.value || null,
       template_key: templateKey.value,
@@ -174,8 +151,6 @@ const applyTemplate = async (force = false) => {
     if (requestId !== composeRequestId) return;
     templateOptions.value = result.template_options || templateOptions.value;
     missingRequisites.value = result.missing_requisites || [];
-    if (force || !subjectTouched.value) subject.value = result.subject;
-    if (force || !bodyTouched.value) bodyText.value = result.body_text;
     error.value = '';
   } catch (err) {
     if (requestId !== composeRequestId) return;
@@ -186,6 +161,8 @@ const applyTemplate = async (force = false) => {
 };
 
 const changeTemplate = () => {
+  createPayload = null;
+  createKey = mailCommandKey();
   templateExplicitlyChosen = true;
   resettingSelection = true;
   if (templateKey.value === 'request_requisites' || templateKey.value === 'request_signer') {
@@ -198,11 +175,9 @@ const changeTemplate = () => {
     const document = props.documents.find((item) => actTypes.has(item.doc_type));
     if (document) selectedDocumentIds.value = [document.id];
   }
-  subjectTouched.value = false;
-  bodyTouched.value = false;
   void nextTick(() => {
     resettingSelection = false;
-    return applyTemplate(true);
+    return applyTemplate();
   });
 };
 
@@ -215,12 +190,14 @@ watch(
 );
 
 watch([selectedDocumentIds, registrationCertificateId], () => {
-  if (!props.modelValue || resettingSelection) return;
+  if (!props.modelValue || resettingSelection || creationUncertain.value) return;
+  createPayload = null;
+  createKey = mailCommandKey();
   if (!props.documents.length && !templateExplicitlyChosen) {
     templateKey.value = registrationCertificateId.value ? 'auto' : 'request_requisites';
   }
   if (templateKey.value === 'custom') return;
-  void applyTemplate(false);
+  void applyTemplate();
 });
 
 const close = async () => {
@@ -230,25 +207,45 @@ const close = async () => {
 };
 
 const sendEmail = async () => {
+  if (sending.value || mailDraft.value) return;
   error.value = '';
   if (documentsRequired.value && !selectedDocumentIds.value.length && !registrationCertificateId.value) {
     error.value = 'Выберите хотя бы один документ';
     return;
   }
   sending.value = true;
+  let createStarted = false;
   try {
-    const payload = {
+    const payload = createPayload || {
       to_email: toEmail.value.trim(),
-      subject: subject.value.trim(),
-      body_text: bodyText.value.trim(),
-      document_ids: selectedDocumentIds.value,
+      template_key: templateKey.value,
+      subject: '',
+      body_text: null,
+      document_ids: [...selectedDocumentIds.value],
       registration_certificate_id: registrationCertificateId.value || null,
       legal_entity_id: certificateIssuerId.value || null,
     };
+    createPayload = payload;
+    createOrderId = props.order.id;
     mailAccounts.value = (await mailApi.accounts()).items;
-    mailDraft.value = await mailApi.createOrderDraft(props.order.id, payload, props.transport || 'legacy');
+    createStarted = true;
+    mailDraft.value = await mailApi.createOrderDraft(props.order.id, payload, props.transport || 'legacy', createKey);
+    creationUncertain.value = false;
+    const initial = mailDraft.value;
+    void mailApi.suggest(initial.id, initial.version).then(async suggestion => {
+      await nextTick();
+      if (props.modelValue && mailDraft.value?.id === initial.id) draftEditor.value?.applySuggestion(suggestion);
+    }).catch(() => { /* The saved deterministic text remains ready to edit and send. */ });
   } catch (err) {
-    error.value = getApiErrorMessage(err);
+    const status = (err as { status?: number })?.status;
+    if (creationUncertain.value || (createStarted && (!status || status >= 500))) {
+      creationUncertain.value = true;
+      error.value = 'Ответ о сохранении черновика не получен. Выбор зафиксирован: повторите подготовку, чтобы открыть тот же черновик. Письмо ещё не отправляется.';
+    } else {
+      createPayload = null;
+      createKey = mailCommandKey();
+      error.value = getApiErrorMessage(err);
+    }
     emit('settled');
   } finally {
     sending.value = false;
@@ -281,33 +278,17 @@ const sendEmail = async () => {
 
         <div v-if="mailDraft" class="flex-1 overflow-y-auto p-4"><MailDraftEditor :key="mailDraft.id" ref="draftEditor" :initial="mailDraft" :accounts="mailAccounts" @saved="mailDraft = $event" @close="close" @deleted="mailDraft = null; close()" @sent="emit('settled'); emit('sent')" /></div>
         <div v-else class="flex-1 space-y-4 overflow-y-auto px-5 py-4">
-          <div>
-            <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Получатель</label>
-            <input
-              v-model="toEmail"
-              type="email"
-              class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-              placeholder="client@example.com"
-            />
-          </div>
+          <p class="text-sm text-slate-600 dark:text-slate-300">Выберите документы. Письмо откроется с сохранёнными файлами; адреса, текст и подпись можно будет изменить перед отправкой.</p>
 
           <div>
             <div class="mb-1 flex items-center justify-between gap-3">
               <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Шаблон письма</label>
-              <button
-                v-if="subjectTouched || bodyTouched"
-                type="button"
-                class="text-xs font-semibold text-brand-700 hover:text-brand-800 dark:text-brand-300"
-                :disabled="composing"
-                @click="applyTemplate(true)"
-              >
-                Обновить по шаблону
-              </button>
+
             </div>
             <select
               v-model="templateKey"
               class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-              :disabled="composing"
+              :disabled="composing || sending || creationUncertain"
               @change="changeTemplate"
             >
               <option
@@ -332,6 +313,7 @@ const sendEmail = async () => {
                 <input
                   v-model="selectedDocumentIds"
                   type="checkbox"
+                  :disabled="sending || creationUncertain"
                   :value="doc.id"
                   class="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
                 />
@@ -351,7 +333,7 @@ const sendEmail = async () => {
 
           <div>
             <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Свидетельство о регистрации</label>
-            <select v-model="registrationCertificateId" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800" :disabled="sending">
+            <select v-model="registrationCertificateId" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800" :disabled="sending || creationUncertain">
               <option value="">Не прикладывать</option>
               <option v-for="item in certificateOptions" :key="item.id" :value="item.id">{{ item.issuerName }} — {{ item.filename }}</option>
             </select>
@@ -366,27 +348,8 @@ const sendEmail = async () => {
             <p class="mt-1">{{ missingRequisites.map((item) => item.label).join(', ') }}</p>
           </div>
 
-          <div>
-            <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Тема</label>
-            <input
-              v-model="subject"
-              type="text"
-              class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-              @input="subjectTouched = true"
-            />
-          </div>
 
-          <div>
-            <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Текст</label>
-            <textarea
-              v-model="bodyText"
-              rows="8"
-              class="w-full resize-y rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-              @input="bodyTouched = true"
-            />
-          </div>
-
-          <p v-if="error" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/40 dark:bg-red-950/30 dark:text-red-200">
+          <p v-if="error" role="alert" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/40 dark:bg-red-950/30 dark:text-red-200">
             {{ error }}
           </p>
         </div>
@@ -409,7 +372,7 @@ const sendEmail = async () => {
             <span v-if="sending" class="material-icons-round animate-spin text-[18px]">loop</span>
             <span v-else-if="composing" class="material-icons-round animate-spin text-[18px]">loop</span>
             <span v-else class="material-icons-round text-[18px]">send</span>
-            {{ sending ? 'Сохраняем...' : composing ? 'Готовим...' : 'Сохранить и проверить письмо' }}
+            {{ sending ? 'Сохраняем...' : composing ? 'Готовим...' : 'Подготовить письмо' }}
           </button>
         </footer>
       </div>

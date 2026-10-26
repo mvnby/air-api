@@ -26,9 +26,19 @@ class OrderMailDeliveryService:
                 document_ids=payload.document_ids, registration_certificate_id=payload.registration_certificate_id,
                 legal_entity_id=payload.legal_entity_id,
             )
+            suggested = None
+            if payload.template_key is not None and payload.body_text is None and payload.body_html is None:
+                from services.order_email_template_service import OrderEmailTemplateService
+                suggested = await OrderEmailTemplateService.compose(
+                    session, tenant_scope=actor.tenant_scope, order_id=order_id,
+                    document_ids=payload.document_ids, template_key=payload.template_key,
+                    registration_certificate_id=payload.registration_certificate_id,
+                    legal_entity_id=payload.legal_entity_id, staff_user_id=actor.staff_user_id,
+                )
             outcome = await MailWorkspaceService.create_legacy_draft(
                 session, actor=actor, idempotency_key=idempotency_key, to_email=payload.to_email,
-                subject=payload.subject, body_text=payload.body_text, body_html=payload.body_html,
+                subject=suggested["subject"] if suggested else payload.subject,
+                body_text=suggested["body_text"] if suggested else payload.body_text, body_html=payload.body_html,
                 reply_to=payload.reply_to, order_id=order_id, customer_id=order.customer_id, attachments=attachments,
             )
             return PublicWriteCommandResponse(value=outcome.value, status_code=201,

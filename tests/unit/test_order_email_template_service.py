@@ -55,6 +55,7 @@ async def test_invoice_template_uses_order_scenario_and_reports_missing_requisit
         order_id=order.id,
         doc_type="invoice",
         number="СЧ-001",
+        render_snapshot={"table_rows": {"lines": [{"line.kind": "service", "line.title": "Техническое обслуживание оборудования"}]}},
         google_file_id="invoice",
         google_edit_url="https://docs.example/invoice",
     )
@@ -71,8 +72,8 @@ async def test_invoice_template_uses_order_scenario_and_reports_missing_requisit
     )
 
     assert result["template_key"] == "invoice"
-    assert result["subject"] == "Счёт на техническое обслуживание кондиционеров"
-    assert "Направляем счёт на техническое обслуживание кондиционеров." in result["body_text"]
+    assert result["subject"] == "Счёт на техническое обслуживание оборудования"
+    assert "Направляем счёт на техническое обслуживание оборудования." in result["body_text"]
     missing_keys = {item["key"] for item in result["missing_requisites"]}
     assert {"legal_address", "bank_name", "bic", "iban", "signer_name"} <= missing_keys
     assert "email" not in missing_keys
@@ -140,6 +141,7 @@ async def test_documents_template_describes_multiple_attachments(db, tenant_scop
         order_id=order.id,
         doc_type="invoice",
         number="СЧ-002",
+        render_snapshot={"table_rows": {"lines": [{"line.kind": "product", "line.title": "Вентилятор"}]}},
         google_file_id="invoice",
         google_edit_url="https://docs.example/invoice",
     )
@@ -147,6 +149,7 @@ async def test_documents_template_describes_multiple_attachments(db, tenant_scop
         order_id=order.id,
         doc_type="contract",
         number="Д-002",
+        render_snapshot={"table_rows": {"lines": [{"line.kind": "product", "line.title": "Вентилятор"}]}},
         google_file_id="contract",
         google_edit_url="https://docs.example/contract",
     )
@@ -165,7 +168,7 @@ async def test_documents_template_describes_multiple_attachments(db, tenant_scop
     )
 
     assert result["template_key"] == "documents"
-    assert result["subject"] == "Счёт и договор на поставку кондиционеров"
+    assert result["subject"] == "Счёт и договор на поставку товаров"
     assert "Документы приложены к письму." in result["body_text"]
 
 
@@ -201,6 +204,7 @@ async def test_signer_template_and_diagnostic_scenario_are_adaptive(db, tenant_s
         order_id=order.id,
         doc_type="defect_act",
         number="ДА-001",
+        render_snapshot={"table_rows": {"lines": [{"line.kind": "service", "line.title": "Диагностика оборудования"}]}},
         google_file_id="defect-act",
         google_edit_url="https://docs.example/defect-act",
     )
@@ -228,3 +232,54 @@ async def test_signer_template_and_diagnostic_scenario_are_adaptive(db, tenant_s
     assert "основание полномочий подписанта" in signer_request["body_text"]
     assert "юридический адрес" not in signer_request["body_text"]
     assert diagnostic_email["subject"] == "Дефектный акт на диагностику оборудования"
+
+
+@pytest.mark.parametrize(("rows", "expected"), [
+    ([("service", "Стандартный монтаж настенного кондиционера свыше 4,2 и менее 8 кВт")], "монтаж оборудования"),
+    ([("product", "Вентилятор\nМонтаж не включён")], "поставку товаров"),
+    ([("product", "Котёл"), ("service", "Доставка\nМонтаж не входит; обслуживание оплачивается отдельно")], "поставку товаров и доставку"),
+    ([("service", "Демонтаж без монтажа")], "демонтаж оборудования"),
+    ([("service", "Ремонт"), ("service", "Диагностика")], "ремонт оборудования и диагностику оборудования"),
+    ([("service", "Техническое обслуживание"), ("product", "Фильтр")], "поставку товаров и техническое обслуживание оборудования"),
+    ([("service", "Выезд специалиста")], "выполнение работ"),
+])
+def test_scenario_uses_only_frozen_primary_titles(rows, expected):
+    from types import SimpleNamespace
+    document = SimpleNamespace(render_snapshot={"table_rows": {"lines": [
+        {"line.kind": kind, "line.title": title} for kind, title in rows]}})
+    order = SimpleNamespace(title="Обслуживание — шаблонный шум", workflow_type="maintenance",
+                            service_links=[SimpleNamespace(title="Чужой ремонт")], product_links=[])
+    assert OrderEmailTemplateService._scenario_label(order, [document]) == expected
+
+
+def test_legacy_without_frozen_lines_does_not_guess_from_current_proposal():
+    from types import SimpleNamespace
+    order = SimpleNamespace(service_links=[SimpleNamespace(title="Монтаж")], product_links=[object()], workflow_type="maintenance")
+    document = SimpleNamespace(render_snapshot=None, proposal_id=25)
+    assert OrderEmailTemplateService._scenario_label(order, [document]) == ""
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("responsible", [True, False])
+async def test_personal_signature_uses_responsible_or_current_staff_and_public_contacts(db, tenant_scope, responsible):
+    from models import StaffUser, TenantMembership
+    current = StaffUser(display_name="Вадим", username="signature-vadim", email="private-recovery@example.test", phone="private-phone")
+    owner = StaffUser(display_name="Анна", username="signature-anna", email="personal-login@example.test")
+    db.add_all([current, owner])
+    await db.flush()
+    db.add_all([TenantMembership(tenant_id=1, staff_user_id=person.id, role="manager") for person in [current, owner]])
+    await db.flush()
+    order = Order(tenant_id=1, storefront_id=1, responsible_staff_user_id=owner.id if responsible else None)
+    db.add(order)
+    await db.commit()
+    result = await OrderEmailTemplateService.compose(db, tenant_scope=tenant_scope, order_id=order.id,
+        document_ids=[], template_key="custom", staff_user_id=current.id)
+    assert "С уважением,\n" + ("Анна" if responsible else "Вадим") + "\nМастер Воздуха" in result["body_text"]
+    assert "private" not in result["body_text"] and "personal-login" not in result["body_text"]
+
+
+def test_partial_document_set_without_snapshots_stays_neutral():
+    from types import SimpleNamespace
+    known = SimpleNamespace(render_snapshot={"table_rows": {"lines": [{"line.kind": "product", "line.title": "Вентилятор"}]}})
+    unknown = SimpleNamespace(render_snapshot=None)
+    assert OrderEmailTemplateService._scenario_label(None, [known, unknown]) == ""
