@@ -740,6 +740,8 @@ async def test_manager_mail_composes_adaptive_order_email(async_client, monkeypa
     async def fake_compose(_session, **kwargs):
         tenant_scope = kwargs.pop("tenant_scope")
         assert tenant_scope.is_system is True
+        staff_id = kwargs.pop("staff_user_id")
+        assert staff_id is None or (isinstance(staff_id, int) and staff_id > 0)
         assert kwargs == {
             "order_id": 123,
             "document_ids": [10, 11],
