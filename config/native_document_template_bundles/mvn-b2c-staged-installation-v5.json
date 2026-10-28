@@ -8,7 +8,7 @@
       "aliases": [],
       "doc_type": "b2c_customer_equipment_installation_act",
       "source_filename": "Заказ-акт — монтаж оборудования заказчика — CRM v3.docx",
-      "sha256": "03cf1aace8d7b8269e1e25ca66914587f5d9974a867ce195e28dd3113493ae97",
+      "sha256": "dc04fbf7a7f9039b14a371bf72f0322e22165c3386775a4930205d15e3ad38b3",
       "description": "B2C: монтаж оборудования заказчика в один или два этапа",
       "sort_order": 20
     },
@@ -18,7 +18,7 @@
       "aliases": [],
       "doc_type": "b2c_supply_installation_act",
       "source_filename": "Заказ-акт — поставка и монтаж оборудования — CRM v5.docx",
-      "sha256": "cbc5b29c958236756510eea35325971651a6ec6c48a2fb6dff785c29d6247239",
+      "sha256": "2eee8cb251a66c215fc7fd0244b343adc1e80a591b8051a5df8e56e784cb96ee",
       "description": "B2C: поставка оборудования и монтаж в один или два этапа",
       "sort_order": 10
     }
