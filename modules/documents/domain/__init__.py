@@ -24,6 +24,7 @@ from .consumer_terms import (
     B2C_NATIVE_DOCUMENT_TYPES,
     ConsumerDocumentTerms,
     DEFAULT_GOODS_WARRANTY_MONTHS,
+    STAGED_INSTALLATION_DOCUMENT_TYPES,
 )
 from .business_terms import (
     BUSINESS_TERMS_DOCUMENT_TYPES,
@@ -54,6 +55,7 @@ __all__ = [
     "B2C_NATIVE_DOCUMENT_TYPES",
     "ConsumerDocumentTerms",
     "DEFAULT_GOODS_WARRANTY_MONTHS",
+    "STAGED_INSTALLATION_DOCUMENT_TYPES",
     "CONTRACT_SCENARIOS",
     "BUSINESS_TERMS_DOCUMENT_TYPES",
     "PAYMENT_DAY_KINDS",

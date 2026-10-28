@@ -18,11 +18,12 @@ import {
   createDefaultConsumerDocumentTerms,
   isConsumerDocumentType,
   isSupplyInstallationDocumentType,
+  isStagedInstallationDocumentType,
   type ConsumerDocumentTerms,
 } from '../model/consumer-document-terms';
 import {
-  calculateInstallationTwoStages,
-  normalizeByNAmount,
+  installationTermsError,
+  serializeInstallationTerms,
 } from '../model/installation-two-stages';
 import {
   createDefaultBusinessDocumentTerms,
@@ -202,6 +203,11 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       installation_two_stages: false,
       installation_outdoor_unit_in_first_stage: true,
       installation_first_stage_amount: null,
+      installation_remaining_amount: null,
+      installation_unit_count: 1,
+      installation_first_stage_works: null,
+      installation_second_stage_works: null,
+      installation_second_stage_due: null,
     };
     manuallyEditedConsumerDefaultFields.clear();
   };
@@ -298,13 +304,13 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     return '';
   });
   const installationTwoStagesError = computed(() => {
-    if (!isSupplyInstallationDocumentType(documentType.value) || !consumerTerms.value.installation_two_stages) {
+    if (!isStagedInstallationDocumentType(documentType.value) || !consumerTerms.value.installation_two_stages) {
       return '';
     }
-    return calculateInstallationTwoStages(
-      consumerTerms.value.installation_first_stage_amount,
+    return installationTermsError(
+      consumerTerms.value,
       input.proposalTotalCents(),
-    ).error;
+    );
   });
 
   const draftBlockedReason = computed(() => {
@@ -500,8 +506,8 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       resetTransportTerms();
     }
     if (
-      previousType === 'b2c_supply_installation_act'
-      && nextType !== 'b2c_supply_installation_act'
+      isStagedInstallationDocumentType(previousType)
+      && nextType !== previousType
     ) {
       resetSoldEquipmentTerms();
     }
@@ -567,7 +573,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     replaces_document_id: replacesDocumentId.value,
     consumer_terms: isConsumerDocumentType(documentType.value)
       ? {
-        ...consumerTerms.value,
+        ...serializeInstallationTerms(consumerTerms.value),
         goods_warranty_months: isSupplyInstallationDocumentType(documentType.value)
           && !consumerDefaultsLoaded.value
           && !manuallyEditedConsumerDefaultFields.has('goods_warranty_months')
@@ -578,9 +584,6 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
           && !manuallyEditedConsumerDefaultFields.has('goods_warranty_terms')
           ? null
           : consumerTerms.value.goods_warranty_terms,
-        installation_first_stage_amount: consumerTerms.value.installation_two_stages
-          ? normalizeByNAmount(consumerTerms.value.installation_first_stage_amount)
-          : null,
       }
       : undefined,
     business_terms: isBusinessTermsDocumentType(documentType.value)

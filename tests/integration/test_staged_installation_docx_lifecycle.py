@@ -7,7 +7,7 @@ import pytest
 from docx import Document
 from sqlmodel import select
 
-from models import OrderProductLink
+from models import OrderProductLink, Payment
 from models.tenancy import TenantScope
 from modules.documents.application import (
     DocumentContextSelection,
@@ -55,7 +55,7 @@ def _staged_template() -> bytes:
     return output.getvalue()
 
 
-async def _staged_fixture(db, tmp_path):
+async def _staged_fixture(db, tmp_path, document_type="b2c_supply_installation_act"):
     order, issuer, proposal, _ = await _seed_order(db)
     issuer.requisites = {
         **issuer.requisites,
@@ -81,7 +81,7 @@ async def _staged_fixture(db, tmp_path):
         tenant_scope=scope,
         legal_entity_id=issuer.id,
         name="Заказ-акт: поставка и монтаж",
-        doc_type="b2c_supply_installation_act",
+        doc_type=document_type,
     )
     source = _staged_template()
     version = await NativeTemplateVersionService.upload_native_docx_version(
@@ -181,3 +181,44 @@ async def test_staged_installation_issue_keeps_first_stage_acceptance_and_unit_a
     else:
         assert "Первый: Штробление и прокладка коммуникаций" in text
         assert "Второй: Установка наружного и внутреннего блоков" in text
+
+
+@pytest.mark.asyncio
+async def test_customer_equipment_stages_freeze_custom_terms_without_registering_payment(db, tmp_path):
+    from modules.documents.application.draft_mutations import ManagedDocumentDraftMutationService
+
+    scope, order, issuer, proposal, template, template_storage, artifact_storage = await _staged_fixture(
+        db, tmp_path, "b2c_customer_equipment_installation_act"
+    )
+    order_id = order.id
+    finances = (order.status, order.total_payments, order.balance_due, order.is_paid)
+    draft = await ManagedDocumentService.create_draft(
+        db, tenant_scope=scope, template_id=template.id,
+        selection=DocumentContextSelection(
+            order_id=order_id, legal_entity_id=issuer.id,
+            document_type="b2c_customer_equipment_installation_act", issue_date=date(2026, 10, 28),
+            proposal_id=proposal.id,
+            consumer_terms=ConsumerDocumentTerms(installation_two_stages=True, installation_unit_count=3,
+                installation_remaining_amount="400.00",
+                installation_first_stage_works="Подготовка трех трасс и наружные блоки.",
+                installation_second_stage_works="Три внутренних блока и пусконаладка.",
+                installation_second_stage_due="После ремонта и согласования даты выезда."),
+        ),
+    )
+    parameters = await ManagedDocumentDraftMutationService.get(db, tenant_scope=scope, document_id=draft.id)
+    terms = parameters["consumer_terms"]
+    assert terms["installation_unit_count"] == 3
+    assert terms["installation_first_stage_amount"] == "2740.00"
+    assert terms["installation_remaining_amount"] == "400.00"
+    issued = await ManagedDocumentService.issue(db, tenant_scope=scope, document_id=draft.id,
+        template_storage=template_storage, artifact_storage=artifact_storage, pdf_converter=FakePdfConverter())
+    artifact = next(item for item in issued.artifacts if item.kind == "rendered_docx")
+    text = _document_text(await artifact_storage.read(ManagedDocumentService.stored_artifact(artifact)))
+    assert "Первый: Подготовка трех трасс и наружные блоки." in text
+    assert "Второй: Три внутренних блока и пусконаладка." in text
+    assert "После ремонта и согласования даты выезда." in text
+    assert "Остаток: 400.00" in text
+    assert "{{" not in text
+    await db.refresh(order)
+    assert (order.status, order.total_payments, order.balance_due, order.is_paid) == finances
+    assert not (await db.execute(select(Payment).where(Payment.order_id == order_id))).scalars().all()

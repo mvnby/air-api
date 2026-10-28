@@ -1,0 +1,26 @@
+{
+  "bundle_id": "mvn-b2c-staged-installation-v5",
+  "description": "B2C installation contract stages with editable work scopes and separate factual acceptance",
+  "templates": [
+    {
+      "key": "b2c-customer-equipment-installation",
+      "name": "Заказ-акт: монтаж оборудования заказчика",
+      "aliases": [],
+      "doc_type": "b2c_customer_equipment_installation_act",
+      "source_filename": "Заказ-акт — монтаж оборудования заказчика — CRM v3.docx",
+      "sha256": "03cf1aace8d7b8269e1e25ca66914587f5d9974a867ce195e28dd3113493ae97",
+      "description": "B2C: монтаж оборудования заказчика в один или два этапа",
+      "sort_order": 20
+    },
+    {
+      "key": "b2c-supply-installation",
+      "name": "Заказ-акт: поставка и монтаж",
+      "aliases": [],
+      "doc_type": "b2c_supply_installation_act",
+      "source_filename": "Заказ-акт — поставка и монтаж оборудования — CRM v5.docx",
+      "sha256": "cbc5b29c958236756510eea35325971651a6ec6c48a2fb6dff785c29d6247239",
+      "description": "B2C: поставка оборудования и монтаж в один или два этапа",
+      "sort_order": 10
+    }
+  ]
+}

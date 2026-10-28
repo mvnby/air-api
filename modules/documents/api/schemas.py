@@ -9,6 +9,7 @@ from modules.documents.domain import (
     B2C_NATIVE_DOCUMENT_TYPES,
     BUSINESS_TERMS_DOCUMENT_TYPES,
     SUPPORTED_NATIVE_DOCUMENT_TYPES,
+    STAGED_INSTALLATION_DOCUMENT_TYPES,
     WAYBILL_DOCUMENT_TYPES,
 )
 from .business_schemas import ActTermsPayload, BusinessDocumentTermsPayload
@@ -337,9 +338,9 @@ class ManagedDocumentDraftPayload(BaseModel):
         if (
             self.consumer_terms is not None
             and self.consumer_terms.installation_two_stages
-            and self.document_type != "b2c_supply_installation_act"
+            and self.document_type not in STAGED_INSTALLATION_DOCUMENT_TYPES
         ):
-            raise ValueError("Монтаж в два этапа доступен для продажи с монтажом")
+            raise ValueError("Монтаж в два этапа доступен для поставки с монтажом и монтажа оборудования заказчика")
         if (
             self.business_terms is not None
             and self.document_type in B2C_NATIVE_DOCUMENT_TYPES
@@ -408,6 +409,13 @@ class ConsumerDocumentTermsPayload(BaseModel):
     installation_first_stage_amount: str | None = Field(
         default=None, max_length=20, pattern=r"^\d{1,12}(?:\.\d{1,2})?$"
     )
+    installation_remaining_amount: str | None = Field(
+        default=None, max_length=20, pattern=r"^\d{1,12}(?:\.\d{1,2})?$"
+    )
+    installation_unit_count: int = Field(default=1, ge=1, le=1000)
+    installation_first_stage_works: str | None = Field(default=None, min_length=1, max_length=4000)
+    installation_second_stage_works: str | None = Field(default=None, min_length=1, max_length=4000)
+    installation_second_stage_due: str | None = Field(default=None, min_length=1, max_length=2000)
     route_length_meters: str | None = Field(default=None, max_length=64)
     route_liquid_pipe_diameter_mm: str | None = Field(default=None, max_length=64)
     route_gas_pipe_diameter_mm: str | None = Field(default=None, max_length=64)

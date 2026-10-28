@@ -16,6 +16,11 @@ export type ConsumerDocumentTermsPayload = {
     installation_two_stages?: boolean;
     installation_outdoor_unit_in_first_stage?: boolean;
     installation_first_stage_amount?: (string | null);
+    installation_remaining_amount?: (string | null);
+    installation_unit_count?: number;
+    installation_first_stage_works?: (string | null);
+    installation_second_stage_works?: (string | null);
+    installation_second_stage_due?: (string | null);
     route_length_meters?: (string | null);
     route_liquid_pipe_diameter_mm?: (string | null);
     route_gas_pipe_diameter_mm?: (string | null);
