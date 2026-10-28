@@ -39,6 +39,10 @@ CONSUMER_FIELDS = {
     "route_power_supply": "route.power_supply",
     "route_notes": "route.notes",
     "installation_first_stage_amount": "installation.first_stage_amount",
+    "installation_remaining_amount": "installation.remaining_amount",
+    "installation_first_stage_works": "installation.first_stage_works",
+    "installation_second_stage_works": "installation.second_stage_works",
+    "installation_second_stage_due": "installation.second_stage_due",
 }
 ACT_FIELDS = {
     name: f"act.{name}"
@@ -172,6 +176,12 @@ def read_draft_parameters(document) -> dict:
             or not terms["installation_two_stages"]
         )
         result["consumer_terms"] = saved.get("consumer_terms") or terms
+        # Older drafts have no count; never infer it from prose or replace their amounts.
+        result["consumer_terms"].setdefault("installation_unit_count", 1)
+        if terms["installation_two_stages"]:
+            for name in CONSUMER_FIELDS:
+                if name.startswith("installation_") and result["consumer_terms"].get(name) is None:
+                    result["consumer_terms"][name] = terms[name]
         for name in ("goods_warranty_months", "work_warranty_months"):
             if result["consumer_terms"].get(name) is None:
                 result["consumer_terms"][name] = terms[name]

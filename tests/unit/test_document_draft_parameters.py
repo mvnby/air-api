@@ -11,6 +11,21 @@ from modules.documents.application.draft_parameters import read_draft_parameters
 from modules.documents.domain import BusinessDocumentTerms, PaymentScheduleItem
 
 
+def test_legacy_staged_draft_recovers_agreed_amounts_and_text_without_new_default_repricing():
+    document = SimpleNamespace(doc_type="b2c_supply_installation_act", date=datetime(2026, 10, 28), render_snapshot={
+        "values": {"installation.first_stage_amount": "3500.00", "installation.remaining_amount": "400.00",
+                   "installation.first_stage_works": "Индивидуально согласованные работы", "installation.second_stage_works": "Завершение монтажа",
+                   "installation.second_stage_due": "После готовности объекта"},
+        "conditions": {"installation.two_stages": True}, "meta": {},
+    })
+    terms = read_draft_parameters(document)["consumer_terms"]
+    assert terms["installation_first_stage_amount"] == "3500.00"
+    assert terms["installation_remaining_amount"] == "400.00"
+    assert terms["installation_first_stage_works"] == "Индивидуально согласованные работы"
+    assert terms["installation_second_stage_works"] == "Завершение монтажа"
+    assert terms["installation_unit_count"] == 1
+
+
 @pytest.mark.parametrize(
     "event",
     ["before_supply", "before_work", "after_supply", "after_work", "after_acceptance"],

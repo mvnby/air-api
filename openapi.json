@@ -50059,6 +50059,65 @@
             ],
             "title": "Installation First Stage Amount"
           },
+          "installation_remaining_amount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20,
+                "pattern": "^\\d{1,12}(?:\\.\\d{1,2})?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installation Remaining Amount"
+          },
+          "installation_unit_count": {
+            "type": "integer",
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Installation Unit Count",
+            "default": 1
+          },
+          "installation_first_stage_works": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installation First Stage Works"
+          },
+          "installation_second_stage_works": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installation Second Stage Works"
+          },
+          "installation_second_stage_due": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installation Second Stage Due"
+          },
           "route_length_meters": {
             "anyOf": [
               {

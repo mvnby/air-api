@@ -18,6 +18,11 @@ export type ConsumerDocumentTerms = {
   installation_two_stages: boolean;
   installation_outdoor_unit_in_first_stage: boolean;
   installation_first_stage_amount: string | null;
+  installation_remaining_amount: string | null;
+  installation_unit_count: number;
+  installation_first_stage_works: string | null;
+  installation_second_stage_works: string | null;
+  installation_second_stage_due: string | null;
 };
 
 export const B2C_NATIVE_DOCUMENT_TYPES = [
@@ -37,6 +42,10 @@ export const isRouteLayingDocumentType = (documentType: string) => (
 
 export const isSupplyInstallationDocumentType = (documentType: string) => (
   documentType === 'b2c_supply_installation_act'
+);
+
+export const isStagedInstallationDocumentType = (documentType: string) => (
+  isSupplyInstallationDocumentType(documentType) || documentType === 'b2c_customer_equipment_installation_act'
 );
 
 export const createDefaultConsumerDocumentTerms = (
@@ -62,4 +71,9 @@ export const createDefaultConsumerDocumentTerms = (
   installation_two_stages: false,
   installation_outdoor_unit_in_first_stage: true,
   installation_first_stage_amount: null,
+  installation_remaining_amount: null,
+  installation_unit_count: 1,
+  installation_first_stage_works: null,
+  installation_second_stage_works: null,
+  installation_second_stage_due: null,
 });

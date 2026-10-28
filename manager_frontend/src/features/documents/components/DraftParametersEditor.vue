@@ -11,6 +11,7 @@ import B2BContractTermsPanel from './B2BContractTermsPanel.vue';
 import ConsumerDocumentTermsPanel from './ConsumerDocumentTermsPanel.vue';
 import ActTermsPanel from './ActTermsPanel.vue';
 import TransportTermsPanel from './TransportTermsPanel.vue';
+import { installationTermsError, serializeInstallationTerms } from '../model/installation-two-stages';
 
 const props = defineProps<{ document: ManagedDocumentItem; disabled?: boolean }>();
 const emit = defineEmits<{ close: []; saved: [rebuilt: boolean]; toast: [message: string, type: 'success' | 'error'] }>();
@@ -38,6 +39,8 @@ const changes = computed(() => {
   return result;
 });
 const rebuilds = computed(() => Object.keys(changes.value).some((name) => name !== 'issue_date'));
+const stageError = computed(() => form.value?.consumer_terms?.installation_two_stages
+  ? installationTermsError(form.value.consumer_terms, Math.round(Number(form.value.total_amount) * 100)) : '');
 
 const load = async () => {
   try {
@@ -69,10 +72,11 @@ const load = async () => {
 void load();
 
 const save = async () => {
-  if (!form.value || saving.value || props.disabled || !Object.keys(changes.value).length) return;
+  if (!form.value || saving.value || props.disabled || stageError.value || !Object.keys(changes.value).length) return;
   const rebuilt = rebuilds.value;
   const reset = rebuilt && form.value.has_editable_copy;
   const payload = { ...changes.value, expected_revision: form.value.revision, reset_editable_copy: reset } as ManagedDocumentDraftParameterUpdate;
+  if (payload.consumer_terms && form.value.consumer_terms) payload.consumer_terms = serializeInstallationTerms(form.value.consumer_terms);
   saving.value = true;
   error.value = '';
   try {
@@ -117,7 +121,7 @@ const save = async () => {
     </fieldset>
     <p v-if="error" class="mt-3 text-sm text-rose-700" role="alert">{{ error }}</p>
     <div class="mt-4 flex flex-wrap gap-2">
-      <button v-if="form" class="native-action-primary" type="submit" data-testid="save-draft-parameters" :disabled="saving || disabled || !Object.keys(changes).length">{{ saving ? 'Сохраняем…' : 'Сохранить параметры' }}</button>
+      <button v-if="form" class="native-action-primary" type="submit" data-testid="save-draft-parameters" :disabled="saving || disabled || Boolean(stageError) || !Object.keys(changes).length">{{ saving ? 'Сохраняем…' : 'Сохранить параметры' }}</button>
       <button class="native-action" type="button" :disabled="saving" @click="emit('close')">Отмена</button>
     </div>
   </form>

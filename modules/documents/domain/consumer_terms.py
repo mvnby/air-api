@@ -4,6 +4,10 @@ from dataclasses import dataclass
 
 
 DEFAULT_GOODS_WARRANTY_MONTHS = 36
+STAGED_INSTALLATION_DOCUMENT_TYPES = frozenset({
+    "b2c_supply_installation_act",
+    "b2c_customer_equipment_installation_act",
+})
 B2C_NATIVE_DOCUMENT_TYPES = frozenset(
     {
         "b2c_supply_installation_act",
@@ -28,6 +32,11 @@ class ConsumerDocumentTerms:
     installation_two_stages: bool = False
     installation_outdoor_unit_in_first_stage: bool = True
     installation_first_stage_amount: str | None = None
+    installation_remaining_amount: str | None = None
+    installation_unit_count: int = 1
+    installation_first_stage_works: str | None = None
+    installation_second_stage_works: str | None = None
+    installation_second_stage_due: str | None = None
     route_length_meters: str | None = None
     route_liquid_pipe_diameter_mm: str | None = None
     route_gas_pipe_diameter_mm: str | None = None

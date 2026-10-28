@@ -4,6 +4,7 @@ import {
   type ConsumerDocumentTerms,
   isRouteLayingDocumentType,
   isSupplyInstallationDocumentType,
+  isStagedInstallationDocumentType,
 } from '../model/consumer-document-terms';
 import InstallationTwoStagesPanel from './InstallationTwoStagesPanel.vue';
 
@@ -54,7 +55,7 @@ const updateMonths = (field: 'goods_warranty_months' | 'work_warranty_months', e
     </div>
 
     <InstallationTwoStagesPanel
-      v-if="isSupplyInstallation"
+      v-if="isStagedInstallationDocumentType(documentType)"
       :terms="terms"
       :proposal-total-cents="proposalTotalCents"
       @update-terms="update"

@@ -83,6 +83,51 @@ const prepareReplacementFromDocumentList = async (wrapper: VueWrapper) => {
 };
 
 describe('consumer installation documents', () => {
+  it.each(['b2c_supply_installation_act', 'b2c_customer_equipment_installation_act'])('calculates editable 100/200 BYN per unit and submits custom contract terms for %s', async (documentType) => {
+    const wrapper = await mountConsumerWorkspace();
+    await wrapper.get(`[data-testid="native-document-type-${documentType}"]`).trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="installation-two-stages-toggle"]').trigger('click');
+    expect(wrapper.get<HTMLInputElement>('[data-testid="installation-second-stage-amount"]').element.value).toBe('100.00');
+    await wrapper.get('[data-testid="installation-unit-count"]').setValue('3');
+    expect(wrapper.get<HTMLInputElement>('[data-testid="installation-first-stage-amount"]').element.value).toBe('2840.00');
+    expect(wrapper.get<HTMLInputElement>('[data-testid="installation-second-stage-amount"]').element.value).toBe('300.00');
+    await wrapper.get('[data-testid="installation-outdoor-second-stage"]').trigger('click');
+    expect(wrapper.get<HTMLInputElement>('[data-testid="installation-second-stage-amount"]').element.value).toBe('600.00');
+    expect(wrapper.get<HTMLInputElement>('[data-testid="installation-first-stage-amount"]').element.value).toBe('2540.00');
+    await wrapper.get('[data-testid="installation-second-stage-amount"]').setValue('400,11');
+    expect(wrapper.get<HTMLInputElement>('[data-testid="installation-first-stage-amount"]').element.value).toBe('2739.89');
+    await wrapper.get('[data-testid="installation-first-stage-works"]').setValue('Трассы по проекту');
+    await wrapper.get('[data-testid="installation-second-stage-works"]').setValue('Навеска блоков и пусконаладка');
+    await wrapper.get('[data-testid="installation-second-stage-due"]').setValue('После готовности помещений');
+    await wrapper.get('[data-testid="installation-outdoor-first-stage"]').trigger('click');
+    expect(wrapper.get<HTMLTextAreaElement>('[data-testid="installation-first-stage-works"]').element.value).toBe('Трассы по проекту');
+    expect(wrapper.get<HTMLInputElement>('[data-testid="installation-second-stage-amount"]').element.value).toBe('400,11');
+    // Toggling is reversible; an accidental click does not discard negotiated terms.
+    await wrapper.get('[data-testid="installation-two-stages-toggle"]').trigger('click');
+    await wrapper.get('[data-testid="installation-two-stages-toggle"]').trigger('click');
+    expect(wrapper.get<HTMLInputElement>('[data-testid="installation-second-stage-amount"]').element.value).toBe('400,11');
+    await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
+    await flushPromises();
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenCalledWith(42, expect.objectContaining({ document_type: documentType,
+      consumer_terms: expect.objectContaining({ installation_unit_count: 3, installation_first_stage_amount: '2739.89',
+        installation_remaining_amount: '400.11', installation_first_stage_works: 'Трассы по проекту',
+        installation_second_stage_works: 'Навеска блоков и пусконаладка', installation_second_stage_due: 'После готовности помещений' }),
+    }));
+  });
+
+  it('blocks empty work scope and excessive remainder before creating a contract', async () => {
+    const wrapper = await mountConsumerWorkspace();
+    await wrapper.get('[data-testid="installation-two-stages-toggle"]').trigger('click');
+    await wrapper.get('[data-testid="installation-first-stage-works"]').setValue('');
+    expect(wrapper.get('[data-testid="installation-two-stages-error"]').text()).toContain('Заполните состав работ');
+    expect(wrapper.get('[data-testid="create-native-draft"]').attributes('disabled')).toBeDefined();
+    await wrapper.get('[data-testid="installation-first-stage-works"]').setValue('Закладка трасс');
+    await wrapper.get('[data-testid="installation-second-stage-amount"]').setValue('4000');
+    expect(wrapper.get('[data-testid="create-native-draft"]').attributes('disabled')).toBeDefined();
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).not.toHaveBeenCalled();
+  });
+
   it.each(['b2c_customer_equipment_installation_act', 'b2c_maintenance_repair_act', 'b2c_route_laying_act'])('clears sale stages when switching to %s', async (documentType) => {
     const wrapper = await mountConsumerWorkspace();
     await wrapper.get('[data-testid="installation-two-stages-toggle"]').trigger('click');
@@ -98,7 +143,7 @@ describe('consumer installation documents', () => {
     const wrapper = await mountConsumerWorkspace();
     await wrapper.get('[data-testid="installation-two-stages-toggle"]').trigger('click');
     await wrapper.get('[data-testid="installation-first-stage-amount"]').setValue('3000,00');
-    expect(wrapper.get<HTMLInputElement>('[data-testid="installation-second-stage-amount"]').element.value).toBe('140,00');
+    expect(wrapper.get<HTMLInputElement>('[data-testid="installation-second-stage-amount"]').element.value).toBe('140.00');
     await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
     await flushPromises();
     expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenCalledWith(42, expect.objectContaining({ consumer_terms: expect.objectContaining({ installation_two_stages: true, installation_outdoor_unit_in_first_stage: true, installation_first_stage_amount: '3000.00' }) }));
@@ -118,8 +163,8 @@ describe('consumer installation documents', () => {
     await wrapper.get('[data-testid="installation-outdoor-second-stage"]').trigger('click');
 
     expect(wrapper.get('[data-testid="installation-outdoor-second-stage"]').attributes('aria-pressed')).toBe('true');
-    expect(wrapper.get('[data-testid="installation-two-stages-description"]').text()).toContain('Второй: внутренний и наружный блоки, подключение и пусконаладка');
-    expect(wrapper.get<HTMLInputElement>('[data-testid="installation-second-stage-amount"]').element.value).toBe('140,00');
+    expect(wrapper.get<HTMLTextAreaElement>('[data-testid="installation-second-stage-works"]').element.value).toContain('наружного и внутреннего блоков');
+    expect(wrapper.get<HTMLInputElement>('[data-testid="installation-second-stage-amount"]').element.value).toBe('140.00');
 
     await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
     await flushPromises();

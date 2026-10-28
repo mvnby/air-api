@@ -1,3 +1,5 @@
+import type { ConsumerDocumentTerms } from './consumer-document-terms';
+
 export type InstallationTwoStagesCalculation = {
   firstStageCents: number | null;
   remainingCents: number | null;
@@ -54,6 +56,7 @@ export const proposalLineTotalCents = (proposal: {
 export const calculateInstallationTwoStages = (
   rawFirstStageAmount: string | null,
   proposalTotalCents: number | null,
+  rawRemainingAmount?: string | null,
 ): InstallationTwoStagesCalculation => {
   if (proposalTotalCents === null || proposalTotalCents <= 0) {
     return { firstStageCents: null, remainingCents: null, error: 'Не удалось определить сумму выбранного предложения' };
@@ -69,6 +72,9 @@ export const calculateInstallationTwoStages = (
       error: 'Первый этап должен быть больше 0 и меньше полной суммы предложения',
     };
   }
+  if (rawRemainingAmount != null && moneyToCents(rawRemainingAmount) !== proposalTotalCents - firstStageCents) {
+    return { firstStageCents, remainingCents: null, error: 'Суммы этапов должны совпадать с полной стоимостью предложения' };
+  }
   return {
     firstStageCents,
     remainingCents: proposalTotalCents - firstStageCents,
@@ -79,4 +85,34 @@ export const calculateInstallationTwoStages = (
 export const normalizeByNAmount = (value: string | null) => {
   const cents = moneyToCents(value);
   return cents === null ? null : centsToAmount(cents);
+};
+
+export const serializeInstallationTerms = (terms: ConsumerDocumentTerms): ConsumerDocumentTerms => ({
+  ...terms,
+  installation_first_stage_amount: terms.installation_two_stages ? normalizeByNAmount(terms.installation_first_stage_amount) : null,
+  installation_remaining_amount: terms.installation_two_stages ? normalizeByNAmount(terms.installation_remaining_amount) : null,
+});
+export const installationStageDefaults = (outdoorInFirst: boolean) => ({
+  first: outdoorInFirst
+    ? 'Установка наружного блока, штробление и прокладка коммуникаций.'
+    : 'Штробление и прокладка коммуникаций.',
+  second: outdoorInFirst
+    ? 'Установка внутреннего блока, подключение и пусконаладочные работы.'
+    : 'Установка наружного и внутреннего блоков, подключение и пусконаладочные работы.',
+  due: 'После завершения ремонта и готовности помещения; дата выезда согласовывается сторонами. Остаток оплачивается после выполнения и приемки второго этапа.',
+});
+
+export const installationRemainingDefault = (outdoorInFirst: boolean, count: number) => (
+  (outdoorInFirst ? 10000 : 20000) * count
+);
+
+export const installationTermsError = (terms: ConsumerDocumentTerms, total: number | null) => {
+  if (!Number.isInteger(terms.installation_unit_count) || terms.installation_unit_count < 1 || terms.installation_unit_count > 1000) {
+    return 'Укажите количество кондиционеров от 1 до 1000';
+  }
+  if ([terms.installation_first_stage_works, terms.installation_second_stage_works, terms.installation_second_stage_due]
+    .some((value) => value !== null && !value.trim())) {
+    return 'Заполните состав работ и условия завершения этапов';
+  }
+  return calculateInstallationTwoStages(terms.installation_first_stage_amount, total, terms.installation_remaining_amount).error;
 };
